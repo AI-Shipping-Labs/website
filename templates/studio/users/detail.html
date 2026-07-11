@@ -304,6 +304,18 @@
     </div>
     <div class="flex justify-between gap-4">
       <dt class="text-muted-foreground inline-flex items-center gap-1"
+          title="Derived reporting bucket combining Source, Activated, and signup attribution so newsletter-only contacts are not counted as full registrations.">
+        Account lifecycle
+        <i data-lucide="help-circle" class="studio-help w-3 h-3 text-muted-foreground"></i>
+      </dt>
+      <dd>
+        <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-secondary text-foreground border border-border"
+              data-testid="user-detail-account-lifecycle"
+              data-lifecycle="{{ account_lifecycle }}">{{ account_lifecycle_label }}</span>
+      </dd>
+    </div>
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground inline-flex items-center gap-1"
           title="Whether the user receives marketing emails. Unsubscribed users still keep their account.">
         Newsletter
         <i data-lucide="help-circle" class="studio-help w-3 h-3 text-muted-foreground"></i>

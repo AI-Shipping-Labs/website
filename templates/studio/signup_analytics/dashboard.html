@@ -13,6 +13,7 @@
   <p class="text-xs text-muted-foreground" data-testid="headline-fixed-note">
     Fixed rolling windows — these cards always show the last 24h / 7d / 30d and
     ignore the Date range filter below. They do reflect the selected Signup path.
+    {% if filters.account_lifecycle %} They also reflect the selected Account lifecycle.{% endif %}
   </p>
 </div>
 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8" data-testid="signup-analytics-headlines">
@@ -67,9 +68,51 @@
       </select>
     </div>
 
+    <div>
+      <label class="block text-xs font-medium text-muted-foreground mb-1" for="filter-account-lifecycle">Account lifecycle</label>
+      <select id="filter-account-lifecycle" name="account_lifecycle" onchange="this.form.submit()" class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="" {% if not filters.account_lifecycle %}selected{% endif %}>All</option>
+        {% for value, label in account_lifecycle_choices %}
+        <option value="{{ value }}" {% if filters.account_lifecycle == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
     <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">Apply</button>
   </div>
 </form>
+
+{# ---- Section 2: account lifecycle breakdown ---- #}
+<div class="mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-3">Account lifecycle</h2>
+  {% if window_total %}
+  <div class="bg-card border border-border rounded-lg overflow-x-auto">
+    <table class="w-full" data-testid="signup-analytics-lifecycle-table">
+      <thead class="bg-secondary">
+        <tr>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Lifecycle</th>
+          <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Count</th>
+          <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">% share</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for row in account_lifecycle_rows %}
+        <tr class="hover:bg-secondary/50 transition-colors" data-lifecycle="{{ row.account_lifecycle }}">
+          <td class="px-4 py-3 text-sm text-foreground">{{ row.label }}</td>
+          <td class="px-4 py-3 text-sm text-foreground text-right font-medium">{{ row.n }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground text-right">{{ row.pct }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="bg-card border border-border rounded-lg p-6 text-center" data-testid="signup-analytics-lifecycle-empty">
+    <p class="text-foreground">No matching lifecycle rows</p>
+    <p class="text-sm text-muted-foreground mt-1">Imported / unknown rows appear here when tracking data is incomplete.</p>
+  </div>
+  {% endif %}
+</div>
 
 {# ---- Section 3: breakdown by signup_path ---- #}
 <div class="mb-8">
@@ -293,6 +336,7 @@
           <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Visits</th>
           <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Top categories</th>
           <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Signup path</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Lifecycle</th>
           <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Signed up</th>
         </tr>
       </thead>
@@ -312,6 +356,11 @@
           <td class="px-4 py-3 text-sm text-foreground text-right font-medium">{{ row.tracked_visit_count }}</td>
           <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.top_categories_label }}</td>
           <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.get_signup_path_display }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground">
+            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-secondary text-foreground border border-border"
+                  data-testid="signup-analytics-recent-lifecycle"
+                  data-lifecycle="{{ row.account_lifecycle }}">{{ row.account_lifecycle_label }}</span>
+          </td>
           <td class="px-4 py-3 text-sm text-muted-foreground text-right" title="{{ row.created_at|operator_datetime_tz }}">{{ row.created_at|operator_datetime }}</td>
         </tr>
         {% endfor %}

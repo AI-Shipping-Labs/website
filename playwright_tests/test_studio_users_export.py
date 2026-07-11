@@ -88,6 +88,16 @@ def _set_slack_status(email, *, member=False, checked=False):
     connection.close()
 
 
+def _set_lifecycle_fields(email, *, signup_source, account_activated):
+    from accounts.models import User
+
+    user = User.objects.get(email=email)
+    user.signup_source = signup_source
+    user.account_activated = account_activated
+    user.save(update_fields=["signup_source", "account_activated"])
+    connection.close()
+
+
 @pytest.mark.django_db(transaction=True)
 class TestOperatorExportsContactCSV:
     """Operator clicks Export CSV; the downloaded file is parseable and
@@ -106,6 +116,11 @@ class TestOperatorExportsContactCSV:
             email_verified=True,
             unsubscribed=False,
         )
+        _set_lifecycle_fields(
+            "alice@test.com",
+            signup_source="newsletter",
+            account_activated=False,
+        )
         _set_tags("alice@test.com", ["early-adopter", "paid-2026"])
         _set_slack_status("alice@test.com", member=True, checked=True)
 
@@ -115,6 +130,11 @@ class TestOperatorExportsContactCSV:
             tier_slug="main",
             email_verified=True,
             unsubscribed=True,
+        )
+        _set_lifecycle_fields(
+            "bob@test.com",
+            signup_source="signup",
+            account_activated=True,
         )
         _set_slack_status("bob@test.com", member=False, checked=True)
 
@@ -175,6 +195,9 @@ class TestOperatorExportsContactCSV:
             "date_joined",
             "last_login",
             "slack",
+            "signup_source",
+            "account_activated",
+            "account_lifecycle",
         ], f"Unexpected fieldnames: {fieldnames!r}"
 
         rows_by_email = {row["email"]: row for row in rows}
@@ -188,12 +211,16 @@ class TestOperatorExportsContactCSV:
         assert alice["unsubscribed"] == "No"
         assert alice["last_login"] == ""
         assert alice["slack"] == "Member"
+        assert alice["signup_source"] == "newsletter"
+        assert alice["account_activated"] == "No"
+        assert alice["account_lifecycle"] == "newsletter_only"
 
         # 5b. Bob: empty tags, unsubscribed=Yes, checked but not in Slack.
         bob = rows_by_email["bob@test.com"]
         assert bob["tags"] == ""
         assert bob["unsubscribed"] == "Yes"
         assert bob["slack"] == "Not in Slack"
+        assert bob["account_lifecycle"] == "full_account"
 
         # 5c. Charlie: override-tier label, single tag, and never-checked Slack.
         charlie = rows_by_email["charlie@test.com"]

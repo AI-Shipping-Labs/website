@@ -18,6 +18,7 @@ documented in the OpenAPI spec:
 
 from django.utils import timezone
 
+from accounts.lifecycle import lifecycle_payload
 from accounts.models import TierOverride
 from accounts.utils.display import display_name
 
@@ -144,6 +145,7 @@ def serialize_user_state(user, *, compact=False):
         "subscription_id": user.subscription_id or "",
         "date_joined": _isoformat_or_none(user.date_joined),
         "last_login": _isoformat_or_none(user.last_login),
+        **lifecycle_payload(user),
     }
     if not compact:
         payload["tags"] = list(user.tags or [])

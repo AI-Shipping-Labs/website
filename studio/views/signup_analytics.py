@@ -3,6 +3,7 @@
 from django.core.paginator import Paginator
 from django.shortcuts import render
 
+from accounts.lifecycle import ACCOUNT_LIFECYCLE_CHOICES
 from analytics.models import SIGNUP_PATH_CHOICES, UserAttribution
 from analytics.services.signup_analytics import (
     RANGE_CHOICES,
@@ -84,9 +85,11 @@ def signup_analytics_dashboard(request):
         'filters': filters,
         'querystring': querystring(filters),
         'signup_path_choices': SIGNUP_PATH_CHOICES,
+        'account_lifecycle_choices': ACCOUNT_LIFECYCLE_CHOICES,
         'range_choices': RANGE_CHOICES,
         'headline_cards': report['headline_cards'],
         'window_total': report['window_total'],
+        'account_lifecycle_rows': report['account_lifecycle_rows'],
         'signup_path_rows': report['signup_path_rows'],
         'utm_source_rows': report['utm_source_rows'],
         'has_referrer_data': has_referrer_data,

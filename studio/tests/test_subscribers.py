@@ -38,6 +38,8 @@ class StudioUserListTest(TestCase):
         cls.alice = User.objects.create_user(
             email='alice@test.com',
             password='testpass',
+            signup_source='newsletter',
+            account_activated=False,
         )
         cls.bob = User.objects.create_user(
             email='bob@test.com',
@@ -49,12 +51,16 @@ class StudioUserListTest(TestCase):
             password='testpass',
             tier=cls.main_tier,
             subscription_id='sub_MAIN',
+            signup_source='signup',
+            account_activated=True,
         )
         cls.premium_user = User.objects.create_user(
             email='premium@test.com',
             password='testpass',
             tier=cls.premium_tier,
             subscription_id='sub_PREMIUM',
+            signup_source='signup',
+            account_activated=True,
         )
         cls.override_user = User.objects.create_user(
             email='override@test.com',
@@ -134,6 +140,23 @@ class StudioUserListTest(TestCase):
         response = self.client.get('/studio/users/?filter=garbage')
         self.assertEqual(response.context['active_filter'], 'all')
 
+    def test_account_lifecycle_filter_shows_newsletter_only_contacts(self):
+        response = self.client.get(
+            '/studio/users/?account_lifecycle=newsletter_only',
+        )
+        emails = [row['email'] for row in response.context['user_rows']]
+        self.assertEqual(emails, ['alice@test.com'])
+        row = response.context['user_rows'][0]
+        self.assertEqual(row['account_lifecycle'], 'newsletter_only')
+        self.assertEqual(row['account_lifecycle_label'], 'Newsletter-only')
+
+    def test_account_lifecycle_filter_composes_with_existing_filters(self):
+        response = self.client.get(
+            '/studio/users/?filter=subscribers&account_lifecycle=full_account&q=main',
+        )
+        emails = [row['email'] for row in response.context['user_rows']]
+        self.assertEqual(emails, ['main@test.com'])
+
     def test_search_filters_within_chip(self):
         # Search narrows within the active Paid chip; main@ is a paying user.
         response = self.client.get('/studio/users/?filter=paid&q=main')
@@ -156,11 +179,31 @@ class StudioUserListTest(TestCase):
         self.assertContains(response, '?filter=premium&amp;slack=any&amp;bounce=any&amp;q=alice')
         self.assertContains(response, '?filter=subscribers&amp;slack=any&amp;bounce=any&amp;q=alice')
 
+    def test_filter_links_carry_account_lifecycle_value(self):
+        response = self.client.get(
+            '/studio/users/?account_lifecycle=newsletter_only&q=alice',
+        )
+        self.assertContains(
+            response,
+            '?filter=paid&amp;slack=any&amp;bounce=any&amp;account_lifecycle=newsletter_only&amp;q=alice',
+        )
+        self.assertContains(response, 'data-testid="user-lifecycle-filter-chips"')
+
     def test_subscribed_column_uses_user_unsubscribed_flag(self):
         response = self.client.get('/studio/users/?filter=all')
         rows = {row['email']: row for row in response.context['user_rows']}
         self.assertTrue(rows['alice@test.com']['is_subscribed'])
         self.assertFalse(rows['bob@test.com']['is_subscribed'])
+
+    def test_row_exposes_account_lifecycle_context(self):
+        response = self.client.get('/studio/users/?filter=all')
+        rows = {row['email']: row for row in response.context['user_rows']}
+        self.assertEqual(rows['alice@test.com']['account_lifecycle'], 'newsletter_only')
+        self.assertIn(
+            'Account lifecycle: Newsletter-only',
+            rows['alice@test.com']['row_tooltip'],
+        )
+        self.assertContains(response, 'data-testid="user-list-lifecycle-pill"')
 
     def test_tier_column_shows_effective_override_tier(self):
         response = self.client.get('/studio/users/?filter=all')
@@ -214,6 +257,7 @@ class StudioUserListTest(TestCase):
         self.assertEqual(response.context['main_plus_count'], 3)
         self.assertEqual(response.context['premium_count'], 2)
         self.assertEqual(response.context['subscriber_count'], 4)
+        self.assertEqual(response.context['newsletter_only_count'], 1)
 
 
 class StudioUserListSlackFilterTest(TestCase):
@@ -315,6 +359,8 @@ class StudioUserExportTest(TestCase):
         cls.alice = User.objects.create_user(
             email='alice@test.com',
             password='testpass',
+            signup_source='newsletter',
+            account_activated=False,
         )
         cls.alice.tags = ['early-adopter', 'paid-2026']
         cls.alice.save(update_fields=['tags'])
@@ -328,6 +374,8 @@ class StudioUserExportTest(TestCase):
             password='testpass',
             tier=cls.main_tier,
             subscription_id='sub_MAIN',
+            signup_source='signup',
+            account_activated=True,
         )
         cls.override_user = User.objects.create_user(
             email='override@test.com',
@@ -378,7 +426,7 @@ class StudioUserExportTest(TestCase):
         first_line = response.content.decode().splitlines()[0]
         self.assertEqual(
             first_line,
-            'email,tier,tags,email_verified,unsubscribed,date_joined,last_login,slack',
+            'email,tier,tags,email_verified,unsubscribed,date_joined,last_login,slack,signup_source,account_activated,account_lifecycle',
         )
 
     def test_export_dictreader_fieldnames_match_locked_set(self):
@@ -395,6 +443,9 @@ class StudioUserExportTest(TestCase):
                 'date_joined',
                 'last_login',
                 'slack',
+                'signup_source',
+                'account_activated',
+                'account_lifecycle',
             ],
         )
 
@@ -426,6 +477,17 @@ class StudioUserExportTest(TestCase):
             emails,
             {'alice@test.com', 'main@test.com', 'override@test.com'},
         )
+
+    def test_export_honours_account_lifecycle_filter_and_columns(self):
+        response = self.client.get(
+            '/studio/users/export?account_lifecycle=newsletter_only',
+        )
+        rows = _parse_csv(response)
+        self.assertEqual({row['email'] for row in rows}, {'alice@test.com'})
+        row = rows[0]
+        self.assertEqual(row['signup_source'], 'newsletter')
+        self.assertEqual(row['account_activated'], 'No')
+        self.assertEqual(row['account_lifecycle'], 'newsletter_only')
 
     def test_export_honours_search(self):
         response = self.client.get('/studio/users/export?filter=all&q=override')

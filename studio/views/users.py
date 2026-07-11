@@ -42,6 +42,14 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from accounts.lifecycle import (
+    ACCOUNT_LIFECYCLE_CHOICES,
+    ACCOUNT_LIFECYCLE_NEWSLETTER_ONLY,
+    account_lifecycle_q,
+    derive_account_lifecycle,
+    lifecycle_label,
+    normalize_account_lifecycle,
+)
 from accounts.models import EmailAlias, TierOverride
 from accounts.services.email_resolution import normalize_email
 from accounts.utils.bounce import mark_permanent_bounce, record_soft_bounce
@@ -113,6 +121,8 @@ VALID_BOUNCE_FILTERS = {
 }
 DEFAULT_BOUNCE_FILTER = BOUNCE_FILTER_ANY
 
+DEFAULT_ACCOUNT_LIFECYCLE_FILTER = ''
+
 USER_LIST_TAG_LIMIT = 3
 
 # Page size for the Studio users list (issue #438). Hard-coded for v1; the
@@ -150,6 +160,11 @@ def _normalize_bounce_filter(value):
     if value in VALID_BOUNCE_FILTERS:
         return value
     return DEFAULT_BOUNCE_FILTER
+
+
+def _normalize_account_lifecycle_filter(value):
+    """Map ``account_lifecycle`` to a known reporting bucket or all."""
+    return normalize_account_lifecycle(value)
 
 
 def _slack_status(user):
@@ -261,7 +276,7 @@ def _annotated_user_queryset():
     active_override = _active_override_subquery(timezone.now())
     return (
         User.objects
-        .select_related('tier')
+        .select_related('tier', 'attribution')
         .annotate(
             base_tier_level=Coalesce(
                 'tier__level',
@@ -323,6 +338,7 @@ def _user_ids_matching_exact_tag(normalized_tag):
 def _apply_user_listing_filters(
     qs, active_filter, search, tag_filter, slack_filter,
     bounce_filter=DEFAULT_BOUNCE_FILTER,
+    account_lifecycle_filter=DEFAULT_ACCOUNT_LIFECYCLE_FILTER,
 ):
     """Apply the Studio list/export filters to an annotated user queryset."""
     if search:
@@ -362,12 +378,16 @@ def _apply_user_listing_filters(
     }:
         qs = qs.filter(bounce_state=bounce_filter)
 
+    if account_lifecycle_filter:
+        qs = qs.filter(account_lifecycle_q(account_lifecycle_filter))
+
     return qs
 
 
 def _filtered_user_queryset(
     active_filter, search, tag_filter, slack_filter,
     bounce_filter=DEFAULT_BOUNCE_FILTER,
+    account_lifecycle_filter=DEFAULT_ACCOUNT_LIFECYCLE_FILTER,
 ):
     """Return the filtered, annotated queryset backing list and export."""
     return _apply_user_listing_filters(
@@ -377,6 +397,7 @@ def _filtered_user_queryset(
         tag_filter,
         slack_filter,
         bounce_filter=bounce_filter,
+        account_lifecycle_filter=account_lifecycle_filter,
     )
 
 
@@ -421,6 +442,10 @@ def _user_listing_counts():
         main_plus_count=Count('pk', filter=Q(effective_tier_level__gte=20)),
         premium_count=Count('pk', filter=Q(effective_tier_level__gte=30)),
         subscriber_count=Count('pk', filter=Q(unsubscribed=False)),
+        newsletter_only_count=Count(
+            'pk',
+            filter=account_lifecycle_q(ACCOUNT_LIFECYCLE_NEWSLETTER_ONLY),
+        ),
         slack_member_count=Count('pk', filter=Q(slack_member=True)),
     )
     counts = {key: value or 0 for key, value in counts.items()}
@@ -465,6 +490,9 @@ def _row_tooltip(user, slack_status):
         parts.append(f'Stripe customer: {user.stripe_customer_id}')
     newsletter_state = 'unsubscribed' if user.unsubscribed else 'subscribed'
     parts.append(f'Newsletter: {newsletter_state}')
+    parts.append(
+        f'Account lifecycle: {lifecycle_label(derive_account_lifecycle(user))}'
+    )
     parts.append(f'Slack workspace: {slack_status}')
     # Bounce state (issue #766). Only appended when the row has a
     # non-``none`` bounce so unaffected users keep the existing
@@ -495,6 +523,7 @@ def _user_rows_from_users(users):
         # empty string and the User cell falls back to email-as-headline.
         full_name = f'{first_name} {last_name}'.strip()
         slack_status = _slack_status(user)
+        account_lifecycle = derive_account_lifecycle(user)
         user_rows.append({
             'pk': user.pk,
             'email': user.email,
@@ -505,6 +534,10 @@ def _user_rows_from_users(users):
             'last_login': user.last_login,
             'is_subscribed': not user.unsubscribed,
             'unsubscribed': user.unsubscribed,
+            'signup_source': user.signup_source,
+            'account_activated': bool(user.account_activated),
+            'account_lifecycle': account_lifecycle,
+            'account_lifecycle_label': lifecycle_label(account_lifecycle),
             'email_verified': user.email_verified,
             'tier_name': _effective_tier_name(user, override),
             'tier_slug': _effective_tier_slug(user, override),
@@ -527,6 +560,7 @@ def _user_rows_from_users(users):
 def _build_user_listing(
     active_filter, search, tag_filter='', slack_filter=DEFAULT_SLACK_FILTER,
     bounce_filter=DEFAULT_BOUNCE_FILTER,
+    account_lifecycle_filter=DEFAULT_ACCOUNT_LIFECYCLE_FILTER,
 ):
     """Build filtered rows plus aggregate counts for the users page/export.
 
@@ -547,6 +581,7 @@ def _build_user_listing(
         _filtered_user_queryset(
             active_filter, search, tag_filter, slack_filter,
             bounce_filter=bounce_filter,
+            account_lifecycle_filter=account_lifecycle_filter,
         )
     )
     return _user_rows_from_users(users), _user_listing_counts()
@@ -580,6 +615,9 @@ def user_list(request):
     active_filter = _normalize_filter(request.GET.get('filter', ''))
     slack_filter = _normalize_slack_filter(request.GET.get('slack', ''))
     bounce_filter = _normalize_bounce_filter(request.GET.get('bounce', ''))
+    account_lifecycle_filter = _normalize_account_lifecycle_filter(
+        request.GET.get('account_lifecycle', ''),
+    )
     search = request.GET.get('q', '')
     raw_tag = request.GET.get('tag', '')
     active_tag = normalize_tag(raw_tag) if raw_tag else ''
@@ -587,6 +625,7 @@ def user_list(request):
     user_queryset = _filtered_user_queryset(
         active_filter, search, tag_filter=raw_tag, slack_filter=slack_filter,
         bounce_filter=bounce_filter,
+        account_lifecycle_filter=account_lifecycle_filter,
     )
     counts = _user_listing_counts()
 
@@ -639,6 +678,7 @@ def user_list(request):
         'active_filter': active_filter,
         'slack_filter': slack_filter,
         'bounce_filter': bounce_filter,
+        'account_lifecycle_filter': account_lifecycle_filter,
         'search': search,
         'active_tag': active_tag,
         # Tag picker for the filter row (issue #694). Same sorted source as
@@ -657,6 +697,7 @@ def user_list(request):
         'main_plus_count': counts['main_plus_count'],
         'premium_count': counts['premium_count'],
         'subscriber_count': counts['subscriber_count'],
+        'newsletter_only_count': counts['newsletter_only_count'],
         'slack_member_count': counts['slack_member_count'],
         'filter_all': FILTER_ALL,
         'filter_paid': FILTER_PAID,
@@ -670,6 +711,7 @@ def user_list(request):
         'bounce_filter_none': BOUNCE_FILTER_NONE,
         'bounce_filter_soft': BOUNCE_FILTER_SOFT,
         'bounce_filter_permanent': BOUNCE_FILTER_PERMANENT,
+        'account_lifecycle_choices': ACCOUNT_LIFECYCLE_CHOICES,
         'stripe_account_id': stripe_account_id,
         'slack_team_id': slack_team_id,
     })
@@ -693,12 +735,16 @@ def user_export_csv(request):
     active_filter = _normalize_filter(request.GET.get('filter', ''))
     slack_filter = _normalize_slack_filter(request.GET.get('slack', ''))
     bounce_filter = _normalize_bounce_filter(request.GET.get('bounce', ''))
+    account_lifecycle_filter = _normalize_account_lifecycle_filter(
+        request.GET.get('account_lifecycle', ''),
+    )
     search = request.GET.get('q', '')
     raw_tag = request.GET.get('tag', '')
 
     user_rows, _counts = _build_user_listing(
         active_filter, search, tag_filter=raw_tag, slack_filter=slack_filter,
         bounce_filter=bounce_filter,
+        account_lifecycle_filter=account_lifecycle_filter,
     )
 
     timestamp = (
@@ -721,6 +767,9 @@ def user_export_csv(request):
         'date_joined',
         'last_login',
         'slack',
+        'signup_source',
+        'account_activated',
+        'account_lifecycle',
     ])
     for row in user_rows:
         tier_name = row['tier_name']
@@ -735,6 +784,9 @@ def user_export_csv(request):
             row['date_joined'].isoformat() if row['date_joined'] else '',
             row['last_login'].isoformat() if row['last_login'] else '',
             row['slack_status'],
+            row['signup_source'],
+            'Yes' if row['account_activated'] else 'No',
+            row['account_lifecycle'],
         ])
 
     return response
@@ -1337,6 +1389,7 @@ def user_detail(request, user_id):
 
     bounce_state = user.bounce_state or User.BounceState.NONE
     bounce_state_label = user.get_bounce_state_display()
+    account_lifecycle = derive_account_lifecycle(user)
 
     context = {
         'detail_user': user,
@@ -1350,6 +1403,8 @@ def user_detail(request, user_id):
         'known_tags': _all_known_contact_tags(),
         'bounce_state': bounce_state,
         'bounce_state_label': bounce_state_label,
+        'account_lifecycle': account_lifecycle,
+        'account_lifecycle_label': lifecycle_label(account_lifecycle),
         'bounce_recorded_at': user.bounce_recorded_at,
         'last_bounce_diagnostic': user.last_bounce_diagnostic or '',
         'recent_email_logs': deliverability_rows["email_logs"],

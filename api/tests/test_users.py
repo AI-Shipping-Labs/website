@@ -83,6 +83,9 @@ class UserDetailGetTest(_UserApiBase):
         self.assertFalse(body["unsubscribed"])
         self.assertEqual(body["soft_bounce_count"], 0)
         self.assertEqual(body["bounce_state"], "none")
+        self.assertEqual(body["signup_source"], "unknown")
+        self.assertFalse(body["account_activated"])
+        self.assertEqual(body["account_lifecycle"], "imported_or_unknown")
         self.assertTrue(body["email_verified"])
         self.assertEqual(body["tags"], ["sprint:may-2026"])
         self.assertTrue(body["slack_member"])
@@ -478,6 +481,77 @@ class UsersCollectionTest(_UserApiBase):
         emails = {u["email"] for u in response.json()["users"]}
         self.assertIn("new@test.com", emails)
         self.assertNotIn("old@test.com", emails)
+
+    def test_account_lifecycle_filter_returns_compact_lifecycle_fields(self):
+        newsletter = self._make_user(
+            email="newsletter@test.com",
+            signup_source="newsletter",
+            account_activated=False,
+        )
+        newsletter.unsubscribed = True
+        newsletter.save(update_fields=["unsubscribed"])
+        self._make_user(
+            email="full@test.com",
+            signup_source="signup",
+            account_activated=True,
+        )
+        self._make_user(
+            email="imported@test.com",
+            signup_source="imported",
+            account_activated=False,
+        )
+
+        response = self.client.get(
+            "/api/users?account_lifecycle=newsletter_only",
+            **self._auth_headers(),
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        emails = {u["email"] for u in body["users"]}
+        self.assertEqual(emails, {"newsletter@test.com"})
+        row = body["users"][0]
+        self.assertEqual(row["signup_source"], "newsletter")
+        self.assertFalse(row["account_activated"])
+        self.assertEqual(row["account_lifecycle"], "newsletter_only")
+
+    def test_invalid_account_lifecycle_filter_returns_422(self):
+        response = self.client.get(
+            "/api/users?account_lifecycle=not-real",
+            **self._auth_headers(),
+        )
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertEqual(body["details"]["field"], "account_lifecycle")
+
+    def test_account_lifecycle_filter_requires_valid_staff_token(self):
+        non_staff_user = User.objects.create_user(
+            email="collection-member@test.com",
+            password=None,
+        )
+        bad_token = Token(
+            key="collection-non-staff-token-key",
+            user=non_staff_user,
+            name="legacy",
+        )
+        Token.objects.bulk_create([bad_token])
+
+        cases = (
+            ({}, "Authentication token required"),
+            ({"HTTP_AUTHORIZATION": "Token not-real"}, "Invalid token"),
+            (
+                {"HTTP_AUTHORIZATION": f"Token {bad_token.key}"},
+                "Invalid token",
+            ),
+        )
+        for headers, message in cases:
+            with self.subTest(message=message):
+                response = self.client.get(
+                    "/api/users?account_lifecycle=newsletter_only",
+                    **headers,
+                )
+                self.assertEqual(response.status_code, 401)
+                self.assertEqual(response.json(), {"error": message})
 
 
 # ---------------------------------------------------------------------------

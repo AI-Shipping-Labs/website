@@ -230,10 +230,49 @@ class CrmExportEnvelopeTest(CrmExportTestBase):
             "stripe_customer_id", "subscription_id", "slack_member",
             "slack_user_id", "email_verified", "unsubscribed",
             "bounce_state", "date_joined", "last_login",
-            "email_preferences", "import_metadata",
+            "email_preferences", "import_metadata", "signup_source",
+            "account_activated", "account_lifecycle",
         ):
             self.assertIn(key, item)
         self.assertIn("source", item["tier"])
+
+    def test_account_lifecycle_filter_limits_exported_members(self):
+        newsletter = self._make_member("newsletter-only@test.com")
+        newsletter.signup_source = "newsletter"
+        newsletter.account_activated = False
+        newsletter.save(update_fields=["signup_source", "account_activated"])
+        self._give_crm_record(newsletter)
+
+        full = self._make_member("full-account@test.com")
+        full.signup_source = "signup"
+        full.account_activated = True
+        full.save(update_fields=["signup_source", "account_activated"])
+        self._give_crm_record(full)
+
+        response = self.client.get(
+            self.URL,
+            {"account_lifecycle": "newsletter_only"},
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        emails = {member["email"] for member in body["members"]}
+        self.assertEqual(emails, {"newsletter-only@test.com"})
+        member = body["members"][0]
+        self.assertEqual(member["signup_source"], "newsletter")
+        self.assertFalse(member["account_activated"])
+        self.assertEqual(member["account_lifecycle"], "newsletter_only")
+
+    def test_invalid_account_lifecycle_filter_returns_422(self):
+        response = self.client.get(
+            self.URL,
+            {"account_lifecycle": "not-real"},
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertEqual(body["details"]["field"], "account_lifecycle")
 
     def test_member_carries_full_crm_record(self):
         item = self._member_payload()
@@ -800,7 +839,10 @@ class CrmExportOpenApiTest(CrmExportTestBase):
         operation = spec["paths"]["/api/crm/export"]["get"]
         self.assertIn("CRM", operation["tags"])
         param_names = {p["name"] for p in operation.get("parameters", [])}
-        for expected in ("scope", "limit", "offset", "since", "q", "email"):
+        for expected in (
+            "scope", "limit", "offset", "since", "q", "email",
+            "account_lifecycle",
+        ):
             self.assertIn(expected, param_names)
         self.assertIn("200", operation["responses"])
         self.assertIn("404", operation["responses"])

@@ -51,6 +51,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from accounts.lifecycle import ACCOUNT_LIFECYCLE_VALUES, account_lifecycle_q
 from accounts.services.email_resolution import resolve_user_by_email
 from accounts.utils.bounce import mark_permanent_bounce, record_soft_bounce
 from accounts.utils.tags import add_tag, normalize_tag, remove_tag
@@ -161,11 +162,34 @@ def _parse_activity_category(raw):
     )
 
 
+def _parse_account_lifecycle(raw):
+    value = (raw or "").strip()
+    if not value:
+        return "", None
+    if value in ACCOUNT_LIFECYCLE_VALUES:
+        return value, None
+    return None, error_response(
+        f"Invalid account_lifecycle: {raw!r}",
+        "validation_error",
+        status=422,
+        details={
+            "field": "account_lifecycle",
+            "value": raw,
+            "allowed": list(ACCOUNT_LIFECYCLE_VALUES),
+        },
+    )
+
+
 def _find_user(email):
     """Look up a ``User`` by case-insensitive email."""
     if not email:
         return None
-    return User.objects.select_related("tier").filter(email__iexact=email).first()
+    return (
+        User.objects
+        .select_related("tier", "attribution")
+        .filter(email__iexact=email)
+        .first()
+    )
 
 
 def _user_not_found_response():
@@ -316,6 +340,9 @@ _USER_EXAMPLE = {
         "granted_by": "ops@aishippinglabs.com",
     },
     "unsubscribed": False,
+    "signup_source": "signup",
+    "account_activated": True,
+    "account_lifecycle": "full_account",
     "soft_bounce_count": 0,
     "bounce_state": "none",
     "email_verified": True,
@@ -368,6 +395,16 @@ _USER_EXAMPLE = {
                         "this are returned."
                     ),
                 },
+                "account_lifecycle": {
+                    "type": "string",
+                    "enum": list(ACCOUNT_LIFECYCLE_VALUES),
+                    "required": False,
+                    "description": (
+                        "Optional derived account lifecycle filter: "
+                        "newsletter_only, full_account, or "
+                        "imported_or_unknown."
+                    ),
+                },
             },
             "responses": {
                 200: {
@@ -401,13 +438,21 @@ def users_collection(request):
     since, err = _parse_since(request.GET.get("since"))
     if err is not None:
         return err
+    account_lifecycle, err = _parse_account_lifecycle(
+        request.GET.get("account_lifecycle"),
+    )
+    if err is not None:
+        return err
 
     q = (request.GET.get("q") or "").strip()
 
-    qs = User.objects.select_related("tier")
+    qs = User.objects.select_related("tier", "attribution")
 
     if since is not None:
         qs = qs.filter(date_joined__gte=since)
+
+    if account_lifecycle:
+        qs = qs.filter(account_lifecycle_q(account_lifecycle))
 
     if q:
         scalar = (

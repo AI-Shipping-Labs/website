@@ -721,6 +721,9 @@ class StudioUserDetailChipsTest(TestCase):
         self.assertContains(response, 'data-signup-source="signup"')
         self.assertContains(response, 'Email + password signup')
         self.assertContains(response, 'data-account-activated="yes"')
+        self.assertContains(response, 'data-testid="user-detail-account-lifecycle"')
+        self.assertContains(response, 'data-lifecycle="full_account"')
+        self.assertContains(response, 'Full account')
 
     def test_inactive_newsletter_user_renders_chips_with_no_activation(self):
         response = self.client.get(f'/studio/users/{self.newsletter_user.pk}/')
@@ -728,6 +731,17 @@ class StudioUserDetailChipsTest(TestCase):
         self.assertContains(response, 'data-signup-source="newsletter"')
         self.assertContains(response, 'Newsletter subscribe')
         self.assertContains(response, 'data-account-activated="no"')
+        self.assertContains(response, 'data-lifecycle="newsletter_only"')
+        self.assertContains(response, 'Newsletter-only')
+
+    def test_activated_newsletter_user_reports_full_account_lifecycle(self):
+        self.newsletter_user.account_activated = True
+        self.newsletter_user.save(update_fields=['account_activated'])
+        response = self.client.get(f'/studio/users/{self.newsletter_user.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-signup-source="newsletter"')
+        self.assertContains(response, 'data-account-activated="yes"')
+        self.assertContains(response, 'data-lifecycle="full_account"')
 
     def test_no_django_comment_leaks_on_user_detail(self):
         """Multi-line ``{# ... #}`` blocks leak — assert none ship to HTML."""

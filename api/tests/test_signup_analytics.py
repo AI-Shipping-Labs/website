@@ -19,8 +19,12 @@ URL = '/api/signup-analytics'
 def _make_attribution(*, email, signup_path='email_password',
                       first_source='', first_medium='', first_campaign='',
                       first_campaign_obj=None, created_at=None,
-                      anonymous_id=''):
-    user = User.objects.create_user(email=email, password='pw')
+                      anonymous_id='', user_kwargs=None):
+    user = User.objects.create_user(
+        email=email,
+        password='pw',
+        **(user_kwargs or {}),
+    )
     attr, _created = UserAttribution.objects.get_or_create(user=user)
     attr.signup_path = signup_path
     attr.first_touch_utm_source = first_source
@@ -183,6 +187,61 @@ class SignupAnalyticsApiTest(TestCase):
             '/courses/agents',
         )
 
+    def test_account_lifecycle_filter_and_breakdown_apply(self):
+        now = timezone.now()
+        _make_attribution(
+            email='newsletter-only@test.com',
+            signup_path='newsletter',
+            created_at=now - timedelta(hours=1),
+            user_kwargs={
+                'signup_source': 'newsletter',
+                'account_activated': False,
+                'unsubscribed': True,
+            },
+        )
+        _make_attribution(
+            email='full@test.com',
+            signup_path='email_password',
+            created_at=now - timedelta(hours=2),
+            user_kwargs={
+                'signup_source': 'signup',
+                'account_activated': True,
+            },
+        )
+        _make_attribution(
+            email='imported@test.com',
+            signup_path='unknown',
+            created_at=now - timedelta(hours=3),
+            user_kwargs={
+                'signup_source': 'imported',
+                'account_activated': False,
+            },
+        )
+
+        response = self.client.get(
+            URL + '?account_lifecycle=newsletter_only',
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body['filters']['account_lifecycle'], 'newsletter_only')
+        self.assertEqual(body['window_total'], 1)
+        self.assertEqual(
+            body['recent_signups'][0]['email'],
+            'newsletter-only@test.com',
+        )
+        self.assertEqual(
+            body['recent_signups'][0]['account_lifecycle'],
+            'newsletter_only',
+        )
+        breakdown = {
+            row['account_lifecycle']: row['signup_count']
+            for row in body['account_lifecycle_rows']
+        }
+        self.assertEqual(breakdown['newsletter_only'], 1)
+        self.assertEqual(breakdown['full_account'], 0)
+        self.assertEqual(breakdown['imported_or_unknown'], 0)
+
     def test_limit_is_capped_at_safe_maximum(self):
         response = self.client.get(URL + '?limit=999', **self._auth())
         self.assertEqual(response.status_code, 200)
@@ -195,6 +254,7 @@ class SignupAnalyticsApiTest(TestCase):
             ('?range=custom&start=bad&end=2026-02-03', 'date'),
             ('?range=custom&start=2026-02-04&end=2026-02-03', 'date'),
             ('?signup_path=bogus', 'signup_path'),
+            ('?account_lifecycle=bogus', 'account_lifecycle'),
             ('?limit=zero', 'limit'),
         )
         for query, field in cases:
@@ -213,4 +273,5 @@ class SignupAnalyticsApiTest(TestCase):
         self.assertEqual(operation['tags'], ['Analytics'])
         params = {param['name'] for param in operation['parameters']}
         self.assertIn('signup_path', params)
+        self.assertIn('account_lifecycle', params)
         self.assertIn('limit', params)

@@ -51,6 +51,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from accounts.lifecycle import account_lifecycle_q
 from accounts.models.email_alias import EmailAlias
 from accounts.utils.tags import normalize_tag
 from api.openapi import openapi_spec
@@ -71,6 +72,7 @@ from api.views.enrollments import (
 )
 from api.views.onboarding import _parse_offset, _persona_map, _resolve_persona
 from api.views.users import (
+    _parse_account_lifecycle,
     _parse_limit,
     _parse_since,
     resolve_crm_persona,
@@ -205,6 +207,9 @@ _MEMBER_EXAMPLE = {
     "display_name": "Alice Doe",
     "tier": {"slug": "main", "level": 20, "source": "override"},
     "tags": ["early-adopter"],
+    "signup_source": "signup",
+    "account_activated": True,
+    "account_lifecycle": "full_account",
     "crm_record": {
         "id": 42,
         "status": "active",
@@ -251,7 +256,7 @@ def _base_queryset():
     gated query covers the whole page rather than one per member.
     """
     return (
-        User.objects.select_related("tier")
+        User.objects.select_related("tier", "attribution")
         .prefetch_related(
             "plans",
             "interview_notes",
@@ -519,6 +524,15 @@ def _serialize_member(
                         "``scope=all`` exports when fetching one user."
                     ),
                 },
+                "account_lifecycle": {
+                    "type": "string",
+                    "enum": ["newsletter_only", "full_account", "imported_or_unknown"],
+                    "required": False,
+                    "description": (
+                        "Optional derived account lifecycle filter. Composes "
+                        "with scope, email, q, since, limit, and offset."
+                    ),
+                },
             },
             "responses": {
                 200: {
@@ -579,6 +593,11 @@ def crm_export(request):
     since, err = _parse_since(request.GET.get("since"))
     if err is not None:
         return err
+    account_lifecycle, err = _parse_account_lifecycle(
+        request.GET.get("account_lifecycle"),
+    )
+    if err is not None:
+        return err
 
     q = (request.GET.get("q") or "").strip()
     q_lower = q.lower()
@@ -604,6 +623,8 @@ def crm_export(request):
         qs = qs.filter(pk=target_id)
         if since is not None:
             qs = qs.filter(date_joined__gte=since)
+        if account_lifecycle:
+            qs = qs.filter(account_lifecycle_q(account_lifecycle))
         matched = list(qs)
 
         if scope == "crm" and matched:
@@ -625,6 +646,8 @@ def crm_export(request):
 
     if since is not None:
         qs = qs.filter(date_joined__gte=since)
+    if account_lifecycle:
+        qs = qs.filter(account_lifecycle_q(account_lifecycle))
 
     # Resolve the scope/filter match set once (the full ``total``), then
     # slice. ``_has_crm_signal`` and ``_q_matches`` read prefetched

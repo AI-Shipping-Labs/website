@@ -1348,6 +1348,20 @@
               "description": "Exact case-insensitive user email lookup for fast targeted CRM automation. Surrounding whitespace is trimmed. Unknown users return 404 ``user_not_found``. Use this instead of broad ``scope=all`` exports when fetching one user.",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "account_lifecycle",
+            "required": false,
+            "schema": {
+              "description": "Optional derived account lifecycle filter. Composes with scope, email, q, since, limit, and offset.",
+              "enum": [
+                "newsletter_only",
+                "full_account",
+                "imported_or_unknown"
+              ],
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1360,6 +1374,8 @@
                   "limit": 200,
                   "members": [
                     {
+                      "account_activated": true,
+                      "account_lifecycle": "full_account",
                       "course_enrollments": [],
                       "crm_record": {
                         "created_at": "2026-04-15T12:00:00+00:00",
@@ -1375,6 +1391,7 @@
                       "notes": [],
                       "onboarding_responses": [],
                       "plans": [],
+                      "signup_source": "signup",
                       "sprint_enrollments": [
                         {
                           "enrolled_at": "2026-04-15T12:00:00+00:00",
@@ -7593,6 +7610,20 @@
           },
           {
             "in": "query",
+            "name": "account_lifecycle",
+            "required": false,
+            "schema": {
+              "description": "Optional derived account lifecycle filter.",
+              "enum": [
+                "newsletter_only",
+                "full_account",
+                "imported_or_unknown"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -7608,6 +7639,14 @@
             "content": {
               "application/json": {
                 "example": {
+                  "account_lifecycle_rows": [
+                    {
+                      "account_lifecycle": "newsletter_only",
+                      "label": "Newsletter-only",
+                      "percent_share": "25.0%",
+                      "signup_count": 3
+                    }
+                  ],
                   "actionable_source_rows": [
                     {
                       "campaign": {
@@ -7626,6 +7665,8 @@
                     }
                   ],
                   "filters": {
+                    "account_lifecycle": "",
+                    "account_lifecycle_label": "All lifecycles",
                     "end": "2026-07-09",
                     "end_at": "2026-07-09T12:00:00+00:00",
                     "limit": 50,
@@ -7657,6 +7698,8 @@
                   ],
                   "recent_signups": [
                     {
+                      "account_lifecycle": "full_account",
+                      "account_lifecycle_label": "Full account",
                       "actionable_source": {
                         "campaign_slug": "spring_launch",
                         "kind": "campaign",
@@ -10175,6 +10218,20 @@
               "description": "ISO-8601 datetime; only users joined at or after this are returned.",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "account_lifecycle",
+            "required": false,
+            "schema": {
+              "description": "Optional derived account lifecycle filter: newsletter_only, full_account, or imported_or_unknown.",
+              "enum": [
+                "newsletter_only",
+                "full_account",
+                "imported_or_unknown"
+              ],
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -10186,6 +10243,8 @@
                   "limit": 50,
                   "users": [
                     {
+                      "account_activated": true,
+                      "account_lifecycle": "full_account",
                       "aliases": [
                         "47-gentle.virtual@icloud.com"
                       ],
@@ -10197,6 +10256,7 @@
                       "first_name": "Alice",
                       "last_login": "2026-05-19T08:30:00+00:00",
                       "last_name": "Doe",
+                      "signup_source": "signup",
                       "slack_member": true,
                       "slack_user_id": "U01ABCDEF",
                       "soft_bounce_count": 0,
@@ -10553,6 +10613,8 @@
             "content": {
               "application/json": {
                 "example": {
+                  "account_activated": true,
+                  "account_lifecycle": "full_account",
                   "aliases": [
                     "47-gentle.virtual@icloud.com"
                   ],
@@ -10568,6 +10630,7 @@
                   "first_name": "Alice",
                   "last_login": "2026-05-19T08:30:00+00:00",
                   "last_name": "Doe",
+                  "signup_source": "signup",
                   "slack_member": true,
                   "slack_user_id": "U01ABCDEF",
                   "soft_bounce_count": 0,
@@ -10650,6 +10713,8 @@
             "content": {
               "application/json": {
                 "example": {
+                  "account_activated": true,
+                  "account_lifecycle": "full_account",
                   "aliases": [
                     "47-gentle.virtual@icloud.com"
                   ],
@@ -10665,6 +10730,7 @@
                   "first_name": "Alice",
                   "last_login": "2026-05-19T08:30:00+00:00",
                   "last_name": "Doe",
+                  "signup_source": "signup",
                   "slack_member": true,
                   "slack_user_id": "U01ABCDEF",
                   "soft_bounce_count": 0,
@@ -11036,6 +11102,8 @@
             "content": {
               "application/json": {
                 "example": {
+                  "account_activated": true,
+                  "account_lifecycle": "full_account",
                   "aliases": [
                     "47-gentle.virtual@icloud.com"
                   ],
@@ -11051,6 +11119,7 @@
                   "first_name": "Alice",
                   "last_login": "2026-05-19T08:30:00+00:00",
                   "last_name": "Doe",
+                  "signup_source": "signup",
                   "slack_member": true,
                   "slack_user_id": "U01ABCDEF",
                   "soft_bounce_count": 0,
@@ -11403,6 +11472,8 @@
             "content": {
               "application/json": {
                 "example": {
+                  "account_activated": true,
+                  "account_lifecycle": "full_account",
                   "aliases": [
                     "47-gentle.virtual@icloud.com"
                   ],
@@ -11418,6 +11489,7 @@
                   "first_name": "Alice",
                   "last_login": "2026-05-19T08:30:00+00:00",
                   "last_name": "Doe",
+                  "signup_source": "signup",
                   "slack_member": true,
                   "slack_user_id": "U01ABCDEF",
                   "soft_bounce_count": 0,

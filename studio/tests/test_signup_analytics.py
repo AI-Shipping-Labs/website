@@ -53,14 +53,19 @@ def _user_login(client, email='free@test.com'):
 def _make_attribution(*, email, signup_path='email_password',
                       first_source='', first_medium='', first_campaign='',
                       first_campaign_obj=None, created_at=None, first_ts=None,
-                      anonymous_id='', referrer_host='', referrer_source=''):
+                      anonymous_id='', referrer_host='', referrer_source='',
+                      user_kwargs=None):
     """Create a User + matching UserAttribution row.
 
     The ``post_save`` signal already creates a blank UserAttribution row
     on user creation, so we update it in place (rather than create a new
     row that would collide on the OneToOne PK).
     """
-    user = User.objects.create_user(email=email, password='pw')
+    user = User.objects.create_user(
+        email=email,
+        password='pw',
+        **(user_kwargs or {}),
+    )
     attr, _ = UserAttribution.objects.get_or_create(user=user)
     attr.signup_path = signup_path
     attr.first_touch_utm_source = first_source
@@ -182,6 +187,16 @@ class SignupAnalyticsHeaderTest(TestCase):
         filters = response.context['filters']
         self.assertEqual(filters['signup_path'], '')
 
+    def test_lifecycle_filter_options_render(self):
+        response = self.client.get('/studio/signup-analytics/')
+        self.assertContains(response, 'Account lifecycle')
+        for value in (
+            'newsletter_only',
+            'full_account',
+            'imported_or_unknown',
+        ):
+            self.assertContains(response, f'value="{value}"')
+
 
 # ---------------------------------------------------------------------------
 # Headline cards
@@ -266,6 +281,33 @@ class SignupAnalyticsHeadlineCardsTest(TestCase):
         # 7d card respects the filter: 3 (not 5).
         seven = response.context['headline_cards'][1]
         self.assertEqual(seven['count'], 3)
+
+    def test_account_lifecycle_filter_applies_to_headline_cards(self):
+        now = timezone.now()
+        _make_attribution(
+            email='newsletter@test.com',
+            signup_path='newsletter',
+            created_at=now - timedelta(days=1),
+            user_kwargs={
+                'signup_source': 'newsletter',
+                'account_activated': False,
+            },
+        )
+        _make_attribution(
+            email='full@test.com',
+            signup_path='email_password',
+            created_at=now - timedelta(days=1),
+            user_kwargs={
+                'signup_source': 'signup',
+                'account_activated': True,
+            },
+        )
+
+        response = self.client.get(
+            '/studio/signup-analytics/?account_lifecycle=newsletter_only',
+        )
+        seven = response.context['headline_cards'][1]
+        self.assertEqual(seven['count'], 1)
 
     def test_date_range_filter_does_not_affect_headline_cards(self):
         now = timezone.now()
@@ -391,6 +433,106 @@ class SignupAnalyticsBreakdownTest(TestCase):
         self.assertEqual(rows[0]['signup_path'], 'google_oauth')
         self.assertEqual(rows[0]['n'], 3)
         self.assertEqual(rows[0]['pct'], '100.0%')
+
+
+class SignupAnalyticsLifecycleBreakdownTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='pw', is_staff=True,
+        )
+        UserAttribution.objects.filter(user=cls.staff).delete()
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='pw')
+
+    def test_lifecycle_breakdown_counts_and_recent_rows_render(self):
+        now = timezone.now()
+        newsletter, _ = _make_attribution(
+            email='newsletter@test.com',
+            signup_path='newsletter',
+            created_at=now - timedelta(hours=1),
+            user_kwargs={
+                'signup_source': 'newsletter',
+                'account_activated': False,
+                'unsubscribed': True,
+            },
+        )
+        full, _ = _make_attribution(
+            email='full@test.com',
+            signup_path='email_password',
+            created_at=now - timedelta(hours=2),
+            user_kwargs={
+                'signup_source': 'signup',
+                'account_activated': True,
+            },
+        )
+        imported, _ = _make_attribution(
+            email='imported@test.com',
+            signup_path='unknown',
+            created_at=now - timedelta(hours=3),
+            user_kwargs={
+                'signup_source': 'imported',
+                'account_activated': False,
+            },
+        )
+
+        response = self.client.get('/studio/signup-analytics/')
+        rows = {
+            row['account_lifecycle']: row
+            for row in response.context['account_lifecycle_rows']
+        }
+        self.assertEqual(rows['newsletter_only']['n'], 1)
+        self.assertEqual(rows['newsletter_only']['pct'], '33.3%')
+        self.assertEqual(rows['full_account']['n'], 1)
+        self.assertEqual(rows['imported_or_unknown']['n'], 1)
+        self.assertContains(response, 'data-testid="signup-analytics-lifecycle-table"')
+        self.assertContains(response, 'Newsletter-only')
+        self.assertContains(response, 'Full account')
+        self.assertContains(response, 'Imported / unknown')
+        self.assertContains(response, 'data-lifecycle="newsletter_only"')
+
+        lifecycles_by_email = {
+            attr.user.email: attr.account_lifecycle
+            for attr in response.context['recent_signups']
+        }
+        self.assertEqual(lifecycles_by_email[newsletter.email], 'newsletter_only')
+        self.assertEqual(lifecycles_by_email[full.email], 'full_account')
+        self.assertEqual(
+            lifecycles_by_email[imported.email],
+            'imported_or_unknown',
+        )
+
+    def test_lifecycle_filter_composes_with_signup_path_and_pagination(self):
+        now = timezone.now()
+        for i in range(51):
+            _make_attribution(
+                email=f'google-full-{i}@test.com',
+                signup_path='google_oauth',
+                created_at=now - timedelta(minutes=i),
+                user_kwargs={
+                    'signup_source': 'oauth',
+                    'account_activated': True,
+                },
+            )
+        _make_attribution(
+            email='newsletter@test.com',
+            signup_path='newsletter',
+            created_at=now - timedelta(hours=1),
+            user_kwargs={
+                'signup_source': 'newsletter',
+                'account_activated': False,
+            },
+        )
+
+        response = self.client.get(
+            '/studio/signup-analytics/?signup_path=google_oauth&account_lifecycle=full_account',
+        )
+        self.assertEqual(response.context['window_total'], 51)
+        next_url = response.context['pager_next_url']
+        self.assertIn('signup_path=google_oauth', next_url)
+        self.assertIn('account_lifecycle=full_account', next_url)
+        self.assertIn('page=2', next_url)
 
 
 # ---------------------------------------------------------------------------

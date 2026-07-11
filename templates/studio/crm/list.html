@@ -16,46 +16,65 @@
 <!-- Filter chips and search -->
 <form method="get" class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" data-testid="crm-list-controls">
   <div class="flex flex-wrap items-center gap-2" data-testid="crm-filter-chips">
-    <a href="?filter={{ filter_active }}{% if search %}&q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_active }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}"
        data-testid="crm-filter-active"
        class="px-3 py-1.5 rounded-full text-xs font-medium border {% if active_filter == filter_active %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
       Active{{ counts.active|paren_count }}
     </a>
-    <a href="?filter={{ filter_archived }}{% if search %}&q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_archived }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}"
        data-testid="crm-filter-archived"
        class="px-3 py-1.5 rounded-full text-xs font-medium border {% if active_filter == filter_archived %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
       Archived{{ counts.archived|paren_count }}
     </a>
-    <a href="?filter={{ filter_all }}{% if search %}&q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_all }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}"
        data-testid="crm-filter-all"
        class="px-3 py-1.5 rounded-full text-xs font-medium border {% if active_filter == filter_all %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
       All{{ counts.all|paren_count }}
     </a>
   </div>
-  <div class="flex items-center gap-2">
-    <input type="hidden" name="filter" value="{{ active_filter }}">
-    <input type="text"
-           name="q"
-           value="{{ search }}"
-           placeholder="Search email or persona..."
-           autocomplete="off"
-           data-testid="crm-search-input"
-           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
-    <button type="submit"
-            data-testid="crm-search-submit"
-            class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
-      Search
-    </button>
+  <div class="flex flex-col gap-2 sm:items-end">
+    <div class="flex flex-wrap items-center gap-2" data-testid="crm-lifecycle-filter-chips">
+      <span class="text-xs text-muted-foreground">Lifecycle:</span>
+      <a href="?filter={{ active_filter }}{% if search %}&q={{ search }}{% endif %}"
+         data-lifecycle-filter=""
+         class="px-3 py-1 rounded-full text-xs font-medium border {% if not account_lifecycle_filter %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
+        All
+      </a>
+      {% for value, label in account_lifecycle_choices %}
+      <a href="?filter={{ active_filter }}&account_lifecycle={{ value }}{% if search %}&q={{ search }}{% endif %}"
+         data-lifecycle-filter="{{ value }}"
+         class="px-3 py-1 rounded-full text-xs font-medium border {% if account_lifecycle_filter == value %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
+        {{ label }}
+      </a>
+      {% endfor %}
+    </div>
+    <div class="flex items-center gap-2">
+      <input type="hidden" name="filter" value="{{ active_filter }}">
+      {% if account_lifecycle_filter %}<input type="hidden" name="account_lifecycle" value="{{ account_lifecycle_filter }}">{% endif %}
+      <input type="text"
+             name="q"
+             value="{{ search }}"
+             placeholder="Search email or persona..."
+             autocomplete="off"
+             data-testid="crm-search-input"
+             class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
+      <button type="submit"
+              data-testid="crm-search-submit"
+              class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+        Search
+      </button>
+    </div>
   </div>
 </form>
 
-{% if rows or search or active_filter == filter_archived %}
+{% if rows or search or account_lifecycle_filter or active_filter == filter_archived %}
 <div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="crm-list-table">
   <table class="min-w-full divide-y divide-border">
     <thead class="bg-secondary">
       <tr class="text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
         <th class="px-4 py-3">User</th>
         <th class="px-4 py-3">Tier</th>
+        <th class="px-4 py-3">Lifecycle</th>
         <th class="px-4 py-3">Persona</th>
         <th class="px-4 py-3">Status</th>
         <th class="px-4 py-3">Last updated</th>
@@ -89,6 +108,11 @@
             {% endif %}
           </div>
         </td>
+        <td class="px-4 py-3">
+          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-secondary text-muted-foreground border border-border"
+                data-testid="crm-list-lifecycle-pill"
+                data-lifecycle="{{ row.account_lifecycle }}">{{ row.account_lifecycle_label }}</span>
+        </td>
         <td class="px-4 py-3 text-foreground" data-testid="crm-row-persona">{{ row.persona|default:"—" }}</td>
         <td class="px-4 py-3">
           <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs {% if row.status == 'active' %}bg-green-500/20 text-green-700 dark:text-green-300{% else %}bg-muted text-muted-foreground{% endif %}">
@@ -108,7 +132,7 @@
       </tr>
       {% empty %}
         {% url 'studio_crm_list' as crm_clear_url %}
-        {% studio_empty_state 'filter' entity_label='CRM record' entity_label_plural='CRM records' clear_url=crm_clear_url colspan=8 testid_suffix='crm-empty-state' %}
+        {% studio_empty_state 'filter' entity_label='CRM record' entity_label_plural='CRM records' clear_url=crm_clear_url colspan=9 testid_suffix='crm-empty-state' %}
       {% endfor %}
     </tbody>
   </table>
@@ -119,12 +143,12 @@
   <span>Showing {{ page.start_index }}-{{ page.end_index }} of {{ paginator.count }}</span>
   <div class="flex items-center gap-2">
     {% if page.has_previous %}
-    <a href="?filter={{ active_filter }}{% if search %}&q={{ search }}{% endif %}&page={{ page.previous_page_number }}"
+    <a href="?filter={{ active_filter }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}&page={{ page.previous_page_number }}"
        class="px-3 py-1 rounded border border-border hover:bg-secondary">Previous</a>
     {% endif %}
     <span>Page {{ page.number }} of {{ paginator.num_pages }}</span>
     {% if page.has_next %}
-    <a href="?filter={{ active_filter }}{% if search %}&q={{ search }}{% endif %}&page={{ page.next_page_number }}"
+    <a href="?filter={{ active_filter }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}&page={{ page.next_page_number }}"
        class="px-3 py-1 rounded border border-border hover:bg-secondary">Next</a>
     {% endif %}
   </div>

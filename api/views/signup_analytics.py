@@ -4,6 +4,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from accounts.lifecycle import ACCOUNT_LIFECYCLE_VALUES
 from analytics.services.signup_analytics import (
     API_RECENT_LIMIT_MAX,
     build_signup_analytics_report,
@@ -23,6 +24,8 @@ _RESPONSE_EXAMPLE = {
         'end_at': '2026-07-09T12:00:00+00:00',
         'signup_path': '',
         'signup_path_label': 'All paths',
+        'account_lifecycle': '',
+        'account_lifecycle_label': 'All lifecycles',
         'limit': 50,
     },
     'headline_cards': [
@@ -51,6 +54,14 @@ _RESPONSE_EXAMPLE = {
             },
         },
     ],
+    'account_lifecycle_rows': [
+        {
+            'account_lifecycle': 'newsletter_only',
+            'label': 'Newsletter-only',
+            'signup_count': 3,
+            'percent_share': '25.0%',
+        },
+    ],
     'pre_signup_activity_rows': [
         {
             'category': 'Pricing',
@@ -75,6 +86,8 @@ _RESPONSE_EXAMPLE = {
             'tracked_visit_count': 3,
             'top_categories': ['Pricing'],
             'top_categories_label': 'Pricing',
+            'account_lifecycle': 'full_account',
+            'account_lifecycle_label': 'Full account',
             'signup_path': 'email_password',
             'signup_path_label': 'Email + password',
             'signed_up_at': '2026-07-09T12:00:00+00:00',
@@ -122,6 +135,12 @@ _RESPONSE_EXAMPLE = {
                     'type': 'string',
                     'required': False,
                     'description': 'Optional signup path filter.',
+                },
+                'account_lifecycle': {
+                    'type': 'string',
+                    'enum': list(ACCOUNT_LIFECYCLE_VALUES),
+                    'required': False,
+                    'description': 'Optional derived account lifecycle filter.',
                 },
                 'limit': {
                     'type': 'integer',

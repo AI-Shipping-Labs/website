@@ -18,6 +18,13 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
+from accounts.lifecycle import (
+    ACCOUNT_LIFECYCLE_CHOICES,
+    account_lifecycle_q,
+    derive_account_lifecycle,
+    lifecycle_label,
+    normalize_account_lifecycle,
+)
 from accounts.models import TierOverride
 from community.models import STATUS_BOOKED, BookedCall
 from crm.models import (
@@ -59,6 +66,10 @@ def _normalize_list_filter(raw):
     if raw in VALID_LIST_FILTERS:
         return raw
     return DEFAULT_LIST_FILTER
+
+
+def _normalize_account_lifecycle_filter(raw):
+    return normalize_account_lifecycle(raw)
 
 
 def _active_tier_info(user):
@@ -119,11 +130,14 @@ def crm_list(request):
     Pagination: 50 per page (mirrors the user list).
     """
     active_filter = _normalize_list_filter(request.GET.get('filter', ''))
+    account_lifecycle_filter = _normalize_account_lifecycle_filter(
+        request.GET.get('account_lifecycle', ''),
+    )
     search = (request.GET.get('q', '') or '').strip()
 
     records_qs = (
         CRMRecord.objects
-        .select_related('user', 'user__tier')
+        .select_related('user', 'user__tier', 'user__attribution')
         .annotate(
             plans_count=Count('user__plans', distinct=True),
             notes_count=Count('user__interview_notes', distinct=True),
@@ -135,6 +149,14 @@ def crm_list(request):
         records_qs = records_qs.filter(status='active')
     elif active_filter == FILTER_ARCHIVED:
         records_qs = records_qs.filter(status='archived')
+
+    if account_lifecycle_filter:
+        records_qs = records_qs.filter(
+            account_lifecycle_q(
+                account_lifecycle_filter,
+                user_prefix='user__',
+            )
+        )
 
     if search:
         records_qs = records_qs.filter(
@@ -155,6 +177,7 @@ def crm_list(request):
     rows = []
     for record in page.object_list:
         tier_info = _active_tier_info(record.user)
+        account_lifecycle = derive_account_lifecycle(record.user)
         rows.append({
             'pk': record.pk,
             'user_pk': record.user.pk,
@@ -163,6 +186,8 @@ def crm_list(request):
             'tier_name': tier_info['name'],
             'tier_slug': tier_info['slug'],
             'tier_source': tier_info['source'],
+            'account_lifecycle': account_lifecycle,
+            'account_lifecycle_label': lifecycle_label(account_lifecycle),
             'persona': record.persona,
             'status': record.status,
             'status_display': record.get_status_display(),
@@ -182,17 +207,19 @@ def crm_list(request):
         'paginator': paginator,
         'page': page,
         'active_filter': active_filter,
+        'account_lifecycle_filter': account_lifecycle_filter,
         'search': search,
         'counts': counts,
         'filter_all': FILTER_ALL,
         'filter_active': FILTER_ACTIVE,
         'filter_archived': FILTER_ARCHIVED,
+        'account_lifecycle_choices': ACCOUNT_LIFECYCLE_CHOICES,
     })
 
 
 def _get_record(crm_id):
     return get_object_or_404(
-        CRMRecord.objects.select_related('user', 'user__tier'),
+        CRMRecord.objects.select_related('user', 'user__tier', 'user__attribution'),
         pk=crm_id,
     )
 
@@ -217,6 +244,7 @@ def _activity_filter_chips(request, active_category):
 def _record_detail_context(record, request):
     """Build the shared context for the CRM detail page."""
     tier_info = _active_tier_info(record.user)
+    account_lifecycle = derive_account_lifecycle(record.user)
     activity_category = normalize_activity_category(
         request.GET.get('activity_category', ''),
     )
@@ -268,6 +296,8 @@ def _record_detail_context(record, request):
         'tier_name': tier_info['name'],
         'tier_slug': tier_info['slug'],
         'tier_source': tier_info['source'],
+        'account_lifecycle': account_lifecycle,
+        'account_lifecycle_label': lifecycle_label(account_lifecycle),
         'member_plans': member_plans,
         'booked_calls': booked_calls,
         'activities': activity_context['activities'],

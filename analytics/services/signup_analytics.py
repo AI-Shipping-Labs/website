@@ -7,6 +7,12 @@ from urllib.parse import urlencode
 from django.db.models import Count, Q
 from django.utils import timezone
 
+from accounts.lifecycle import (
+    ACCOUNT_LIFECYCLE_CHOICES,
+    ACCOUNT_LIFECYCLE_LABELS,
+    account_lifecycle_q,
+    derive_account_lifecycle,
+)
 from analytics.models import SIGNUP_PATH_CHOICES, CampaignVisit, UserAttribution
 from integrations.models import UtmCampaign
 
@@ -54,6 +60,7 @@ def parse_signup_analytics_filters(params, *, strict=False, now=None):
     start_str = (params.get('start') or '').strip()
     end_str = (params.get('end') or '').strip()
     signup_path = (params.get('signup_path') or '').strip()
+    account_lifecycle = (params.get('account_lifecycle') or '').strip()
     errors = {}
 
     if range_key not in RANGE_CHOICES:
@@ -65,6 +72,10 @@ def parse_signup_analytics_filters(params, *, strict=False, now=None):
     if signup_path and signup_path not in SIGNUP_PATH_VALUES:
         errors['signup_path'] = 'Unknown signup path.'
         signup_path = ''
+
+    if account_lifecycle and account_lifecycle not in ACCOUNT_LIFECYCLE_LABELS:
+        errors['account_lifecycle'] = 'Unknown account lifecycle.'
+        account_lifecycle = ''
 
     if range_key == 'custom':
         if strict and not start_str:
@@ -112,6 +123,7 @@ def parse_signup_analytics_filters(params, *, strict=False, now=None):
         'start_str': start_str,
         'end_str': end_str,
         'signup_path': signup_path,
+        'account_lifecycle': account_lifecycle,
         'start': start,
         'end': end,
         'prior_start': start - window,
@@ -144,16 +156,26 @@ def querystring(filters):
             params['end'] = filters['end_str']
     if filters['signup_path']:
         params['signup_path'] = filters['signup_path']
+    if filters['account_lifecycle']:
+        params['account_lifecycle'] = filters['account_lifecycle']
     if not params:
         return ''
     return '?' + urlencode(params)
 
 
-def headline_cards(now, *, signup_path=None):
+def headline_cards(now, *, signup_path=None, account_lifecycle=None):
     """Compute the rolling 24h / 7d / 30d headline cards."""
     base = UserAttribution.objects.all()
     if signup_path:
         base = base.filter(signup_path=signup_path)
+    if account_lifecycle:
+        base = base.filter(
+            account_lifecycle_q(
+                account_lifecycle,
+                user_prefix='user__',
+                signup_path_lookup='signup_path',
+            )
+        )
 
     windows = [
         ('24h', '24h', timedelta(hours=24)),
@@ -214,8 +236,13 @@ def build_signup_analytics_report(filters, *, now=None, has_referrer_data=True):
         'headline_cards': headline_cards(
             now,
             signup_path=filters['signup_path'],
+            account_lifecycle=filters['account_lifecycle'],
         ),
         'window_total': window_total,
+        'account_lifecycle_rows': _account_lifecycle_rows(
+            attributions,
+            window_total,
+        ),
         'signup_path_rows': _signup_path_rows(attributions, window_total),
         'utm_source_rows': _utm_source_rows(attributions, window_total),
         'referrer_rows': _referrer_rows(
@@ -369,10 +396,20 @@ def serialize_report(report, *, recent_limit=RECENT_PAGE_SIZE):
                 if filters['signup_path']
                 else 'All paths'
             ),
+            'account_lifecycle': filters['account_lifecycle'],
+            'account_lifecycle_label': (
+                ACCOUNT_LIFECYCLE_LABELS.get(filters['account_lifecycle'])
+                if filters['account_lifecycle']
+                else 'All lifecycles'
+            ),
             'limit': recent_limit,
         },
         'headline_cards': report['headline_cards'],
         'window_total': report['window_total'],
+        'account_lifecycle_rows': [
+            _serialize_lifecycle_row(row)
+            for row in report['account_lifecycle_rows']
+        ],
         'actionable_source_rows': [
             _serialize_actionable_source_row(row)
             for row in report['actionable_source_rows']
@@ -395,6 +432,14 @@ def _window_attributions(filters):
     )
     if filters['signup_path']:
         qs = qs.filter(signup_path=filters['signup_path'])
+    if filters['account_lifecycle']:
+        qs = qs.filter(
+            account_lifecycle_q(
+                filters['account_lifecycle'],
+                user_prefix='user__',
+                signup_path_lookup='signup_path',
+            )
+        )
     return (
         qs.select_related('user', 'first_touch_campaign')
         .order_by('-created_at', '-user_id')
@@ -452,6 +497,11 @@ def _attach_journey_context(attr, source, visits):
     attr.actionable_source = source
     attr.actionable_source_label = source['label']
     attr.actionable_source_kind = source['kind']
+    attr.account_lifecycle = derive_account_lifecycle(
+        attr.user,
+        signup_path=attr.signup_path,
+    )
+    attr.account_lifecycle_label = ACCOUNT_LIFECYCLE_LABELS[attr.account_lifecycle]
     attr.tracked_visit_count = len(visits)
     if not visits:
         attr.first_tracked_landing_path = NO_TRACKED_VISITS_LABEL
@@ -484,6 +534,20 @@ def _signup_path_rows(attributions, total):
         rows.append({
             'signup_path': signup_path,
             'label': SIGNUP_PATH_LABELS.get(signup_path, signup_path),
+            'n': count,
+            'pct': _pct_share(count, total),
+        })
+    return rows
+
+
+def _account_lifecycle_rows(attributions, total):
+    counter = Counter(attr.account_lifecycle for attr in attributions)
+    rows = []
+    for lifecycle, label in ACCOUNT_LIFECYCLE_CHOICES:
+        count = counter.get(lifecycle, 0)
+        rows.append({
+            'account_lifecycle': lifecycle,
+            'label': label,
             'n': count,
             'pct': _pct_share(count, total),
         })
@@ -656,6 +720,15 @@ def _serialize_activity_row(row):
     }
 
 
+def _serialize_lifecycle_row(row):
+    return {
+        'account_lifecycle': row['account_lifecycle'],
+        'label': row['label'],
+        'signup_count': row['n'],
+        'percent_share': row['pct'],
+    }
+
+
 def _serialize_recent_signup(attr):
     return {
         'user_id': attr.user_id,
@@ -667,6 +740,8 @@ def _serialize_recent_signup(attr):
         'tracked_visit_count': attr.tracked_visit_count,
         'top_categories': attr.top_categories,
         'top_categories_label': attr.top_categories_label,
+        'account_lifecycle': attr.account_lifecycle,
+        'account_lifecycle_label': attr.account_lifecycle_label,
         'signup_path': attr.signup_path,
         'signup_path_label': attr.get_signup_path_display(),
         'signed_up_at': attr.created_at.isoformat(),

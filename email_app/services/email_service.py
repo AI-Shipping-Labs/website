@@ -52,6 +52,7 @@ TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "email_templates"
 EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = {
     "email_verification_signup",
     "email_verification_subscribe",
+    "account_email_change_confirm",
     "password_reset",
 }
 
@@ -114,7 +115,15 @@ class EmailService:
             )
         return self._ses_client
 
-    def send(self, user, template_name, context=None, cc=None, bcc=None):
+    def send(
+        self,
+        user,
+        template_name,
+        context=None,
+        cc=None,
+        bcc=None,
+        recipient_email=None,
+    ):
         """Send a transactional email to a user.
 
         Args:
@@ -133,6 +142,10 @@ class EmailService:
             bcc: Optional BCC recipient(s). Same shape rules as ``cc``.
                 Paid checkout welcomes use this for the hidden staff copy;
                 other callers may use it for their own hidden-copy needs.
+            recipient_email: Optional destination override. Used for
+                account-security flows where the email must be addressed to
+                a verified pending/former address before or after
+                ``user.email`` changes.
 
         Returns:
             EmailLog instance for the sent email.
@@ -142,6 +155,7 @@ class EmailService:
         """
         if context is None:
             context = {}
+        to_email = (recipient_email or user.email).strip()
 
         try:
             email_kind = classify_email_type(template_name)
@@ -189,7 +203,7 @@ class EmailService:
 
         # Send via SES
         ses_message_id = self._send_ses(
-            user.email,
+            to_email,
             subject,
             full_html,
             email_type=template_name,
@@ -211,6 +225,7 @@ class EmailService:
         if isinstance(user, Model) and getattr(user, "pk", None):
             email_log = EmailLog.objects.create(
                 user=user,
+                recipient_email=to_email if to_email != user.email else "",
                 email_type=template_name,
                 ses_message_id=ses_message_id,
             )
@@ -220,7 +235,7 @@ class EmailService:
         logger.info(
             'Sent "%s" email to %s (SES message ID: %s)',
             template_name,
-            user.email,
+            to_email,
             ses_message_id,
         )
 

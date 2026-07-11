@@ -25,10 +25,12 @@ class EmailAlias(models.Model):
     SOURCE_MERGE = "merge"
     SOURCE_MANUAL = "manual"
     SOURCE_STRIPE_RELAY = "stripe_relay"
+    SOURCE_ACCOUNT_CHANGE = "account_change"
     SOURCE_CHOICES = [
         (SOURCE_MERGE, "Added by an account merge"),
         (SOURCE_MANUAL, "Operator-added"),
         (SOURCE_STRIPE_RELAY, "Billing relay address"),
+        (SOURCE_ACCOUNT_CHANGE, "Former login email after account change"),
     ]
 
     user = models.ForeignKey(

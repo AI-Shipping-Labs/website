@@ -36,6 +36,8 @@ TRANSACTIONAL_EMAIL_TYPES = {
     "email_verification_signup_reminder",
     "email_verification_subscribe_reminder",
     "password_reset",
+    "account_email_change_confirm",
+    "account_email_changed_notice",
     "event_registration",
     "event_rescheduled",
     "event_cancelled",

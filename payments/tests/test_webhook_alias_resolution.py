@@ -53,6 +53,33 @@ class CheckoutAliasResolutionTest(QuietSubscriptionLookupMixin, TestCase):
             User.objects.filter(email="relay@icloud.test").exists()
         )
 
+    def test_former_login_email_alias_checkout_routes_to_changed_account(self):
+        """An account-change alias keeps old-email Stripe events canonical."""
+        canonical = User.objects.create_user(email="new-member@test.com")
+        EmailAlias.objects.create(
+            user=canonical,
+            email="old-member@test.com",
+            source=EmailAlias.SOURCE_ACCOUNT_CHANGE,
+        )
+
+        session_data = {
+            "id": "cs_former_email",
+            "customer": "cus_former_email",
+            "customer_details": {"email": "old-member@test.com"},
+            "subscription": "sub_former_email",
+            "client_reference_id": None,
+            "metadata": {"tier_slug": "main"},
+        }
+
+        handle_checkout_completed(session_data)
+
+        canonical.refresh_from_db()
+        self.assertEqual(canonical.tier.slug, "main")
+        self.assertEqual(canonical.stripe_customer_id, "cus_former_email")
+        self.assertFalse(
+            User.objects.filter(email="old-member@test.com").exists()
+        )
+
     def test_primary_email_wins_over_alias(self):
         """The primary-email match takes precedence; the alias is never used."""
         user_a = User.objects.create_user(email="a@test.com")

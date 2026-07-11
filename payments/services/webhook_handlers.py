@@ -919,7 +919,7 @@ def handle_customer_updated(customer_data):
         # cases where only metadata or name changed.
         return
 
-    new_email = User.objects.normalize_email(new_email_raw)
+    new_email = normalize_email(new_email_raw)
     if not new_email:
         return
 
@@ -952,6 +952,33 @@ def handle_customer_updated(customer_data):
         raise WebhookPermanentError(
             f"customer.updated: email collision for stripe_customer_id="
             f"{customer_id}; another local user already owns {new_email}"
+        )
+
+    alias = EmailAlias.objects.select_related("user").filter(email=new_email).first()
+    if alias is not None:
+        if alias.user_id == user.pk:
+            _services.logger.info(
+                "customer.updated: email=%s is already an alias for user=%s; "
+                "leaving primary login email unchanged",
+                new_email,
+                user.pk,
+            )
+            return
+
+        CommunityAuditLog.objects.create(
+            user=user,
+            action="email_synced_from_stripe",
+            details=json.dumps({
+                "status": "failed",
+                "reason": "alias_collision",
+                "old_email": user.email,
+                "new_email": new_email,
+                "colliding_user_id": alias.user_id,
+            }),
+        )
+        raise WebhookPermanentError(
+            f"customer.updated: alias collision for stripe_customer_id="
+            f"{customer_id}; another local user has alias {new_email}"
         )
 
     old_email = user.email

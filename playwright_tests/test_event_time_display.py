@@ -164,7 +164,9 @@ def test_member_finds_saves_and_reloads_timezone(
     page.get_by_test_id('save-timezone-btn').click()
 
     status = page.get_by_test_id('timezone-preference-status')
-    expect(status).to_contain_text('Current timezone: GMT+02:00 Europe/Berlin')
+    expect(status).to_have_text('Timezone preference saved.')
+    expect(status).not_to_contain_text('Saved timezone:')
+    expect(status).not_to_contain_text('Europe/Berlin')
 
     page.reload(wait_until='domcontentloaded')
     assert timezone_input.input_value() == 'Europe/Berlin'
@@ -264,7 +266,8 @@ def test_member_clears_timezone_and_uses_browser_timezone(
     page = context.new_page()
     _stub_browser_timezone(page, 'Europe/Berlin')
     page.goto(f'{django_server}/account/', wait_until='domcontentloaded')
-    page.get_by_test_id('clear-timezone-btn').click()
+    page.get_by_test_id('account-timezone-input').select_option('')
+    page.get_by_test_id('save-timezone-btn').click()
     expect(page.get_by_test_id('timezone-preference-status')).to_contain_text(
         'Using browser timezone.'
     )

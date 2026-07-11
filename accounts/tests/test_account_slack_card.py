@@ -183,32 +183,31 @@ class AccountSlackJoinCtaTest(
         self.assertNotContains(connected_response, "Connected to Slack")
         self.assertNotContains(connected_response, "U0FLIP123")
 
-    def test_join_cta_renders_above_membership_and_email_preferences(self):
-        # Issue #730: when the user has not yet joined Slack, the Join
-        # CTA must sit immediately under Profile -- above Membership
-        # and above Email Preferences. Anchor on markers that only
-        # appear once inside the main /account/ card stack (Membership
-        # also appears in the global nav and the mobile menu, so we
-        # cannot rely on the literal word alone).
+    def test_join_cta_renders_after_email_preferences_before_api_keys(self):
+        # Issue #1206: activated members scan Membership first, then Email
+        # Preferences, then the Slack card when eligible, then API keys.
         self._login_main("position@test.com")
         with self.settings(SLACK_INVITE_URL=TEST_INVITE_URL):
             response = self.client.get("/account/")
         self.assertEqual(response.status_code, 200)
 
         content = response.content.decode()
-        join_idx = content.index('data-testid="slack-account-card-join"')
-        # The Membership card heading: lucide "crown" icon + "Membership"
-        # heading text appears in the card stack only.
         membership_idx = content.index('data-lucide="crown"')
         email_prefs_idx = content.index('id="email-preferences-section"')
+        join_idx = content.index('data-testid="slack-account-card-join"')
+        api_idx = content.index('id="api-keys"')
 
-        self.assertLess(
-            join_idx, membership_idx,
-            "Join Slack CTA must render above the Membership card",
-        )
         self.assertLess(
             membership_idx, email_prefs_idx,
             "Membership card must render above Email Preferences",
+        )
+        self.assertLess(
+            email_prefs_idx, join_idx,
+            "Email Preferences must render above the Join Slack CTA",
+        )
+        self.assertLess(
+            join_idx, api_idx,
+            "Join Slack CTA must render above API keys",
         )
 
 

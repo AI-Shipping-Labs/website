@@ -189,7 +189,8 @@ def test_manual_clear_is_not_immediately_rebackfilled(
     page = context.new_page()
     page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
 
-    page.get_by_test_id("clear-timezone-btn").click()
+    page.get_by_test_id("account-timezone-input").select_option("")
+    page.get_by_test_id("save-timezone-btn").click()
     expect(page.get_by_test_id("account-timezone-input")).to_have_value("")
     expect(page.get_by_test_id("timezone-preference-status")).to_contain_text(
         "Using browser timezone."

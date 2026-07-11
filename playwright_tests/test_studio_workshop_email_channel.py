@@ -243,11 +243,7 @@ class TestAccountWorkshopEmailToggle:
         page.goto(f'{django_server}/account/', wait_until='domcontentloaded')
 
         status = page.locator('#workshop-emails-status')
-        status.wait_for(state='visible', timeout=10000)
-        assert (
-            status.inner_text().strip()
-            == 'You will receive workshop announcement emails.'
-        )
+        status.wait_for(state='hidden', timeout=10000)
 
         # Click the toggle and wait for the JS to swap the status text.
         page.locator('#workshop-emails-toggle').click()
@@ -255,24 +251,20 @@ class TestAccountWorkshopEmailToggle:
             """() => {
                 var el = document.getElementById('workshop-emails-status');
                 return el && el.textContent.trim()
-                    === 'You will not receive workshop announcement emails.';
+                    === 'Workshop announcements turned off.';
             }""",
             timeout=10000,
         )
         assert (
             status.inner_text().strip()
-            == 'You will not receive workshop announcement emails.'
+            == 'Workshop announcements turned off.'
         )
 
         # Reload the page: the off state must come from the DB, not
         # from in-memory JS state.
         page.reload(wait_until='domcontentloaded')
         status = page.locator('#workshop-emails-status')
-        status.wait_for(state='visible', timeout=10000)
-        assert (
-            status.inner_text().strip()
-            == 'You will not receive workshop announcement emails.'
-        )
+        status.wait_for(state='hidden', timeout=10000)
 
         # Belt-and-suspenders: confirm the JSONField actually flipped.
         from accounts.models import User

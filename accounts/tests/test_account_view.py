@@ -100,9 +100,9 @@ class AccountPageProfileFormTest(TestCase):
 
 
 class AccountPageProfileOrderTest(TestCase):
-    """The Profile card sits at the top of the cards stack on /account/."""
+    """The Profile card sits below Change Password on /account/."""
 
-    def test_profile_card_appears_before_other_cards(self):
+    def test_profile_card_appears_after_change_password_before_account_info(self):
         user = User.objects.create_user(email="order@example.com")
         self.client.force_login(user)
 
@@ -111,27 +111,13 @@ class AccountPageProfileOrderTest(TestCase):
 
         profile_idx = content.find('id="profile-section"')
         self.assertNotEqual(profile_idx, -1, "profile-section must render")
+        password_idx = content.find('id="change-password-section"')
+        info_idx = content.find('id="account-info-section"')
+        self.assertNotEqual(password_idx, -1, "change-password-section must render")
+        self.assertNotEqual(info_idx, -1, "account-info-section must render")
 
-        # Cards that must appear AFTER the Profile card on the page. Use
-        # ``id=`` attribute markers (or a unique HTML comment for the
-        # Membership block, which has no id) so the assertion is not
-        # tripped by stray occurrences of the word elsewhere on the page.
-        for marker in (
-            "<!-- Membership Section -->",
-            'id="email-preferences-section"',
-            'id="display-preferences-section"',
-            'id="change-password-section"',
-            'id="account-info-section"',
-        ):
-            marker_idx = content.find(marker)
-            self.assertNotEqual(
-                marker_idx, -1,
-                f"{marker!r} must render on /account/",
-            )
-            self.assertLess(
-                profile_idx, marker_idx,
-                f"Profile card must appear above {marker!r}",
-            )
+        self.assertLess(password_idx, profile_idx)
+        self.assertLess(profile_idx, info_idx)
 
 
 class AccountProfilePostTest(TestCase):

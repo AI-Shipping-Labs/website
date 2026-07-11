@@ -909,9 +909,9 @@ class TestScenario10ResubscribeFromAccountPage:
         toggle = page.locator("#newsletter-toggle")
         assert toggle.count() >= 1
 
-        # Then: Shows unsubscribed state
+        # Then: Permanent duplicate state copy is hidden initially.
         status_text = page.locator("#newsletter-status")
-        assert "unsubscribed" in status_text.inner_text().lower()
+        assert status_text.is_hidden()
 
         # The toggle dot should be at translate-x-0 (off)
         toggle_dot = page.locator("#newsletter-toggle-dot")
@@ -926,7 +926,7 @@ class TestScenario10ResubscribeFromAccountPage:
         page.wait_for_function(
             """() => {
                 var el = document.getElementById('newsletter-status');
-                return el && el.textContent.includes('You are subscribed');
+                return el && el.textContent.includes('Newsletter updates turned on');
             }""",
             timeout=10000,
         )
@@ -937,7 +937,7 @@ class TestScenario10ResubscribeFromAccountPage:
         )
 
         # Then: Status text shows subscribed
-        assert "You are subscribed to newsletters" in status_text.inner_text()
+        assert "Newsletter updates turned on." in status_text.inner_text()
 
         # Step 3: Refresh /account/ to verify persistence
         page.goto(
@@ -945,9 +945,9 @@ class TestScenario10ResubscribeFromAccountPage:
             wait_until="domcontentloaded",
         )
 
-        # Then: Toggle still shows subscribed
+        # Then: Toggle still shows subscribed and duplicate copy is hidden.
         status_text = page.locator("#newsletter-status")
-        assert "You are subscribed to newsletters" in status_text.inner_text()
+        assert status_text.is_hidden()
 
         toggle_dot = page.locator("#newsletter-toggle-dot")
         assert toggle_dot.evaluate(

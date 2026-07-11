@@ -185,8 +185,10 @@ def test_saved_preference_is_not_overwritten_by_browser_detection(
     assert timezone_input.input_value() == 'America/New_York'
 
     status = page.get_by_test_id('timezone-preference-status')
-    expect(status).to_contain_text('Current timezone:')
-    expect(status).to_contain_text('America/New_York')
+    expect(status).to_have_text('Using saved timezone for event times.')
+    expect(status).not_to_contain_text('Saved timezone:')
+    expect(status).not_to_contain_text('America/New_York')
+    expect(status).not_to_contain_text('GMT-04:00')
 
     # Detected hint must NOT show -- the user already chose a preference.
     expect(page.get_by_test_id('timezone-detected-hint')).to_be_hidden()
@@ -277,9 +279,11 @@ def test_explicit_save_persists_then_survives_reload(
     timezone_input.select_option('America/New_York')
     page.get_by_test_id('save-timezone-btn').click()
 
-    expect(page.get_by_test_id('timezone-preference-status')).to_contain_text(
-        'Current timezone: GMT-04:00 America/New_York'
-    )
+    status = page.get_by_test_id('timezone-preference-status')
+    expect(status).to_have_text('Timezone preference saved.')
+    expect(status).not_to_contain_text('Saved timezone:')
+    expect(status).not_to_contain_text('America/New_York')
+    expect(status).not_to_contain_text('GMT-04:00')
 
     page.reload(wait_until='domcontentloaded')
     timezone_input = page.get_by_test_id('account-timezone-input')
@@ -309,7 +313,8 @@ def test_clear_resets_to_browser_default_option(
     _stub_browser_timezone(page, 'Europe/Berlin')
     page.goto(f'{django_server}/account/', wait_until='domcontentloaded')
 
-    page.get_by_test_id('clear-timezone-btn').click()
+    page.get_by_test_id('account-timezone-input').select_option('')
+    page.get_by_test_id('save-timezone-btn').click()
 
     timezone_input = page.get_by_test_id('account-timezone-input')
     expect(timezone_input).to_have_value('')

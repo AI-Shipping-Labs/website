@@ -72,7 +72,15 @@ class MemberAPIKeyAccountViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="member-api-keys-section"')
         self.assertContains(response, 'data-testid="member-api-keys-empty"')
-        self.assertContains(response, "API usage guide")
+        self.assertContains(
+            response,
+            'data-testid="member-api-usage-guide-link"',
+            count=1,
+        )
+        self.assertNotContains(
+            response,
+            'data-testid="member-api-keys-empty">\n          No API keys exist yet. Read the',
+        )
         self.assertContains(response, "Download agent skill")
         # Issue #1127: the guide link now points at the on-site docs page,
         # not the raw GitHub blob.

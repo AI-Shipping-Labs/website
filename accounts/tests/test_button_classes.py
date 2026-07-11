@@ -204,10 +204,7 @@ class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):
             _tag_class(html, 'id="save-timezone-btn"'),
             PRODUCT_BUTTON_CLASSES['primary'],
         )
-        self.assertEqual(
-            _tag_class(html, 'id="clear-timezone-btn"'),
-            PRODUCT_BUTTON_CLASSES['secondary'],
-        )
+        self.assertNotIn('id="clear-timezone-btn"', html)
 
     def test_account_verification_banner_button_preserves_amber_overrides(self):
         user = User.objects.create_user(

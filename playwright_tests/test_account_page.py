@@ -650,7 +650,7 @@ class TestScenarioNewsletterToggle:
     def test_newsletter_subscribed_status(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Initially shows subscribed status."""
+        """Initial duplicate state copy stays hidden until a save."""
         ctx = _auth_context(
             browser, "free@test.com", django_db_blocker
         )
@@ -658,7 +658,7 @@ class TestScenarioNewsletterToggle:
         _go_to_account(page, django_server)
 
         status = page.locator("#newsletter-status")
-        assert "You are subscribed to newsletters." in status.inner_text()
+        assert status.is_hidden()
         ctx.close()
     @pytest.mark.core
     def test_toggle_off_and_on(
@@ -676,46 +676,40 @@ class TestScenarioNewsletterToggle:
         toggle = page.locator("#newsletter-toggle")
         status = page.locator("#newsletter-status")
 
-        # Ensure starting state is subscribed
-        expect(status).to_contain_text("subscribed", timeout=5000)
-        if "unsubscribed" in status.inner_text():
-            toggle.click()
-            expect(status).to_contain_text(
-                "You are subscribed to newsletters.", timeout=5000
-            )
-
         # Toggle off
         toggle.click()
         expect(status).to_contain_text(
-            "You are unsubscribed from newsletters.", timeout=5000
+            "Newsletter updates turned off.", timeout=5000
         )
 
         # Toggle back on
         toggle.click()
         expect(status).to_contain_text(
-            "You are subscribed to newsletters.", timeout=5000
+            "Newsletter updates turned on.", timeout=5000
         )
         ctx.close()
     def test_newsletter_persists_after_reload(
         self, django_server, test_users, django_db_blocker
     , browser):
         """Newsletter preference persists after page reload."""
+        from playwright.sync_api import expect
+
         ctx = _auth_context(
             browser, "free@test.com", django_db_blocker
         )
         page = ctx.new_page()
         _go_to_account(page, django_server)
 
+        page.locator("#newsletter-toggle").click()
         status = page.locator("#newsletter-status")
-        if "unsubscribed" in status.inner_text():
-            page.locator("#newsletter-toggle").click()
-            page.wait_for_load_state("domcontentloaded")
-
-        assert "You are subscribed to newsletters." in status.inner_text()
-
+        expect(status).to_contain_text(
+            "Newsletter updates turned off.", timeout=5000
+        )
         page.reload(wait_until="domcontentloaded")
-        status = page.locator("#newsletter-status")
-        assert "You are subscribed to newsletters." in status.inner_text()
+        assert page.locator("#newsletter-status").is_hidden()
+        assert "translate-x-5" not in (
+            page.locator("#newsletter-toggle-dot").get_attribute("class") or ""
+        )
         ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Change password success

@@ -156,7 +156,7 @@ class TestSprintCadenceNotifications:
         page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
         page.locator('[data-testid="sprint-cadence-emails-toggle"]').click()
         status = page.locator('[data-testid="sprint-cadence-emails-status"]')
-        status.get_by_text("You will not receive sprint reminder emails.").wait_for()
+        status.get_by_text("Sprint reminders turned off.").wait_for()
 
         connection.close()
         send_sprint_cadence_notifications(today=datetime.date(2026, 5, 1))

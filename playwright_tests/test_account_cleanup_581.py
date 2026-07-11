@@ -398,27 +398,18 @@ def test_scenario_7_settings_still_work_after_cleanup(
 
         # 1) Newsletter toggle: off -> status text updates.
         status = page.locator("#newsletter-status")
-        if "subscribed" in status.inner_text() and "unsubscribed" not in status.inner_text():
-            page.locator("#newsletter-toggle").click()
-            expect(status).to_contain_text(
-                "You are unsubscribed from newsletters.", timeout=5000
-            )
-        else:
-            # Already unsubscribed; toggle on then off to verify both ways.
-            page.locator("#newsletter-toggle").click()
-            expect(status).to_contain_text(
-                "You are subscribed to newsletters.", timeout=5000
-            )
-            page.locator("#newsletter-toggle").click()
-            expect(status).to_contain_text(
-                "You are unsubscribed from newsletters.", timeout=5000
-            )
+        page.locator("#newsletter-toggle").click()
+        expect(status).to_contain_text(
+            "Newsletter updates turned off.", timeout=5000
+        )
 
         # 2) Display Preferences: pick a timezone option and Save.
         page.locator("#timezone-preference-input").select_option("Europe/Berlin")
         page.click("#save-timezone-btn")
         tz_status = page.locator("#timezone-preference-status")
-        expect(tz_status).to_contain_text("Current timezone:", timeout=5000)
+        expect(tz_status).to_have_text("Timezone preference saved.", timeout=5000)
+        expect(tz_status).not_to_contain_text("Saved timezone:")
+        expect(tz_status).not_to_contain_text("Europe/Berlin")
 
         # 3) Change Password: mismatched new passwords show inline error.
         page.fill("#current-password", DEFAULT_PASSWORD)

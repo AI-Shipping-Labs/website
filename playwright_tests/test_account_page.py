@@ -46,7 +46,7 @@ def _create_test_users():
     Must be called within django_db_blocker.unblock() context.
     Returns a dict of created users keyed by email prefix.
     """
-    from accounts.models import User
+    from accounts.models import TierOverride, User
     from payments.models import Tier
     from playwright_tests.conftest import ensure_tiers
 
@@ -135,6 +135,51 @@ def _create_test_users():
     )
     premium_user.save()
     users["premium"] = premium_user
+
+    # Comped Basic member without a Stripe subscription
+    comped_basic_user, _ = User.objects.get_or_create(
+        email="comped-basic@test.com",
+        defaults={
+            "email_verified": True,
+            "tier": tiers["basic"],
+            "subscription_id": "",
+            "billing_period_end": None,
+            "unsubscribed": False,
+        },
+    )
+    comped_basic_user.set_password(DEFAULT_PASSWORD)
+    comped_basic_user.tier = tiers["basic"]
+    comped_basic_user.subscription_id = ""
+    comped_basic_user.billing_period_end = None
+    comped_basic_user.pending_tier = None
+    comped_basic_user.save()
+    users["comped_basic"] = comped_basic_user
+
+    # Free base member with temporary Main override and no subscription
+    override_main_user, _ = User.objects.get_or_create(
+        email="override-main@test.com",
+        defaults={
+            "email_verified": True,
+            "tier": tiers["free"],
+            "subscription_id": "",
+            "billing_period_end": None,
+            "unsubscribed": False,
+        },
+    )
+    override_main_user.set_password(DEFAULT_PASSWORD)
+    override_main_user.tier = tiers["free"]
+    override_main_user.subscription_id = ""
+    override_main_user.billing_period_end = None
+    override_main_user.pending_tier = None
+    override_main_user.save()
+    TierOverride.objects.filter(user=override_main_user).delete()
+    TierOverride.objects.create(
+        user=override_main_user,
+        original_tier=tiers["free"],
+        override_tier=tiers["main"],
+        expires_at=timezone.make_aware(datetime.datetime(2027, 6, 5, 18, 30, 0)),
+    )
+    users["override_main"] = override_main_user
 
     # Main member with pending downgrade to Basic
     main_downgrade_user, _ = User.objects.get_or_create(
@@ -329,6 +374,23 @@ class TestScenarioFreeMemberAccountPage:
         assert btn.is_visible()
         assert btn.get_attribute("href") == "/pricing"
         ctx.close()
+    @pytest.mark.core
+    def test_free_membership_summary_has_no_billing_or_portal(
+        self, django_server, test_users, django_db_blocker, browser
+    ):
+        """Free member sees concise benefits and only the pricing CTA."""
+        ctx = _auth_context(browser, "free@test.com", django_db_blocker)
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
+
+        benefits = page.locator("#current-tier-benefits")
+        assert benefits.is_visible()
+        assert "Newsletter updates" in benefits.inner_text()
+        assert page.locator("#upgrade-btn").get_attribute("href") == "/pricing"
+        assert page.locator("#manage-subscription-btn").count() == 0
+        assert page.locator("#billing-period-end").count() == 0
+        assert page.locator("#temporary-access-expiry").count() == 0
+        ctx.close()
     def test_no_downgrade_or_cancel_for_free(
         self, django_server, test_users, django_db_blocker
     , browser):
@@ -428,6 +490,33 @@ class TestScenarioBasicMemberSubscription:
         assert portal.inner_text().strip() == "Manage Subscription"
         assert portal.get_attribute("href").startswith("https://billing.stripe.com/")
         ctx.close()
+    @pytest.mark.core
+    def test_basic_member_sees_benefits_and_main_upsell(
+        self, django_server, test_users, django_db_blocker, browser
+    ):
+        """Basic member sees current value and Main as the next step."""
+        ctx = _auth_context(browser, "basic@test.com", django_db_blocker)
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
+
+        assert "Everything in Free" in page.locator("#current-tier-benefits").inner_text()
+        assert "March 15, 2026" in page.locator("#billing-period-end").inner_text()
+        assert page.locator("#manage-subscription-btn").is_visible()
+
+        upsell = page.locator("#next-tier-upsell")
+        assert upsell.is_visible()
+        upsell_text = upsell.inner_text()
+        assert "community" in upsell_text
+        assert "live and group work" in upsell_text
+        assert "accountability" in upsell_text
+        assert "topic voting" in upsell_text
+
+        cta = page.locator("#next-tier-upsell-btn")
+        assert cta.get_attribute("href") == "/pricing"
+        cta.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/pricing" in page.url
+        ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Main member initiates a downgrade
 # ---------------------------------------------------------------
@@ -478,6 +567,27 @@ class TestScenarioMainMemberDowngrade:
         assert page.locator("#downgrade-modal").count() == 0
         assert page.locator("#manage-subscription-btn").is_visible()
         ctx.close()
+    @pytest.mark.core
+    def test_main_member_sees_premium_upsell(
+        self, django_server, test_users, django_db_blocker, browser
+    ):
+        """Main member sees Premium value without local mutation controls."""
+        ctx = _auth_context(browser, "main@test.com", django_db_blocker)
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
+
+        assert "Everything in Basic" in page.locator("#current-tier-benefits").inner_text()
+        assert "April 1, 2026" in page.locator("#billing-period-end").inner_text()
+        assert page.locator("#manage-subscription-btn").is_visible()
+
+        upsell_text = page.locator("#next-tier-upsell").inner_text()
+        assert "mini-courses" in upsell_text
+        assert "course-topic voting" in upsell_text
+        assert "LinkedIn" in upsell_text
+        assert "GitHub teardowns" in upsell_text
+        assert page.locator("#upgrade-modal").count() == 0
+        assert page.locator("#cancel-modal").count() == 0
+        ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Premium member at highest tier
 # ---------------------------------------------------------------
@@ -513,6 +623,77 @@ class TestScenarioPremiumMemberHighestTier:
         assert page.locator("#upgrade-btn").count() == 0
         assert page.locator("#downgrade-btn").count() == 0
         assert page.locator("#cancel-btn").count() == 0
+        ctx.close()
+    @pytest.mark.core
+    def test_premium_has_highest_tier_note_not_upsell(
+        self, django_server, test_users, django_db_blocker, browser
+    ):
+        """Premium member sees benefits and no next-tier prompt."""
+        ctx = _auth_context(browser, "premium@test.com", django_db_blocker)
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
+
+        assert "Everything in Main" in page.locator("#current-tier-benefits").inner_text()
+        assert page.locator("#manage-subscription-btn").is_visible()
+        assert "highest tier" in page.locator("#highest-tier-note").inner_text()
+        assert page.locator("#next-tier-upsell").count() == 0
+        assert page.locator("#upgrade-btn").count() == 0
+        ctx.close()
+
+
+# ---------------------------------------------------------------
+# Scenario: Members without Stripe subscription management
+# ---------------------------------------------------------------
+
+@pytest.mark.django_db(transaction=True)
+class TestScenarioAccountMembershipNoSubscription:
+    """Comped/override members see status, expiry, and pricing paths."""
+
+    @pytest.mark.core
+    def test_override_main_member_sees_expiry_not_billing_or_portal(
+        self, django_server, test_users, django_db_blocker, browser
+    ):
+        """Temporary Main access uses explicit expiry copy, not billing copy."""
+        ctx = _auth_context(browser, "override-main@test.com", django_db_blocker)
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
+
+        assert page.locator("#tier-name").inner_text().strip() == "Main"
+        provenance = page.locator("#tier-override-provenance").inner_text()
+        assert "tier override from Free" in provenance
+        assert "05/06/2027" in provenance
+
+        notice_text = page.locator("#tier-override-notice").inner_text()
+        assert "Temporary Main access" in notice_text
+        assert "not a subscription change" in notice_text
+        expiry = page.locator("#temporary-access-expiry")
+        assert expiry.is_visible()
+        assert "Temporary Access Expires" in expiry.inner_text()
+        assert "Jun 5, 2027" in expiry.inner_text()
+
+        assert page.locator("#billing-period-end").count() == 0
+        assert "Billing Period Ends" not in page.locator("body").inner_text()
+        assert page.locator("#manage-subscription-btn").count() == 0
+        assert page.locator("#paid-plan-pricing-btn").get_attribute("href") == "/pricing"
+        ctx.close()
+
+    @pytest.mark.core
+    def test_paid_tier_without_subscription_gets_pricing_not_portal(
+        self, django_server, test_users, django_db_blocker, browser
+    ):
+        """Paid status without subscription_id does not show dead portal UI."""
+        ctx = _auth_context(browser, "comped-basic@test.com", django_db_blocker)
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
+
+        assert page.locator("#tier-name").inner_text().strip() == "Basic"
+        assert "Everything in Free" in page.locator("#current-tier-benefits").inner_text()
+        assert page.locator("#manage-subscription-btn").count() == 0
+        note = page.locator("#paid-without-subscription-note")
+        assert note.is_visible()
+        assert "No Stripe subscription is connected" in note.inner_text()
+        assert page.locator("#paid-plan-pricing-btn").get_attribute("href") == "/pricing"
+        assert page.locator("#next-tier-upsell").is_visible()
         ctx.close()
 # ---------------------------------------------------------------
 # Scenario: No dead scheduled-downgrade UI (issue #968)

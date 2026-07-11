@@ -22,6 +22,7 @@ def _shot(page, name):
 
 def _reset_guest_content():
     from django.db import connection
+
     from content.models import Article, Course, CuratedLink, Workshop, WorkshopPage
     from events.models import Event, EventRegistration
 
@@ -37,6 +38,7 @@ def _reset_guest_content():
 
 def _create_article(title, slug, *, cover_image_url="", tags=None):
     from django.db import connection
+
     from content.models import Article
 
     Article.objects.create(
@@ -53,6 +55,7 @@ def _create_article(title, slug, *, cover_image_url="", tags=None):
 
 def _create_course(title, slug, tags=None):
     from django.db import connection
+
     from content.models import Course
 
     Course.objects.create(
@@ -67,6 +70,7 @@ def _create_course(title, slug, tags=None):
 
 def _create_curated_link(title, item_id, *, description="", required_level=0):
     from django.db import connection
+
     from content.models import CuratedLink
 
     CuratedLink.objects.create(
@@ -85,6 +89,7 @@ def _create_curated_link(title, item_id, *, description="", required_level=0):
 
 def _create_workshop():
     from django.db import connection
+
     from content.models import Workshop
 
     workshop = Workshop.objects.create(
@@ -110,6 +115,7 @@ def _create_workshop():
 
 def _create_event():
     from django.db import connection
+
     from events.models import Event
 
     event = Event.objects.create(

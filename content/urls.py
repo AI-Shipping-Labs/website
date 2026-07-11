@@ -22,6 +22,7 @@ from content.views.faq import faq
 from content.views.home import home
 from content.views.interview import interview_detail, interview_hub
 from content.views.legal import impressum, privacy, terms
+from content.views.marketing_pages import marketing_page_preview
 from content.views.pages import (
     about,
     activities,
@@ -37,7 +38,6 @@ from content.views.pages import (
     tutorial_detail,
     tutorials_list,
 )
-from content.views.marketing_pages import marketing_page_preview
 from content.views.peer_review import (
     api_review_dashboard,
     api_submit_project,

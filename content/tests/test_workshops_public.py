@@ -90,6 +90,7 @@ def _make_workshop(slug='ws', title='Workshop', status='published',
                    landing=0, pages=10, recording=20, with_event=False,
                    recording_url='https://www.youtube.com/watch?v=abc',
                    materials=None, code_repo_url='', cover_image_url='',
+                   custom_banner_url='', auto_banner_url='',
                    description='# Hello\n\nDescription text.',
                    tags=None, instructor='Alice', skill_level='',
                    core_tools=None):
@@ -114,6 +115,8 @@ def _make_workshop(slug='ws', title='Workshop', status='published',
         description=description,
         code_repo_url=code_repo_url,
         cover_image_url=cover_image_url,
+        custom_banner_url=custom_banner_url,
+        auto_banner_url=auto_banner_url,
         tags=tags or [],
         skill_level=skill_level,
         core_tools=core_tools or [],
@@ -823,15 +826,92 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'group block focus-visible:outline-none')
         self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
 
+    def test_catalog_auto_banner_only_uses_decorative_fallback_preview(self):
+        auto_url = 'https://cdn.example/banners/generated-workshop.png'
+        self.published.cover_image_url = ''
+        self.published.custom_banner_url = ''
+        self.published.auto_banner_url = auto_url
+        self.published.save()
+
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
+        card = _workshop_card_html(response, 'one')
+
+        self.assertIn('data-testid="workshop-card-preview-fallback"', card)
+        self.assertNotIn('data-testid="workshop-card-preview-image"', card)
+        self.assertNotIn(auto_url, card)
+
+    def test_landing_embedded_catalog_skips_auto_banner_preview(self):
+        auto_url = 'https://cdn.example/banners/landing-generated-workshop.png'
+        self.published.cover_image_url = ''
+        self.published.custom_banner_url = ''
+        self.published.auto_banner_url = auto_url
+        self.published.save()
+
+        response = self.client.get(WORKSHOPS_LANDING_URL)
+        card = _workshop_card_html(response, 'one')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-testid="workshop-card-preview-fallback"', card)
+        self.assertNotIn('data-testid="workshop-card-preview-image"', card)
+        self.assertNotIn(auto_url, card)
+
     def test_catalog_cover_image_has_alt_text_and_lazy_loading(self):
         self.published.cover_image_url = 'https://cdn.example/workshop-card.png'
+        self.published.custom_banner_url = 'https://cdn.example/custom/workshop-card.png'
+        self.published.auto_banner_url = 'https://cdn.example/generated/workshop-card.png'
         self.published.save()
         response = self.client.get(WORKSHOPS_CATALOG_URL)
+        card = _workshop_card_html(response, 'one')
         self.assertContains(response, 'data-testid="workshop-card-preview-image"')
         self.assertContains(response, 'https://cdn.example/workshop-card.png')
         self.assertContains(response, 'alt="Cover image for Visible Workshop"')
         self.assertContains(response, 'loading="lazy"')
         self.assertNotContains(response, 'data-testid="workshop-card-preview-fallback"')
+        self.assertIn('https://cdn.example/workshop-card.png', card)
+        self.assertNotIn('https://cdn.example/custom/workshop-card.png', card)
+        self.assertNotIn('https://cdn.example/generated/workshop-card.png', card)
+
+    def test_catalog_custom_banner_preview_beats_auto_banner(self):
+        custom_url = 'https://cdn.example/custom-banners/workshop-card.png'
+        auto_url = 'https://cdn.example/banners/generated-workshop-card.png'
+        self.published.cover_image_url = ''
+        self.published.custom_banner_url = custom_url
+        self.published.auto_banner_url = auto_url
+        self.published.save()
+
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
+        card = _workshop_card_html(response, 'one')
+
+        self.assertIn('data-testid="workshop-card-preview-image"', card)
+        self.assertIn(custom_url, card)
+        self.assertNotIn(auto_url, card)
+        self.assertNotIn('data-testid="workshop-card-preview-fallback"', card)
+
+    def test_filtered_catalog_keeps_auto_banner_only_fallback(self):
+        Workshop.objects.all().delete()
+        agents_auto_url = 'https://cdn.example/banners/agents-generated.png'
+        _make_workshop(
+            slug='agents-card',
+            title='Agents Card',
+            pages=LEVEL_OPEN,
+            tags=['agents'],
+            auto_banner_url=agents_auto_url,
+        )
+        _make_workshop(
+            slug='python-card',
+            title='Python Card',
+            pages=LEVEL_OPEN,
+            tags=['python'],
+            cover_image_url='https://cdn.example/covers/python.png',
+        )
+
+        response = self.client.get(f'{WORKSHOPS_CATALOG_URL}?tag=agents')
+        card = _workshop_card_html(response, 'agents-card')
+
+        self.assertIn('Agents Card', card)
+        self.assertIn('data-testid="workshop-card-preview-fallback"', card)
+        self.assertNotIn(agents_auto_url, card)
+        self.assertNotContains(response, 'Python Card')
 
     def test_catalog_draft_metadata_does_not_leak_through_card_signals(self):
         draft = _make_workshop(

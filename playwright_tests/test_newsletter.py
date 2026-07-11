@@ -554,7 +554,7 @@ class TestScenario5DoubleOptInVerification:
 
         # Then: User can access the authenticated dashboard
         body = page.content()
-        assert "Quick Actions" in body or "Welcome" in body
+        assert "Quick actions" in body or "Welcome" in body
 
     def test_already_verified_user_gets_success_page(self, django_server, page):
         """Already-verified users can click an old link idempotently."""

@@ -200,13 +200,14 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         self.client.login(email='main-sprint@test.com', password='pw')
         response = self.client.get('/')
 
-        self.assertContains(response, 'Sprints & Cohorts')
+        self.assertContains(response, 'Sprints and cohorts')
         self.assertContains(response, 'Main Sprint')
         self.assertContains(
             response,
             reverse('sprint_detail', kwargs={'sprint_slug': sprint.slug}),
         )
-        self.assertContains(response, 'View sprint')
+        self.assertContains(response, 'Main')
+        self.assertContains(response, 'View cohort')
 
     def test_ineligible_user_does_not_see_locked_active_sprint(self):
         User.objects.create_user(
@@ -226,6 +227,33 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Premium Sprint')
         self.assertContains(response, 'No active sprint openings for your tier')
         self.assertContains(response, 'href="/activities"')
+
+    def test_free_visible_sprint_has_free_open_label(self):
+        User.objects.create_user(
+            email='free-sprint@test.com', password='pw', tier=self.free_tier,
+        )
+        Sprint.objects.create(
+            name='Open Sprint', slug='open-sprint',
+            start_date=_active_sprint_start(),
+            duration_weeks=6,
+            status='active',
+            min_tier_level=0,
+        )
+        Sprint.objects.create(
+            name='Main Only Sprint', slug='main-only-sprint',
+            start_date=_active_sprint_start(),
+            duration_weeks=6,
+            status='active',
+            min_tier_level=LEVEL_MAIN,
+        )
+
+        self.client.login(email='free-sprint@test.com', password='pw')
+        response = self.client.get('/')
+
+        self.assertContains(response, 'Open Sprint')
+        self.assertContains(response, 'Free/open')
+        self.assertContains(response, 'Open to Free members')
+        self.assertNotContains(response, 'Main Only Sprint')
 
     def test_enrolled_user_without_plan_links_active_sprint_to_cohort(self):
         user = User.objects.create_user(
@@ -286,8 +314,36 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
                 kwargs={'sprint_slug': current.slug, 'plan_id': plan.pk},
             ),
         )
+        self.assertContains(response, 'Other cohorts')
         self.assertContains(response, 'Other Sprint')
         self.assertContains(
             response,
             reverse('sprint_detail', kwargs={'sprint_slug': other.slug}),
         )
+        active_sprints = response.content.decode().split(
+            'data-testid="dashboard-active-sprints"', 1,
+        )[1]
+        self.assertNotIn('Current Sprint', active_sprints)
+        self.assertNotContains(response, 'Current cohort')
+
+    def test_user_with_plan_and_no_other_opportunities_has_no_duplicate_cohort(self):
+        user = User.objects.create_user(
+            email='planned-only@test.com', password='pw', tier=self.main_tier,
+        )
+        current = Sprint.objects.create(
+            name='Current Only Sprint', slug='current-only-sprint',
+            start_date=_active_sprint_start(),
+            duration_weeks=6,
+            status='active',
+            min_tier_level=LEVEL_MAIN,
+        )
+        Plan.objects.create(
+            member=user, sprint=current, shared_at=timezone.now(),
+        )
+
+        self.client.login(email='planned-only@test.com', password='pw')
+        response = self.client.get('/')
+
+        self.assertContains(response, 'data-testid="account-sprint-plan-card"')
+        self.assertNotContains(response, 'Current cohort')
+        self.assertNotContains(response, 'data-testid="dashboard-active-sprints"')

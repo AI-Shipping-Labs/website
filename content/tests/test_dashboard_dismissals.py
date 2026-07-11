@@ -91,6 +91,7 @@ class DashboardSlackDismissTest(TierSetupMixin, TestCase):
         self.assertContains(
             response, 'data-testid="slack-account-card-dismiss"',
         )
+        self.assertContains(response, 'absolute right-3 top-3')
         self.assertTrue(response.context["slack_card_dismissable"])
 
     def test_dashboard_join_card_hidden_when_dismissed(self):

@@ -160,7 +160,7 @@ def _mark_unit_completed(user_email, unit):
 
 
 def _enroll_user(user_email, course):
-    """Create an active course Enrollment for dashboard Continue Learning."""
+    """Create an active course Enrollment for dashboard Continue learning."""
     from accounts.models import User
     from content.models import Enrollment
 
@@ -855,7 +855,7 @@ class TestScenario10DashboardContinueLearning:
     @pytest.mark.core
     def test_in_progress_course_on_dashboard(self, django_server, browser):
         """Given a Premium member with 1 of 3 units completed, the
-        dashboard shows the course in 'Continue Learning' with progress.
+        dashboard shows the course in 'Continue learning' with progress.
         Clicking the Continue button deep-links to the next unfinished
         unit within the course."""
         _clear_courses()
@@ -894,8 +894,8 @@ class TestScenario10DashboardContinueLearning:
         )
         body = page.content()
 
-        # "Continue Learning" section is present
-        assert "Continue Learning" in body
+        # "Continue learning" section is present
+        assert "Continue learning" in body
 
         # The course appears with progress
         assert "Dashboard Course" in body
@@ -903,7 +903,7 @@ class TestScenario10DashboardContinueLearning:
         progress_text = page.locator("text=/1\\s*(of|\\/)\\s*3/")
         assert progress_text.count() >= 1, "Expected progress indicator like '1 of 3' or '1/3'"
 
-        # Step 2: Click the Continue button in the Continue Learning section.
+        # Step 2: Click the Continue button in the Continue learning section.
         # After #244, Continue deep-links to the next unfinished unit, so the
         # link should start with /courses/dashboard-course/ (a descendant URL),
         # not point at the course landing page.

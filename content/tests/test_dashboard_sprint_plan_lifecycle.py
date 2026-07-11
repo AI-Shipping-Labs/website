@@ -72,8 +72,8 @@ class DashboardSprintPlanLifecycleTest(TierSetupMixin, TestCase):
         self.assertContains(
             response, 'data-testid="account-sprint-plan-open"',
         )
-        # The Sprints & Cohorts sidebar still renders for discovery.
-        self.assertContains(response, "Sprints & Cohorts")
+        # The duplicate current-cohort sidebar no longer renders.
+        self.assertNotContains(response, "Current cohort")
 
     def test_active_sprint_keeps_present_heading_and_active_label(self):
         # start 14 days ago, 8-week (56d) window -> active (not ending soon).

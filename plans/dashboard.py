@@ -20,6 +20,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.utils.user_checks import is_authenticated_user
+from content.access import LEVEL_OPEN, get_required_tier_name
 from plans.models import Plan, Sprint, SprintEnrollment
 from plans.services import annotate_plan_progress
 from plans.tasks.sprint_end import (
@@ -212,6 +213,7 @@ def build_active_sprint_opportunities_context(
         return {
             'active_sprint_opportunities': [],
             'active_sprint_discovery_url': '/activities',
+            'active_sprint_section_title': 'Sprints and cohorts',
         }
 
     current_plan_sprint_id = plan.sprint_id if plan is not None else None
@@ -234,16 +236,28 @@ def build_active_sprint_opportunities_context(
     enrolled_sprint_ids = {enrollment.sprint_id for enrollment in enrollments}
 
     opportunities = []
+
+    def _opportunity_payload(sprint, *, url, cta_label, enrolled):
+        required_tier_label = get_required_tier_name(sprint.min_tier_level)
+        return {
+            'sprint': sprint,
+            'url': url,
+            'cta_label': cta_label,
+            'enrolled': enrolled,
+            'required_tier_label': required_tier_label,
+            'is_free_open': sprint.min_tier_level == LEVEL_OPEN,
+        }
+
     for enrollment in enrollments:
         sprint = enrollment.sprint
         if sprint.id in blocked_sprint_ids:
             continue
-        opportunities.append({
-            'sprint': sprint,
-            'url': reverse('cohort_board', kwargs={'sprint_slug': sprint.slug}),
-            'cta_label': 'View cohort',
-            'enrolled': True,
-        })
+        opportunities.append(_opportunity_payload(
+            sprint,
+            url=reverse('cohort_board', kwargs={'sprint_slug': sprint.slug}),
+            cta_label='View cohort',
+            enrolled=True,
+        ))
 
     remaining_slots = max(0, 2 - len(opportunities))
     if remaining_slots:
@@ -254,17 +268,21 @@ def build_active_sprint_opportunities_context(
             .order_by('start_date')[:remaining_slots]
         )
         for sprint in joinable_sprints:
-            opportunities.append({
-                'sprint': sprint,
-                'url': reverse(
+            opportunities.append(_opportunity_payload(
+                sprint,
+                url=reverse(
                     'sprint_detail',
                     kwargs={'sprint_slug': sprint.slug},
                 ),
-                'cta_label': 'View sprint',
-                'enrolled': False,
-            })
+                cta_label='View cohort',
+                enrolled=False,
+            ))
 
     return {
         'active_sprint_opportunities': opportunities[:2],
         'active_sprint_discovery_url': '/activities',
+        'active_sprint_section_title': (
+            'Other cohorts' if current_plan_sprint_id is not None
+            else 'Sprints and cohorts'
+        ),
     }

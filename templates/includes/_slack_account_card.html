@@ -26,14 +26,23 @@
   flag) and only on this Join-Slack branch — never on the slack_connected
   state below.
 {% endcomment %}
-<section class="mb-8" data-testid="slack-account-card"{% if slack_card_dismissable %} data-dismiss-card-container{% endif %}>
-  <div class="rounded-lg border border-border bg-card p-5 sm:p-6">
-    <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+<section class="{% if slack_card_dismissable %}h-full{% else %}mb-8{% endif %}" data-testid="slack-account-card"{% if slack_card_dismissable %} data-dismiss-card-container{% endif %}>
+  <div class="relative h-full rounded-lg border border-border bg-card p-5 sm:p-6">
+    {% if slack_card_dismissable %}
+    <button type="button"
+            class="absolute right-3 top-3 inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            aria-label="Dismiss"
+            data-testid="slack-account-card-dismiss"
+            data-dismiss-card="slack_join">
+      <i data-lucide="x" class="h-4 w-4"></i>
+    </button>
+    {% endif %}
+    <div class="flex flex-col gap-4 {% if slack_card_dismissable %}pr-12 sm:pr-0{% endif %} sm:flex-row sm:items-center">
       <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-secondary">
         <i data-lucide="message-square" class="h-5 w-5 text-accent"></i>
       </div>
-      <div class="flex-1">
-        <h2 class="text-lg font-semibold text-foreground">Join our Slack community</h2>
+      <div class="min-w-0 flex-1">
+        <h2 class="text-lg font-semibold tracking-tight text-foreground">Join our Slack community</h2>
         <p class="mt-1 text-sm text-muted-foreground">Connect with other builders in our private Slack workspace.</p>
         <p class="mt-2 text-xs text-muted-foreground">Already joined? It may take up to an hour for your account to be linked automatically.</p>
       </div>
@@ -41,15 +50,6 @@
         <i data-lucide="message-square" class="h-4 w-4"></i>
         Join Slack
       </a>
-      {% if slack_card_dismissable %}
-      <button type="button"
-              class="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Dismiss"
-              data-testid="slack-account-card-dismiss"
-              data-dismiss-card="slack_join">
-        <i data-lucide="x" class="h-4 w-4"></i>
-      </button>
-      {% endif %}
     </div>
   </div>
 </section>

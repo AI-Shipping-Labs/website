@@ -208,7 +208,7 @@ class TestPartialGatedSeriesDashboardEnrollment:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
         upcoming = page.locator(
             "section", has=page.get_by_role(
-                "heading", name="Upcoming Events",
+                "heading", name="Upcoming events",
             ),
         )
         upcoming.wait_for(state="visible")

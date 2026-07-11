@@ -81,60 +81,86 @@ class HomepageRoutingTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         self.assertTemplateNotUsed(response, 'home.html')
 
-    def test_authenticated_user_sees_dashboard_content_without_welcome_card(self):
+    def test_authenticated_user_sees_dashboard_content_with_header(self):
         self.client.login(email='test@example.com', password='testpass123')
         response = self.client.get('/')
         content = response.content.decode()
-        self.assertIn('Continue Learning', content)
-        self.assertNotIn('Welcome back', content)
+        self.assertIn('Continue learning', content)
+        self.assertIn('Welcome back, Alice', content)
 
 
 # ============================================================
-# Removed Welcome Card
+# Dashboard Header
 # ============================================================
 
 
-class RemovedWelcomeCardTest(TierSetupMixin, TestCase):
-    """The dashboard no longer renders the old welcome/account upgrade card."""
+class DashboardHeaderTest(TierSetupMixin, TestCase):
+    """The dashboard renders a compact identity header and tier pill."""
 
-    def test_does_not_show_first_name_welcome_card(self):
-        User.objects.create_user(
-            email='alice@example.com', password='testpass',
-            first_name='Alice',
+    def _login_user(self, email, *, tier=None, first_name=''):
+        user = User.objects.create_user(
+            email=email, password='testpass', first_name=first_name,
+            tier=tier,
         )
-        self.client.login(email='alice@example.com', password='testpass')
-        response = self.client.get('/')
-        self.assertNotContains(response, 'Welcome back, Alice')
+        self.client.login(email=email, password='testpass')
+        return user
 
-    def test_does_not_show_generic_welcome_card(self):
-        User.objects.create_user(
-            email='noname@example.com', password='testpass',
+    def test_shows_first_name_greeting_and_one_h1(self):
+        self._login_user(
+            email='alice@example.com',
+            first_name='Alice', tier=self.free_tier,
         )
-        self.client.login(email='noname@example.com', password='testpass')
         response = self.client.get('/')
-        self.assertNotContains(response, 'Welcome back')
+        content = response.content.decode()
+        self.assertContains(response, 'data-testid="dashboard-header"')
+        self.assertContains(response, 'Welcome back, Alice')
+        self.assertEqual(len(re.findall(r'<h1\b', content)), 1)
 
-    def test_free_label_is_not_rendered_as_standalone_dashboard_badge(self):
-        User.objects.create_user(
-            email='free@example.com', password='testpass',
-        )
-        self.client.login(email='free@example.com', password='testpass')
+    def test_shows_generic_greeting_without_first_name(self):
+        self._login_user('noname@example.com', tier=self.free_tier)
         response = self.client.get('/')
-        self.assertNotContains(response, '>Free<')
+        self.assertContains(response, 'Welcome back')
+        self.assertNotContains(response, 'Welcome back,')
+
+    def test_tier_pill_renders_for_all_standard_tiers(self):
+        for tier in [
+            self.free_tier,
+            self.basic_tier,
+            self.main_tier,
+            self.premium_tier,
+        ]:
+            with self.subTest(tier=tier.slug):
+                self.client.logout()
+                self._login_user(f'{tier.slug}@example.com', tier=tier)
+                response = self.client.get('/')
+                self.assertContains(response, 'data-testid="dashboard-tier-pill"')
+                self.assertContains(response, tier.name)
+
+    def test_tier_pill_defaults_to_free_without_explicit_tier(self):
+        self._login_user('notier@example.com')
+        response = self.client.get('/')
+        self.assertContains(response, 'data-testid="dashboard-tier-pill"')
+        self.assertContains(response, 'Free')
+
+    def test_active_override_tier_is_marked_as_trial(self):
+        user = self._login_user('override@example.com', tier=self.free_tier)
+        TierOverride.objects.create(
+            user=user,
+            original_tier=self.free_tier,
+            override_tier=self.main_tier,
+            expires_at=timezone.now() + timedelta(days=7),
+        )
+        response = self.client.get('/')
+        self.assertContains(response, 'data-testid="dashboard-tier-pill"')
+        self.assertContains(response, 'Main trial')
 
     def test_account_link_remains_available_in_header(self):
-        User.objects.create_user(
-            email='acct@example.com', password='testpass',
-        )
-        self.client.login(email='acct@example.com', password='testpass')
+        self._login_user('acct@example.com')
         response = self.client.get('/')
         self.assertContains(response, 'Account')
 
-    def test_upgrade_link_is_not_rendered_in_removed_welcome_card(self):
-        User.objects.create_user(
-            email='upgrade@example.com', password='testpass',
-        )
-        self.client.login(email='upgrade@example.com', password='testpass')
+    def test_old_upgrade_welcome_card_is_not_rendered(self):
+        self._login_user('upgrade@example.com', tier=self.free_tier)
         response = self.client.get('/')
         self.assertNotContains(response, 'Upgrade')
 
@@ -187,8 +213,8 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         content = response.content.decode()
         self.assertIn('No courses or workshops in progress yet', content)
-        self.assertIn('Browse Courses', content)
-        self.assertIn('Browse Workshops', content)
+        self.assertIn('Browse courses', content)
+        self.assertIn('Browse workshops', content)
         self.assertIn('data-testid="member-empty-state"', content)
         self.assertIn('href="/courses"', content)
         self.assertIn('href="/workshops"', content)
@@ -574,7 +600,7 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         content = response.content.decode()
         self.assertIn('No upcoming events', content)
-        self.assertIn('Browse Events', content)
+        self.assertIn('Browse events', content)
         self.assertIn('data-testid="member-empty-state"', content)
         self.assertIn('href="/events"', content)
 
@@ -845,7 +871,7 @@ class RecentContentTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         content = response.content.decode()
         self.assertIn('No content available yet', content)
-        self.assertIn('Browse Blog', content)
+        self.assertIn('Browse blog', content)
         self.assertIn('data-testid="member-empty-state"', content)
         self.assertIn('href="/blog"', content)
 
@@ -1002,10 +1028,10 @@ class QuickActionsTest(TierSetupMixin, TestCase):
         )
         self.client.login(email='free@example.com', password='testpass')
         response = self.client.get('/')
-        self.assertContains(response, 'Browse Courses')
-        self.assertContains(response, 'Browse Workshops')
+        self.assertContains(response, 'Browse courses')
+        self.assertContains(response, 'Browse workshops')
         self.assertContains(response, 'Resources')
-        self.assertContains(response, 'Events &amp; Recordings')
+        self.assertContains(response, 'Events and recordings')
         self.assertContains(response, 'Projects')
         self.assertContains(response, 'Activities')
 
@@ -1260,11 +1286,11 @@ class DashboardTemplateTest(TierSetupMixin, TestCase):
     def test_dashboard_has_all_sections(self):
         response = self.client.get('/')
         content = response.content.decode()
-        self.assertIn('Continue Learning', content)
-        self.assertIn('Upcoming Events', content)
-        self.assertIn('Recent Content', content)
-        self.assertIn('Active Polls', content)
-        self.assertIn('Quick Actions', content)
+        self.assertIn('Continue learning', content)
+        self.assertIn('Upcoming events', content)
+        self.assertIn('Recent content', content)
+        self.assertIn('Active polls', content)
+        self.assertIn('Quick actions', content)
 
     def test_dashboard_body_has_no_duplicate_notifications_section(self):
         Notification.objects.create(
@@ -1282,7 +1308,7 @@ class DashboardTemplateTest(TierSetupMixin, TestCase):
         self.assertFalse(
             any('notifications' in context for context in response.context),
         )
-        self.assertContains(response, 'Quick Actions')
+        self.assertContains(response, 'Quick actions')
 
     def test_dashboard_extends_base(self):
         response = self.client.get('/')
@@ -1415,8 +1441,8 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
             response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertIn('Continue Learning', content)
-        self.assertNotIn('Welcome back', content)
+        self.assertIn('Continue learning', content)
+        self.assertIn('Welcome back', content)
 
     def test_auto_linking_note_shown(self):
         """The join card includes a note about automatic linking."""
@@ -1479,13 +1505,15 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
         self.assertTrue(response.context['show_slack_join'])
         self.assertFalse(response.context['slack_connected'])
 
-    def test_slack_section_position_above_continue(self):
-        """The Slack section appears before Continue Learning."""
+    def test_slack_section_position_after_continue(self):
+        """The Slack section is secondary, after Continue learning."""
         self._create_user('main-pos@test.com', tier=self.main_tier)
         self.client.login(email='main-pos@test.com', password='testpass')
         with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
             response = self.client.get('/')
         content = response.content.decode()
         pos_slack = content.index('Join our Slack community')
-        pos_continue = content.index('Continue Learning')
-        self.assertLess(pos_slack, pos_continue)
+        pos_continue = content.index('Continue learning')
+        pos_upcoming = content.index('Upcoming events')
+        self.assertGreater(pos_slack, pos_continue)
+        self.assertGreater(pos_slack, pos_upcoming)

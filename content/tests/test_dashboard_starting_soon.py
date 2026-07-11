@@ -6,8 +6,7 @@ Covers:
 - Not-registered case (no card)
 - Excluded statuses (cancelled, completed, draft)
 - ``format_user_datetime`` user-TZ suffix (Europe/Berlin vs default UTC)
-- Join URL is ``/events/<slug>/join``, not the raw Zoom URL
-- Card label flips at the 5-min boundary
+- The rendered card links to the event detail page, not the raw Zoom URL
 - Meta refresh tag present only when the card is showing
 - Upcoming Events list still includes the same imminent event
   (intentional double-display)
@@ -287,12 +286,8 @@ class StartingSoonDashboardViewTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'data-seconds-remaining=')
         # Title shown.
         self.assertContains(response, 'Cohort Office Hours')
-        # Open join page label (> 5 min away).
-        self.assertContains(response, 'Open join page')
-        # Join URL is the id-canonical /events/<id>/<slug>/join (#1082),
-        # NEVER raw Zoom.
-        join_url = event.get_join_url()
-        self.assertContains(response, f'href="{join_url}"')
+        self.assertContains(response, 'View event')
+        self.assertContains(response, f'href="{event.get_absolute_url()}"')
         self.assertNotContains(response, 'href="https://zoom.us/j/abc"')
         # Meta refresh present.
         self.assertContains(
@@ -310,7 +305,8 @@ class StartingSoonDashboardViewTest(TierSetupMixin, TestCase):
         self.assertContains(
             response, 'data-testid="starting-soon-card"',
         )
-        self.assertContains(response, 'Join now')
+        self.assertContains(response, 'View event')
+        self.assertNotContains(response, 'Join now')
         self.assertNotContains(response, 'Open join page')
 
     def test_far_event_does_not_render_card_or_meta_refresh(self):
@@ -342,9 +338,9 @@ class StartingSoonDashboardViewTest(TierSetupMixin, TestCase):
 
         response = self.client.get('/')
         # Title rendered AT LEAST twice — once in the card, once in the list.
-        # The card has the data-testid; the list has the "View Event" CTA.
+        # The card has the data-testid; the list has the "View event" CTA.
         self.assertContains(response, 'Both Surfaces', count=2)
-        self.assertContains(response, 'View Event')
+        self.assertContains(response, 'View event')
 
     def test_unregistered_user_with_imminent_event_sees_no_card(self):
         # Event exists in the window but the user is not registered.
@@ -404,7 +400,8 @@ class StartingSoonFreezeTimeTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         self.assertContains(response, 'data-testid="starting-soon-card"')
         self.assertContains(response, 'Exactly Ten')
-        self.assertContains(response, 'Open join page')
+        self.assertContains(response, 'View event')
+        self.assertNotContains(response, 'Open join page')
 
     @freeze_time(FROZEN_NOW)
     def test_event_at_t_plus_11_min_no_card(self):
@@ -437,7 +434,8 @@ class StartingSoonFreezeTimeTest(TierSetupMixin, TestCase):
 
         self.client.login(email='ft3@example.com', password='testpass')
         response = self.client.get('/')
-        self.assertContains(response, 'Join now')
+        self.assertContains(response, 'View event')
+        self.assertNotContains(response, 'Join now')
         self.assertNotContains(response, 'Open join page')
 
     @freeze_time(FROZEN_NOW)

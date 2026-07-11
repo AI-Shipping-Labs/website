@@ -166,7 +166,7 @@ def test_authenticated_member_keeps_dashboard_path(
         assert page.locator('[data-testid="home-upcoming-events-section"]').count() == 0
         assert page.locator('[data-testid="home-sprint-story-section"]').count() == 0
         expect(
-            page.get_by_role("heading", name="Recent Content", exact=True)
+            page.get_by_role("heading", name="Recent content", exact=True)
         ).to_be_visible()
     finally:
         context.close()

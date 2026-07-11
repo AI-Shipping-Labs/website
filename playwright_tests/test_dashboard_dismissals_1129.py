@@ -253,8 +253,9 @@ class TestSprintPlanLifecycle:
         assert (
             page.locator('[data-testid="account-sprint-plan-open"]').count() == 1
         )
-        # Active/next sprint discovery still present.
-        assert page.get_by_text("Sprints & Cohorts").count() >= 1
+        # The duplicate current-cohort discovery card is suppressed.
+        assert page.get_by_text("Current cohort").count() == 0
+        assert page.locator('[data-testid="dashboard-active-sprints"]').count() == 0
 
     @pytest.mark.core
     def test_active_sprint_keeps_live_framing(self, django_server, browser):

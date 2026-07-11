@@ -104,7 +104,7 @@ class TestCourseRenameDashboardLink:
         # Step 1: navigate to dashboard, confirm link points at OLD slug.
         page.goto(f'{django_server}/', wait_until='domcontentloaded')
         learning = page.locator(
-            'section:has(h2:has-text("Continue Learning"))',
+            'section:has(h2:has-text("Continue learning"))',
         )
         learning_html = learning.inner_html()
         assert '/courses/python-course/' in learning_html, (
@@ -121,7 +121,7 @@ class TestCourseRenameDashboardLink:
         # Step 3: reload the dashboard.
         page.goto(f'{django_server}/', wait_until='domcontentloaded')
         learning = page.locator(
-            'section:has(h2:has-text("Continue Learning"))',
+            'section:has(h2:has-text("Continue learning"))',
         )
         learning_html = learning.inner_html()
         # Continue link rebuilds against the NEW slug.

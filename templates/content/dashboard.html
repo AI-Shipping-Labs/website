@@ -13,7 +13,7 @@
   Issue #705: re-evaluate the "Starting soon" window every 30s so the
   card naturally vanishes when delta drops below 0 (the event started)
   or flips its label when delta crosses 5 min. Emitted ONLY when the
-  card is showing — we do not want every authenticated dashboard
+  card is showing -- we do not want every authenticated dashboard
   visit to auto-refresh every 30s.
 {% endcomment %}
 <meta http-equiv="refresh" content="30">
@@ -22,80 +22,37 @@
 
 {% block body %}
 {% include "includes/header.html" %}
-<main class="min-h-screen pt-24">
+<main class="min-h-screen overflow-x-hidden pt-24">
   <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
 
     <!-- Checkout Success Banner (shown via JS when ?checkout=success is present) -->
     <div id="checkout-success-banner" class="mb-6 hidden rounded-xl border border-green-500/30 bg-green-500/10 p-4" role="alert">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <i data-lucide="check-circle" class="h-5 w-5 text-green-400"></i>
+      <div class="flex items-center justify-between gap-4">
+        <div class="flex min-w-0 items-center gap-3">
+          <i data-lucide="check-circle" class="h-5 w-5 shrink-0 text-green-400"></i>
           <p class="text-sm font-medium text-green-300">Payment successful! Welcome to AI Shipping Labs.</p>
         </div>
-        <button type="button" id="dismiss-success-banner" class="text-green-400 hover:text-green-300 transition-colors" aria-label="Dismiss">
+        <button type="button" id="dismiss-success-banner" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-green-400 transition-colors hover:bg-green-500/10 hover:text-green-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background" aria-label="Dismiss">
           <i data-lucide="x" class="h-4 w-4"></i>
         </button>
       </div>
     </div>
 
-    {% if show_onboarding_prompt %}
-    <!-- Onboarding prompt banner (issue #802). Dismiss control: issue #1129. -->
-    <div class="mb-6 rounded-xl border border-accent/40 bg-accent/10 p-5" data-testid="onboarding-prompt" data-dismiss-card-container>
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex items-start gap-3">
-          <i data-lucide="sparkles" class="h-5 w-5 text-accent shrink-0 mt-0.5"></i>
-          <div>
-            <p class="text-sm font-medium text-foreground">Tell us a bit about you so we can build your plan</p>
-            <p class="text-xs text-muted-foreground mt-1">It takes a few minutes and helps us prepare the right plan for you.</p>
-          </div>
-        </div>
-        <div class="flex shrink-0 items-center gap-3">
-          <a href="{% url 'onboarding_start' %}"
-             class="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
-             data-testid="onboarding-prompt-cta">
-            Start onboarding
-          </a>
-          <button type="button"
-                  class="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label="Dismiss"
-                  data-testid="onboarding-prompt-dismiss"
-                  data-dismiss-card="onboarding_prompt">
-            <i data-lucide="x" class="h-4 w-4"></i>
-          </button>
-        </div>
+    <header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between" data-testid="dashboard-header">
+      <div class="min-w-0">
+        <h1 class="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl" data-testid="dashboard-heading">
+          {% if request.user.first_name %}Welcome back, {{ request.user.first_name }}{% else %}Welcome back{% endif %}
+        </h1>
       </div>
-    </div>
-    {% endif %}
+      <div class="flex items-center">
+        <span class="inline-flex min-h-[44px] items-center rounded-full border border-accent/40 bg-accent/10 px-4 text-sm font-medium text-accent" data-testid="dashboard-tier-pill">
+          {% if dashboard_tier_is_override %}{{ dashboard_tier_label }} trial{% else %}{{ dashboard_tier_label }}{% endif %}
+        </span>
+      </div>
+    </header>
 
-    {% if show_plan_preparing %}
-    <!-- Plan preparation waiting state (issue #1199). -->
-    <section class="mb-8" data-testid="dashboard-plan-preparing-section">
-      <div class="rounded-lg border border-accent/30 bg-card p-5 sm:p-6" data-testid="dashboard-plan-preparing-card">
-        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div class="flex items-start gap-3">
-            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10">
-              <i data-lucide="map" class="h-5 w-5 text-accent"></i>
-            </div>
-            <div class="min-w-0">
-              <h2 class="text-xl font-semibold text-foreground" data-testid="dashboard-plan-preparing-heading">
-                Your plan is being prepared
-              </h2>
-              <p class="mt-2 text-sm text-muted-foreground" data-testid="dashboard-plan-preparing-copy">
-                Alexey and Valeria are using your onboarding answers to prepare your sprint plan.
-                This usually takes 1-2 business days. We will let you know through the bell
-                notification and by email as soon as it is ready.
-              </p>
-            </div>
-          </div>
-          <a href="{% url 'onboarding_start' %}"
-             class="{% button_classes 'secondary' 'shrink-0' %}"
-             data-testid="dashboard-plan-preparing-cta">
-            Review onboarding answers
-            <i data-lucide="arrow-right" class="h-4 w-4"></i>
-          </a>
-        </div>
-      </div>
-    </section>
+    {% if starting_soon %}
+    {% include "content/_starting_soon_card.html" %}
     {% endif %}
 
     {% if show_free_activation_checklist %}
@@ -131,7 +88,7 @@
                 Done
               </span>
               <a href="{{ item.url }}"
-                 class="inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline"
+                 class="inline-flex min-h-[44px] items-center gap-1 rounded-md px-2 text-sm font-medium text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                  data-testid="free-activation-action-{{ item.key }}">
                 Open
                 <i data-lucide="arrow-right" class="h-3.5 w-3.5"></i>
@@ -173,125 +130,32 @@
     </section>
     {% endif %}
 
-    {% if plan %}
-    <!-- Sprint Plan Section (issue #442) -->
-    <section class="mb-8">
-      <div class="rounded-lg border border-border bg-card p-5 sm:p-6" id="sprint-plan-section" data-testid="account-sprint-plan-card">
-        <h2 class="text-xl font-semibold mb-4 flex items-center gap-2" data-testid="account-sprint-plan-heading">
-          <i data-lucide="map" class="h-5 w-5 text-accent"></i>
-          {% comment %}
-            Issue #1129: an ended sprint is a past plan, not the current one —
-            reframe the heading to past tense so it no longer reads as the
-            member's live plan. Lifecycle is date-derived on the sprint.
-          {% endcomment %}
-          {% if plan.sprint.has_ended %}Your latest sprint plan{% else %}Your sprint plan{% endif %}
-        </h2>
-        <p class="text-sm text-muted-foreground" data-testid="account-sprint-plan-name">
-          {{ plan.sprint.name }}
-        </p>
-        <p class="text-sm text-muted-foreground mt-1 flex items-center gap-2" data-testid="account-sprint-plan-meta">
-          <span data-testid="account-sprint-plan-dates">{% sprint_date_range plan.sprint %}</span>
-          {% comment %}
-            Issue #1129: the old {{ plan.get_status_display }} rendered empty
-            (Plan has no ``status`` field). Use the date-derived sprint badge
-            as the single source of truth so the status line shows the real
-            lifecycle label (Ended / Active / Ending soon / ...).
-          {% endcomment %}
-          &middot;
-          {% member_status_badge plan.sprint.sprint_badge_current.label size="xs" extra_class=plan.sprint.sprint_badge_current.css_class testid="account-sprint-plan-status" %}
-        </p>
-        {% if plan_has_ended %}
-        <div class="mt-4 rounded-md border border-accent/30 bg-accent/10 p-3" data-testid="account-sprint-plan-recap">
-          <p class="text-sm font-medium text-foreground">
-            Sprint recap
-          </p>
-          <p class="mt-1 text-sm text-muted-foreground" data-testid="account-sprint-plan-progress">
-            {{ plan_progress_done }} of {{ plan_progress_total }} checkpoints done
-          </p>
-        </div>
-        {% elif plan_progress_total %}
-        <p class="text-sm text-foreground mt-3" data-testid="account-sprint-plan-progress">
-          {{ plan_progress_done }} of {{ plan_progress_total }} checkpoints done
-        </p>
-        {% endif %}
-        <div class="flex flex-col sm:flex-row flex-wrap gap-3 mt-5">
-          <a href="{% url 'my_plan_detail' sprint_slug=plan.sprint.slug plan_id=plan.pk %}"
-             class="{% button_classes 'primary' %}"
-             data-testid="account-sprint-plan-open">
-            <i data-lucide="arrow-right-circle" class="h-4 w-4"></i>
-            Open my plan
-          </a>
-          {% if cohort_has_other_members %}
-          <a href="{% url 'cohort_board' sprint_slug=plan.sprint.slug %}"
-             class="{% button_classes 'secondary' %}"
-             data-testid="account-sprint-plan-cohort">
-            <i data-lucide="users" class="h-4 w-4"></i>
-            View cohort
-          </a>
-          {% endif %}
-          {% if plan_has_ended and sprint_end_feedback_url %}
-          <a href="{{ sprint_end_feedback_url }}"
-             class="{% button_classes 'secondary' %}"
-             data-testid="account-sprint-plan-feedback">
-            <i data-lucide="message-square-text" class="h-4 w-4"></i>
-            {{ sprint_end_feedback_label }}
-          </a>
-          {% endif %}
-          {% if plan_has_ended and sprint_end_next_action %}
-          <a href="{{ sprint_end_next_action.url }}"
-             class="{% button_classes 'secondary' %}"
-             data-testid="account-sprint-plan-next-action">
-            <i data-lucide="move-right" class="h-4 w-4"></i>
-            {{ sprint_end_next_action.label }}
-          </a>
-          {% endif %}
-        </div>
-      </div>
-    </section>
-    {% endif %}
-
-    <!-- Slack Community Section (shared partial — issue #700) -->
-    {# Issue #729: hide the "Connected to Slack" card on the dashboard. The #}
-    {# partial still renders on /account/ for the connected state. #}
-    {% if not slack_connected %}
-    {% include "includes/_slack_account_card.html" %}
-    {% endif %}
-
-    <div class="grid gap-10 lg:gap-8 lg:grid-cols-3 overflow-hidden">
-      <!-- Main content: 2 columns wide -->
-      <div class="lg:col-span-2 space-y-8 min-w-0">
-
-        {% if starting_soon %}
-        {% include "content/_starting_soon_card.html" %}
-        {% endif %}
-
+    <div class="space-y-10">
+      <div class="grid gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]" data-testid="dashboard-primary-sections">
         <!-- Continue Learning -->
-        <section>
-          <div class="flex items-center justify-between gap-3 mb-4">
-            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 min-w-0">
+        <section class="min-w-0" data-testid="dashboard-continue-learning-section">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h2 class="flex min-w-0 items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
               <i data-lucide="book-open" class="h-5 w-5 shrink-0 text-accent"></i>
-              Continue Learning
+              Continue learning
             </h2>
-            <div class="flex shrink-0 items-center gap-3 text-sm">
-              <a href="/courses" class="text-accent hover:underline">Courses</a>
-              <a href="/workshops" class="text-accent hover:underline">Workshops</a>
+            <div class="flex shrink-0 items-center gap-1 text-sm">
+              <a href="/courses" class="inline-flex min-h-[44px] items-center rounded-md px-2 text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Courses</a>
+              <a href="/workshops" class="inline-flex min-h-[44px] items-center rounded-md px-2 text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Workshops</a>
             </div>
           </div>
           {% if in_progress_learning %}
           <div class="space-y-4" data-testid="continue-learning-list">
             {% for item in in_progress_learning %}
             {% if item.kind == 'workshop' %}
-            <!-- Workshop card (issue #365). Mirrors the course card chrome
-                 so the merged list reads as a single Continue-Learning
-                 stream rather than two segregated sub-sections. -->
             <div class="rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50" data-testid="continue-learning-workshop">
-              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div class="flex-1 min-w-0">
-                  <h3 class="font-medium text-foreground truncate">{{ item.workshop.title }}</h3>
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div class="min-w-0 flex-1">
+                  <h3 class="truncate font-medium text-foreground">{{ item.workshop.title }}</h3>
                   <p class="mt-1 text-sm text-muted-foreground">
                     {{ item.completed_count }}/{{ item.total_units }} pages completed
                   </p>
-                  <div class="mt-2 h-2 w-full rounded-full bg-secondary overflow-hidden">
+                  <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-secondary">
                     <div class="h-full rounded-full bg-accent transition-all" style="width: {{ item.percentage }}%"></div>
                   </div>
                   {% if item.last_page %}
@@ -314,15 +178,14 @@
               </div>
             </div>
             {% else %}
-            <div class="rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50">
-              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div class="flex-1 min-w-0">
-                  <h3 class="font-medium text-foreground truncate">{{ item.course.title }}</h3>
+            <div class="rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50" data-testid="continue-learning-course">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div class="min-w-0 flex-1">
+                  <h3 class="truncate font-medium text-foreground">{{ item.course.title }}</h3>
                   <p class="mt-1 text-sm text-muted-foreground">
                     {{ item.completed_count }}/{{ item.total_units }} units completed
                   </p>
-                  <!-- Progress bar -->
-                  <div class="mt-2 h-2 w-full rounded-full bg-secondary overflow-hidden">
+                  <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-secondary">
                     <div class="h-full rounded-full bg-accent transition-all" style="width: {{ item.percentage }}%"></div>
                   </div>
                   {% if item.last_unit %}
@@ -331,7 +194,7 @@
                   </p>
                   {% else %}
                   <p class="mt-1 text-xs text-muted-foreground">
-                    Just enrolled — start with the first lesson.
+                    Just enrolled - start with the first lesson.
                   </p>
                   {% endif %}
                 </div>
@@ -371,25 +234,25 @@
           {% else %}
           {% button_classes 'primary' as primary_cta_classes %}
           {% button_classes 'secondary' as secondary_cta_classes %}
-          {% member_empty_state title='No courses or workshops in progress yet' body='Start a course or workshop and it will appear here when you make progress.' icon='book-open' kind='fresh' primary_cta_label='Browse Courses' primary_cta_url='/courses' primary_cta_icon='arrow-right' primary_cta_class=primary_cta_classes secondary_cta_label='Browse Workshops' secondary_cta_url='/workshops' secondary_cta_icon='arrow-right' secondary_cta_class=secondary_cta_classes %}
+          {% member_empty_state title='No courses or workshops in progress yet' body='Start a course or workshop and it will appear here when you make progress.' icon='book-open' kind='fresh' primary_cta_label='Browse courses' primary_cta_url='/courses' primary_cta_icon='arrow-right' primary_cta_class=primary_cta_classes secondary_cta_label='Browse workshops' secondary_cta_url='/workshops' secondary_cta_icon='arrow-right' secondary_cta_class=secondary_cta_classes %}
           {% endif %}
         </section>
 
         <!-- Upcoming Events -->
-        <section>
-          <div class="flex items-center justify-between gap-3 mb-4">
-            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 min-w-0">
+        <section class="min-w-0" data-testid="dashboard-upcoming-events-section">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h2 class="flex min-w-0 items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
               <i data-lucide="calendar" class="h-5 w-5 shrink-0 text-accent"></i>
-              Upcoming Events
+              Upcoming events
             </h2>
-            <a href="/events" class="shrink-0 text-sm text-accent hover:underline">View all events</a>
+            <a href="/events" class="inline-flex min-h-[44px] shrink-0 items-center rounded-md px-2 text-sm text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">View all events</a>
           </div>
           {% if upcoming_events %}
           <div class="space-y-4">
             {% for event in upcoming_events %}
             <div class="rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50" data-testid="dashboard-upcoming-event-row">
-              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div class="flex-1 min-w-0">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-2">
                     <h3 class="font-medium text-foreground">{{ event.title }}</h3>
                     {% if event.dashboard_is_event_series %}
@@ -405,14 +268,14 @@
                       <span class="min-w-0 break-words" data-testid="dashboard-event-date">{{ event.dashboard_formatted_start }}</span>
                     </span>
                     {% if event.dashboard_series_remaining_count > 0 %}
-                    <a href="{{ event.event_series.get_absolute_url }}" class="font-medium text-accent hover:underline" data-testid="dashboard-event-series-see-more">
+                    <a href="{{ event.event_series.get_absolute_url }}" class="inline-flex min-h-[44px] items-center rounded-md px-2 font-medium text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-event-series-see-more">
                       See more
                     </a>
                     {% endif %}
                   </div>
                 </div>
                 <a href="{{ event.get_absolute_url }}" class="{% button_classes 'secondary' 'shrink-0' %}" data-testid="dashboard-event-action">
-                  View Event
+                  View event
                   <i data-lucide="arrow-right" class="h-4 w-4"></i>
                 </a>
               </div>
@@ -421,109 +284,263 @@
           </div>
           {% else %}
           {% button_classes 'secondary' as secondary_cta_classes %}
-          {% member_empty_state title='No upcoming events' body='Register for an event and it will appear here.' icon='calendar' kind='fresh' primary_cta_label='Browse Events' primary_cta_url='/events' primary_cta_icon='arrow-right' primary_cta_class=secondary_cta_classes %}
-          {% endif %}
-        </section>
-
-        <!-- Recent Content -->
-        <section>
-          <div class="flex items-center justify-between gap-3 mb-4">
-            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 min-w-0">
-              <i data-lucide="sparkles" class="h-5 w-5 shrink-0 text-accent"></i>
-              Recent Content
-            </h2>
-            <a href="/blog" class="shrink-0 text-sm text-accent hover:underline">View all</a>
-          </div>
-          {% if recent_content %}
-          <div class="space-y-3" data-testid="dashboard-recent-content">
-            {% for item in recent_content %}
-            <a href="{{ item.url }}" class="flex items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50" data-testid="recent-content-card">
-              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
-                <i data-lucide="{{ item.icon }}" class="h-5 w-5 text-muted-foreground"></i>
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="font-medium text-foreground truncate">{{ item.title }}</p>
-                <p class="text-sm text-muted-foreground truncate">{{ item.description|strip_markdown|truncatechars:80 }}</p>
-              </div>
-              <span class="hidden sm:block shrink-0 text-xs text-muted-foreground">{{ item.date|member_compact_date }}</span>
-            </a>
-            {% endfor %}
-          </div>
-          {% else %}
-          {% button_classes 'secondary' as secondary_cta_classes %}
-          {% member_empty_state title='No content available yet' body='Browse the blog while the content library grows.' icon='file-text' kind='fresh' primary_cta_label='Browse Blog' primary_cta_url='/blog' primary_cta_icon='arrow-right' primary_cta_class=secondary_cta_classes %}
+          {% member_empty_state title='No upcoming events' body='Register for an event and it will appear here.' icon='calendar' kind='fresh' primary_cta_label='Browse events' primary_cta_url='/events' primary_cta_icon='arrow-right' primary_cta_class=secondary_cta_classes %}
           {% endif %}
         </section>
       </div>
 
-      <!-- Sidebar: 1 column -->
-      <div class="space-y-8">
+      <!-- Quick Actions -->
+      <section data-testid="dashboard-quick-actions-section">
+        <h2 class="mb-4 flex items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
+          <i data-lucide="zap" class="h-5 w-5 text-accent"></i>
+          Quick actions
+        </h2>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6" data-testid="dashboard-quick-actions">
+          {% for action in quick_actions %}
+          <a href="{{ action.url }}" class="flex min-h-[88px] items-start gap-3 rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-quick-action">
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
+              <i data-lucide="{{ action.icon }}" class="h-5 w-5 text-accent"></i>
+            </div>
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-foreground">{{ action.title }}</p>
+              <p class="mt-1 text-xs leading-relaxed text-muted-foreground">{{ action.description }}</p>
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+      </section>
 
+      <div class="grid gap-6 lg:grid-cols-2" data-testid="dashboard-secondary-guidance">
+        {% if show_onboarding_prompt %}
+        <!-- Onboarding prompt banner (issue #802). Dismiss control: issue #1129. -->
+        <section class="rounded-lg border border-accent/40 bg-accent/10 p-5" data-testid="onboarding-prompt" data-dismiss-card-container>
+          <div class="flex h-full flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div class="flex min-w-0 items-start gap-3">
+              <i data-lucide="sparkles" class="mt-0.5 h-5 w-5 shrink-0 text-accent"></i>
+              <div class="min-w-0">
+                <h2 class="text-base font-semibold tracking-tight text-foreground">Tell us a bit about you so we can build your plan</h2>
+                <p class="mt-1 text-sm text-muted-foreground">It takes a few minutes and helps us prepare the right plan for you.</p>
+              </div>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <a href="{% url 'onboarding_start' %}"
+                 class="{% button_classes 'primary' 'shrink-0' %}"
+                 data-testid="onboarding-prompt-cta">
+                Start onboarding
+              </a>
+              <button type="button"
+                      class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      aria-label="Dismiss"
+                      data-testid="onboarding-prompt-dismiss"
+                      data-dismiss-card="onboarding_prompt">
+                <i data-lucide="x" class="h-4 w-4"></i>
+              </button>
+            </div>
+          </div>
+        </section>
+        {% endif %}
+
+        {% if show_plan_preparing %}
+        <!-- Plan preparation waiting state (issue #1199). -->
+        <section class="rounded-lg border border-accent/30 bg-card p-5" data-testid="dashboard-plan-preparing-section">
+          <div data-testid="dashboard-plan-preparing-card">
+          <div class="flex h-full flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div class="flex min-w-0 items-start gap-3">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10">
+                <i data-lucide="map" class="h-5 w-5 text-accent"></i>
+              </div>
+              <div class="min-w-0">
+                <h2 class="text-base font-semibold tracking-tight text-foreground" data-testid="dashboard-plan-preparing-heading">
+                  Your plan is being prepared
+                </h2>
+                <p class="mt-2 text-sm text-muted-foreground" data-testid="dashboard-plan-preparing-copy">
+                  Alexey and Valeria are using your onboarding answers to prepare your sprint plan. This usually takes 1-2 business days. We will let you know through the bell notification and by email as soon as it is ready.
+                </p>
+              </div>
+            </div>
+            <a href="{% url 'onboarding_start' %}"
+               class="{% button_classes 'secondary' 'shrink-0' %}"
+               data-testid="dashboard-plan-preparing-cta">
+              Review onboarding answers
+              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </a>
+          </div>
+          </div>
+        </section>
+        {% endif %}
+
+        {% if plan %}
+        <!-- Sprint Plan Section (issue #442) -->
+        <section class="rounded-lg border border-border bg-card p-5" id="sprint-plan-section" data-testid="account-sprint-plan-card">
+          <div class="flex h-full flex-col gap-4">
+            <div class="min-w-0">
+              <h2 class="flex items-center gap-2 text-xl font-semibold tracking-tight text-foreground" data-testid="account-sprint-plan-heading">
+                <i data-lucide="map" class="h-5 w-5 text-accent"></i>
+                {% if plan.sprint.has_ended %}Your latest sprint plan{% else %}Your sprint plan{% endif %}
+              </h2>
+              <p class="mt-3 text-sm text-muted-foreground" data-testid="account-sprint-plan-name">
+                {{ plan.sprint.name }}
+              </p>
+              <p class="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" data-testid="account-sprint-plan-meta">
+                <span data-testid="account-sprint-plan-dates">{% sprint_date_range plan.sprint %}</span>
+                <span aria-hidden="true">&middot;</span>
+                {% member_status_badge plan.sprint.sprint_badge_current.label size="xs" extra_class=plan.sprint.sprint_badge_current.css_class testid="account-sprint-plan-status" %}
+              </p>
+              {% if plan_has_ended %}
+              <div class="mt-4 rounded-md border border-accent/30 bg-accent/10 p-3" data-testid="account-sprint-plan-recap">
+                <p class="text-sm font-medium text-foreground">
+                  Sprint recap
+                </p>
+                <p class="mt-1 text-sm text-muted-foreground" data-testid="account-sprint-plan-progress">
+                  {{ plan_progress_done }} of {{ plan_progress_total }} checkpoints done
+                </p>
+              </div>
+              {% elif plan_progress_total %}
+              <p class="mt-3 text-sm text-foreground" data-testid="account-sprint-plan-progress">
+                {{ plan_progress_done }} of {{ plan_progress_total }} checkpoints done
+              </p>
+              {% endif %}
+            </div>
+            <div class="mt-auto flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <a href="{% url 'my_plan_detail' sprint_slug=plan.sprint.slug plan_id=plan.pk %}"
+                 class="{% button_classes 'primary' %}"
+                 data-testid="account-sprint-plan-open">
+                <i data-lucide="arrow-right-circle" class="h-4 w-4"></i>
+                Open my plan
+              </a>
+              {% if cohort_has_other_members %}
+              <a href="{% url 'cohort_board' sprint_slug=plan.sprint.slug %}"
+                 class="{% button_classes 'secondary' %}"
+                 data-testid="account-sprint-plan-cohort">
+                <i data-lucide="users" class="h-4 w-4"></i>
+                View cohort
+              </a>
+              {% endif %}
+              {% if plan_has_ended and sprint_end_feedback_url %}
+              <a href="{{ sprint_end_feedback_url }}"
+                 class="{% button_classes 'secondary' %}"
+                 data-testid="account-sprint-plan-feedback">
+                <i data-lucide="message-square-text" class="h-4 w-4"></i>
+                {{ sprint_end_feedback_label }}
+              </a>
+              {% endif %}
+              {% if plan_has_ended and sprint_end_next_action %}
+              <a href="{{ sprint_end_next_action.url }}"
+                 class="{% button_classes 'secondary' %}"
+                 data-testid="account-sprint-plan-next-action">
+                <i data-lucide="move-right" class="h-4 w-4"></i>
+                {{ sprint_end_next_action.label }}
+              </a>
+              {% endif %}
+            </div>
+          </div>
+        </section>
+        {% endif %}
+
+        <!-- Slack Community Section (shared partial - issue #700) -->
+        {# Issue #729: hide the "Connected to Slack" card on the dashboard. The #}
+        {# partial still renders on /account/ for the connected state. #}
+        {% if not slack_connected %}
+        {% include "includes/_slack_account_card.html" %}
+        {% endif %}
+
+        {% if active_sprint_opportunities or not plan %}
         <!-- Active Sprints -->
         <section>
-          <div class="flex items-center justify-between gap-3 mb-4">
-            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 min-w-0">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h2 class="flex min-w-0 items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
               <i data-lucide="users" class="h-5 w-5 shrink-0 text-accent"></i>
-              Sprints & Cohorts
+              {{ active_sprint_section_title }}
             </h2>
-            <a href="{{ active_sprint_discovery_url }}" class="shrink-0 text-sm text-accent hover:underline">Activities</a>
+            <a href="{{ active_sprint_discovery_url }}" class="inline-flex min-h-[44px] shrink-0 items-center rounded-md px-2 text-sm text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Activities</a>
           </div>
           {% if active_sprint_opportunities %}
-          <div class="space-y-3" data-testid="dashboard-active-sprints">
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-1" data-testid="dashboard-active-sprints">
             {% for item in active_sprint_opportunities %}
-            <a href="{{ item.url }}" class="block rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50" data-testid="dashboard-active-sprint">
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                  <p class="text-sm font-medium text-foreground">{{ item.sprint.name }}</p>
-                  <p class="mt-1 text-xs text-muted-foreground">
-                    {% sprint_date_range item.sprint compact=True %}
-                  </p>
+            <a href="{{ item.url }}" class="block min-h-[112px] rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-active-sprint">
+              <div class="flex h-full flex-col gap-3">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium text-foreground">{{ item.sprint.name }}</p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                      {% sprint_date_range item.sprint compact=True %}
+                    </p>
+                  </div>
+                  <span class="inline-flex min-h-[28px] shrink-0 items-center rounded-full bg-secondary px-2 text-xs font-medium text-accent" data-testid="dashboard-active-sprint-tier">
+                    {% if item.is_free_open %}Free/open{% else %}{{ item.required_tier_label }}{% endif %}
+                  </span>
                 </div>
-                <span class="shrink-0 text-xs text-accent">{{ item.cta_label }}</span>
+                <div class="mt-auto flex items-center justify-between gap-3">
+                  <p class="text-xs text-muted-foreground">
+                    {% if item.is_free_open %}Open to Free members{% else %}{{ item.required_tier_label }} members and above{% endif %}
+                  </p>
+                  <span class="inline-flex min-h-[44px] items-center gap-1 rounded-md px-2 text-sm font-medium text-accent">
+                    {{ item.cta_label }}
+                    <i data-lucide="arrow-right" class="h-4 w-4"></i>
+                  </span>
+                </div>
               </div>
             </a>
             {% endfor %}
           </div>
-          {% elif plan %}
-          <div class="rounded-lg border border-border bg-card p-5">
-            <p class="text-sm font-medium text-foreground">Current cohort</p>
-            <p class="mt-1 text-sm text-muted-foreground">{{ plan.sprint.name }}</p>
-            {% if cohort_has_other_members %}
-            <a href="{% url 'cohort_board' sprint_slug=plan.sprint.slug %}" class="mt-3 inline-flex items-center gap-2 text-sm text-accent hover:underline">
-              View cohort
-              <i data-lucide="arrow-right" class="h-4 w-4"></i>
-            </a>
-            {% endif %}
-          </div>
           {% else %}
           <div class="rounded-lg border border-border bg-card p-5">
             <p class="text-sm text-muted-foreground">No active sprint openings for your tier right now.</p>
-            <a href="{{ active_sprint_discovery_url }}" class="mt-3 inline-flex items-center gap-2 text-sm text-accent hover:underline">
+            <a href="{{ active_sprint_discovery_url }}" class="mt-3 inline-flex min-h-[44px] items-center gap-2 rounded-md px-2 text-sm font-medium text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
               Browse activities
               <i data-lucide="arrow-right" class="h-4 w-4"></i>
             </a>
           </div>
           {% endif %}
         </section>
+        {% endif %}
+      </div>
+
+      <div class="grid gap-8 lg:grid-cols-2" data-testid="dashboard-discovery-sections">
+        <!-- Recent Content -->
+        <section class="min-w-0">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h2 class="flex min-w-0 items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
+              <i data-lucide="newspaper" class="h-5 w-5 shrink-0 text-accent"></i>
+              Recent content
+            </h2>
+            <a href="/blog" class="inline-flex min-h-[44px] shrink-0 items-center rounded-md px-2 text-sm text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Browse blog</a>
+          </div>
+          {% if recent_content %}
+          <div class="space-y-3" data-testid="dashboard-recent-content">
+            {% for item in recent_content %}
+            <a href="{{ item.url }}" class="flex min-h-[76px] items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="recent-content-card">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
+                <i data-lucide="{{ item.icon }}" class="h-5 w-5 text-muted-foreground"></i>
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-medium text-foreground">{{ item.title }}</p>
+                <p class="truncate text-sm text-muted-foreground">{{ item.description|strip_markdown|truncatechars:80 }}</p>
+              </div>
+              <span class="hidden shrink-0 text-xs text-muted-foreground sm:block">{{ item.date|member_compact_date }}</span>
+            </a>
+            {% endfor %}
+          </div>
+          {% else %}
+          {% button_classes 'secondary' as secondary_cta_classes %}
+          {% member_empty_state title='No content available yet' body='Browse the blog while the content library grows.' icon='file-text' kind='fresh' primary_cta_label='Browse blog' primary_cta_url='/blog' primary_cta_icon='arrow-right' primary_cta_class=secondary_cta_classes %}
+          {% endif %}
+        </section>
 
         <!-- Active Polls -->
-        <section>
-          <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 mb-4">
+        <section class="min-w-0">
+          <h2 class="mb-4 flex items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
             <i data-lucide="bar-chart-3" class="h-5 w-5 text-accent"></i>
-            Active Polls
+            Active polls
           </h2>
           {% if active_polls %}
           <div class="space-y-4">
             {% for poll in active_polls %}
-            <a href="{{ poll.get_absolute_url }}" class="block rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50">
+            <a href="{{ poll.get_absolute_url }}" class="block min-h-[96px] rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-active-poll">
               <h3 class="font-medium text-foreground">{{ poll.title }}</h3>
               {% if poll.description %}
-              <p class="mt-1 text-sm text-muted-foreground line-clamp-2">{{ poll.description|truncatechars:100 }}</p>
+              <p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{{ poll.description|truncatechars:100 }}</p>
               {% endif %}
-              {% comment %}
-                Issue #483: suppress zero-count rows so we never render
-                awkward "0 votes" / "0 options" copy on the dashboard.
-              {% endcomment %}
               <div class="mt-3 flex items-center gap-3 text-xs text-muted-foreground" data-testid="poll-counts">
                 {% if poll.total_votes %}
                 <span>{{ poll.total_votes }} vote{{ poll.total_votes|pluralize }}</span>
@@ -539,32 +556,10 @@
           <div class="rounded-lg border border-border bg-card p-6 text-center">
             <i data-lucide="bar-chart-3" class="mx-auto h-8 w-8 text-muted-foreground"></i>
             <p class="mt-2 text-sm text-muted-foreground">No active polls right now</p>
-            <a href="/vote" class="mt-3 inline-block text-sm text-accent hover:underline">View past polls</a>
+            <a href="/vote" class="mt-3 inline-flex min-h-[44px] items-center rounded-md px-2 text-sm font-medium text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">View past polls</a>
           </div>
           {% endif %}
         </section>
-
-        <!-- Quick Actions -->
-        <section>
-          <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 mb-4">
-            <i data-lucide="zap" class="h-5 w-5 text-accent"></i>
-            Quick Actions
-          </h2>
-          <div class="space-y-3">
-            {% for action in quick_actions %}
-            <a href="{{ action.url }}" class="flex items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50">
-              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
-                <i data-lucide="{{ action.icon }}" class="h-5 w-5 text-accent"></i>
-              </div>
-              <div>
-                <p class="font-medium text-foreground text-sm">{{ action.title }}</p>
-                <p class="text-xs text-muted-foreground">{{ action.description }}</p>
-              </div>
-            </a>
-            {% endfor %}
-          </div>
-        </section>
-
       </div>
     </div>
 
@@ -581,7 +576,7 @@
     // GA4 conversion: fire purchase BEFORE we clean the URL so a
     // mid-render error doesn't lose the event. Value/currency/items
     // come from query-string params Stripe Payment Links append to
-    // the success URL — see _docs/integrations/analytics.md. Missing
+    // the success URL -- see _docs/integrations/analytics.md. Missing
     // tier/value/billing params just yield a purchase event with no
     // value, which is still useful for funnel tracking.
     var analytics = window.aslabAnalytics;

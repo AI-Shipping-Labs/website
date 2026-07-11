@@ -207,4 +207,6 @@ class ActiveSprintOpportunitiesContextTest(TestCase):
             opportunities[0]['url'],
             reverse('sprint_detail', kwargs={'sprint_slug': other.slug}),
         )
-        self.assertEqual(opportunities[0]['cta_label'], 'View sprint')
+        self.assertEqual(opportunities[0]['cta_label'], 'View cohort')
+        self.assertEqual(opportunities[0]['required_tier_label'], 'Main')
+        self.assertFalse(opportunities[0]['is_free_open'])

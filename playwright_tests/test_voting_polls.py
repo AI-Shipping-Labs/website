@@ -609,8 +609,8 @@ class TestScenario10NavigateFromDashboard:
         )
         body = page.content()
 
-        # Then: The dashboard shows the Active Polls section
-        assert "Active Polls" in body
+        # Then: The dashboard shows the Active polls section
+        assert "Active polls" in body
         assert "Dashboard Poll Test" in body
 
         # Step 2: Click the poll link on the dashboard

@@ -19,6 +19,7 @@ Usage:
 
 import datetime
 import os
+from pathlib import Path
 
 import pytest
 from django.utils import timezone
@@ -47,6 +48,14 @@ from django.db import connection
 # session-cookie injection, etc.) and cannot run against the
 # deployed dev environment. See _docs/testing-guidelines.md.
 pytestmark = pytest.mark.local_only
+SCREENSHOT_DIR = (
+    Path(__file__).parent.parent / ".tmp" / "aisl-issue-1211-screenshots"
+)
+
+
+def _shot(page, name):
+    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+    page.screenshot(path=SCREENSHOT_DIR / f"{name}.png", full_page=True)
 
 
 def _anon_context(browser):
@@ -239,7 +248,7 @@ def _mark_unit_completed(user, unit, completed_at=None):
 
 
 def _enroll_user(user, course):
-    """Create an active course Enrollment for dashboard Continue Learning."""
+    """Create an active course Enrollment for dashboard Continue learning."""
     from content.models import Enrollment
 
     enrollment, _ = Enrollment.objects.get_or_create(user=user, course=course)
@@ -283,6 +292,51 @@ def _create_event(
     event.save()
     connection.close()
     return event
+
+
+def _create_sprint(
+    name,
+    slug,
+    *,
+    min_tier_level=20,
+    status="active",
+    start_offset_days=-7,
+    duration_weeks=6,
+):
+    from plans.models import Sprint
+
+    sprint = Sprint.objects.create(
+        name=name,
+        slug=slug,
+        start_date=datetime.date.today() + datetime.timedelta(
+            days=start_offset_days,
+        ),
+        duration_weeks=duration_weeks,
+        status=status,
+        min_tier_level=min_tier_level,
+    )
+    connection.close()
+    return sprint
+
+
+def _create_plan(user, sprint, *, shared=True):
+    from plans.models import Plan
+
+    plan = Plan.objects.create(
+        member=user,
+        sprint=sprint,
+        shared_at=timezone.now() if shared else None,
+    )
+    connection.close()
+    return plan
+
+
+def _enroll_sprint(user, sprint):
+    from plans.models import SprintEnrollment
+
+    enrollment = SprintEnrollment.objects.create(user=user, sprint=sprint)
+    connection.close()
+    return enrollment
 
 
 def _register_user_for_event(user, event):
@@ -406,9 +460,9 @@ class TestScenario1AnonymousVisitorSeesPublicHomepage:
 
         # Then: No dashboard sections shown
         assert "Welcome back" not in body
-        assert "Continue Learning" not in body
-        assert "Upcoming Events" not in body
-        assert "Quick Actions" not in body
+        assert "Continue learning" not in body
+        assert "Upcoming events" not in body
+        assert "Quick actions" not in body
 
         # Step 2: Click "View Membership Tiers"
         tiers_link = page.locator(
@@ -463,10 +517,11 @@ class TestScenario2FreeMemberSeesDashboard:
         )
         body = page.content()
 
-        # Then: Dashboard without the old welcome/tier card
-        assert "Welcome back" not in body
-        assert "Continue Learning" in body
-        assert "Quick Actions" in body
+        # Then: Dashboard identity header and member-only sections render.
+        assert page.get_by_role("heading", name="Welcome back, Alex").count() == 1
+        assert page.locator('[data-testid="dashboard-tier-pill"]').inner_text() == "Free"
+        assert "Continue learning" in body
+        assert "Quick actions" in body
 
         # Then: Marketing homepage elements NOT shown
         assert "Turn AI ideas into" not in body
@@ -498,13 +553,13 @@ class TestScenario3EmptyStatesGuideNextSteps:
         has no course progress, no event registrations, and no unread
         notifications.
         1. Navigate to /
-        Then: The 'Continue Learning' section shows no courses or
-              workshops in progress with Browse Courses and Browse
+        Then: The 'Continue learning' section shows no courses or
+              workshops in progress with Browse courses and Browse
               Workshops links.
-        Then: The 'Upcoming Events' section shows 'No upcoming events'
-              with a 'Browse Events' link.
+        Then: The 'Upcoming events' section shows 'No upcoming events'
+              with a 'Browse events' link.
         Then: The dashboard body does not show a notifications empty-state card.
-        2. Click 'Browse Courses' in the empty continue learning
+        2. Click 'Browse courses' in the empty continue learning
            section.
         Then: User navigates to /courses and sees the course catalog."""
         _clear_dashboard_data()
@@ -528,26 +583,26 @@ class TestScenario3EmptyStatesGuideNextSteps:
 
         # CTA links present
         browse_courses_link = page.locator(
-            'a:has-text("Browse Courses")'
+            'a:has-text("Browse courses")'
         )
         assert browse_courses_link.count() >= 1
         assert browse_courses_link.first.get_attribute("href") == "/courses"
         browse_workshops_link = page.locator(
-            'a:has-text("Browse Workshops")'
+            'a:has-text("Browse workshops")'
         )
         assert browse_workshops_link.count() >= 1
         assert browse_workshops_link.first.get_attribute("href") == "/workshops"
 
         browse_events_link = page.locator(
-            'a:has-text("Browse Events")'
+            'a:has-text("Browse events")'
         )
         assert browse_events_link.count() >= 1
         assert browse_events_link.first.get_attribute("href") == "/events"
-        browse_blog_link = page.locator('a:has-text("Browse Blog")')
+        browse_blog_link = page.locator('a:has-text("Browse blog")')
         assert browse_blog_link.count() >= 1
         assert browse_blog_link.first.get_attribute("href") == "/blog"
 
-        # Step 2: Click "Browse Courses" in the empty
+        # Step 2: Click "Browse courses" in the empty
         # continue learning section
         browse_courses_link.first.click()
         page.wait_for_load_state("domcontentloaded")
@@ -583,6 +638,8 @@ class TestScenario3bFreeActivationDashboard:
         page = context.new_page()
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
+        assert page.get_by_role("heading", name="Welcome back").count() == 1
+        assert page.locator('[data-testid="dashboard-tier-pill"]').inner_text() == "Free"
         checklist = page.locator('[data-testid="free-activation-checklist"]')
         assert checklist.count() == 1
         assert "Start AI Hero" in checklist.inner_text()
@@ -595,6 +652,8 @@ class TestScenario3bFreeActivationDashboard:
         assert checklist_box is not None
         assert empty_box is not None
         assert checklist_box["y"] < empty_box["y"]
+        assert page.locator('[data-testid="onboarding-prompt"]').count() == 0
+        _shot(page, "free-dashboard-desktop")
 
         page.locator('[data-testid="free-activation-action-ai-hero"]').click()
         page.wait_for_url("**/courses/aihero*", timeout=10000)
@@ -691,7 +750,7 @@ class TestScenario4BasicMemberResumesCourse:
         has completed 3 of 10 units in a course titled
         'AI Agents Buildcamp'.
         1. Navigate to /
-        Then: The 'Continue Learning' section shows 'AI Agents
+        Then: The 'Continue learning' section shows 'AI Agents
               Buildcamp' with a progress bar at 30% and
               '3/10 units completed'.
         Then: The last completed unit title is displayed below the
@@ -739,9 +798,18 @@ class TestScenario4BasicMemberResumesCourse:
         )
         body = page.content()
 
-        # Then: Course shown in Continue Learning
+        # Then: Course shown in Continue learning
         assert "AI Agents Buildcamp" in body
         assert "3/10 units completed" in body
+        learning_box = page.locator(
+            '[data-testid="dashboard-continue-learning-section"]'
+        ).bounding_box()
+        onboarding_box = page.locator(
+            '[data-testid="onboarding-prompt"]'
+        ).bounding_box()
+        assert learning_box is not None
+        assert onboarding_box is not None
+        assert learning_box["y"] < onboarding_box["y"]
 
         # Progress bar at 30% is rendered (check style attr)
         progress_bar = page.locator(
@@ -778,10 +846,10 @@ class TestScenario5MainMemberSeesUpcomingEvents:
         """Given: A user logged in as main@test.com (Main tier) who
         is registered for 2 upcoming events.
         1. Navigate to /
-        Then: The 'Upcoming Events' section shows both registered
+        Then: The 'Upcoming events' section shows both registered
               events with their titles and dates.
         Then: Events are ordered by start date (soonest first).
-        2. Click 'View Event' on the first event.
+        2. Click 'View event' on the first event.
         Then: User navigates to the event detail page at
               /events/{slug} showing the full event description,
               schedule, and registration status."""
@@ -829,9 +897,9 @@ class TestScenario5MainMemberSeesUpcomingEvents:
             "Events should be ordered soonest first"
         )
 
-        # Step 2: Click "View Event" on the first event
+        # Step 2: Click "View event" on the first event
         view_event_links = page.locator(
-            'a:has-text("View Event")'
+            'a:has-text("View event")'
         )
         assert view_event_links.count() >= 1
         view_event_links.first.click()
@@ -842,6 +910,40 @@ class TestScenario5MainMemberSeesUpcomingEvents:
         assert event1.get_absolute_url() in page.url
         event_body = page.content()
         assert "AI Workshop: Prompt Engineering" in event_body
+
+
+@pytest.mark.django_db(transaction=True)
+class TestIssue1211StartingSoonEvent:
+    @pytest.mark.core
+    def test_starting_soon_event_is_first_dashboard_action(
+        self, django_server, browser,
+    ):
+        _clear_dashboard_data()
+        user = _create_user("main-event@test.com", tier_slug="main")
+        event = _create_event(
+            title="Urgent Shipping Call",
+            slug="urgent-shipping-call",
+            description="Registered members can open the event detail.",
+            start_datetime=timezone.now() + datetime.timedelta(minutes=7),
+        )
+        _register_user_for_event(user, event)
+
+        context = _auth_context(browser, "main-event@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+        heading = page.locator('[data-testid="dashboard-heading"]')
+        soon = page.locator('[data-testid="starting-soon-card"]')
+        upcoming = page.locator('[data-testid="dashboard-upcoming-events-section"]')
+        heading.wait_for(state="visible")
+        soon.wait_for(state="visible")
+        assert heading.bounding_box()["y"] < soon.bounding_box()["y"]
+        assert soon.bounding_box()["y"] < upcoming.bounding_box()["y"]
+        assert "Urgent Shipping Call" in soon.inner_text()
+
+        soon.locator('[data-testid="starting-soon-event-button"]').click()
+        page.wait_for_load_state("domcontentloaded")
+        assert event.get_absolute_url() in page.url
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1045,11 +1147,11 @@ class TestScenario6DashboardQuickActions:
     """Members see valid dashboard quick actions."""
 
     def test_quick_actions_use_current_member_destinations(
-        self, django_server
-    , browser):
+        self, django_server, browser,
+    ):
         """Given: A user logged in as main@test.com (Main tier).
         1. Navigate to /
-        Then: The 'Quick Actions' section includes current member
+        Then: The 'Quick actions' section includes current member
               destinations for courses, workshops, resources, events,
               projects, and activities.
         2. Log out and log in as free@test.com (Free tier).
@@ -1061,20 +1163,21 @@ class TestScenario6DashboardQuickActions:
         _create_user("free@test.com", tier_slug="free")
 
 
-        # Step 1: Main member sees Community action
+        # Step 1: Main member sees route-backed dashboard actions.
         context = _auth_context(browser, "main@test.com")
         page = context.new_page()
         page.goto(
             f"{django_server}/",
             wait_until="domcontentloaded",
         )
-        body = page.content()
+        quick = page.locator('[data-testid="dashboard-quick-actions"]')
+        body = quick.inner_html()
 
         # Then: Current quick actions are present and route-backed.
-        assert "Browse Courses" in body
-        assert "Browse Workshops" in body
+        assert "Browse courses" in body
+        assert "Browse workshops" in body
         assert "Resources" in body
-        assert "Events &amp; Recordings" in body
+        assert "Events and recordings" in body
         assert "Projects" in body
         assert "Activities" in body
         assert 'href="/community"' not in body
@@ -1087,15 +1190,222 @@ class TestScenario6DashboardQuickActions:
             f"{django_server}/",
             wait_until="domcontentloaded",
         )
-        body = page.content()
+        quick = page.locator('[data-testid="dashboard-quick-actions"]')
+        body = quick.inner_html()
 
-        assert "Browse Courses" in body
-        assert "Browse Workshops" in body
+        assert "Browse courses" in body
+        assert "Browse workshops" in body
         assert "Resources" in body
-        assert "Events &amp; Recordings" in body
+        assert "Events and recordings" in body
         assert "Projects" in body
         assert "Activities" in body
         assert 'href="/community"' not in body
+
+    @pytest.mark.core
+    def test_quick_actions_are_full_width_after_primary_sections(
+        self, django_server, browser,
+    ):
+        _clear_dashboard_data()
+        _create_user("main-actions@test.com", tier_slug="main")
+
+        context = _auth_context(browser, "main-actions@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+        primary = page.locator('[data-testid="dashboard-primary-sections"]')
+        quick = page.locator('[data-testid="dashboard-quick-actions-section"]')
+        assert primary.bounding_box()["y"] < quick.bounding_box()["y"]
+        actions = page.locator('[data-testid="dashboard-quick-action"]')
+        assert actions.count() == 6
+        quick_text = quick.inner_text()
+        for label in [
+            "Browse courses",
+            "Browse workshops",
+            "Resources",
+            "Events and recordings",
+            "Projects",
+            "Activities",
+        ]:
+            assert label in quick_text
+
+        quick.get_by_role("link", name="Activities").click()
+        page.wait_for_load_state("domcontentloaded")
+        assert page.url.rstrip("/").endswith("/activities")
+
+
+@pytest.mark.django_db(transaction=True)
+class TestIssue1211SprintAndPlanSurfaces:
+    @pytest.mark.core
+    def test_planned_main_member_no_onboarding_wall_and_slack_secondary(
+        self, django_server, browser, settings,
+    ):
+        settings.SLACK_INVITE_URL = "https://join.slack.com/issue-1211"
+        _clear_dashboard_data()
+        user = _create_user("main-plan@test.com", tier_slug="main")
+        sprint = _create_sprint("Current Sprint", "current-sprint-1211")
+        _create_plan(user, sprint, shared=True)
+
+        context = _auth_context(browser, "main-plan@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+        assert page.locator('[data-testid="onboarding-prompt"]').count() == 0
+        assert page.locator('[data-testid="account-sprint-plan-card"]').count() == 1
+        assert page.get_by_text("Open my plan").count() == 1
+        assert page.locator('[data-testid="slack-account-card"]').count() == 1
+        assert "Tell us a bit about you so we can build your plan" not in page.content()
+
+        learning_y = page.locator(
+            '[data-testid="dashboard-continue-learning-section"]'
+        ).bounding_box()["y"]
+        slack_y = page.locator('[data-testid="slack-account-card"]').bounding_box()["y"]
+        assert learning_y < slack_y
+        _shot(page, "main-planned-dashboard-desktop")
+
+    @pytest.mark.core
+    def test_planned_member_sees_other_cohorts_without_current_duplicate(
+        self, django_server, browser,
+    ):
+        _clear_dashboard_data()
+        user = _create_user("main-cohorts@test.com", tier_slug="main")
+        current = _create_sprint("Current Cohort", "current-cohort-1211")
+        other = _create_sprint(
+            "Other Cohort",
+            "other-cohort-1211",
+            start_offset_days=-3,
+        )
+        _create_plan(user, current, shared=True)
+
+        context = _auth_context(browser, "main-cohorts@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+        assert page.get_by_text("Other cohorts").count() == 1
+        active = page.locator('[data-testid="dashboard-active-sprints"]')
+        assert "Other Cohort" in active.inner_text()
+        assert "Current Cohort" not in active.inner_text()
+
+        active.locator('[data-testid="dashboard-active-sprint"]').first.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert f"/sprints/{other.slug}" in page.url
+
+    @pytest.mark.core
+    def test_free_member_sees_only_free_open_sprints(
+        self, django_server, browser,
+    ):
+        _clear_dashboard_data()
+        _create_user("free-sprints@test.com", tier_slug="free")
+        free_sprint = _create_sprint(
+            "Free Sprint",
+            "free-sprint-1211",
+            min_tier_level=0,
+        )
+        _create_sprint("Main Sprint", "main-sprint-1211", min_tier_level=20)
+        _create_sprint("Premium Sprint", "premium-sprint-1211", min_tier_level=30)
+
+        context = _auth_context(browser, "free-sprints@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+        active = page.locator('[data-testid="dashboard-active-sprints"]')
+        assert "Free Sprint" in active.inner_text()
+        assert "Free/open" in active.inner_text()
+        assert "Open to Free members" in active.inner_text()
+        assert "Main Sprint" not in active.inner_text()
+        assert "Premium Sprint" not in active.inner_text()
+
+        active.locator('[data-testid="dashboard-active-sprint"]').first.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert f"/sprints/{free_sprint.slug}" in page.url
+
+
+@pytest.mark.django_db(transaction=True)
+class TestIssue1211MobileDashboard:
+    @pytest.mark.core
+    def test_mobile_slack_dismiss_control_is_top_right_and_persists(
+        self, django_server, browser, settings,
+    ):
+        settings.SLACK_INVITE_URL = "https://join.slack.com/mobile-1211"
+        _clear_dashboard_data()
+        _create_user("main-mobile-slack@test.com", tier_slug="main")
+
+        context = _auth_context(browser, "main-mobile-slack@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+        card = page.locator('[data-testid="slack-account-card"]')
+        dismiss = page.locator('[data-testid="slack-account-card-dismiss"]')
+        card.wait_for(state="visible")
+        dismiss.wait_for(state="visible")
+        card_box = card.bounding_box()
+        dismiss_box = dismiss.bounding_box()
+        assert card_box is not None
+        assert dismiss_box is not None
+        assert dismiss_box["x"] > card_box["x"] + card_box["width"] - 72
+        assert dismiss_box["y"] < card_box["y"] + 24
+        assert page.evaluate(
+            "() => document.documentElement.scrollWidth <= "
+            "document.documentElement.clientWidth"
+        )
+        _shot(page, "main-mobile-slack")
+
+        dismiss.click()
+        card.wait_for(state="detached")
+        page.reload(wait_until="domcontentloaded")
+        assert page.locator('[data-testid="slack-account-card"]').count() == 0
+
+        page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
+        assert page.locator('[data-testid="slack-account-card-join"]').count() == 1
+        assert page.locator('[data-testid="slack-account-card-dismiss"]').count() == 0
+
+    @pytest.mark.core
+    def test_mobile_dashboard_links_have_no_overflow_and_navigate(
+        self, django_server, browser,
+    ):
+        _clear_dashboard_data()
+        user = _create_user("mobile-dashboard@test.com", tier_slug="main")
+        event = _create_event(
+            title="Mobile Link Clinic",
+            slug="mobile-link-clinic",
+            start_datetime=timezone.now() + datetime.timedelta(days=2),
+        )
+        _register_user_for_event(user, event)
+        _create_article(
+            title="Mobile Dashboard Article",
+            slug="mobile-dashboard-article",
+            description="A recent item for the compact mobile dashboard.",
+            required_level=0,
+        )
+
+        context = _auth_context(browser, "mobile-dashboard@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+        assert page.evaluate(
+            "() => document.documentElement.scrollWidth <= "
+            "document.documentElement.clientWidth"
+        )
+        for selector in [
+            'a:has-text("View all events")',
+            '[data-testid="dashboard-quick-actions"] a:has-text("Browse courses")',
+        ]:
+            box = page.locator(selector).first.bounding_box()
+            assert box is not None
+            assert box["height"] >= 44
+        _shot(page, "mobile-dashboard-links")
+
+        page.get_by_role("link", name="View all events").click()
+        page.wait_for_load_state("domcontentloaded")
+        assert page.url.rstrip("/").endswith("/events")
+
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+        page.locator(
+            '[data-testid="dashboard-quick-actions"] a:has-text("Browse courses")'
+        ).click()
+        page.wait_for_load_state("domcontentloaded")
+        assert page.url.rstrip("/").endswith("/courses")
 # -------------------------------------------------------------------
 # Scenario 7: Free member discovers gated content in recent content
 #              and finds the upgrade path
@@ -1113,7 +1423,7 @@ class TestScenario7GatedContentInRecentContent:
         3 open articles (level 0) plus 2 gated articles (level 10
         Basic) exist.
         1. Navigate to /
-        Then: The 'Recent Content' section shows only the 3 open
+        Then: The 'Recent content' section shows only the 3 open
               articles the user can access (gated articles are
               excluded).
         2. Click on one of the articles in the recent content list.
@@ -1176,18 +1486,18 @@ class TestScenario7GatedContentInRecentContent:
         )
         page.content()
 
-        # Then: Recent Content shows only open articles
-        # The dashboard "Recent Content" section filters by
+        # Then: Recent content shows only open articles
+        # The dashboard "Recent content" section filters by
         # user level
         recent_section = page.locator(
-            'section:has(h2:has-text("Recent Content"))'
+            'section:has(h2:has-text("Recent content"))'
         )
         recent_text = recent_section.inner_text()
         assert "Getting Started with Python" in recent_text
         assert "Intro to Machine Learning" in recent_text
         assert "Data Cleaning Tips" in recent_text
 
-        # Gated articles NOT in Recent Content
+        # Gated articles NOT in Recent content
         assert "Advanced RAG Techniques" not in recent_text
         assert "Fine-tuning LLMs Guide" not in recent_text
 
@@ -1243,7 +1553,7 @@ class TestScenario8PremiumMemberSeesActivePolls:
         and 2 open polls exist (1 topic poll at Main level, 1 course
         poll at Premium level).
         1. Navigate to /
-        Then: The 'Active Polls' section shows both polls with their
+        Then: The 'Active polls' section shows both polls with their
               titles, vote counts, and option counts.
         2. Click on the course poll.
         Then: User navigates to /vote/{uuid} where they can see
@@ -1251,6 +1561,13 @@ class TestScenario8PremiumMemberSeesActivePolls:
         _clear_dashboard_data()
         _create_user(
             "premium@test.com", tier_slug="premium"
+        )
+        _create_article(
+            title="Premium Agent Patterns",
+            slug="premium-agent-patterns",
+            description="Reusable agent patterns for production work.",
+            required_level=30,
+            date=datetime.date(2026, 2, 27),
         )
 
         # Create a topic poll (required_level auto-set to 20)
@@ -1284,14 +1601,23 @@ class TestScenario8PremiumMemberSeesActivePolls:
         )
         body = page.content()
 
-        # Then: Active Polls section shows both polls
-        assert "Active Polls" in body
+        # Then: Active polls section shows both polls
+        assert "Active polls" in body
+        assert "Recent content" in body
         assert "Next Workshop Topic" in body
         assert "Next Mini-Course" in body
+        assert "Premium Agent Patterns" in body
+        assert page.locator(
+            'section:has(h2:has-text("Recent content")) [data-lucide="newspaper"]'
+        ).count() == 1
+        assert page.locator(
+            'section:has(h2:has-text("Recent content")) [data-lucide="sparkles"]'
+        ).count() == 0
+        _shot(page, "premium-dashboard-desktop")
 
         # Vote and option counts are displayed
         polls_section = page.locator(
-            'section:has(h2:has-text("Active Polls"))'
+            'section:has(h2:has-text("Active polls"))'
         )
         polls_text = polls_section.inner_text()
         assert "vote" in polls_text.lower()
@@ -1374,7 +1700,7 @@ class TestScenario9DashboardNotificationsSurfaceConsolidated:
             'main section:has(h2:has-text("Notifications"))'
         ).count() == 0
         assert page.locator(
-            'main section:has-text("Quick Actions")'
+            'main section:has-text("Quick actions")'
         ).count() >= 1
 
         # Then: The header bell remains the canonical quick-peek entry point.
@@ -1393,7 +1719,7 @@ class TestScenario9DashboardNotificationsSurfaceConsolidated:
         assert "/notifications" in page.url
 @pytest.mark.django_db(transaction=True)
 class TestScenario10CompletedUnitsWithoutEnrollment:
-    """Completed units alone do not populate Continue Learning."""
+    """Completed units alone do not populate Continue learning."""
 
     def test_completed_units_without_enrollment_absent(
         self, django_server, browser
@@ -1417,11 +1743,11 @@ class TestScenario10CompletedUnitsWithoutEnrollment:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
         learning_section = page.locator(
-            'section:has(h2:has-text("Continue Learning"))'
+            'section:has(h2:has-text("Continue learning"))'
         )
         learning_text = learning_section.inner_text()
         assert "Progress Without Enrollment" not in learning_text
-        assert "Browse Courses" in learning_text
+        assert "Browse courses" in learning_text
 # -------------------------------------------------------------------
 # Scenario 11: Removed welcome-card upgrade link
 # -------------------------------------------------------------------
@@ -1449,5 +1775,6 @@ class TestScenario11RemovedWelcomeUpgradeLink:
         )
         body = page.content()
 
-        assert "Welcome back" not in body
+        assert "Welcome back" in body
+        assert page.locator('[data-testid="dashboard-tier-pill"]').inner_text() == "Free"
         assert "Upgrade" not in body

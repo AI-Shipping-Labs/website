@@ -13,8 +13,7 @@
     starting_soon.minutes_until_start   -> int
     starting_soon.remaining_seconds     -> int
     starting_soon.event_start_local     -> str (TZ-aware, via format_user_datetime)
-    starting_soon.join_url              -> str (/events/<slug>/join)
-    starting_soon.join_label            -> "Open join page" or "Join now"
+    starting_soon.event.get_absolute_url -> event detail URL
 {% endcomment %}
 <section class="mb-8">
   <div class="rounded-lg border border-accent/40 bg-accent/5 p-5 sm:p-6"
@@ -38,11 +37,11 @@
                 class="font-semibold">{{ starting_soon.minutes_until_start }} min {{ starting_soon.remaining_seconds }} sec</span>
         </p>
       </div>
-      <a href="{{ starting_soon.join_url }}"
-         class="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-accent px-5 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-         data-testid="starting-soon-join-button">
-        <i data-lucide="video" class="h-4 w-4"></i>
-        {{ starting_soon.join_label }}
+      <a href="{{ starting_soon.event.get_absolute_url }}"
+         class="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-lg bg-accent px-5 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+         data-testid="starting-soon-event-button">
+        <i data-lucide="calendar" class="h-4 w-4"></i>
+        View event
       </a>
     </div>
   </div>

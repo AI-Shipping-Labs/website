@@ -149,7 +149,7 @@ def _clear_audit_logs():
 
 
 def _dashboard_quick_actions(page):
-    return page.locator('section:has(h2:has-text("Quick Actions"))')
+    return page.locator('section:has(h2:has-text("Quick actions"))')
 
 
 def _assert_slack_join_panel(page, raw_invite_url):
@@ -212,8 +212,8 @@ class TestScenario2BasicMemberNoCommunityAction:
 
     def test_basic_member_does_not_see_community_card(self, django_server, browser):
         """Given a user logged in as basic@test.com (Basic tier, level 10).
-        Navigate to / (authenticated dashboard), scroll to Quick Actions.
-        Quick actions include Browse Courses, View Recordings, and Submit
+        Navigate to / (authenticated dashboard), scroll to Quick actions.
+        Quick actions include Browse courses, View Recordings, and Submit
         a Project. No Community action card is shown."""
         _ensure_tiers()
         _create_user("basic@test.com", tier_slug="basic")
@@ -230,10 +230,10 @@ class TestScenario2BasicMemberNoCommunityAction:
 
         # Step 2: Verify current learning/content quick actions are present.
         expected_actions = {
-            "Browse Courses": "/courses",
-            "Browse Workshops": "/workshops",
+            "Browse courses": "/courses",
+            "Browse workshops": "/workshops",
             "Resources": "/resources",
-            "Events & Recordings": "/events",
+            "Events and recordings": "/events",
             "Projects": "/projects",
             "Activities": "/activities",
         }
@@ -577,8 +577,8 @@ class TestScenario11DashboardAfterDeletion:
         )
         body = page.content()
 
-        # Quick Actions section is present
-        assert "Quick Actions" in body
+        # Quick actions section is present
+        assert "Quick actions" in body
 
         # Community action card should NOT be shown for Free user
         community_link = page.locator(

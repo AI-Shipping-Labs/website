@@ -282,6 +282,8 @@ def _dashboard(request):
     override_tier_name = ''
     if active_override is not None:
         override_tier_name = active_override.override_tier.name
+    dashboard_tier_label = override_tier_name or tier_name or 'Free'
+    dashboard_tier_is_override = bool(override_tier_name)
 
     # --- Continue learning ---
     # Find courses where the user has progress (at least one unit accessed)
@@ -421,6 +423,8 @@ def _dashboard(request):
     context = {
         'tier_name': tier_name,
         'override_tier_name': override_tier_name,
+        'dashboard_tier_label': dashboard_tier_label,
+        'dashboard_tier_is_override': dashboard_tier_is_override,
         'show_onboarding_prompt': show_onboarding_prompt,
         'show_plan_preparing': show_plan_preparing,
         **free_activation_context,
@@ -1011,13 +1015,13 @@ def _get_quick_actions(user_level):
     """Build quick action cards based on user's tier level."""
     actions = [
         {
-            'title': 'Browse Courses',
+            'title': 'Browse courses',
             'description': 'Explore structured learning paths',
             'url': '/courses',
             'icon': 'book-open',
         },
         {
-            'title': 'Browse Workshops',
+            'title': 'Browse workshops',
             'description': 'Practice with focused workshop material',
             'url': '/workshops',
             'icon': 'monitor-play',
@@ -1029,7 +1033,7 @@ def _get_quick_actions(user_level):
             'icon': 'link',
         },
         {
-            'title': 'Events & Recordings',
+            'title': 'Events and recordings',
             'description': 'Register live or catch up on recordings',
             'url': '/events',
             'icon': 'video',

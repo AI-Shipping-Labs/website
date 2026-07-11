@@ -1092,7 +1092,7 @@ class TestScenario11AnonymousReadsOpenSyncedArticle:
         # No gating overlay (the gating overlay uses filter:blur
         # and specific CTA text)
         gating_overlay = page.locator(
-            'text="Upgrade to Basic to read this article"'
+            'text="Create a free account or choose Basic to read this article"'
         )
         assert gating_overlay.count() == 0
 # ---------------------------------------------------------------------------

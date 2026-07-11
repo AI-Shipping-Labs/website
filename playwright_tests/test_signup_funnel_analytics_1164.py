@@ -178,14 +178,44 @@ class TestSignupFunnelAnalytics:
 
         email = f'inline-register-{uuid.uuid4().hex[:8]}@test.com'
         page.goto(f'{django_server}/pricing', wait_until='domcontentloaded')
+        page.evaluate(
+            """() => {
+                sessionStorage.removeItem('email-signup-events');
+                var originalGtag = window.gtag;
+                window.gtag = function() {
+                  var args = Array.from(arguments);
+                  if (
+                    args[0] === 'event'
+                    && (args[1] === 'signup_start' || args[1] === 'sign_up')
+                  ) {
+                    var events = JSON.parse(
+                      sessionStorage.getItem('email-signup-events') || '[]'
+                    );
+                    events.push([args[1], args[2]]);
+                    sessionStorage.setItem(
+                      'email-signup-events',
+                      JSON.stringify(events)
+                    );
+                  }
+                  return originalGtag.apply(this, arguments);
+                };
+            }"""
+        )
         page.fill('#register-email', email)
         page.fill('#register-password', 'TestPass123!')
         page.fill('#register-password-confirm', 'TestPass123!')
         page.click('#register-submit')
-        page.locator('#register-success').wait_for(state='visible')
+        page.locator('[data-testid="account-menu-trigger"]').wait_for(
+            state='visible',
+        )
 
-        signup_start = _event_payloads(page, 'signup_start')[-1]
-        sign_up = _event_payloads(page, 'sign_up')[-1]
+        events = dict(json.loads(
+            page.evaluate(
+                "() => sessionStorage.getItem('email-signup-events') || '[]'"
+            )
+        ))
+        signup_start = events['signup_start']
+        sign_up = events['sign_up']
 
         assert signup_start == {
             'method': 'email',
@@ -382,7 +412,9 @@ class TestSignupFunnelAnalytics:
         page.fill('#register-password', 'TestPass123!')
         page.fill('#register-password-confirm', 'TestPass123!')
         page.click('#register-submit')
-        page.locator('#register-success').wait_for(state='visible')
+        page.locator('[data-testid="account-menu-trigger"]').wait_for(
+            state='visible',
+        )
 
         assert page.evaluate("() => typeof window.gtag") == 'undefined'
         assert page.evaluate("() => window.dataLayer === undefined") is True

@@ -271,9 +271,8 @@ class TestInlineRegisterCollapseEmailVariant:
     def test_expanded_email_form_registers_user_successfully(
         self, django_server, page, django_db_blocker,
     ):
-        """After expanding the email block, the form still submits and
-        renders the success message with the return link pointing back
-        at /courses/collapse-687-demo."""
+        """After expanding the email block, the form submits and redirects
+        back to /courses/collapse-687-demo as an authenticated user."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
@@ -295,18 +294,10 @@ class TestInlineRegisterCollapseEmailVariant:
         card.locator("#register-password-confirm").fill(DEFAULT_PASSWORD)
         card.locator("#register-submit").click()
 
-        success = card.locator("#register-success")
-        success.wait_for(state="visible")
-        # Non-empty success copy.
-        message = success.inner_text()
-        assert message.strip() != ""
-        # Return link points back to the originating course.
-        return_link = success.locator("a")
-        assert (
-            return_link.get_attribute("href")
-            == "/courses/collapse-687-demo"
+        page.locator('[data-testid="account-menu-trigger"]').wait_for(
+            state="visible",
         )
-        assert "Return to where you left off." in return_link.inner_text()
+        assert page.url.endswith("/courses/collapse-687-demo")
         # User row exists, unverified.
         with django_db_blocker.unblock():
             from accounts.models import User

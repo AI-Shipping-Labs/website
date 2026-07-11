@@ -462,12 +462,6 @@ class TestScenario449UnverifiedSignupFreeArticle:
         )
         assert register_response.status == 201
 
-        page.goto(f"{django_server}/accounts/login/", wait_until="domcontentloaded")
-        page.fill("#login-email", "unverified@test.com")
-        page.fill("#login-password", "pass1234")
-        page.click("#login-submit")
-        page.wait_for_url(f"{django_server}/")
-
         page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
         assert "Free Article Requires Verification" in page.content()
 
@@ -592,12 +586,6 @@ class TestScenario1160VerifyEmailReturnToContent:
         assert user.tier.slug == "free"
         assert user.email_verified is False
         connection.close()
-
-        page.goto(f"{django_server}/accounts/login/", wait_until="domcontentloaded")
-        page.fill("#login-email", "return-reader@test.com")
-        page.fill("#login-password", "pass1234")
-        page.click("#login-submit")
-        page.wait_for_url(f"{django_server}/")
 
         page.goto(
             f"{django_server}/blog/free-return-article",
@@ -1004,8 +992,11 @@ class TestScenario2FreeMemberHitsBasicGatedArticle:
             not in body
         )
 
-        # CTA message
+        # Signed-in Free members stay on the member upgrade path.
         assert "Upgrade to Basic to read this article" in body
+        assert "Create a free account" not in body
+        assert 'href="/accounts/register/?next=/blog/basic-gated-article"' not in body
+        assert 'href="/accounts/login/?next=/blog/basic-gated-article"' not in body
 
         # Click View Pricing
         pricing_link = page.locator('a:has-text("View Pricing")')
@@ -1606,7 +1597,7 @@ class TestScenario10StaffChangesVisibilityInStudio:
 
         body = anon_page.content()
         assert "Visibility Test Article" in body
-        assert "Upgrade to Basic to read this article" in body
+        assert "Create a free account or choose Basic to read this article" in body
         assert (
             "Full body content that should be gated after change"
             not in body

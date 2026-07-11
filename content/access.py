@@ -378,7 +378,11 @@ def build_gating_context(user, content, content_type='article'):
         'event': 'join this event',
     }
     action = action_verbs.get(content_type, 'access this content')
-    cta_message = f'Upgrade to {tier_name} to {action}'
+    is_guest_paywall = user is None or not user.is_authenticated
+    if is_guest_paywall:
+        cta_message = f'Create a free account or choose {tier_name} to {action}'
+    else:
+        cta_message = f'Upgrade to {tier_name} to {action}'
 
     return {
         'is_gated': True,
@@ -386,5 +390,6 @@ def build_gating_context(user, content, content_type='article'):
         'teaser': teaser,
         'cta_message': cta_message,
         'required_tier_name': tier_name,
+        'is_guest_paywall': is_guest_paywall,
         'pricing_url': '/pricing',
     }

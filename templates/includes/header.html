@@ -173,6 +173,9 @@
         </div>
       </div>
       {% else %}
+      <a href="{% url 'account_register' %}" data-testid="header-join-free-link" class="inline-flex items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+        Join free
+      </a>
       <a href="{{ header_login_url }}" data-testid="header-sign-in-link" class="inline-flex items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
         Sign in
       </a>
@@ -292,9 +295,14 @@
         </a>
       </div>
       {% else %}
-      <a href="{{ header_login_url }}" data-testid="header-sign-in-link" class="mt-4 flex min-h-[44px] w-full items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+      <div class="mt-4 grid gap-2">
+      <a href="{% url 'account_register' %}" data-testid="mobile-header-join-free-link" class="flex min-h-[44px] w-full items-center justify-center rounded-md bg-accent px-4 py-2 text-center text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+        Join free
+      </a>
+      <a href="{{ header_login_url }}" data-testid="header-sign-in-link" class="flex min-h-[44px] w-full items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary">
         Sign in
       </a>
+      </div>
       {% endif %}
     </div>
   </div>

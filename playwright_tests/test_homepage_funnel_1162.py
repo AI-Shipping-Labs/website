@@ -35,7 +35,7 @@ def _seed_homepage_tiers(django_db_blocker):
         ensure_site_config_tiers()
 
 
-def test_homepage_free_card_registers_without_leaving_home(
+def test_homepage_free_card_registers_and_redirects_home_authenticated(
     django_server, page, django_db_blocker
 ):
     _seed_homepage_tiers(django_db_blocker)
@@ -50,11 +50,9 @@ def test_homepage_free_card_registers_without_leaving_home(
     free_card.locator("#register-password-confirm").fill("Password123!")
     free_card.locator("#register-submit").click()
 
-    success = free_card.locator("#register-success")
-    success.wait_for(state="visible")
-    expect(success).to_contain_text("Check your email")
-    assert success.locator("a").get_attribute("href") == "/"
-    assert page.url.endswith("/")
+    page.wait_for_url(f"{django_server}/", timeout=10000)
+    expect(page.locator('[data-testid="account-menu-trigger"]')).to_be_visible()
+    expect(page.locator('[data-testid="header-join-free-link"]')).to_have_count(0)
 
 
 def test_homepage_sprint_story_links_to_active_sprint_detail(

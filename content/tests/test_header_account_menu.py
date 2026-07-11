@@ -31,9 +31,13 @@ class HeaderAccountMenuTest(TestCase):
         html = self._get_header()
 
         self.assertIn(reverse("account_login"), html)
+        self.assertIn('data-testid="header-join-free-link"', html)
+        self.assertIn('href="/accounts/register/"', html)
+        self.assertIn('data-testid="mobile-header-join-free-link"', html)
         self.assertNotIn('data-testid="account-menu"', html)
         self.assertNotIn('id="account-menu-trigger"', html)
         self.assertNotIn('id="notification-bell-btn"', html)
+        self.assertNotIn('href="/accounts/register/?next=', html)
 
     def test_authenticated_header_uses_compact_account_menu(self):
         user = User.objects.create_user(
@@ -47,6 +51,9 @@ class HeaderAccountMenuTest(TestCase):
 
         self.assertIn('id="notification-bell-btn"', html)
         self.assertIn('data-testid="account-menu-trigger"', html)
+        self.assertNotIn('data-testid="header-join-free-link"', html)
+        self.assertNotIn('data-testid="mobile-header-join-free-link"', html)
+        self.assertNotIn('data-testid="header-sign-in-link"', html)
         self.assertIn('aria-haspopup="menu"', html)
         self.assertIn('aria-expanded="false"', html)
         self.assertIn("Ada Lovelace", html)

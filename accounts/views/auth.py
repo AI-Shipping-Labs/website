@@ -353,6 +353,7 @@ def register_api(request):
     next_url = sanitize_verification_return_path(
         data.get("next", ""), request=request, default=""
     )
+    redirect_url = next_url or "/"
 
     if not email:
         return JsonResponse({"error": "Email is required"}, status=400)
@@ -398,6 +399,8 @@ def register_api(request):
     else:
         _send_verification_email(user)
 
+    login(request, user, backend=EMAIL_PASSWORD_AUTH_BACKEND)
+
     message = "Account created. Check your email to verify your address."
     if next_url:
         message = (
@@ -409,6 +412,7 @@ def register_api(request):
         {
             "status": "ok",
             "message": message,
+            "redirect_url": redirect_url,
             "return_url": next_url,
         },
         status=201,

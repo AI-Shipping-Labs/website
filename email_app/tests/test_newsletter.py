@@ -472,6 +472,7 @@ class SubscribePageTest(TestCase):
 
     def test_subscribe_page_uses_correct_template(self):
         response = self.client.get("/subscribe")
+        self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "email_app/subscribe.html")
 
     def test_subscribe_page_contains_form(self):
@@ -479,6 +480,37 @@ class SubscribePageTest(TestCase):
         self.assertContains(response, "subscribe-form")
         self.assertContains(response, 'type="email"')
         self.assertContains(response, "Subscribe")
+
+    def test_subscribe_page_has_single_h1_and_metadata(self):
+        response = self.client.get("/subscribe")
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(content.count("<h1"), 1)
+        self.assertContains(
+            response,
+            "Subscribe to the AI Shipping Labs newsletter",
+        )
+        self.assertContains(
+            response,
+            '<h2 class="text-2xl font-semibold tracking-tight sm:text-3xl"',
+        )
+        self.assertContains(response, "Stay on top of the community")
+        self.assertNotContains(response, "<h1>Stay on top of the community")
+        self.assertContains(response, "<title>Subscribe | AI Shipping Labs</title>")
+        self.assertContains(
+            response,
+            "Subscribe to the AI Shipping Labs newsletter for free updates",
+        )
+
+    def test_subscribe_page_suppresses_footer_newsletter(self):
+        response = self.client.get("/subscribe")
+        content = response.content.decode()
+
+        self.assertEqual(content.count('class="subscribe-form '), 1)
+        self.assertNotIn('id="newsletter"', content)
+        self.assertIn(">Community<", content)
+        self.assertIn(">Legal<", content)
 
     def test_subscribe_page_does_not_leak_template_comments(self):
         """Documentation comment in subscribe_form.html partial must not render to HTML."""

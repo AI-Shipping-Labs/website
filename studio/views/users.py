@@ -467,8 +467,8 @@ def _row_tooltip(user, slack_status):
 
     The new four-column users list drops the per-row Membership/Tags
     columns. To preserve at-a-glance access to the Slack ID, Stripe
-    customer ID, Newsletter state, and Slack workspace state, those four
-    facts move into a hover tooltip on the row itself.
+    customer ID, Newsletter state, account lifecycle, and Slack workspace
+    state, those facts move into a hover tooltip on the row itself.
 
     Order matters because the tooltip renders as a single newline-joined
     string in DOM order:
@@ -476,6 +476,7 @@ def _row_tooltip(user, slack_status):
     - ``Slack ID: <id>`` only when set.
     - ``Stripe customer: <cus_id>`` only when set.
     - ``Newsletter: subscribed|unsubscribed`` always.
+    - ``Account lifecycle: <label>`` always.
     - ``Slack workspace: <status>`` always (the three-state label from
       ``_slack_status``: ``Member`` / ``Not in Slack`` / ``Never checked``).
 

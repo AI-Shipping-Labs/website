@@ -626,11 +626,12 @@ class RowTooltipHelperTest(TestCase):
         cls.minimal.slack_checked_at = None
         cls.minimal.save(update_fields=['slack_checked_at'])
 
-    def test_tooltip_has_all_four_lines_when_slack_and_stripe_set(self):
+    def test_tooltip_has_all_expected_lines_when_slack_and_stripe_set(self):
         tooltip = _row_tooltip(self.full, 'Member')
         self.assertIn('Slack ID: U01ABC123', tooltip)
         self.assertIn('Stripe customer: cus_ABC', tooltip)
         self.assertIn('Newsletter: subscribed', tooltip)
+        self.assertIn('Account lifecycle:', tooltip)
         self.assertIn('Slack workspace: Member', tooltip)
 
     def test_tooltip_omits_slack_id_line_when_user_has_no_slack_id(self):
@@ -652,8 +653,8 @@ class RowTooltipHelperTest(TestCase):
         # newline-joining is the right operator-visible separator. Most
         # browsers render \n inside title attributes as a line break.
         tooltip = _row_tooltip(self.full, 'Member')
-        # All four parts present and separated by single newlines.
-        self.assertEqual(tooltip.count('\n'), 3)
+        # All five parts present and separated by single newlines.
+        self.assertEqual(tooltip.count('\n'), 4)
 
 
 class RowTooltipRenderedOnTrTest(TestCase):

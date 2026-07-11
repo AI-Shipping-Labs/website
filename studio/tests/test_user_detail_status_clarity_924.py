@@ -165,11 +165,14 @@ class CrypticLabelTooltipsTest(_Base924):
     def test_help_icons_render_on_cryptic_labels(self):
         # One help-circle icon per cryptic label inside the membership
         # card (Tier, Status, Email verified, Source, Activated,
-        # Newsletter, Slack, Slack ID) = 8, plus the card-header
-        # "What do these mean?" link icon and the deliverability state
-        # icon = 10.
+        # Account lifecycle, Newsletter, Slack, Slack ID) = 9, plus the
+        # card-header "What do these mean?" link icon = 10. Count only
+        # this section so unrelated cards can add their own help icons.
+        membership_section = self.body.split(
+            'data-testid="user-detail-membership-section"', 1,
+        )[1].split('data-testid="user-detail-deliverability-section"', 1)[0]
         self.assertEqual(
-            self.body.count('data-lucide="help-circle"'), 10,
+            membership_section.count('data-lucide="help-circle"'), 10,
         )
 
 

@@ -1,10 +1,12 @@
 import datetime
+from pathlib import Path
 
+import yaml
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from content.models import CuratedLink
+from content.models import CuratedLink, SiteConfig
 from payments.models import Tier
 from plans.models import Plan, Sprint, SprintEnrollment
 
@@ -27,6 +29,16 @@ def _expected_sprint_range(start_date, duration_weeks):
         f'{start_date:%B} {start_date.day}, {start_date.year} – '
         f'{end_date:%B} {end_date.day}, {end_date.year} '
         f'({duration_weeks} weeks)'
+    )
+
+
+def _seed_full_tier_config():
+    fixture_path = Path(__file__).parent / 'fixtures' / 'tiers.yaml'
+    with open(fixture_path) as f:
+        tiers_data = yaml.safe_load(f)
+    SiteConfig.objects.update_or_create(
+        key='tiers',
+        defaults={'data': tiers_data},
     )
 
 
@@ -97,14 +109,34 @@ class ActivitiesSprintHubTest(TestCase):
         self.assertContains(response, 'data-testid="activities-sprint-tier"')
         self.assertContains(response, 'data-component="member-badge"')
         self.assertContains(response, 'Joining requires Main membership')
+        self.assertContains(
+            response,
+            'time-bound shipping cohort: use the window for project structure',
+        )
         self.assertContains(response, 'Log in to join')
+        self.assertContains(response, 'View sprint details')
+        self.assertContains(response, 'data-testid="activities-sprint-name-link"')
+        self.assertContains(response, 'data-testid="activities-sprint-detail-link"')
         self.assertContains(response, 'data-testid="activities-sprints-intro-row"')
         self.assertContains(response, 'data-testid="activities-sprints-card-row"')
         self.assertContains(response, 'data-testid="activities-sprint-facts"')
         self.assertContains(
             response,
+            f'href="{reverse("sprint_detail", kwargs={"sprint_slug": sprint.slug})}"',
+        )
+        self.assertContains(
+            response,
             f'{reverse("account_login")}?next=/sprints/{sprint.slug}',
         )
+        self.assertNotContains(response, '/studio/')
+        self.assertNotContains(response, '/plans/')
+
+        detail_response = self.client.get(
+            reverse('sprint_detail', kwargs={'sprint_slug': sprint.slug})
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, sprint.name)
+        self.assertContains(detail_response, 'Log in to join')
 
     def test_sprint_section_uses_stacked_detail_layout(self):
         Sprint.objects.create(
@@ -125,11 +157,15 @@ class ActivitiesSprintHubTest(TestCase):
         facts_index = content.index('data-testid="activities-sprint-facts"')
         guidance_index = content.index('data-testid="activities-sprint-guidance"')
         cta_index = content.index('data-testid="activities-sprint-cta"')
+        detail_link_index = content.index(
+            'data-testid="activities-sprint-detail-link"'
+        )
 
         self.assertLess(intro_index, card_row_index)
         self.assertLess(card_row_index, card_index)
         self.assertLess(card_index, facts_index)
         self.assertLess(facts_index, guidance_index)
+        self.assertLess(guidance_index, detail_link_index)
         self.assertLess(guidance_index, cta_index)
         self.assertNotIn(
             'lg:grid-cols-[minmax(0,0.78fr)_minmax(420px,1fr)]',
@@ -263,6 +299,32 @@ class ActivitiesSprintHubTest(TestCase):
 
         self.assertContains(response, 'Upgrade to Premium')
         self.assertContains(response, f'href="{reverse("pricing")}"')
+        self.assertContains(
+            response,
+            f'href="{reverse("sprint_detail", kwargs={"sprint_slug": "premium-sprint"})}"',
+        )
+
+    def test_eligible_member_keeps_detail_link_and_primary_join_path(self):
+        sprint = Sprint.objects.create(
+            name='Main Sprint',
+            slug='main-sprint',
+            start_date=_active_sprint_start(),
+            status='active',
+            min_tier_level=20,
+        )
+        member = User.objects.create_user(email='eligible@example.com', password='pw')
+        member.tier = Tier.objects.get(slug='main')
+        member.save(update_fields=['tier'])
+
+        self.client.force_login(member)
+        response = self.client.get('/activities')
+
+        self.assertContains(
+            response,
+            f'href="{reverse("sprint_detail", kwargs={"sprint_slug": sprint.slug})}"',
+        )
+        self.assertContains(response, 'View sprint')
+        self.assertContains(response, 'View sprint details')
 
     def test_enrolled_member_cta_points_to_existing_plan(self):
         sprint = Sprint.objects.create(
@@ -291,6 +353,43 @@ class ActivitiesSprintHubTest(TestCase):
                 kwargs={'sprint_slug': sprint.slug, 'plan_id': plan.pk},
             ),
         )
+
+
+class ActivitiesCardActionTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        _seed_full_tier_config()
+
+    def _card_markup(self, response, title):
+        content = response.content.decode()
+        title_index = content.index(title)
+        return content[
+            content.rfind('data-testid="activity-card"', 0, title_index):
+            content.find('</article>', title_index)
+        ]
+
+    def test_activity_cards_render_visible_destination_actions(self):
+        response = self.client.get('/activities#access-by-tier')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="activity-card-action"', count=15)
+        self.assertContains(response, 'data-testid="activity-card-next-step"', count=15)
+
+        content_card = self._card_markup(response, 'Exclusive Substack Content')
+        self.assertIn('Full access to premium paywalled articles', content_card)
+        self.assertIn('Browse member articles', content_card)
+        self.assertIn('href="/blog"', content_card)
+        self.assertIn('data-tier="basic" data-included="true"', content_card)
+
+        sprint_card = self._card_markup(response, 'Guided Project-Based Learning')
+        self.assertIn('Explore sprints', sprint_card)
+        self.assertIn('href="/sprints"', sprint_card)
+        self.assertIn('data-tier="main" data-included="true"', sprint_card)
+
+        course_card = self._card_markup(response, 'Mini-Courses on Specialized Topics')
+        self.assertIn('Browse courses', course_card)
+        self.assertIn('href="/courses"', course_card)
+        self.assertIn('data-tier="premium" data-included="true"', course_card)
 
 
 class ResourcesSprintIsolationTest(TestCase):

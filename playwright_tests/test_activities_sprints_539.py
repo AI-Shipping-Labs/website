@@ -1,6 +1,6 @@
 """Playwright coverage for the /activities tier benefits and sprint hub.
 
-Screenshots are written to ``.tmp/screenshots/issue-1181`` for tester
+Screenshots are written to ``.tmp/screenshots/issue-1182`` for tester
 review.
 """
 
@@ -21,7 +21,7 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 # deployed dev environment. See _docs/testing-guidelines.md.
 pytestmark = pytest.mark.local_only
 
-SCREENSHOT_DIR = Path(".tmp/screenshots/issue-1181")
+SCREENSHOT_DIR = Path(".tmp/screenshots/issue-1182")
 
 
 def _shot(page, name):
@@ -202,11 +202,18 @@ class TestActivitiesAccessByTierLayout:
         assert "Active" in body
         assert _expected_sprint_range(_active_sprint_start(), 4) in body
         assert "Main or above" in body
+        assert "time-bound shipping cohort" in body
+        assert "project structure" in body
         cta = card.locator('[data-testid="activities-sprint-cta"]')
         assert "Log in to join" in cta.inner_text()
         assert "/accounts/login/?next=/sprints/may-shipping-sprint" in (
             cta.get_attribute("href")
         )
+        detail_link = card.locator('[data-testid="activities-sprint-detail-link"]')
+        assert "View sprint details" in detail_link.inner_text()
+        assert detail_link.get_attribute("href") == "/sprints/may-shipping-sprint"
+        name_link = card.locator('[data-testid="activities-sprint-name-link"]')
+        assert name_link.get_attribute("href") == "/sprints/may-shipping-sprint"
         assert _top(card.locator('[data-testid="activities-sprint-dates"]')) > _top(
             card.locator('[data-testid="activities-sprint-name"]')
         )
@@ -217,6 +224,31 @@ class TestActivitiesAccessByTierLayout:
         assert _top(card) < secondary_top
         _assert_no_horizontal_overflow(page)
         _shot(page, "01-activities-anonymous-desktop")
+
+    def test_anonymous_sprint_detail_link_stays_separate_from_join_cta(
+        self, django_server, page, django_db_blocker
+    ):
+        with django_db_blocker.unblock():
+            _seed_base(active=True)
+
+        page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
+
+        card = page.locator('[data-testid="activities-sprint-card"]').first
+        cta = card.locator('[data-testid="activities-sprint-cta"]')
+        detail = card.locator('[data-testid="activities-sprint-detail-link"]')
+        assert cta.get_attribute("href") == (
+            "/accounts/login/?next=/sprints/may-shipping-sprint"
+        )
+        assert detail.get_attribute("href") == "/sprints/may-shipping-sprint"
+
+        detail.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert page.url.rstrip("/").endswith("/sprints/may-shipping-sprint")
+        expect = page.get_by_test_id("sprint-detail-name")
+        expect.wait_for()
+        assert "May Shipping Sprint" in expect.inner_text()
+        assert page.get_by_test_id("sprint-cta-login").is_visible()
+        _shot(page, "02-activities-anonymous-sprint-detail")
 
     def test_mobile_anonymous_sees_tier_benefits_first(
         self, django_server, browser, django_db_blocker
@@ -239,7 +271,7 @@ class TestActivitiesAccessByTierLayout:
         assert _top(benefits) < _top(sprints)
         assert page.locator('[data-testid="activities-tier-filter"]').count() == 4
         _assert_no_horizontal_overflow(page)
-        _shot(page, "02-activities-anonymous-pixel7")
+        _shot(page, "03-activities-anonymous-pixel7")
         context.close()
 
     def test_community_sprints_anchor_lands_on_live_section(
@@ -258,7 +290,7 @@ class TestActivitiesAccessByTierLayout:
         assert section.is_visible()
         assert page.locator("#community-sprints").count() == 1
         assert "May Shipping Sprint" in section.inner_text()
-        _shot(page, "03-activities-anchor-desktop")
+        _shot(page, "04-activities-anchor-desktop")
 
     def test_stale_active_sprint_is_hidden_from_public_activities(
         self, django_server, page, django_db_blocker
@@ -301,7 +333,7 @@ class TestActivitiesAccessByTierLayout:
         assert empty.locator('a[href="/events"]').count() == 1
         assert empty.locator('a[href="/workshops"]').count() == 1
         assert page.locator('[data-testid="activities-sprint-card"]').count() == 0
-        _shot(page, "04-activities-empty-state")
+        _shot(page, "05-activities-empty-state")
 
     def test_free_member_understands_premium_requirement(
         self, django_server, browser, django_db_blocker
@@ -322,6 +354,16 @@ class TestActivitiesAccessByTierLayout:
         card = page.locator('[data-testid="activities-sprint-card"]').first
         assert "Premium" in card.inner_text()
         assert "Membership:" not in card.inner_text()
+        detail = card.locator('[data-testid="activities-sprint-detail-link"]')
+        assert detail.get_attribute("href") == "/sprints/premium-shipping-sprint"
+        detail.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert page.url.rstrip("/").endswith("/sprints/premium-shipping-sprint")
+        assert page.get_by_test_id("sprint-cta-upgrade").is_visible()
+        assert "requires the Premium tier" in page.locator("body").inner_text()
+
+        page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
+        card = page.locator('[data-testid="activities-sprint-card"]').first
         cta = card.locator('[data-testid="activities-sprint-cta"]')
         assert "Upgrade to Premium" in cta.inner_text()
         assert cta.get_attribute("href") == "/pricing"
@@ -343,7 +385,7 @@ class TestActivitiesAccessByTierLayout:
         page.wait_for_load_state("domcontentloaded")
         assert page.url.rstrip("/").endswith("/sprints/may-shipping-sprint")
         assert page.locator('[data-testid="sprint-detail-name"]').is_visible()
-        _shot(page, "05-activities-main-member-destination")
+        _shot(page, "06-activities-main-member-destination")
         ctx.close()
 
     def test_staff_can_preview_draft_without_public_exposure(
@@ -368,7 +410,15 @@ class TestActivitiesAccessByTierLayout:
         ).inner_text()
         assert "Draft Sprint" in section_text
         assert "Draft" in section_text
-        _shot(staff_page, "06-activities-staff-draft")
+        draft_card = staff_page.locator(
+            '[data-testid="activities-sprint-card"]',
+            has_text="Draft Sprint",
+        )
+        draft_card.locator('[data-testid="activities-sprint-detail-link"]').click()
+        staff_page.wait_for_load_state("domcontentloaded")
+        assert staff_page.url.rstrip("/").endswith("/sprints/draft-sprint")
+        assert staff_page.get_by_test_id("sprint-detail-name").is_visible()
+        _shot(staff_page, "07-activities-staff-draft-detail")
         ctx.close()
 
     def test_pricing_compare_link_lands_on_access_by_tier_without_changing_ctas(
@@ -421,6 +471,16 @@ class TestActivitiesAccessByTierLayout:
         assert "Exclusive Substack Content" in basic_titles
         assert "Closed Community Access" not in basic_titles
         assert "Mini-Courses on Specialized Topics" not in basic_titles
+        visible_actions = page.locator('[data-testid="activity-card-action"]:visible')
+        assert visible_actions.count() == len(basic_titles)
+        assert visible_actions.first.get_attribute("href") == "/blog"
+        assert "Browse member articles" in visible_actions.first.inner_text()
+        basic_filter.press("Tab")
+        page.keyboard.press("Tab")
+        page.keyboard.press("Tab")
+        assert page.evaluate(
+            "() => document.activeElement?.dataset?.testid"
+        ) == "activity-card-action"
 
         main_filter.click()
         assert main_filter.get_attribute("aria-pressed") == "true"
@@ -430,6 +490,10 @@ class TestActivitiesAccessByTierLayout:
         assert "Closed Community Access" in main_titles
         assert "Interactive Group Coding Sessions" in main_titles
         assert "Profile Teardowns" not in main_titles
+        assert page.locator(
+            '[data-testid="activity-card"]:visible '
+            '[data-testid="activity-card-action"][href="/sprints"]'
+        ).count() >= 1
 
         premium_filter.click()
         assert premium_filter.get_attribute("aria-pressed") == "true"
@@ -438,6 +502,10 @@ class TestActivitiesAccessByTierLayout:
         assert "Vote on Course Topics" in premium_titles
         assert "Profile Teardowns" in premium_titles
         assert len(premium_titles) == 15
+        assert page.locator(
+            '[data-testid="activity-card"]:visible '
+            '[data-testid="activity-card-action"][href="/courses"]'
+        ).count() == 1
 
         page.get_by_text("Quick comparison").scroll_into_view_if_needed()
         assert page.get_by_text("Quick comparison").is_visible()
@@ -478,4 +546,4 @@ class TestActivitiesAccessByTierLayout:
         assert "May Shipping Sprint" not in body
         assert page.locator('[data-testid="activities-sprint-card"]').count() == 0
         assert page.locator('[data-testid="activities-sprints-section"]').count() == 0
-        _shot(page, "07-resources-no-sprint-hub")
+        _shot(page, "08-resources-no-sprint-hub")

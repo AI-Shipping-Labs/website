@@ -174,6 +174,13 @@ class GetActivitiesTest(TestCase):
             self.assertIn('title', activity)
             self.assertIn('description', activity)
             self.assertIn('tiers', activity)
+            self.assertIn('action_label', activity)
+            self.assertIn('action_url', activity)
+
+    def test_activity_dict_has_default_action_metadata(self):
+        activities = get_activities()
+        self.assertEqual(activities[0]['action_label'], 'Compare membership options')
+        self.assertEqual(activities[0]['action_url'], '/pricing')
 
     def test_description_is_stripped(self):
         SiteConfig.objects.update_or_create(

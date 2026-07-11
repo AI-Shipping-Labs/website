@@ -616,6 +616,32 @@ class WorkshopOgImageAutoBannerFallbackTest(TestCase):
         neither = self._make_workshop(slug='plain-ws')
         self.assertEqual(neither.display_image_url, '')
 
+    def test_card_image_url_excludes_generated_auto_banner(self):
+        cover = self._make_workshop(
+            slug='card-cover-ws',
+            cover_image_url='https://cdn.example.com/manual/card-cover.png',
+            custom_banner_url='https://cdn.example.com/custom/workshop.png',
+            auto_banner_url='https://cdn.example.com/banners/workshop-card.jpg',
+        )
+        self.assertEqual(
+            cover.card_image_url,
+            'https://cdn.example.com/manual/card-cover.png',
+        )
+        custom = self._make_workshop(
+            slug='card-custom-ws',
+            custom_banner_url='https://cdn.example.com/custom/workshop-card.png',
+            auto_banner_url='https://cdn.example.com/banners/workshop-custom.jpg',
+        )
+        self.assertEqual(
+            custom.card_image_url,
+            'https://cdn.example.com/custom/workshop-card.png',
+        )
+        auto_only = self._make_workshop(
+            slug='card-auto-ws',
+            auto_banner_url='https://cdn.example.com/banners/workshop-auto.jpg',
+        )
+        self.assertEqual(auto_only.card_image_url, '')
+
 
 class CustomBannerPrecedenceTest(TestCase):
     """Issue #931: ``custom_banner_url`` sits between cover and auto banner.

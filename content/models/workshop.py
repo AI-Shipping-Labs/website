@@ -389,7 +389,7 @@ class Workshop(
 
     @property
     def display_image_url(self):
-        """Return the best thumbnail/preview URL for listings and cards.
+        """Return the best sharing/preview URL for SEO and Studio panels.
 
         Precedence (issue #931): frontmatter ``cover_image_url`` wins, then
         the operator-uploaded ``custom_banner_url`` (sync-safe), then the
@@ -398,6 +398,11 @@ class Workshop(
         icon.
         """
         return effective_banner_url(self)
+
+    @property
+    def card_image_url(self):
+        """Return the public catalog card image, excluding auto banners."""
+        return self.cover_image_url or self.custom_banner_url or ''
 
     def user_can_access_landing(self, user):
         """Return True when ``user`` may view the workshop landing."""

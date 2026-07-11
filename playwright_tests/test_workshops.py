@@ -66,6 +66,8 @@ def _create_workshop(
     instructor='Alexey',
     status='published',
     cover_image_url='',
+    custom_banner_url='',
+    auto_banner_url='',
     tags=None,
     skill_level='',
     core_tools=None,
@@ -113,6 +115,8 @@ def _create_workshop(
         description=description,
         code_repo_url=code_repo_url,
         cover_image_url=cover_image_url,
+        custom_banner_url=custom_banner_url,
+        auto_banner_url=auto_banner_url,
         tags=tags or [],
         skill_level=skill_level,
         core_tools=core_tools or [],
@@ -257,12 +261,14 @@ class TestVisitorBrowsesCatalog:
         self, django_server, page,
     ):
         _clear_workshops()
+        agents_auto_url = 'https://example.com/generated-agents-filter.jpg'
         _create_workshop(
             slug='agents-ws',
             title='Agent Workshop',
             pages=0,
             recording=0,
             tags=['agents'],
+            auto_banner_url=agents_auto_url,
         )
         _create_workshop(
             slug='python-ws',
@@ -270,6 +276,7 @@ class TestVisitorBrowsesCatalog:
             pages=0,
             recording=0,
             tags=['python'],
+            cover_image_url='https://example.com/python-filter-cover.jpg',
         )
 
         page.goto(
@@ -285,6 +292,11 @@ class TestVisitorBrowsesCatalog:
         ).inner_text()
         assert 'Agent Workshop' in page.content()
         assert 'Python Workshop' not in page.content()
+        agent_card = page.locator('article:has(a[href="/workshops/agents-ws"])')
+        assert agent_card.locator(
+            '[data-testid="workshop-card-preview-fallback"]',
+        ).count() == 1
+        assert agent_card.locator(f'img[src="{agents_auto_url}"]').count() == 0
 
         clear_link = page.locator('[data-testid="clear-workshop-filter"]')
         assert clear_link.get_attribute('href') == '/workshops/catalog'
@@ -757,7 +769,9 @@ class TestVisitorBrowsesCatalog:
         self, django_server, page,
     ):
         _clear_workshops()
-        _create_workshop()
+        generated_url = 'https://example.com/generated-workshop-banner.jpg'
+        custom_url = 'https://example.com/operator-selected-workshop.jpg'
+        _create_workshop(auto_banner_url=generated_url)
         _create_workshop(
             slug='visual-workshop',
             title='Visual Systems',
@@ -765,6 +779,15 @@ class TestVisitorBrowsesCatalog:
             recording=0,
             with_event=False,
             cover_image_url='https://example.com/workshop-cover.jpg',
+        )
+        _create_workshop(
+            slug='custom-workshop',
+            title='Custom Visual Systems',
+            pages=0,
+            recording=0,
+            with_event=False,
+            custom_banner_url=custom_url,
+            auto_banner_url='https://example.com/generated-custom-workshop.jpg',
         )
 
         page.goto(
@@ -791,6 +814,7 @@ class TestVisitorBrowsesCatalog:
         assert 'Alexey' not in production_fallback.inner_text()
         assert 'Apr 21, 2026' not in production_fallback.inner_text()
         assert production_card.locator('.h-12.w-12').count() == 0
+        assert production_card.locator(f'img[src="{generated_url}"]').count() == 0
 
         visual_image = page.locator(
             'img[src="https://example.com/workshop-cover.jpg"]',
@@ -800,6 +824,14 @@ class TestVisitorBrowsesCatalog:
             "Cover image for Visual Systems"
         )
         assert visual_image.get_attribute("loading") == "lazy"
+
+        custom_card = page.locator(
+            'article:has(a[href="/workshops/custom-workshop"])',
+        )
+        assert custom_card.locator(f'img[src="{custom_url}"]').count() == 1
+        assert custom_card.locator(
+            'img[src="https://example.com/generated-custom-workshop.jpg"]',
+        ).count() == 0
 
         # Click the workshop card to land on the landing page.
         page.locator('a:has-text("Production Agents")').first.click()

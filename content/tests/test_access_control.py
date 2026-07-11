@@ -776,7 +776,33 @@ class TutorialDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/tutorials/gated-tutorial')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Secret tutorial content')
+        self.assertContains(
+            response,
+            'Create a free account or choose Premium to read this tutorial',
+        )
+        self.assertContains(
+            response,
+            'href="/accounts/register/?next=/tutorials/gated-tutorial"',
+        )
+        self.assertContains(
+            response,
+            'href="/accounts/login/?next=/tutorials/gated-tutorial"',
+        )
+        self.assertNotContains(
+            response, 'Upgrade to Premium to read this tutorial',
+        )
+
+    def test_free_user_sees_gated_tutorial_upgrade_copy(self):
+        user = User.objects.create_user(email='free-tutorial@test.com')
+        user.tier = self.free_tier
+        user.save()
+        self.client.force_login(user)
+
+        response = self.client.get('/tutorials/gated-tutorial')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Secret tutorial content')
         self.assertContains(response, 'Upgrade to Premium to read this tutorial')
+        self.assertNotContains(response, 'Create a free account or choose Premium')
 
 
 @tag('core')

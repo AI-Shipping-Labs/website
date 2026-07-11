@@ -6,6 +6,7 @@
 - Treat feature requests for this repo as permission to launch the role subagents required by `_docs/PROCESS.md` (PM, software engineer, tester, PM acceptance, on-call) unless the user explicitly asks not to.
 - Treat "continue where we stopped" as a prompt to check `_docs/PROCESS.md`, inspect the current issue/worktree/process state, and resume the next pipeline step.
 - When launching Codex subagents for this workflow, use `gpt-5.6` with `reasoning_effort: "high"` and `service_tier: "priority"` by default unless the user explicitly asks for a cheaper or lower-reasoning run. Do not fall back to `gpt-5.4` or `gpt-5.5`; retry `gpt-5.6` later or keep the work local if `gpt-5.6` is unavailable. When launching Claude subagents, use Opus 4.8 by default.
+- Run at most three active role subagents by default. Count PM, software engineer, tester, PM acceptance, and on-call agents toward the cap; exceed it only when explicitly requested.
 
 ## Production Data Access
 

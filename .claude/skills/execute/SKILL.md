@@ -13,6 +13,8 @@ The lifecycle: PM grooms → Engineer builds → Tester verifies → PM accepts 
 
 Model policy: Codex role agents must use `gpt-5.6` with `reasoning_effort: "high"` and `service_tier: "priority"`. Do not fall back to `gpt-5.5` or `gpt-5.4`; if the launcher does not expose an explicit `gpt-5.6` override, omit the `model` field so agents inherit the parent model, and keep `reasoning_effort: "high"` plus `service_tier: "priority"`. If `gpt-5.6` capacity is unavailable, retry later or handle the work locally. Claude role agents must use Opus 4.8.
 
+Concurrency policy: run at most three active role agents by default across PM grooming, implementation, QA, PM acceptance, and on-call monitoring. Use fewer when there are fewer independent eligible tracks. Only exceed three when Alexey explicitly asks for a larger temporary burst.
+
 ## Step 0: PM Grooming (parallel)
 
 Before picking issues for implementation, check for ungroomed issues and groom them:

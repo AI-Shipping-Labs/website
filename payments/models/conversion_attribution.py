@@ -39,10 +39,14 @@ class ConversionAttribution(models.Model):
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name="conversion_attributions",
-        help_text="The user who paid. PROTECT so we never silently drop "
-                  "attribution rows when a user is hard-deleted.",
+        null=True,
+        blank=True,
+        help_text=(
+            "The user who paid. Null after privacy deletion so accounting "
+            "attribution can be retained without a live User row."
+        ),
     )
     stripe_session_id = models.CharField(
         max_length=255,

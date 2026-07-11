@@ -105,6 +105,14 @@ class PrivacyContentTests(TestCase):
         for processor in ('Stripe', 'Slack', 'Amazon SES'):
             self.assertIn(processor, self.body)
 
+    def test_mentions_self_service_export_delete_and_slack_ingest(self):
+        self.assertIn('July 11, 2026', self.body)
+        self.assertIn('Privacy &amp; data section', self.body)
+        self.assertIn('download a portable copy', self.body)
+        self.assertIn('local account deletion', self.body)
+        self.assertIn('imports limited sprint/community Slack', self.body)
+        self.assertIn('Billing records are kept', self.body)
+
     def test_mentions_oauth_providers(self):
         self.assertIn('GitHub', self.body)
         self.assertIn('Google', self.body)

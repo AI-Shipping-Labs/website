@@ -39,9 +39,14 @@ class PaymentAccountMismatch(models.Model):
     stripe_email = models.EmailField(help_text="Billing email from Stripe.")
     paid_user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="payment_mismatches_as_paid_user",
-        help_text="User who received entitlement from client_reference_id.",
+        help_text=(
+            "User who received entitlement from client_reference_id. "
+            "Null after privacy deletion."
+        ),
     )
     candidate_user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

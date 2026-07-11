@@ -6,25 +6,35 @@ from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.http import (
+    HttpResponse,
     HttpResponseForbidden,
     HttpResponsePermanentRedirect,
     JsonResponse,
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.views.decorators.http import require_POST
+from django.utils import timezone
+from django.views.decorators.http import require_GET, require_POST
 
 from accounts.gating import is_newsletter_only_user
-from accounts.models import MemberAPIKey
+from accounts.models import MemberAPIKey, PrivacyRequestLog
 from accounts.return_context import sanitize_verification_return_path
 from accounts.services.email_change import (
     EmailChangeError,
     active_email_change_request_for_user,
     confirm_email_change,
     request_email_change,
+)
+from accounts.services.privacy import (
+    build_user_data_export,
+    delete_account_for_privacy,
+    log_blocked_privacy_delete,
+    request_context_from_request,
+    write_privacy_export_log,
 )
 
 # Issue #448: per-user resend throttle for the account verification banner.
@@ -174,6 +184,8 @@ def _render_account_page(
     profile_error="",
     profile_form_first_name=None,
     profile_form_last_name=None,
+    privacy_delete_error="",
+    privacy_blocker_reason="",
     status=200,
 ):
     """Build the ``/account/`` context and render ``accounts/account.html``.
@@ -375,6 +387,9 @@ def _render_account_page(
         ),
         "pending_email_change": active_email_change_request_for_user(user),
         "email_change_requires_password": user.has_usable_password(),
+        "privacy_requires_password": user.has_usable_password(),
+        "privacy_delete_error": privacy_delete_error,
+        "privacy_blocker_reason": privacy_blocker_reason,
     }
 
     # Issue #581: the Sprint plan card was removed from /account/. The
@@ -388,6 +403,111 @@ def _render_account_page(
 def account_view(request):
     """Render the account page showing tier, billing info, and actions."""
     return _render_account_page(request)
+
+
+@login_required
+@require_GET
+def data_export_view(request):
+    """Return the signed-in member's portable privacy export as JSON."""
+    payload = build_user_data_export(request.user)
+    write_privacy_export_log(
+        request.user,
+        request_context_from_request(request),
+    )
+    today = timezone.localdate().isoformat()
+    response = HttpResponse(
+        json.dumps(payload, indent=2, sort_keys=True),
+        content_type="application/json",
+    )
+    response["Content-Disposition"] = (
+        f'attachment; filename="ai-shipping-labs-data-{today}.json"'
+    )
+    return response
+
+
+def _delete_request_data(request):
+    content_type = request.META.get("CONTENT_TYPE", "")
+    if content_type.startswith("application/json"):
+        try:
+            data = json.loads(request.body or b"{}")
+        except (json.JSONDecodeError, ValueError):
+            return {}
+        return data if isinstance(data, dict) else {}
+    return request.POST
+
+
+@login_required
+@require_POST
+def delete_account_view(request):
+    """Delete the signed-in member's local platform account."""
+    data = _delete_request_data(request)
+    request_context = request_context_from_request(request)
+    user = request.user
+    confirm_email = data.get("confirm_email") or ""
+
+    if confirm_email != user.email:
+        log_blocked_privacy_delete(
+            user,
+            PrivacyRequestLog.BLOCKER_BAD_CONFIRMATION,
+            request_context,
+        )
+        return _render_account_page(
+            request,
+            privacy_delete_error=(
+                "We could not confirm this request. Check the email address "
+                "and password, then try again."
+            ),
+            privacy_blocker_reason=PrivacyRequestLog.BLOCKER_BAD_CONFIRMATION,
+            status=400,
+        )
+
+    if user.has_usable_password():
+        current_password = data.get("current_password") or ""
+        if not user.check_password(current_password):
+            log_blocked_privacy_delete(
+                user,
+                PrivacyRequestLog.BLOCKER_BAD_PASSWORD,
+                request_context,
+            )
+            return _render_account_page(
+                request,
+                privacy_delete_error=(
+                    "We could not confirm this request. Check the email "
+                    "address and password, then try again."
+                ),
+                privacy_blocker_reason=PrivacyRequestLog.BLOCKER_BAD_PASSWORD,
+                status=400,
+            )
+
+    result = delete_account_for_privacy(user, request_context)
+    if not result.success:
+        if result.blocker_reason == PrivacyRequestLog.BLOCKER_ACTIVE_SUBSCRIPTION:
+            error = (
+                "Your account still has an active subscription. Manage or "
+                "cancel the subscription first, then return here after the "
+                "billing update is complete."
+            )
+        elif result.blocker_reason == PrivacyRequestLog.BLOCKER_STAFF_ACCOUNT:
+            error = (
+                "Staff and admin accounts cannot be deleted from this "
+                "self-service flow. Contact another operator for support."
+            )
+        else:
+            error = "We could not delete this account from the self-service flow."
+        return _render_account_page(
+            request,
+            privacy_delete_error=error,
+            privacy_blocker_reason=result.blocker_reason,
+            status=403,
+        )
+
+    logout(request)
+    return redirect("account_deleted")
+
+
+def account_deleted_view(request):
+    """Public confirmation page after a member deletes their account."""
+    return render(request, "accounts/account_deleted.html")
 
 
 @login_required

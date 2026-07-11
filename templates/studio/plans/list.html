@@ -27,7 +27,7 @@
     </select>
   </div>
   <div>
-    {% include "studio/includes/_people_picker.html" with name="member" id_prefix="plan-list-member" label="Member" search_url=user_search_url on_select_action="set_value" testid_prefix="plan-list-member" %}
+    {% include "studio/includes/_people_picker.html" with name="member" id_prefix="plan-list-member" label="Member" search_url=user_search_url on_select_action="set_value" testid_prefix="plan-list-member" hidden_autocomplete="off" %}
     {% if member_filter_id and prefill_member_display %}
     <script>
       (function() {

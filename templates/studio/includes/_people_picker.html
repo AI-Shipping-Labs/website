@@ -45,7 +45,7 @@ Enter activates the highlighted row, Esc closes the suggestion list.
          data-hidden-id="{{ id_prefix }}-id"
          class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
          data-testid="{{ effective_testid_prefix }}-search">
-  <input type="hidden" name="{{ name }}" id="{{ id_prefix }}-id" autocomplete="off">
+  <input type="hidden" name="{{ name }}" id="{{ id_prefix }}-id"{% if hidden_autocomplete %} autocomplete="{{ hidden_autocomplete }}"{% endif %}>
   <ul id="{{ id_prefix }}-suggestions"
       class="hidden absolute z-20 mt-1 w-full bg-card border border-border rounded-lg shadow-lg overflow-hidden"
       role="listbox"

@@ -24,7 +24,7 @@
       {% if messages %}
       <div class="mb-6 space-y-2" data-testid="account-messages-region" role="status" aria-live="polite">
         {% for message in messages %}
-        <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% elif message.tags == 'warning' %}bg-yellow-500/20 text-yellow-300{% else %}bg-blue-500/20 text-blue-400{% endif %}"
+        <div class="px-4 py-3 rounded-lg border text-sm {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-800 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-200{% elif message.tags == 'success' %}border-green-200 bg-green-50 text-green-800 dark:border-green-500/30 dark:bg-green-500/15 dark:text-green-200{% elif message.tags == 'warning' %}border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-100{% else %}border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200{% endif %}"
              data-message-tag="{{ message.tags }}"
              data-testid="account-message">
           {{ message }}
@@ -63,63 +63,6 @@
         </a>
       </div>
       {% endif %}
-
-      {% if not is_newsletter_only %}
-      <!-- Profile Section (issue #447: name form lives inline here) -->
-      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mb-8" id="profile-section">
-        <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
-          <i data-lucide="user" class="h-5 w-5 text-accent"></i>
-          Profile
-        </h2>
-        {% if user.is_staff or user.is_superuser %}
-        <div class="mb-4">
-          {% member_label_badge "Admin" tone="accent_outline" size="sm" icon="shield" element_id="account-admin-role-badge" testid="account-admin-role-badge" %}
-        </div>
-        {% endif %}
-        {% if user.first_name or user.last_name %}
-        <p class="text-foreground mb-4" id="profile-current-name">{{ user.first_name }} {{ user.last_name }}</p>
-        {% else %}
-        <p class="text-muted-foreground mb-4" id="profile-current-name">Your name is not set yet</p>
-        {% endif %}
-
-        {% if profile_error %}
-        <div class="mb-6 px-4 py-3 rounded-lg text-sm bg-red-500/20 text-red-400" id="profile-error" data-testid="profile-form-error">
-          {{ profile_error }}
-        </div>
-        {% endif %}
-
-        <form method="post" action="{% url 'account_profile' %}" id="profile-form">
-          {% csrf_token %}
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div>
-              <label for="id_first_name" class="block text-sm font-medium text-foreground mb-1">First name</label>
-              <input type="text" id="id_first_name" name="first_name"
-                     value="{{ profile_form_first_name }}" maxlength="150" placeholder="Optional"
-                     autocomplete="given-name"
-                     class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent">
-            </div>
-            <div>
-              <label for="id_last_name" class="block text-sm font-medium text-foreground mb-1">Last name</label>
-              <input type="text" id="id_last_name" name="last_name"
-                     value="{{ profile_form_last_name }}" maxlength="150" placeholder="Optional"
-                     autocomplete="family-name"
-                     class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent">
-            </div>
-          </div>
-
-          <button type="submit" id="profile-save-btn"
-                  class="{% button_classes 'primary' %}">
-            Save
-          </button>
-        </form>
-      </div>
-
-      <!-- Slack Community Card (shared partial — issue #700; lifted above Membership per #730) -->
-      {% if not slack_connected %}
-      {% include "includes/_slack_account_card.html" %}
-      {% endif %}
-      {% endif %}{# /not is_newsletter_only — Profile + Slack #}
 
       {% if not is_newsletter_only %}
 
@@ -237,9 +180,7 @@
           </div>
         </div>
 
-        <p class="text-sm text-foreground mt-4" id="newsletter-status">
-          {% if newsletter_subscribed %}You are subscribed to newsletters.{% else %}You are unsubscribed from newsletters.{% endif %}
-        </p>
+        <p class="mt-4 hidden text-sm text-foreground" id="newsletter-status" aria-live="polite"></p>
 
         <!-- Issue #655: per-content-type opt-out for workshop announcements. -->
         <div class="flex items-center justify-between mt-6 pt-6 border-t border-border">
@@ -258,9 +199,7 @@
           </div>
         </div>
 
-        <p class="text-sm text-foreground mt-4" id="workshop-emails-status">
-          {% if workshop_emails_enabled %}You will receive workshop announcement emails.{% else %}You will not receive workshop announcement emails.{% endif %}
-        </p>
+        <p class="mt-4 hidden text-sm text-foreground" id="workshop-emails-status" aria-live="polite"></p>
 
         <div class="flex items-center justify-between mt-6 pt-6 border-t border-border">
           <div>
@@ -279,96 +218,14 @@
           </div>
         </div>
 
-        <p class="text-sm text-foreground mt-4" id="sprint-cadence-emails-status" data-testid="sprint-cadence-emails-status">
-          {% if sprint_cadence_emails_enabled %}You will receive sprint reminder emails.{% else %}You will not receive sprint reminder emails.{% endif %}
-        </p>
+        <p class="mt-4 hidden text-sm text-foreground" id="sprint-cadence-emails-status" data-testid="sprint-cadence-emails-status" aria-live="polite"></p>
       </div>
 
       {% if not is_newsletter_only %}
-      <!-- Display Preferences Section -->
-      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mt-8" id="display-preferences-section">
-        <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
-          <i data-lucide="globe" class="h-5 w-5 text-accent"></i>
-          Display Preferences
-        </h2>
-
-        <div>
-          <label for="timezone-preference-input" class="block text-sm font-medium text-foreground mb-1">Timezone</label>
-          <p class="text-sm text-muted-foreground mb-3">Used for event times when you are signed in.</p>
-          <div class="flex flex-col gap-3 sm:flex-row">
-            <select class="app-select w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-              id="timezone-preference-input"
-              name="timezone"
-              data-testid="account-timezone-input"
-              autocomplete="off"
-              data-has-preference="{% if user.preferred_timezone %}true{% else %}false{% endif %}"
-            >
-              <option value="">Use browser timezone</option>
-              {% for option in timezone_options %}
-              <option value="{{ option.value }}" {% if user.preferred_timezone == option.value %}selected{% endif %}>{{ option.label }}</option>
-              {% endfor %}
-            </select>
-            <div class="flex gap-3">
-              <button
-                type="button"
-                id="save-timezone-btn"
-                data-testid="save-timezone-btn"
-                class="{% button_classes 'primary' %}"
-                onclick="saveTimezonePreference()">
-                Save
-              </button>
-              <button
-                type="button"
-                id="clear-timezone-btn"
-                data-testid="clear-timezone-btn"
-                class="{% button_classes 'secondary' %}"
-                onclick="clearTimezonePreference()">
-                Clear
-              </button>
-            </div>
-          </div>
-          <p class="text-sm text-foreground mt-4" id="timezone-preference-status" data-testid="timezone-preference-status">
-            {% if user.preferred_timezone %}Current timezone: {{ preferred_timezone_label }}{% else %}Using browser timezone.{% endif %}
-          </p>
-          <p class="text-sm text-muted-foreground mt-2 hidden" id="timezone-detected-hint" data-testid="timezone-detected-hint"></p>
-          <p class="text-sm text-red-400 mt-2 hidden" id="timezone-preference-error" data-testid="timezone-preference-error"></p>
-        </div>
-      </div>
-
-      <!-- Change Password Section -->
-      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mt-8" id="change-password-section">
-        <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
-          <i data-lucide="lock" class="h-5 w-5 text-accent"></i>
-          Change Password
-        </h2>
-
-        <form id="change-password-form" class="space-y-4" onsubmit="return handleChangePassword(event)">
-          <div>
-            <label for="current-password" class="block text-sm font-medium text-foreground mb-1">Current Password</label>
-            <input type="password" id="current-password" name="current_password"
-                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-                   placeholder="Enter current password">
-          </div>
-          <div>
-            <label for="new-password" class="block text-sm font-medium text-foreground mb-1">New Password</label>
-            <input type="password" id="new-password" name="new_password" required minlength="8"
-                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-                   placeholder="At least 8 characters">
-          </div>
-          <div>
-            <label for="confirm-new-password" class="block text-sm font-medium text-foreground mb-1">Confirm New Password</label>
-            <input type="password" id="confirm-new-password" name="confirm_new_password" required minlength="8"
-                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-                   placeholder="Confirm new password">
-          </div>
-          <div id="password-error" class="text-sm text-red-400 hidden"></div>
-          <div id="password-success" class="text-sm text-green-400 hidden"></div>
-          <button type="submit"
-                  class="{% button_classes 'primary' %}">
-            Update Password
-          </button>
-        </form>
-      </div>
+      <!-- Slack Community Card (shared partial, when eligible) -->
+      {% if not slack_connected %}
+      {% include "includes/_slack_account_card.html" %}
+      {% endif %}
 
       <!-- Member API Keys Section (issue #1111; redesigned + moved below
            Email Preferences in #1127). One calm card: only the outer card
@@ -423,7 +280,7 @@
                    class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                    data-testid="member-api-key-name-input">
             <button type="submit"
-                    class="{% button_classes 'primary' %}"
+                    class="{% button_classes 'primary' extra='shrink-0 whitespace-nowrap' %}"
                     data-testid="member-api-key-create-submit">
               <i data-lucide="plus" class="h-4 w-4"></i>
               New key
@@ -502,7 +359,7 @@
         </div>
         {% else %}
         <p class="text-sm text-muted-foreground" data-testid="member-api-keys-empty">
-          No API keys exist yet. Read the <a href="{{ member_api_usage_guide_url }}" target="_blank" rel="noopener" class="text-accent hover:underline">API usage guide</a>, then create a key when you are ready to connect a local tool.
+          No API keys exist yet. Create a key when you are ready to connect a local tool.
         </p>
         {% endif %}
 
@@ -528,6 +385,134 @@
         </div>
       </div>
 
+
+      <!-- Display Preferences Section -->
+      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mt-8" id="display-preferences-section">
+        <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
+          <i data-lucide="globe" class="h-5 w-5 text-accent"></i>
+          Display Preferences
+        </h2>
+
+        <div>
+          <label for="timezone-preference-input" class="block text-sm font-medium text-foreground mb-1">Timezone</label>
+          <p class="text-sm text-muted-foreground mb-3">Used for event times when you are signed in.</p>
+          <div class="flex flex-col gap-3 sm:flex-row">
+            <select class="app-select w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              id="timezone-preference-input"
+              name="timezone"
+              data-testid="account-timezone-input"
+              autocomplete="off"
+              data-has-preference="{% if user.preferred_timezone %}true{% else %}false{% endif %}"
+            >
+              <option value="">Use browser timezone</option>
+              {% for option in timezone_options %}
+              <option value="{{ option.value }}" {% if user.preferred_timezone == option.value %}selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+            <div class="flex gap-3">
+              <button
+                type="button"
+                id="save-timezone-btn"
+                data-testid="save-timezone-btn"
+                class="{% button_classes 'primary' %}"
+                onclick="saveTimezonePreference()">
+                Save
+              </button>
+            </div>
+          </div>
+          <p class="text-sm text-foreground mt-4" id="timezone-preference-status" data-testid="timezone-preference-status">
+            {% if user.preferred_timezone %}Using saved timezone for event times.{% else %}Using browser timezone.{% endif %}
+          </p>
+          <p class="text-sm text-muted-foreground mt-2 hidden" id="timezone-detected-hint" data-testid="timezone-detected-hint"></p>
+          <p class="text-sm text-red-400 mt-2 hidden" id="timezone-preference-error" data-testid="timezone-preference-error"></p>
+        </div>
+      </div>
+
+      <!-- Change Password Section -->
+      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mt-8" id="change-password-section">
+        <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
+          <i data-lucide="lock" class="h-5 w-5 text-accent"></i>
+          Change Password
+        </h2>
+
+        <form id="change-password-form" class="space-y-4" onsubmit="return handleChangePassword(event)">
+          <div>
+            <label for="current-password" class="block text-sm font-medium text-foreground mb-1">Current Password</label>
+            <input type="password" id="current-password" name="current_password"
+                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                   placeholder="Enter current password">
+          </div>
+          <div>
+            <label for="new-password" class="block text-sm font-medium text-foreground mb-1">New Password</label>
+            <input type="password" id="new-password" name="new_password" required minlength="8"
+                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                   placeholder="At least 8 characters">
+          </div>
+          <div>
+            <label for="confirm-new-password" class="block text-sm font-medium text-foreground mb-1">Confirm New Password</label>
+            <input type="password" id="confirm-new-password" name="confirm_new_password" required minlength="8"
+                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                   placeholder="Confirm new password">
+          </div>
+          <div id="password-error" class="text-sm text-red-400 hidden"></div>
+          <div id="password-success" class="text-sm text-green-400 hidden"></div>
+          <button type="submit"
+                  class="{% button_classes 'primary' %}">
+            Update Password
+          </button>
+        </form>
+      </div>
+
+      <!-- Profile Section (issue #447: name form lives inline here) -->
+      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mt-8" id="profile-section">
+        <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+          <i data-lucide="user" class="h-5 w-5 text-accent"></i>
+          Profile
+        </h2>
+        {% if user.is_staff or user.is_superuser %}
+        <div class="mb-4">
+          {% member_label_badge "Admin" tone="accent_outline" size="sm" icon="shield" element_id="account-admin-role-badge" testid="account-admin-role-badge" %}
+        </div>
+        {% endif %}
+        {% if user.first_name or user.last_name %}
+        <p class="text-foreground mb-4" id="profile-current-name">{{ user.first_name }} {{ user.last_name }}</p>
+        {% else %}
+        <p class="text-muted-foreground mb-4" id="profile-current-name">Your name is not set yet</p>
+        {% endif %}
+
+        {% if profile_error %}
+        <div class="mb-6 px-4 py-3 rounded-lg text-sm bg-red-500/20 text-red-400" id="profile-error" data-testid="profile-form-error">
+          {{ profile_error }}
+        </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'account_profile' %}" id="profile-form">
+          {% csrf_token %}
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label for="id_first_name" class="block text-sm font-medium text-foreground mb-1">First name</label>
+              <input type="text" id="id_first_name" name="first_name"
+                     value="{{ profile_form_first_name }}" maxlength="150" placeholder="Optional"
+                     autocomplete="given-name"
+                     class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent">
+            </div>
+            <div>
+              <label for="id_last_name" class="block text-sm font-medium text-foreground mb-1">Last name</label>
+              <input type="text" id="id_last_name" name="last_name"
+                     value="{{ profile_form_last_name }}" maxlength="150" placeholder="Optional"
+                     autocomplete="family-name"
+                     class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent">
+            </div>
+          </div>
+
+          <button type="submit" id="profile-save-btn"
+                  class="{% button_classes 'primary' %}">
+            Save
+          </button>
+        </form>
+      </div>
+
       <!-- Account Info Section -->
       <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mt-8" id="account-info-section">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
@@ -536,10 +521,11 @@
         </h2>
 
         <dl class="space-y-2">
-          <div class="flex items-center gap-3">
-            <dt class="text-sm text-muted-foreground">User ID:</dt>
-            <dd class="font-mono text-foreground" id="user-id-value">{{ user.id }}</dd>
+          <div class="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+            <dt class="text-sm font-medium text-foreground">Support ID</dt>
+            <dd class="font-mono text-foreground" id="support-id-value">{{ user.id }}</dd>
           </div>
+          <dd class="text-sm text-muted-foreground">Quote this in support requests.</dd>
         </dl>
       </div>
       {% endif %}{# /not is_newsletter_only — Display Prefs + Change Password + Account Info #}
@@ -561,6 +547,12 @@ function getCsrfToken() {
     }
   }
   return '';
+}
+
+function showInlineStatus(status, message) {
+  if (!status) return;
+  status.textContent = message;
+  status.classList.remove('hidden');
 }
 
 (function initMemberApiKeyCopy() {
@@ -604,13 +596,13 @@ function toggleWorkshopEmails() {
         dot.classList.remove('translate-x-0', 'bg-foreground');
         toggle.classList.add('bg-accent');
         toggle.classList.remove('bg-secondary');
-        status.textContent = 'You will receive workshop announcement emails.';
+        showInlineStatus(status, 'Workshop announcements turned on.');
       } else {
         dot.classList.remove('translate-x-5', 'bg-accent-foreground');
         dot.classList.add('translate-x-0', 'bg-foreground');
         toggle.classList.remove('bg-accent');
         toggle.classList.add('bg-secondary');
-        status.textContent = 'You will not receive workshop announcement emails.';
+        showInlineStatus(status, 'Workshop announcements turned off.');
       }
     } else {
       alert(data.error || 'Failed to update preferences');
@@ -644,13 +636,13 @@ function toggleSprintCadenceEmails() {
         dot.classList.remove('translate-x-0', 'bg-foreground');
         toggle.classList.add('bg-accent');
         toggle.classList.remove('bg-secondary');
-        status.textContent = 'You will receive sprint reminder emails.';
+        showInlineStatus(status, 'Sprint reminders turned on.');
       } else {
         dot.classList.remove('translate-x-5', 'bg-accent-foreground');
         dot.classList.add('translate-x-0', 'bg-foreground');
         toggle.classList.remove('bg-accent');
         toggle.classList.add('bg-secondary');
-        status.textContent = 'You will not receive sprint reminder emails.';
+        showInlineStatus(status, 'Sprint reminders turned off.');
       }
     } else {
       alert(data.error || 'Failed to update preferences');
@@ -685,13 +677,13 @@ function toggleNewsletter() {
         dot.classList.remove('translate-x-0', 'bg-foreground');
         toggle.classList.add('bg-accent');
         toggle.classList.remove('bg-secondary');
-        status.textContent = 'You are subscribed to newsletters.';
+        showInlineStatus(status, 'Newsletter updates turned on.');
       } else {
         dot.classList.remove('translate-x-5', 'bg-accent-foreground');
         dot.classList.add('translate-x-0', 'bg-foreground');
         toggle.classList.remove('bg-accent');
         toggle.classList.add('bg-secondary');
-        status.textContent = 'You are unsubscribed from newsletters.';
+        showInlineStatus(status, 'Newsletter updates turned off.');
       }
     } else {
       alert(data.error || 'Failed to update preferences');
@@ -817,12 +809,11 @@ function setTimezonePreferenceStatus(timezoneName, label) {
   var status = document.getElementById('timezone-preference-status');
   if (!input || !status) return;
   if (timezoneName) {
-    // A preference has been saved -- show the formatted label, hide the
-    // detected hint, and re-enable Save (it will toggle off again only
-    // when the value matches a fresh detection with no preference).
+    // A preference has been saved -- confirm without repeating the selected
+    // option, hide the detected hint, and re-enable Save.
     input.value = timezoneName;
     input.dataset.hasPreference = 'true';
-    status.textContent = 'Current timezone: ' + (label || timezoneName);
+    status.textContent = 'Timezone preference saved.';
     hideDetectedHint();
     setSaveButtonDisabled(false);
   } else {
@@ -879,10 +870,6 @@ function saveTimezonePreference() {
     return;
   }
   submitTimezonePreference(resolveTimezoneInputValue());
-}
-
-function clearTimezonePreference() {
-  submitTimezonePreference('');
 }
 
 // Issue #582/#596: detect the browser timezone, populate the select when the

@@ -2,6 +2,7 @@
 
 import json
 from datetime import timedelta
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings, tag
@@ -729,7 +730,10 @@ class AccountPageWorkshopEmailsToggleTest(TestCase):
         response = self.client.get("/account/")
 
         self.assertTrue(response.context["workshop_emails_enabled"])
-        self.assertContains(response, "You will receive workshop announcement emails.")
+        self.assertContains(response, 'id="workshop-emails-status"')
+        self.assertNotContains(
+            response, "You will receive workshop announcement emails.",
+        )
 
     def test_opted_out_workshop_emails_toggle_is_off(self):
         user = User.objects.create_user(email="wstoggle-off@example.com")
@@ -739,7 +743,7 @@ class AccountPageWorkshopEmailsToggleTest(TestCase):
         response = self.client.get("/account/")
 
         self.assertFalse(response.context["workshop_emails_enabled"])
-        self.assertContains(
+        self.assertNotContains(
             response, "You will not receive workshop announcement emails.",
         )
 
@@ -766,7 +770,8 @@ class AccountPageSprintCadenceEmailsToggleTest(TestCase):
         response = self.client.get("/account/")
 
         self.assertTrue(response.context["sprint_cadence_emails_enabled"])
-        self.assertContains(response, "You will receive sprint reminder emails.")
+        self.assertContains(response, 'id="sprint-cadence-emails-status"')
+        self.assertNotContains(response, "You will receive sprint reminder emails.")
 
     def test_opted_out_sprint_cadence_toggle_is_off(self):
         user = User.objects.create_user(email="sprint-toggle-off@example.com")
@@ -776,7 +781,9 @@ class AccountPageSprintCadenceEmailsToggleTest(TestCase):
         response = self.client.get("/account/")
 
         self.assertFalse(response.context["sprint_cadence_emails_enabled"])
-        self.assertContains(response, "You will not receive sprint reminder emails.")
+        self.assertNotContains(
+            response, "You will not receive sprint reminder emails.",
+        )
 
 
 class AccountPageEmailPreferencesDisplayTest(TestCase):
@@ -797,21 +804,24 @@ class AccountPageEmailPreferencesDisplayTest(TestCase):
         content = response.content.decode()
         self.assertIn('id="newsletter-toggle"', content)
 
-    def test_subscribed_status_shown(self):
+    def test_subscribed_status_hidden_initially(self):
         user = User.objects.create_user(email="sub@example.com")
         self.client.force_login(user)
         response = self.client.get("/account/")
         content = response.content.decode()
-        self.assertIn("You are subscribed to newsletters.", content)
+        self.assertIn('id="newsletter-status"', content)
+        self.assertIn('aria-live="polite"', content)
+        self.assertNotIn("You are subscribed to newsletters.", content)
 
-    def test_unsubscribed_status_shown(self):
+    def test_unsubscribed_status_hidden_initially(self):
         user = User.objects.create_user(email="unsub@example.com")
         user.unsubscribed = True
         user.save(update_fields=["unsubscribed"])
         self.client.force_login(user)
         response = self.client.get("/account/")
         content = response.content.decode()
-        self.assertIn("You are unsubscribed from newsletters.", content)
+        self.assertIn('id="newsletter-status"', content)
+        self.assertNotIn("You are unsubscribed from newsletters.", content)
 
     def test_newsletter_context_subscribed(self):
         user = User.objects.create_user(email="ctx@example.com")
@@ -826,6 +836,74 @@ class AccountPageEmailPreferencesDisplayTest(TestCase):
         self.client.force_login(user)
         response = self.client.get("/account/")
         self.assertFalse(response.context["newsletter_subscribed"])
+
+
+class AccountPagePolish1206Test(TestCase):
+    def test_activated_member_sections_render_in_job_first_order_with_slack(self):
+        main_tier = Tier.objects.get(slug="main")
+        user = User.objects.create_user(
+            email="order-1206@example.com",
+            tier=main_tier,
+            email_verified=True,
+        )
+        self.client.force_login(user)
+
+        with self.settings(SLACK_INVITE_URL="https://slack.example/invite"):
+            response = self.client.get("/account/")
+
+        content = response.content.decode()
+        markers = [
+            'data-lucide="crown"',
+            'id="email-preferences-section"',
+            'data-testid="slack-account-card"',
+            'id="api-keys"',
+            'id="display-preferences-section"',
+            'id="change-password-section"',
+            'id="profile-section"',
+            'id="account-info-section"',
+        ]
+        positions = [content.index(marker) for marker in markers]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_account_flash_message_classes_cover_light_and_dark_states(self):
+        template = Path("templates/accounts/account.html").read_text()
+
+        expected_classes = [
+            "border-green-200 bg-green-50 text-green-800",
+            "dark:border-green-500/30 dark:bg-green-500/15 dark:text-green-200",
+            "border-amber-200 bg-amber-50 text-amber-900",
+            "dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-100",
+            "border-red-200 bg-red-50 text-red-800",
+            "dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-200",
+            "border-blue-200 bg-blue-50 text-blue-800",
+            "dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200",
+        ]
+        for class_names in expected_classes:
+            self.assertIn(class_names, template)
+
+    def test_timezone_card_has_one_save_action_no_clear_or_current_caption(self):
+        user = User.objects.create_user(
+            email="tz-polish-1206@example.com",
+            preferred_timezone="America/New_York",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/account/")
+
+        self.assertContains(response, 'data-testid="save-timezone-btn"', count=1)
+        self.assertNotContains(response, 'data-testid="clear-timezone-btn"')
+        self.assertNotContains(response, "Current timezone:")
+        self.assertNotContains(response, "Saved timezone:")
+
+        content = response.content.decode()
+        status_marker = 'id="timezone-preference-status"'
+        status_idx = content.index(status_marker)
+        status_tag_end = content.index(">", status_idx)
+        status_close = content.index("</p>", status_tag_end)
+        status_text = content[status_tag_end + 1:status_close].strip()
+        self.assertEqual(status_text, "Using saved timezone for event times.")
+        self.assertNotIn("America/New_York", status_text)
+        self.assertNotIn("GMT-04:00", status_text)
 
 
 class TimezonePreferenceAPITest(TestCase):
@@ -1022,7 +1100,9 @@ class AccountPageTimezonePreferenceDisplayTest(TestCase):
         response = self.client.get("/account/")
 
         self.assertContains(response, '<option value="Europe/Berlin" selected>')
-        self.assertContains(response, "Current timezone: GMT+02:00 Europe/Berlin")
+        self.assertContains(response, "Using saved timezone for event times.")
+        self.assertNotContains(response, "Saved timezone:")
+        self.assertNotContains(response, "Current timezone:")
 
     def test_no_saved_preference_marks_select_for_browser_detection(self):
         """Issue #582: the select needs a ``data-has-preference=false``
@@ -1212,38 +1292,37 @@ class AccountPageHeaderFooterTest(TestCase):
         self.assertContains(response, "<title>Account")
 
 
-class AccountPageUserIdDisplayTest(TestCase):
-    """Tests for the User ID display on the account page (issue #367)."""
+class AccountPageSupportIdDisplayTest(TestCase):
+    """Tests for the support identifier on the account page."""
 
-    def test_logged_in_user_sees_their_user_id(self):
-        """Logged-in user sees their numeric User.id rendered with the
-        label 'User ID:' on the account page."""
+    def test_logged_in_user_sees_their_support_id(self):
+        """Logged-in users see their numeric User.id as a support ID."""
         user = User.objects.create_user(email="userid@example.com")
         self.client.force_login(user)
         response = self.client.get("/account/")
         self.assertEqual(response.status_code, 200)
 
         content = response.content.decode()
-        # The 'User ID:' label is present
-        self.assertIn("User ID:", content)
-        # The numeric id is rendered inside the user-id-value element
-        marker = 'id="user-id-value"'
+        self.assertIn("Support ID", content)
+        self.assertIn("Quote this in support requests.", content)
+        self.assertNotIn("User ID:", content)
+        marker = 'id="support-id-value"'
         idx = content.find(marker)
-        self.assertNotEqual(idx, -1, "user-id-value element must be present")
+        self.assertNotEqual(idx, -1, "support-id-value element must be present")
         tag_end = content.find(">", idx)
         close_idx = content.find("</dd>", tag_end)
         self.assertNotEqual(close_idx, -1)
         rendered = content[tag_end + 1:close_idx].strip()
         self.assertEqual(rendered, str(user.id))
 
-    def test_user_id_value_uses_monospace_font(self):
-        """The User ID value is rendered in a monospace font for
+    def test_support_id_value_uses_monospace_font(self):
+        """The Support ID value is rendered in a monospace font for
         easy visual scanning / selection."""
         user = User.objects.create_user(email="mono@example.com")
         self.client.force_login(user)
         response = self.client.get("/account/")
         content = response.content.decode()
-        marker = 'id="user-id-value"'
+        marker = 'id="support-id-value"'
         idx = content.find(marker)
         self.assertNotEqual(idx, -1)
         tag_start = content.rfind("<", 0, idx)
@@ -1262,7 +1341,7 @@ class AccountPageUserIdDisplayTest(TestCase):
 
     def test_anonymous_visitor_redirected_to_login(self):
         """Anonymous visitors hitting /account/ are redirected to login —
-        no User ID is exposed."""
+        no Support ID is exposed."""
         response = self.client.get("/account/")
         self.assertEqual(response.status_code, 302)
         self.assertIn("/accounts/login/", response.url)

@@ -106,6 +106,31 @@ def _clear_dashboard_data():
     connection.close()
 
 
+def _dashboard_quick_actions(page):
+    return page.locator('[data-testid="dashboard-quick-actions"]')
+
+
+def _assert_current_quick_actions(page):
+    quick_actions = _dashboard_quick_actions(page)
+    assert quick_actions.is_visible()
+    expected_actions = {
+        "Browse courses": "/courses",
+        "Browse workshops": "/workshops",
+        "Resources": "/resources",
+        "Events and recordings": "/events",
+        "Projects": "/projects",
+        "Activities": "/activities",
+    }
+    for label, href in expected_actions.items():
+        action = quick_actions.get_by_role("link", name=label)
+        assert action.count() == 1
+        assert action.first.get_attribute("href") == href
+
+    # /community is a valid public nav destination, but it should not be
+    # presented as a member quick action.
+    assert quick_actions.locator('a[href="/community"]').count() == 0
+
+
 def _create_article(
     title,
     slug,
@@ -1170,17 +1195,7 @@ class TestScenario6DashboardQuickActions:
             f"{django_server}/",
             wait_until="domcontentloaded",
         )
-        quick = page.locator('[data-testid="dashboard-quick-actions"]')
-        body = quick.inner_html()
-
-        # Then: Current quick actions are present and route-backed.
-        assert "Browse courses" in body
-        assert "Browse workshops" in body
-        assert "Resources" in body
-        assert "Events and recordings" in body
-        assert "Projects" in body
-        assert "Activities" in body
-        assert 'href="/community"' not in body
+        _assert_current_quick_actions(page)
 
         context.close()
 
@@ -1190,16 +1205,8 @@ class TestScenario6DashboardQuickActions:
             f"{django_server}/",
             wait_until="domcontentloaded",
         )
-        quick = page.locator('[data-testid="dashboard-quick-actions"]')
-        body = quick.inner_html()
-
-        assert "Browse courses" in body
-        assert "Browse workshops" in body
-        assert "Resources" in body
-        assert "Events and recordings" in body
-        assert "Projects" in body
-        assert "Activities" in body
-        assert 'href="/community"' not in body
+        _assert_current_quick_actions(page)
+        context.close()
 
     @pytest.mark.core
     def test_quick_actions_are_full_width_after_primary_sections(

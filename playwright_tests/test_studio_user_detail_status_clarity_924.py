@@ -315,11 +315,11 @@ class TestBounceStateTooltip:
             wait_until="domcontentloaded",
         )
 
-        bounce_card = page.locator(
-            '[data-testid="user-detail-bounce-section"]',
+        deliverability_card = page.locator(
+            '[data-testid="user-detail-deliverability-section"]',
         )
-        assert bounce_card.count() == 1
-        state_label = bounce_card.locator("dt", has_text="State").first
+        assert deliverability_card.count() == 1
+        state_label = deliverability_card.locator("dt", has_text="State").first
         title = state_label.get_attribute("title")
         assert title is not None
         assert "SES delivery status" in title

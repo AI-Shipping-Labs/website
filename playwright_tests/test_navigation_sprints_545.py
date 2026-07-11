@@ -441,7 +441,9 @@ def test_mobile_community_accordion_reaches_past_recordings(django_server, brows
         """
     )
     assert link_ids == [
+        "mobile-nav-community-link-overview",
         "mobile-nav-community-link-membership",
+        "mobile-nav-community-link-activities",
         "mobile-nav-community-link-sprints",
         "mobile-nav-community-link-events",
         "mobile-nav-community-link-past-recordings",
@@ -566,7 +568,9 @@ def test_authenticated_member_sees_same_public_nav_plus_account(
         ".map(a => a.getAttribute('data-testid'))"
     )
     assert link_ids == [
+        "nav-community-link-overview",
         "nav-community-link-membership",
+        "nav-community-link-activities",
         "nav-community-link-sprints",
         "nav-community-link-events",
         "nav-community-link-past-recordings",

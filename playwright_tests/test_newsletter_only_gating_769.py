@@ -506,7 +506,7 @@ class TestNewsletterOnlyCanTogglePrefs:
         page.click("#newsletter-toggle")
         page.wait_for_function(
             "() => document.querySelector('#newsletter-status').innerText "
-            ".includes('unsubscribed')"
+            ".includes('Newsletter updates turned off.')"
         )
 
         # Reload: still trimmed (no Profile / Membership sections).

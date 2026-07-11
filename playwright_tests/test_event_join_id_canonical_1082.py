@@ -68,6 +68,11 @@ def _register(user, event):
     connection.close()
 
 
+def _join_target(django_server, token):
+    """Local target for join redirects; avoids external network in Playwright."""
+    return f"{django_server}/__test_join_target__/{token}"
+
+
 @pytest.mark.django_db(transaction=True)
 class TestEventJoinIdCanonical:
     def test_appending_join_to_detail_url_reaches_session(
@@ -81,7 +86,7 @@ class TestEventJoinIdCanonical:
         event = _create_event(
             "append-join-event",
             minutes_from_now=1,
-            zoom_url="https://zoom.us/j/append-canon",
+            zoom_url=_join_target(django_server, "append-canon"),
         )
         _register(user, event)
         canonical_join = event.get_join_url()
@@ -93,10 +98,10 @@ class TestEventJoinIdCanonical:
             f"{django_server}{canonical_join}",
             wait_until="domcontentloaded",
         )
-        # Followed the redirect to Zoom; final URL is the raw join link and
-        # the request never 404'd.
+        # Followed the redirect to the configured live-session URL; final URL
+        # is the raw join link and the request never 404'd.
         assert resp is not None
-        assert page.url.startswith("https://zoom.us/j/append-canon")
+        assert page.url.startswith(_join_target(django_server, "append-canon"))
         ctx.close()
 
     def test_on_page_join_button_uses_canonical_url(
@@ -134,7 +139,7 @@ class TestEventJoinIdCanonical:
         event = _create_event(
             "legacy-join-event",
             minutes_from_now=1,
-            zoom_url="https://zoom.us/j/legacy-canon",
+            zoom_url=_join_target(django_server, "legacy-canon"),
         )
         _register(user, event)
 
@@ -144,7 +149,7 @@ class TestEventJoinIdCanonical:
             f"{django_server}/events/{event.slug}/join",
             wait_until="domcontentloaded",
         )
-        assert page.url.startswith("https://zoom.us/j/legacy-canon")
+        assert page.url.startswith(_join_target(django_server, "legacy-canon"))
         ctx.close()
 
     def test_cosmetic_wrong_slug_is_corrected(
@@ -157,7 +162,7 @@ class TestEventJoinIdCanonical:
         event = _create_event(
             "real-slug-event",
             minutes_from_now=1,
-            zoom_url="https://zoom.us/j/cosmetic-canon",
+            zoom_url=_join_target(django_server, "cosmetic-canon"),
         )
         _register(user, event)
 
@@ -168,7 +173,7 @@ class TestEventJoinIdCanonical:
             wait_until="domcontentloaded",
         )
         # 301 to the canonical join URL, then on to Zoom inside the window.
-        assert page.url.startswith("https://zoom.us/j/cosmetic-canon")
+        assert page.url.startswith(_join_target(django_server, "cosmetic-canon"))
         ctx.close()
 
     def test_anonymous_visitor_sent_to_login_and_returned(

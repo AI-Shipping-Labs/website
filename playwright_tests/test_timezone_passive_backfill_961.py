@@ -223,9 +223,10 @@ def test_manual_set_from_account_settings_persists(
     timezone_input.select_option("Asia/Tokyo")
     page.get_by_test_id("save-timezone-btn").click()
 
-    expect(page.get_by_test_id("timezone-preference-status")).to_contain_text(
-        "Asia/Tokyo"
+    expect(page.get_by_test_id("timezone-preference-status")).to_have_text(
+        "Timezone preference saved."
     )
+    expect(timezone_input).to_have_value("Asia/Tokyo")
 
     page.reload(wait_until="domcontentloaded")
     expect(page.get_by_test_id("account-timezone-input")).to_have_value(

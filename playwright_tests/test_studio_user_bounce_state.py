@@ -102,12 +102,14 @@ class TestStudioUserBounceState:
         assert "Bounce: permanent" in tooltip
         assert "Newsletter:" in tooltip
 
-        # Click into the detail page; the new card is visible.
+        # Click into the detail page; the deliverability card is visible.
         row.locator('[data-testid="user-view-link"]').click()
         page.wait_for_load_state("domcontentloaded")
-        card = page.locator('[data-testid="user-detail-bounce-section"]')
+        card = page.locator('[data-testid="user-detail-deliverability-section"]')
         assert card.is_visible()
-        assert "Permanent" in card.inner_text()
+        state = card.locator('[data-testid="user-detail-bounce-state"]')
+        assert state.get_attribute("data-bounce-state") == "permanent"
+        assert "Permanent bounce" in card.inner_text()
         assert "550 5.1.1 Mailbox does not exist" in card.inner_text()
 
     def test_clearing_filter_returns_every_user(
@@ -161,10 +163,17 @@ class TestStudioUserBounceState:
             wait_until="domcontentloaded",
         )
 
-        # The Bounce status section is not present; verification / Slack
-        # / tags sections still are.
+        # The deliverability card remains present, but a clean user has
+        # a healthy bounce state and no bounce-specific metadata.
+        card = page.locator('[data-testid="user-detail-deliverability-section"]')
+        assert card.is_visible()
+        state = card.locator('[data-testid="user-detail-bounce-state"]')
+        assert state.get_attribute("data-bounce-state") == "none"
         assert page.locator(
-            '[data-testid="user-detail-bounce-section"]'
+            '[data-testid="user-detail-bounce-recorded-at"]'
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="user-detail-bounce-diagnostic"]'
         ).count() == 0
         assert page.locator(
             '[data-testid="user-tags-section"]'
@@ -226,11 +235,12 @@ class TestStudioUserBounceState:
             wait_until="domcontentloaded",
         )
 
-        card = page.locator('[data-testid="user-detail-bounce-section"]')
+        card = page.locator('[data-testid="user-detail-deliverability-section"]')
         assert card.is_visible()
-        # The label is the Soft display value; Permanent must not appear
-        # in the card body.
+        # The label is the Soft display value; the state badge must not
+        # claim this user is permanently bounced.
         card_text = card.inner_text()
-        assert "Soft" in card_text
-        assert "Permanent" not in card_text
+        state = card.locator('[data-testid="user-detail-bounce-state"]')
+        assert state.get_attribute("data-bounce-state") == "soft"
+        assert "Soft bounce" in card_text
         assert "421 4.4.5 Server busy" in card_text

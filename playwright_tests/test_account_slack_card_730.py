@@ -2,10 +2,9 @@
 
 Issue #730 made two surgical changes to ``templates/accounts/account.html``:
 
-1. The Slack card include moved from between Membership and Email
-   Preferences to immediately after the Profile section -- so when a
-   not-yet-joined Main+ member lands on /account/ the Join Slack CTA is
-   the second card on the page, not the fourth.
+1. The Slack card include moved onto the account page for not-yet-joined
+   Main+ members. The current account-page contract places it after Email
+   Preferences and before API keys.
 2. The include is wrapped in ``{% if not slack_connected %}`` so members
    who already joined Slack see nothing in that slot. The connected-state
    panel duplicated information the user already has inside Slack.
@@ -13,8 +12,7 @@ Issue #730 made two surgical changes to ``templates/accounts/account.html``:
 These three browser-level scenarios mirror the issue's Playwright spec:
 
 * Connected Main member sees no Slack confirmation noise on /account/.
-* Not-yet-joined Main member sees the Join CTA between Profile and
-  Membership.
+* Not-yet-joined Main member sees the Join CTA in the account settings flow.
 * Free user sees no Slack card at all (regression -- the partial
   short-circuits below the Main tier).
 
@@ -104,7 +102,7 @@ class TestConnectedMemberSeesNoSlackCardOnAccount:
 
 
 @pytest.mark.django_db(transaction=True)
-class TestNotYetJoinedMainMemberSeesCtaNearTopOfAccount:
+class TestNotYetJoinedMainMemberSeesCtaInSettingsFlow:
     """Issue #730 scenario 2: not-yet-joined Main member sees the CTA."""
 
     def test_join_cta_renders_above_membership_card(
@@ -136,34 +134,32 @@ class TestNotYetJoinedMainMemberSeesCtaNearTopOfAccount:
             assert join_anchor.first.get_attribute("target") is None
             assert join_anchor.first.get_attribute("rel") == "noopener"
 
-            # The Slack card sits between Profile and Membership in the
-            # main column. Read bounding boxes to verify visual order.
-            profile_box = page.locator("#profile-section").bounding_box()
+            # The Slack card sits in the account settings flow after Email
+            # Preferences and before API keys. Read bounding boxes to verify
+            # visual order without coupling to copy.
+            membership_box = page.locator('[data-lucide="crown"]').first.bounding_box()
+            email_box = page.locator("#email-preferences-section").bounding_box()
             join_box = join_card.first.bounding_box()
-            # The Membership card has no id; anchor on its lucide crown
-            # icon, which is unique to that section in this template.
-            # Lucide swaps <i data-lucide="..."> into inline <svg> on load,
-            # but preserves the data-lucide attribute — match by attribute.
-            membership_box = page.locator(
-                '#profile-section ~ div [data-lucide="crown"]'
-            ).first.bounding_box()
-            email_box = page.locator(
-                "#email-preferences-section"
-            ).bounding_box()
+            api_keys_box = page.locator("#api-keys").bounding_box()
+            profile_box = page.locator("#profile-section").bounding_box()
 
-            assert profile_box is not None
-            assert join_box is not None
             assert membership_box is not None
             assert email_box is not None
+            assert join_box is not None
+            assert api_keys_box is not None
+            assert profile_box is not None
 
-            assert profile_box["y"] < join_box["y"], (
-                "Slack join card must render below Profile"
-            )
-            assert join_box["y"] < membership_box["y"], (
-                "Slack join card must render above Membership"
-            )
             assert membership_box["y"] < email_box["y"], (
-                "Membership must still render above Email Preferences"
+                "Membership must render above Email Preferences"
+            )
+            assert email_box["y"] < join_box["y"], (
+                "Slack join card must render below Email Preferences"
+            )
+            assert join_box["y"] < api_keys_box["y"], (
+                "Slack join card must render above API keys"
+            )
+            assert api_keys_box["y"] < profile_box["y"], (
+                "API keys must still render above Profile"
             )
         finally:
             context.close()

@@ -438,11 +438,14 @@ class TestStudioUserSlackId:
             f"{django_server}/studio/settings/",
             wait_until="domcontentloaded",
         )
+        page.locator('[data-section-nav-item="messaging"]').click()
+        messaging_section = page.locator("#messaging")
+        messaging_section.wait_for(state="visible")
         # 2. Set SLACK_TEAM_ID to T01TEAM123 and save.
         # The page renders one input per registered key inside the slack
         # group's form; submit via the form helper to avoid disambiguating
         # multiple group save buttons.
-        team_id_input = page.locator('input[name="SLACK_TEAM_ID"]')
+        team_id_input = messaging_section.locator('input[name="SLACK_TEAM_ID"]')
         assert team_id_input.count() == 1, (
             "Settings dashboard must render an input for SLACK_TEAM_ID"
         )

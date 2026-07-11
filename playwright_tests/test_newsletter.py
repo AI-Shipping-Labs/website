@@ -21,6 +21,7 @@ Usage:
 
 import datetime
 import os
+import uuid
 
 import jwt
 import pytest
@@ -154,6 +155,98 @@ def _clear_downloads():
 @pytest.mark.django_db(transaction=True)
 class TestScenario1SubscribeFromDedicatedPage:
     """Anonymous visitor subscribes from the dedicated subscribe page."""
+
+    @pytest.mark.core
+    def test_subscribe_page_heading_outline_and_metadata(
+        self, django_server, page,
+    ):
+        page.goto(
+            f"{django_server}/subscribe",
+            wait_until="domcontentloaded",
+        )
+
+        main = page.locator("main")
+        h1 = main.get_by_role(
+            "heading",
+            name="Subscribe to the AI Shipping Labs newsletter",
+            exact=True,
+            level=1,
+        )
+        assert h1.count() == 1
+        assert page.locator("h1:visible").count() == 1
+
+        form_heading = main.get_by_role(
+            "heading",
+            name="Stay on top of the community",
+            exact=True,
+        )
+        assert form_heading.count() == 1
+        assert form_heading.evaluate("el => el.tagName.toLowerCase()") == "h2"
+        assert main.locator(
+            "h1",
+            has_text="Stay on top of the community",
+        ).count() == 0
+
+        h1_box = h1.bounding_box()
+        form_box = page.locator("form.subscribe-form").first.bounding_box()
+        assert h1_box is not None
+        assert form_box is not None
+        assert h1_box["y"] < form_box["y"]
+
+        assert page.locator("form.subscribe-form").count() == 1
+        assert page.locator("#newsletter").count() == 0
+        assert page.get_by_role(
+            "heading",
+            name="Community",
+            exact=True,
+        ).is_visible()
+        assert page.get_by_role(
+            "heading",
+            name="Legal",
+            exact=True,
+        ).is_visible()
+
+        assert page.title() == "Subscribe | AI Shipping Labs"
+        description = page.locator('meta[name="description"]').get_attribute(
+            "content"
+        )
+        assert description is not None
+        assert "AI Shipping Labs newsletter" in description
+
+    @pytest.mark.core
+    def test_subscribe_page_mobile_heading_form_and_submit(
+        self, django_server, page,
+    ):
+        _ensure_tiers()
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.goto(
+            f"{django_server}/subscribe",
+            wait_until="domcontentloaded",
+        )
+
+        page.get_by_role(
+            "heading",
+            name="Subscribe to the AI Shipping Labs newsletter",
+            exact=True,
+            level=1,
+        ).wait_for(state="visible")
+        assert page.locator("form.subscribe-form").count() == 1
+        assert page.get_by_role("contentinfo").is_visible()
+
+        has_horizontal_overflow = page.evaluate(
+            """() => {
+                const root = document.documentElement;
+                return root.scrollWidth > root.clientWidth + 1;
+            }"""
+        )
+        assert has_horizontal_overflow is False
+
+        email = f"issue1215-mobile-{uuid.uuid4().hex}@test.com"
+        page.fill('.subscribe-form input[name="email"]', email)
+        page.click('.subscribe-form button[type="submit"]')
+        message_el = page.locator(".subscribe-message")
+        message_el.wait_for(state="visible", timeout=10000)
+        assert "created a free account" in message_el.inner_text().lower()
 
     @pytest.mark.core
     def test_anonymous_subscribes_from_subscribe_page(

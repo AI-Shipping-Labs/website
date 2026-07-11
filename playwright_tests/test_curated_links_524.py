@@ -84,6 +84,19 @@ def _clear_curated_links():
 SECTION_HEADING_SELECTOR = "h2.text-xl.font-semibold.text-foreground"
 
 
+def _category_section(page, heading):
+    return page.locator(
+        f'div:has(> div > {SECTION_HEADING_SELECTOR}:has-text("{heading}"))'
+    ).first
+
+
+def _assert_category_icon(section, icon_name):
+    icon = section.locator(
+        f'[data-lucide="{icon_name}"], .lucide-{icon_name}'
+    )
+    assert icon.count() >= 1
+
+
 # ---------------------------------------------------------------
 # Scenario 1: Visitor sees the new section order on /resources
 # ---------------------------------------------------------------
@@ -159,24 +172,16 @@ class TestScenario2WorkshopInWorkshopsSection:
             wait_until="domcontentloaded",
         )
 
-        # Section heading present
-        ws_heading = page.locator(
-            f"{SECTION_HEADING_SELECTOR}:has-text('Workshops')"
-        )
-        assert ws_heading.count() == 1
+        section = _category_section(page, "Workshops")
+        assert section.count() == 1
+        _assert_category_icon(section, "graduation-cap")
 
-        # Card is present and is an <a> opening in a new tab to the URL
-        card = page.locator(
+        # Card is present inside the Workshops group and opens in a new tab.
+        card = section.locator(
             'a:has-text("Build an LLM agent in a weekend")'
         ).first
         assert card.get_attribute("target") == "_blank"
         assert card.get_attribute("href") == "https://example.com/agent-weekend"
-
-        # Badge shows the Workshops label and graduation-cap icon
-        badge_icon = card.locator('[data-lucide="graduation-cap"]')
-        assert badge_icon.count() >= 1
-        # Badge label text is "Workshops"
-        assert "Workshops" in card.inner_text()
 
 
 # ---------------------------------------------------------------
@@ -206,20 +211,14 @@ class TestScenario3ArticleInArticlesSection:
             wait_until="domcontentloaded",
         )
 
-        ar_heading = page.locator(
-            f"{SECTION_HEADING_SELECTOR}:has-text('Articles')"
-        )
-        assert ar_heading.count() == 1
+        section = _category_section(page, "Articles")
+        assert section.count() == 1
+        _assert_category_icon(section, "file-text")
 
-        card = page.locator(
+        card = section.locator(
             'a:has-text("Why your RAG pipeline keeps lying")'
         ).first
         assert card.get_attribute("href") == "https://example.com/rag-lies"
-
-        # Badge file-text icon present
-        file_text_icon = card.locator('[data-lucide="file-text"]')
-        assert file_text_icon.count() >= 1
-        assert "Articles" in card.inner_text()
 
 
 # ---------------------------------------------------------------

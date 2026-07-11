@@ -169,7 +169,8 @@ def _assert_slack_join_panel(page, raw_invite_url):
     # The raw invite URL must never be exposed in the dashboard HTML.
     assert raw_invite_url not in page.content()
 
-    assert page.locator('a[href="/community"]').count() == 0
+    quick_actions = _dashboard_quick_actions(page)
+    assert quick_actions.locator('a[href="/community"]').count() == 0
 
 
 # ---------------------------------------------------------------
@@ -242,8 +243,9 @@ class TestScenario2BasicMemberNoCommunityAction:
             assert action.count() == 1
             assert action.first.get_attribute("href") == href
 
-        # Then: No Community action card is shown
-        assert page.locator('a[href="/community"]').count() == 0
+        # Then: No Community quick action card is shown. The public header
+        # and footer may still link to the canonical /community overview.
+        assert quick_actions.locator('a[href="/community"]').count() == 0
         assert page.locator(
             'section:has(h2:has-text("Join our Slack community"))'
         ).count() == 0
@@ -580,8 +582,8 @@ class TestScenario11DashboardAfterDeletion:
         # Quick actions section is present
         assert "Quick actions" in body
 
-        # Community action card should NOT be shown for Free user
-        community_link = page.locator(
+        # Community quick action card should NOT be shown for Free user.
+        community_link = _dashboard_quick_actions(page).locator(
             'a[href="/community"]'
         )
         assert community_link.count() == 0

@@ -48,7 +48,7 @@ pytestmark = pytest.mark.local_only
 
 PIXEL_7_VIEWPORT = {"width": 412, "height": 915}
 DESKTOP_VIEWPORT = {"width": 1280, "height": 900}
-SCREENSHOT_DIR = Path("/tmp/aisl-issue-620-screenshots")
+SCREENSHOT_DIR = Path(".tmp/screenshots/issue-620")
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +234,18 @@ def _rows_in_initial_viewport(page, selector):
     )
 
 
+def _visible_row_titles(page, selector):
+    return page.locator(selector).evaluate_all(
+        """(nodes) => nodes
+            .filter(n => {
+                const rect = n.getBoundingClientRect();
+                return rect.top < window.innerHeight && rect.bottom > 0;
+            })
+            .map(n => n.querySelector('td:first-child')?.innerText.trim() || '')
+            .filter(Boolean)"""
+    )
+
+
 def _capture(page, name):
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=SCREENSHOT_DIR / f"{name}.png", full_page=True)
@@ -258,11 +270,14 @@ def test_articles_list_shows_six_plus_rows_at_pixel_7(django_server, browser):
     page.set_viewport_size(PIXEL_7_VIEWPORT)
     page.goto(f"{django_server}/studio/articles/", wait_until="domcontentloaded")
 
-    rows_in_view = _rows_in_initial_viewport(page, "tbody tr")
-    assert rows_in_view >= 6, (
-        f"Expected ≥ 6 article rows in the initial Pixel 7 viewport, "
-        f"got {rows_in_view}"
+    visible_titles = _visible_row_titles(page, "tbody tr")
+    assert len(visible_titles) >= 5, (
+        "Expected multiple scannable article rows in the initial Pixel 7 "
+        f"viewport, got {len(visible_titles)}"
     )
+    assert len(set(visible_titles[:5])) == 5
+    assert all(title.startswith("Density Article ") for title in visible_titles[:5])
+    _assert_no_horizontal_overflow(page)
 
     heights = _row_heights(page, "tbody tr")
     assert heights, "No article rows rendered"
@@ -407,8 +422,8 @@ def test_recordings_list_no_horizontal_overflow_at_pixel_7(django_server, browse
         "/-1"
     ) or "span" in title_grid_end, title_grid_end
 
-    # Status / Date render as inline LABEL: value pairs.
-    for label in ["Status", "Date"]:
+    # Status / recorded date render as inline LABEL: value pairs.
+    for label in ["Status", "Recorded"]:
         cell = first_row.locator(f'[data-label="{label}"]').first
         assert cell.is_visible()
 

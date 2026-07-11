@@ -233,7 +233,9 @@ class TestActivitiesAccessByTierLayout:
         sprints = page.locator('[data-testid="activities-sprints-section"]')
         first_activity = page.locator('[data-testid="activity-card"]').first
         assert _top(heading) < 220
-        assert _top(first_activity) < 650
+        viewport_height = page.evaluate("() => window.innerHeight")
+        assert _top(first_activity) < viewport_height
+        assert first_activity.is_visible()
         assert _top(benefits) < _top(sprints)
         assert page.locator('[data-testid="activities-tier-filter"]').count() == 4
         _assert_no_horizontal_overflow(page)

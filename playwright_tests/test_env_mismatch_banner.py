@@ -38,7 +38,7 @@ def _reset_site_settings():
     clear_config_cache()
     connection.close()
 
-SCREENSHOT_DIR = Path("/tmp/aisl-issue-408-screenshots")
+SCREENSHOT_DIR = Path(".tmp/screenshots/issue-408")
 MOBILE_VIEWPORT = {"width": 390, "height": 900}
 
 
@@ -51,6 +51,13 @@ def _login_staff(browser, email="env-mismatch-admin@test.com"):
     _ensure_tiers()
     _create_staff_user(email)
     return _auth_context(browser, email)
+
+
+def _open_site_settings_card(page):
+    page.locator('[data-section-nav-item="site"]').click()
+    site_card = page.locator("#integration-site")
+    site_card.wait_for(state="visible")
+    return site_card
 
 
 @pytest.mark.django_db(transaction=True)
@@ -158,7 +165,7 @@ def test_db_override_clears_banner_on_next_page_load(django_server, browser, set
     assert "https://prod.aishippinglabs.com" in banner.inner_text()
 
     # Step 2: save SITE_BASE_URL to the test server URL via the Site card form.
-    site_card = page.locator("#integration-site")
+    site_card = _open_site_settings_card(page)
     site_card.locator('input[name="SITE_BASE_URL"]').fill(django_server)
     site_card.locator('button[type="submit"]').click()
     page.wait_for_load_state("domcontentloaded")
@@ -186,7 +193,7 @@ def test_alias_set_via_db_suppresses_banner(django_server, browser, settings):
     page = context.new_page()
 
     page.goto(f"{django_server}/studio/settings/", wait_until="domcontentloaded")
-    site_card = page.locator("#integration-site")
+    site_card = _open_site_settings_card(page)
     site_card.locator('textarea[name="SITE_BASE_URL_ALIASES"]').fill(django_server)
     site_card.locator('button[type="submit"]').click()
     page.wait_for_load_state("domcontentloaded")

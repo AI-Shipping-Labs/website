@@ -39,7 +39,7 @@
         <label for="plan-visibility" class="text-xs text-muted-foreground">Visibility</label>
         <select id="plan-visibility"
                 name="visibility"
-                class="bg-secondary border border-border rounded-md px-2 py-1 text-xs text-foreground"
+                class="studio-select bg-secondary border border-border rounded-md px-2 py-1 text-xs text-foreground"
                 data-testid="plan-visibility-select">
           <option value="private" {% if plan.visibility == 'private' %}selected{% endif %}>Private</option>
           <option value="cohort" {% if plan.visibility == 'cohort' %}selected{% endif %}>Cohort</option>

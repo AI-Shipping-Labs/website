@@ -60,6 +60,76 @@ _STEADY_STATE_PAIRS = frozenset({
     ("Current plan", ""),
 })
 
+_ACCOUNT_TIER_BENEFIT_FALLBACKS = {
+    "free": [
+        "Newsletter updates",
+        "Open articles, recordings, projects, tutorials, and events",
+        "Account dashboard and email preferences",
+    ],
+    "basic": [
+        "Everything in Free",
+        "Exclusive articles, tutorials with code, AI tool breakdowns, and research notes",
+        "Basic gated curated links and downloads",
+    ],
+    "main": [
+        "Everything in Basic",
+        "Slack community, group coding sessions, and guided project work",
+        "Accountability through sprints, topic voting, and community activities",
+    ],
+    "premium": [
+        "Everything in Main",
+        "All mini-courses and course-topic voting",
+        "Resume, LinkedIn, and GitHub teardowns",
+    ],
+}
+
+_ACCOUNT_NEXT_TIER_UPSELLS = {
+    "basic": {
+        "target_slug": "main",
+        "target_name": "Main",
+        "title": "Main adds the community layer",
+        "description": (
+            "Join the private community, live and group work, accountability "
+            "sprints, and topic voting."
+        ),
+        "cta_label": "Compare Main",
+        "url": "/pricing",
+    },
+    "main": {
+        "target_slug": "premium",
+        "target_name": "Premium",
+        "title": "Premium adds deeper career support",
+        "description": (
+            "Unlock mini-courses, course-topic voting, and resume, LinkedIn, "
+            "and GitHub teardowns."
+        ),
+        "cta_label": "Compare Premium",
+        "url": "/pricing",
+    },
+}
+
+
+def _account_tier_benefits(tier):
+    """Return a concise account-card benefit summary for ``tier``."""
+    slug = tier.slug if tier else "free"
+    synced_features = []
+    if tier and isinstance(tier.features, list):
+        synced_features = [
+            str(feature).strip()
+            for feature in tier.features
+            if str(feature).strip()
+        ]
+    return synced_features[:4] or _ACCOUNT_TIER_BENEFIT_FALLBACKS.get(
+        slug,
+        _ACCOUNT_TIER_BENEFIT_FALLBACKS["free"],
+    )
+
+
+def _account_next_tier_upsell(effective_tier):
+    if effective_tier is None:
+        return None
+    return _ACCOUNT_NEXT_TIER_UPSELLS.get(effective_tier.slug)
+
 
 def _suppress_steady_state_plan_state(state, *, is_pending_cancellation):
     """Return ``{}`` for steady-state plan-state frames, else ``state``.
@@ -183,6 +253,30 @@ def _render_account_page(
         and not is_pending_cancellation
         and active_override is None
     )
+    membership_benefits = _account_tier_benefits(effective_tier)
+    next_tier_upsell = _account_next_tier_upsell(effective_tier)
+    is_effective_premium = (
+        effective_tier is not None and effective_tier.slug == "premium"
+    )
+    show_paid_plan_pricing_action = bool(
+        effective_tier is not None
+        and effective_tier.slug != "free"
+        and not has_subscription
+        and not is_effective_premium
+    )
+    paid_without_subscription_note = ""
+    if show_paid_plan_pricing_action:
+        if active_override is not None:
+            paid_without_subscription_note = (
+                "No Stripe subscription is connected to this account. Use "
+                "pricing to choose a paid plan or keep access after temporary "
+                "access ends."
+            )
+        else:
+            paid_without_subscription_note = (
+                "No Stripe subscription is connected to this account. Use "
+                "pricing to choose or upgrade a paid plan."
+            )
 
     # Slack community card (issue #700). Issue #971: uses the effective
     # (override-aware) level via get_user_level — an active TierOverride
@@ -232,6 +326,11 @@ def _render_account_page(
         "effective_tier": effective_tier,
         "override_provenance": override_provenance,
         "account_plan_state": account_plan_state,
+        "membership_benefits": membership_benefits,
+        "next_tier_upsell": next_tier_upsell,
+        "is_effective_premium": is_effective_premium,
+        "show_paid_plan_pricing_action": show_paid_plan_pricing_action,
+        "paid_without_subscription_note": paid_without_subscription_note,
         "show_manage_subscription": show_manage_subscription,
         "show_upgrade_action": show_upgrade_action,
         "stripe_customer_portal_url": stripe_customer_portal_url,

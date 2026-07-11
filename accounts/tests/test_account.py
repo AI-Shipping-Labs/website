@@ -9,6 +9,7 @@ from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
 from accounts.models import TierOverride, User
+from accounts.models.user import SIGNUP_SOURCE_NEWSLETTER
 from accounts.services import timezones
 from accounts.services.timezones import build_timezone_options
 from email_app.models import EmailLog
@@ -509,6 +510,222 @@ class AccountPageMembershipActionStateTest(TestCase):
         self.assertContains(response, "Your subscription needs review.")
         self.assertNotContains(response, 'id="upgrade-btn"')
         self.assertContains(response, 'id="manage-subscription-btn"')
+
+
+@override_settings(
+    STRIPE_CUSTOMER_PORTAL_URL="https://billing.example.test/portal",
+)
+class AccountPageMembershipCardServingMembersTest(TestCase):
+    """Focused Membership-card rendering states for issue #1207."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.free_tier = Tier.objects.get(slug="free")
+        cls.basic_tier = Tier.objects.get(slug="basic")
+        cls.main_tier = Tier.objects.get(slug="main")
+        cls.premium_tier = Tier.objects.get(slug="premium")
+
+    def _user(
+        self,
+        email,
+        tier,
+        *,
+        subscription_id="",
+        billing_period_end=None,
+        pending_tier=None,
+        signup_source="signup",
+        account_activated=True,
+    ):
+        user = User.objects.create_user(
+            email=email,
+            signup_source=signup_source,
+            account_activated=account_activated,
+            email_verified=True,
+        )
+        user.tier = tier
+        user.subscription_id = subscription_id
+        user.billing_period_end = billing_period_end
+        user.pending_tier = pending_tier
+        user.save(
+            update_fields=[
+                "tier",
+                "subscription_id",
+                "billing_period_end",
+                "pending_tier",
+                "signup_source",
+                "account_activated",
+                "email_verified",
+            ]
+        )
+        return user
+
+    def _account_response(self, user):
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    def test_free_member_keeps_upgrade_and_benefits_without_billing_ui(self):
+        response = self._account_response(
+            self._user("free-1207@example.com", self.free_tier)
+        )
+
+        self.assertContains(response, 'id="current-tier-benefits"')
+        self.assertContains(response, "Newsletter updates")
+        self.assertContains(response, 'id="upgrade-btn"')
+        self.assertContains(response, 'href="/pricing"')
+        self.assertNotContains(response, 'id="manage-subscription-btn"')
+        self.assertNotContains(response, "Billing Period Ends")
+        self.assertNotContains(response, "Temporary Access Expires")
+
+    def test_basic_member_gets_benefits_billing_portal_and_main_upsell(self):
+        user = self._user(
+            "basic-1207@example.com",
+            self.basic_tier,
+            subscription_id="sub_basic_1207",
+            billing_period_end=timezone.make_aware(
+                timezone.datetime(2026, 3, 15, 12, 0, 0)
+            ),
+        )
+
+        response = self._account_response(user)
+
+        self.assertEqual(
+            response.context["next_tier_upsell"]["target_slug"],
+            "main",
+        )
+        self.assertContains(response, "Everything in Free")
+        self.assertContains(response, "March 15, 2026")
+        self.assertContains(response, 'id="manage-subscription-btn"')
+        self.assertContains(response, "https://billing.example.test/portal")
+        self.assertContains(response, 'id="next-tier-upsell"')
+        self.assertContains(response, "community")
+        self.assertContains(response, "live and group work")
+        self.assertContains(response, "accountability")
+        self.assertContains(response, "topic voting")
+        self.assertContains(response, 'id="next-tier-upsell-btn"')
+        self.assertContains(response, 'href="/pricing"')
+
+    def test_main_member_gets_benefits_billing_portal_and_premium_upsell(self):
+        user = self._user(
+            "main-1207@example.com",
+            self.main_tier,
+            subscription_id="sub_main_1207",
+            billing_period_end=timezone.make_aware(
+                timezone.datetime(2026, 4, 1, 12, 0, 0)
+            ),
+        )
+
+        response = self._account_response(user)
+
+        self.assertEqual(
+            response.context["next_tier_upsell"]["target_slug"], "premium"
+        )
+        self.assertContains(response, "Everything in Basic")
+        self.assertContains(response, "April 1, 2026")
+        self.assertContains(response, 'id="manage-subscription-btn"')
+        self.assertContains(response, 'id="next-tier-upsell"')
+        self.assertContains(response, "mini-courses")
+        self.assertContains(response, "course-topic voting")
+        self.assertContains(response, "LinkedIn")
+        self.assertContains(response, "GitHub teardowns")
+
+    def test_premium_member_gets_benefits_portal_and_no_upsell(self):
+        response = self._account_response(
+            self._user(
+                "premium-1207@example.com",
+                self.premium_tier,
+                subscription_id="sub_premium_1207",
+                billing_period_end=timezone.make_aware(
+                    timezone.datetime(2026, 5, 1, 12, 0, 0)
+                ),
+            )
+        )
+
+        self.assertContains(response, "Everything in Main")
+        self.assertContains(response, 'id="manage-subscription-btn"')
+        self.assertContains(response, 'id="highest-tier-note"')
+        self.assertContains(response, "highest tier")
+        self.assertNotContains(response, 'id="next-tier-upsell"')
+        self.assertNotContains(response, 'id="upgrade-btn"')
+
+    def test_active_override_without_subscription_shows_temporary_expiry(self):
+        user = self._user("override-main-1207@example.com", self.free_tier)
+        TierOverride.objects.create(
+            user=user,
+            original_tier=self.free_tier,
+            override_tier=self.main_tier,
+            expires_at=timezone.make_aware(
+                timezone.datetime(2027, 6, 5, 18, 30, 0)
+            ),
+        )
+
+        response = self._account_response(user)
+
+        self.assertEqual(response.context["effective_tier"].slug, "main")
+        self.assertContains(response, "Main")
+        self.assertContains(response, 'id="tier-override-provenance"')
+        self.assertContains(response, "tier override from Free")
+        self.assertContains(response, 'id="tier-override-notice"')
+        self.assertContains(response, "Temporary Main access")
+        self.assertContains(response, 'id="temporary-access-expiry"')
+        self.assertContains(response, "Temporary Access Expires")
+        self.assertContains(response, "05/06/2027")
+        self.assertNotContains(response, "Billing Period Ends")
+        self.assertNotContains(response, 'id="manage-subscription-btn"')
+        self.assertContains(response, 'id="paid-plan-pricing-btn"')
+        self.assertContains(response, "keep access after temporary access ends")
+
+    def test_paid_member_without_subscription_gets_pricing_path_not_portal(self):
+        response = self._account_response(
+            self._user("comped-basic-1207@example.com", self.basic_tier)
+        )
+
+        self.assertContains(response, "Everything in Free")
+        self.assertContains(response, 'id="paid-without-subscription-note"')
+        self.assertContains(response, "No Stripe subscription is connected")
+        self.assertContains(response, 'id="paid-plan-pricing-btn"')
+        self.assertContains(response, 'href="/pricing"')
+        self.assertNotContains(response, 'id="manage-subscription-btn"')
+
+    def test_pending_cancellation_keeps_warning_and_portal_path(self):
+        response = self._account_response(
+            self._user(
+                "cancel-main-1207@example.com",
+                self.main_tier,
+                subscription_id="sub_cancel_main_1207",
+                billing_period_end=timezone.make_aware(
+                    timezone.datetime(2026, 5, 15, 12, 0, 0)
+                ),
+                pending_tier=self.free_tier,
+            )
+        )
+
+        self.assertContains(response, 'id="pending-cancellation-notice"')
+        self.assertContains(response, "Main")
+        self.assertContains(response, "May 15, 2026")
+        self.assertContains(response, 'id="manage-subscription-btn"')
+        self.assertNotContains(response, 'id="cancel-btn"')
+        self.assertNotContains(response, 'id="downgrade-btn"')
+        self.assertNotContains(response, 'id="upgrade-modal"')
+
+    def test_newsletter_only_user_does_not_see_membership_card(self):
+        response = self._account_response(
+            self._user(
+                "newsletter-only-1207@example.com",
+                self.free_tier,
+                signup_source=SIGNUP_SOURCE_NEWSLETTER,
+                account_activated=False,
+            )
+        )
+
+        self.assertContains(response, 'id="newsletter-only-cta"')
+        self.assertNotContains(response, 'id="membership-section"')
+        self.assertNotContains(response, 'id="current-tier-benefits"')
+        self.assertNotContains(response, 'id="next-tier-upsell"')
+        self.assertNotContains(response, "Billing Period Ends")
+        self.assertNotContains(response, "Temporary Access Expires")
+        self.assertNotContains(response, 'id="manage-subscription-btn"')
 
 
 @tag('core')

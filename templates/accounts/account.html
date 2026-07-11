@@ -67,7 +67,7 @@
       {% if not is_newsletter_only %}
 
       <!-- Membership Section -->
-      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mb-8">
+      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mb-8" id="membership-section">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
           <i data-lucide="crown" class="h-5 w-5 text-accent"></i>
           Membership
@@ -107,6 +107,21 @@
         </div>
         {% endif %}
 
+        <!-- Current Tier Benefits -->
+        {% if membership_benefits %}
+        <div class="rounded-lg border border-border bg-secondary/20 p-4 mb-6" id="current-tier-benefits" data-testid="current-tier-benefits">
+          <p class="text-sm font-medium text-foreground">Your {% if effective_tier %}{{ effective_tier.name }}{% else %}Free{% endif %} benefits</p>
+          <ul class="mt-3 space-y-2 text-sm text-muted-foreground">
+            {% for benefit in membership_benefits %}
+            <li class="flex items-start gap-2">
+              <i data-lucide="check" class="h-4 w-4 text-accent mt-0.5 shrink-0"></i>
+              <span>{{ benefit }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
         <!-- Active Tier Override -->
         {% if active_override %}
         <div class="rounded-lg border border-accent/30 bg-accent/10 p-4 mb-6" id="tier-override-notice">
@@ -122,6 +137,10 @@
             </div>
           </div>
         </div>
+        <div class="mb-6" id="temporary-access-expiry" data-testid="temporary-access-expiry">
+          <p class="text-sm text-muted-foreground">Temporary Access Expires</p>
+          <p class="text-foreground mt-1">{{ active_override.expires_at|member_short_datetime }} UTC</p>
+        </div>
         {% endif %}
 
         <!-- Pending Cancellation Notice -->
@@ -133,6 +152,42 @@
               Your <strong>{{ tier.name }}</strong> access ends on <strong>{{ billing_period_end|member_full_date }}</strong>.
             </p>
           </div>
+        </div>
+        {% endif %}
+
+        {% if next_tier_upsell %}
+        <div class="rounded-lg border border-accent/30 bg-accent/10 p-4 mb-6" id="next-tier-upsell" data-testid="next-tier-upsell">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p class="text-sm font-medium text-foreground">{{ next_tier_upsell.title }}</p>
+              <p class="text-sm text-muted-foreground mt-1">{{ next_tier_upsell.description }}</p>
+            </div>
+            <a href="{{ next_tier_upsell.url }}"
+               class="{% button_classes 'secondary' size='sm' extra='shrink-0' %}"
+               id="next-tier-upsell-btn">
+              <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+              {{ next_tier_upsell.cta_label }}
+            </a>
+          </div>
+        </div>
+        {% elif is_effective_premium %}
+        <div class="rounded-lg border border-border bg-secondary/20 p-4 mb-6" id="highest-tier-note" data-testid="highest-tier-note">
+          <p class="text-sm font-medium text-foreground">You are on the highest tier.</p>
+          <p class="text-sm text-muted-foreground mt-1">Premium includes every AI Shipping Labs membership benefit.</p>
+        </div>
+        {% endif %}
+
+        {% if paid_without_subscription_note %}
+        <div class="rounded-lg border border-border bg-secondary/20 p-4 mb-6" id="paid-without-subscription-note" data-testid="paid-without-subscription-note">
+          <p class="text-sm text-muted-foreground">{{ paid_without_subscription_note }}</p>
+          {% if show_paid_plan_pricing_action %}
+          <a href="/pricing"
+             class="{% button_classes 'secondary' size='sm' extra='mt-3' %}"
+             id="paid-plan-pricing-btn">
+            <i data-lucide="credit-card" class="h-4 w-4"></i>
+            View paid plans
+          </a>
+          {% endif %}
         </div>
         {% endif %}
 

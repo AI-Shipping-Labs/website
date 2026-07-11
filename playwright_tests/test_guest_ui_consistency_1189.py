@@ -28,6 +28,7 @@ def _reset_guest_content():
 
 def _create_event(title, slug, *, required_level=0, **kwargs):
     from django.db import connection
+
     from events.models import Event
 
     event = Event.objects.create(
@@ -99,6 +100,7 @@ def test_guest_events_use_canonical_tier_badges_and_gated_card(
 @pytest.mark.django_db(transaction=True)
 def test_guest_download_empty_states_use_shared_component(django_server, page):
     from django.db import connection
+
     from content.models import Download
 
     _reset_guest_content()
@@ -138,6 +140,7 @@ def test_guest_download_empty_states_use_shared_component(django_server, page):
 @pytest.mark.django_db(transaction=True)
 def test_home_and_projects_share_project_card_language(django_server, page):
     from django.db import connection
+
     from content.models import Project
 
     _reset_guest_content()

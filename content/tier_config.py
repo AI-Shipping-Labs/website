@@ -42,6 +42,79 @@ def get_tiers_with_features():
     return result
 
 
+ACTIVITY_ACTIONS = {
+    'Exclusive Substack Content': {
+        'label': 'Browse member articles',
+        'url': '/blog',
+    },
+    'Behind-the-Scenes Research': {
+        'label': 'Browse research notes',
+        'url': '/blog',
+    },
+    'Curated Social Content Collection': {
+        'label': 'Browse curated resources',
+        'url': '/resources',
+    },
+    'Closed Community Access': {
+        'label': 'Compare community membership',
+        'url': '/pricing',
+    },
+    'Collaborative Problem-Solving & Mentorship': {
+        'label': 'See live community sessions',
+        'url': '/events',
+    },
+    'Interactive Group Coding Sessions': {
+        'label': 'See events',
+        'url': '/events',
+    },
+    'Guided Project-Based Learning': {
+        'label': 'Explore sprints',
+        'url': '/sprints',
+    },
+    'Community Hackathons': {
+        'label': 'Explore sprints',
+        'url': '/sprints',
+    },
+    'Career Advancement Discussions': {
+        'label': 'See events',
+        'url': '/events',
+    },
+    'Personal Brand Development': {
+        'label': 'Browse workshops',
+        'url': '/workshops',
+    },
+    'Developer Productivity Tips & Workflows': {
+        'label': 'Browse related resources',
+        'url': '/resources',
+    },
+    'Propose and Vote on Topics': {
+        'label': 'Open topic voting',
+        'url': '/vote',
+    },
+    'Mini-Courses on Specialized Topics': {
+        'label': 'Browse courses',
+        'url': '/courses',
+    },
+    'Vote on Course Topics': {
+        'label': 'Open course voting',
+        'url': '/vote',
+    },
+    'Profile Teardowns': {
+        'label': 'Compare Premium membership',
+        'url': '/pricing',
+    },
+}
+
+DEFAULT_ACTIVITY_ACTION = {
+    'label': 'Compare membership options',
+    'url': '/pricing',
+}
+
+
+def _activity_action(title):
+    return ACTIVITY_ACTIONS.get(title, DEFAULT_ACTIVITY_ACTION)
+
+
 def get_activities():
     """Return the flat activities list for the activities page.
 
@@ -63,11 +136,14 @@ def get_activities():
             if title in seen_titles:
                 continue
             seen_titles.add(title)
+            action = _activity_action(title)
             activities.append({
                 'icon': activity['icon'],
                 'title': title,
                 'description': activity['description'].strip(),
                 'tiers': inheriting_tiers,
+                'action_label': action['label'],
+                'action_url': action['url'],
             })
 
     return activities

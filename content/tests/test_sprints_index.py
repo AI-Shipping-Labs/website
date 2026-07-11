@@ -291,6 +291,11 @@ class SprintsIndexTest(TestCase):
         self.assertContains(response, 'data-testid="sprints-sprint-tier"')
         self.assertContains(response, 'data-component="member-badge"')
         self.assertContains(response, 'Sprint window')
+        self.assertContains(
+            response,
+            'A sprint is a time-bound shipping cohort with project structure',
+        )
+        self.assertContains(response, 'data-testid="sprints-sprint-context"')
         self.assertContains(response, 'Joining requires Main membership')
         self.assertContains(response, 'Log in to join')
         self.assertContains(

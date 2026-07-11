@@ -44,15 +44,15 @@ class HeaderMobileMenuTest(TestCase):
         self.assertIn('min-h-[44px]', content)
         self.assertIn('min-w-[44px]', content)
 
-    def test_mobile_nav_links_use_compact_rows(self):
-        """Mobile menu accordion sub-links use compact rows."""
+    def test_mobile_nav_links_use_44px_tap_targets(self):
+        """Mobile menu accordion sub-links use 44px tap targets."""
         response = self.client.get("/")
         content = response.content.decode()
         menu_start = content.index('id="mobile-menu"')
         menu_html = content[menu_start:]
         match = re.search(r'<a[^>]*href="/courses"[^>]*>', menu_html)
         self.assertIsNotNone(match, "Courses link not found in mobile menu")
-        self.assertIn("min-h-[32px]", match.group(0))
+        self.assertIn("min-h-[44px]", match.group(0))
 
     def test_notification_dropdown_has_max_width_constraint(self):
         """The notification dropdown should be constrained to viewport width for authenticated users."""

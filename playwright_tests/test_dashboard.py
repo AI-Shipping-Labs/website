@@ -1543,7 +1543,7 @@ class TestScenario7GatedContentInRecentContent:
 
         # Then: Paywall message shown
         gated_body = page.content()
-        assert "Create a free account or choose Basic to read this article" in gated_body
+        assert "Upgrade to Basic to read this article" in gated_body
         assert "/pricing" in gated_body
 # -------------------------------------------------------------------
 # Scenario 8: Premium member sees active polls and navigates to vote

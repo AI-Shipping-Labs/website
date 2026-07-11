@@ -1336,8 +1336,8 @@ class TestScenario6AnonymousGatedArticleViaSharedLink:
             not in body
         )
 
-        # Upgrade CTA
-        assert "Upgrade to Premium to read this article" in body
+        # Anonymous guest CTA
+        assert "Create a free account or choose Premium to read this article" in body
 
         # View Pricing link
         pricing_link = page.locator('a:has-text("View Pricing")')

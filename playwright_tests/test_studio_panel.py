@@ -889,7 +889,8 @@ class TestScenario10StaffExportsSubscribers:
             csv_content = f.read()
 
         assert csv_content.splitlines()[0] == (
-            "email,tier,tags,email_verified,unsubscribed,date_joined,last_login,slack"
+            "email,tier,tags,email_verified,unsubscribed,date_joined,last_login,slack,"
+            "signup_source,account_activated,account_lifecycle"
         )
         assert "Never checked" in csv_content
 

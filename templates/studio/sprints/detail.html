@@ -38,13 +38,23 @@
 <div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-2xl">
   <dl class="grid grid-cols-2 gap-4 text-sm">
     <div>
-      <dt class="text-xs text-muted-foreground uppercase">Status</dt>
+      <dt class="text-xs text-muted-foreground uppercase">Lifecycle</dt>
+      <dd class="mt-1" data-testid="sprint-lifecycle-badge">
+        {% with badge=sprint.sprint_badge_current %}
+        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ badge.css_class }}">
+          {{ badge.label }}
+        </span>
+        {% endwith %}
+      </dd>
+    </div>
+    <div>
+      <dt class="text-xs text-muted-foreground uppercase">Admin status</dt>
       <dd class="mt-1">
         {% if sprint.status == 'cancelled' %}
         <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-500/15 text-red-300"
-              data-testid="sprint-status-badge">{{ sprint.get_status_display }}</span>
+              data-testid="sprint-admin-status-badge">{{ sprint.get_status_display }}</span>
         {% else %}
-        <span class="text-foreground" data-testid="sprint-status-badge">{{ sprint.get_status_display }}</span>
+        <span class="text-foreground" data-testid="sprint-admin-status-badge">{{ sprint.get_status_display }}</span>
         {% endif %}
       </dd>
     </div>
@@ -69,6 +79,26 @@
       <dd class="text-foreground mt-1" data-testid="sprint-enrollment-count">{{ enrollment_count }}</dd>
     </div>
   </dl>
+  {% if sprint.status != 'cancelled' and sprint.status != 'completed' %}
+  <div class="mt-6 pt-6 border-t border-border flex items-start justify-between gap-4"
+       data-testid="sprint-status-actions">
+    <div>
+      <p class="text-sm font-medium text-foreground">Mark completed</p>
+      <p class="text-xs text-muted-foreground mt-1">
+        Updates the stored admin status only. Plans, enrollments, feedback, partners, and events stay intact.
+      </p>
+    </div>
+    <form method="post" action="{% url 'studio_sprint_complete' sprint_id=sprint.pk %}"
+          data-testid="sprint-complete-form">
+      {% csrf_token %}
+      <button type="submit"
+              class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
+              data-testid="sprint-complete-button">
+        Mark completed
+      </button>
+    </form>
+  </div>
+  {% endif %}
 </div>
 
 <h2 class="text-lg font-semibold text-foreground mb-4">Event series</h2>

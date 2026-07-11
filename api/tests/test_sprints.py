@@ -63,6 +63,10 @@ class SerializeSprintEndDateTest(TestCase):
         self.assertEqual(data["start_date"], "2026-06-17")
         self.assertEqual(data["end_date"], "2026-07-29")
         self.assertEqual(data["duration_weeks"], 6)
+        self.assertEqual(
+            set(data["lifecycle_badge"]),
+            {"state", "label"},
+        )
 
 
 class SprintsListTest(SprintApiTestBase):
@@ -78,7 +82,7 @@ class SprintsListTest(SprintApiTestBase):
             set(first.keys()),
             {
                 "slug", "name", "start_date", "end_date",
-                "duration_weeks", "status", "event_series",
+                "duration_weeks", "status", "lifecycle_badge", "event_series",
                 "created_at", "updated_at",
             },
         )
@@ -143,9 +147,64 @@ class SprintDetailTest(SprintApiTestBase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["status"], "completed")
+        self.assertEqual(
+            set(body["lifecycle_badge"]),
+            {"state", "label"},
+        )
         # Untouched fields keep their values.
         self.assertEqual(body["name"], "May 2026")
         self.assertEqual(body["start_date"], "2026-05-01")
+
+    def test_detail_includes_stored_status_and_date_lifecycle_badge(self):
+        response = self.client.get("/api/sprints/may-2026", **self._auth())
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["status"], "active")
+        self.assertEqual(body["lifecycle_badge"]["state"], "ended")
+        self.assertEqual(body["lifecycle_badge"]["label"], "Ended")
+
+    def test_patch_completed_is_staff_only_and_preserves_lifecycle_badge(self):
+        response = self.client.patch(
+            "/api/sprints/may-2026",
+            data=json.dumps({"status": "completed"}),
+            content_type="application/json",
+            **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["status"], "completed")
+        self.assertEqual(body["lifecycle_badge"]["state"], "ended")
+        self.assertEqual(body["lifecycle_badge"]["label"], "Ended")
+
+    def test_patch_completed_rejects_missing_invalid_and_non_staff_tokens(self):
+        non_staff_token = Token(
+            key="non-staff-sprint-patch-token",
+            user=self.member,
+            name="legacy-non-staff-sprint-patch",
+        )
+        Token.objects.bulk_create([non_staff_token])
+
+        requests = [
+            ({}, 401),
+            ({"HTTP_AUTHORIZATION": "Token does-not-exist"}, 401),
+            (self._auth(non_staff_token), 401),
+        ]
+        for headers, expected_status in requests:
+            with self.subTest(headers=headers):
+                self.sprint_active.status = "active"
+                self.sprint_active.save(update_fields=["status"])
+                response = self.client.patch(
+                    "/api/sprints/may-2026",
+                    data=json.dumps({"status": "completed"}),
+                    content_type="application/json",
+                    **headers,
+                )
+
+                self.assertEqual(response.status_code, expected_status)
+                self.sprint_active.refresh_from_db()
+                self.assertEqual(self.sprint_active.status, "active")
 
     def test_delete_returns_405_pointing_to_studio(self):
         # Issue #864 (2026-06-13): sprint DELETE is blocked via the API. The

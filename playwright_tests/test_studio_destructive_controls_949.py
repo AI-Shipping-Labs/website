@@ -202,7 +202,7 @@ class TestStudioDestructiveControls949:
 
         region = page.locator('[data-testid="messages-region"]')
         assert "cancelled" in region.inner_text().lower()
-        badge = page.locator('[data-testid="sprint-status-badge"]')
+        badge = page.locator('[data-testid="sprint-admin-status-badge"]')
         assert "Cancelled" in badge.inner_text()
 
         # Both members still rostered and the plan survives in the DB.

@@ -163,6 +163,7 @@ class TestBlogBrowserSmoke:
         assert "Learn advanced deployment patterns for ML systems" in body
         assert "This is the full article content that should be hidden" not in body
         assert "Upgrade to Basic to read this article" in body
+        assert "Create a free account" not in body
 
         pricing_link = page.locator('a:has-text("View Pricing")')
         assert pricing_link.count() >= 1

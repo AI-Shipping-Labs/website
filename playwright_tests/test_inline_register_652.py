@@ -176,13 +176,9 @@ class TestInlineRegisterCard:
         page.fill("#register-password-confirm", DEFAULT_PASSWORD)
         page.click("#register-submit")
 
-        success = page.locator("#register-success")
-        success.wait_for(state="visible")
-        assert "Check your email" in success.inner_text()
-        # The return-link points back to the originating course URL.
-        return_link = success.locator("a")
-        assert return_link.get_attribute("href") == "/courses/inline-652-demo"
-        # No full-page redirect happened — we are still on the course page.
+        page.locator('[data-testid="account-menu-trigger"]').wait_for(
+            state="visible",
+        )
         assert page.url.endswith("/courses/inline-652-demo")
         # User exists, unverified.
         with django_db_blocker.unblock():
@@ -328,10 +324,10 @@ class TestInlineRegisterCard:
         page.fill("#register-password-confirm", DEFAULT_PASSWORD)
         page.click("#register-submit")
 
-        success = page.locator("#register-success")
-        success.wait_for(state="visible")
-        return_link = success.locator("a")
-        assert return_link.get_attribute("href") == landing_url
+        page.locator('[data-testid="account-menu-trigger"]').wait_for(
+            state="visible",
+        )
+        assert page.url == f"{django_server}{landing_url}"
 
     def test_logged_in_free_user_on_free_course_sees_no_inline_form(
         self, django_server, browser, django_db_blocker

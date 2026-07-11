@@ -5,6 +5,7 @@ Expects these context variables:
   - teaser: The teaser text to show
   - cta_message: The CTA message (e.g. "Upgrade to Basic to read this article")
   - pricing_url: URL to the pricing page (defaults to /pricing)
+  - is_guest_paywall: True when an anonymous visitor lacks a paid tier
 {% endcomment %}
 
 {% if gated_reason == "unverified_email" %}
@@ -41,10 +42,25 @@ Expects these context variables:
     <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
     <p class="mt-2 text-sm text-muted-foreground">Get full access to this content and more with a membership.</p>
     <a href="{{ pricing_url|default:'/pricing' }}"
+       data-testid="gated-pricing-link"
        class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
       <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
       View Pricing
     </a>
+    {% if is_guest_paywall %}
+    <div class="mt-4 flex flex-col items-center justify-center gap-3 sm:flex-row">
+      <a href="{% url 'account_register' %}?next={{ request.get_full_path|urlencode }}"
+         data-testid="gated-create-free-account-link"
+         class="inline-flex items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+        Create a free account
+      </a>
+      <a href="{% url 'account_login' %}?next={{ request.get_full_path|urlencode }}"
+         data-testid="gated-sign-in-link"
+         class="text-sm text-muted-foreground transition-colors hover:text-foreground hover:underline">
+        Already a member? Sign in
+      </a>
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endif %}

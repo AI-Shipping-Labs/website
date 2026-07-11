@@ -286,6 +286,17 @@ class CanAccessEmailVerifiedTest(TierSetupMixin, TestCase):
         self.assertTrue(ctx['is_gated'])
         self.assertEqual(ctx['gated_reason'], 'insufficient_tier')
         self.assertEqual(ctx['cta_message'], 'Upgrade to Basic to read this article')
+        self.assertFalse(ctx['is_guest_paywall'])
+
+    def test_build_gating_context_guest_insufficient_tier(self):
+        ctx = build_gating_context(AnonymousUser(), self.basic_article, 'article')
+        self.assertTrue(ctx['is_gated'])
+        self.assertEqual(ctx['gated_reason'], 'insufficient_tier')
+        self.assertTrue(ctx['is_guest_paywall'])
+        self.assertEqual(
+            ctx['cta_message'],
+            'Create a free account or choose Basic to read this article',
+        )
 
     def test_course_access_row_bypasses_email_check(self):
         user = self._user('course-access', self.free_tier, False)
@@ -460,7 +471,11 @@ class BuildGatingContextTest(TierSetupMixin, TestCase):
         from django.contrib.auth.models import AnonymousUser
         ctx = build_gating_context(AnonymousUser(), self.article, 'article')
         self.assertTrue(ctx['is_gated'])
-        self.assertEqual(ctx['cta_message'], 'Upgrade to Basic to read this article')
+        self.assertEqual(
+            ctx['cta_message'],
+            'Create a free account or choose Basic to read this article',
+        )
+        self.assertTrue(ctx['is_guest_paywall'])
         self.assertEqual(ctx['required_tier_name'], 'Basic')
         self.assertEqual(ctx['pricing_url'], '/pricing')
         self.assertIn('This is the description', ctx['teaser'])
@@ -495,7 +510,10 @@ class BuildGatingContextTest(TierSetupMixin, TestCase):
         )
         from django.contrib.auth.models import AnonymousUser
         ctx = build_gating_context(AnonymousUser(), recording, 'recording')
-        self.assertEqual(ctx['cta_message'], 'Upgrade to Main to watch this recording')
+        self.assertEqual(
+            ctx['cta_message'],
+            'Create a free account or choose Main to watch this recording',
+        )
 
 
 # --- Model field tests ---
@@ -593,7 +611,22 @@ class BlogDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/blog/basic-article')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Full basic content')
-        self.assertContains(response, 'Upgrade to Basic to read this article')
+        self.assertContains(
+            response,
+            'Create a free account or choose Basic to read this article',
+        )
+        self.assertContains(response, 'View Pricing')
+        self.assertContains(response, 'Create a free account')
+        self.assertContains(response, 'Already a member? Sign in')
+        self.assertContains(
+            response,
+            'href="/accounts/register/?next=/blog/basic-article"',
+        )
+        self.assertContains(
+            response,
+            'href="/accounts/login/?next=/blog/basic-article"',
+        )
+        self.assertNotContains(response, 'Upgrade to Basic to read this article')
 
     def test_free_user_sees_gated_basic_article(self):
         self.client.force_login(self.free_user)
@@ -677,7 +710,14 @@ class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/projects/gated-project')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Secret project content')
-        self.assertContains(response, 'Upgrade to Basic to view this project')
+        self.assertContains(
+            response,
+            'Create a free account or choose Basic to view this project',
+        )
+        self.assertContains(
+            response,
+            'href="/accounts/register/?next=/projects/gated-project"',
+        )
 
     def test_basic_user_sees_full_project(self):
         # Replaces playwright_tests/test_project_showcase.py::TestScenario7BasicMemberUnlocksBasicProject::test_basic_member_sees_full_project_content

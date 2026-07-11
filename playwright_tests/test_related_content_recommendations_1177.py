@@ -267,7 +267,10 @@ class TestRelatedContentRecommendations:
 
         page.goto(f"{django_server}/blog/gated-agents", wait_until="domcontentloaded")
 
-        assert "Upgrade to Basic to read this article" in page.content()
+        assert (
+            "Create a free account or choose Basic to read this article"
+            in page.content()
+        )
         assert "SECRET PAID BODY" not in page.content()
         rail = page.get_by_test_id("related-content-rail")
         assert rail.is_visible()
@@ -329,7 +332,9 @@ class TestRelatedContentRecommendations:
         page.wait_for_load_state("domcontentloaded")
 
         assert page.url.endswith("/blog/paid-agents-article")
-        assert "Upgrade to Basic to read this article" in page.content()
+        body = page.content()
+        assert "Upgrade to Basic to read this article" in body
+        assert "Create a free account" not in body
         context.close()
 
     def test_project_recommends_related_workshop(self, django_server, page):

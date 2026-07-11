@@ -9,10 +9,9 @@
 //   2. Emit {{ next_url|json_script:"auth-next-url" }} so the script
 //      can read the round-trip URL out of the DOM.
 //
-// On success (HTTP 201) the success message renders inline with a
-// "Return to where you left off." link that points at return_url —
-// no auto-redirect happens so the visitor stays on the originating
-// page and can pick up their verification email at leisure.
+// On success (HTTP 201) the API creates an authenticated session and
+// returns a sanitized redirect_url. The browser follows that URL after
+// firing the guarded sign_up analytics event.
 
 (function () {
   var registerPending = false;
@@ -82,19 +81,7 @@
               signup_kind: 'account',
             });
           }
-          window.authHelpers.showMessage(
-            'register-success',
-            result.data.message || 'Account created successfully!'
-          );
-          if (result.data.return_url) {
-            var successBox = document.getElementById('register-success');
-            var returnLink = document.createElement('a');
-            returnLink.href = result.data.return_url;
-            returnLink.className = 'ml-1 text-accent hover:underline';
-            returnLink.textContent = 'Return to where you left off.';
-            successBox.appendChild(returnLink);
-          }
-          document.getElementById('register-form').reset();
+          window.location.assign(result.data.redirect_url || result.data.return_url || '/');
         } else {
           window.authHelpers.showMessage(
             'register-error',

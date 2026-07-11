@@ -608,9 +608,16 @@ class ProjectDetailGatingTest(TestCase):
         self.assertContains(response, 'Gated description')
         # Full content NOT served to anonymous viewer
         self.assertNotContains(response, 'Secret gated project content')
-        # Upgrade CTA + link to pricing
-        self.assertContains(response, 'Upgrade to Basic to view this project')
+        # Guest-aware CTA + link to pricing
+        self.assertContains(
+            response,
+            'Create a free account or choose Basic to view this project',
+        )
         self.assertContains(response, '/pricing')
+        self.assertContains(
+            response,
+            'href="/accounts/register/?next=/projects/gated-project"',
+        )
         # Gated overlay artefacts: blur style and lock icon in the CTA banner
         self.assertContains(response, 'filter: blur(8px)')
         self.assertContains(response, 'data-lucide="lock"')

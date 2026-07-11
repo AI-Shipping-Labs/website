@@ -112,7 +112,7 @@ class TestSharedAuthJourneys:
         page.wait_for_url(f"{django_server}/", timeout=10000)
 
     @pytest.mark.core
-    def test_register_success_resets_form_and_creates_free_user(
+    def test_register_success_redirects_and_creates_free_user(
         self, django_server, page, django_db_blocker
     ):
         _ensure_tiers(django_db_blocker)
@@ -124,17 +124,15 @@ class TestSharedAuthJourneys:
 
         page.click("#register-submit")
 
-        success = page.locator("#register-success")
-        success.wait_for(state="visible")
-        assert "Account created. Check your email" in success.inner_text()
-        assert page.locator("#register-email").input_value() == ""
-        assert page.locator("#register-password").input_value() == ""
-        assert page.locator("#register-password-confirm").input_value() == ""
+        page.wait_for_url(f"{django_server}/", timeout=10000)
+        assert page.locator('[data-testid="account-menu-trigger"]').is_visible()
+        assert page.locator('[data-testid="header-join-free-link"]').count() == 0
         with django_db_blocker.unblock():
             from accounts.models import User
 
             user = User.objects.get(email=email)
             assert user.tier.slug == "free"
+            assert user.email_verified is False
 
     def test_register_password_mismatch_does_not_call_api_then_can_retry(
         self, django_server, page
@@ -162,7 +160,7 @@ class TestSharedAuthJourneys:
         page.fill("#register-password-confirm", DEFAULT_PASSWORD)
         page.click("#register-submit")
 
-        page.locator("#register-success").wait_for(state="visible")
+        page.wait_for_url(f"{django_server}/", timeout=10000)
         assert register_calls["count"] == 1
 
     def test_register_duplicate_email_shows_api_error(

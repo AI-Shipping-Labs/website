@@ -282,12 +282,9 @@ class TestPricingInlineRegisterVariant:
         free_card.locator("#register-password-confirm").fill(DEFAULT_PASSWORD)
         free_card.locator("#register-submit").click()
 
-        success = free_card.locator("#register-success")
-        success.wait_for(state="visible")
-        # The return-link points back to /pricing.
-        return_link = success.locator("a")
-        assert return_link.get_attribute("href") == "/pricing"
-        # Browser stayed on /pricing — no full-page redirect.
+        page.locator('[data-testid="account-menu-trigger"]').wait_for(
+            state="visible",
+        )
         assert page.url.endswith("/pricing")
         # User row exists, unverified.
         with django_db_blocker.unblock():

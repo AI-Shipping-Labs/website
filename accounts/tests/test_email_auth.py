@@ -88,7 +88,21 @@ class RegisterAPITest(TestCase):
         self.assertEqual(resp.status_code, 201)
         data = resp.json()
         self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["redirect_url"], "/")
         self.assertTrue(User.objects.filter(email="new@example.com").exists())
+
+    def test_register_logs_in_new_user(self):
+        resp = self._post({
+            "email": "autologin@example.com",
+            "password": "secure1234",
+        })
+        self.assertEqual(resp.status_code, 201)
+        user = User.objects.get(email="autologin@example.com")
+        self.assertEqual(int(self.client.session["_auth_user_id"]), user.pk)
+        self.assertEqual(
+            self.client.session["_auth_user_backend"],
+            "django.contrib.auth.backends.ModelBackend",
+        )
 
     @patch("accounts.views.auth._send_verification_email")
     def test_register_sends_verification_email(self, mock_send):
@@ -156,6 +170,7 @@ class RegisterAPITest(TestCase):
         resp = self._post({"email": "dupe@example.com", "password": "newpass1234"})
         self.assertEqual(resp.status_code, 400)
         self.assertIn("already exists", resp.json()["error"])
+        self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_register_missing_email_returns_400(self):
         before = User.objects.count()
@@ -163,6 +178,7 @@ class RegisterAPITest(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.json(), {"error": "Email is required"})
         self.assertEqual(User.objects.count(), before)
+        self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_register_missing_password_returns_400(self):
         before = User.objects.count()
@@ -170,12 +186,14 @@ class RegisterAPITest(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.json(), {"error": "Password is required"})
         self.assertEqual(User.objects.count(), before)
+        self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_register_short_password_returns_400(self):
         """Password must be at least 8 characters."""
         resp = self._post({"email": "short@example.com", "password": "short"})
         self.assertEqual(resp.status_code, 400)
         self.assertIn("8 characters", resp.json()["error"])
+        self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_register_empty_email_returns_400(self):
         before = User.objects.count()
@@ -194,6 +212,7 @@ class RegisterAPITest(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.json(), {"error": "Invalid JSON"})
         self.assertEqual(User.objects.count(), before)
+        self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_register_get_not_allowed(self):
         """GET method is not allowed on register endpoint."""
@@ -214,6 +233,7 @@ class RegisterAPITest(TestCase):
         data = resp.json()
         self.assertIn("message", data)
         self.assertIn("verify", data["message"].lower())
+        self.assertEqual(data["redirect_url"], "/")
         self.assertEqual(data["return_url"], "")
 
     def test_register_returns_safe_return_url(self):
@@ -223,6 +243,7 @@ class RegisterAPITest(TestCase):
             "next": "/courses/free-course/m/l",
         })
         self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.json()["redirect_url"], "/courses/free-course/m/l")
         self.assertEqual(resp.json()["return_url"], "/courses/free-course/m/l")
 
     def test_register_ignores_unsafe_return_url(self):
@@ -232,7 +253,29 @@ class RegisterAPITest(TestCase):
             "next": "https://evil.example",
         })
         self.assertEqual(resp.status_code, 201)
+        user = User.objects.get(email="unsafe-next@example.com")
+        self.assertEqual(int(self.client.session["_auth_user_id"]), user.pk)
+        self.assertEqual(resp.json()["redirect_url"], "/")
         self.assertEqual(resp.json()["return_url"], "")
+
+    def test_register_rejects_member_and_auth_next_targets(self):
+        for index, next_url in enumerate([
+            "/account/",
+            "/accounts/login/",
+            "/studio/",
+            "/admin/",
+            "/notifications/",
+        ]):
+            with self.subTest(next_url=next_url):
+                self.client.logout()
+                resp = self._post({
+                    "email": f"skip-next-{index}@example.com",
+                    "password": "secure1234",
+                    "next": next_url,
+                })
+                self.assertEqual(resp.status_code, 201)
+                self.assertEqual(resp.json()["redirect_url"], "/")
+                self.assertEqual(resp.json()["return_url"], "")
 
 
 # ── Email Verification API ────────────────────────────────────────────

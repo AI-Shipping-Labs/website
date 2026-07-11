@@ -252,9 +252,9 @@ def test_pricing_email_disclosure_submits_with_pricing_return_url(
     free_card.locator("#register-password-confirm").fill(DEFAULT_PASSWORD)
     free_card.locator("#register-submit").click()
 
-    success = free_card.locator("#register-success")
-    success.wait_for(state="visible")
-    assert success.locator("a").get_attribute("href") == "/pricing"
+    page.locator('[data-testid="account-menu-trigger"]').wait_for(
+        state="visible",
+    )
     assert page.url.endswith("/pricing")
 
 

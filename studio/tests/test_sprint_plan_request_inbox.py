@@ -18,12 +18,16 @@ from crm.models import CRMRecord
 from email_app.models import EmailLog
 from notifications.models import Notification
 from plans.models import (
-    PLAN_READY_EMAIL_STATUS_SENT,
+    FirstSprintPlanDraft,
     Plan,
     PlanReadyEmailLog,
     PlanRequest,
     Sprint,
     SprintEnrollment,
+)
+from plans.services.first_sprint_draft import (
+    DraftWeek,
+    FirstSprintDraftResult,
 )
 from questionnaires.models import Questionnaire, Response
 
@@ -59,6 +63,19 @@ def _draft_onboarding(member):
     q = Questionnaire.objects.get(slug='onboarding-general')
     return Response.objects.create(
         questionnaire=q, respondent=member, status='draft',
+    )
+
+
+def _first_draft_result():
+    return FirstSprintDraftResult(
+        title='Alice first sprint',
+        goal='Ship a first project',
+        summary_goal='Build and share a useful first project.',
+        weeks=[
+            DraftWeek(week_number=n, theme=f'Week {n}', checkpoints=[f'CP {n}'])
+            for n in range(1, 7)
+        ],
+        rationale='Onboarding asked for a portfolio project.',
     )
 
 
@@ -393,6 +410,18 @@ class CreatePlanFromRequestSubmitTest(TestCase):
         )
         self.mock_ses = self.ses_patcher.start()
         self.addCleanup(self.ses_patcher.stop)
+        self.llm_enabled_patcher = patch(
+            'plans.services.first_sprint_draft_service.llm.is_enabled',
+            return_value=True,
+        )
+        self.draft_patcher = patch(
+            'plans.services.first_sprint_draft_service.draft_first_sprint',
+            return_value=_first_draft_result(),
+        )
+        self.llm_enabled_patcher.start()
+        self.draft_patcher.start()
+        self.addCleanup(self.llm_enabled_patcher.stop)
+        self.addCleanup(self.draft_patcher.stop)
         # One pending request as the inbox precondition.
         PlanRequest.objects.create(sprint=self.sprint, member=self.member)
         _submit_onboarding(self.member)
@@ -455,36 +484,33 @@ class CreatePlanFromRequestSubmitTest(TestCase):
         response = self.client.post(self._url(), follow=True)
         flash_texts = [str(m) for m in response.context['messages']]
         self.assertTrue(
-            any('Plan created for alice@test.com' in t for t in flash_texts),
+            any('drafted a first sprint plan' in t for t in flash_texts),
             msg=f'Expected success flash, got {flash_texts!r}',
         )
 
-    def test_post_sends_ready_email_for_newly_created_plan(self):
+    def test_post_creates_private_unshared_plan_and_draft_without_email(self):
         response = self.client.post(self._url(), follow=True)
 
         plan = Plan.objects.get(sprint=self.sprint, member=self.member)
         self.assertRedirects(response, f'/studio/plans/{plan.pk}/edit/')
         plan.refresh_from_db()
-        self.assertIsNotNone(plan.shared_at)
-        log = PlanReadyEmailLog.objects.get(plan=plan)
-        self.assertEqual(log.status, PLAN_READY_EMAIL_STATUS_SENT)
-        self.assertEqual(log.notification.notification_type, 'plan_shared')
-        self.assertEqual(log.email_log.email_type, 'plan_shared')
+        self.assertEqual(plan.visibility, 'private')
+        self.assertIsNone(plan.shared_at)
+        draft = FirstSprintPlanDraft.objects.get(plan=plan)
+        self.assertEqual(draft.source_response.respondent, self.member)
+        self.assertEqual(draft.result_json['goal'], 'Ship a first project')
+        self.assertEqual(PlanReadyEmailLog.objects.filter(plan=plan).count(), 0)
         self.assertEqual(
             Notification.objects.filter(
                 user=self.member, notification_type='plan_shared',
             ).count(),
-            1,
+            0,
         )
         self.assertEqual(
             EmailLog.objects.filter(user=self.member, email_type='plan_shared').count(),
-            1,
+            0,
         )
-        flash_texts = [str(m) for m in response.context['messages']]
-        self.assertTrue(
-            any('and plan-ready email sent.' in t for t in flash_texts),
-            msg=f'Expected sent-email flash, got {flash_texts!r}',
-        )
+        self.assertEqual(self.mock_ses.call_count, 0)
 
     def test_post_preserves_plan_request_audit_rows(self):
         """``PlanRequest`` rows are audit data; never deleted (issue #718)."""
@@ -532,18 +558,19 @@ class CreatePlanFromRequestSubmitTest(TestCase):
             1,
         )
 
-    def test_second_post_does_not_send_duplicate_ready_email(self):
+    def test_second_post_does_not_duplicate_draft_or_send_email(self):
         self.client.post(self._url())
         response = self.client.post(self._url(), follow=True)
 
         plan = Plan.objects.get(sprint=self.sprint, member=self.member)
         self.assertRedirects(response, f'/studio/plans/{plan.pk}/edit/')
-        self.assertEqual(PlanReadyEmailLog.objects.filter(plan=plan).count(), 1)
+        self.assertEqual(FirstSprintPlanDraft.objects.filter(plan=plan).count(), 1)
+        self.assertEqual(PlanReadyEmailLog.objects.filter(plan=plan).count(), 0)
         self.assertEqual(
             EmailLog.objects.filter(user=self.member, email_type='plan_shared').count(),
-            1,
+            0,
         )
-        self.assertEqual(self.mock_ses.call_count, 1)
+        self.assertEqual(self.mock_ses.call_count, 0)
 
     def test_second_post_flashes_already_has_plan_message(self):
         self.client.post(self._url())

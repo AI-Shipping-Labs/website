@@ -96,6 +96,8 @@ from api.views.plan_items import (
 from api.views.plan_sprints_ingest import plan_sprints_ingest
 from api.views.plans import (
     plan_detail,
+    plan_draft_first_sprint,
+    plan_draft_first_sprint_apply,
     plan_draft_next_sprint,
     plan_move_unfinished,
     sprint_partner_intro_emails,
@@ -540,6 +542,16 @@ urlpatterns = [
         "plans/<int:plan_id>/draft-next-sprint",
         plan_draft_next_sprint,
         name="api_plan_draft_next_sprint",
+    ),
+    path(
+        "plans/<int:plan_id>/draft-first-sprint",
+        plan_draft_first_sprint,
+        name="api_plan_draft_first_sprint",
+    ),
+    path(
+        "plans/<int:plan_id>/draft-first-sprint/apply",
+        plan_draft_first_sprint_apply,
+        name="api_plan_draft_first_sprint_apply",
     ),
     # ---- Weeks (issue #433) -------------------------------------------
     path(

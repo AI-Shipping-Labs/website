@@ -13,6 +13,129 @@
   </a>
 </div>
 
+{% if request.user.is_staff and first_sprint_draft %}
+<section data-testid="first-sprint-draft-panel"
+         class="bg-sky-50 dark:bg-sky-950/30 border border-sky-300 dark:border-sky-800 rounded-lg p-6 mb-6">
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
+    <div>
+      <h2 class="text-lg font-semibold text-sky-900 dark:text-sky-200">
+        AI draft for the first sprint
+      </h2>
+      <p class="text-xs text-sky-800/80 dark:text-sky-200/70 mt-1">
+        Review draft only — nothing has been applied to the live plan yet.
+      </p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <form method="post" action="{% url 'studio_plan_draft_first_sprint_apply' plan_id=plan.pk %}">
+        {% csrf_token %}
+        <button type="submit"
+                class="bg-sky-700 text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-sky-800 transition-colors"
+                data-testid="first-sprint-draft-apply">
+          Apply draft
+        </button>
+      </form>
+      <form method="post" action="{% url 'studio_plan_draft_first_sprint_dismiss' plan_id=plan.pk %}">
+        {% csrf_token %}
+        <button type="submit"
+                class="bg-white dark:bg-sky-900/40 text-sky-900 dark:text-sky-100 border border-sky-300 dark:border-sky-700 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-sky-100 dark:hover:bg-sky-900/60 transition-colors"
+                data-testid="first-sprint-draft-dismiss">
+          Dismiss draft
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid gap-4 lg:grid-cols-2 text-sm">
+    <div class="space-y-3">
+      <div>
+        <p class="text-xs uppercase text-sky-800/70 dark:text-sky-200/60">Title</p>
+        <p class="text-sky-950 dark:text-sky-50 mt-1">{{ first_sprint_draft.title|default:"-" }}</p>
+      </div>
+      <div>
+        <p class="text-xs uppercase text-sky-800/70 dark:text-sky-200/60">Goal</p>
+        <p class="text-sky-950 dark:text-sky-50 mt-1 whitespace-pre-line">{{ first_sprint_draft.goal|default:"-" }}</p>
+      </div>
+      <div>
+        <p class="text-xs uppercase text-sky-800/70 dark:text-sky-200/60">Summary</p>
+        <dl class="mt-1 space-y-1 text-sky-950 dark:text-sky-50">
+          <div><dt class="font-medium inline">Current:</dt> <dd class="inline">{{ first_sprint_draft.summary_current_situation|default:"-" }}</dd></div>
+          <div><dt class="font-medium inline">Goal:</dt> <dd class="inline">{{ first_sprint_draft.summary_goal|default:"-" }}</dd></div>
+          <div><dt class="font-medium inline">Gap:</dt> <dd class="inline">{{ first_sprint_draft.summary_main_gap|default:"-" }}</dd></div>
+          <div><dt class="font-medium inline">Hours:</dt> <dd class="inline">{{ first_sprint_draft.summary_weekly_hours|default:"-" }}</dd></div>
+          <div><dt class="font-medium inline">Why:</dt> <dd class="inline">{{ first_sprint_draft.summary_why_this_plan|default:"-" }}</dd></div>
+        </dl>
+      </div>
+      <div>
+        <p class="text-xs uppercase text-sky-800/70 dark:text-sky-200/60">Focus and accountability</p>
+        <p class="text-sky-950 dark:text-sky-50 mt-1 whitespace-pre-line">{{ first_sprint_draft.focus_main|default:"-" }}</p>
+        {% if first_sprint_draft.focus_supporting %}
+        <ul class="list-disc list-inside text-sky-950 dark:text-sky-50 mt-1">
+          {% for item in first_sprint_draft.focus_supporting %}<li>{{ item }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        <p class="text-sky-950 dark:text-sky-50 mt-1 whitespace-pre-line">{{ first_sprint_draft.accountability|default:"-" }}</p>
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <div data-testid="first-sprint-draft-weeks">
+        <p class="text-xs uppercase text-sky-800/70 dark:text-sky-200/60">Weekly checkpoints</p>
+        <ol class="mt-1 space-y-2 text-sky-950 dark:text-sky-50">
+          {% for week in first_sprint_draft.weeks %}
+          <li>
+            <span class="font-medium">Week {{ week.week_number }}{% if week.theme %}: {{ week.theme }}{% endif %}</span>
+            {% if week.checkpoints %}
+            <ul class="list-disc list-inside ml-2">
+              {% for checkpoint in week.checkpoints %}<li>{{ checkpoint }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ol>
+      </div>
+      <div>
+        <p class="text-xs uppercase text-sky-800/70 dark:text-sky-200/60">Resources</p>
+        <ul class="list-disc list-inside text-sky-950 dark:text-sky-50 mt-1">
+          {% for resource in first_sprint_draft.resources %}
+          <li>{{ resource.title }}{% if resource.url %} — {{ resource.url }}{% endif %}{% if resource.note %} — {{ resource.note }}{% endif %}</li>
+          {% empty %}<li>-</li>{% endfor %}
+        </ul>
+      </div>
+      <div>
+        <p class="text-xs uppercase text-sky-800/70 dark:text-sky-200/60">Deliverables</p>
+        <ul class="list-disc list-inside text-sky-950 dark:text-sky-50 mt-1">
+          {% for item in first_sprint_draft.deliverables %}<li>{{ item }}</li>{% empty %}<li>-</li>{% endfor %}
+        </ul>
+      </div>
+      <div>
+        <p class="text-xs uppercase text-sky-800/70 dark:text-sky-200/60">Pre-sprint actions</p>
+        <ul class="list-disc list-inside text-sky-950 dark:text-sky-50 mt-1">
+          {% for item in first_sprint_draft.next_steps %}<li>{{ item }}</li>{% empty %}<li>-</li>{% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  {% if first_sprint_draft.internal_notes %}
+  <div class="mt-4" data-testid="first-sprint-draft-internal-notes">
+    <p class="text-xs uppercase text-sky-800/70 dark:text-sky-200/60">Internal notes</p>
+    <p class="text-sky-950 dark:text-sky-50 mt-1 whitespace-pre-line">{{ first_sprint_draft.internal_notes }}</p>
+  </div>
+  {% endif %}
+  {% if first_sprint_draft.rationale %}
+  <div class="mt-4" data-testid="first-sprint-draft-rationale">
+    <p class="text-xs uppercase text-sky-800/70 dark:text-sky-200/60">Rationale</p>
+    <p class="text-sky-950 dark:text-sky-50 mt-1 whitespace-pre-line">{{ first_sprint_draft.rationale }}</p>
+  </div>
+  {% endif %}
+  <p class="mt-4 text-xs text-sky-800/70 dark:text-sky-200/60" data-testid="first-sprint-draft-provenance">
+    Source onboarding response #{{ first_sprint_draft.source_response_id }}
+    {% if first_sprint_draft.model_name %}· model {{ first_sprint_draft.model_name }}{% endif %}
+    · {{ first_sprint_draft.generated_at|operator_date }}
+  </p>
+</section>
+{% endif %}
+
 {% comment %}
   Advisory AI next-sprint draft panel (issue #891, Phase 3). Staff-only,
   rendered ONLY in the Studio editor shell (never the member-facing editor)

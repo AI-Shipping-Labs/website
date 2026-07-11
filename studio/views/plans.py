@@ -44,15 +44,19 @@ from plans.markdown_export import (
     render_plan_markdown_export,
 )
 from plans.models import (
+    FirstSprintPlanDraft,
     InterviewNote,
     NextSprintPlanDraft,
     Plan,
     Sprint,
 )
 from plans.services import (
+    FirstSprintDraftSourceMissing,
     MoveUnfinishedItemsError,
+    apply_first_sprint_draft,
     carry_over_unfinished_tasks,
     create_plan_for_enrollment,
+    draft_first_sprint_plan,
     draft_next_sprint_plan,
     eligible_move_target_sprints,
     find_carry_over_source_plan,
@@ -112,6 +116,8 @@ def plan_list(request):
         'sprints': Sprint.objects.order_by('-start_date'),
         'sprint_filter_id': sprint_filter_id,
         'member_filter_id': member_filter_id,
+        'user_search_url': reverse('studio_user_search'),
+        'prefill_member_display': _picker_prefill_display(member_filter),
         'search': search,
         **pager,
     })
@@ -359,6 +365,30 @@ def plan_detail(request, plan_id):
         # Read-only #plan-sprints Slack ingest linked to this plan (#889).
         'slack_threads': threads_for_plan(plan),
     })
+
+
+@staff_required
+@require_POST
+def plan_visibility_update(request, plan_id):
+    """Staff-only Studio visibility switch for private/cohort plans."""
+    plan = get_object_or_404(Plan.objects.select_related('member'), pk=plan_id)
+    visibility = (request.POST.get('visibility') or '').strip()
+    if visibility not in {'private', 'cohort'}:
+        messages.error(request, 'Pick a valid visibility: private or cohort.')
+        next_url = request.POST.get('next')
+        if next_url:
+            return redirect(next_url)
+        return redirect('studio_plan_detail', plan_id=plan.pk)
+    plan.visibility = visibility
+    plan.save(update_fields=['visibility', 'updated_at'])
+    messages.success(
+        request,
+        f'Plan visibility updated to {plan.get_visibility_display()}.',
+    )
+    next_url = request.POST.get('next')
+    if next_url:
+        return redirect(next_url)
+    return redirect('studio_plan_detail', plan_id=plan.pk)
 
 
 @staff_required
@@ -726,4 +756,68 @@ def plan_draft_next_sprint_dismiss(request, plan_id):
     plan = get_object_or_404(Plan, pk=plan_id)
     NextSprintPlanDraft.objects.filter(plan=plan).delete()
     messages.info(request, 'Dismissed the AI next-sprint draft.')
+    return redirect('studio_plan_edit', plan_id=plan.pk)
+
+
+@staff_required
+@require_POST
+def plan_draft_first_sprint(request, plan_id):
+    """Staff trigger: create/regenerate the held-aside first-plan draft."""
+    plan = get_object_or_404(
+        Plan.objects.select_related('member', 'sprint'),
+        pk=plan_id,
+    )
+    try:
+        outcome = draft_first_sprint_plan(plan=plan, actor=request.user)
+    except FirstSprintDraftSourceMissing:
+        logger.exception('Failed to start first-sprint draft for plan %s', plan.pk)
+        messages.error(
+            request,
+            'AI draft could not run because submitted onboarding was not found.',
+        )
+        return redirect('studio_plan_edit', plan_id=plan.pk)
+
+    if not outcome['llm_enabled']:
+        messages.info(
+            request,
+            'AI draft was skipped because AI is off. Hand-author and share '
+            'the plan manually.',
+        )
+    elif outcome['draft_error']:
+        messages.error(
+            request,
+            'The AI draft failed. The plan is still private and unshared.',
+        )
+    else:
+        messages.success(
+            request,
+            'Drafted a first sprint plan for staff review.',
+        )
+    return redirect('studio_plan_edit', plan_id=plan.pk)
+
+
+@staff_required
+@require_POST
+def plan_draft_first_sprint_apply(request, plan_id):
+    """Apply the current first-sprint draft without sharing the plan."""
+    plan = get_object_or_404(Plan, pk=plan_id)
+    draft = FirstSprintPlanDraft.objects.filter(plan=plan).first()
+    if draft is None:
+        messages.info(request, 'There is no first-sprint draft to apply.')
+        return redirect('studio_plan_edit', plan_id=plan.pk)
+    apply_first_sprint_draft(draft=draft, actor=request.user)
+    messages.success(
+        request,
+        'Applied the first-sprint draft. Review edits, then share when ready.',
+    )
+    return redirect('studio_plan_edit', plan_id=plan.pk)
+
+
+@staff_required
+@require_POST
+def plan_draft_first_sprint_dismiss(request, plan_id):
+    """Delete the current first-sprint draft and leave live plan rows alone."""
+    plan = get_object_or_404(Plan, pk=plan_id)
+    FirstSprintPlanDraft.objects.filter(plan=plan).delete()
+    messages.info(request, 'Dismissed the first-sprint draft.')
     return redirect('studio_plan_edit', plan_id=plan.pk)

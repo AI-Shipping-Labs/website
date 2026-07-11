@@ -21,6 +21,11 @@ from plans.services.accountability import (
     randomize_accountability_partners,
     remove_accountability_partners,
 )
+from plans.services.first_sprint_draft_service import (
+    FirstSprintDraftSourceMissing,
+    apply_first_sprint_draft,
+    draft_first_sprint_plan,
+)
 from plans.services.next_sprint_draft_service import draft_next_sprint_plan
 from plans.services.partner_intro_emails import (
     preview_partner_intro_emails,
@@ -73,6 +78,8 @@ __all__ = [
     'count_unfinished_carry_over_items',
     'create_plan_for_enrollment',
     'distribute_sprint_feedback',
+    'apply_first_sprint_draft',
+    'draft_first_sprint_plan',
     'draft_next_sprint_plan',
     'eligible_move_target_sprints',
     'find_carry_over_source_plan',
@@ -85,4 +92,5 @@ __all__ = [
     'send_plan_ready_emails',
     'send_partner_intro_emails',
     'unfinished_plan_item_counts',
+    'FirstSprintDraftSourceMissing',
 ]

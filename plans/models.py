@@ -1505,5 +1505,48 @@ class NextSprintPlanDraft(TimestampedModelMixin, models.Model):
     class Meta:
         ordering = ['-generated_at']
 
+
+class FirstSprintPlanDraft(TimestampedModelMixin, models.Model):
+    """Staff-only AI draft for a member's first sprint plan.
+
+    Holds structured draft output aside from the live :class:`Plan` fields.
+    Staff must explicitly apply the draft, then share the plan separately.
+    """
+
+    plan = models.OneToOneField(
+        'plans.Plan',
+        on_delete=models.CASCADE,
+        related_name='first_sprint_draft',
+    )
+    result_json = models.JSONField(
+        default=dict,
+        help_text='The validated FirstSprintDraftResult as a dict.',
+    )
+    source_response = models.ForeignKey(
+        'questionnaires.Response',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+        help_text='Submitted onboarding response used as source input.',
+    )
+    model_name = models.CharField(
+        max_length=200,
+        blank=True,
+        default='',
+        help_text='Resolved LLM model used, for provenance.',
+    )
+    generated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    generated_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ['-generated_at']
+
     def __str__(self):
         return f'Next-sprint draft for {self.plan}'

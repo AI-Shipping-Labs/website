@@ -56,11 +56,13 @@ from plans.models import (
     SprintFeedbackSummary,
 )
 from plans.services import (
+    FirstSprintDraftSourceMissing,
     accountability_partners_by_user,
     assign_accountability_partners,
     clear_accountability_for_member,
     create_plan_for_enrollment,
     distribute_sprint_feedback,
+    draft_first_sprint_plan,
     preview_partner_intro_emails,
     preview_plan_ready_emails,
     randomize_accountability_partners,
@@ -1434,14 +1436,39 @@ def sprint_plan_request_create_plan(request, sprint_id, member_id):
         enrolled_by=request.user,
     )
 
-    if created_now:
-        result = send_plan_ready_email_for_plan(plan, actor=request.user)
-        _flash_plan_create_ready_email_result(request, plan, result)
-    else:
-        messages.info(
+    _ = created_now
+    if plan.visibility != 'private':
+        plan.visibility = 'private'
+        plan.save(update_fields=['visibility', 'updated_at'])
+
+    try:
+        outcome = draft_first_sprint_plan(plan=plan, actor=request.user)
+    except FirstSprintDraftSourceMissing:
+        messages.warning(
             request,
-            f'{member.email} already has a plan in "{sprint.name}".',
+            'Created a private, unshared plan. AI drafting was skipped '
+            'because submitted onboarding could not be found; hand-author '
+            'the plan and share it manually.',
         )
+    else:
+        if not outcome['llm_enabled']:
+            messages.info(
+                request,
+                'Created a private, unshared plan. AI drafting was skipped '
+                'because AI is off; hand-author the plan and share it manually.',
+            )
+        elif outcome['draft_error']:
+            messages.error(
+                request,
+                'Created a private, unshared plan. The AI draft failed; '
+                'hand-author the plan and share it manually.',
+            )
+        else:
+            messages.success(
+                request,
+                'Created a private, unshared plan and drafted a first '
+                'sprint plan for staff review.',
+            )
 
     return redirect('studio_plan_edit', plan_id=plan.pk)
 

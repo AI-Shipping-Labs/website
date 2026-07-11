@@ -12,7 +12,7 @@
     Prepare plan request
   </h1>
   <p class="text-sm text-muted-foreground mt-1">
-    Review the request, readiness, and member context before creating the plan.
+    Review the request, readiness, and member context before drafting the plan.
   </p>
 </div>
 
@@ -84,10 +84,10 @@
   </section>
 
   <section class="bg-card border border-border rounded-lg p-6" data-testid="plan-request-create-action">
-    <h2 class="text-lg font-semibold text-foreground mb-3">Create-plan action</h2>
+    <h2 class="text-lg font-semibold text-foreground mb-3">Draft-first action</h2>
     {% if onboarding_state.is_submitted %}
     <p class="text-sm text-muted-foreground mb-4">
-      Member and sprint are locked for this request. The plan will be created for the member and sprint shown above.
+      Member and sprint are locked for this request. Studio will create a private, unshared plan, draft from onboarding, and open the editor for review.
     </p>
     <form method="post" action="{{ create_url }}" data-testid="plan-request-create-form">
       {% csrf_token %}
@@ -96,18 +96,18 @@
       <button type="submit"
               class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
               data-testid="plan-request-create-button">
-        Create plan from request
+        Create draft plan for review
       </button>
     </form>
     {% else %}
     <p class="text-sm text-muted-foreground mb-4">
-      The create action is unavailable until onboarding is submitted.
+      The draft action is unavailable until onboarding is submitted.
     </p>
     <button type="button"
             class="bg-secondary border border-border text-muted-foreground px-4 py-2 rounded-lg text-sm font-medium cursor-not-allowed"
             disabled
             data-testid="plan-request-create-disabled">
-      Create plan from request unavailable
+      Draft plan unavailable
     </button>
     {% endif %}
   </section>

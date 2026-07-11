@@ -5995,6 +5995,13 @@
                   "title": {
                     "maxLength": 280,
                     "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "private",
+                      "cohort"
+                    ],
+                    "type": "string"
                   }
                 },
                 "type": "object"
@@ -6025,7 +6032,7 @@
             "description": "Plan not found."
           },
           "422": {
-            "description": "Bad title/goal length or invalid focus.supporting type."
+            "description": "Bad title/goal length, invalid focus.supporting type, or invalid visibility."
           }
         },
         "summary": "Update plan-level fields",
@@ -6147,6 +6154,84 @@
         "summary": "Create a deliverable",
         "tags": [
           "Plan Items"
+        ]
+      }
+    },
+    "/api/plans/{plan_id}/draft-first-sprint": {
+      "post": {
+        "description": "Staff-token-only. Creates or regenerates the held-aside first-sprint draft for a plan from submitted onboarding. The draft is persisted separately and never mutates live plan fields.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "draft": {
+                    "plan_id": 5,
+                    "result": {
+                      "goal": "Ship a first project"
+                    },
+                    "source_response_id": 8
+                  },
+                  "draft_error": false,
+                  "llm_enabled": true
+                }
+              }
+            },
+            "description": "Draft attempt completed."
+          },
+          "403": {
+            "description": "Non-staff bearer."
+          },
+          "404": {
+            "description": "Plan not found."
+          },
+          "422": {
+            "description": "Submitted onboarding is missing."
+          }
+        },
+        "summary": "Draft first-sprint plan",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/api/plans/{plan_id}/draft-first-sprint/apply": {
+      "post": {
+        "description": "Staff-token-only. Atomically writes the current held-aside first-sprint draft into the live plan and deletes the draft. This does not set shared_at or notify the member.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plan updated (nested detail shape)."
+          },
+          "403": {
+            "description": "Non-staff bearer."
+          },
+          "404": {
+            "description": "Plan or draft not found."
+          }
+        },
+        "summary": "Apply first-sprint draft",
+        "tags": [
+          "Plans"
         ]
       }
     },

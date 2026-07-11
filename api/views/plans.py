@@ -39,9 +39,11 @@ from plans.models import (
     KIND_CHOICES,
     NEXT_STEP_KIND_CHOICES,
     NEXT_STEP_KIND_PRE_SPRINT,
+    PLAN_VISIBILITY_CHOICES,
     VISIBILITY_CHOICES,
     Checkpoint,
     Deliverable,
+    FirstSprintPlanDraft,
     InterviewNote,
     NextStep,
     Plan,
@@ -50,7 +52,10 @@ from plans.models import (
     Week,
 )
 from plans.services import (
+    FirstSprintDraftSourceMissing,
     MoveUnfinishedItemsError,
+    apply_first_sprint_draft,
+    draft_first_sprint_plan,
     draft_next_sprint_plan,
     move_unfinished_items_to_sprint,
     send_partner_intro_emails,
@@ -73,6 +78,7 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 VALID_VISIBILITIES = {choice for choice, _label in VISIBILITY_CHOICES}
+PLAN_VALID_VISIBILITIES = {choice for choice, _label in PLAN_VISIBILITY_CHOICES}
 VALID_KINDS = {choice for choice, _label in KIND_CHOICES}
 VALID_NEXT_STEP_KINDS = {choice for choice, _label in NEXT_STEP_KIND_CHOICES}
 
@@ -1724,6 +1730,10 @@ def _refetch_plan_detail(plan_id):
                     "accountability": {"type": "string"},
                     "summary": {"type": "object"},
                     "focus": {"type": "object"},
+                    "visibility": {
+                        "type": "string",
+                        "enum": ["private", "cohort"],
+                    },
                     "shared_at": {
                         "type": "string",
                         "format": "date-time",
@@ -1751,7 +1761,8 @@ def _refetch_plan_detail(plan_id):
                 404: {"description": "Plan not found."},
                 422: {
                     "description": (
-                        "Bad title/goal length or invalid focus.supporting type."
+                        "Bad title/goal length, invalid focus.supporting type, "
+                        "or invalid visibility."
                     ),
                 },
             },
@@ -2119,6 +2130,20 @@ def _apply_top_level_fields(plan, data):
         plan.title = title or plan.fallback_title()
         update_fields.append("title")
 
+    if "visibility" in data:
+        visibility = data["visibility"]
+        if visibility not in PLAN_VALID_VISIBILITIES:
+            return error_response(
+                "Invalid visibility",
+                "validation_error",
+                status=422,
+                details={
+                    "visibility": "must be one of: private, cohort",
+                },
+            ), False
+        plan.visibility = visibility
+        update_fields.append("visibility")
+
     fire_plan_shared = False
     if "shared_at" in data:
         if data["shared_at"] is None:
@@ -2224,5 +2249,144 @@ def plan_draft_next_sprint(request, plan_id):
             "source_plan_id": source_plan.pk if source_plan is not None else None,
             "draft": draft_result.model_dump() if draft_result is not None else None,
         },
+        status=200,
+    )
+
+
+def _serialize_first_sprint_draft(draft):
+    result = draft.result_json or {}
+    return {
+        "id": draft.pk,
+        "plan_id": draft.plan_id,
+        "source_response_id": draft.source_response_id,
+        "model_name": draft.model_name,
+        "generated_at": draft.generated_at.isoformat(),
+        "result": result,
+    }
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Plans",
+    summary="Draft a member's first sprint plan",
+    methods={
+        "POST": {
+            "summary": "Draft first-sprint plan",
+            "description": (
+                "Staff-token-only. Creates or regenerates the held-aside "
+                "first-sprint draft for a plan from submitted onboarding. "
+                "The draft is persisted separately and never mutates live "
+                "plan fields."
+            ),
+            "responses": {
+                200: {
+                    "description": "Draft attempt completed.",
+                    "example": {
+                        "llm_enabled": True,
+                        "draft_error": False,
+                        "draft": {
+                            "plan_id": 5,
+                            "source_response_id": 8,
+                            "result": {"goal": "Ship a first project"},
+                        },
+                    },
+                },
+                403: {"description": "Non-staff bearer."},
+                404: {"description": "Plan not found."},
+                422: {"description": "Submitted onboarding is missing."},
+            },
+        },
+    },
+)
+def plan_draft_first_sprint(request, plan_id):
+    """``POST /api/plans/<id>/draft-first-sprint``."""
+    if not bearer_is_admin(request.user):
+        return error_response(
+            "Drafting a first-sprint plan is staff-only",
+            "forbidden_other_user_plan",
+            status=403,
+        )
+    plan = (
+        Plan.objects
+        .select_related("member", "sprint")
+        .filter(pk=plan_id)
+        .first()
+    )
+    if plan is None:
+        return error_response("Plan not found", "unknown_plan", status=404)
+    try:
+        outcome = draft_first_sprint_plan(plan=plan, actor=request.user)
+    except FirstSprintDraftSourceMissing:
+        return error_response(
+            "Submitted onboarding response is required",
+            "missing_onboarding",
+            status=422,
+            details={"plan_id": plan.pk},
+        )
+    draft = outcome["draft"]
+    return JsonResponse(
+        {
+            "llm_enabled": outcome["llm_enabled"],
+            "draft_error": outcome["draft_error"],
+            "source_response_id": outcome["source_response"].pk,
+            "draft": (
+                _serialize_first_sprint_draft(draft)
+                if draft is not None else None
+            ),
+        },
+        status=200,
+    )
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Plans",
+    summary="Apply a member's first-sprint draft",
+    methods={
+        "POST": {
+            "summary": "Apply first-sprint draft",
+            "description": (
+                "Staff-token-only. Atomically writes the current held-aside "
+                "first-sprint draft into the live plan and deletes the draft. "
+                "This does not set shared_at or notify the member."
+            ),
+            "responses": {
+                200: {"description": "Plan updated (nested detail shape)."},
+                403: {"description": "Non-staff bearer."},
+                404: {"description": "Plan or draft not found."},
+            },
+        },
+    },
+)
+def plan_draft_first_sprint_apply(request, plan_id):
+    """``POST /api/plans/<id>/draft-first-sprint/apply``."""
+    if not bearer_is_admin(request.user):
+        return error_response(
+            "Applying a first-sprint draft is staff-only",
+            "forbidden_other_user_plan",
+            status=403,
+        )
+    draft = (
+        FirstSprintPlanDraft.objects
+        .select_related("plan__member", "plan__sprint")
+        .filter(plan_id=plan_id)
+        .first()
+    )
+    if draft is None:
+        if not Plan.objects.filter(pk=plan_id).exists():
+            return error_response("Plan not found", "unknown_plan", status=404)
+        return error_response(
+            "First-sprint draft not found",
+            "missing_first_sprint_draft",
+            status=404,
+        )
+    plan = apply_first_sprint_draft(draft=draft, actor=request.user)
+    plan = _refetch_plan_detail(plan.pk)
+    return JsonResponse(
+        serialize_plan_detail(plan, viewer=request.user),
         status=200,
     )

@@ -178,6 +178,9 @@ from studio.views.plans import (
     plan_carry_over,
     plan_create,
     plan_detail,
+    plan_draft_first_sprint,
+    plan_draft_first_sprint_apply,
+    plan_draft_first_sprint_dismiss,
     plan_draft_next_sprint,
     plan_draft_next_sprint_dismiss,
     plan_edit,
@@ -186,6 +189,7 @@ from studio.views.plans import (
     plan_move_unfinished,
     plan_share,
     plan_view_as_member,
+    plan_visibility_update,
 )
 from studio.views.projects import project_list, project_review
 from studio.views.questionnaires import (
@@ -1089,6 +1093,11 @@ urlpatterns = [
         name='studio_plan_view_as_member',
     ),
     path('plans/<int:plan_id>/edit/', plan_edit, name='studio_plan_edit'),
+    path(
+        'plans/<int:plan_id>/visibility/',
+        plan_visibility_update,
+        name='studio_plan_visibility_update',
+    ),
     # Issue #732: explicit share / re-share trigger from the plan
     # editor header. POST-only; staff-only. Fires bell + transactional
     # email and stamps ``Plan.shared_at = now()``.
@@ -1117,6 +1126,21 @@ urlpatterns = [
         'plans/<int:plan_id>/draft-next-sprint/',
         plan_draft_next_sprint,
         name='studio_plan_draft_next_sprint',
+    ),
+    path(
+        'plans/<int:plan_id>/draft-first-sprint/',
+        plan_draft_first_sprint,
+        name='studio_plan_draft_first_sprint',
+    ),
+    path(
+        'plans/<int:plan_id>/draft-first-sprint/apply/',
+        plan_draft_first_sprint_apply,
+        name='studio_plan_draft_first_sprint_apply',
+    ),
+    path(
+        'plans/<int:plan_id>/draft-first-sprint/dismiss/',
+        plan_draft_first_sprint_dismiss,
+        name='studio_plan_draft_first_sprint_dismiss',
     ),
     path(
         'plans/<int:plan_id>/draft-next-sprint/dismiss/',

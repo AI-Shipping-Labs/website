@@ -206,6 +206,7 @@ def build_plan_editor_context(plan, *, viewer, token_name):
         # from ``plan_payload`` so it never blends into the live plan data.
         # ``None`` when no draft exists -> the editor panel does not render.
         'next_sprint_draft': _serialize_next_sprint_draft(plan),
+        'first_sprint_draft': _serialize_first_sprint_draft(plan),
     }
 
 
@@ -237,4 +238,37 @@ def _serialize_next_sprint_draft(plan):
         'update_count': draft.update_count,
         'model_name': draft.model_name,
         'generated_at': draft.generated_at,
+    }
+
+
+def _serialize_first_sprint_draft(plan):
+    """Return the current ``FirstSprintPlanDraft`` context dict, or None."""
+    from plans.models import FirstSprintPlanDraft
+
+    draft = FirstSprintPlanDraft.objects.filter(plan=plan).first()
+    if draft is None:
+        return None
+    result = draft.result_json or {}
+    return {
+        'title': result.get('title', ''),
+        'goal': result.get('goal', ''),
+        'summary_current_situation': result.get(
+            'summary_current_situation', '',
+        ),
+        'summary_goal': result.get('summary_goal', ''),
+        'summary_main_gap': result.get('summary_main_gap', ''),
+        'summary_weekly_hours': result.get('summary_weekly_hours', ''),
+        'summary_why_this_plan': result.get('summary_why_this_plan', ''),
+        'focus_main': result.get('focus_main', ''),
+        'focus_supporting': list(result.get('focus_supporting') or []),
+        'accountability': result.get('accountability', ''),
+        'weeks': list(result.get('weeks') or []),
+        'resources': list(result.get('resources') or []),
+        'deliverables': list(result.get('deliverables') or []),
+        'next_steps': list(result.get('next_steps') or []),
+        'internal_notes': result.get('internal_notes', ''),
+        'rationale': result.get('rationale', ''),
+        'model_name': draft.model_name,
+        'generated_at': draft.generated_at,
+        'source_response_id': draft.source_response_id,
     }

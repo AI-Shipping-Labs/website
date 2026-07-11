@@ -16,7 +16,7 @@
   </a>
 </div>
 
-<form method="get" action="{% url 'studio_plan_list' %}" autocomplete="off" class="bg-card border border-border rounded-lg p-4 mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+<form method="get" action="{% url 'studio_plan_list' %}" autocomplete="off" class="bg-card border border-border rounded-lg p-4 mb-6 grid grid-cols-1 lg:grid-cols-3 gap-3">
   <div>
     <label class="block text-xs text-muted-foreground mb-1">Sprint</label>
     <select name="sprint" autocomplete="off" class="studio-select w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
@@ -27,10 +27,19 @@
     </select>
   </div>
   <div>
-    <label class="block text-xs text-muted-foreground mb-1">Member ID</label>
-    <input type="text" name="member" value="{% if member_filter_id %}{{ member_filter_id }}{% endif %}"
-           autocomplete="off"
-           class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground" placeholder="user pk">
+    {% include "studio/includes/_people_picker.html" with name="member" id_prefix="plan-list-member" label="Member" search_url=user_search_url on_select_action="set_value" testid_prefix="plan-list-member" %}
+    {% if member_filter_id and prefill_member_display %}
+    <script>
+      (function() {
+        var hidden = document.getElementById('plan-list-member-id');
+        var visible = document.getElementById('plan-list-member-search');
+        if (hidden && visible) {
+          hidden.value = '{{ member_filter_id }}';
+          visible.value = '{{ prefill_member_display|escapejs }}';
+        }
+      })();
+    </script>
+    {% endif %}
   </div>
   <div>
     <label class="block text-xs text-muted-foreground mb-1">Search (email/name)</label>

@@ -30,6 +30,25 @@
     <div class="flex flex-col items-start gap-2 sm:items-end" data-testid="studio-header-actions">
       {% if request.user.is_staff %}
       {% include "studio/includes/_admin_link.html" with obj=plan %}
+      <form method="post"
+            action="{% url 'studio_plan_visibility_update' plan_id=plan.pk %}"
+            class="flex items-center gap-2"
+            data-testid="plan-visibility-form">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{% url 'studio_plan_edit' plan_id=plan.pk %}">
+        <label for="plan-visibility" class="text-xs text-muted-foreground">Visibility</label>
+        <select id="plan-visibility"
+                name="visibility"
+                class="bg-secondary border border-border rounded-md px-2 py-1 text-xs text-foreground"
+                data-testid="plan-visibility-select">
+          <option value="private" {% if plan.visibility == 'private' %}selected{% endif %}>Private</option>
+          <option value="cohort" {% if plan.visibility == 'cohort' %}selected{% endif %}>Cohort</option>
+        </select>
+        <button type="submit"
+                class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-secondary text-foreground border border-border hover:bg-secondary/80">
+          Update
+        </button>
+      </form>
       {% endif %}
       <p class="text-xs text-muted-foreground" data-testid="plan-share-indicator">
         {% if plan.shared_at %}
@@ -192,7 +211,7 @@
         {% endfor %}
       </ul>
       <p class="text-xs text-muted-foreground mt-2">
-        Tip: supporting focuses are stored as a JSON list; the editor will let you reorder them via drag once the API in #433 is wired.
+        Supporting focuses are stored as a short list for staff to keep the plan scoped.
       </p>
     </div>
   </section>

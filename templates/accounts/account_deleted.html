@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+
+{% block title %}Account deleted | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen pt-24">
+  {% include "includes/header.html" %}
+
+  <section class="mx-auto max-w-2xl px-4 py-16 sm:px-6 lg:px-8">
+    <div class="rounded-lg border border-border bg-card p-6 sm:p-8" data-testid="account-deleted-confirmation">
+      <div class="mb-4 flex items-center gap-3">
+        <i data-lucide="check-circle-2" class="h-6 w-6 text-accent"></i>
+        <h1 class="text-2xl font-semibold tracking-tight">Account deleted</h1>
+      </div>
+      <p class="text-muted-foreground">
+        Your local AI Shipping Labs account has been deleted and you have been signed out.
+      </p>
+      <p class="mt-4 text-sm text-muted-foreground">
+        Stripe billing records, Slack workspace messages, SES provider logs, and OAuth-provider data follow their own retention and deletion processes.
+      </p>
+      <a href="/" class="{% button_classes 'primary' extra='mt-6' %}">
+        Return home
+      </a>
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

@@ -644,6 +644,103 @@
       </div>
       {% endif %}{# /not is_newsletter_only — Display Prefs + Change Password + Account Info #}
 
+      <!-- Privacy & data Section (issue #1210). Kept outside the
+           newsletter-only gate so every authenticated account can export
+           or request local deletion. -->
+      <div class="rounded-lg border border-red-500/30 bg-card p-5 sm:p-6 mt-8" id="privacy-data-section" data-testid="privacy-data-section">
+        <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+          <i data-lucide="shield-alert" class="h-5 w-5 text-red-400"></i>
+          Privacy &amp; data
+        </h2>
+
+        <p class="text-sm text-muted-foreground mb-5">
+          Download a portable copy of your local platform data or delete your local account.
+          External processor records follow their own retention processes.
+        </p>
+
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <a href="{% url 'account_data_export' %}"
+             class="{% button_classes 'secondary' %}"
+             data-testid="privacy-export-link">
+            <i data-lucide="download" class="h-4 w-4"></i>
+            Download my data
+          </a>
+        </div>
+
+        <div class="mt-6 border-t border-border pt-6">
+          <h3 class="text-base font-semibold text-red-300">Delete account</h3>
+          <p class="mt-2 text-sm text-muted-foreground">
+            This deletes your local login, preferences, progress, registrations, comments, sprint plans, CRM/onboarding data, API keys, and local linked Slack sprint-ingest copies.
+          </p>
+
+          {% if privacy_delete_error %}
+          <div class="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200" data-testid="privacy-delete-error">
+            {{ privacy_delete_error }}
+            {% if privacy_blocker_reason == "active_subscription" and stripe_customer_portal_url %}
+            <a href="{{ stripe_customer_portal_url }}" class="ml-1 underline hover:text-foreground" data-testid="privacy-manage-subscription-link">Manage subscription</a>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          {% if user.is_staff or user.is_superuser %}
+          <div class="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100" data-testid="privacy-staff-block">
+            Staff and admin accounts cannot be deleted from this self-service flow. Contact another operator for support.
+          </div>
+          {% else %}
+          {% if has_subscription %}
+          <div class="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100" data-testid="privacy-active-subscription-note">
+            Your account has an active subscription. Manage or cancel it first; export remains available.
+            {% if stripe_customer_portal_url %}
+            <a href="{{ stripe_customer_portal_url }}" class="ml-1 underline hover:text-foreground" data-testid="privacy-subscription-note-link">Manage subscription</a>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          <details class="mt-4 rounded-lg border border-red-500/30 bg-red-500/5 p-4" data-testid="privacy-delete-confirmation">
+            <summary class="cursor-pointer text-sm font-medium text-red-200">
+              Show deletion confirmation
+            </summary>
+            <form method="post" action="{% url 'account_delete' %}" class="mt-4 space-y-4" data-testid="privacy-delete-form">
+              {% csrf_token %}
+              <div>
+                <label for="privacy-confirm-email" class="block text-sm font-medium text-foreground mb-1">
+                  Type your account email exactly
+                </label>
+                <input type="email"
+                       id="privacy-confirm-email"
+                       name="confirm_email"
+                       autocomplete="off"
+                       placeholder="{{ user.email }}"
+                       required
+                       class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-red-400 focus:outline-none focus:ring-1 focus:ring-red-400"
+                       data-testid="privacy-confirm-email">
+              </div>
+              {% if privacy_requires_password %}
+              <div>
+                <label for="privacy-current-password" class="block text-sm font-medium text-foreground mb-1">
+                  Current password
+                </label>
+                <input type="password"
+                       id="privacy-current-password"
+                       name="current_password"
+                       autocomplete="current-password"
+                       required
+                       class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-red-400 focus:outline-none focus:ring-1 focus:ring-red-400"
+                       data-testid="privacy-current-password">
+              </div>
+              {% endif %}
+              <button type="submit"
+                      class="{% button_classes 'destructive' %}"
+                      data-testid="privacy-delete-submit">
+                <i data-lucide="trash-2" class="h-4 w-4"></i>
+                Delete account
+              </button>
+            </form>
+          </details>
+          {% endif %}
+        </div>
+      </div>
+
     </div>
 
   {% include "includes/footer.html" %}

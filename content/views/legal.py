@@ -8,6 +8,7 @@ issue #368.
 from django.shortcuts import render
 
 LAST_UPDATED = 'April 27, 2026'
+PRIVACY_LAST_UPDATED = 'July 11, 2026'
 LAST_UPDATED_DE = '27. April 2026'
 
 
@@ -18,7 +19,7 @@ def terms(request):
 
 def privacy(request):
     """Privacy Policy (English)."""
-    return render(request, 'legal/privacy.html', {'last_updated': LAST_UPDATED})
+    return render(request, 'legal/privacy.html', {'last_updated': PRIVACY_LAST_UPDATED})
 
 
 def impressum(request):

@@ -193,60 +193,60 @@
                 data-testid="theme-toggle"
                 aria-label="Switch to light mode"
                 onclick="window.themeToggle.toggle()"
-                class="p-2.5 text-muted-foreground transition-colors hover:text-foreground">
+                class="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md p-2.5 text-muted-foreground transition-colors hover:text-foreground">
           <svg class="theme-icon-sun h-5 w-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
           <svg class="theme-icon-moon h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
         </button>
       </div>
       <div class="py-0.5">
-        <button type="button" id="mobile-about-toggle" data-testid="mobile-nav-about-trigger" aria-expanded="false" aria-controls="mobile-about-list" class="flex w-full min-h-[36px] items-center justify-between rounded-md px-2 py-1 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
+        <button type="button" id="mobile-about-toggle" data-testid="mobile-nav-about-trigger" aria-expanded="false" aria-controls="mobile-about-list" class="flex w-full min-h-[44px] items-center justify-between rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
           About
           <svg class="h-4 w-4 transition-transform" id="mobile-about-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
         <div class="ml-3 mt-0.5 space-y-0 border-l border-border pl-3 hidden" id="mobile-about-list" data-testid="mobile-nav-about-menu">
-          <a href="/about" data-testid="mobile-nav-about-link-about" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">About</a>
-          <a href="/about#team" data-testid="mobile-nav-about-link-team" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Team</a>
-          <a href="/faq" data-testid="mobile-nav-about-link-faq" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">FAQ</a>
+          <a href="/about" data-testid="mobile-nav-about-link-about" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">About</a>
+          <a href="/about#team" data-testid="mobile-nav-about-link-team" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Team</a>
+          <a href="/faq" data-testid="mobile-nav-about-link-faq" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">FAQ</a>
           {% for page in marketing_nav.about %}
-          <a href="{{ page.get_absolute_url }}" data-testid="mobile-nav-about-link-marketing-{{ forloop.counter }}" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">{{ page.nav_text }}</a>
+          <a href="{{ page.get_absolute_url }}" data-testid="mobile-nav-about-link-marketing-{{ forloop.counter }}" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">{{ page.nav_text }}</a>
           {% endfor %}
         </div>
       </div>
       <div class="py-0.5">
-        <button type="button" id="mobile-community-toggle" data-testid="mobile-nav-community-trigger" aria-expanded="false" aria-controls="mobile-community-list" class="flex w-full min-h-[36px] items-center justify-between rounded-md px-2 py-1 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
+        <button type="button" id="mobile-community-toggle" data-testid="mobile-nav-community-trigger" aria-expanded="false" aria-controls="mobile-community-list" class="flex w-full min-h-[44px] items-center justify-between rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
           Community
           <svg class="h-4 w-4 transition-transform" id="mobile-community-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
         <div class="ml-3 mt-0.5 space-y-0 border-l border-border pl-3 hidden" id="mobile-community-list" data-testid="mobile-nav-community-menu">
-          <a href="/community" data-testid="mobile-nav-community-link-overview" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Overview</a>
-          <a href="/pricing" data-testid="mobile-nav-community-link-membership" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Membership</a>
-          <a href="/activities#access-by-tier" data-testid="mobile-nav-community-link-activities" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Activities</a>
-          <a href="/sprints" data-testid="mobile-nav-community-link-sprints" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Community Sprints</a>
-          <a href="/events" data-testid="mobile-nav-community-link-events" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Events</a>
-          <a href="/events?filter=past" data-testid="mobile-nav-community-link-past-recordings" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Past Recordings</a>
+          <a href="/community" data-testid="mobile-nav-community-link-overview" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Overview</a>
+          <a href="/pricing" data-testid="mobile-nav-community-link-membership" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Membership</a>
+          <a href="/activities#access-by-tier" data-testid="mobile-nav-community-link-activities" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Activities</a>
+          <a href="/sprints" data-testid="mobile-nav-community-link-sprints" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Community Sprints</a>
+          <a href="/events" data-testid="mobile-nav-community-link-events" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Events</a>
+          <a href="/events?filter=past" data-testid="mobile-nav-community-link-past-recordings" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Past Recordings</a>
           {% for page in marketing_nav.community %}
-          <a href="{{ page.get_absolute_url }}" data-testid="mobile-nav-community-link-marketing-{{ forloop.counter }}" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">{{ page.nav_text }}</a>
+          <a href="{{ page.get_absolute_url }}" data-testid="mobile-nav-community-link-marketing-{{ forloop.counter }}" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">{{ page.nav_text }}</a>
           {% endfor %}
         </div>
       </div>
       <div class="py-0.5">
-        <button type="button" id="mobile-resources-toggle" data-testid="mobile-nav-resources-trigger" aria-expanded="false" aria-controls="mobile-resources-list" class="flex w-full min-h-[36px] items-center justify-between rounded-md px-2 py-1 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
+        <button type="button" id="mobile-resources-toggle" data-testid="mobile-nav-resources-trigger" aria-expanded="false" aria-controls="mobile-resources-list" class="flex w-full min-h-[44px] items-center justify-between rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
           Resources
           <svg class="h-4 w-4 transition-transform" id="mobile-resources-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
         <div class="ml-3 mt-0.5 space-y-0 border-l border-border pl-3 hidden" id="mobile-resources-list" data-testid="mobile-nav-resources-menu">
-          <a href="/blog" data-testid="mobile-nav-resources-link-blog" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Blog</a>
-          <a href="/courses" data-testid="mobile-nav-resources-link-courses" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Courses</a>
-          <a href="/workshops" data-testid="mobile-nav-resources-link-workshops" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Workshops</a>
-          <a href="/learning-path/ai-engineer" data-testid="mobile-nav-resources-link-learning-paths" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Learning Paths</a>
-          <a href="/projects" data-testid="mobile-nav-resources-link-projects" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Project Ideas</a>
-          <a href="/interview" data-testid="mobile-nav-resources-link-interview" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Interview Prep</a>
-          <a href="/resources" data-testid="mobile-nav-resources-link-curated-links" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Curated Links</a>
+          <a href="/blog" data-testid="mobile-nav-resources-link-blog" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Blog</a>
+          <a href="/courses" data-testid="mobile-nav-resources-link-courses" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Courses</a>
+          <a href="/workshops" data-testid="mobile-nav-resources-link-workshops" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Workshops</a>
+          <a href="/learning-path/ai-engineer" data-testid="mobile-nav-resources-link-learning-paths" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Learning Paths</a>
+          <a href="/projects" data-testid="mobile-nav-resources-link-projects" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Project Ideas</a>
+          <a href="/interview" data-testid="mobile-nav-resources-link-interview" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Interview Prep</a>
+          <a href="/resources" data-testid="mobile-nav-resources-link-curated-links" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Curated Links</a>
           {% if has_published_downloads %}
-          <a href="/downloads" data-testid="mobile-nav-resources-link-downloads" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Downloads</a>
+          <a href="/downloads" data-testid="mobile-nav-resources-link-downloads" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Downloads</a>
           {% endif %}
           {% for page in marketing_nav.resources %}
-          <a href="{{ page.get_absolute_url }}" data-testid="mobile-nav-resources-link-marketing-{{ forloop.counter }}" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">{{ page.nav_text }}</a>
+          <a href="{{ page.get_absolute_url }}" data-testid="mobile-nav-resources-link-marketing-{{ forloop.counter }}" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">{{ page.nav_text }}</a>
           {% endfor %}
         </div>
       </div>
@@ -269,30 +269,30 @@
           {% endif %}
         </div>
         {% if not is_newsletter_only %}
-        <a href="/notifications" class="relative block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2" data-testid="mobile-notifications-link">
+        <a href="/notifications" class="relative flex min-h-[44px] w-full items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2" data-testid="mobile-notifications-link">
           <span data-testid="mobile-notifications-label">Notifications</span>
           <span id="mobile-notification-badge" class="absolute -top-1 -right-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"></span>
         </a>
         {% endif %}
-        <a href="{% url 'account' %}" id="mobile-account-link" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
+        <a href="{% url 'account' %}" id="mobile-account-link" class="flex min-h-[44px] w-full items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
           Account
         </a>
         {% if header_sprint_shortcut and not is_newsletter_only %}
-        <a href="{{ header_sprint_shortcut.href }}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2" data-testid="mobile-header-plan-link">
+        <a href="{{ header_sprint_shortcut.href }}" class="flex min-h-[44px] w-full items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2" data-testid="mobile-header-plan-link">
           {{ header_sprint_shortcut.label }}
         </a>
         {% endif %}
         {% if user.is_staff %}
-        <a href="{% url 'studio_dashboard' %}" class="block w-full rounded-md border border-accent bg-transparent px-4 py-2 text-center text-sm font-medium text-accent transition-colors hover:bg-secondary mb-2">
+        <a href="{% url 'studio_dashboard' %}" class="flex min-h-[44px] w-full items-center justify-center rounded-md border border-accent bg-transparent px-4 py-2 text-center text-sm font-medium text-accent transition-colors hover:bg-secondary mb-2">
           Studio
         </a>
         {% endif %}
-        <a href="{{ header_logout_url }}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+        <a href="{{ header_logout_url }}" class="flex min-h-[44px] w-full items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary">
           Log out
         </a>
       </div>
       {% else %}
-      <a href="{{ header_login_url }}" data-testid="header-sign-in-link" class="mt-4 block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+      <a href="{{ header_login_url }}" data-testid="header-sign-in-link" class="mt-4 flex min-h-[44px] w-full items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary">
         Sign in
       </a>
       {% endif %}

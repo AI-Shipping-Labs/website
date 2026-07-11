@@ -170,7 +170,8 @@ class TestResourcesAccordionGroupingAndTapTargets:
             _open_drawer(page)
             _expand(page, "resources")
 
-            # Every sub-link in the expanded list uses the compact mobile rhythm.
+            # Every sub-link in the expanded list meets the mobile tap target
+            # floor from the shared public chrome accessibility fix (#1214).
             link_heights = page.evaluate(
                 """
                 () => {
@@ -183,9 +184,9 @@ class TestResourcesAccordionGroupingAndTapTargets:
             )
             assert link_heights, "Resources accordion must render sub-links"
             for height in link_heights:
-                assert 31 <= height <= 36, (
+                assert height >= 44, (
                     f"Resources sub-link is {height}px tall, "
-                    "expected compact 32px-ish footer/header rhythm"
+                    "expected at least a 44px mobile tap target"
                 )
 
             # The container holding the sub-links carries a left border.

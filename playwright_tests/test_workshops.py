@@ -538,10 +538,12 @@ class TestVisitorBrowsesCatalog:
             'Workshop'
         )
 
-        access = scan_card.locator('[data-testid="workshop-card-access"]')
-        assert 'Access' in access.inner_text()
+        access = scan_card.locator('[data-testid="workshop-tier-badge"]')
+        assert access.get_attribute('data-required-level') == '10'
         assert 'Basic or above' in access.inner_text()
-        assert 'Free with sign-in' not in access.inner_text()
+        assert access.locator('svg.lucide-lock').count() == 1
+        assert scan_card.locator('[data-testid="workshop-card-access"]').count() == 0
+        assert 'Access' not in access.inner_text()
 
         metadata = scan_card.locator('[data-testid="workshop-card-metadata"]')
         metadata_text = metadata.inner_text()
@@ -571,10 +573,12 @@ class TestVisitorBrowsesCatalog:
 
         signin_access = page.locator(
             'article[data-workshop-slug="signin-workshop"] '
-            '[data-testid="workshop-card-access"]',
+            '[data-testid="workshop-free-badge"]',
         )
-        assert 'Access' in signin_access.inner_text()
+        assert signin_access.get_attribute('data-required-level') == '5'
+        assert 'Access' not in signin_access.inner_text()
         assert 'Free with sign-in' in signin_access.inner_text()
+        assert signin_access.locator('svg.lucide-badge-check').count() == 1
 
         bare_card = page.locator('article[data-workshop-slug="bare-workshop"]')
         assert bare_card.locator('[data-testid="workshop-card-link"]').get_attribute(
@@ -583,6 +587,10 @@ class TestVisitorBrowsesCatalog:
         assert bare_card.locator('[data-testid="workshop-card-title"]').inner_text() == (
             'Bare Metadata Workshop'
         )
+        bare_access = bare_card.locator('[data-testid="workshop-free-badge"]')
+        assert bare_access.get_attribute('data-required-level') == '0'
+        assert bare_access.inner_text() == 'Free'
+        assert bare_access.locator('svg.lucide-badge-check').count() == 1
         assert bare_card.locator('[data-testid="workshop-card-instructor"]').count() == 0
         assert bare_card.locator('[data-testid="workshop-card-description"]').count() == 0
         assert bare_card.locator('[data-testid="workshop-card-topics"]').count() == 0
@@ -641,6 +649,10 @@ class TestVisitorBrowsesCatalog:
         assert 'Paid Agents Workshop' in paid_agents_body
         assert 'Free Agents Workshop' not in paid_agents_body
         assert 'Paid Python Workshop' not in paid_agents_body
+        paid_badge = page.locator('[data-testid="workshop-tier-badge"]')
+        assert paid_badge.count() == 1
+        assert paid_badge.get_attribute('data-required-level') == '10'
+        assert paid_badge.locator('svg.lucide-lock').count() == 1
 
         page.goto(
             f'{django_server}/workshops/catalog?access=paid',

@@ -1,4 +1,4 @@
-<span{% if element_id %} id="{{ element_id }}"{% endif %} class="{{ classes }}"{% if testid %} data-testid="{{ testid }}"{% endif %} data-component="member-badge">{% if icon %}
+<span{% if element_id %} id="{{ element_id }}"{% endif %} class="{{ classes }}"{% if testid %} data-testid="{{ testid }}"{% endif %}{% if has_required_level %} data-required-level="{{ required_level }}"{% endif %} data-component="member-badge">{% if icon %}
   <i data-lucide="{{ icon }}" class="{{ icon_classes }}"></i>{% endif %}
   {{ label }}
 </span>

@@ -446,11 +446,9 @@ class ProjectsListDisplayTest(TestCase):
         response = self.client.get('/projects')
         self.assertContains(response, 'A project description')
 
-    def test_lock_icon_on_gated_no_icon_on_open(self):
-        # Replaces playwright_tests/test_project_showcase.py::TestScenario12VisitorDistinguishesOpenFromGated::test_lock_icon_on_gated_project_and_no_icon_on_open
-        # The setUp project (Display Project) is open (required_level=0) so
-        # it MUST NOT carry a lock icon. We add a single gated project so
-        # the listing distinguishes the two.
+    def test_shared_access_badges_distinguish_open_and_gated_projects(self):
+        # The setUp project is open. Add one gated project so the listing
+        # exercises both shared tier-badge branches.
         Project.objects.create(
             title='Pro Techniques',
             slug='pro-techniques',
@@ -465,8 +463,13 @@ class ProjectsListDisplayTest(TestCase):
         # Both cards visible
         self.assertContains(response, 'Display Project')
         self.assertContains(response, 'Pro Techniques')
-        # Exactly one lock icon — on the gated card — plus the tier label.
+        self.assertContains(response, 'data-testid="project-free-badge"', count=1)
+        self.assertContains(response, 'data-testid="project-tier-badge"', count=1)
+        self.assertContains(response, 'data-required-level="0"', count=1)
+        self.assertContains(response, 'data-required-level="10"', count=1)
+        self.assertContains(response, 'data-lucide="badge-check"', count=1)
         self.assertContains(response, 'data-lucide="lock"', count=1)
+        self.assertContains(response, 'Free')
         self.assertContains(response, 'Basic or above')
 
     def test_no_lock_icon_when_all_projects_are_open(self):
@@ -477,6 +480,8 @@ class ProjectsListDisplayTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Display Project')
         self.assertNotContains(response, 'data-lucide="lock"')
+        self.assertContains(response, 'data-testid="project-free-badge"', count=1)
+        self.assertContains(response, 'data-lucide="badge-check"', count=1)
 
 
 # --- Project detail display tests ---

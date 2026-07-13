@@ -212,7 +212,7 @@ class SprintDetailCommentLeakTest(TestCase):
 
 
 class SprintDetailTierBadgeTest(TestCase):
-    """The tier-name badge mirrors LEVEL_TO_TIER_NAME."""
+    """The detail badge matches the public tier vocabulary on the index."""
 
     def test_main_tier_badge_when_min_is_20(self):
         sprint = Sprint.objects.create(
@@ -222,7 +222,12 @@ class SprintDetailTierBadgeTest(TestCase):
         )
         url = reverse('sprint_detail', kwargs={'sprint_slug': sprint.slug})
         response = self.client.get(url)
-        self.assertContains(response, 'Main tier required')
+        self.assertContains(response, 'data-testid="sprint-tier-badge"')
+        self.assertContains(response, 'data-component="member-badge"')
+        self.assertContains(response, 'data-required-level="20"')
+        self.assertContains(response, 'data-lucide="lock"')
+        self.assertContains(response, 'Main or above')
+        self.assertNotContains(response, 'Main tier required')
 
 
 class SprintDetailDateRangeTest(TestCase):

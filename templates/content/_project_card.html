@@ -20,6 +20,8 @@ page-specific test id; the entity hierarchy stays the same.
           {% endif %}
           {% if project.required_level > 0 %}
           {% member_tier_badge project.required_level tone="accent_strong" icon="lock" testid="project-tier-badge" %}
+          {% else %}
+          {% member_tier_badge project.required_level tone="accent_strong" icon="badge-check" testid="project-free-badge" %}
           {% endif %}
         </div>
         <i data-lucide="arrow-right" class="hidden h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent sm:block"></i>

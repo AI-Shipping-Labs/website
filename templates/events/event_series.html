@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load tz static access_tags %}
+{% load member_badges %}
 
 {% block title %}{{ series.name }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}Series page for {{ series.name }} — listing every upcoming and past occurrence.{% endblock %}
@@ -134,21 +135,14 @@
                 badge for every session — a neutral "Free" pill for open
                 sessions and an accent lock + label for gated ones — so the
                 Free-vs-paid split across sibling sessions is visible at a
-                glance, including to anonymous visitors. Label comes from
-                LEVEL_TO_PUBLIC_LABEL via the required_tier_label filter; no
-                hardcoded tier strings here.
+                glance, including to anonymous visitors. The shared tier
+                component sources its label from LEVEL_TO_PUBLIC_LABEL and
+                preserves the numeric level as component metadata.
               {% endcomment %}
               {% if event.required_level > 0 %}
-              <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent"
-                    data-testid="series-event-tier" data-required-level="{{ event.required_level }}">
-                <i data-lucide="lock" class="h-3 w-3"></i>
-                {{ event.required_level|required_tier_label }}
-              </span>
+              {% member_tier_badge event.required_level tone="accent_strong" icon="lock" testid="series-event-tier" %}
               {% else %}
-              <span class="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
-                    data-testid="series-event-tier" data-required-level="{{ event.required_level }}">
-                {{ event.required_level|required_tier_label }}
-              </span>
+              {% member_tier_badge event.required_level tone="neutral" testid="series-event-tier" %}
               {% endif %}
             </div>
           </div>

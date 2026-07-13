@@ -110,6 +110,7 @@ class SeriesTierBadgeAnonymousTest(TestCase):
         self.assertEqual(self.response.status_code, 200)
         # Four published sessions -> four tier badges.
         self.assertEqual(self.html.count('data-testid="series-event-tier"'), 4)
+        self.assertEqual(self.html.count('data-component="member-badge"'), 4)
 
     def test_each_badge_carries_matching_required_level(self):
         for level in (LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM):

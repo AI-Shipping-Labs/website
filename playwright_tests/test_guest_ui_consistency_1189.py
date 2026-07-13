@@ -155,6 +155,14 @@ def test_home_and_projects_share_project_card_language(django_server, page):
         tags=["agents", "rag", "evaluation", "deployment", "python"],
         published=True,
     )
+    free_project = Project.objects.create(
+        title="Free Shared 1226 Project",
+        slug="free-shared-1226-project",
+        description="A free shared project card fixture.",
+        date=datetime.date(2026, 7, 2),
+        required_level=0,
+        published=True,
+    )
     connection.close()
 
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
@@ -168,6 +176,16 @@ def test_home_and_projects_share_project_card_language(django_server, page):
     assert "Official" in home_text
     assert "+2" in home_text
     home_href = home_card.locator("a").first.get_attribute("href")
+    home_paid_badge = home_card.get_by_test_id("project-tier-badge")
+    expect(home_paid_badge).to_have_attribute("data-required-level", "10")
+    expect(home_paid_badge.locator("svg.lucide-lock")).to_have_count(1)
+    home_free_card = page.get_by_test_id("home-project-card").filter(
+        has_text=free_project.title,
+    )
+    home_free_badge = home_free_card.get_by_test_id("project-free-badge")
+    expect(home_free_badge).to_contain_text("Free")
+    expect(home_free_badge).to_have_attribute("data-required-level", "0")
+    expect(home_free_badge.locator("svg.lucide-badge-check")).to_have_count(1)
 
     page.goto(f"{django_server}/projects", wait_until="domcontentloaded")
     listing_card = page.locator('article:has-text("Shared 1189 Project")')
@@ -181,3 +199,11 @@ def test_home_and_projects_share_project_card_language(django_server, page):
     assert "focus-visible:ring-2" in (
         listing_card.locator("a").first.get_attribute("class") or ""
     )
+    listing_paid_badge = listing_card.get_by_test_id("project-tier-badge")
+    expect(listing_paid_badge).to_have_attribute("data-required-level", "10")
+    free_listing_card = page.locator(
+        'article:has-text("Free Shared 1226 Project")'
+    )
+    listing_free_badge = free_listing_card.get_by_test_id("project-free-badge")
+    expect(listing_free_badge).to_contain_text("Free")
+    expect(listing_free_badge).to_have_attribute("data-required-level", "0")

@@ -310,9 +310,12 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertIn('data-testid="workshop-card-primary-signals"', card)
         self.assertIn('data-testid="workshop-card-type"', card)
         self.assertIn('Workshop', card)
-        self.assertIn('data-testid="workshop-card-access"', card)
-        self.assertIn('Access', card)
+        self.assertNotIn('data-testid="workshop-card-access"', card)
+        self.assertNotIn('>Access<', card)
         self.assertIn('data-testid="workshop-tier-badge"', card)
+        self.assertIn('data-component="member-badge"', card)
+        self.assertIn('data-required-level="10"', card)
+        self.assertIn('data-lucide="lock"', card)
         self.assertIn('Basic or above', card)
         self.assertIn('data-testid="workshop-card-title"', card)
         self.assertIn('Visible Workshop', card)
@@ -375,16 +378,22 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
 
         response = self.client.get(WORKSHOPS_CATALOG_URL)
 
-        self.assertIn(
-            'data-testid="workshop-free-badge">Free</span>',
-            _workshop_card_html(response, 'open-card'),
-        )
-        self.assertIn(
-            'data-testid="workshop-free-badge">Free with sign-in</span>',
-            _workshop_card_html(response, 'registered-card'),
-        )
+        open_card = _workshop_card_html(response, 'open-card')
+        self.assertIn('data-testid="workshop-free-badge"', open_card)
+        self.assertIn('data-required-level="0"', open_card)
+        self.assertIn('data-lucide="badge-check"', open_card)
+        self.assertIn('Free', open_card)
+        self.assertNotIn('green-', open_card)
+        registered_card = _workshop_card_html(response, 'registered-card')
+        self.assertIn('data-testid="workshop-free-badge"', registered_card)
+        self.assertIn('data-required-level="5"', registered_card)
+        self.assertIn('data-lucide="badge-check"', registered_card)
+        self.assertIn('Free with sign-in', registered_card)
+        self.assertNotIn('green-', registered_card)
         basic_card = _workshop_card_html(response, 'basic-card')
         self.assertIn('data-testid="workshop-tier-badge"', basic_card)
+        self.assertIn('data-required-level="10"', basic_card)
+        self.assertIn('data-lucide="lock"', basic_card)
         self.assertIn('Basic or above', basic_card)
         self.assertNotIn('data-testid="workshop-free-badge"', basic_card)
         self.assertIn(

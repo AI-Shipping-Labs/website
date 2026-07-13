@@ -367,6 +367,14 @@ def project_detail(request, slug):
         'tag_rules': tag_rules,
     }
     context.update(build_gating_context(request.user, project, 'project'))
+    if context.get('is_guest_paywall'):
+        next_path = project.get_absolute_url()
+        context.update({
+            'guest_signup_url': (
+                f'{reverse("account_register")}?next={next_path}'
+            ),
+            'guest_signin_url': f'{reverse("account_login")}?next={next_path}',
+        })
     _record_resource_view_if_accessible(
         request, project, 'project', project.slug, 'project_detail', slug,
     )

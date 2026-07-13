@@ -95,7 +95,13 @@
       </header>
 
       {% if is_gated %}
-        {% include "includes/content_gated.html" %}
+        {% if gated_reason == "unverified_email" %}
+          {% include "content/_verify_email_required.html" %}
+        {% elif is_guest_paywall %}
+          {% include "content/_gated_access_card.html" with gated_card_testid="project-paywall" gated_icon="lock" gated_heading=cta_message gated_description="Membership unlocks the full project write-up and code." required_tier_name=required_tier_name gated_cta_url=pricing_url gated_cta_label="View Pricing" gated_cta_testid="project-upgrade-cta" signup_cta_url=guest_signup_url signup_cta_label="Create a free account" signup_cta_testid="gated-create-free-account-link" signin_cta_url=guest_signin_url signin_cta_label="Already a member? Sign in" signin_cta_testid="gated-sign-in-link" %}
+        {% else %}
+          {% include "content/_gated_access_card.html" with gated_card_testid="project-paywall" gated_icon="lock" gated_heading=cta_message gated_description="Membership unlocks the full project write-up and code." required_tier_name=required_tier_name gated_cta_url=pricing_url gated_cta_label="View Pricing" gated_cta_testid="project-upgrade-cta" %}
+        {% endif %}
       {% else %}
       <div class="prose">
         {{ project.content_html|safe }}

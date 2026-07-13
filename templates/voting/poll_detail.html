@@ -43,14 +43,7 @@
 
       {% if is_gated %}
       <!-- Access gated -->
-      <div class="rounded-lg border border-border bg-card p-8 text-center">
-        <i data-lucide="lock" class="mx-auto h-10 w-10 text-muted-foreground mb-4"></i>
-        <p class="text-lg font-medium text-foreground mb-2">{{ cta_message }}</p>
-        <a href="{{ pricing_url }}" class="mt-4 inline-flex items-center gap-2 rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-          View Pricing
-          <i data-lucide="arrow-right" class="h-4 w-4"></i>
-        </a>
-      </div>
+      {% include "content/_gated_access_card.html" with gated_card_testid="poll-gated" gated_icon="lock" gated_heading=cta_message required_tier_name=required_tier_name gated_cta_url=pricing_url gated_cta_label="View Pricing" gated_cta_testid="poll-pricing-cta" %}
       {% else %}
 
       <!-- Vote info bar -->

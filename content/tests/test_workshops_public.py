@@ -1988,6 +1988,19 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
 
 
 class PublicGatedContentCopyRegressionTest(SimpleTestCase):
+    def test_legacy_gated_partial_remains_for_blog_and_tutorials(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        legacy_partial = (
+            repo_root / 'templates' / 'includes' / 'content_gated.html'
+        )
+
+        self.assertTrue(legacy_partial.is_file())
+        for template_name in ('blog_detail.html', 'tutorial_detail.html'):
+            template_source = (
+                repo_root / 'templates' / 'content' / template_name
+            ).read_text()
+            self.assertIn('includes/content_gated.html', template_source)
+
     def test_public_gated_templates_do_not_use_public_metadata_jargon(self):
         repo_root = Path(__file__).resolve().parents[2]
         template_paths = [

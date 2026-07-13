@@ -718,6 +718,33 @@ class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
             response,
             'href="/accounts/register/?next=/projects/gated-project"',
         )
+        self.assertContains(
+            response,
+            'href="/accounts/login/?next=/projects/gated-project"',
+        )
+        self.assertContains(response, 'data-testid="project-paywall"')
+        self.assertContains(response, 'data-testid="project-upgrade-cta"')
+        self.assertContains(response, 'Basic or above required')
+        self.assertEqual(
+            response.content.count(b'data-testid="gated-required-tier"'), 1,
+        )
+        self.assertNotContains(response, 'filter: blur(8px)')
+
+    def test_free_member_sees_upgrade_without_guest_prompts(self):
+        user = User.objects.create_user(
+            email='free-project@test.com', password='testpass',
+            email_verified=True,
+        )
+        user.tier = self.free_tier
+        user.save()
+        self.client.login(email=user.email, password='testpass')
+
+        response = self.client.get('/projects/gated-project')
+
+        self.assertContains(response, 'Upgrade to Basic to view this project')
+        self.assertContains(response, 'data-testid="project-paywall"')
+        self.assertNotContains(response, 'Create a free account')
+        self.assertNotContains(response, 'Already a member? Sign in')
 
     def test_basic_user_sees_full_project(self):
         # Replaces playwright_tests/test_project_showcase.py::TestScenario7BasicMemberUnlocksBasicProject::test_basic_member_sees_full_project_content
@@ -856,6 +883,9 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
         response = self.client.get('/projects/free-project-gate')
         self.assert_verify_gate(response)
         self.assertNotContains(response, 'Free project body')
+        self.assertNotContains(response, 'data-testid="project-paywall"')
+        self.assertNotContains(response, 'data-testid="gated-required-tier"')
+        self.assertNotContains(response, 'data-testid="project-upgrade-cta"')
 
     def test_event_recording_detail_renders_verify_gate(self):
         event = Event.objects.create(

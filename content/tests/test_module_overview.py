@@ -14,9 +14,14 @@ Covers:
 - ``Module.get_absolute_url()``
 """
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from content.access import LEVEL_MAIN
 from content.models import Course, Module, Unit
+from tests.fixtures import TierSetupMixin
+
+User = get_user_model()
 
 # ---------------------------------------------------------------------------
 # Module model
@@ -173,4 +178,57 @@ class ModuleOverviewViewTest(TestCase):
         response = self.client.get('/courses/draft-course/m')
         self.assertEqual(response.status_code, 404)
 
+
+class ModuleOverviewGatedCardTest(TierSetupMixin, TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.course = Course.objects.create(
+            title='Main Course', slug='main-course', status='published',
+            required_level=LEVEL_MAIN,
+        )
+        cls.module = Module.objects.create(
+            course=cls.course, title='Gated Module', slug='gated-module',
+            overview='Public overview.',
+        )
+        Unit.objects.create(
+            module=cls.module, title='Clickable lesson', slug='lesson',
+        )
+
+    def test_below_tier_uses_canonical_card_and_preserves_lessons(self):
+        user = User.objects.create_user(
+            email='module-free@test.com', password='testpass',
+            email_verified=True,
+        )
+        user.tier = self.free_tier
+        user.save()
+        self.client.login(email=user.email, password='testpass')
+
+        response = self.client.get('/courses/main-course/gated-module')
+
+        self.assertEqual(response.context['required_tier_name'], 'Main')
+        self.assertContains(response, 'data-testid="module-cta"')
+        self.assertContains(response, 'data-testid="module-cta-button"')
+        self.assertContains(response, 'Main or above required')
+        self.assertContains(
+            response, 'href="/courses/main-course/gated-module/lesson"',
+        )
+        self.assertEqual(
+            response.content.count(b'data-testid="gated-required-tier"'), 1,
+        )
+
+    def test_above_tier_has_content_without_gate(self):
+        user = User.objects.create_user(
+            email='module-main@test.com', password='testpass',
+            email_verified=True,
+        )
+        user.tier = self.main_tier
+        user.save()
+        self.client.login(email=user.email, password='testpass')
+
+        response = self.client.get('/courses/main-course/gated-module')
+
+        self.assertEqual(response.context['required_tier_name'], '')
+        self.assertContains(response, 'Public overview.')
+        self.assertNotContains(response, 'data-testid="module-cta"')
 

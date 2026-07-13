@@ -715,6 +715,18 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/courses/paid-course')
         self.assertContains(response, 'Unlock with Main')
 
+    def test_paid_course_uses_canonical_gate_and_tier_badges(self):
+        response = self.client.get('/courses/paid-course')
+
+        self.assertEqual(response.context['required_tier_name'], 'Main')
+        self.assertContains(response, 'Main or above')
+        self.assertContains(response, 'data-testid="course-gated-cta"')
+        self.assertContains(response, 'data-testid="course-gated-cta-button"')
+        self.assertContains(response, 'Main or above required')
+        self.assertEqual(
+            response.content.count(b'data-testid="gated-required-tier"'), 1,
+        )
+
     def test_anonymous_unit_titles_clickable_for_teaser(self):
         """Issue #248: locked unit rows are clickable so visitors can
         click through to the teaser preview instead of bouncing off
@@ -745,6 +757,8 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/courses/paid-course')
         self.assertContains(response, 'Your Progress')
         self.assertContains(response, '0 of 1 completed')
+        self.assertContains(response, 'Main or above')
+        self.assertNotContains(response, 'data-testid="course-gated-cta"')
 
     def test_unauthorized_user_no_progress_bar(self):
         response = self.client.get('/courses/paid-course')
@@ -779,6 +793,11 @@ class FreeCourseAccessTest(TierSetupMixin, TestCase):
     def test_anonymous_sees_signup_cta(self):
         response = self.client.get('/courses/free-course')
         self.assertContains(response, 'Sign up free to start this course')
+        self.assertEqual(response.context['required_tier_name'], '')
+        self.assertContains(response, '>Free<')
+        self.assertContains(response, 'data-testid="inline-register-card"')
+        self.assertNotContains(response, 'data-testid="course-gated-cta"')
+        self.assertNotContains(response, 'data-testid="gated-required-tier"')
 
     def test_authenticated_user_no_cta(self):
         User.objects.create_user(email='user@test.com', password='testpass')

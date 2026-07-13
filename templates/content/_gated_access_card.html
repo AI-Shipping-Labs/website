@@ -53,7 +53,7 @@ in the extra_scripts block.
   </div>
   {% endif %}
   <a href="{{ gated_cta_url }}"
-     class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+     class="mt-6 inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
      data-testid="{{ gated_cta_testid }}">
     <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
     {{ gated_cta_label }}

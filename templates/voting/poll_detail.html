@@ -93,7 +93,7 @@
             </div>
             {% if can_vote %}
             <button type="button"
-                    class="vote-btn flex-shrink-0 inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors {% if item.user_voted %}bg-accent text-accent-foreground hover:bg-accent/80{% else %}border border-border bg-transparent text-foreground hover:bg-secondary{% endif %}"
+                    class="vote-btn inline-flex min-h-[44px] flex-shrink-0 items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if item.user_voted %}bg-accent text-accent-foreground hover:bg-accent/80{% else %}border border-border bg-transparent text-foreground hover:bg-secondary{% endif %}"
                     data-option-id="{{ item.option.id }}"
                     data-voted="{{ item.user_voted|yesno:'true,false' }}">
               {% if item.user_voted %}
@@ -138,7 +138,8 @@
             </div>
             <div class="flex items-center gap-3">
               <button type="submit"
-                      class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                      class="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      data-testid="poll-proposal-submit">
                 <i data-lucide="plus" class="h-4 w-4"></i>
                 Submit Proposal
               </button>

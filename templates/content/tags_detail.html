@@ -16,11 +16,8 @@
       </a>
 
       <div class="mb-12">
-        <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
-          <i data-lucide="tag" class="h-4 w-4"></i>
-          Tag
-        </div>
-        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Tag</p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
           {{ tag }}
         </h1>
         <p class="mt-4 text-lg text-muted-foreground">
@@ -41,11 +38,11 @@
                     {{ item.type_label }}
                   </span>
                 </div>
-                <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
+                <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
                   {{ item.title }}
                 </h2>
                 {% if item.description %}
-                <p class="mt-2 text-muted-foreground line-clamp-2">{{ item.description|strip_markdown }}</p>
+                <p class="mt-2 text-sm sm:text-base text-muted-foreground line-clamp-2">{{ item.description|strip_markdown }}</p>
                 {% endif %}
                 <div class="mt-3 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                   <span class="flex items-center gap-1.5">
@@ -53,17 +50,17 @@
                     {{ item.date|member_short_date }}
                   </span>
                 </div>
-                {% if item.tags %}
-                <div class="mt-3 flex flex-wrap gap-2">
-                  {% for t in item.tags %}
-                  <a href="/tags/{{ t }}" class="inline-flex items-center rounded-full bg-secondary px-3 py-2 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors min-h-[44px]" onclick="event.stopPropagation();">{{ t }}</a>
-                  {% endfor %}
-                </div>
-                {% endif %}
               </div>
-              <i data-lucide="arrow-right" class="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
+              <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
             </div>
           </a>
+          {% if item.tags %}
+          <div class="mt-3 flex flex-wrap gap-2" data-testid="tag-detail-related-tags">
+            {% for t in item.tags %}
+            <a href="/tags/{{ t }}" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ t }}</a>
+            {% endfor %}
+          </div>
+          {% endif %}
         </article>
         {% endfor %}
       </div>

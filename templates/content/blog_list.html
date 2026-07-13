@@ -47,7 +47,7 @@
                 {% endif %}
               </div>
               <div class="flex-1">
-                <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
+                <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
                   {% if article.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}{{ article.title }}
                   {% if article.required_level > 0 %}
                   {% member_tier_badge article.required_level tone="neutral" size="xs" extra_class="ml-2 inline-flex align-middle" %}
@@ -79,16 +79,14 @@
           {% if article.tags %}
           {% comment %}
           Tag chips live OUTSIDE the wrapping <a> so we can render them
-          as real anchors. event.stopPropagation() is defensive — even
-          though they are no longer nested, future enhancements (e.g. a
-          card-level click handler on the <article>) shouldn't intercept.
+          as real anchors with destinations independent from the card body.
           {% endcomment %}
           <div class="mt-3 flex flex-wrap gap-1.5" data-testid="blog-card-tags">
             {% for tag in article.tags|slice:":3" %}
-            <a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex min-h-[44px] items-center rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary/80" onclick="event.stopPropagation();">{{ tag }}</a>
+            <a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ tag }}</a>
             {% endfor %}
             {% if article.tags|length > 3 %}
-            <span class="inline-flex min-h-[44px] items-center rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground" aria-label="{{ article.tags|length|add:'-3' }} more article tags">+{{ article.tags|length|add:"-3" }}</span>
+            <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ article.tags|length|add:'-3' }} more article tags">+{{ article.tags|length|add:"-3" }}</span>
             {% endif %}
           </div>
           {% endif %}

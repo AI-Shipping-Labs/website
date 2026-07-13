@@ -98,17 +98,16 @@
 
           {% comment %}
           Tag chips and CTA block live OUTSIDE the wrapping <a> so they stay
-          interactive as their own anchors. event.stopPropagation() on tag
-          chips is defensive — they're already siblings, not children.
+          interactive as their own anchors and are siblings, not children.
           {% endcomment %}
           <div class="px-4 pb-4 sm:px-5 sm:pb-5">
             {% if item.download.tags %}
             <div class="flex flex-wrap gap-1.5" data-testid="download-card-tags">
               {% for tag in item.download.tags|slice:":3" %}
-              <a href="{% tag_add_url base_path selected_tags tag %}" class="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors" onclick="event.stopPropagation();">{{ tag }}</a>
+              <a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ tag }}</a>
               {% endfor %}
               {% if item.download.tags|length > 3 %}
-              <span class="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ item.download.tags|length|add:'-3' }} more download tags">+{{ item.download.tags|length|add:"-3" }}</span>
+              <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ item.download.tags|length|add:'-3' }} more download tags">+{{ item.download.tags|length|add:"-3" }}</span>
               {% endif %}
             </div>
             {% endif %}

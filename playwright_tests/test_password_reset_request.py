@@ -16,7 +16,7 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 # Issue #656: this module uses local-only fixtures (DB seeding,
 # session-cookie injection, etc.) and cannot run against the
 # deployed dev environment. See _docs/testing-guidelines.md.
-pytestmark = pytest.mark.local_only
+pytestmark = [pytest.mark.local_only, pytest.mark.core]
 
 SUCCESS_MESSAGE = (
     "If an account exists for that email, we\u2019ll send password reset "
@@ -32,6 +32,22 @@ def _seed_user(db_blocker, email, password=DEFAULT_PASSWORD):
     with db_blocker.unblock():
         user = create_user(email=email, password=password)
         return user.pk
+
+
+def _configure_google_oauth(db_blocker):
+    with db_blocker.unblock():
+        from allauth.socialaccount.models import SocialApp
+        from django.contrib.sites.models import Site
+        from django.db import connection
+
+        app = SocialApp.objects.create(
+            provider="google",
+            name="Google",
+            client_id="google-cid",
+            secret="google-secret",
+        )
+        app.sites.add(Site.objects.get_current())
+        connection.close()
 
 
 def _email_log_count(db_blocker, email):
@@ -66,8 +82,30 @@ class TestPasswordResetRequest:
         page.goto(f"{django_server}/accounts/login/", wait_until="domcontentloaded")
         page.click("#forgot-password-link")
         page.wait_for_url(f"{django_server}/accounts/password-reset-request")
+        auth_card = page.locator('[data-testid="auth-card"]')
+        assert auth_card.get_by_role(
+            "heading", name="Reset your password", exact=True
+        ).is_visible()
+        assert auth_card.get_by_role(
+            "link", name="Back to sign in", exact=True
+        ).is_visible()
+        assert page.locator("#newsletter").count() == 0
+        assert page.locator("[data-auth-oauth-divider]").count() == 0
+        assert "By signing" not in auth_card.inner_text()
+
+        pending_routes = []
+        page.route(
+            "**/api/password-reset-request",
+            lambda route: pending_routes.append(route),
+        )
         page.fill("#password-reset-email", email)
         page.click("#password-reset-request-submit")
+        page.wait_for_function(
+            "document.querySelector('#password-reset-request-submit-text').textContent === 'Sending...'"
+        )
+        assert page.locator("#password-reset-request-submit").is_disabled()
+        assert len(pending_routes) == 1
+        pending_routes[0].continue_()
 
         success = page.locator("#password-reset-request-success")
         success.wait_for(state="visible")
@@ -95,7 +133,98 @@ class TestPasswordResetRequest:
         assert success.inner_text() == SUCCESS_MESSAGE
         assert "not found" not in page.content().lower()
         assert "does not exist" not in page.content().lower()
+        assert page.locator("#newsletter").count() == 0
         assert _email_log_count(django_db_blocker, email) == 0
+
+    def test_configured_oauth_is_isolated_from_reset_page(
+        self, django_server, page, django_db_blocker
+    ):
+        _configure_google_oauth(django_db_blocker)
+
+        page.goto(
+            f"{django_server}/accounts/password-reset-request",
+            wait_until="domcontentloaded",
+        )
+        auth_card = page.locator('[data-testid="auth-card"]')
+        assert auth_card.locator("#password-reset-email").is_visible()
+        assert auth_card.locator("[data-auth-oauth-divider]").count() == 0
+        assert auth_card.get_by_role(
+            "link", name="Sign in with Google", exact=True
+        ).count() == 0
+        assert "By signing in, you agree" not in auth_card.inner_text()
+
+        page.get_by_role("link", name="Back to sign in", exact=True).click()
+        page.wait_for_url(f"{django_server}/accounts/login/")
+        login_card = page.locator('[data-testid="auth-card"]')
+        assert login_card.get_by_role(
+            "link", name="Sign in with Google", exact=True
+        ).is_visible()
+        assert "By signing in, you agree to our" in login_card.inner_text()
+
+    def test_registration_and_login_use_sentence_case_copy(
+        self, django_server, page, django_db_blocker
+    ):
+        _configure_google_oauth(django_db_blocker)
+
+        page.goto(f"{django_server}/accounts/register/", wait_until="domcontentloaded")
+        register_card = page.locator('[data-testid="auth-card"]')
+        assert page.title() == "Create account | AI Shipping Labs"
+        assert register_card.get_by_role(
+            "heading", name="Create account", exact=True
+        ).is_visible()
+        assert page.locator("#register-submit").inner_text() == "Create account"
+        assert page.locator("#register-submit").get_attribute(
+            "data-idle-text"
+        ) == "Create account"
+        assert register_card.get_by_role(
+            "link", name="Sign up with Google", exact=True
+        ).is_visible()
+        assert "By creating an account, you agree to our" in register_card.inner_text()
+
+        page.locator("#login-link").click()
+        page.wait_for_url(f"{django_server}/accounts/login/")
+        login_card = page.locator('[data-testid="auth-card"]')
+        assert page.title() == "Sign in | AI Shipping Labs"
+        assert login_card.get_by_role(
+            "heading", name="Sign in", exact=True
+        ).is_visible()
+        assert page.locator("#login-submit").inner_text() == "Sign in"
+        assert login_card.get_by_role(
+            "link", name="Sign in with Google", exact=True
+        ).is_visible()
+        assert "By signing in, you agree to our" in login_card.inner_text()
+
+        page.locator("#register-link").click()
+        page.wait_for_url(f"{django_server}/accounts/register/")
+        assert page.get_by_role(
+            "heading", name="Create account", exact=True
+        ).is_visible()
+
+    def test_authenticated_newsletter_member_uses_prefilled_reset_form(
+        self, django_server, browser, django_db_blocker
+    ):
+        email = _email("newsletter-prefill")
+        _seed_user(django_db_blocker, email)
+        context = auth_context(browser, email)
+        page = context.new_page()
+
+        try:
+            page.goto(
+                f"{django_server}/accounts/password-reset-request?email={email}",
+                wait_until="domcontentloaded",
+            )
+            assert page.url.endswith(
+                f"/accounts/password-reset-request?email={email}"
+            )
+            assert page.locator("#password-reset-email").input_value() == email
+            assert page.locator("#password-reset-request-form").is_visible()
+            assert page.locator("#newsletter").count() == 0
+            assert page.locator("[data-auth-oauth-divider]").count() == 0
+            assert "By signing" not in page.locator(
+                '[data-testid="auth-card"]'
+            ).inner_text()
+        finally:
+            context.close()
 
     def test_empty_reset_request_can_be_fixed(self, django_server, page):
         page.goto(

@@ -98,6 +98,11 @@ class PasswordResetRequestViewTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "accounts/password_reset_request.html")
+        self.assertTemplateUsed(response, "accounts/includes/_auth_card.html")
+        self.assertTemplateUsed(
+            response,
+            "accounts/includes/_password_reset_request_form.html",
+        )
         self.assertContains(response, "Reset your password")
         self.assertContains(
             response,
@@ -106,7 +111,6 @@ class PasswordResetRequestViewTest(TestCase):
         self.assertContains(response, 'type="email"')
         self.assertContains(response, 'id="password-reset-email"')
         self.assertContains(response, 'name="email"')
-        self.assertContains(response, "text-base")
         self.assertContains(response, "Send reset link")
         self.assertContains(response, "Sending...")
         self.assertContains(
@@ -116,9 +120,33 @@ class PasswordResetRequestViewTest(TestCase):
         self.assertContains(response, 'href="/accounts/login/"')
         self.assertContains(response, "Back to sign in")
 
-    def test_request_page_uses_auth_card_padding(self):
+    def test_request_page_hides_newsletter_but_keeps_standard_footer(self):
         response = self.client.get("/accounts/password-reset-request")
-        self.assertContains(response, "p-5 sm:p-8")
+
+        self.assertTrue(response.context["hide_footer_newsletter"])
+        self.assertNotContains(response, 'id="newsletter"')
+        self.assertNotContains(response, "Build AI in public, with a group.")
+        self.assertContains(
+            response,
+            "Where action-oriented builders turn AI ideas into real projects.",
+        )
+
+    def test_request_page_omits_oauth_and_auth_legal_sections(self):
+        _configure_provider('google', 'Google')
+
+        response = self.client.get("/accounts/password-reset-request")
+
+        self.assertTemplateNotUsed(
+            response,
+            "accounts/includes/_oauth_providers.html",
+        )
+        self.assertTemplateNotUsed(
+            response,
+            "accounts/includes/_legal_footer.html",
+        )
+        self.assertNotContains(response, 'data-auth-oauth-divider')
+        self.assertNotContains(response, "Sign in with Google")
+        self.assertNotContains(response, "By signing in, you agree")
 
     def test_request_page_posts_to_existing_api_with_csrf(self):
         response = self.client.get("/accounts/password-reset-request")
@@ -143,6 +171,28 @@ class PasswordResetRequestViewTest(TestCase):
         self.assertEqual(url, "/accounts/password-reset-request")
 
 
+@tag('visual_regression')
+class PasswordResetRequestVisualRegressionTest(TestCase):
+    """Tailwind contracts for the shared password-reset auth shell."""
+
+    def test_request_page_uses_shared_auth_card_chrome(self):
+        response = self.client.get("/accounts/password-reset-request")
+
+        self.assertContains(
+            response,
+            "px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12",
+        )
+        self.assertContains(
+            response,
+            "rounded-lg border border-border bg-card p-5 sm:p-6",
+        )
+        self.assertContains(
+            response,
+            "text-2xl font-semibold tracking-tight sm:text-3xl",
+        )
+        self.assertContains(response, "text-base")
+
+
 @tag('core')
 class SharedAuthTemplateTest(TestCase):
     """Tests for the shared login/register auth shell and OAuth partials."""
@@ -162,6 +212,26 @@ class SharedAuthTemplateTest(TestCase):
         self.assertTemplateUsed(response, "accounts/includes/_register_form.html")
         self.assertTemplateUsed(response, "accounts/includes/_oauth_providers.html")
         self.assertTemplateUsed(response, "accounts/includes/_legal_footer.html")
+
+    def test_login_and_register_copy_uses_sentence_case(self):
+        login_response = self.client.get("/accounts/login/")
+        register_response = self.client.get("/accounts/register/")
+
+        self.assertContains(
+            login_response,
+            "<title>Sign in | AI Shipping Labs</title>",
+            html=True,
+        )
+        self.assertContains(login_response, ">Sign in</h1>")
+        self.assertContains(login_response, 'data-idle-text="Sign in"')
+        self.assertContains(
+            register_response,
+            "<title>Create account | AI Shipping Labs</title>",
+            html=True,
+        )
+        self.assertContains(register_response, ">Create account</h1>")
+        self.assertContains(register_response, 'data-idle-text="Create account"')
+        self.assertNotContains(register_response, "Create Account")
 
     def test_login_hides_oauth_area_when_all_providers_disabled(self):
         response = self.client.get("/accounts/login/")

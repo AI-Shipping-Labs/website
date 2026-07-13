@@ -3,7 +3,7 @@
 import re
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from payments.models import Tier
 
@@ -285,6 +285,7 @@ class LoginPageLinksWrapTest(TestCase):
         self.assertIn("gap-2", preceding)
 
 
+@tag("visual_regression")
 class LoginPageMobilePaddingTest(TestCase):
     """Login page card uses compact responsive padding."""
 
@@ -298,6 +299,7 @@ class LoginPageMobilePaddingTest(TestCase):
         self.assertIn("p-5 sm:p-6", preceding)
 
 
+@tag("visual_regression")
 class RegisterPageMobilePaddingTest(TestCase):
     """Register page card uses compact responsive padding."""
 
@@ -305,18 +307,19 @@ class RegisterPageMobilePaddingTest(TestCase):
         """Register card uses p-5 sm:p-6."""
         response = self.client.get("/accounts/register/")
         content = response.content.decode()
-        heading_pos = content.index("Create Account</h1>")
+        heading_pos = content.index("Create account</h1>")
         preceding = content[max(0, heading_pos - 400):heading_pos]
         self.assertIn("p-5 sm:p-6", preceding)
 
 
+@tag("visual_regression")
 class PasswordResetRequestMobilePaddingTest(TestCase):
-    """Password reset request page card uses responsive padding."""
+    """Password reset request shares the compact auth-card padding."""
 
     def test_password_reset_request_card_has_responsive_padding(self):
-        """Password reset request card uses p-5 sm:p-8."""
+        """Password reset request card uses p-5 sm:p-6."""
         response = self.client.get("/accounts/password-reset-request")
         content = response.content.decode()
         heading_pos = content.index("Reset your password</h1>")
         preceding = content[max(0, heading_pos - 400):heading_pos]
-        self.assertIn("p-5 sm:p-8", preceding)
+        self.assertIn("p-5 sm:p-6", preceding)

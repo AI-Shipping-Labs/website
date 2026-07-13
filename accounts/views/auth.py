@@ -102,7 +102,10 @@ def password_reset_request_view(request):
     return render(
         request,
         "accounts/password_reset_request.html",
-        {"prefill_email": prefill_email},
+        {
+            "prefill_email": prefill_email,
+            "hide_footer_newsletter": True,
+        },
     )
 
 

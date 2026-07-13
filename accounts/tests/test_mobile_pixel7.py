@@ -25,7 +25,7 @@ class SignupRedirectTest(TestCase):
         """GET /accounts/register/ returns 200 with styled form."""
         response = self.client.get("/accounts/register/")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Create Account")
+        self.assertContains(response, "Create account")
         self.assertContains(response, 'id="register-email"')
 
 

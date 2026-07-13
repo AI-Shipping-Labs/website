@@ -37,7 +37,7 @@ class InlineRegisterPartialTest(TestCase):
         self.assertIn('id="register-password"', html)
         self.assertIn('id="register-password-confirm"', html)
         # Submit button label.
-        self.assertIn("Create Account", html)
+        self.assertIn("Create account", html)
         # Wrapper testid so surface tests can scope to the card.
         self.assertIn('data-testid="inline-register-card"', html)
 

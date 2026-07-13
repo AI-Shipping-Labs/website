@@ -126,7 +126,7 @@ def test_member_surfaces_default_ci_smoke(
     ]
     auth_routes = [
         ("/accounts/login/", "Sign in"),
-        ("/accounts/register/", "Create Account"),
+        ("/accounts/register/", "Create account"),
     ]
 
     for path, text in member_routes:
@@ -171,7 +171,7 @@ def test_member_surfaces_have_consistent_frames_screenshots(
     ]
     auth_routes = [
         ("login", "/accounts/login/", "Sign in"),
-        ("register", "/accounts/register/", "Create Account"),
+        ("register", "/accounts/register/", "Create account"),
     ]
 
     for label, path, text in member_routes:

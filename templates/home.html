@@ -1,37 +1,6 @@
 {% extends "base.html" %}
 {% load member_badges %}
-{% load static %}
 {% load sprint_extras %}
-
-{% block extra_head %}
-<style>
-  #tiers .home-free-tier-card .home-inline-register-embed > div {
-    max-width: none;
-    border-width: 0;
-    background: transparent;
-    padding: 0;
-  }
-
-  #tiers .home-free-tier-card .home-inline-register-embed [data-auth-oauth-divider] {
-    margin-bottom: 1rem;
-    margin-top: 1rem;
-  }
-
-  #tiers .home-free-tier-card .home-inline-register-embed > div > .mt-6 {
-    margin-top: 1rem;
-  }
-
-  #tiers .home-free-tier-card .home-inline-register-embed > div > .mt-3 {
-    margin-top: 0.5rem;
-  }
-
-  #tiers .home-free-tier-card .home-inline-register-embed [data-auth-oauth-providers] a,
-  #tiers .home-free-tier-card .home-inline-register-embed button[aria-controls="inline-register-email-block"] {
-    padding-bottom: 0.625rem;
-    padding-top: 0.625rem;
-  }
-</style>
-{% endblock %}
 
 {% block title %}AI Shipping Labs | A Technical Community{% endblock %}
 
@@ -201,9 +170,11 @@
             {% endfor %}
           </ul>
 
-          <div class="mt-auto home-inline-register-embed" data-testid="home-free-tier-register">
-            {% include "accounts/includes/_inline_register_card.html" with collapse_email=True %}
-          </div>
+          <a href="/accounts/register/"
+             class="mt-auto flex min-h-[44px] w-full items-center justify-center rounded-md bg-secondary px-4 py-3 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:py-2.5"
+             data-testid="home-free-tier-cta">
+            Join free
+          </a>
         </div>
 
         {% for tier in tiers %}
@@ -663,9 +634,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="/static/js/accounts/auth-helpers.js"></script>
-{{ next_url|json_script:"auth-next-url" }}
-<script src="/static/js/accounts/inline-register.js"></script>
 <script>
 function toggleFaq(btn) {
   var content = btn.nextElementSibling;

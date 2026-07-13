@@ -103,7 +103,7 @@
           {% include "content/_gated_access_card.html" with gated_card_testid="project-paywall" gated_icon="lock" gated_heading=cta_message gated_description="Membership unlocks the full project write-up and code." required_tier_name=required_tier_name gated_cta_url=pricing_url gated_cta_label="View Pricing" gated_cta_testid="project-upgrade-cta" %}
         {% endif %}
       {% else %}
-      <div class="prose">
+      <div class="prose max-w-full overflow-x-auto" data-testid="project-body">
         {{ project.content_html|safe }}
       </div>
 

@@ -107,7 +107,7 @@
           {% endif %}
 
           <div class="relative mb-8" data-testid="teaser-body-wrapper">
-            <div class="prose teaser-body" data-testid="teaser-body">
+            <div class="prose teaser-body max-w-full overflow-x-auto" data-testid="teaser-body">
               {{ teaser_body_html|safe }}
             </div>
             <!-- Fade-out gradient over the bottom of the teaser body. Sits
@@ -127,7 +127,7 @@
           {% else %}
           <!-- Page body -->
           {% if page.body_html %}
-          <div class="prose prose-tight mb-12" data-testid="page-body">
+          <div class="prose prose-tight mb-12 max-w-full overflow-x-auto" data-testid="page-body">
             {{ page.body_html|safe }}
           </div>
           {% endif %}

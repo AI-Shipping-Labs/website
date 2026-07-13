@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Sign In | {{ site_name }}{% endblock %}
+{% block title %}Sign in | {{ site_name }}{% endblock %}
 
 {% block body %}
   {% include "accounts/includes/_auth_card.html" with auth_title="Sign in" auth_subtitle="Sign in to access your AI Shipping Labs account" form_template="accounts/includes/_login_form.html" oauth_action="Sign in" oauth_divider_text="continue with" legal_action="signing in" %}

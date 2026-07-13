@@ -5,15 +5,19 @@
     <div class="absolute inset-0 hero-gradient"></div>
     <div class="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
       <div class="mx-auto max-w-md">
-        <div class="rounded-lg border border-border bg-card p-5 sm:p-6">
+        <div class="rounded-lg border border-border bg-card p-5 sm:p-6" data-testid="auth-card">
           <div class="text-center mb-8">
             <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">{{ auth_title }}</h1>
             <p class="mt-2 text-sm text-muted-foreground">{{ auth_subtitle }}</p>
           </div>
 
           {% include form_template %}
-          {% include "accounts/includes/_oauth_providers.html" %}
-          {% include "accounts/includes/_legal_footer.html" %}
+          {% if not hide_oauth %}
+            {% include "accounts/includes/_oauth_providers.html" %}
+          {% endif %}
+          {% if not hide_legal %}
+            {% include "accounts/includes/_legal_footer.html" %}
+          {% endif %}
         </div>
       </div>
     </div>

@@ -140,10 +140,10 @@
         Desktop layout now shows four cards while preserving the highlighted
         Main tier treatment.
       {% endcomment %}
-      <div class="mx-auto mt-4 grid max-w-7xl gap-6 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:items-start max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:pt-6 max-lg:[scrollbar-width:none] sm:mt-16 lg:grid-cols-4"
+      <div class="mx-auto mt-4 grid max-w-7xl gap-6 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:items-start max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:pt-6 max-lg:[scrollbar-width:none] sm:mt-16 lg:grid-cols-4 lg:items-start"
            data-tier-carousel
            data-testid="home-tier-carousel">
-        <div class="home-free-tier-card relative flex flex-col overflow-visible rounded-xl border border-border bg-background p-5 transition-all lg:min-h-full max-lg:flex-none max-lg:snap-center max-lg:w-[min(82vw,22rem)] max-lg:p-4 sm:p-8"
+        <div class="home-free-tier-card relative flex flex-col overflow-visible rounded-xl border border-border bg-background p-5 transition-all max-lg:flex-none max-lg:snap-center max-lg:w-[min(82vw,22rem)] max-lg:p-4 sm:p-8"
              data-tier-card="free"
              data-testid="home-tier-card">
           <div class="mb-6 max-lg:mb-3">
@@ -178,8 +178,8 @@
         </div>
 
         {% for tier in tiers %}
-        {# Issue #510: drop `min-h-full` on mobile so peer cards size to content #}
-        <div class="relative flex flex-col overflow-visible rounded-xl border p-5 transition-all lg:min-h-full max-lg:flex-none max-lg:snap-center sm:p-8 {% if tier.highlighted %}border-accent bg-background shadow-xl ring-2 ring-accent/20 max-lg:w-[min(82vw,22rem)] lg:scale-105{% else %}border-border bg-background max-lg:w-[min(70vw,18rem)] max-lg:p-4{% endif %}"
+        {# Issues #510/#1235: cards size to their own content on mobile and desktop. #}
+        <div class="relative flex flex-col overflow-visible rounded-xl border p-5 transition-all max-lg:flex-none max-lg:snap-center sm:p-8 {% if tier.highlighted %}border-accent bg-background shadow-xl ring-2 ring-accent/20 max-lg:w-[min(82vw,22rem)] lg:scale-105{% else %}border-border bg-background max-lg:w-[min(70vw,18rem)] max-lg:p-4{% endif %}"
              data-tier-card="{{ tier.stripe_key }}"
              data-testid="home-tier-card"
              style="{% if tier.highlighted %}box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);{% endif %}">

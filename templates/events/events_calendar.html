@@ -21,15 +21,15 @@
 
       <!-- View Toggle + Subscribe CTA -->
       <div class="flex flex-wrap items-center gap-2 mb-6" data-testid="events-view-toggle-row">
-        <a href="{% url 'events_list' %}" class="px-3 py-1 rounded bg-secondary text-muted-foreground text-sm hover:bg-secondary/80 transition-colors">List</a>
-        <a href="{% url 'events_calendar' %}" class="px-3 py-1 rounded bg-accent text-accent-foreground text-sm">Calendar</a>
+        <a href="{% url 'events_list' %}" class="inline-flex min-h-[44px] items-center rounded-full bg-secondary px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">List</a>
+        <a href="{% url 'events_calendar' %}" class="inline-flex min-h-[44px] items-center rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" aria-current="page">Calendar</a>
         {% include "events/_subscribe_popover.html" %}
       </div>
 
       <!-- Month Navigation -->
       <div class="flex items-center justify-between mb-6">
         <a href="/events/calendar/{{ prev_year }}/{{ prev_month }}"
-           class="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+           class="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
            aria-label="Previous month">
           <i data-lucide="chevron-left" class="h-4 w-4"></i>
           <span class="hidden sm:inline">Prev</span>
@@ -37,12 +37,12 @@
         <div class="flex items-center gap-3">
           <h2 class="text-xl font-semibold tracking-tight" data-testid="calendar-heading">{{ month_name }} {{ year }}</h2>
           <a href="{% url 'events_calendar' %}"
-             class="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
+             class="inline-flex min-h-[44px] items-center rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
             Today
           </a>
         </div>
         <a href="/events/calendar/{{ next_year }}/{{ next_month }}"
-           class="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+           class="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
            aria-label="Next month">
           <span class="hidden sm:inline">Next</span>
           <i data-lucide="chevron-right" class="h-4 w-4"></i>
@@ -64,10 +64,10 @@
 
         <!-- Calendar Weeks -->
         {% for week in weeks %}
-        <div class="grid grid-cols-7 border-b border-border/50">
+        <div class="grid grid-cols-7 border-b border-border/50" data-calendar-week="{{ forloop.counter }}">
           {% for cell in week %}
-          <div class="min-h-[5rem] p-1.5 {% if cell.day == 0 %}bg-secondary/30{% endif %} {% if cell.is_today %}bg-accent/10 ring-1 ring-inset ring-accent/40{% endif %}"
-               {% if cell.events %}data-calendar-day="{{ cell.day }}" onclick="toggleDayEvents({{ cell.day }})" role="button" tabindex="0"{% endif %}>
+          <div class="min-h-[5rem] p-1.5 {% if cell.day == 0 %}bg-secondary/30{% endif %} {% if cell.is_today %}bg-accent/10 ring-1 ring-inset ring-accent/40{% endif %}{% if cell.events %} cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent{% endif %}"
+               {% if cell.events %}id="calendar-day-{{ year }}-{{ month }}-{{ cell.day }}" data-calendar-day="{{ cell.day }}" onclick="toggleDayEvents(this)" onkeydown="handleDayEventsKeydown(event, this)" role="button" tabindex="0" aria-label="{{ month_name }} {{ cell.day }}, {{ year }}: {{ cell.events|length }} event{{ cell.events|length|pluralize }}" aria-expanded="false" aria-controls="day-events-{{ year }}-{{ month }}-{{ cell.day }}"{% endif %}>
             {% if cell.day != 0 %}
             <div class="flex items-start justify-between">
               <span class="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs {% if cell.is_today %}bg-accent text-accent-foreground font-bold{% else %}text-muted-foreground{% endif %}">
@@ -93,13 +93,10 @@
           </div>
           {% endfor %}
         </div>
-        {% endfor %}
-
-        <!-- Day Events Panel (expanded on click) -->
-        {% for week in weeks %}
+        <!-- The expanded panel belongs to this week and precedes the next row. -->
         {% for cell in week %}
         {% if cell.day != 0 and cell.events %}
-        <div id="day-events-{{ cell.day }}" class="hidden border border-border rounded-lg bg-card p-4 mt-2 mb-2" data-day-panel="{{ cell.day }}">
+        <div id="day-events-{{ year }}-{{ month }}-{{ cell.day }}" class="hidden border border-border rounded-lg bg-card p-4 mt-2 mb-2" data-day-panel="{{ cell.day }}" data-calendar-week="{{ forloop.parentloop.counter }}" role="region" aria-labelledby="calendar-day-{{ year }}-{{ month }}-{{ cell.day }}">
           <h3 class="text-sm font-semibold text-foreground mb-3">{{ month_name }} {{ cell.day }}, {{ year }}</h3>
           <div class="space-y-3">
             {% for event in cell.events %}
@@ -165,17 +162,29 @@
 </main>
 
 <script>
-function toggleDayEvents(day) {
-  // Hide all day panels first
+function toggleDayEvents(trigger) {
+  var targetId = trigger.getAttribute('aria-controls');
+  var shouldOpen = trigger.getAttribute('aria-expanded') !== 'true';
+
+  // Keep exactly one day open and synchronize every trigger's ARIA state.
   document.querySelectorAll('[data-day-panel]').forEach(function(panel) {
-    if (panel.dataset.dayPanel !== String(day)) {
-      panel.classList.add('hidden');
-    }
+    panel.classList.add('hidden');
   });
-  // Toggle the clicked day's panel
-  var panel = document.getElementById('day-events-' + day);
-  if (panel) {
-    panel.classList.toggle('hidden');
+  document.querySelectorAll('[data-calendar-day]').forEach(function(dayTrigger) {
+    dayTrigger.setAttribute('aria-expanded', 'false');
+  });
+
+  var panel = document.getElementById(targetId);
+  if (panel && shouldOpen) {
+    panel.classList.remove('hidden');
+    trigger.setAttribute('aria-expanded', 'true');
+  }
+}
+
+function handleDayEventsKeydown(event, trigger) {
+  if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+    event.preventDefault();
+    toggleDayEvents(trigger);
   }
 }
 </script>

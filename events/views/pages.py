@@ -745,6 +745,12 @@ def event_detail(request, event_id, slug):
         event,
         has_access=has_access,
     )
+    show_no_recording_closure = (
+        event.is_past
+        and not event.has_recording
+        and not event.has_recap
+        and not _event_has_linked_workshop(event)
+    )
 
     context = {
         'event': event,
@@ -797,6 +803,10 @@ def event_detail(request, event_id, slug):
         # Issue #1037: structured post-event resource links for standalone
         # completed events. No description scraping, no inline playback UI.
         'post_event_resources': post_event_resources,
+        # Issue #1232: this is based on the event's real recording metadata,
+        # not viewer-visible resources, so tier gating cannot produce a false
+        # "No recording" message. Recaps and Workshop handoffs stay canonical.
+        'show_no_recording_closure': show_no_recording_closure,
         'related_content': (
             build_related_content_rail(event)
             if event.published and event.status not in HIDDEN_FROM_PUBLIC_STATUSES

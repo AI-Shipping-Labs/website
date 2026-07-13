@@ -46,6 +46,11 @@
       {% include "events/_event_description.html" %}
       {% include "events/_event_hosts.html" %}
       {% include "events/_event_post_resources.html" %}
+      {% if show_no_recording_closure %}
+      <div class="mb-12 rounded-lg border border-border bg-secondary p-5 text-sm text-muted-foreground sm:p-6" data-testid="event-no-recording-closure">
+        This event has ended. No recording is available.
+      </div>
+      {% endif %}
 
       {% comment %}
         Issue #679: post-event feedback surface (aggregate badge + form).

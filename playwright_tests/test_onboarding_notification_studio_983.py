@@ -271,7 +271,7 @@ class TestPlanRequestNotificationRegression:
         self, django_server, browser,
     ):
         """Plan-request notification opens the locked preparation flow."""
-        import datetime
+        from django.utils import timezone
 
         from plans.models import PlanRequest, Sprint
         from plans.views.sprints import (
@@ -287,8 +287,7 @@ class TestPlanRequestNotificationRegression:
         sprint = Sprint.objects.create(
             name="Sprint 983",
             slug="sprint-983",
-            # date-rot-ok: notification routing fixture; current sprint state is not under test.
-            start_date=datetime.date(2026, 6, 1),
+            start_date=timezone.localdate(),
         )
         member_pk = member.pk
         sprint_pk = sprint.pk

@@ -618,8 +618,8 @@ class ProjectDetailGatingTest(TestCase):
             response,
             'href="/accounts/register/?next=/projects/gated-project"',
         )
-        # Gated overlay artefacts: blur style and lock icon in the CTA banner
-        self.assertContains(response, 'filter: blur(8px)')
+        # The canonical access card replaces the old blurred skeleton.
+        self.assertNotContains(response, 'filter: blur(8px)')
         self.assertContains(response, 'data-lucide="lock"')
         # The "View Pricing" button text from the gated CTA
         self.assertContains(response, 'View Pricing')

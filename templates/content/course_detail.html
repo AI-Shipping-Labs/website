@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load member_badges %}
 {% load seo_tags %}
 {% load teaser_tags %}
 
@@ -28,6 +29,8 @@
           </span>
           {% if course.is_free %}
           <span class="rounded-full bg-green-500/20 px-3 py-1.5 text-sm font-medium text-green-400">Free</span>
+          {% elif course.required_level > 0 %}
+          {% member_tier_badge course.required_level tone="accent_strong" icon="lock" %}
           {% endif %}
         </div>
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
@@ -299,18 +302,7 @@
         {% include "accounts/includes/_inline_register_card.html" with collapse_email=True %}
       </div>
       {% elif cta_message %}
-      <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center">
-        <div class="mb-4">
-          <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
-        </div>
-        <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
-        <p class="mt-2 text-sm text-muted-foreground">Get full access to this course and more with a membership.</p>
-        <a href="{{ cta_url }}"
-           class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
-          View Pricing
-        </a>
-      </div>
+      {% include "content/_gated_access_card.html" with gated_card_testid="course-gated-cta" gated_icon="lock" gated_heading=cta_message gated_description="Get full access to this course and more with a membership." required_tier_name=required_tier_name gated_cta_url=cta_url gated_cta_label="View Pricing" gated_cta_testid="course-gated-cta-button" %}
       {% endif %}
     </div>
   </article>

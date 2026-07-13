@@ -279,6 +279,12 @@ class PollGatingTest(TierSetupMixin, TestCase):
             'href="/pricing"',
         )
         self.assertContains(response, 'View Pricing')
+        self.assertContains(response, 'data-testid="poll-gated"')
+        self.assertContains(response, 'data-testid="poll-pricing-cta"')
+        self.assertContains(response, 'Main or above required')
+        self.assertEqual(
+            response.content.count(b'data-testid="gated-required-tier"'), 1,
+        )
 
 
 class CoursePollGatingTest(TierSetupMixin, TestCase):
@@ -329,6 +335,9 @@ class CoursePollGatingTest(TierSetupMixin, TestCase):
         response = self.client.get(f'/vote/{self.course_poll.id}')
         self.assertContains(response, 'href="/pricing"')
         self.assertContains(response, 'View Pricing')
+        self.assertContains(response, 'data-testid="poll-gated"')
+        self.assertContains(response, 'Premium required')
+        self.assertNotContains(response, 'Premium or above required')
 
 
 class ClosedPollDisplayTest(TierSetupMixin, TestCase):

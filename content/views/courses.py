@@ -191,6 +191,10 @@ def course_detail(request, slug):
         'progress_pct': progress_pct,
         'cta_message': cta_message,
         'cta_url': cta_url,
+        'required_tier_name': (
+            get_required_tier_name(course.required_level)
+            if course.required_level > 0 else ''
+        ),
         'is_free_course': course.is_free,
         'user_authenticated': user.is_authenticated,
         'active_cohorts': active_cohorts,
@@ -447,6 +451,10 @@ def module_overview(request, course_slug, module_slug):
         'completed_unit_ids': completed_unit_ids,
         'cta_message': cta_message,
         'cta_url': cta_url,
+        'required_tier_name': (
+            get_required_tier_name(course.required_level)
+            if not has_access else ''
+        ),
     }
     return render(request, 'content/module_overview.html', context)
 

@@ -5,6 +5,7 @@ import datetime
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from payments.models import Tier
 from plans.models import Plan, Sprint, SprintEnrollment
@@ -31,7 +32,7 @@ class SprintJoinTest(TestCase):
     def setUpTestData(cls):
         cls.sprint = Sprint.objects.create(
             name='May 2026', slug='may-2026',
-            start_date=datetime.date(2026, 5, 1),
+            start_date=timezone.localdate() - datetime.timedelta(days=7),
             status='active', min_tier_level=30,
         )
 
@@ -109,6 +110,85 @@ class SprintJoinTest(TestCase):
         response = self.client.post(url)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(SprintEnrollment.objects.count(), before)
+
+
+class SprintEndedJoinGuardTest(TestCase):
+    """Direct POST cannot bypass an ended participation window (#1233)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.today = timezone.localdate()
+        cls.ended = Sprint.objects.create(
+            name='Ended cohort', slug='ended-cohort',
+            start_date=cls.today - datetime.timedelta(weeks=6),
+            duration_weeks=6, status='active', min_tier_level=30,
+        )
+
+    def test_eligible_direct_post_redirects_with_message_and_no_side_effect(self):
+        premium = _premium_user('ended-premium@test.com')
+        self.client.force_login(premium)
+        join_url = reverse(
+            'sprint_join', kwargs={'sprint_slug': self.ended.slug},
+        )
+
+        response = self.client.post(join_url, follow=True)
+
+        self.assertRedirects(response, self.ended.get_absolute_url())
+        self.assertContains(
+            response,
+            'This sprint has ended and is no longer open to join.',
+        )
+        self.assertContains(response, 'data-testid="sprint-cta-ended"')
+        self.assertFalse(
+            SprintEnrollment.objects.filter(
+                sprint=self.ended, user=premium,
+            ).exists()
+        )
+        self.assertFalse(
+            Plan.objects.filter(sprint=self.ended, member=premium).exists()
+        )
+
+    def test_ended_guard_precedes_tier_evaluation(self):
+        free = _free_user('ended-free@test.com')
+        self.client.force_login(free)
+        join_url = reverse(
+            'sprint_join', kwargs={'sprint_slug': self.ended.slug},
+        )
+
+        response = self.client.post(join_url, follow=True)
+
+        self.assertRedirects(response, self.ended.get_absolute_url())
+        self.assertContains(
+            response,
+            'This sprint has ended and is no longer open to join.',
+        )
+        self.assertNotContains(response, 'Upgrade to Premium')
+        self.assertFalse(
+            SprintEnrollment.objects.filter(
+                sprint=self.ended, user=free,
+            ).exists()
+        )
+
+    def test_cancelled_guard_keeps_distinct_message(self):
+        self.ended.status = 'cancelled'
+        self.ended.save(update_fields=['status'])
+        premium = _premium_user('cancelled-premium@test.com')
+        self.client.force_login(premium)
+        join_url = reverse(
+            'sprint_join', kwargs={'sprint_slug': self.ended.slug},
+        )
+
+        response = self.client.post(join_url, follow=True)
+
+        self.assertRedirects(response, self.ended.get_absolute_url())
+        self.assertContains(response, 'This sprint has been cancelled.')
+        self.assertContains(response, 'data-testid="sprint-cta-cancelled"')
+        self.assertNotContains(response, 'data-testid="sprint-cta-ended"')
+        self.assertFalse(
+            SprintEnrollment.objects.filter(
+                sprint=self.ended, user=premium,
+            ).exists()
+        )
 
 
 class SprintLeaveTest(TestCase):

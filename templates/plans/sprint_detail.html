@@ -33,13 +33,6 @@
           <p class="text-sm text-foreground" data-testid="sprint-cta-cancelled">
             This sprint has been cancelled and is no longer open to join.
           </p>
-        {% elif not is_authenticated %}
-          <p class="mb-4 text-sm text-muted-foreground">Log in to join this sprint and prepare your plan.</p>
-          <a href="/accounts/login/?next=/sprints/{{ sprint.slug }}"
-             class="min-h-[44px] w-full sm:w-auto {% button_classes 'primary' %}"
-             data-testid="sprint-cta-login">
-            Log in to join
-          </a>
         {% elif enrolled %}
           <p class="text-sm font-medium text-foreground" data-testid="sprint-cta-enrolled">You're enrolled.</p>
           <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -68,6 +61,17 @@
               Your plan and progress stay; the cohort just won&rsquo;t see them anymore.
             </p>
           </div>
+        {% elif sprint_has_ended %}
+          <p class="text-sm text-foreground" data-testid="sprint-cta-ended">
+            This sprint has ended and is no longer open to join.
+          </p>
+        {% elif not is_authenticated %}
+          <p class="mb-4 text-sm text-muted-foreground">Log in to join this sprint and prepare your plan.</p>
+          <a href="/accounts/login/?next=/sprints/{{ sprint.slug }}"
+             class="min-h-[44px] w-full sm:w-auto {% button_classes 'primary' %}"
+             data-testid="sprint-cta-login">
+            Log in to join
+          </a>
         {% elif not eligible %}
           <p class="text-sm text-foreground">
             This sprint requires the {{ required_tier_name }} tier.

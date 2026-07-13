@@ -15,10 +15,15 @@ from freezegun import freeze_time
 
 from events.models import Event, EventSeries
 from payments.models import Tier
-from plans.models import Sprint, SprintEnrollment
+from plans.models import Plan, Sprint, SprintEnrollment
 
 User = get_user_model()
 FROZEN_CALL_NOW = '2026-06-15T12:00:00Z'
+
+
+def _active_sprint_start_date():
+    """Keep CTA fixtures inside their participation window."""
+    return timezone.localdate() - datetime.timedelta(days=7)
 
 
 def _premium_user(email):
@@ -80,7 +85,7 @@ class SprintDetailAnonymousTest(TestCase):
     def setUpTestData(cls):
         cls.sprint = Sprint.objects.create(
             name='May 2026', slug='may-2026',
-            start_date=datetime.date(2026, 5, 1),
+            start_date=_active_sprint_start_date(),
             status='active', min_tier_level=30,
         )
 
@@ -131,7 +136,7 @@ class SprintDetailUnderTierTest(TestCase):
     def setUpTestData(cls):
         cls.sprint = Sprint.objects.create(
             name='Premium-only', slug='premium-only',
-            start_date=datetime.date(2026, 5, 1),
+            start_date=_active_sprint_start_date(),
             status='active', min_tier_level=30,
         )
         cls.free_user = _free_user('free@test.com')
@@ -152,7 +157,7 @@ class SprintDetailEligibleTest(TestCase):
     def setUpTestData(cls):
         cls.sprint = Sprint.objects.create(
             name='Premium-only', slug='premium-only',
-            start_date=datetime.date(2026, 5, 1),
+            start_date=_active_sprint_start_date(),
             status='active', min_tier_level=30,
         )
         cls.premium_user = _premium_user('p@test.com')
@@ -194,7 +199,7 @@ class SprintDetailCommentLeakTest(TestCase):
     def setUpTestData(cls):
         cls.sprint = Sprint.objects.create(
             name='Premium-only', slug='premium-only',
-            start_date=datetime.date(2026, 5, 1),
+            start_date=_active_sprint_start_date(),
             status='active', min_tier_level=30,
         )
         cls.premium_user = _premium_user('p@test.com')
@@ -209,6 +214,102 @@ class SprintDetailCommentLeakTest(TestCase):
         self.assertContains(response, 'data-testid="sprint-cta-join"')
         self.assertNotContains(response, 'emerald color override')
         self.assertNotContains(response, 'win the cascade')
+
+
+class SprintDetailEndedParticipationTest(TestCase):
+    """Ended self-join closes without hiding existing enrolled work (#1233)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.today = timezone.localdate()
+        cls.sprint = Sprint.objects.create(
+            name='Ended cohort', slug='ended-cohort',
+            start_date=cls.today - datetime.timedelta(weeks=6),
+            duration_weeks=6, status='active', min_tier_level=30,
+        )
+        cls.free_user = _free_user('ended-free@test.com')
+        cls.premium_user = _premium_user('ended-premium@test.com')
+
+    def _assert_ended_closure(self, response):
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['sprint_has_ended'])
+        self.assertContains(response, 'data-testid="sprint-cta-ended"')
+        self.assertContains(
+            response,
+            'This sprint has ended and is no longer open to join.',
+        )
+        for hidden_testid in (
+            'sprint-cta-login', 'sprint-cta-upgrade', 'sprint-cta-join',
+        ):
+            self.assertNotContains(
+                response, f'data-testid="{hidden_testid}"',
+            )
+
+    def test_anonymous_sees_ended_closure_instead_of_login(self):
+        response = self.client.get(self.sprint.get_absolute_url())
+        self._assert_ended_closure(response)
+
+    def test_under_tier_member_sees_ended_closure_instead_of_upgrade(self):
+        self.client.force_login(self.free_user)
+        response = self.client.get(self.sprint.get_absolute_url())
+        self._assert_ended_closure(response)
+
+    def test_eligible_member_sees_ended_closure_instead_of_join(self):
+        self.client.force_login(self.premium_user)
+        response = self.client.get(self.sprint.get_absolute_url())
+        self._assert_ended_closure(response)
+
+    def test_enrolled_member_keeps_plan_action_after_sprint_ends(self):
+        plan = Plan.objects.create(
+            sprint=self.sprint, member=self.premium_user,
+        )
+        self.client.force_login(self.premium_user)
+
+        response = self.client.get(self.sprint.get_absolute_url())
+
+        self.assertContains(response, 'data-testid="sprint-cta-enrolled"')
+        self.assertContains(response, 'data-testid="sprint-cta-open-plan"')
+        self.assertContains(
+            response,
+            reverse(
+                'my_plan_detail',
+                kwargs={
+                    'sprint_slug': self.sprint.slug,
+                    'plan_id': plan.pk,
+                },
+            ),
+        )
+        self.assertNotContains(response, 'data-testid="sprint-cta-ended"')
+        self.assertNotContains(response, 'data-testid="sprint-cta-join"')
+
+    def test_cancelled_ended_sprint_keeps_cancelled_explanation(self):
+        self.sprint.status = 'cancelled'
+        self.sprint.save(update_fields=['status'])
+
+        response = self.client.get(self.sprint.get_absolute_url())
+
+        self.assertContains(response, 'data-testid="sprint-cta-cancelled"')
+        self.assertContains(
+            response,
+            'This sprint has been cancelled and is no longer open to join.',
+        )
+        self.assertNotContains(response, 'data-testid="sprint-cta-ended"')
+
+    def test_end_date_boundary_closes_today_but_not_tomorrow(self):
+        current = Sprint.objects.create(
+            name='Current until tomorrow', slug='current-until-tomorrow',
+            start_date=self.today - datetime.timedelta(days=6),
+            duration_weeks=1, status='active', min_tier_level=30,
+        )
+        self.client.force_login(self.premium_user)
+
+        current_response = self.client.get(current.get_absolute_url())
+        ended_response = self.client.get(self.sprint.get_absolute_url())
+
+        self.assertEqual(current.end_date, self.today + datetime.timedelta(days=1))
+        self.assertContains(current_response, 'data-testid="sprint-cta-join"')
+        self.assertEqual(self.sprint.end_date, self.today)
+        self.assertContains(ended_response, 'data-testid="sprint-cta-ended"')
 
 
 class SprintDetailTierBadgeTest(TestCase):

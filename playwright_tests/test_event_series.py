@@ -1268,6 +1268,9 @@ class TestScenario956PerSessionTierBadge:
 
         badges = page.locator('[data-testid="series-event-tier"]')
         assert badges.count() == 2
+        assert page.locator(
+            '[data-testid="series-event-tier"][data-component="member-badge"]'
+        ).count() == 2
 
         # The Free badge (required-level 0) reads "Free" and has no lock.
         # lucide.createIcons() swaps the <i data-lucide="lock"> for an

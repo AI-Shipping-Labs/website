@@ -58,6 +58,14 @@ class HomeViewTest(TestCase):
         self.assertEqual(list(response.context['projects']), [self.project])
         self.assertEqual(list(response.context['curated_links']), [self.link])
 
+    def test_home_project_card_shows_shared_free_access_badge(self):
+        response = self.client.get('/')
+
+        self.assertContains(response, 'data-testid="home-project-card"', count=1)
+        self.assertContains(response, 'data-testid="project-free-badge"', count=1)
+        self.assertContains(response, 'data-required-level="0"', count=1)
+        self.assertContains(response, 'data-lucide="badge-check"')
+
     def test_home_contains_sections(self):
         response = self.client.get('/')
         for section_id in (

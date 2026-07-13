@@ -247,6 +247,11 @@ class TestActivitiesAccessByTierLayout:
         expect = page.get_by_test_id("sprint-detail-name")
         expect.wait_for()
         assert "May Shipping Sprint" in expect.inner_text()
+        tier_badge = page.get_by_test_id("sprint-tier-badge")
+        assert tier_badge.inner_text() == "Main or above"
+        assert tier_badge.get_attribute("data-required-level") == "20"
+        assert tier_badge.locator("svg.lucide-lock").count() == 1
+        assert "Main tier required" not in page.locator("body").inner_text()
         assert page.get_by_test_id("sprint-cta-login").is_visible()
         _shot(page, "02-activities-anonymous-sprint-detail")
 
@@ -359,6 +364,9 @@ class TestActivitiesAccessByTierLayout:
         detail.click()
         page.wait_for_load_state("domcontentloaded")
         assert page.url.rstrip("/").endswith("/sprints/premium-shipping-sprint")
+        tier_badge = page.get_by_test_id("sprint-tier-badge")
+        assert tier_badge.inner_text() == "Premium"
+        assert tier_badge.get_attribute("data-required-level") == "30"
         assert page.get_by_test_id("sprint-cta-upgrade").is_visible()
         assert "requires the Premium tier" in page.locator("body").inner_text()
 

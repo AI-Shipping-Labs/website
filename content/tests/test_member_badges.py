@@ -38,6 +38,38 @@ class MemberBadgeRendererTest(SimpleTestCase):
         self.assertIn('Basic or above', html)
         self.assertNotIn('Basic+', html)
 
+    def test_tier_badge_preserves_numeric_required_level_metadata(self):
+        labels = {
+            0: 'Free',
+            5: 'Free with sign-in',
+            10: 'Basic or above',
+            20: 'Main or above',
+            30: 'Premium',
+        }
+
+        for level, label in labels.items():
+            with self.subTest(level=level):
+                html = render_template(
+                    """
+                    {% load member_badges %}
+                    {% member_tier_badge level %}
+                    """,
+                    {'level': level},
+                )
+                self.assertIn(f'data-required-level="{level}"', html)
+                self.assertIn(label, html)
+
+    def test_non_tier_badges_do_not_emit_required_level_metadata(self):
+        html = render_template(
+            """
+            {% load member_badges %}
+            {% member_label_badge "Admin" %}
+            {% member_status_badge "Registered" %}
+            """,
+        )
+
+        self.assertNotIn('data-required-level', html)
+
     def test_status_badge_uses_visible_text(self):
         html = render_template(
             """
@@ -67,6 +99,7 @@ class MemberBadgeTemplateUsageTest(SimpleTestCase):
             'templates/events/_upcoming_event_card.html',
             'templates/events/events_calendar.html',
             'templates/events/events_list.html',
+            'templates/events/event_series.html',
             'templates/voting/poll_list.html',
             'templates/voting/poll_detail.html',
         ]

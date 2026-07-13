@@ -60,6 +60,7 @@ def _context(
     testid='',
     extra_class='',
     uppercase=False,
+    required_level=None,
 ):
     size_classes = SIZE_CLASSES.get(size, SIZE_CLASSES['xs'])
     tone_classes = TONE_CLASSES.get(tone, TONE_CLASSES['neutral'])
@@ -75,6 +76,8 @@ def _context(
         'testid': testid,
         'classes': classes,
         'icon_classes': ICON_SIZE_CLASSES.get(size, ICON_SIZE_CLASSES['xs']),
+        'has_required_level': required_level is not None,
+        'required_level': required_level,
     }
 
 
@@ -121,6 +124,7 @@ def member_tier_badge(
         element_id=element_id,
         testid=testid,
         extra_class=extra_class,
+        required_level=required_level,
     )
 
 

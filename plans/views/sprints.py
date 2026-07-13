@@ -148,6 +148,7 @@ def sprint_detail(request, sprint_slug):
     user_level = get_user_level(user) if is_authenticated else 0
     eligible = user_level >= sprint.min_tier_level
     enrolled = _is_enrolled(sprint, user)
+    sprint_has_ended = sprint.has_ended()
     viewer_plan = _viewer_plan(sprint, user)
     required_tier_name = LEVEL_TO_TIER_NAME.get(sprint.min_tier_level, 'Premium')
     accountability_partners = []
@@ -171,6 +172,7 @@ def sprint_detail(request, sprint_slug):
             'sprint': sprint,
             'is_authenticated': is_authenticated,
             'enrolled': enrolled,
+            'sprint_has_ended': sprint_has_ended,
             'eligible': eligible,
             'viewer_plan': viewer_plan,
             'required_tier_name': required_tier_name,
@@ -354,6 +356,18 @@ def sprint_join(request, sprint_slug):
     # enrollments/plans are untouched; only the join path is blocked.
     if sprint.status == 'cancelled':
         messages.error(request, 'This sprint has been cancelled.')
+        return redirect('sprint_detail', sprint_slug=sprint.slug)
+
+    # The participation window is closed on the sprint's existing derived
+    # hand-off boundary (issue #1233). Keep this ahead of tier evaluation and
+    # enrollment creation so stale pages and handcrafted requests cannot
+    # create a late self-enrollment. Staff enrollment paths are intentionally
+    # separate and remain available.
+    if sprint.has_ended():
+        messages.error(
+            request,
+            'This sprint has ended and is no longer open to join.',
+        )
         return redirect('sprint_detail', sprint_slug=sprint.slug)
 
     user_level = get_user_level(request.user)

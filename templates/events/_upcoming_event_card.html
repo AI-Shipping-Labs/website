@@ -7,7 +7,7 @@ the Upcoming loop can render either an event row or a grouped series row.
 event ids the current user is registered for. Behaviour is unchanged from
 the inline card it replaced (#523 / #673 / #857 / #572).
 {% endcomment %}
-<article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
+<article class="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 sm:p-5" data-testid="upcoming-event-card">
   {% if event.event_series %}
   {% comment %}
   The series link lives OUTSIDE the wrapping clickable-card <a>

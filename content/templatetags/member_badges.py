@@ -39,7 +39,7 @@ STATUS_TONES = {
     'closed': 'danger',
     'enrolled': 'success_soft',
     'open': 'success',
-    'past': 'success',
+    'past': 'muted',
     'proposals_open': 'success',
     'registered': 'success',
     'upcoming': 'info',

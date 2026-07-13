@@ -81,6 +81,43 @@ class MemberBadgeRendererTest(SimpleTestCase):
         self.assertIn('Proposals Open', html)
         self.assertIn('data-lucide="plus"', html)
 
+    def test_past_status_badge_uses_neutral_tone(self):
+        html = render_template(
+            """
+            {% load member_badges %}
+            {% member_status_badge "Past" status="past" %}
+            """,
+        )
+
+        self.assertIn('bg-secondary', html)
+        self.assertIn('text-muted-foreground', html)
+        self.assertNotIn('bg-green-', html)
+        self.assertNotIn('text-green-', html)
+
+    def test_other_status_tones_are_unchanged(self):
+        expected_classes = {
+            'active': 'bg-green-500/20 text-green-400',
+            'closed': 'bg-red-500/20 text-red-400',
+            'enrolled': 'bg-green-500/15 text-green-400',
+            'upcoming': 'bg-blue-500/20 text-blue-400',
+            'registered': 'bg-green-500/20 text-green-400',
+            'open': 'bg-green-500/20 text-green-400',
+            'proposals_open': 'bg-green-500/20 text-green-400',
+            'cancelled': 'bg-secondary text-muted-foreground',
+        }
+
+        for status, classes in expected_classes.items():
+            with self.subTest(status=status):
+                html = render_template(
+                    """
+                    {% load member_badges %}
+                    {% member_status_badge label status=status %}
+                    """,
+                    {'label': status.title(), 'status': status},
+                )
+                for class_name in classes.split():
+                    self.assertIn(class_name, html)
+
 
 class MemberBadgeTemplateUsageTest(SimpleTestCase):
     def test_first_batch_templates_load_member_badges(self):

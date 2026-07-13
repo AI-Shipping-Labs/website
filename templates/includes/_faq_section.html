@@ -1,8 +1,7 @@
 {% comment %}
 FAQ section partial.
 
-Used on the marketing homepage (templates/home.html) and the About page
-(templates/content/about.html). Expects:
+Used on the marketing homepage (templates/home.html). Expects:
 
   - faq_items: iterable of dicts with `question` and `answer` keys.
   - section_id (optional, default "faq"): id used on the wrapping <section> so
@@ -11,7 +10,7 @@ Used on the marketing homepage (templates/home.html) and the About page
 Each FAQ row is rendered with the shared `_accordion.html` details/summary
 partial so FAQ typography and behavior stay aligned with the rest of the site.
 {% endcomment %}
-<section id="{{ section_id|default:'faq' }}" class="border-t border-border bg-background py-16 sm:py-24 lg:py-32">
+<section id="{{ section_id|default:'faq' }}" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28">
   <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
     <div class="text-center">
       <p class="text-sm font-medium uppercase tracking-widest text-accent">FAQ</p>

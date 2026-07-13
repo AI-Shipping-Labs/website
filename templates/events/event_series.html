@@ -60,7 +60,7 @@
              data-series-slug="{{ series.slug }}">
           {% if not request.user.is_authenticated %}
           <a href="/accounts/login/?next={{ login_next|urlencode }}"
-             class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90"
+             class="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
              data-testid="series-register-login-cta">
             <i data-lucide="calendar-plus" class="h-4 w-4"></i>
             Register for all upcoming sessions
@@ -74,7 +74,7 @@
               You're registered for this series
             </span>
             <button type="button"
-                    class="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    class="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                     data-testid="series-cancel-button"
                     data-series-cancel>
               Cancel series registration
@@ -82,7 +82,7 @@
           </div>
           {% elif has_upcoming_to_register %}
           <button type="button"
-                  class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90"
+                  class="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   data-testid="series-register-button"
                   data-series-register>
             <i data-lucide="calendar-plus" class="h-4 w-4"></i>

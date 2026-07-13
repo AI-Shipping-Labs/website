@@ -2,14 +2,14 @@
 
 Verifies that:
 - /accounts/signup/ redirects to /accounts/register/ (styled page)
-- Tag links have min-h-[44px] for touch targets
+- Blog tag metadata uses the compact canonical clickable-chip treatment
 - Social icon links on about page are at least 44px
 - Course unit links have adequate touch target sizing
 """
 
 import re
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 
 class SignupRedirectTest(TestCase):
@@ -30,18 +30,30 @@ class SignupRedirectTest(TestCase):
 
 
 class BlogTagTouchTargetTest(TestCase):
-    """Blog list tag links have min-h-[44px] for adequate touch targets."""
+    """Blog tag links use the compact metadata contract from issue #1228."""
 
-    def test_blog_list_tag_links_have_min_height(self):
-        """Tag links in the blog list template include min-h-[44px]."""
+    @tag("visual_regression")
+    def test_blog_list_tag_links_use_compact_clickable_treatment(self):
+        """Blog tags remain native links with the exact compact classes."""
         from django.template.loader import get_template
 
         template = get_template("content/blog_list.html")
         source = template.template.source
-        # Find the tag link pattern (the one with tag_add_url)
-        tag_link_match = re.search(r'tag_add_url.*?class="([^"]*)"', source)
+        tag_link_match = re.search(
+            r'<a\s+href="[^"]*tag_add_url.*?class="([^"]*)"',
+            source,
+        )
         self.assertIsNotNone(tag_link_match, "Tag link not found in blog_list.html")
-        self.assertIn("min-h-[44px]", tag_link_match.group(1))
+        self.assertEqual(
+            tag_link_match.group(1),
+            "inline-flex items-center gap-1 rounded-full bg-secondary "
+            "px-2.5 py-0.5 text-xs font-medium text-muted-foreground "
+            "transition-colors hover:bg-secondary/80 "
+            "focus-visible:outline-none focus-visible:ring-2 "
+            "focus-visible:ring-accent focus-visible:ring-offset-2 "
+            "focus-visible:ring-offset-background",
+        )
+        self.assertNotIn("min-h-[44px]", tag_link_match.group(1))
 
 
 class RecordingsTagTouchTargetTest(TestCase):

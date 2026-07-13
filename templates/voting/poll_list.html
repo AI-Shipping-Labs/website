@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load member_badges %}
+{% load member_empty_state %}
 
 {% block title %}Vote | AI Shipping Labs{% endblock %}
 {% block meta_description %}Vote on upcoming topics and mini-courses for the AI Shipping Labs community.{% endblock %}
@@ -66,18 +67,12 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="rounded-lg border border-border bg-card p-12 text-center">
-        <i data-lucide="vote" class="mx-auto h-10 w-10 text-muted-foreground mb-4"></i>
-        <p class="text-lg text-muted-foreground">
-          No active polls right now. Check back soon!
-        </p>
-        {% if not user.is_authenticated %}
-        <p class="mt-4 text-sm text-muted-foreground">
-          <a href="{% url 'account_login' %}" class="text-accent hover:underline">Sign in</a>
-          to see polls available for your membership level.
-        </p>
-        {% endif %}
-      </div>
+      {% if user.is_authenticated %}
+      {% member_empty_state title='No active polls right now' body='Check back soon!' icon='vote' kind='fresh' %}
+      {% else %}
+      {% url 'account_login' as login_url %}
+      {% member_empty_state title='No active polls right now' body='Check back soon!' icon='vote' kind='fresh' secondary_cta_label='Sign in' secondary_cta_url=login_url %}
+      {% endif %}
       {% endif %}
     </div>
   </section>

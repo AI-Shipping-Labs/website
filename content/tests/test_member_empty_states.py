@@ -26,6 +26,25 @@ class MemberEmptyStateTemplateUsageTest(SimpleTestCase):
                 self.assertIn('{% load member_empty_state %}', source)
                 self.assertIn('{% member_empty_state ', source)
 
+    def test_tags_resources_projects_and_vote_use_member_empty_state_tag(self):
+        template_paths = [
+            'templates/content/tags_index.html',
+            'templates/content/tags_detail.html',
+            'templates/content/collection_list.html',
+            'templates/content/projects_list.html',
+            'templates/voting/poll_list.html',
+        ]
+
+        for template_path in template_paths:
+            with self.subTest(template=template_path):
+                source = (ROOT / template_path).read_text()
+                self.assertIn('{% load member_empty_state %}', source)
+                self.assertIn('{% member_empty_state ', source)
+                self.assertNotIn(
+                    'rounded-lg border border-border bg-card p-12 text-center',
+                    source,
+                )
+
     def test_studio_empty_state_partial_remains_separate(self):
         source = (
             ROOT / 'templates' / 'studio' / 'includes' / 'empty_state.html'

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load member_empty_state %}
 {% load tag_filters %}
 {% load teaser_tags %}
 
@@ -117,17 +118,11 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="rounded-lg border border-border bg-card p-12 text-center">
-        <i data-lucide="folder-open" class="mx-auto h-12 w-12 text-muted-foreground"></i>
-        <p class="mt-4 text-lg text-muted-foreground">
-          {% if selected_tags %}
-          No links found with the selected tags.
-          <a href="/resources" class="text-accent hover:underline">View all links</a>
-          {% else %}
-          No curated links yet. Check back soon.
-          {% endif %}
-        </p>
-      </div>
+      {% if selected_tags %}
+      {% member_empty_state title='No links found' body='No curated links found with the selected tags.' icon='folder-open' kind='filter' primary_cta_label='View all links' primary_cta_url='/resources' %}
+      {% else %}
+      {% member_empty_state title='No curated links yet' body='Check back soon for workshops, courses, and references.' icon='folder-open' kind='fresh' %}
+      {% endif %}
       {% endif %}
     </div>
   </section>

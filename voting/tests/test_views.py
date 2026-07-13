@@ -441,12 +441,9 @@ class AnonymousVotePromptTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Public Topic Poll')
         self.assertEqual(list(response.context['polls']), [])
-        # Empty-state block contains the sign-in CTA copy specific to
-        # the poll list (distinct from the global header Sign in button).
-        self.assertContains(
-            response,
-            'to see polls available for your membership level',
-        )
+        self.assertContains(response, 'No active polls right now')
+        self.assertContains(response, 'Check back soon!')
+        self.assertContains(response, 'data-empty-kind="fresh"')
         self.assertContains(response, 'href="/accounts/login/"')
 
     def test_anonymous_detail_shows_gating_with_pricing_link(self):

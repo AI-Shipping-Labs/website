@@ -274,7 +274,9 @@ class ProjectsListFilteringTest(TestCase):
         self.assertNotContains(response, 'Advanced Project')
         self.assertNotContains(response, 'Intermediate Project')
         # Empty-state message and recovery link visible
-        self.assertContains(response, 'No projects found with the selected tags.')
+        self.assertContains(response, 'No projects match these tags')
+        self.assertContains(response, 'No projects match the selected tags.')
+        self.assertContains(response, 'data-empty-kind="filter"')
         self.assertContains(
             response,
             '<a href="/projects" class="text-accent hover:underline">View all projects</a>',

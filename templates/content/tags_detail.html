@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load member_empty_state %}
 {% load teaser_tags %}
 
 {% block title %}Tag: {{ tag }} | AI Shipping Labs{% endblock %}
@@ -67,12 +68,7 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="rounded-lg border border-border bg-card p-12 text-center">
-        <p class="text-lg text-muted-foreground">
-          No content found with tag "{{ tag }}".
-          <a href="/tags" class="text-accent hover:underline">Browse all tags</a>
-        </p>
-      </div>
+      {% member_empty_state title='No content found' body='No published content uses the "'|add:tag|add:'" tag yet.' icon='tag' kind='filter' primary_cta_label='Browse all tags' primary_cta_url='/tags' %}
       {% endif %}
     </div>
   </section>

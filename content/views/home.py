@@ -9,7 +9,6 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from accounts.gating import is_newsletter_only_user
-from accounts.oauth_context import get_oauth_provider_context
 from accounts.services.timezones import format_user_datetime
 from community.services.slack_links import build_slack_profile_url
 from content.access import (
@@ -250,8 +249,6 @@ def _public_home(request):
         'section_nav': SECTION_NAV,
         'registered_event_ids': set(),
     }
-    context.update(get_oauth_provider_context())
-    context['next_url'] = request.path
     return render(request, 'home.html', context)
 
 

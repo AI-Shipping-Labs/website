@@ -2,9 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import yaml
-from allauth.socialaccount.models import SocialApp
 from django.conf import settings
-from django.contrib.sites.models import Site
 from django.test import TestCase
 from django.utils import timezone
 
@@ -64,36 +62,59 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
         end = next_section if next_section != -1 else len(body)
         return body[start:end]
 
-    def test_anonymous_home_shows_free_inline_register_and_oauth_context(self):
-        app = SocialApp.objects.create(
-            provider='google',
-            name='Google',
-            client_id='google-cid',
-            secret='google-secret',
-        )
-        app.sites.add(Site.objects.get_current())
-
+    def test_anonymous_home_shows_clean_free_registration_handoff(self):
         response = self.client.get('/')
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['next_url'], '/')
-        self.assertTrue(response.context['oauth_google_enabled'])
-        self.assertFalse(response.context['oauth_github_enabled'])
-        self.assertFalse(response.context['oauth_slack_enabled'])
+        self.assertNotIn('next_url', response.context)
+        self.assertNotIn('oauth_google_enabled', response.context)
         self.assertEqual(
             [tier['stripe_key'] for tier in response.context['tiers']],
             ['basic', 'main', 'premium'],
         )
         free_card = self._card_html(response, 'free')
-        self.assertIn('data-testid="inline-register-card"', free_card)
-        self.assertIn('data-testid="inline-register-opt-in"', free_card)
-        self.assertIn('/accounts/google/login/?next=/', free_card)
+        self.assertIn('&euro;0', free_card)
+        self.assertIn('/forever', free_card)
+        self.assertIn('Start shipping with us', free_card)
+        self.assertIn('Community updates and newsletter emails', free_card)
+        self.assertIn('data-testid="home-free-tier-cta"', free_card)
+        self.assertIn('href="/accounts/register/"', free_card)
+        self.assertIn('>\n            Join free\n', free_card)
+        self.assertIn('min-h-[44px]', free_card)
+        self.assertIn('focus-visible:outline-accent', free_card)
+        self.assertNotIn('data-testid="inline-register-card"', free_card)
+        self.assertNotIn('data-testid="inline-register-opt-in"', free_card)
+        self.assertNotIn('<form', free_card)
+        self.assertNotIn('data-auth-oauth-providers', free_card)
+        self.assertNotIn('/pricing/free', free_card)
         self.assertNotIn('tier-cta-link', free_card)
 
         body = self._body(response)
-        self.assertIn('/static/js/accounts/auth-helpers.js', body)
-        self.assertIn('auth-next-url', body)
-        self.assertIn('/static/js/accounts/inline-register.js', body)
+        self.assertNotIn('home-inline-register-embed', body)
+        self.assertNotIn('/static/js/accounts/auth-helpers.js', body)
+        self.assertNotIn('auth-next-url', body)
+        self.assertNotIn('/static/js/accounts/inline-register.js', body)
+
+    def test_dedicated_registration_page_remains_the_free_next_step(self):
+        response = self.client.get('/accounts/register/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="register-email"')
+        self.assertContains(response, 'id="register-password"')
+        self.assertContains(response, 'id="register-password-confirm"')
+        self.assertContains(response, 'creating an account')
+        # The canonical home return is serialized as an empty next value;
+        # register_api resolves that default to "/".
+        self.assertEqual(response.context['next_url'], '')
+
+    def test_pricing_keeps_its_inline_free_registration(self):
+        response = self.client.get('/pricing')
+
+        self.assertEqual(response.status_code, 200)
+        pricing_free_card = self._card_html(response, 'free')
+        self.assertIn('data-testid="inline-register-card"', pricing_free_card)
+        self.assertIn('data-testid="inline-register-opt-in"', pricing_free_card)
+        self.assertNotIn('data-testid="home-free-tier-cta"', pricing_free_card)
 
     def test_home_paid_tiers_default_to_monthly_prices_and_links(self):
         response = self.client.get('/')
@@ -285,3 +306,4 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'data-testid="home-sprint-story-section"')
         self.assertNotContains(response, 'data-testid="home-upcoming-events-section"')
         self.assertNotContains(response, 'data-testid="home-free-tier-register"')
+        self.assertNotContains(response, 'data-testid="home-free-tier-cta"')

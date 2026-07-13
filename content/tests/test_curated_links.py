@@ -530,7 +530,11 @@ class ResourcesEmptyStateTest(TestCase):
             tags=['python'], published=True,
         )
         response = self.client.get('/resources?tag=nonexistent')
-        self.assertContains(response, 'No links found with the selected tags')
+        self.assertContains(response, 'No links found')
+        self.assertContains(
+            response,
+            'No curated links found with the selected tags.',
+        )
 
 
 # --- Conversions from playwright_tests/test_seo_tags.py (issue #256) ---

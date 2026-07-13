@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load member_empty_state %}
 {% load tag_filters %}
 
 {% block title %}Project Showcase | AI Shipping Labs{% endblock %}
@@ -47,17 +48,13 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="rounded-lg border border-border bg-card p-12 text-center">
-        <i data-lucide="rocket" class="mx-auto h-12 w-12 text-muted-foreground"></i>
-        <p class="mt-4 text-lg text-muted-foreground">
-          {% if selected_tags %}
-          No projects found with the selected tags.
-          <a href="/projects" class="text-accent hover:underline">View all projects</a>
-          {% else %}
-          No project ideas yet. Check back soon for pet and portfolio project ideas.
-          {% endif %}
-        </p>
-      </div>
+      {% if selected_tags %}
+      {% member_empty_state title='No projects match these tags' body='No projects match the selected tags.' icon='rocket' kind='filter' primary_cta_label='View all projects' primary_cta_url='/projects' testid='projects-empty-state' %}
+      {% elif current_difficulty %}
+      {% member_empty_state title='No projects match this difficulty' body='No projects match the selected difficulty.' icon='rocket' kind='filter' primary_cta_label='View all projects' primary_cta_url='/projects' testid='projects-empty-state' %}
+      {% else %}
+      {% member_empty_state title='No project ideas yet' body='Check back soon for pet and portfolio project ideas.' icon='rocket' kind='fresh' testid='projects-empty-state' %}
+      {% endif %}
       {% endif %}
     </div>
   </section>

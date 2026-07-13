@@ -551,8 +551,9 @@ class TestScenario8EmptyStateNoMatchingTag:
         # No link cards shown
         assert "Python CLI" not in body
 
-        # Empty state message
-        assert "No links found with the selected tags" in body
+        # Empty state copy distinguishes filter-zero from a fresh catalog.
+        assert "No links found" in body
+        assert "No curated links found with the selected tags." in body
 
         # "View all links" link pointing to /resources
         view_all_link = page.locator(
@@ -564,7 +565,7 @@ class TestScenario8EmptyStateNoMatchingTag:
 
         # Click the link
         view_all_link.first.click()
-        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_url(f"{django_server}/resources")
 
         # Back to full listing
         body = page.content()
@@ -593,7 +594,8 @@ class TestScenario10EmptyStateNoLinks:
         body = page.content()
 
         # Empty state message
-        assert "No curated links yet. Check back soon." in body
+        assert "No curated links yet" in body
+        assert "Check back soon for workshops, courses, and references." in body
 
         # No category headers
         # The categories would appear as h2 elements within the

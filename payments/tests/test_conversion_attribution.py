@@ -8,7 +8,7 @@ These cover the scenarios listed in issue #195:
 - Stripe webhook retry doesn't create duplicates
 - Attribution failure doesn't break tier upgrade
 - customer.subscription.updated doesn't create new snapshots
-- Re-subscribe creates a second snapshot
+- Conflicting second subscriptions are quarantined
 - One-off course purchase records attribution without tier/MRR
 - Campaign FK resolves when matching UtmCampaign exists
 - Read-only admin protects snapshot integrity
@@ -28,14 +28,33 @@ from accounts.models import User
 from analytics.models import UserAttribution
 from content.models import Course
 from integrations.models import UtmCampaign
-from payments.models import ConversionAttribution, Tier
+from payments import services as payment_services
+from payments.models import CheckoutFulfillment, ConversionAttribution, Tier
 from payments.services import (
-    handle_checkout_completed,
+    handle_checkout_completed as _handle_checkout_completed,
+)
+from payments.services import (
     handle_subscription_updated,
 )
 
 WEBHOOK_URL = "/api/webhooks/payments"
 TEST_WEBHOOK_SECRET = "whsec_test_secret_key_for_testing"
+
+
+def _completed_session(data):
+    result = {
+        "payment_status": "paid",
+        "status": "complete",
+        "livemode": str(payment_services.get_config("STRIPE_SECRET_KEY", "")).startswith(
+            ("sk_live_", "rk_live_")
+        ),
+    }
+    result.update(data)
+    return result
+
+
+def handle_checkout_completed(session_data):
+    return _handle_checkout_completed(_completed_session(session_data))
 
 
 class QuietSubscriptionLookupMixin:
@@ -65,6 +84,8 @@ def _build_stripe_signature(payload_bytes, secret=TEST_WEBHOOK_SECRET):
 
 def _make_event_payload(event_id, event_type, data_object):
     """Build a Stripe event JSON payload."""
+    if event_type == "checkout.session.completed":
+        data_object = _completed_session(data_object)
     return {
         "id": event_id,
         "type": event_type,
@@ -486,10 +507,10 @@ class SubscriptionUpdateDoesNotCreateSnapshotTest(TestCase):
         self.assertEqual(user.tier, main)
 
 
-class ResubscribeCreatesSecondSnapshotTest(QuietSubscriptionLookupMixin, TestCase):
+class ConflictingResubscribeQuarantineTest(QuietSubscriptionLookupMixin, TestCase):
     """Re-subscribe after cancellation creates a new attribution row."""
 
-    def test_second_checkout_creates_second_row(self):
+    def test_second_subscription_checkout_is_quarantined(self):
         _configure_tier_prices(
             "basic", "price_basic_monthly", "price_basic_yearly",
         )
@@ -537,13 +558,17 @@ class ResubscribeCreatesSecondSnapshotTest(QuietSubscriptionLookupMixin, TestCas
             ConversionAttribution.objects
             .filter(user=user).order_by("-created_at"),
         )
-        self.assertEqual(len(rows), 2)
-        # Second row reflects the new last-touch campaign
-        self.assertEqual(rows[0].last_touch_utm_campaign, "summer_promo")
-        self.assertEqual(rows[0].stripe_session_id, "cs_resub_2")
-        # First row still carries the original last-touch campaign
-        self.assertEqual(rows[1].last_touch_utm_campaign, "launch_apr2026")
-        self.assertEqual(rows[1].stripe_session_id, "cs_resub_1")
+        # A second, distinct subscription cannot silently replace the first
+        # subscription's authority; it is quarantined for operator review.
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].last_touch_utm_campaign, "launch_apr2026")
+        self.assertEqual(rows[0].stripe_session_id, "cs_resub_1")
+        self.assertEqual(
+            CheckoutFulfillment.objects.get(
+                stripe_session_id="cs_resub_2"
+            ).status,
+            CheckoutFulfillment.STATUS_QUARANTINED,
+        )
 
 
 class CoursePurchaseAttributionTest(TestCase):

@@ -53,19 +53,32 @@
       <tr data-testid="payment-mismatch-row">
         <td class="px-4 py-3 align-top" data-label="Stripe">
           <div class="space-y-1 text-sm">
+            {% if row.stripe_session_url %}
+            <a href="{{ row.stripe_session_url }}" target="_blank" rel="noopener" class="block font-mono text-foreground break-all hover:text-accent hover:underline" data-testid="stripe-session-link">Session: {{ mismatch.stripe_session_id }}</a>
+            {% else %}
             <p class="font-mono text-foreground break-all">{{ mismatch.stripe_session_id }}</p>
+            {% endif %}
             <p class="font-mono text-xs text-muted-foreground break-all">{{ mismatch.stripe_email }}</p>
             <p class="text-xs text-muted-foreground whitespace-nowrap">{{ mismatch.created_at|operator_datetime }} UTC</p>
             {% if row.stripe_customer_url %}
-            <a href="{{ row.stripe_customer_url }}" target="_blank" rel="noopener" class="inline-flex text-xs text-accent hover:underline">Stripe customer</a>
+            <a href="{{ row.stripe_customer_url }}" target="_blank" rel="noopener" class="block font-mono text-xs text-accent break-all hover:underline">Customer: {{ mismatch.stripe_customer_id }}</a>
             {% elif mismatch.stripe_customer_id %}
             <p class="font-mono text-xs text-muted-foreground break-all">{{ mismatch.stripe_customer_id }}</p>
+            {% endif %}
+            {% if row.stripe_subscription_url %}
+            <a href="{{ row.stripe_subscription_url }}" target="_blank" rel="noopener" class="block font-mono text-xs text-accent break-all hover:underline" data-testid="stripe-subscription-link">Subscription: {{ mismatch.stripe_subscription_id }}</a>
+            {% elif mismatch.stripe_subscription_id %}
+            <p class="font-mono text-xs text-muted-foreground break-all">{{ mismatch.stripe_subscription_id }}</p>
             {% endif %}
           </div>
         </td>
         <td class="px-4 py-3 align-top" data-label="Paid account">
+          {% if row.paid_user %}
           <a href="{% url 'studio_user_detail' row.paid_user.pk %}" class="text-sm text-accent hover:underline break-all">{{ row.paid_user.email }}</a>
           <p class="text-xs text-muted-foreground mt-1">{{ row.paid_user.tier.name }}</p>
+          {% else %}
+          <span class="text-sm text-muted-foreground">Unresolved</span>
+          {% endif %}
         </td>
         <td class="px-4 py-3 align-top" data-label="Candidate">
           {% if row.candidate_user %}
@@ -82,6 +95,17 @@
         <td class="px-4 py-3 align-top" data-label="Reason">
           <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">{{ mismatch.reason }}</span>
           <p class="text-xs text-muted-foreground mt-2">{{ mismatch.status }}</p>
+          <p class="text-xs font-medium text-foreground mt-2" data-testid="payment-mismatch-outcome">Outcome: {{ row.outcome }}</p>
+          {% if row.fulfillment %}
+          <div class="mt-2 text-xs text-muted-foreground" data-testid="payment-mismatch-fulfillment">
+            <p>Fulfillment: {{ row.fulfillment.status }}</p>
+            {% if row.fulfillment.binding %}
+            <p>Source: {{ row.fulfillment.binding.source }}</p>
+            <p>Purpose: {{ row.fulfillment.binding.purpose }}</p>
+            <p>Bound tier: {{ row.fulfillment.binding.tier.slug }} / {{ row.fulfillment.binding.billing_period }}</p>
+            {% endif %}
+          </div>
+          {% endif %}
         </td>
         <td class="px-4 py-3 align-top text-right studio-actions-cell" data-label="Actions">
           {% if mismatch.status == status_open %}

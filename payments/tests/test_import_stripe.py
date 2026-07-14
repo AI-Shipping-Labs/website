@@ -425,8 +425,10 @@ class StripeImportAdapterTest(TestCase):
         )
 
         user = User.objects.get(email="webhook-linked@example.com")
-        self.assertEqual(user.tier, self.premium)
-        self.assertEqual(user.subscription_id, "sub_new_webhook")
+        # Customer-id fallback must not let an event for a different
+        # subscription replace the exact imported subscription authority.
+        self.assertEqual(user.tier, self.basic)
+        self.assertEqual(user.subscription_id, "sub_webhook")
         self.assertEqual(User.objects.filter(stripe_customer_id="cus_webhook").count(), 1)
 
     # ------------------------------------------------------------------

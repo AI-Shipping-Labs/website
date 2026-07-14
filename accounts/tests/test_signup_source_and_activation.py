@@ -29,6 +29,7 @@ from django.utils import timezone
 from accounts.models import User
 from accounts.utils.activation import mark_activated, mark_email_verified
 from email_app.models import EmailLog
+from payments import services as payment_services
 
 
 @tag('core')
@@ -631,6 +632,11 @@ class StripeCheckoutCompletedActivationTest(TestCase):
             'subscription': subscription_id,
             'client_reference_id': None,
             'metadata': {'tier_slug': 'basic'},
+            'payment_status': 'paid',
+            'status': 'complete',
+            'livemode': str(
+                payment_services.get_config('STRIPE_SECRET_KEY', '')
+            ).startswith(('sk_live_', 'rk_live_')),
         }
 
     @override_settings()

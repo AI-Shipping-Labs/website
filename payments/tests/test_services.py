@@ -17,6 +17,7 @@ from django.test import TestCase, tag
 
 from accounts.models import User
 from content.models import Course, CourseAccess
+from payments import services as payment_services
 from payments.models import ConversionAttribution, Tier, WebhookEvent
 from payments.services import (
     _get_subscription_interval,
@@ -25,8 +26,22 @@ from payments.services import (
     _subscription_price_id,
     _tier_for_price_id,
     _tier_from_subscription,
-    handle_checkout_completed,
 )
+from payments.services import (
+    handle_checkout_completed as _handle_checkout_completed,
+)
+
+
+def handle_checkout_completed(session_data):
+    payload = {
+        "payment_status": "paid",
+        "status": "complete",
+        "livemode": str(payment_services.get_config("STRIPE_SECRET_KEY", "")).startswith(
+            ("sk_live_", "rk_live_")
+        ),
+    }
+    payload.update(session_data)
+    return _handle_checkout_completed(payload)
 
 
 class StripeMappingObject:
@@ -727,6 +742,11 @@ class PaymentNotificationEmailTest(TestCase):
                         "tier_slug": "basic",
                         "user_id": str(user.pk),
                     },
+                    "payment_status": "paid",
+                    "status": "complete",
+                    "livemode": str(
+                        original_get_config("STRIPE_SECRET_KEY", "")
+                    ).startswith(("sk_live_", "rk_live_")),
                 },
             },
         }

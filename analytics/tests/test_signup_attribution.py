@@ -390,7 +390,13 @@ class StripeCheckoutSignupTest(TestCase):
             'customer_details': {'email': 'newpaid@test.com'},
             'client_reference_id': None,
             'metadata': {'tier_slug': 'main'},
+            'payment_status': 'paid',
+            'status': 'complete',
         }
+        from payments import services as payment_services
+        session_data['livemode'] = str(
+            payment_services.get_config('STRIPE_SECRET_KEY', '')
+        ).startswith(('sk_live_', 'rk_live_'))
 
         # Patch the Stripe lookup so it returns no period-end (we don't
         # care about the post-creation work for this test).

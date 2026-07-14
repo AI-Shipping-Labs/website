@@ -11,7 +11,8 @@ from django.test import TestCase, tag
 
 from accounts.models import User
 from content.models import Course, CourseAccess
-from payments.services import handle_checkout_completed
+
+from .test_webhooks import handle_checkout_completed
 
 
 @tag('core')

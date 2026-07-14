@@ -33,10 +33,28 @@ from content.models import (
     UserCourseProgress,
 )
 from events.models import Event, EventRegistration
-from payments.services import handle_checkout_completed, handle_subscription_deleted
+from payments import services as payment_services
+from payments.services import (
+    handle_checkout_completed as _handle_checkout_completed,
+)
+from payments.services import (
+    handle_subscription_deleted,
+)
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
+
+
+def handle_checkout_completed(session_data):
+    payload = {
+        "payment_status": "paid",
+        "status": "complete",
+        "livemode": str(payment_services.get_config("STRIPE_SECRET_KEY", "")).startswith(
+            ("sk_live_", "rk_live_")
+        ),
+    }
+    payload.update(session_data)
+    return _handle_checkout_completed(payload)
 
 
 class QuietSubscriptionLookupMixin:

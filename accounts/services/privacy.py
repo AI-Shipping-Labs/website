@@ -289,6 +289,8 @@ def _account_profile(user):
 def _membership_payment(user):
     conversion = _model("payments", "ConversionAttribution")
     mismatch = _model("payments", "PaymentAccountMismatch")
+    binding = _model("payments", "CheckoutAccountBinding")
+    fulfillment = _model("payments", "CheckoutFulfillment")
     return {
         "current_tier": _tier_snapshot(user.tier),
         "base_tier": _tier_snapshot(user.tier),
@@ -345,6 +347,16 @@ def _membership_payment(user):
                 "updated_at",
                 "resolved_at",
             ],
+        ),
+        "checkout_bindings": _values(
+            binding,
+            Q(user=user),
+            ["id", "tier_id", "billing_period", "source", "created_at", "expires_at", "revoked_at"],
+        ),
+        "checkout_fulfillments": _values(
+            fulfillment,
+            Q(user=user),
+            ["id", "stripe_session_id", "tier_id", "status", "reason", "created_at"],
         ),
         "card_data": "not_stored",
     }
@@ -1065,6 +1077,20 @@ def _detach_payment_diagnostics(user, summary, email):
         conversion_count = conversion_model.objects.filter(user=user).update(user=None)
         _increment(summary, "retained", "conversion_attributions", conversion_count)
 
+    binding_model = _model("payments", "CheckoutAccountBinding")
+    if binding_model is not None:
+        bindings = binding_model.objects.filter(user=user)
+        binding_count = bindings.update(
+            user=None,
+            email_snapshot=f"deleted-user-{user.pk}@privacy.invalid",
+        )
+        _increment(summary, "retained", "checkout_account_bindings", binding_count)
+
+    fulfillment_model = _model("payments", "CheckoutFulfillment")
+    if fulfillment_model is not None:
+        fulfillment_count = fulfillment_model.objects.filter(user=user).update(user=None)
+        _increment(summary, "retained", "checkout_fulfillments", fulfillment_count)
+
     mismatch_model = _model("payments", "PaymentAccountMismatch")
     if mismatch_model is None:
         return
@@ -1072,6 +1098,7 @@ def _detach_payment_diagnostics(user, summary, email):
     mismatch_count = mismatches.count()
     anonymized_email = f"deleted-user-{user.pk}@privacy.invalid"
     for mismatch in mismatches:
+        identifiers = {email, mismatch.stripe_email}
         changed = []
         if mismatch.paid_user_id == user.pk:
             mismatch.paid_user = None
@@ -1082,10 +1109,12 @@ def _detach_payment_diagnostics(user, summary, email):
         if mismatch.resolved_by_id == user.pk:
             mismatch.resolved_by = None
             changed.append("resolved_by")
-        if mismatch.stripe_email.lower() == email.lower():
-            mismatch.stripe_email = anonymized_email
-            changed.append("stripe_email")
-        mismatch.details = _scrub_payload(mismatch.details, {email})
+        # The Stripe billing address may deliberately differ from the member's
+        # canonical login. It is still personal data attached to this data
+        # subject, so redact it unconditionally for every linked diagnostic.
+        mismatch.stripe_email = anonymized_email
+        changed.append("stripe_email")
+        mismatch.details = _scrub_payload(mismatch.details, identifiers)
         changed.append("details")
         mismatch.save(update_fields=changed)
     _increment(summary, "retained", "payment_account_mismatches", mismatch_count)

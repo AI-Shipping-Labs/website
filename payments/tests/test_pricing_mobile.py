@@ -45,10 +45,10 @@ class PricingMobileResponsiveTest(TestCase):
         cta_min_height_count = content.count("min-h-[44px]")
         self.assertGreaterEqual(cta_min_height_count, 4)
 
-    def test_cta_buttons_have_responsive_vertical_padding(self):
-        """CTA buttons should use py-3 on mobile, py-2.5 on sm+."""
+    def test_cta_buttons_use_canonical_large_button_spacing(self):
+        """Pricing CTAs use the design-system large button owner."""
         content = self._get_pricing_content()
-        self.assertIn("py-3 sm:py-2.5", content)
+        self.assertIn("px-6 py-3", content)
 
     def test_most_popular_badge_visible_with_overflow_visible(self):
         """The 'Most Popular' badge card should have overflow-visible so badge is not clipped."""

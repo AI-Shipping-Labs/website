@@ -72,7 +72,7 @@ from crm.models import CRMRecord
 from email_app.models import EmailLog, SesEvent
 from events.models import EventRegistration
 from integrations.config import get_config
-from payments.models import PaymentAccountMismatch, Tier
+from payments.models import CheckoutFulfillment, PaymentAccountMismatch, Tier
 from payments.services.backfill_tiers import backfill_user_from_stripe
 from plans.models import Plan, SprintEnrollment
 from studio.decorators import staff_required, superuser_required
@@ -1196,24 +1196,46 @@ def _stripe_dashboard_url(account_id, resource, object_id):
 
 
 def _payment_mismatch_rows(mismatches, stripe_account_id):
+    mismatches = list(mismatches)
+    fulfillments = {
+        item.stripe_session_id: item
+        for item in CheckoutFulfillment.objects.filter(
+            stripe_session_id__in=[row.stripe_session_id for row in mismatches]
+        ).select_related('binding', 'binding__tier', 'user', 'tier')
+    }
     rows = []
     for mismatch in mismatches:
+        fulfillment = fulfillments.get(mismatch.stripe_session_id)
         candidate = mismatch.candidate_user
         merge_preview_url = ''
-        if candidate is not None:
+        if candidate is not None and mismatch.paid_user is not None:
             query = urlencode({
                 'canonical': mismatch.paid_user.email,
                 'secondary': candidate.email,
             })
             merge_preview_url = f"{reverse('studio_user_merge')}?{query}"
+        if (
+            fulfillment is not None
+            and fulfillment.status == CheckoutFulfillment.STATUS_FULFILLED
+        ):
+            outcome = 'granted'
+        else:
+            outcome = 'quarantined'
         rows.append({
             'mismatch': mismatch,
+            'fulfillment': fulfillment,
+            'outcome': outcome,
             'paid_user': mismatch.paid_user,
             'candidate_user': candidate,
             'stripe_customer_url': _stripe_dashboard_url(
                 stripe_account_id,
                 'customers',
                 mismatch.stripe_customer_id,
+            ),
+            'stripe_session_url': _stripe_dashboard_url(
+                stripe_account_id,
+                'checkout/sessions',
+                mismatch.stripe_session_id,
             ),
             'stripe_subscription_url': _stripe_dashboard_url(
                 stripe_account_id,

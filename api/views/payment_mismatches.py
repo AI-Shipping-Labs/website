@@ -10,7 +10,7 @@ from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from community.models import CommunityAuditLog
-from payments.models import PaymentAccountMismatch
+from payments.models import CheckoutFulfillment, PaymentAccountMismatch
 
 
 def _actor_label(request):
@@ -32,7 +32,44 @@ def _dt(value):
     return value.isoformat() if value else None
 
 
-def _serialize_mismatch(mismatch):
+def _serialize_fulfillment(fulfillment):
+    if fulfillment is None:
+        return None
+    binding = fulfillment.binding
+    return {
+        "id": fulfillment.pk,
+        "status": fulfillment.status,
+        "reason": fulfillment.reason,
+        "user": _user_payload(fulfillment.user),
+        "tier": (
+            {"id": fulfillment.tier_id, "slug": fulfillment.tier.slug}
+            if fulfillment.tier_id else None
+        ),
+        "binding": (
+            {
+                "id": binding.pk,
+                "source": binding.source,
+                "purpose": binding.purpose,
+                "billing_period": binding.billing_period,
+                "tier": binding.tier.slug,
+            }
+            if binding is not None else None
+        ),
+        "created_at": _dt(fulfillment.created_at),
+        "updated_at": _dt(fulfillment.updated_at),
+    }
+
+
+def _operator_outcome(mismatch, fulfillment):
+    if (
+        fulfillment is not None
+        and fulfillment.status == CheckoutFulfillment.STATUS_FULFILLED
+    ):
+        return "granted"
+    return "quarantined"
+
+
+def _serialize_mismatch(mismatch, fulfillment=None):
     return {
         "id": mismatch.pk,
         "stripe_session_id": mismatch.stripe_session_id,
@@ -43,6 +80,8 @@ def _serialize_mismatch(mismatch):
         "candidate_user": _user_payload(mismatch.candidate_user),
         "reason": mismatch.reason,
         "status": mismatch.status,
+        "outcome": _operator_outcome(mismatch, fulfillment),
+        "fulfillment": _serialize_fulfillment(fulfillment),
         "details": mismatch.details,
         "created_at": _dt(mismatch.created_at),
         "updated_at": _dt(mismatch.updated_at),
@@ -148,8 +187,18 @@ def payment_mismatches_collection(request):
     if stripe_session_id:
         qs = qs.filter(stripe_session_id=stripe_session_id)
 
+    rows = list(qs[:200])
+    fulfillments = {
+        item.stripe_session_id: item
+        for item in CheckoutFulfillment.objects.filter(
+            stripe_session_id__in=[row.stripe_session_id for row in rows]
+        ).select_related("binding", "binding__tier", "user", "tier")
+    }
     return JsonResponse({
-        "payment_mismatches": [_serialize_mismatch(row) for row in qs[:200]]
+        "payment_mismatches": [
+            _serialize_mismatch(row, fulfillments.get(row.stripe_session_id))
+            for row in rows
+        ]
     })
 
 
@@ -278,4 +327,7 @@ def payment_mismatch_detail(request, mismatch_id):
             }, sort_keys=True),
         )
 
-    return JsonResponse(_serialize_mismatch(mismatch))
+    fulfillment = CheckoutFulfillment.objects.filter(
+        stripe_session_id=mismatch.stripe_session_id,
+    ).select_related("binding", "binding__tier", "user", "tier").first()
+    return JsonResponse(_serialize_mismatch(mismatch, fulfillment))

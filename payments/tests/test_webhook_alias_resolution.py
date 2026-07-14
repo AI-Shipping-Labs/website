@@ -16,12 +16,9 @@ from django.core import mail
 from django.test import TestCase, override_settings
 
 from accounts.models import EmailAlias, User
-from payments.services import (
-    handle_checkout_completed,
-    handle_invoice_payment_failed,
-)
+from payments.services import handle_invoice_payment_failed
 
-from .test_webhooks import QuietSubscriptionLookupMixin
+from .test_webhooks import QuietSubscriptionLookupMixin, handle_checkout_completed
 
 
 class CheckoutAliasResolutionTest(QuietSubscriptionLookupMixin, TestCase):

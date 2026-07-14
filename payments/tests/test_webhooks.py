@@ -23,6 +23,7 @@ from django.test import TestCase, override_settings, tag
 
 from accounts.models import EmailAlias, User
 from community.models import CommunityAuditLog
+from payments import services as payment_services
 from payments.exceptions import WebhookPermanentError
 from payments.models import (
     ConversionAttribution,
@@ -31,7 +32,9 @@ from payments.models import (
     WebhookEvent,
 )
 from payments.services import (
-    handle_checkout_completed,
+    handle_checkout_completed as _handle_checkout_completed,
+)
+from payments.services import (
     handle_invoice_payment_failed,
     handle_subscription_deleted,
     handle_subscription_updated,
@@ -43,6 +46,22 @@ WEBHOOK_URL = "/api/webhooks/payments"
 TEST_WEBHOOK_SECRET = "whsec_test_secret_key_for_testing"
 
 
+def _completed_session(data):
+    result = {
+        "payment_status": "paid",
+        "status": "complete",
+        "livemode": str(payment_services.get_config("STRIPE_SECRET_KEY", "")).startswith(
+            ("sk_live_", "rk_live_")
+        ),
+    }
+    result.update(data)
+    return result
+
+
+def handle_checkout_completed(session_data):
+    return _handle_checkout_completed(_completed_session(session_data))
+
+
 class QuietSubscriptionLookupMixin:
     """Avoid real Stripe subscription lookups in webhook tests."""
 
@@ -50,14 +69,21 @@ class QuietSubscriptionLookupMixin:
         super().setUp()
         # The 3-step resolver fallback in ``handle_checkout_completed``
         # (issue #663) reaches Stripe via ``_get_stripe_client``. Tests
-        # that don't exercise the resolver still need the call to be a
-        # no-op rather than a network request, so we stub the client to
-        # raise StripeError, which the helper catches and turns into a
-        # ``None`` subscription (the existing fallback).
-        import stripe as _stripe_mod
+        # that don't exercise the resolver still need an authoritative
+        # successful response rather than a fake outage: outages now
+        # deliberately propagate so Stripe can retry (#1105).
+        quiet_client_object = MagicMock()
+        quiet_client_object.subscriptions.retrieve.return_value = {
+            "items": {"data": [{"price": {
+                "id": "price_test_unmapped",
+                "metadata": {},
+                "unit_amount": 99999,
+                "recurring": {"interval": "month"},
+            }}]},
+        }
         quiet_client = patch(
             "payments.services._get_stripe_client",
-            side_effect=_stripe_mod.AuthenticationError("test-stub: no real Stripe"),
+            return_value=quiet_client_object,
         )
         patchers = [
             patch("payments.services._get_subscription_period_end", return_value=None),
@@ -84,6 +110,8 @@ def _build_stripe_signature(payload_bytes, secret=TEST_WEBHOOK_SECRET):
 
 def _make_event_payload(event_id, event_type, data_object):
     """Build a Stripe event JSON payload."""
+    if event_type == "checkout.session.completed":
+        data_object = _completed_session(data_object)
     return {
         "id": event_id,
         "type": event_type,
@@ -443,8 +471,7 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
         user.refresh_from_db()
         self.assertEqual(user.tier.slug, "basic")
 
-    def test_client_reference_fulfills_user_and_adds_unclaimed_stripe_alias(self):
-        """Differing unclaimed Stripe email becomes an alias on referenced user."""
+    def test_legacy_reference_with_different_email_is_quarantined(self):
         user = User.objects.create_user(email="member@test.com")
 
         session_data = {
@@ -460,30 +487,18 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
         handle_checkout_completed(session_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "premium")
-        self.assertEqual(user.stripe_customer_id, "cus_alias_1105")
+        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.stripe_customer_id, "")
         self.assertFalse(
             User.objects.filter(email__iexact="billing+stripe@test.com")
             .exclude(pk=user.pk)
             .exists()
         )
-        alias = EmailAlias.objects.get(email="billing+stripe@test.com")
-        self.assertEqual(alias.user, user)
-        self.assertEqual(alias.source, EmailAlias.SOURCE_STRIPE_RELAY)
-        self.assertIn("cs_alias_1105", alias.note)
+        self.assertFalse(EmailAlias.objects.filter(email="billing+stripe@test.com").exists())
         self.assertEqual(
-            EmailAlias.objects.filter(email="billing+stripe@test.com").count(),
-            1,
+            PaymentAccountMismatch.objects.get(stripe_session_id="cs_alias_1105").reason,
+            PaymentAccountMismatch.REASON_LEGACY_REFERENCE_MISMATCH,
         )
-        self.assertEqual(
-            CommunityAuditLog.objects.filter(
-                user=user,
-                action="email_alias_added",
-                details__contains="cs_alias_1105",
-            ).count(),
-            1,
-        )
-        self.assertFalse(PaymentAccountMismatch.objects.exists())
 
     def test_client_reference_primary_email_collision_records_mismatch(self):
         paid_user = User.objects.create_user(email="member-collision@test.com")
@@ -503,15 +518,15 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
 
         paid_user.refresh_from_db()
         candidate.refresh_from_db()
-        self.assertEqual(paid_user.tier.slug, "main")
-        self.assertEqual(paid_user.subscription_id, "sub_primary_collision")
+        self.assertEqual(paid_user.tier.slug, "free")
+        self.assertEqual(paid_user.subscription_id, "")
         self.assertEqual(candidate.tier.slug, "free")
         self.assertFalse(EmailAlias.objects.filter(email=candidate.email).exists())
         mismatch = PaymentAccountMismatch.objects.get(
             stripe_session_id="cs_primary_collision_1105"
         )
         self.assertEqual(mismatch.status, PaymentAccountMismatch.STATUS_OPEN)
-        self.assertEqual(mismatch.reason, PaymentAccountMismatch.REASON_PRIMARY_EMAIL_COLLISION)
+        self.assertEqual(mismatch.reason, PaymentAccountMismatch.REASON_LEGACY_REFERENCE_MISMATCH)
         self.assertEqual(mismatch.paid_user, paid_user)
         self.assertEqual(mismatch.candidate_user, candidate)
         self.assertEqual(mismatch.stripe_email, candidate.email)
@@ -551,19 +566,18 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
 
         paid_user.refresh_from_db()
         candidate.refresh_from_db()
-        self.assertEqual(paid_user.tier.slug, "basic")
+        self.assertEqual(paid_user.tier.slug, "free")
         self.assertEqual(candidate.tier.slug, "free")
         alias = EmailAlias.objects.get(email="relay-alias@test.com")
         self.assertEqual(alias.user, candidate)
         mismatch = PaymentAccountMismatch.objects.get(
             stripe_session_id="cs_alias_collision_1105"
         )
-        self.assertEqual(mismatch.reason, PaymentAccountMismatch.REASON_ALIAS_COLLISION)
+        self.assertEqual(mismatch.reason, PaymentAccountMismatch.REASON_LEGACY_REFERENCE_MISMATCH)
         self.assertEqual(mismatch.paid_user, paid_user)
         self.assertEqual(mismatch.candidate_user, candidate)
 
-    def test_invalid_client_reference_preserves_email_fallback(self):
-        """Stale client_reference_id does not block existing email resolution."""
+    def test_invalid_client_reference_is_quarantined_without_email_fallback(self):
         user = User.objects.create_user(email="fallback-invalid-ref@test.com")
 
         session_data = {
@@ -578,9 +592,14 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
         handle_checkout_completed(session_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "basic")
-        self.assertEqual(user.stripe_customer_id, "cus_invalid_ref")
-        self.assertFalse(PaymentAccountMismatch.objects.exists())
+        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.stripe_customer_id, "")
+        self.assertEqual(
+            PaymentAccountMismatch.objects.get(
+                stripe_session_id="cs_invalid_ref_1105"
+            ).reason,
+            PaymentAccountMismatch.REASON_LEGACY_REFERENCE_MISMATCH,
+        )
 
     def test_creates_user_if_not_found(self):
         """A new user is created if no user matches the email."""
@@ -875,8 +894,8 @@ class CheckoutAutoVerifyEmailTest(QuietSubscriptionLookupMixin, TestCase):
 
         relay_account.refresh_from_db()
         real_account.refresh_from_db()
-        # The entitled (resolved) row is verified.
-        self.assertTrue(relay_account.email_verified)
+        # Conflicting legacy evidence is quarantined; neither row is verified.
+        self.assertFalse(relay_account.email_verified)
         # The real account matching the billing email is NOT cross-verified.
         self.assertFalse(real_account.email_verified)
 
@@ -1500,8 +1519,7 @@ class SubscriptionDeletedHandlerTest(TestCase):
         self.assertIsNone(user.pending_tier)
         self.assertEqual(user.tier.slug, "free")
 
-    def test_lookup_by_customer_id(self):
-        """User is found by stripe_customer_id when subscription_id doesn't match."""
+    def test_customer_fallback_does_not_delete_newer_subscription(self):
         main_tier = Tier.objects.get(slug="main")
         user = User.objects.create_user(email="bycust@test.com")
         user.tier = main_tier
@@ -1517,7 +1535,13 @@ class SubscriptionDeletedHandlerTest(TestCase):
         handle_subscription_deleted(subscription_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.subscription_id, "sub_old")
+        self.assertTrue(
+            CommunityAuditLog.objects.filter(
+                user=user, action="stale_subscription_event_ignored"
+            ).exists()
+        )
 
     def test_no_error_when_user_not_found(self):
         """Handler does not crash when no user matches the subscription."""

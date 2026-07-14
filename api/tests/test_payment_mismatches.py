@@ -1,10 +1,17 @@
 import json
+from datetime import timedelta
 
 from django.test import TestCase
+from django.utils import timezone
 
 from accounts.models import EmailAlias, Token, User
 from community.models import CommunityAuditLog
-from payments.models import PaymentAccountMismatch, Tier
+from payments.models import (
+    CheckoutAccountBinding,
+    CheckoutFulfillment,
+    PaymentAccountMismatch,
+    Tier,
+)
 
 
 class PaymentMismatchApiTest(TestCase):
@@ -123,6 +130,73 @@ class PaymentMismatchApiTest(TestCase):
             ).count(),
             1,
         )
+        self.assertEqual(body["outcome"], "quarantined")
+
+    def test_resolving_review_does_not_overwrite_fulfilled_granted_outcome(self):
+        mismatch = self._mismatch()
+        tier = Tier.objects.get(slug="basic")
+        CheckoutFulfillment.objects.create(
+            stripe_session_id=mismatch.stripe_session_id,
+            user=mismatch.paid_user,
+            tier=tier,
+            status=CheckoutFulfillment.STATUS_FULFILLED,
+        )
+
+        response = self._patch(
+            mismatch.pk,
+            {"status": "resolved", "resolution_note": "Review complete."},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "resolved")
+        self.assertEqual(response.json()["outcome"], "granted")
+
+    def test_list_exposes_fulfillment_provenance_and_granted_outcome(self):
+        mismatch = self._mismatch()
+        tier = Tier.objects.get(slug="basic")
+        binding, _reference = CheckoutAccountBinding.issue(
+            user=mismatch.paid_user,
+            tier=tier,
+            billing_period=CheckoutAccountBinding.PERIOD_MONTHLY,
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+        CheckoutFulfillment.objects.create(
+            stripe_session_id=mismatch.stripe_session_id,
+            binding=binding,
+            user=mismatch.paid_user,
+            tier=tier,
+            status=CheckoutFulfillment.STATUS_FULFILLED,
+        )
+
+        row = self._get("?status=open").json()["payment_mismatches"][0]
+
+        self.assertEqual(row["outcome"], "granted")
+        self.assertEqual(row["fulfillment"]["status"], "fulfilled")
+        self.assertEqual(
+            row["fulfillment"]["binding"]["source"],
+            CheckoutAccountBinding.SOURCE_AUTHENTICATED_PRICING,
+        )
+        self.assertEqual(
+            row["fulfillment"]["binding"]["purpose"],
+            CheckoutAccountBinding.PURPOSE_MEMBERSHIP_CHECKOUT,
+        )
+        self.assertEqual(row["fulfillment"]["binding"]["tier"], "basic")
+
+    def test_out_of_order_subscription_event_is_visible_as_quarantined(self):
+        mismatch = self._mismatch()
+        mismatch.reason = PaymentAccountMismatch.REASON_OUT_OF_ORDER_SUBSCRIPTION_EVENT
+        mismatch.details = {
+            "event_type": "customer.subscription.deleted",
+            "event_subscription_id": "sub_old",
+            "authoritative_subscription_id": "sub_new",
+        }
+        mismatch.save(update_fields=["reason", "details"])
+
+        row = self._get("?status=open").json()["payment_mismatches"][0]
+
+        self.assertEqual(row["reason"], "out_of_order_subscription_event")
+        self.assertEqual(row["outcome"], "quarantined")
+        self.assertIsNone(row["fulfillment"])
 
     def test_patch_ignored_never_merges_or_moves_aliases(self):
         mismatch = self._mismatch()

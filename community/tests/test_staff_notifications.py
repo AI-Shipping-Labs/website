@@ -21,9 +21,22 @@ from django.test import TestCase, override_settings, tag
 
 from accounts.models import User
 from content.models import Course, CourseAccess
+from payments import services as payment_services
 from payments.models import Tier
-from payments.services import handle_checkout_completed
+from payments.services import handle_checkout_completed as _handle_checkout_completed
 from plans.models import Sprint
+
+
+def handle_checkout_completed(session_data):
+    payload = {
+        "payment_status": "paid",
+        "status": "complete",
+        "livemode": str(payment_services.get_config("STRIPE_SECRET_KEY", "")).startswith(
+            ("sk_live_", "rk_live_")
+        ),
+    }
+    payload.update(session_data)
+    return _handle_checkout_completed(payload)
 
 
 @tag('core')
@@ -681,6 +694,11 @@ class NotifyPaidSignupEndToEndTest(TestCase):
                         "tier_slug": "basic",
                         "user_id": str(user.pk),
                     },
+                    "payment_status": "paid",
+                    "status": "complete",
+                    "livemode": str(
+                        real_get_config("STRIPE_SECRET_KEY", "")
+                    ).startswith(("sk_live_", "rk_live_")),
                 },
             },
         }

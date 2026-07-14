@@ -130,12 +130,18 @@ class SprintCreateTest(TestCase):
             'start_date': '2026-07-01',
             'duration_weeks': '6',
             'status': 'draft',
+            'description': 'A focused building cohort.',
+            'outcomes': 'Prototype\nLaunch',
+            'audience': 'AI builders',
         })
         self.assertEqual(Sprint.objects.count(), before + 1)
         sprint = Sprint.objects.get(slug='summer-2026')
         self.assertEqual(sprint.name, 'Summer 2026')
         self.assertEqual(sprint.duration_weeks, 6)
         self.assertEqual(sprint.start_date, datetime.date(2026, 7, 1))
+        self.assertEqual(sprint.description, 'A focused building cohort.')
+        self.assertEqual(sprint.outcomes, 'Prototype\nLaunch')
+        self.assertEqual(sprint.audience, 'AI builders')
         self.assertRedirects(response, f'/studio/sprints/{sprint.pk}/')
 
     def test_sprint_create_rejects_duplicate_slug(self):
@@ -205,10 +211,39 @@ class SprintEditTest(TestCase):
             'start_date': self.sprint.start_date.isoformat(),
             'duration_weeks': str(self.sprint.duration_weeks),
             'status': 'active',
+            'description': 'Updated public description.',
+            'outcomes': 'One\nTwo',
+            'audience': 'Builders\nFounders',
         })
         self.assertEqual(response.status_code, 302)
         self.sprint.refresh_from_db()
         self.assertEqual(self.sprint.status, 'active')
+        self.assertEqual(self.sprint.description, 'Updated public description.')
+        self.assertEqual(self.sprint.outcomes, 'One\nTwo')
+        self.assertEqual(self.sprint.audience, 'Builders\nFounders')
+
+        form = self.client.get(f'/studio/sprints/{self.sprint.pk}/edit')
+        self.assertContains(form, 'Updated public description.')
+        self.assertContains(form, 'One\nTwo')
+        self.assertContains(form, 'Builders\nFounders')
+        self.assertContains(form, 'Enter one item per line.')
+
+    def test_blank_landing_fields_are_accepted(self):
+        response = self.client.post(f'/studio/sprints/{self.sprint.pk}/edit', {
+            'name': self.sprint.name,
+            'slug': self.sprint.slug,
+            'start_date': self.sprint.start_date.isoformat(),
+            'duration_weeks': str(self.sprint.duration_weeks),
+            'status': self.sprint.status,
+            'description': '',
+            'outcomes': '',
+            'audience': '',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.sprint.refresh_from_db()
+        self.assertEqual(self.sprint.description, '')
+        self.assertEqual(self.sprint.outcomes, '')
+        self.assertEqual(self.sprint.audience, '')
 
 
 class SprintDetailEditAccessTest(TestCase):

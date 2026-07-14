@@ -47,6 +47,27 @@
     </div>
 
     <div class="mb-6">
+      <label for="sprint-description" class="block text-sm font-medium text-foreground mb-1">Description</label>
+      <textarea id="sprint-description" name="description" rows="6"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.description }}</textarea>
+      <p class="text-xs text-muted-foreground mt-1">Optional. Appears in the About this sprint section on the public landing page.</p>
+    </div>
+
+    <div class="mb-6">
+      <label for="sprint-outcomes" class="block text-sm font-medium text-foreground mb-1">Outcomes</label>
+      <textarea id="sprint-outcomes" name="outcomes" rows="5"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.outcomes }}</textarea>
+      <p class="text-xs text-muted-foreground mt-1">Optional. Appears as What you'll achieve on the public landing page. Enter one item per line.</p>
+    </div>
+
+    <div class="mb-6">
+      <label for="sprint-audience" class="block text-sm font-medium text-foreground mb-1">Audience</label>
+      <textarea id="sprint-audience" name="audience" rows="5"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.audience }}</textarea>
+      <p class="text-xs text-muted-foreground mt-1">Optional. Appears as Who this is for on the public landing page. Enter one item per line.</p>
+    </div>
+
+    <div class="mb-6">
       <label class="block text-sm font-medium text-foreground mb-1">Start date</label>
       <input type="date" name="start_date" value="{{ form_data.start_date }}" required
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">

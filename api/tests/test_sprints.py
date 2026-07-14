@@ -82,6 +82,7 @@ class SprintsListTest(SprintApiTestBase):
             set(first.keys()),
             {
                 "slug", "name", "start_date", "end_date",
+                "description", "outcomes", "audience",
                 "duration_weeks", "status", "lifecycle_badge", "event_series",
                 "created_at", "updated_at",
             },
@@ -111,6 +112,9 @@ class SprintsCreateTest(SprintApiTestBase):
         response = self._post({
             "name": "Sep 2026", "slug": "sep-2026",
             "start_date": "2026-09-01", "duration_weeks": 8,
+            "description": "Build and ship.",
+            "outcomes": "Prototype\nLaunch",
+            "audience": "AI builders",
         })
         self.assertEqual(response.status_code, 201)
         self.assertEqual(Sprint.objects.count(), before + 1)
@@ -118,6 +122,9 @@ class SprintsCreateTest(SprintApiTestBase):
         self.assertEqual(body["slug"], "sep-2026")
         self.assertEqual(body["duration_weeks"], 8)
         self.assertEqual(body["status"], "draft")  # default
+        self.assertEqual(body["description"], "Build and ship.")
+        self.assertEqual(body["outcomes"], "Prototype\nLaunch")
+        self.assertEqual(body["audience"], "AI builders")
 
     def test_create_rejects_missing_required_field(self):
         before = Sprint.objects.count()
@@ -129,6 +136,16 @@ class SprintsCreateTest(SprintApiTestBase):
         self.assertEqual(body["code"], "missing_field")
         self.assertEqual(body["details"]["field"], "start_date")
         self.assertEqual(Sprint.objects.count(), before)
+
+    def test_create_rejects_non_string_landing_field(self):
+        response = self._post({
+            "name": "Bad", "slug": "bad-landing-field",
+            "start_date": "2026-09-01", "duration_weeks": 8,
+            "outcomes": ["not", "a", "string"],
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "invalid_type")
+        self.assertFalse(Sprint.objects.filter(slug="bad-landing-field").exists())
 
 
 class SprintDetailTest(SprintApiTestBase):
@@ -154,6 +171,38 @@ class SprintDetailTest(SprintApiTestBase):
         # Untouched fields keep their values.
         self.assertEqual(body["name"], "May 2026")
         self.assertEqual(body["start_date"], "2026-05-01")
+
+    def test_patch_updates_landing_fields_independently(self):
+        self.sprint_active.description = "Original"
+        self.sprint_active.outcomes = "Keep this"
+        self.sprint_active.audience = "Keep this too"
+        self.sprint_active.save(update_fields=[
+            "description", "outcomes", "audience",
+        ])
+
+        response = self.client.patch(
+            "/api/sprints/may-2026",
+            data=json.dumps({"description": "Updated"}),
+            content_type="application/json",
+            **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["description"], "Updated")
+        self.assertEqual(body["outcomes"], "Keep this")
+        self.assertEqual(body["audience"], "Keep this too")
+
+    def test_patch_rejects_non_string_landing_field_without_writing(self):
+        response = self.client.patch(
+            "/api/sprints/may-2026",
+            data=json.dumps({"description": {"html": "not accepted"}}),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.sprint_active.refresh_from_db()
+        self.assertEqual(self.sprint_active.description, "")
 
     def test_detail_includes_stored_status_and_date_lifecycle_badge(self):
         response = self.client.get("/api/sprints/may-2026", **self._auth())

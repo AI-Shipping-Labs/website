@@ -28,6 +28,72 @@
         </p>
       </header>
 
+      {% if not enrolled %}
+      <div class="mb-6 space-y-6" data-testid="sprint-landing">
+        <section class="rounded-lg border border-border bg-card p-6" data-testid="sprint-landing-about">
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">About</p>
+          <h2 class="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">About this sprint</h2>
+          {% if sprint.description %}
+          <div class="mt-4 space-y-4 text-base leading-relaxed text-muted-foreground">
+            {{ sprint.description|linebreaks }}
+          </div>
+          {% else %}
+          <p class="mt-4 text-base leading-relaxed text-muted-foreground" data-testid="sprint-landing-about-generic">
+            A community sprint is a focused period for turning an idea into something shipped. You set a personal plan, build alongside a cohort, and use regular check-ins to keep moving.
+          </p>
+          {% endif %}
+        </section>
+
+        <section class="rounded-lg border border-border bg-card p-6" data-testid="sprint-landing-includes">
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">Included</p>
+          <h2 class="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">What the sprint includes</h2>
+          <ul class="mt-4 space-y-3 text-base text-muted-foreground">
+            <li class="flex gap-3"><i data-lucide="video" class="mt-0.5 h-5 w-5 shrink-0 text-accent"></i><span>Weekly sprint calls</span></li>
+            <li class="flex gap-3"><i data-lucide="clipboard-list" class="mt-0.5 h-5 w-5 shrink-0 text-accent"></i><span>A personal sprint plan</span></li>
+            <li class="flex gap-3"><i data-lucide="users" class="mt-0.5 h-5 w-5 shrink-0 text-accent"></i><span>Accountability partners</span></li>
+            <li class="flex gap-3"><i data-lucide="layout-dashboard" class="mt-0.5 h-5 w-5 shrink-0 text-accent"></i><span>The cohort board</span></li>
+          </ul>
+        </section>
+
+        <section class="rounded-lg border border-border bg-card p-6" data-testid="sprint-landing-schedule">
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">Schedule</p>
+          <h2 class="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Sprint schedule</h2>
+          <dl class="mt-4 space-y-3 text-base">
+            <div>
+              <dt class="font-medium text-foreground">Dates and duration</dt>
+              <dd class="mt-1 text-muted-foreground">{% sprint_date_range sprint %}</dd>
+            </div>
+            {% if event_series %}
+            <div>
+              <dt class="font-medium text-foreground">Scheduled calls</dt>
+              <dd class="mt-1 text-muted-foreground">{{ sprint_call_entries|length }} call{{ sprint_call_entries|length|pluralize }}</dd>
+            </div>
+            {% endif %}
+          </dl>
+        </section>
+
+        {% if sprint_outcomes %}
+        <section class="rounded-lg border border-border bg-card p-6" data-testid="sprint-landing-outcomes">
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">Outcomes</p>
+          <h2 class="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">What you'll achieve</h2>
+          <ul class="mt-4 list-disc space-y-2 pl-5 text-base leading-relaxed text-muted-foreground">
+            {% for outcome in sprint_outcomes %}<li>{{ outcome }}</li>{% endfor %}
+          </ul>
+        </section>
+        {% endif %}
+
+        {% if sprint_audience %}
+        <section class="rounded-lg border border-border bg-card p-6" data-testid="sprint-landing-audience">
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">Audience</p>
+          <h2 class="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Who this is for</h2>
+          <ul class="mt-4 list-disc space-y-2 pl-5 text-base leading-relaxed text-muted-foreground">
+            {% for audience_item in sprint_audience %}<li>{{ audience_item }}</li>{% endfor %}
+          </ul>
+        </section>
+        {% endif %}
+      </div>
+      {% endif %}
+
       <section class="mb-6 rounded-lg border border-border bg-card/95 p-5 shadow-lg shadow-background/20" data-testid="sprint-primary-action">
         {% if sprint.status == 'cancelled' and not enrolled %}
           <p class="text-sm text-foreground" data-testid="sprint-cta-cancelled">

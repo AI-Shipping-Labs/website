@@ -41,6 +41,7 @@ from playwright_tests.conftest import (
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
+from django.utils import timezone  # noqa: E402
 
 # Issue #656: this module uses local-only fixtures (DB seeding,
 # session-cookie injection, etc.) and cannot run against the
@@ -87,9 +88,9 @@ def _make_event_series(name, slug, *, events=0):
         start_time=datetime.time(18, 0),
         timezone='Europe/Berlin',
     )
-    base = datetime.datetime(
-        2026, 5, 6, 18, 0, tzinfo=datetime.timezone.utc,
-    )
+    # Keep every occurrence safely upcoming without tying this current-sprint
+    # fixture to the calendar date on which the suite happens to run.
+    base = timezone.now() + datetime.timedelta(days=7)
     for i in range(1, events + 1):
         start = base + datetime.timedelta(days=7 * (i - 1))
         Event.objects.create(
@@ -117,8 +118,9 @@ def _make_sprint(name, slug, *, event_series=None, min_tier_level=0):
     sprint = Sprint.objects.create(
         name=name,
         slug=slug,
-        # date-rot-ok: event-series link fixture; call dates, not sprint current state, are under test.
-        start_date=datetime.date(2026, 5, 1),
+        # Two weeks into the default six-week duration leaves a clear margin
+        # from both the start and end boundaries.
+        start_date=timezone.localdate() - datetime.timedelta(days=14),
         status='active',
         min_tier_level=min_tier_level,
         event_series=event_series,
@@ -141,11 +143,11 @@ class TestStaffLinksEventSeries:
         _clear_data()
         _create_staff_user("staff@test.com")
         series = _make_event_series(
-            "Wednesday office hours, May 2026",
-            "wed-oh-may-2026",
+            "Current sprint Wednesday office hours",
+            "current-sprint-wed-oh",
             events=6,
         )
-        sprint = _make_sprint("May 2026 sprint", "may-2026-sprint")
+        sprint = _make_sprint("Current sprint", "current-sprint")
 
         context = _auth_context(browser, "staff@test.com")
         page = context.new_page()
@@ -213,7 +215,7 @@ class TestStaffUnlinksEventSeries:
             "Wednesday office hours", "wed-oh", events=6,
         )
         sprint = _make_sprint(
-            "May 2026", "may-2026", event_series=series,
+            "Current sprint", "current-sprint", event_series=series,
         )
 
         context = _auth_context(browser, "staff@test.com")
@@ -272,15 +274,15 @@ class TestOneSeriesBacksTwoSprints:
         _clear_data()
         _create_staff_user("staff@test.com")
         series = _make_event_series(
-            "Wednesday office hours, Q2 2026", "wed-oh-q2", events=6,
+            "Shared current office hours", "shared-current-oh", events=6,
         )
-        may = _make_sprint("May cohort", "may-cohort")
-        june = _make_sprint("June cohort", "june-cohort")
+        first = _make_sprint("First current cohort", "first-current-cohort")
+        second = _make_sprint("Second current cohort", "second-current-cohort")
 
         context = _auth_context(browser, "staff@test.com")
         page = context.new_page()
 
-        for sprint_pk in (may.pk, june.pk):
+        for sprint_pk in (first.pk, second.pk):
             page.goto(
                 f"{django_server}/studio/sprints/{sprint_pk}/edit",
                 wait_until="domcontentloaded",
@@ -324,17 +326,17 @@ class TestMemberSeesMeetingSchedule:
             "main@test.com", tier_slug="main", email_verified=True,
         )
         series = _make_event_series(
-            "May office hours", "may-oh", events=6,
+            "Current sprint office hours", "current-sprint-oh", events=6,
         )
         _make_sprint(
-            "May 2026 sprint", "may-2026-sprint", event_series=series,
+            "Current sprint", "current-sprint", event_series=series,
         )
 
         context = _auth_context(browser, "main@test.com")
         page = context.new_page()
 
         page.goto(
-            f"{django_server}/sprints/may-2026-sprint",
+            f"{django_server}/sprints/current-sprint",
             wait_until="domcontentloaded",
         )
 
@@ -355,17 +357,17 @@ class TestMemberSeesMeetingSchedule:
         ).first.wait_for(state="visible")
 
         # Click the first occurrence -> lands on the canonical
-        # ``/events/<id>/may-oh-session-...`` URL (issue #673).
+        # ``/events/<id>/current-sprint-oh-session-...`` URL (issue #673).
         first_link = page.locator(
             '[data-testid="sprint-call-entry-link"]'
         ).first
         href = first_link.get_attribute("href")
         assert href is not None
         # Canonical URL is ``/events/<id>/<slug>``; slug starts with
-        # ``may-oh-session-``.
+        # ``current-sprint-oh-session-``.
         import re as _re
         assert _re.match(
-            r"^/events/\d+/may-oh-session-",
+            r"^/events/\d+/current-sprint-oh-session-",
             href,
         ), f"unexpected event URL shape: {href!r}"
         first_link.click()
@@ -471,7 +473,7 @@ class TestInvalidEventSeriesRejected:
         _create_staff_user("staff@test.com")
         series = _make_event_series("Original", "original", events=1)
         sprint = _make_sprint(
-            "May sprint", "may", event_series=series,
+            "Current sprint", "current-sprint", event_series=series,
         )
 
         context = _auth_context(browser, "staff@test.com")
@@ -529,16 +531,16 @@ class TestAnonymousSeesSchedule:
         _ensure_tiers()
         _clear_data()
         series = _make_event_series(
-            "May office hours", "may-oh", events=6,
+            "Current sprint office hours", "current-sprint-oh", events=6,
         )
         _make_sprint(
-            "May 2026 sprint", "may-2026-sprint", event_series=series,
+            "Current sprint", "current-sprint", event_series=series,
         )
 
         page = browser.new_context().new_page()
 
         page.goto(
-            f"{django_server}/sprints/may-2026-sprint",
+            f"{django_server}/sprints/current-sprint",
             wait_until="domcontentloaded",
         )
 

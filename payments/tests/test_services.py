@@ -410,8 +410,25 @@ class PaymentNotificationEmailTest(TestCase):
     # ------------------------------------------------------------------
     @patch("payments.services.get_config")
     def test_payment_notification_not_sent_when_setting_unset(self, mock_get_config):
-        # Default to "" for ANY get_config call (Stripe keys etc all empty).
-        mock_get_config.return_value = ""
+        # Keep intentionally unconfigured notification/Stripe values empty,
+        # but preserve the hardened handler's compatibility defaults. A blanket
+        # empty mock would disable legacy numeric authority before this test
+        # reaches the notification helper it is intended to exercise.
+        def _cfg(key, default=""):
+            if key in {
+                "PAYMENT_NOTIFICATION_EMAIL",
+                "STRIPE_SECRET_KEY",
+                "STRIPE_WEBHOOK_SECRET",
+            }:
+                return ""
+            if key in {
+                "LEGACY_NUMERIC_CHECKOUT_REFERENCE_ENABLED",
+                "LEGACY_NUMERIC_CHECKOUT_REFERENCE_CUTOFF",
+            }:
+                return default
+            return ""
+
+        mock_get_config.side_effect = _cfg
         user = User.objects.create_user(email="unset@test.com")
 
         handle_checkout_completed(self._basic_session_data(user))
@@ -424,6 +441,21 @@ class PaymentNotificationEmailTest(TestCase):
         self.assertEqual(
             len(recipient_calls), 1,
             "Helper must check PAYMENT_NOTIFICATION_EMAIL exactly once.",
+        )
+        legacy_calls = {
+            c.args[0]: c.args[1]
+            for c in mock_get_config.call_args_list
+            if c.args and c.args[0].startswith("LEGACY_NUMERIC_")
+        }
+        self.assertEqual(
+            legacy_calls,
+            {
+                "LEGACY_NUMERIC_CHECKOUT_REFERENCE_ENABLED": "true",
+                "LEGACY_NUMERIC_CHECKOUT_REFERENCE_CUTOFF": (
+                    "2026-08-01T00:00:00Z"
+                ),
+            },
+            "The fixture must preserve both production compatibility defaults.",
         )
         self.assertEqual(
             len(mail.outbox), 0,

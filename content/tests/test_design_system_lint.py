@@ -492,3 +492,79 @@ class DesignSystemLintTest(SimpleTestCase):
                 len(results["public_font_bold"]["templates/new/untracked.html"]),
                 1,
             )
+
+
+@tag("core")
+class DesignSystemWorkshopMediaContractTest(SimpleTestCase):
+    """Keep the Workshop media documentation aligned with deployed #1237."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.base_dir = Path(settings.BASE_DIR)
+        cls.design_system = (cls.base_dir / "_docs/design-system.md").read_text(encoding="utf-8")
+        cls.workshop_model = (cls.base_dir / "content/models/workshop.py").read_text(encoding="utf-8")
+        cls.catalog_template = (cls.base_dir / "templates/content/_workshops_catalog.html").read_text(
+            encoding="utf-8"
+        )
+        cls.banner_resolver = (
+            cls.base_dir / "integrations/services/banner_generator/resolve.py"
+        ).read_text(encoding="utf-8")
+
+    def test_workshop_media_decision_documents_conditional_explicit_policy(self):
+        card_media_section = self.design_system.split("## Card Media Slots", 1)[1].split(
+            "## Breakpoints and Mobile Carousels", 1
+        )[0]
+
+        self.assertIn(
+            "| Workshops | Conditional explicit media: render exactly one slot for an authored "
+            "`cover_image_url` or operator `custom_banner_url`; render no slot for coverless or "
+            "auto-only cards. Generated `auto_banner_url` remains social/Studio media only. |",
+            card_media_section,
+        )
+        self.assertNotIn("| Workshops | Render |", card_media_section)
+        self.assertNotIn("Never branch on cover presence per card.", card_media_section)
+        self.assertIn("Workshop.card_image_url", card_media_section)
+        self.assertIn("Workshop.display_image_url", card_media_section)
+        self.assertIn("no fallback, empty wrapper, or reserved `aspect-video` space", card_media_section)
+
+    def test_content_preview_owner_names_the_workshop_exception(self):
+        component_index = self.design_system.split("## Partials and Component Index", 1)[1].split(
+            "### Deprecated", 1
+        )[0]
+
+        self.assertIn(
+            "Workshop cards use it only for explicit cover/custom media; coverless and auto-only "
+            "workshops omit the slot entirely.",
+            component_index,
+        )
+        self.assertIn("{% if workshop.card_image_url %}", component_index)
+        self.assertIn('preview_cover_url=workshop.card_image_url', component_index)
+
+    def test_documented_workshop_policy_matches_runtime_selection_and_rendering(self):
+        card_image_property = self.workshop_model.split("def card_image_url", 1)[1].split(
+            "def user_can_access_landing", 1
+        )[0]
+        self.assertIn("return self.cover_image_url or self.custom_banner_url or ''", card_image_property)
+        self.assertNotIn("auto_banner_url", card_image_property)
+
+        display_image_property = self.workshop_model.split("def display_image_url", 1)[1].split(
+            "def card_image_url", 1
+        )[0]
+        self.assertIn("return effective_banner_url(self)", display_image_property)
+        self.assertIn(
+            "cover_image_url`` -> ``custom_banner_url`` ->\n    ``auto_banner_url",
+            self.banner_resolver,
+        )
+
+        conditional_start = self.catalog_template.index("{% if workshop.card_image_url %}")
+        preview_include = self.catalog_template.index(
+            '{% include "content/_content_preview.html"',
+            conditional_start,
+        )
+        conditional_end = self.catalog_template.index("{% endif %}", preview_include)
+        card_body = self.catalog_template.index('class="min-w-0 p-4 sm:p-5"', conditional_end)
+        self.assertLess(conditional_start, preview_include)
+        self.assertLess(preview_include, conditional_end)
+        self.assertLess(conditional_end, card_body)
+        self.assertNotIn("preview_decorative_fallback", self.catalog_template)

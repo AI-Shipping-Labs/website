@@ -18,15 +18,18 @@ pytestmark = [
 
 
 COMMUNITY_DESKTOP_LINKS = [
-    ["nav-community-link-overview", "/community", "Overview"],
     ["nav-community-link-membership", "/pricing", "Membership"],
     ["nav-community-link-activities", "/activities#access-by-tier", "Activities"],
     ["nav-community-link-sprints", "/sprints", "Community Sprints"],
     ["nav-community-link-events", "/events", "Events"],
+    [
+        "nav-community-link-past-recordings",
+        "/events?filter=past",
+        "Past Recordings",
+    ],
 ]
 
 COMMUNITY_MOBILE_LINKS = [
-    ["mobile-nav-community-link-overview", "/community", "Overview"],
     ["mobile-nav-community-link-membership", "/pricing", "Membership"],
     [
         "mobile-nav-community-link-activities",
@@ -35,6 +38,11 @@ COMMUNITY_MOBILE_LINKS = [
     ],
     ["mobile-nav-community-link-sprints", "/sprints", "Community Sprints"],
     ["mobile-nav-community-link-events", "/events", "Events"],
+    [
+        "mobile-nav-community-link-past-recordings",
+        "/events?filter=past",
+        "Past Recordings",
+    ],
 ]
 
 
@@ -93,7 +101,7 @@ def test_desktop_community_dropdown_groups_membership_activities_sprints_events(
         assert primary.locator(f'[data-testid="{absent_id}"]').count() == 0
 
     menu = _open_desktop_community_menu(page)
-    assert _menu_links(menu)[:5] == COMMUNITY_DESKTOP_LINKS
+    assert _menu_links(menu) == COMMUNITY_DESKTOP_LINKS
 
 
 def test_visitor_moves_from_activities_to_pricing_sprints_and_events(
@@ -136,7 +144,7 @@ def test_mobile_community_accordion_mirrors_desktop_order_and_opens_activities(
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
         menu = _open_mobile_community_menu(page)
-        assert _menu_links(menu)[:5] == COMMUNITY_MOBILE_LINKS
+        assert _menu_links(menu) == COMMUNITY_MOBILE_LINKS
 
         page.get_by_test_id("mobile-nav-community-link-activities").click()
         page.wait_for_url("**/activities#access-by-tier")
@@ -198,7 +206,7 @@ def test_authenticated_and_staff_controls_survive_community_navigation(
     try:
         member_page.set_viewport_size({"width": 1280, "height": 800})
         member_page.goto(f"{django_server}/", wait_until="domcontentloaded")
-        assert _menu_links(_open_desktop_community_menu(member_page))[:5] == (
+        assert _menu_links(_open_desktop_community_menu(member_page)) == (
             COMMUNITY_DESKTOP_LINKS
         )
         expect(member_page.locator("#notification-bell-btn")).to_be_visible()

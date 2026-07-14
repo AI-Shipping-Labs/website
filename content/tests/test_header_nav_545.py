@@ -22,7 +22,6 @@ ABOUT_LINKS = [
 ]
 
 COMMUNITY_LINKS = [
-    ('Overview', '/community'),
     ('Membership', '/pricing'),
     ('Activities', '/activities#access-by-tier'),
     ('Community Sprints', '/sprints'),
@@ -126,7 +125,6 @@ class HeaderTextNavigationIssue580Test(TestCase):
         self.assertEqual(
             community_link_ids,
             [
-                'nav-community-link-overview',
                 'nav-community-link-membership',
                 'nav-community-link-activities',
                 'nav-community-link-sprints',
@@ -191,7 +189,6 @@ class HeaderTextNavigationIssue580Test(TestCase):
         self.assertEqual(
             mobile_community_link_ids,
             [
-                'mobile-nav-community-link-overview',
                 'mobile-nav-community-link-membership',
                 'mobile-nav-community-link-activities',
                 'mobile-nav-community-link-sprints',

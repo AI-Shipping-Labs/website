@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load accounts_extras %}
 {% load member_badges %}
 {% load sprint_extras %}
 
@@ -45,12 +46,12 @@
         </p>
 
         <div class="mt-8 flex flex-col items-center justify-center gap-3 sm:mt-12 sm:flex-row sm:gap-4">
-          <a href="/#tiers" class="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:w-auto">
-            View Membership Tiers
+          <a href="/#activities" class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}" data-testid="home-hero-activities-cta">
+            See what members get
             <i data-lucide="arrow-right" class="h-4 w-4"></i>
           </a>
-          <a href="/resources" class="inline-flex min-h-[44px] w-full items-center justify-center rounded-md border border-border bg-transparent px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary sm:w-auto">
-            Browse Resources
+          <a href="/#tiers" class="{% button_classes 'secondary' size='lg' extra='w-full sm:w-auto' %}" data-testid="home-hero-tiers-cta">
+            View membership tiers
           </a>
         </div>
 
@@ -99,139 +100,42 @@
     </div>
   </section>
 
-  <!-- Pricing / Tiers Section -->
-  {# Issue #510: tighten mobile vertical spacing on the tier section to reduce total mobile section height #}
-  <section id="tiers" class="border-t border-border bg-card max-lg:pb-4 max-lg:pt-6 sm:py-20 lg:py-28 overflow-x-hidden">
+  <section id="activities" class="scroll-mt-24 border-t border-border bg-card py-12 sm:py-20 lg:py-28" data-testid="home-activities-section" aria-labelledby="home-activities-heading">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl text-center">
-        <p class="text-sm font-medium uppercase tracking-widest text-accent">Membership</p>
-        <h2 class="mt-2 text-3xl font-semibold tracking-tight sm:mt-4 sm:text-4xl" style="text-wrap: balance;">
-          Choose your level of engagement
-        </h2>
-        <p class="mt-3 text-base leading-relaxed text-muted-foreground sm:mt-6 sm:text-lg">
-          Each tier is designed for a different type of builder. More investment means more structure, accountability,
-          and support to help you ship your AI projects consistently.
-        </p>
-
-        <div class="mt-4 flex items-center justify-center gap-4 sm:mt-8">
-          <span class="whitespace-nowrap text-sm text-foreground" id="monthly-label">Monthly</span>
-          <div class="touch-target-toggle">
-            <button type="button" id="billing-toggle"
-                    class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-secondary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                    aria-label="Toggle annual pricing"
-                    aria-pressed="false">
-              <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-foreground shadow ring-0 transition-transform translate-x-0" id="billing-toggle-dot"></span>
-            </button>
-          </div>
-          <span class="whitespace-nowrap text-sm text-muted-foreground" id="annual-label">Annual <span class="text-accent">(Save ~17%)</span></span>
+      <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div class="max-w-3xl">
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">What members do</p>
+          <h2 id="home-activities-heading" class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl" style="text-wrap: balance;">
+            Build momentum with people who ship
+          </h2>
+          <p class="mt-4 max-w-2xl text-lg leading-8 text-muted-foreground">
+            AI Shipping Labs turns project ideas into a shared practice: focused work, useful feedback, and a cadence that keeps the next step visible.
+          </p>
         </div>
+        <a href="/activities#access-by-tier" class="{% button_classes 'secondary' size='md' %}" data-testid="home-activities-tier-link">
+          Compare activities by tier
+          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+        </a>
       </div>
 
-      {% comment %}
-        Issue #510: On mobile (max-lg) the carousel is `overflow-x-auto`. CSS computes
-        the perpendicular axis as `auto` too, which clips the absolutely-positioned
-        `Most Popular` badge that sits at `-top-3`. `max-lg:pt-6` gives the badge room
-        inside the scroll viewport so it is not clipped. Do NOT remove this padding
-        without converting the badge to an in-flow element first.
-
-        Also: on mobile, Main (highlighted) is the dominant card — wider, full
-        feature list, larger padding. Free / Basic / Premium are compact peers —
-        narrower, condensed feature list on mobile, no positioning paragraph.
-        Desktop layout now shows four cards while preserving the highlighted
-        Main tier treatment.
-      {% endcomment %}
-      <div class="mx-auto mt-4 grid max-w-7xl gap-6 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:items-start max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:pt-6 max-lg:[scrollbar-width:none] sm:mt-16 lg:grid-cols-4 lg:items-start"
-           data-tier-carousel
-           data-testid="home-tier-carousel">
-        <div class="home-free-tier-card relative flex flex-col overflow-visible rounded-xl border border-border bg-background p-5 transition-all max-lg:flex-none max-lg:snap-center max-lg:w-[min(82vw,22rem)] max-lg:p-4 sm:p-8"
-             data-tier-card="free"
-             data-testid="home-tier-card">
-          <div class="mb-6 max-lg:mb-3">
-            <h3 class="text-lg font-semibold text-foreground">{{ free_tier.name }}</h3>
-            <p class="mt-1 text-sm text-accent">{{ free_tier.tagline }}</p>
+      <div class="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3" data-testid="home-activities-grid">
+        {% for activity in home_activities %}
+        <article class="rounded-xl border border-border bg-background p-6" data-testid="home-activity-card">
+          <div class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent">
+            <i data-lucide="{{ activity.icon }}" class="h-5 w-5" aria-hidden="true"></i>
           </div>
-
-          <div class="mb-6 max-lg:mb-3">
-            <div class="flex items-baseline">
-              <span class="text-4xl font-semibold text-foreground">&euro;0</span>
-              <span class="ml-2 text-muted-foreground">/forever</span>
-            </div>
-            <p class="mt-2 text-sm text-muted-foreground">{{ free_tier.hook }}</p>
-          </div>
-
-          <p class="mb-6 text-sm text-muted-foreground max-lg:mb-4">{{ free_tier.description }}</p>
-
-          <ul class="mb-8 flex-1 space-y-3 max-lg:mb-4 max-lg:space-y-2">
-            {% for feature in free_tier.features %}
-            <li class="flex items-start gap-3 {% if forloop.counter > 2 %}max-lg:hidden{% endif %}">
-              <i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent"></i>
-              <span class="text-sm text-foreground">{{ feature.text }}</span>
-            </li>
-            {% endfor %}
-          </ul>
-
-          <a href="/accounts/register/"
-             class="mt-auto flex min-h-[44px] w-full items-center justify-center rounded-md bg-secondary px-4 py-3 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:py-2.5"
-             data-testid="home-free-tier-cta">
-            Join free
-          </a>
-        </div>
-
-        {% for tier in tiers %}
-        {# Issues #510/#1235: cards size to their own content on mobile and desktop. #}
-        <div class="relative flex flex-col overflow-visible rounded-xl border p-5 transition-all max-lg:flex-none max-lg:snap-center sm:p-8 {% if tier.highlighted %}border-accent bg-background shadow-xl ring-2 ring-accent/20 max-lg:w-[min(82vw,22rem)] lg:scale-105{% else %}border-border bg-background max-lg:w-[min(70vw,18rem)] max-lg:p-4{% endif %}"
-             data-tier-card="{{ tier.stripe_key }}"
-             data-testid="home-tier-card"
-             style="{% if tier.highlighted %}box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);{% endif %}">
-          {% if tier.highlighted %}
-          <div class="absolute -top-3 left-1/2 z-10 -translate-x-1/2">
-            <span class="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
-              <i data-lucide="star" class="h-3 w-3"></i>
-              Most Popular
-            </span>
-          </div>
-          {% endif %}
-
-          <div class="mb-6 max-lg:mb-3">
-            <h3 class="text-lg font-semibold text-foreground">{{ tier.name }}</h3>
-            <p class="mt-1 text-sm text-accent">{{ tier.tagline }}</p>
-          </div>
-
-          <div class="mb-6 max-lg:mb-3">
-            <div class="flex items-baseline">
-              <span class="text-4xl font-semibold text-foreground tier-price" data-annual="{{ tier.price_annual }}" data-monthly="{{ tier.price_monthly }}">&euro;{{ tier.price_monthly }}</span>
-              <span class="ml-2 text-muted-foreground tier-period">/month</span>
-            </div>
-            <p class="mt-2 text-sm text-muted-foreground">{{ tier.hook }}</p>
-          </div>
-
-          <p class="mb-6 text-sm text-muted-foreground max-lg:mb-4 {% if not tier.highlighted %}max-lg:hidden{% endif %}">{{ tier.description }}</p>
-
-          <ul class="mb-8 flex-1 space-y-3 max-lg:mb-4 max-lg:space-y-2">
-            {% for feature in tier.features %}
-            {# Issue #510: hide features beyond top 3 on non-highlighted cards on mobile only. #}
-            <li class="flex items-start gap-3 {% if not tier.highlighted and forloop.counter > 3 %}max-lg:hidden{% endif %}">
-              {% if feature.included %}
-              <i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent"></i>
-              {% else %}
-              <i data-lucide="x" class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/50"></i>
-              {% endif %}
-              <span class="text-sm {% if feature.included %}text-foreground{% else %}text-muted-foreground/50{% endif %}">{{ feature.text }}</span>
-            </li>
-            {% endfor %}
-          </ul>
-
-          <div class="mt-auto space-y-4 max-lg:space-y-3">
-            <p class="text-xs text-muted-foreground {% if not tier.highlighted %}max-lg:hidden{% endif %}">{{ tier.positioning }}</p>
-            <a href="{{ tier.payment_link_monthly }}"
-               class="tier-cta-link flex min-h-[44px] w-full items-center justify-center rounded-md px-4 py-3 text-center text-sm font-medium transition-colors cursor-pointer sm:py-2.5 {% if tier.highlighted %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
-               data-link-annual="{{ tier.payment_link_annual }}" data-link-monthly="{{ tier.payment_link_monthly }}"
-               style="{% if tier.highlighted %}box-shadow: 0 10px 25px -5px hsl(75 100% 50% / 0.2);{% endif %}">
-              Join
-            </a>
-          </div>
-        </div>
+          <h3 class="mt-4 text-lg font-semibold text-foreground">{{ activity.title }}</h3>
+          <p class="mt-2 text-sm leading-6 text-muted-foreground">{{ activity.description }}</p>
+        </article>
         {% endfor %}
+        <aside class="rounded-xl border border-accent/30 bg-accent/10 p-6 sm:col-span-2 lg:col-span-1" data-testid="home-personalized-plan-callout">
+          <div class="flex flex-wrap items-center gap-2">
+            <i data-lucide="route" class="h-5 w-5 text-accent" aria-hidden="true"></i>
+            <span class="rounded-full border border-accent/30 bg-background px-2.5 py-1 text-xs font-medium text-accent">Main + Premium</span>
+          </div>
+          <h3 class="mt-4 text-lg font-semibold text-foreground">A personalized onboarding plan</h3>
+          <p class="mt-2 text-sm leading-6 text-muted-foreground">Share your goals in a short intake. Alexey prepares a plan you can use inside sprints and accountability check-ins.</p>
+        </aside>
       </div>
     </div>
   </section>
@@ -322,19 +226,20 @@
     </div>
   </section>
 
-  <section id="upcoming-events" class="border-t border-border bg-card py-12 sm:py-20 lg:py-28" data-testid="home-upcoming-events-section">
+  {% if upcoming_events %}
+  <section id="upcoming-events" class="scroll-mt-24 border-t border-border bg-card py-12 sm:py-20 lg:py-28" data-testid="home-upcoming-events-section">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div class="max-w-3xl">
           <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
             <i data-lucide="calendar-heart" class="h-4 w-4"></i>
-            Upcoming live events
+            Live sessions on the calendar
           </p>
           <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
-            Sample the community before you commit
+            See what the community is doing live
           </h2>
           <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
-            Join an upcoming session, see how the community works live, and use the existing guest registration flow when an event is open to Free members.
+            Follow the current schedule of building sessions, office hours, and community conversations. Each event shows the membership level it requires.
           </p>
         </div>
         <a href="/events?filter=upcoming" class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10 hover:text-accent/80" data-testid="home-upcoming-events-link">
@@ -343,7 +248,6 @@
         </a>
       </div>
 
-      {% if upcoming_events %}
       <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3" data-testid="home-upcoming-events-grid">
         {% for event in upcoming_events %}
         <div data-testid="home-upcoming-event-card">
@@ -351,20 +255,9 @@
         </div>
         {% endfor %}
       </div>
-      {% else %}
-      <div class="mt-10 rounded-xl border border-border bg-background p-6 sm:p-8" data-testid="home-upcoming-events-empty">
-        <h3 class="text-lg font-semibold text-foreground">No live events are scheduled right now</h3>
-        <p class="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          Check the events page for the latest schedule and newly announced sessions.
-        </p>
-        <a href="/events" class="mt-5 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-secondary px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80">
-          Browse events
-          <i data-lucide="arrow-right" class="h-4 w-4"></i>
-        </a>
-      </div>
-      {% endif %}
     </div>
   </section>
+  {% endif %}
 
   <!-- Testimonials Section -->
   <section id="testimonials" class="border-t border-border bg-background px-4 py-12 sm:px-6 sm:py-20 lg:px-8 lg:py-28">
@@ -385,89 +278,163 @@
     </div>
   </section>
 
-  <!-- Past Event Recordings Section -->
-  {% comment %}
-    Issue #512: convert mobile layout to a horizontal scroll-snap carousel
-    so the section never bursts the Pixel 7 viewport. Desktop grid
-    (md:grid-cols-2 lg:grid-cols-3) is unchanged. `overflow-x-hidden` on
-    the section is a belt-and-suspenders parent overflow guard.
-  {% endcomment %}
-  <section id="resources" data-testid="home-past-recordings-section" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28 overflow-x-hidden">
+  <!-- Pricing / Tiers Section -->
+  {# Issue #510: tighten mobile vertical spacing on the tier section to reduce total mobile section height #}
+  <section id="tiers" class="border-t border-border bg-card max-lg:pb-4 max-lg:pt-6 sm:py-20 lg:py-28 overflow-x-hidden">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
-            <i data-lucide="video" class="h-4 w-4"></i>
-            Past event recordings
-          </p>
-          <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
-            Past Event Recordings
-          </h2>
-          <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
-            Catch up on completed community sessions from the Events archive. Workshop-linked sessions point back to the workshop artifact for the writeup, materials, tutorial pages, and code context.
-          </p>
+      <div class="mx-auto max-w-2xl text-center">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Membership</p>
+        <h2 class="mt-2 text-3xl font-semibold tracking-tight sm:mt-4 sm:text-4xl" style="text-wrap: balance;">
+          Choose your level of engagement
+        </h2>
+        <p class="mt-3 text-base leading-relaxed text-muted-foreground sm:mt-6 sm:text-lg">
+          Each tier is designed for a different type of builder. More investment means more structure, accountability,
+          and support to help you ship your AI projects consistently.
+        </p>
+
+        <div class="mt-4 flex items-center justify-center gap-4 sm:mt-8">
+          <span class="whitespace-nowrap text-sm text-foreground" id="monthly-label">Monthly</span>
+          <div class="touch-target-toggle">
+            <button type="button" id="billing-toggle"
+                    class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-secondary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    aria-label="Toggle annual pricing"
+                    aria-pressed="false">
+              <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-foreground shadow ring-0 transition-transform translate-x-0" id="billing-toggle-dot"></span>
+            </button>
+          </div>
+          <span class="whitespace-nowrap text-sm text-muted-foreground" id="annual-label">Annual <span class="text-accent">(Save ~17%)</span></span>
         </div>
-        <a href="/events?filter=past" data-testid="home-past-recordings-cta" class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10 hover:text-accent/80">
-          View all past recordings
-          <i data-lucide="arrow-right" class="h-4 w-4"></i>
-        </a>
       </div>
 
-      {% if recordings %}
       {% comment %}
-        Issue #512: max-md collapses the grid into a horizontal scroll-snap
-        carousel, mirroring the testimonial cards pattern. The desktop grid
-        classes are kept byte-for-byte identical to before.
+        Issue #510: On mobile (max-lg) the carousel is `overflow-x-auto`. CSS computes
+        the perpendicular axis as `auto` too, which clips the absolutely-positioned
+        `Most Popular` badge that sits at `-top-3`. `max-lg:pt-6` gives the badge room
+        inside the scroll viewport so it is not clipped. Do NOT remove this padding
+        without converting the badge to an in-flow element first.
+
+        Also: on mobile, Main (highlighted) is the dominant card — wider, full
+        feature list, larger padding. Free / Basic / Premium are compact peers —
+        narrower, condensed feature list on mobile, no positioning paragraph.
+        Desktop layout now shows four cards while preserving the highlighted
+        Main tier treatment.
       {% endcomment %}
-      <div class="mt-10 gap-6 max-md:-mx-4 max-md:flex max-md:snap-x max-md:snap-mandatory max-md:overflow-x-auto max-md:scroll-smooth max-md:px-4 max-md:pb-4 max-md:[scrollbar-width:none] md:grid md:grid-cols-2 lg:grid-cols-3"
-           data-testid="home-recordings-carousel">
-        {% for recording in recordings %}
-        {% comment %}
-        Issue #523 — wrap the whole card body in a single <a> so the entire
-        card is clickable. Recordings here are Event objects with a
-        recording_url; the public detail page lives at /events/<slug>
-        (registered in events/urls.py, served by event_detail). The trailing
-        "View recording" affordance is a <span> now to avoid nested anchors —
-        the card itself is the link.
-        {% endcomment %}
-        <article class="group flex min-w-0 flex-col rounded-xl border border-border bg-card transition-colors hover:border-accent/50 max-md:w-[min(82vw,22rem)] max-md:flex-none max-md:snap-center" data-testid="home-recording-card">
-          {# Issue #673 — canonical event URL via get_absolute_url. #}
-          <a href="{{ recording.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %} flex flex-1 flex-col p-6">
-            <div class="flex-1">
-              <div class="flex min-w-0 items-center gap-2 mb-2">
-                <i data-lucide="video" class="h-5 w-5 shrink-0 text-accent"></i>
-                <h3 class="break-words text-lg font-semibold text-foreground transition-colors group-hover:text-accent [overflow-wrap:anywhere]">{{ recording.title }}</h3>
-              </div>
-              <p class="mt-2 line-clamp-3 break-words text-sm text-muted-foreground">{{ recording.description }}</p>
-              <div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                <span class="inline-flex items-center gap-1.5">
-                  <i data-lucide="calendar" class="h-4 w-4"></i>
-                  {{ recording.short_date }}
-                </span>
-              </div>
-              {% if recording.tags %}
-              <div class="mt-3 flex flex-wrap gap-2">
-                {% for tag in recording.tags|slice:":2" %}
-                <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
-                {% endfor %}
-              </div>
-              {% endif %}
+      <div class="mx-auto mt-4 grid max-w-7xl gap-6 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:items-start max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:pt-6 max-lg:[scrollbar-width:none] sm:mt-16 lg:grid-cols-4 lg:items-start"
+           data-tier-carousel
+           data-testid="home-tier-carousel">
+        <div class="home-free-tier-card relative flex flex-col overflow-visible rounded-xl border border-border bg-background p-5 transition-all max-lg:flex-none max-lg:snap-center max-lg:w-[min(82vw,22rem)] max-lg:p-4 sm:p-8"
+             data-tier-card="free"
+             data-testid="home-tier-card">
+          <div class="mb-6 max-lg:mb-3">
+            <h3 class="text-lg font-semibold text-foreground">{{ free_tier.name }}</h3>
+            <p class="mt-1 text-sm text-accent">{{ free_tier.tagline }}</p>
+          </div>
+
+          <div class="mb-6 max-lg:mb-3">
+            <div class="flex items-baseline">
+              <span class="text-4xl font-semibold text-foreground">&euro;0</span>
+              <span class="ml-2 text-muted-foreground">/forever</span>
             </div>
-            <span class="mt-6 inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors group-hover:text-accent/80">
-              View recording
-              <i data-lucide="arrow-right" class="h-4 w-4 transition-transform group-hover:translate-x-1"></i>
-            </span>
+            <p class="mt-2 text-sm text-muted-foreground">{{ free_tier.hook }}</p>
+          </div>
+
+          <p class="mb-6 text-sm text-muted-foreground max-lg:mb-4">{{ free_tier.description }}</p>
+
+          <ul class="mb-8 flex-1 space-y-3 max-lg:mb-4 max-lg:space-y-2">
+            {% for feature in free_tier.features %}
+            <li class="flex items-start gap-3 {% if forloop.counter > 2 %}max-lg:hidden{% endif %}">
+              <i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent"></i>
+              <span class="text-sm text-foreground">{{ feature.text }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+
+          <a href="/#join-free"
+             class="{% button_classes 'secondary' size='lg' extra='mt-auto w-full' %}"
+             data-testid="home-free-tier-cta">
+            Join free
           </a>
-        </article>
+        </div>
+
+        {% for tier in tiers %}
+        {# Issues #510/#1235: cards size to their own content on mobile and desktop. #}
+        <div class="relative flex flex-col overflow-visible rounded-xl border p-5 transition-all max-lg:flex-none max-lg:snap-center sm:p-8 {% if tier.highlighted %}border-accent bg-background shadow-xl ring-2 ring-accent/20 max-lg:w-[min(82vw,22rem)] lg:scale-105{% else %}border-border bg-background max-lg:w-[min(70vw,18rem)] max-lg:p-4{% endif %}"
+             data-tier-card="{{ tier.stripe_key }}"
+             data-testid="home-tier-card"
+             style="{% if tier.highlighted %}box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);{% endif %}">
+          {% if tier.highlighted %}
+          <div class="absolute -top-3 left-1/2 z-10 -translate-x-1/2">
+            <span class="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
+              <i data-lucide="star" class="h-3 w-3"></i>
+              Most Popular
+            </span>
+          </div>
+          {% endif %}
+
+          <div class="mb-6 max-lg:mb-3">
+            <h3 class="text-lg font-semibold text-foreground">{{ tier.name }}</h3>
+            <p class="mt-1 text-sm text-accent">{{ tier.tagline }}</p>
+          </div>
+
+          <div class="mb-6 max-lg:mb-3">
+            <div class="flex items-baseline">
+              <span class="text-4xl font-semibold text-foreground tier-price" data-annual="{{ tier.price_annual }}" data-monthly="{{ tier.price_monthly }}">&euro;{{ tier.price_monthly }}</span>
+              <span class="ml-2 text-muted-foreground tier-period">/month</span>
+            </div>
+            <p class="mt-2 text-sm text-muted-foreground">{{ tier.hook }}</p>
+          </div>
+
+          <p class="mb-6 text-sm text-muted-foreground max-lg:mb-4 {% if not tier.highlighted %}max-lg:hidden{% endif %}">{{ tier.description }}</p>
+
+          <ul class="mb-8 flex-1 space-y-3 max-lg:mb-4 max-lg:space-y-2">
+            {% for feature in tier.features %}
+            {# Issue #510: hide features beyond top 3 on non-highlighted cards on mobile only. #}
+            <li class="flex items-start gap-3 {% if not tier.highlighted and forloop.counter > 3 %}max-lg:hidden{% endif %}">
+              {% if feature.included %}
+              <i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent"></i>
+              {% else %}
+              <i data-lucide="x" class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/50"></i>
+              {% endif %}
+              <span class="text-sm {% if feature.included %}text-foreground{% else %}text-muted-foreground/50{% endif %}">{{ feature.text }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+
+          <div class="mt-auto space-y-4 max-lg:space-y-3">
+            <p class="text-xs text-muted-foreground {% if not tier.highlighted %}max-lg:hidden{% endif %}">{{ tier.positioning }}</p>
+            <a href="{{ tier.payment_link_monthly }}"
+               class="tier-cta-link flex min-h-[44px] w-full items-center justify-center rounded-md px-4 py-3 text-center text-sm font-medium transition-colors cursor-pointer sm:py-2.5 {% if tier.highlighted %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
+               data-link-annual="{{ tier.payment_link_annual }}" data-link-monthly="{{ tier.payment_link_monthly }}"
+               style="{% if tier.highlighted %}box-shadow: 0 10px 25px -5px hsl(75 100% 50% / 0.2);{% endif %}">
+              Join
+            </a>
+          </div>
+        </div>
         {% endfor %}
       </div>
-      {% else %}
-      <div class="mt-12 rounded-lg border border-border bg-card p-8 text-center">
-        <p class="text-muted-foreground">New event recordings drop after each live session. The newsletter has them first.</p>
-      </div>
-      {% endif %}
     </div>
   </section>
+
+  <section id="join-free" class="scroll-mt-24 border-t border-border bg-background py-12 sm:py-20 lg:py-28" data-testid="home-join-free-section" aria-labelledby="home-join-free-heading">
+    <div class="mx-auto grid max-w-6xl gap-10 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,28rem)] lg:items-center lg:gap-16 lg:px-8">
+      <div class="max-w-2xl">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Start free</p>
+        <h2 id="home-join-free-heading" class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl" style="text-wrap: balance;">Create your free account</h2>
+        <p class="mt-5 text-lg leading-8 text-muted-foreground">
+          Get community updates, browse open resources, and register for free and open events. Paid community activities remain clearly labeled in the membership comparison above.
+        </p>
+        <ul class="mt-8 space-y-3 text-sm text-foreground" aria-label="Free account includes">
+          <li class="flex items-start gap-3"><i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true"></i><span>Community news and practical shipping resources</span></li>
+          <li class="flex items-start gap-3"><i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true"></i><span>Open tutorials, recordings, and project ideas</span></li>
+          <li class="flex items-start gap-3"><i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true"></i><span>Registration for events marked Free or open</span></li>
+        </ul>
+      </div>
+      <div class="w-full max-w-md justify-self-center lg:justify-self-end" data-testid="home-join-free-form">
+        {% include "accounts/includes/_inline_register_card.html" with collapse_email=True %}
+      </div>
+    </div>
+  </section>
+
 
   <!-- Blog Section -->
   <section id="blog" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28">
@@ -634,6 +601,9 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="/static/js/accounts/auth-helpers.js"></script>
+{{ next_url|json_script:"auth-next-url" }}
+<script src="/static/js/accounts/inline-register.js"></script>
 <script>
 function toggleFaq(btn) {
   var content = btn.nextElementSibling;

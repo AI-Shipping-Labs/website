@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from accounts.gating import is_newsletter_only_user
+from accounts.oauth_context import get_oauth_provider_context
 from accounts.services.timezones import format_user_datetime
 from community.services.slack_links import build_slack_profile_url
 from content.access import (
@@ -33,7 +34,6 @@ from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
 from content.tier_config import get_tiers_with_features
 from events.models import Event
 from events.services.time_windows import (
-    past_recording_events_queryset,
     registered_upcoming_events,
     upcoming_events_queryset,
 )
@@ -110,6 +110,49 @@ FEATURES = [
     },
 ]
 
+HOME_ACTIVITIES = [
+    {
+        'icon': 'users-round',
+        'title': 'Accountability circles',
+        'description': (
+            'Build in sprints with shared momentum and live check-ins for '
+            'progress, blockers, and next steps.'
+        ),
+    },
+    {
+        'icon': 'library',
+        'title': 'Group learning',
+        'description': (
+            'Turn solo research into shared leverage by publishing findings '
+            'in a format other builders can reuse.'
+        ),
+    },
+    {
+        'icon': 'code-2',
+        'title': 'Building sessions',
+        'description': (
+            'Join live 1.5–2 hour working sessions once or twice a month on '
+            'topics requested by members—not passive webinars.'
+        ),
+    },
+    {
+        'icon': 'trending-up',
+        'title': 'Trend breakdowns',
+        'description': (
+            'Trace one trending AI idea back to code and primary sources, '
+            'then evaluate it through an engineering lens.'
+        ),
+    },
+    {
+        'icon': 'briefcase-business',
+        'title': 'Career support',
+        'description': (
+            'Work through interviews, offers, salary, LinkedIn, GitHub, and '
+            'how to present projects to hiring teams.'
+        ),
+    },
+]
+
 FREE_HOME_TIER = {
     'name': 'Free',
     'tagline': 'Start shipping with us',
@@ -167,11 +210,12 @@ FAQ_ITEMS = [
 
 SECTION_NAV = [
     {'id': 'about', 'label': 'Philosophy'},
-    {'id': 'tiers', 'label': 'Membership'},
+    {'id': 'activities', 'label': 'Activities'},
     {'id': 'sprint-story', 'label': 'Sprints'},
     {'id': 'upcoming-events', 'label': 'Live Events'},
     {'id': 'testimonials', 'label': 'Testimonials'},
-    {'id': 'resources', 'label': 'Past Recordings'},
+    {'id': 'tiers', 'label': 'Membership'},
+    {'id': 'join-free', 'label': 'Start Free'},
     {'id': 'blog', 'label': 'Blog'},
     {'id': 'projects', 'label': 'Projects'},
     {'id': 'collection', 'label': 'Curated Links'},
@@ -210,9 +254,6 @@ def home(request):
 def _public_home(request):
     """Render the public marketing homepage for anonymous users."""
     articles = Article.objects.filter(published=True)[:3]
-    recordings = past_recording_events_queryset(
-        now=timezone.now(),
-    ).order_by('-start_datetime')[:3]
     projects = Project.objects.filter(published=True)[:3]
     curated_links = CuratedLink.objects.filter(published=True)[:6]
 
@@ -230,13 +271,18 @@ def _public_home(request):
 
     featured_sprint = _get_featured_homepage_sprint()
 
+    upcoming_events = _get_homepage_public_upcoming_events()
+    section_nav = [
+        section for section in SECTION_NAV
+        if section['id'] != 'upcoming-events' or upcoming_events
+    ]
     context = {
         'articles': articles,
-        'recordings': recordings,
         'projects': projects,
         'curated_links': curated_links,
         'testimonials': TESTIMONIALS,
         'features': FEATURES,
+        'home_activities': HOME_ACTIVITIES,
         'free_tier': FREE_HOME_TIER,
         'tiers': tiers_with_links,
         'featured_sprint': featured_sprint,
@@ -244,11 +290,13 @@ def _public_home(request):
             get_required_tier_name(featured_sprint.min_tier_level)
             if featured_sprint is not None else ''
         ),
-        'upcoming_events': _get_homepage_public_upcoming_events(),
+        'upcoming_events': upcoming_events,
         'faq_items': FAQ_ITEMS,
-        'section_nav': SECTION_NAV,
+        'section_nav': section_nav,
         'registered_event_ids': set(),
+        'next_url': '',
     }
+    context.update(get_oauth_provider_context())
     return render(request, 'home.html', context)
 
 

@@ -10,7 +10,7 @@ class ProductDocPastRecordingsNavigationTest(SimpleTestCase):
 
     def test_header_navigation_documents_past_recordings_under_community(self):
         self.assertIn(
-            "Community dropdown: Overview (`/community`), Membership (`/pricing`), "
+            "Community dropdown: Membership (`/pricing`), "
             "Activities (`/activities#access-by-tier`), Community Sprints (`/sprints`), "
             "Events (`/events`), Past Recordings (`/events?filter=past`)",
             self.doc,

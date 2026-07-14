@@ -31,6 +31,15 @@ class HomeViewTest(TestCase):
             recording_url='https://youtube.com/watch?v=test',
             published=True,
         )
+        self.upcoming_event = Event.objects.create(
+            title='Test Live Event',
+            slug='test-live-event',
+            description='Live event desc',
+            start_datetime=now + timedelta(days=2),
+            end_datetime=now + timedelta(days=2, hours=1),
+            status='upcoming',
+            published=True,
+        )
         self.project = Project.objects.create(
             title='Test Project',
             slug='test-project',
@@ -51,12 +60,16 @@ class HomeViewTest(TestCase):
         response = self.client.get('/')
         self.assertTemplateUsed(response, 'home.html')
 
-    def test_home_contains_content(self):
+    def test_home_contains_new_homepage_content_contract(self):
         response = self.client.get('/')
+
         self.assertEqual(list(response.context['articles']), [self.article])
-        self.assertEqual(list(response.context['recordings']), [self.recording])
         self.assertEqual(list(response.context['projects']), [self.project])
         self.assertEqual(list(response.context['curated_links']), [self.link])
+        self.assertEqual(response.context['upcoming_events'], [self.upcoming_event])
+        self.assertNotIn('recordings', response.context)
+        self.assertContains(response, 'Test Live Event')
+        self.assertNotContains(response, 'Test Recording')
 
     def test_home_project_card_shows_shared_free_access_badge(self):
         response = self.client.get('/')
@@ -66,19 +79,31 @@ class HomeViewTest(TestCase):
         self.assertContains(response, 'data-required-level="0"', count=1)
         self.assertContains(response, 'data-lucide="badge-check"')
 
-    def test_home_contains_sections(self):
+    def test_home_contains_new_sections_in_funnel_order(self):
         response = self.client.get('/')
-        for section_id in (
+        body = response.content.decode()
+        section_ids = (
             'about',
-            'tiers',
+            'activities',
+            'sprint-story',
+            'upcoming-events',
             'testimonials',
-            'resources',
+            'tiers',
+            'join-free',
             'blog',
+            'projects',
             'collection',
-            'newsletter',
             'faq',
-        ):
-            self.assertContains(response, f'id="{section_id}"')
+            'newsletter',
+        )
+
+        offsets = [body.index(f'id="{section_id}"') for section_id in section_ids]
+        self.assertEqual(offsets, sorted(offsets))
+        self.assertNotIn('id="resources"', body)
+        self.assertNotIn(
+            'resources',
+            [section['id'] for section in response.context['section_nav']],
+        )
 
     def test_home_testimonials_use_balanced_grid(self):
         response = self.client.get('/')

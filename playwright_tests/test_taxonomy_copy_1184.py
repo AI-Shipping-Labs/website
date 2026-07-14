@@ -202,13 +202,14 @@ def test_mobile_taxonomy_navigation_and_past_recordings(django_server, browser):
     community_menu = page.locator('[data-testid="mobile-nav-community-menu"]')
     resources_menu = page.locator('[data-testid="mobile-nav-resources-menu"]')
     for label in [
-        "Overview",
         "Membership",
         "Activities",
         "Community Sprints",
         "Events",
+        "Past Recordings",
     ]:
         expect(community_menu.get_by_text(label, exact=True)).to_be_visible()
+    expect(community_menu.get_by_text("Overview", exact=True)).to_have_count(0)
     for label in ["Blog", "Courses", "Workshops", "Curated Links"]:
         expect(resources_menu.get_by_text(label, exact=True)).to_be_visible()
 

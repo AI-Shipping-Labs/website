@@ -9,6 +9,7 @@ from content.models.mixins import (
     TimestampedModelMixin,
 )
 from content.utils.markdown import render_markdown
+from integrations.services.banner_generator.resolve import effective_banner_url
 
 PROJECT_STATUS_CHOICES = [
     ('pending_review', 'Pending Review'),
@@ -103,6 +104,11 @@ class Project(
 
     def short_date(self):
         return self.date.strftime('%b %d, %Y')
+
+    @property
+    def display_image_url(self):
+        """Return the highest-precedence project preview image URL."""
+        return effective_banner_url(self)
 
     def difficulty_color(self):
         colors = {

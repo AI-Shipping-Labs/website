@@ -167,9 +167,7 @@ BASELINE: dict[str, dict[str, int]] = {
         "templates/content/blog_detail.html": 1,
         "templates/content/tutorial_detail.html": 1,
     },
-    "grid_gap5": {  # Initial legacy debt: #1240.
-        "templates/content/projects_list.html": 1,
-    },
+    "grid_gap5": {},
     "handrolled_empty_state_signature": {  # Initial legacy debt: #1240.
         "templates/content/peer_review/certificate.html": 2,
         "templates/integrations/admin_sync.html": 1,

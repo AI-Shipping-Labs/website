@@ -45,7 +45,7 @@ class HomepageTierLayoutTemplateTest(SimpleTestCase):
         self.assertEqual(
             self.tier_section.count('data-testid="home-free-tier-cta"'), 1
         )
-        self.assertIn('href="/accounts/register/"', self.tier_section)
+        self.assertIn('href="/#join-free"', self.tier_section)
         self.assertIn('Join free', self.tier_section)
         self.assertNotIn('inline-register-card', self.tier_section)
         self.assertNotIn('<form', self.tier_section)

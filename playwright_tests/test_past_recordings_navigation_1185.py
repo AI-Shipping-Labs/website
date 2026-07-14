@@ -84,7 +84,7 @@ def _past_card(page, title):
     return page.locator(f'[data-testid="past-recording-card"]:has-text("{title}")')
 
 
-def test_homepage_cta_opens_past_recordings_and_workshop_handoff(
+def test_header_opens_past_recordings_and_workshop_handoff(
     django_server, page
 ):
     _clear_recordings_data()
@@ -104,18 +104,13 @@ def test_homepage_cta_opens_past_recordings_and_workshop_handoff(
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
-    section = page.get_by_test_id("home-past-recordings-section")
-    expect(section).to_be_visible()
-    expect(section).to_contain_text("Past event recordings")
-    expect(section).to_contain_text("View all past recordings")
-    expect(section).not_to_contain_text("Workshops & Learning Materials")
-    expect(
-        section.locator(f'a[href="{standalone.get_absolute_url()}"]')
-    ).to_have_count(1)
-
-    cta = page.get_by_test_id("home-past-recordings-cta")
-    expect(cta).to_have_attribute("href", "/events?filter=past")
-    cta.click()
+    expect(page.get_by_test_id("home-past-recordings-section")).to_have_count(0)
+    expect(page.locator(f'a[href="{standalone.get_absolute_url()}"]')).to_have_count(0)
+    page.get_by_test_id("nav-community-trigger").hover()
+    archive_link = page.get_by_test_id("nav-community-link-past-recordings")
+    expect(archive_link).to_be_visible()
+    expect(archive_link).to_have_attribute("href", "/events?filter=past")
+    archive_link.click()
     expect(page).to_have_url(re.compile(r".*/events\?filter=past$"))
     expect(page.get_by_test_id("events-filter-past")).to_have_attribute(
         "aria-selected",

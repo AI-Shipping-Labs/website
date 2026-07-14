@@ -54,7 +54,7 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
-| Public homepage | `/` (anonymous) | Marketing page with hero, philosophy, tier cards (with monthly/annual toggle and Stripe payment links), testimonials, latest recordings, blog posts, project ideas, curated links, newsletter signup, FAQ accordion, and section-dot navigation | Everyone | Shipped |
+| Public homepage | `/` (anonymous) | Community marketing page ordered as hero, philosophy, real member activities, sprint format, optional live schedule, testimonials, tier comparison, a dedicated Free-account conversion section, blog, projects, curated links, FAQ, and newsletter; includes monthly/annual paid-tier switching and section-dot navigation | Everyone | Shipped |
 | Member dashboard | `/` (authenticated) | Personalized dashboard showing welcome banner with tier badge, continue-learning section (in-progress courses with progress bars), upcoming registered events, recent accessible content, active polls, quick actions, and unread notifications | Authenticated users | Shipped |
 
 ### Authentication & Account
@@ -226,7 +226,7 @@ The fixed header appears on every page and contains:
 - Logo + site name linking to `/` (home)
 - Primary nav groups (desktop): About, Community, Resources
 - About dropdown: About, Team, FAQ
-- Community dropdown: Overview (`/community`), Membership (`/pricing`), Activities (`/activities#access-by-tier`), Community Sprints (`/sprints`), Events (`/events`), Past Recordings (`/events?filter=past`)
+- Community dropdown: Membership (`/pricing`), Activities (`/activities#access-by-tier`), Community Sprints (`/sprints`), Events (`/events`), Past Recordings (`/events?filter=past`). The former `/community` overview permanently redirects to the merged home page.
 - Resources dropdown: Blog, Courses, Workshops, Learning Paths, Project Ideas, Interview Prep, Curated Links (`/resources`), and Downloads when published downloads exist. Resources is for content/reference surfaces and does not contain Past Recordings or Event Recordings.
 - Auth area (desktop): "Sign in" for anonymous users; for authenticated users: notification bell with unread badge dropdown, email link to account page, "Log out" button
 - Mobile menu: Hamburger toggle with About, Community, and Resources accordions plus account/notifications/logout controls
@@ -240,14 +240,12 @@ Appears on every page:
 
 ### Homepage CTAs (Anonymous)
 The homepage serves as the primary conversion funnel for anonymous visitors:
-1. Hero: "Subscribe for updates" (scrolls to newsletter section) and "View Membership Tiers" (scrolls to tiers section)
-2. Tiers section: Payment links for each tier (monthly/annual toggle)
-3. Past event recordings section: "View all past recordings" links to `/events?filter=past`
-4. Blog section: "View all posts" links to `/blog`
-5. Projects section: "View all project ideas" links to `/projects`
-6. Collection section: "View all curated links" links to `/resources`
-7. Newsletter section: Email signup form
-8. Footer: Secondary newsletter signup
+1. Hero: “See what members get” scrolls to activities; “View membership tiers” scrolls to tiers.
+2. Activities: explains five real participation modes and links to `/activities#access-by-tier`.
+3. Tiers: Free scrolls to the separate `#join-free` account section; paid tiers retain monthly/annual Stripe links.
+4. Dedicated Free conversion: one account-registration form outside every tier card and carousel.
+5. Blog, Projects, and Curated Links: canonical collection links.
+6. FAQ and footer newsletter: explanation and distinctly labeled newsletter subscription.
 
 ### Dashboard CTAs (Authenticated)
 The dashboard surfaces personalized actions:

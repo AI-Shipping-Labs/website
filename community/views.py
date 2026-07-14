@@ -6,59 +6,7 @@ from django.shortcuts import redirect, render
 from analytics.activity import record_activity
 from analytics.models import UserActivity
 from content.access import LEVEL_MAIN, get_user_level
-from content.tier_config import get_activities
 from integrations.config import get_config
-
-COMMUNITY_TIER_SUMMARIES = (
-    {
-        'name': 'Basic',
-        'slug': 'basic',
-        'icon': 'book-open',
-        'fit': 'Self-directed learning',
-        'summary': 'Use the content library and practical resources at your own pace.',
-    },
-    {
-        'name': 'Main',
-        'slug': 'main',
-        'icon': 'users',
-        'fit': 'Structure + accountability',
-        'summary': (
-            'Add the private community layer, live work, topic voting, '
-            'and shipping support.'
-        ),
-    },
-    {
-        'name': 'Premium',
-        'slug': 'premium',
-        'icon': 'sparkles',
-        'fit': 'Courses + profile feedback',
-        'summary': (
-            'Add mini-courses and focused resume, LinkedIn, and GitHub feedback.'
-        ),
-    },
-)
-
-
-def _build_tier_activity_summaries(activities):
-    return [
-        {
-            **tier,
-            'activities': [
-                activity for activity in activities
-                if tier['slug'] in activity.get('tiers', [])
-            ],
-        }
-        for tier in COMMUNITY_TIER_SUMMARIES
-    ]
-
-
-def community_landing(request):
-    """Public post-launch orientation page for the AI Shipping Labs community."""
-    activities = get_activities()
-    return render(request, 'community/community_landing.html', {
-        'activities': activities,
-        'tier_activity_summaries': _build_tier_activity_summaries(activities),
-    })
 
 
 @login_required

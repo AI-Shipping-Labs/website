@@ -2,7 +2,7 @@
 
 Covers the top nav structure: the desktop primary nav groups About,
 Community, and Resources; About contains About / Team / FAQ, Resources is
-ordered with Blog first, Community surfaces the overview plus Membership,
+ordered with Blog first, Community starts with Membership,
 Sprints, and Events, and the mobile menu mirrors the same structure with
 three accordions.
 
@@ -255,7 +255,6 @@ def test_community_dropdown_groups_membership_sprints_events(django_server, page
         """
     )
     assert link_ids == [
-        "nav-community-link-overview",
         "nav-community-link-membership",
         "nav-community-link-activities",
         "nav-community-link-sprints",
@@ -268,8 +267,8 @@ def test_community_dropdown_groups_membership_sprints_events(django_server, page
     _shot(page, "04-community-membership")
 
 
-def test_community_dropdown_links_overview_first(django_server, page):
-    """Scenario: Visitor opens Community and starts at the restored overview."""
+def test_community_dropdown_links_membership_first(django_server, page):
+    """Scenario: Visitor opens Community and starts at Membership."""
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
@@ -284,11 +283,11 @@ def test_community_dropdown_links_overview_first(django_server, page):
         """
     )
     assert links[:5] == [
-        ["nav-community-link-overview", "/community"],
         ["nav-community-link-membership", "/pricing"],
         ["nav-community-link-activities", "/activities#access-by-tier"],
         ["nav-community-link-sprints", "/sprints"],
         ["nav-community-link-events", "/events"],
+        ["nav-community-link-past-recordings", "/events?filter=past"],
     ]
 
 
@@ -441,7 +440,6 @@ def test_mobile_community_accordion_reaches_past_recordings(django_server, brows
         """
     )
     assert link_ids == [
-        "mobile-nav-community-link-overview",
         "mobile-nav-community-link-membership",
         "mobile-nav-community-link-activities",
         "mobile-nav-community-link-sprints",
@@ -518,7 +516,7 @@ def test_mobile_320px_has_no_horizontal_overflow(django_server, browser):
     # the menu container (no horizontal overflow forcing them off-canvas).
     for test_id in [
         "mobile-nav-about-link-team",
-        "mobile-nav-community-link-overview",
+        "mobile-nav-community-link-membership",
         "mobile-nav-community-link-activities",
         "mobile-nav-community-link-sprints",
         "mobile-nav-community-link-past-recordings",
@@ -568,7 +566,6 @@ def test_authenticated_member_sees_same_public_nav_plus_account(
         ".map(a => a.getAttribute('data-testid'))"
     )
     assert link_ids == [
-        "nav-community-link-overview",
         "nav-community-link-membership",
         "nav-community-link-activities",
         "nav-community-link-sprints",

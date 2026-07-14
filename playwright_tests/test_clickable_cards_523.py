@@ -91,20 +91,19 @@ def _create_project(slug, title, description):
     return p
 
 
-def _create_recording(slug, title, description):
+def _create_upcoming_event(slug, title, description):
     from events.models import Event
-    start_dt = timezone.now() - datetime.timedelta(days=14)
-    recording = Event.objects.create(
+    start_dt = timezone.now() + datetime.timedelta(days=14)
+    event = Event.objects.create(
         title=title,
         slug=slug,
         description=description,
-        recording_url='https://www.youtube.com/watch?v=abc',
         published=True,
         start_datetime=start_dt,
-        status='completed',
+        status='upcoming',
     )
     connection.close()
-    return recording
+    return event
 
 
 # ---------------------------------------------------------------
@@ -268,30 +267,32 @@ class TestDownloadCardSignupCtaClick:
 
 
 # ---------------------------------------------------------------
-# Scenario: Visitor clicks the empty area of a homepage recording
-# preview and lands on the recording
+# Scenario: Visitor clicks the empty area of a homepage live-event
+# preview and lands on the event
 # ---------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
-class TestHomepageRecordingCardBodyClick:
-    def test_clicking_recording_card_body_navigates_to_event_detail(
+class TestHomepageUpcomingEventCardBodyClick:
+    def test_clicking_upcoming_event_card_body_navigates_to_event_detail(
         self, django_server, page,
     ):
         _clear_all()
-        recording = _create_recording(
-            slug='workshop-recording',
-            title='Workshop Recording',
-            description='A great recorded workshop session.',
+        event = _create_upcoming_event(
+            slug='live-building-session',
+            title='Live Building Session',
+            description='Build an AI feature together in a live session.',
         )
 
         page.goto(f'{django_server}/', wait_until='domcontentloaded')
-        # Scroll into view first (the section is below the fold).
-        page.locator('#resources').scroll_into_view_if_needed()
-        page.locator('text="A great recorded workshop session."').first.click()
+        section = page.locator('#upcoming-events')
+        section.scroll_into_view_if_needed()
+        section.get_by_text(
+            'Build an AI feature together in a live session.', exact=True,
+        ).click()
         page.wait_for_load_state('domcontentloaded')
 
         # Issue #673: canonical event URL is ``/events/<id>/<slug>``.
-        assert recording.get_absolute_url() in page.url
+        assert event.get_absolute_url() in page.url
 
 
 # ---------------------------------------------------------------

@@ -1,26 +1,67 @@
+import re
 from datetime import timedelta
 from pathlib import Path
 
 import yaml
+from allauth.socialaccount.models import SocialApp
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 from django.test import TestCase
 from django.utils import timezone
 
+from accounts.templatetags.accounts_extras import button_classes
 from content.models import SiteConfig
-from content.views.home import _get_homepage_public_upcoming_events
 from events.models import Event
-from plans.models import Sprint
 from tests.fixtures import TierSetupMixin
+
+HOME_TEMPLATE = Path(settings.BASE_DIR) / 'templates' / 'home.html'
+
+
+def _anchor_with_testid(source, testid):
+    match = re.search(
+        rf'<a\b(?=[^>]*\bdata-testid="{re.escape(testid)}")[^>]*>',
+        source,
+        re.DOTALL,
+    )
+    if match is None:
+        raise AssertionError(f'Could not find anchor with data-testid={testid!r}')
+    return match.group(0)
+
+
+HOME_CTA_OWNERS = {
+    'home-hero-activities-cta': (
+        "{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}",
+        'primary',
+        'lg',
+        'w-full sm:w-auto',
+    ),
+    'home-hero-tiers-cta': (
+        "{% button_classes 'secondary' size='lg' extra='w-full sm:w-auto' %}",
+        'secondary',
+        'lg',
+        'w-full sm:w-auto',
+    ),
+    'home-activities-tier-link': (
+        "{% button_classes 'secondary' size='md' %}",
+        'secondary',
+        'md',
+        '',
+    ),
+    'home-free-tier-cta': (
+        "{% button_classes 'secondary' size='lg' extra='mt-auto w-full' %}",
+        'secondary',
+        'lg',
+        'mt-auto w-full',
+    ),
+}
 
 
 def _seed_site_config_tiers():
     fixture_path = Path(__file__).parent / 'fixtures' / 'tiers.yaml'
     with fixture_path.open(encoding='utf-8') as handle:
         tiers_data = yaml.safe_load(handle)
-    SiteConfig.objects.update_or_create(
-        key='tiers',
-        defaults={'data': tiers_data},
-    )
+    SiteConfig.objects.update_or_create(key='tiers', defaults={'data': tiers_data})
 
 
 def _make_event(slug, *, start_datetime, **overrides):
@@ -42,268 +83,228 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
         super().setUpTestData()
         _seed_site_config_tiers()
 
-    def _body(self, response):
+    @staticmethod
+    def _body(response):
         return response.content.decode()
 
-    def _card_html(self, response, slug):
+    def _section(self, response, section_id):
         body = self._body(response)
-        start = body.index(f'data-tier-card="{slug}"')
-        next_card = body.find('data-tier-card="', start + 1)
-        end = next_card if next_card != -1 else len(body)
-        return body[start:end]
+        start = body.index(f'<section id="{section_id}"')
+        end = body.find('<section ', start + 1)
+        return body[start:end if end != -1 else len(body)]
 
-    def _section_html(self, response, testid):
+    def _card(self, response, slug):
+        tier = self._section(response, 'tiers')
+        start = tier.index(f'data-tier-card="{slug}"')
+        end = tier.find('data-tier-card="', start + 1)
+        return tier[start:end if end != -1 else len(tier)]
+
+    def test_changed_home_ctas_use_the_documented_button_owner(self):
+        source = HOME_TEMPLATE.read_text(encoding='utf-8')
+
+        for testid, (owner_call, _variant, _size, _extra) in HOME_CTA_OWNERS.items():
+            with self.subTest(testid=testid):
+                anchor = _anchor_with_testid(source, testid)
+                self.assertIn(f'class="{owner_call}"', anchor)
+                self.assertEqual(anchor.count('{% button_classes '), 1)
+
+    def test_changed_home_ctas_render_exact_owned_variants_and_sizes(self):
+        body = self._body(self.client.get('/'))
+
+        for testid, (_owner_call, variant, size, extra) in HOME_CTA_OWNERS.items():
+            with self.subTest(testid=testid):
+                anchor = _anchor_with_testid(body, testid)
+                class_match = re.search(r'\bclass="([^"]*)"', anchor)
+                self.assertIsNotNone(class_match)
+                self.assertEqual(
+                    class_match.group(1),
+                    button_classes(variant, size=size, extra=extra),
+                )
+
+    def test_anonymous_home_renders_binding_section_order(self):
+        _make_event(
+            'member-session',
+            start_datetime=timezone.now() + timedelta(days=1),
+        )
+        response = self.client.get('/')
         body = self._body(response)
-        marker = f'data-testid="{testid}"'
-        marker_start = body.index(marker)
-        section_start = body.rfind('<section ', 0, marker_start)
-        start = section_start if section_start != -1 else marker_start
-        next_section = body.find('<section ', start + 1)
-        end = next_section if next_section != -1 else len(body)
-        return body[start:end]
+        markers = [
+            'id="about"',
+            'id="activities"',
+            'id="sprint-story"',
+            'id="upcoming-events"',
+            'id="testimonials"',
+            'id="tiers"',
+            'id="join-free"',
+            'id="blog"',
+            'id="projects"',
+            'id="collection"',
+            'id="faq"',
+            'id="newsletter"',
+        ]
+        offsets = [body.index(marker) for marker in markers]
+        self.assertEqual(offsets, sorted(offsets))
 
-    def test_anonymous_home_shows_clean_free_registration_handoff(self):
+    def test_value_story_and_hero_precede_membership(self):
         response = self.client.get('/')
+        body = self._body(response)
+        for title in [
+            'Accountability circles',
+            'Group learning',
+            'Building sessions',
+            'Trend breakdowns',
+            'Career support',
+        ]:
+            self.assertContains(response, title, count=1)
+        self.assertContains(response, 'A personalized onboarding plan')
+        self.assertContains(response, 'Main + Premium')
+        self.assertContains(response, 'href="/activities#access-by-tier"')
+        self.assertContains(response, 'href="/#activities"')
+        self.assertContains(response, 'href="/#tiers"')
+        self.assertNotContains(response, 'Browse Resources')
+        self.assertLess(body.index('id="activities"'), body.index('id="tiers"'))
+        self.assertLess(body.index('id="sprint-story"'), body.index('id="tiers"'))
+        self.assertLess(body.index('id="testimonials"'), body.index('id="tiers"'))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn('next_url', response.context)
-        self.assertNotIn('oauth_google_enabled', response.context)
-        self.assertEqual(
-            [tier['stripe_key'] for tier in response.context['tiers']],
-            ['basic', 'main', 'premium'],
-        )
-        free_card = self._card_html(response, 'free')
-        self.assertIn('&euro;0', free_card)
-        self.assertIn('/forever', free_card)
-        self.assertIn('Start shipping with us', free_card)
-        self.assertIn('Community updates and newsletter emails', free_card)
-        self.assertIn('data-testid="home-free-tier-cta"', free_card)
-        self.assertIn('href="/accounts/register/"', free_card)
-        self.assertIn('>\n            Join free\n', free_card)
-        self.assertIn('min-h-[44px]', free_card)
-        self.assertIn('focus-visible:outline-accent', free_card)
-        self.assertNotIn('data-testid="inline-register-card"', free_card)
-        self.assertNotIn('data-testid="inline-register-opt-in"', free_card)
-        self.assertNotIn('<form', free_card)
-        self.assertNotIn('data-auth-oauth-providers', free_card)
-        self.assertNotIn('/pricing/free', free_card)
-        self.assertNotIn('tier-cta-link', free_card)
+    def test_free_card_is_comparison_only_and_targets_separate_section(self):
+        response = self.client.get('/')
+        free = self._card(response, 'free')
+        self.assertIn('href="/#join-free"', free)
+        self.assertIn('Join free', free)
+        for forbidden in [
+            '<form', '<input', 'inline-register-card', 'home-inline-register-embed',
+            'pricing-inline-register-embed', 'data-auth-oauth-providers',
+            'inline-register-opt-in', 'creating an account',
+        ]:
+            self.assertNotIn(forbidden, free)
 
         body = self._body(response)
-        self.assertNotIn('home-inline-register-embed', body)
-        self.assertNotIn('/static/js/accounts/auth-helpers.js', body)
-        self.assertNotIn('auth-next-url', body)
-        self.assertNotIn('/static/js/accounts/inline-register.js', body)
+        tiers = self._section(response, 'tiers')
+        join = self._section(response, 'join-free')
+        self.assertLess(body.index('id="tiers"'), body.index('id="join-free"'))
+        self.assertLess(body.index('id="join-free"'), body.index('id="blog"'))
+        self.assertNotIn('id="register-form"', tiers)
+        self.assertIn('data-testid="home-join-free-form"', join)
+        self.assertEqual(join.count('id="register-form"'), 1)
+        self.assertEqual(body.count('id="register-form"'), 1)
+        self.assertIn('Start free', join)
+        self.assertIn('Create your free account', join)
+        self.assertIn('Already have an account?', join)
+        self.assertIn('Sign in', join)
 
-    def test_dedicated_registration_page_remains_the_free_next_step(self):
-        response = self.client.get('/accounts/register/')
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="register-email"')
-        self.assertContains(response, 'id="register-password"')
-        self.assertContains(response, 'id="register-password-confirm"')
-        self.assertContains(response, 'creating an account')
-        # The canonical home return is serialized as an empty next value;
-        # register_api resolves that default to "/".
-        self.assertEqual(response.context['next_url'], '')
-
-    def test_pricing_keeps_its_inline_free_registration(self):
-        response = self.client.get('/pricing')
-
-        self.assertEqual(response.status_code, 200)
-        pricing_free_card = self._card_html(response, 'free')
-        self.assertIn('data-testid="inline-register-card"', pricing_free_card)
-        self.assertIn('data-testid="inline-register-opt-in"', pricing_free_card)
-        self.assertNotIn('data-testid="home-free-tier-cta"', pricing_free_card)
-
-    def test_home_paid_tiers_default_to_monthly_prices_and_links(self):
+    def test_home_form_uses_shared_accessible_registration_assets(self):
         response = self.client.get('/')
+        join = self._section(response, 'join-free')
+        for expected in [
+            'autocomplete="email"',
+            'autocomplete="new-password"',
+            'role="alert"',
+            'aria-live="assertive"',
+            'aria-busy="false"',
+            'min-h-[44px]',
+            'creating an account',
+            'inline-register-opt-in',
+        ]:
+            self.assertIn(expected, join)
+        body = self._body(response)
+        self.assertEqual(body.count('/static/js/accounts/auth-helpers.js'), 1)
+        self.assertEqual(body.count('/static/js/accounts/inline-register.js'), 1)
+        self.assertEqual(body.count('id="auth-next-url"'), 1)
+        self.assertIn('scroll-mt-24', join)
 
-        self.assertContains(response, 'aria-pressed="false"')
-        basic_card = self._card_html(response, 'basic')
-        main_card = self._card_html(response, 'main')
-        premium_card = self._card_html(response, 'premium')
-
-        self.assertIn('&euro;20', basic_card)
-        self.assertIn('/month', basic_card)
-        self.assertIn(
-            f'href="{settings.STRIPE_PAYMENT_LINKS["basic"]["monthly"]}"',
-            basic_card,
+    def test_oauth_provider_is_only_in_separate_conversion_section(self):
+        app = SocialApp.objects.create(
+            provider='google', name='Google', client_id='home-google', secret='secret'
         )
-        self.assertIn('&euro;50', main_card)
-        self.assertIn(
-            f'href="{settings.STRIPE_PAYMENT_LINKS["main"]["monthly"]}"',
-            main_card,
-        )
-        self.assertIn('&euro;100', premium_card)
-        self.assertIn(
-            f'href="{settings.STRIPE_PAYMENT_LINKS["premium"]["monthly"]}"',
-            premium_card,
-        )
-
-    def test_home_sprint_story_uses_current_or_next_active_sprint(self):
-        today = timezone.localdate()
-        ended_active = Sprint.objects.create(
-            name='Ended Active Sprint',
-            slug='ended-active-sprint',
-            start_date=today - timedelta(days=56),
-            duration_weeks=4,
-            status='active',
-            min_tier_level=20,
-        )
-        current = Sprint.objects.create(
-            name='Current Sprint',
-            slug='current-sprint',
-            start_date=today - timedelta(days=7),
-            duration_weeks=4,
-            status='active',
-            min_tier_level=30,
-        )
-        Sprint.objects.create(
-            name='Future Sprint',
-            slug='future-sprint',
-            start_date=today + timedelta(days=14),
-            duration_weeks=4,
-            status='active',
-            min_tier_level=20,
-        )
-
+        app.sites.add(Site.objects.get_current())
         response = self.client.get('/')
+        self.assertIn('Sign up with Google', self._section(response, 'join-free'))
+        self.assertNotIn('Sign up with Google', self._section(response, 'tiers'))
+        self.assertContains(response, 'data-testid="inline-register-email-toggle"')
 
-        self.assertEqual(response.context['featured_sprint'], current)
-        self.assertContains(response, current.name)
-        self.assertContains(response, 'data-testid="home-featured-sprint-tier"')
-        self.assertContains(response, 'Premium')
-        self.assertContains(response, 'data-component="member-badge"')
-        self.assertContains(response, current.get_absolute_url())
-        self.assertNotContains(response, ended_active.name)
-
-    def test_home_sprint_story_falls_back_to_evergreen_copy_when_none_visible(self):
-        today = timezone.localdate()
-        Sprint.objects.create(
-            name='Old Sprint',
-            slug='old-sprint',
-            start_date=today - timedelta(days=70),
-            duration_weeks=4,
-            status='active',
-        )
-        Sprint.objects.create(
-            name='Completed Future Sprint',
-            slug='completed-future-sprint',
-            start_date=today + timedelta(days=14),
-            duration_weeks=4,
-            status='completed',
-        )
-
+    def test_no_oauth_provider_expands_email_form(self):
+        SocialApp.objects.all().delete()
         response = self.client.get('/')
+        join = self._section(response, 'join-free')
+        self.assertIn('id="register-email"', join)
+        self.assertNotIn('inline-register-email-block" hidden', join)
+        self.assertNotIn('data-auth-oauth-providers', join)
 
-        self.assertIsNone(response.context['featured_sprint'])
-        section = self._section_html(response, 'home-sprint-story-section')
-        self.assertIn('Next sprint coming soon', section)
-        self.assertIn('href="/sprints"', section)
-        self.assertNotIn('Old Sprint', section)
-        self.assertNotIn('Completed Future Sprint', section)
+    def test_paid_tiers_and_pricing_page_remain_independent(self):
+        response = self.client.get('/')
+        for slug, price in [('basic', 20), ('main', 50), ('premium', 100)]:
+            card = self._card(response, slug)
+            self.assertIn(f'&euro;{price}', card)
+            self.assertIn(
+                f'href="{settings.STRIPE_PAYMENT_LINKS[slug]["monthly"]}"', card
+            )
+            self.assertIn('data-link-annual=', card)
+        self.assertIn('Most Popular', self._card(response, 'main'))
 
-    def test_home_upcoming_events_limit_to_published_public_future_rows(self):
-        now = timezone.now().replace(microsecond=0)
-        first = _make_event(
-            'first-upcoming',
-            start_datetime=now + timedelta(days=1),
-        )
-        second = _make_event(
-            'second-upcoming',
-            start_datetime=now + timedelta(days=2),
-        )
-        third = _make_event(
-            'third-upcoming',
-            start_datetime=now + timedelta(days=3),
-        )
-        _make_event(
-            'fourth-upcoming',
-            start_datetime=now + timedelta(days=4),
-        )
-        _make_event(
-            'draft-upcoming',
-            start_datetime=now + timedelta(days=5),
-            status='draft',
-        )
-        _make_event(
-            'cancelled-upcoming',
-            start_datetime=now + timedelta(days=6),
-            status='cancelled',
-        )
-        _make_event(
-            'unpublished-upcoming',
-            start_datetime=now + timedelta(days=7),
-            published=False,
-        )
-        _make_event(
-            'completed-future',
-            start_datetime=now + timedelta(days=8),
-            status='completed',
-        )
-        _make_event(
-            'stale-ended-upcoming',
-            start_datetime=now - timedelta(hours=2),
-            end_datetime=now - timedelta(minutes=1),
-            status='upcoming',
-        )
+        pricing = self.client.get('/pricing')
+        self.assertContains(pricing, 'pricing-inline-register-embed')
+        self.assertContains(pricing, 'data-testid="inline-register-card"')
+        self.assertNotContains(pricing, 'data-testid="home-join-free-section"')
 
-        upcoming_events = _get_homepage_public_upcoming_events(now=now)
+    def test_upcoming_section_is_live_schedule_and_omitted_when_empty(self):
+        empty = self.client.get('/')
+        self.assertNotContains(empty, 'id="upcoming-events"')
+        self.assertNotContains(empty, 'home-upcoming-events-empty')
+        self.assertNotIn('upcoming-events', [item['id'] for item in empty.context['section_nav']])
 
-        self.assertEqual(
-            [event.slug for event in upcoming_events],
-            [first.slug, second.slug, third.slug],
-        )
+        _make_event('live-build', start_datetime=timezone.now() + timedelta(days=2))
+        populated = self.client.get('/')
+        self.assertContains(populated, 'Live sessions on the calendar')
+        self.assertContains(populated, 'See what the community is doing live')
+        self.assertContains(populated, 'href="/events?filter=upcoming"')
+        self.assertIn('upcoming-events', [item['id'] for item in populated.context['section_nav']])
 
-    def test_home_recordings_context_keeps_past_recordings_distinct_from_live_events(self):
-        now = timezone.now().replace(microsecond=0)
-        past_recording = _make_event(
+    def test_sampling_and_past_recordings_proof_are_removed(self):
+        _make_event(
             'past-recording',
-            start_datetime=now - timedelta(days=3),
-            end_datetime=now - timedelta(days=3) + timedelta(hours=1),
+            start_datetime=timezone.now() - timedelta(days=2),
             status='completed',
-            recording_url='https://video.test/past-recording',
+            recording_url='https://video.test/recording',
         )
-        _make_event(
-            'future-recording-placeholder',
-            start_datetime=now + timedelta(days=3),
-            end_datetime=now + timedelta(days=3, hours=1),
-            status='upcoming',
-            recording_url='https://video.test/future-recording',
-        )
-
         response = self.client.get('/')
+        self.assertNotIn('recordings', response.context)
+        for forbidden in [
+            'Sample the community before you commit',
+            'home-past-recordings-section',
+            'home-recordings-carousel',
+            'View all past recordings',
+        ]:
+            self.assertNotContains(response, forbidden)
 
-        self.assertEqual(list(response.context['recordings']), [past_recording])
-        section = self._section_html(response, 'home-past-recordings-section')
-        self.assertIn('id="resources"', section)
-        self.assertIn('Past event recordings', section)
-        self.assertIn('Past Event Recordings', section)
-        self.assertIn('View all past recordings', section)
-        self.assertIn('href="/events?filter=past"', section)
-        self.assertIn('data-testid="home-past-recordings-cta"', section)
-        self.assertIn(f'href="{past_recording.get_absolute_url()}"', section)
-        self.assertIn('View recording', section)
-        self.assertNotIn('Workshops &amp; Learning Materials', section)
-        self.assertContains(response, 'Upcoming live events')
+    def test_section_navigation_has_no_dead_target(self):
+        response = self.client.get('/')
+        body = self._body(response)
+        ids = [item['id'] for item in response.context['section_nav']]
+        self.assertEqual(
+            ids,
+            [
+                'about', 'activities', 'sprint-story', 'testimonials', 'tiers',
+                'join-free', 'blog', 'projects', 'collection', 'newsletter', 'faq',
+            ],
+        )
+        for section_id in ids:
+            self.assertIn(f'id="{section_id}"', body)
 
-    def test_authenticated_member_keeps_dashboard_route(self):
-        from django.contrib.auth import get_user_model
-
+    def test_authenticated_member_keeps_dashboard_without_anonymous_assets(self):
         user = get_user_model().objects.create_user(
-            email='member1162@example.com',
-            password='pw',
+            email='member1241@example.com', password='pw', tier=self.main_tier
         )
-        user.tier = self.main_tier
-        user.save(update_fields=['tier'])
         self.client.force_login(user)
-
         response = self.client.get('/')
-
-        self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'content/dashboard.html')
-        self.assertNotContains(response, 'data-testid="home-sprint-story-section"')
-        self.assertNotContains(response, 'data-testid="home-upcoming-events-section"')
-        self.assertNotContains(response, 'data-testid="home-free-tier-register"')
-        self.assertNotContains(response, 'data-testid="home-free-tier-cta"')
+        for forbidden in [
+            'id="join-free"', 'id="register-form"', 'auth-next-url',
+            '/static/js/accounts/inline-register.js', 'home-free-tier-cta',
+        ]:
+            self.assertNotContains(response, forbidden)
+
+    def test_standalone_registration_remains_canonical(self):
+        response = self.client.get('/accounts/register/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="register-form"')
+        self.assertContains(response, 'Create account')

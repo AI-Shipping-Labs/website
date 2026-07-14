@@ -475,7 +475,7 @@ class TestScenario1AnonymousVisitorSeesPublicHomepage:
         # Then: Public homepage elements are present
         assert "Turn AI ideas into" in body
         assert "real projects" in body
-        assert "View Membership Tiers" in body
+        assert "View membership tiers" in body
 
         # Testimonials section
         assert "testimonials" in body.lower() or "Rolando" in body
@@ -490,9 +490,7 @@ class TestScenario1AnonymousVisitorSeesPublicHomepage:
         assert "Quick actions" not in body
 
         # Step 2: Click "View Membership Tiers"
-        tiers_link = page.locator(
-            'a:has-text("View Membership Tiers")'
-        )
+        tiers_link = page.get_by_role("link", name="View membership tiers")
         assert tiers_link.count() >= 1
         tiers_link.first.click()
 

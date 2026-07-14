@@ -19,7 +19,7 @@ def _goto(page, django_server, path):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_homepage_browse_first_hierarchy(django_server, page):
+def test_homepage_member_value_first_hierarchy(django_server, page):
     ensure_tiers()
     ensure_site_config_tiers()
 
@@ -27,12 +27,13 @@ def test_homepage_browse_first_hierarchy(django_server, page):
 
     hero = page.locator("section").first
     expect(hero.get_by_role("heading", name=re.compile("Turn AI ideas"))).to_be_visible()
-    primary_cta = hero.get_by_role("link", name="View Membership Tiers")
+    primary_cta = hero.get_by_role("link", name="See what members get")
     expect(primary_cta).to_be_visible()
-    expect(primary_cta).to_have_attribute("href", "/#tiers")
-    expect(hero.get_by_role("link", name="Browse Resources")).to_have_attribute(
-        "href", "/resources"
+    expect(primary_cta).to_have_attribute("href", "/#activities")
+    expect(hero.get_by_role("link", name="View membership tiers")).to_have_attribute(
+        "href", "/#tiers"
     )
+    expect(hero.get_by_role("link", name="Browse Resources")).to_have_count(0)
     assert page.locator("form.subscribe-form").count() == 1
 
 

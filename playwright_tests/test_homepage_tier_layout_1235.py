@@ -138,7 +138,7 @@ def test_mobile_carousel_still_centers_main_and_reaches_every_tier(
     expect(
         carousel.locator('[data-tier-card="free"]')
         .get_by_role('link', name='Join free', exact=True)
-    ).to_have_attribute('href', '/accounts/register/')
+    ).to_have_attribute('href', '/#join-free')
 
 
 @pytest.mark.manual_visual

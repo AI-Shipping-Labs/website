@@ -93,7 +93,6 @@ def test_anonymous_keyboard_community_menu_reaches_membership(
         page,
         "community",
         [
-            "nav-community-link-overview",
             "nav-community-link-membership",
         ],
     )
@@ -240,11 +239,11 @@ def test_mobile_public_nav_accordions_keep_existing_aria_and_links(
         expected = {
             "about": ["About", "Team", "FAQ"],
             "community": [
-                "Overview",
                 "Membership",
                 "Activities",
                 "Community Sprints",
                 "Events",
+                "Past Recordings",
             ],
             "resources": [
                 "Blog",

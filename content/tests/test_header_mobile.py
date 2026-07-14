@@ -108,7 +108,7 @@ class HeaderMobileMenuTest(TestCase):
         content = response.content.decode()
         self.assertIn('href="/about"', content)
         self.assertIn('href="/about#team"', content)
-        self.assertIn('href="/community"', content)
+        self.assertNotIn('href="/community"', content)
         self.assertIn('href="/pricing"', content)
         self.assertIn('href="/faq"', content)
         self.assertIn('id="about-dropdown-btn"', content)

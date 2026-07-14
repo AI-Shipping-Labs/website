@@ -166,7 +166,6 @@ class TestMobileMenuTextNavAccordion:
                 "FAQ",
             ],
             "community": [
-                "Overview",
                 "Membership",
                 "Activities",
                 "Community Sprints",
@@ -192,6 +191,12 @@ class TestMobileMenuTextNavAccordion:
                 assert section_list.get_by_text(label, exact=True).is_visible()
             chevron = page.locator(f"#mobile-{section}-chevron")
             assert "rotate-180" in (chevron.get_attribute("class") or "")
+
+        community_links = page.locator("#mobile-community-list a")
+        assert community_links.first.inner_text().strip() == "Membership"
+        assert page.locator(
+            '#mobile-community-list a[href="/community"]'
+        ).count() == 0
 
         context.close()
 

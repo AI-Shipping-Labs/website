@@ -51,7 +51,7 @@ def test_homepage_free_cta_hands_off_to_registration_and_creates_account(
     expect(free_card.locator("[data-auth-oauth-providers]")).to_have_count(0)
 
     join_free = free_card.get_by_role("link", name="Join free", exact=True)
-    expect(join_free).to_have_attribute("href", "/accounts/register/")
+    expect(join_free).to_have_attribute("href", "/#join-free")
     assert join_free.evaluate("el => el.getBoundingClientRect().height") >= 44
     join_free.focus()
     assert join_free.evaluate(
@@ -59,8 +59,11 @@ def test_homepage_free_cta_hands_off_to_registration_and_creates_account(
     )
     join_free.click()
 
-    page.wait_for_url(f"{django_server}/accounts/register/", timeout=10000)
-    expect(page.locator("#register-form")).to_be_visible()
+    page.wait_for_url(f"{django_server}/#join-free")
+    join_section = page.locator("#join-free")
+    expect(join_section).to_be_visible()
+    expect(join_section.locator("#register-form")).to_be_visible()
+    assert join_section.evaluate("el => !el.closest('[data-tier-carousel]')")
     expect(page.get_by_text("By creating an account")).to_be_visible()
     page.locator("#register-email").fill(email)
     page.locator("#register-password").fill("Password123!")
@@ -93,15 +96,13 @@ def test_homepage_free_handoff_keeps_oauth_on_dedicated_page_only(
     free_card = page.locator('[data-tier-card="free"]')
     expect(free_card.get_by_role("link", name="Sign up with Google")).to_have_count(0)
     free_card.get_by_role("link", name="Join free", exact=True).click()
-
-    page.wait_for_url(f"{django_server}/accounts/register/", timeout=10000)
-    expect(page.get_by_role("link", name="Sign up with Google")).to_be_visible()
+    page.wait_for_url(f"{django_server}/#join-free")
+    join_section = page.locator("#join-free")
+    expect(join_section.get_by_role("link", name="Sign up with Google")).to_be_visible()
     expect(page.get_by_role("link", name="Terms of Service").first).to_be_visible()
     expect(page.get_by_role("link", name="Privacy Policy").first).to_be_visible()
 
-    page.go_back(wait_until="domcontentloaded")
-    expect(page.locator('[data-testid="home-tier-carousel"]')).to_be_visible()
-    expect(page.locator('[data-testid="home-tier-card"]')).to_have_count(4)
+    expect(free_card.get_by_role("link", name="Sign up with Google")).to_have_count(0)
 
 
 def test_homepage_billing_toggle_changes_paid_links_but_not_free(
@@ -115,16 +116,16 @@ def test_homepage_billing_toggle_changes_paid_links_but_not_free(
     monthly_basic = basic_cta.get_attribute("data-link-monthly")
     annual_basic = basic_cta.get_attribute("data-link-annual")
     expect(basic_cta).to_have_attribute("href", monthly_basic)
-    expect(free_cta).to_have_attribute("href", "/accounts/register/")
+    expect(free_cta).to_have_attribute("href", "/#join-free")
 
     page.locator("#billing-toggle").click()
     expect(basic_cta).to_have_attribute("href", annual_basic)
-    expect(free_cta).to_have_attribute("href", "/accounts/register/")
+    expect(free_cta).to_have_attribute("href", "/#join-free")
     expect(page.locator('[data-tier-card="main"]')).to_contain_text("Most Popular")
 
     page.locator("#billing-toggle").click()
     expect(basic_cta).to_have_attribute("href", monthly_basic)
-    expect(free_cta).to_have_attribute("href", "/accounts/register/")
+    expect(free_cta).to_have_attribute("href", "/#join-free")
 
 
 def test_homepage_mobile_free_card_is_clean_and_all_tiers_reachable(
@@ -132,7 +133,8 @@ def test_homepage_mobile_free_card_is_clean_and_all_tiers_reachable(
 ):
     _seed_homepage_tiers(django_db_blocker)
     page.set_viewport_size({"width": 390, "height": 844})
-    page.goto(f"{django_server}/", wait_until="networkidle")
+    page.goto(f"{django_server}/", wait_until="domcontentloaded")
+    page.wait_for_load_state("load")
 
     carousel = page.locator('[data-testid="home-tier-carousel"]')
     expect(carousel.locator('[data-testid="home-tier-card"]')).to_have_count(4)
@@ -142,17 +144,19 @@ def test_homepage_mobile_free_card_is_clean_and_all_tiers_reachable(
     ) <= 1
 
     main = carousel.locator('[data-tier-card="main"]')
-    main_delta = carousel.evaluate(
-        """el => {
-          const card = el.querySelector('[data-tier-card="main"]');
-          const outer = el.getBoundingClientRect();
+    main_delta = page.wait_for_function(
+        """carousel => {
+          const card = carousel.querySelector('[data-tier-card="main"]');
+          const outer = carousel.getBoundingClientRect();
           const inner = card.getBoundingClientRect();
-          return Math.abs(
+          const delta = Math.abs(
             (inner.left + inner.width / 2) - (outer.left + outer.width / 2)
           );
-        }"""
+          return delta < 60 ? delta : false;
+        }""",
+        arg=carousel.element_handle(),
     )
-    assert main_delta < 60
+    assert main_delta.json_value() < 60
     expect(main).to_contain_text("Most Popular")
 
     free_card = carousel.locator('[data-tier-card="free"]')
@@ -162,6 +166,14 @@ def test_homepage_mobile_free_card_is_clean_and_all_tiers_reachable(
     join_free = free_card.get_by_role("link", name="Join free", exact=True)
     expect(join_free).to_be_visible()
     assert join_free.evaluate("el => el.getBoundingClientRect().height") >= 44
+    join_free.click()
+    page.wait_for_url(f"{django_server}/#join-free")
+    join_section = page.locator("#join-free")
+    expect(join_section).to_be_visible()
+    expect(join_section.locator("#register-form")).to_be_visible()
+    assert page.evaluate(
+        "() => document.documentElement.scrollWidth - window.innerWidth"
+    ) <= 1
 
 
 def test_homepage_sprint_story_links_to_active_sprint_detail(
@@ -249,13 +261,8 @@ def test_homepage_upcoming_events_empty_state_stays_discoverable(
         )
 
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
-    section = page.locator('[data-testid="home-upcoming-events-section"]')
-    section.scroll_into_view_if_needed()
-    empty = section.locator('[data-testid="home-upcoming-events-empty"]')
-    expect(empty).to_be_visible()
-    expect(empty).to_contain_text("No live events are scheduled right now")
-    empty.get_by_role("link", name="Browse events").click()
-    page.wait_for_url(f"{django_server}/events", timeout=10000)
+    expect(page.locator('[data-testid="home-upcoming-events-section"]')).to_have_count(0)
+    expect(page.locator('[data-testid="home-upcoming-events-empty"]')).to_have_count(0)
 
 
 def test_authenticated_member_keeps_dashboard_path(
@@ -269,7 +276,8 @@ def test_authenticated_member_keeps_dashboard_path(
     page = context.new_page()
     try:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
-        assert page.locator('[data-testid="home-free-tier-register"]').count() == 0
+        assert page.locator('#join-free').count() == 0
+        assert page.locator('#register-form').count() == 0
         assert page.locator('[data-testid="home-upcoming-events-section"]').count() == 0
         assert page.locator('[data-testid="home-sprint-story-section"]').count() == 0
         expect(

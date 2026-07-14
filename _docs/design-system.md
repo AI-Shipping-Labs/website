@@ -1,6 +1,10 @@
 # AI Shipping Labs Design System
 
-This is a working reference for the Django template UI as it exists today. It is not a redesign brief. Before adding a new component or class string, search for an existing surface with the same role and reuse its partial or class pattern.
+This is the authoritative UI contract for the Django template application. It is imperative, not an inventory or redesign brief: new and edited UI must follow the ownership, semantics, and class-string rules below.
+
+## Document Scope
+
+This reference documents presentation contracts only. It does not introduce production API work, models, migrations, views, URLs, integrations, settings, agent definitions, lint rules, or template migrations. Implementation changes require their own scoped issues. #1239 and #1240 depend on this contract for workflow enforcement and lint ratchets, respectively.
 
 ## Stack and Sources of Truth
 
@@ -35,11 +39,11 @@ All theme-aware color should come from the variables in `templates/base.html`. U
 | `--hero-gradient-mid` | `0 0% 96%` | `0 0% 12%` | `.hero-gradient` CSS | Hero gradient midpoint |
 | `--hero-gradient-end` | `0 0% 100%` | `0 0% 4%` | `.hero-gradient` CSS | Hero gradient end |
 
-Use raw Tailwind palette colors only when the state is intentionally theme-stable, such as success (`text-green-400`, `bg-green-500/15`) or explicit status/error badges already present in the codebase.
+Raw Tailwind palette colors are allowed only when their meaning matches the tone table in [Pills, Badges, and Chips](#pills-badges-and-chips). Existing usage is not precedent by itself; check its semantic meaning. Theme-aware non-state UI continues to use design tokens.
 
 ## Typography Scale
 
-Inter uses weights 300 through 700, but public templates mostly use `font-medium` and `font-semibold`. Prefer `font-semibold` over `font-bold` for hierarchy unless matching an existing page.
+Inter uses weights 300 through 700. Headings always use `font-semibold`, never `font-bold`. Do not copy `font-bold` from a legacy page; fix a touched legacy heading instead. Every heading at `text-2xl` or larger includes `tracking-tight`. Eyebrows use `tracking-widest`, never `tracking-wider`.
 
 | Role | Common class pattern |
 |---|---|
@@ -59,6 +63,17 @@ Inter uses weights 300 through 700, but public templates mostly use `font-medium
 Use `tracking-tight` on `text-2xl` and larger headings. Many hero and section headings also use `style="text-wrap: balance;"` for calmer two-line wrapping.
 
 Markdown content is styled by `.prose` in `templates/base.html`. Workshop/tutorial contexts can add `.prose-tight` when list rhythm needs to match compact rows.
+
+### Casing
+
+Use sentence case on public, member, and Studio surfaces for headings, buttons, tab titles, HTML `<title>` blocks, pre-transform eyebrow copy, empty-state titles, and badge labels.
+
+- `Create account`, not `Create Account`.
+- `Sign in`, not `Sign In`.
+- `View pricing`, not `View Pricing`.
+- Proper nouns and initialisms keep their casing, including `GitHub`, `CSV`, and `Slack`.
+
+This extends the Studio CTA convention below. It does not replace Studio's established noun and verb rules.
 
 ## Date and Time Vocabulary
 
@@ -102,10 +117,10 @@ Use `max-w-7xl` for marketing and listing pages, `max-w-5xl` for detail pages wi
 
 Common vertical rhythm:
 
-- Marketing/listing sections: `py-12 sm:py-20 lg:py-28`.
+- `py-12 sm:py-20 lg:py-28` is the only marketing-section rhythm, including shared FAQ and newsletter sections rendered inside marketing pages. Alternate marketing rhythms such as `py-16 sm:py-24 lg:py-32` are forbidden.
 - Reader/detail sections: `py-8 sm:py-16 lg:py-24`.
 - Hero/detail blocks often use `py-16 sm:py-20 lg:py-24`.
-- Default grid gap: `gap-6`; tighter operational rows use `gap-4`.
+- Repeated card grids use `gap-6`; tight operational rows use `gap-4`. Do not use `gap-5`, `gap-8`, or another gap size on a repeated card grid. Purpose-specific page-layout gaps that are not card grids may use the spacing their layout requires.
 - Common stack jumps: `mt-1`, `mt-2`, `mt-4`, `mt-6`, `mt-10`, `mt-16`.
 
 Common card padding:
@@ -130,6 +145,29 @@ Comparison and progress lists:
 - Keep table columns predictable and scannable: identity first, then primary metric/progress, then status, then details/actions.
 - Wrap wide tables in `overflow-x-auto` on small screens instead of collapsing them into uneven cards when comparison is the primary task.
 
+## Hero Layout
+
+Page heroes are single-column and use this order: eyebrow, H1, lead, CTA row.
+
+Do not use arbitrary-fraction or two-column heroes for decorative value-point stacks or feature bullets. Move that content into its own full-width section below the hero. A side column is allowed only for a functional artifact the visitor can act on immediately, such as a registration form, video embed, or event-registration card.
+
+## Card Media Slots
+
+For each content type, the `aspect-video` media band is all-or-nothing across its cards and renders through `templates/content/_content_preview.html`: every card receives a real cover or fallback, or no card renders a media band. Never branch on cover presence per card.
+
+A grid in which every card shows the fallback is a defect. If real images do not exist for that content type, remove the media band rather than ship a placeholder wall.
+
+Current per-type decisions:
+
+| Content type | Media band |
+|---|---|
+| Workshops | Render |
+| Courses | Render |
+| Projects | Render |
+| Downloads | Do not render |
+| Curated Links (`/resources`) | Do not render |
+| Blog list rows | Do not render |
+
 ## Breakpoints and Mobile Carousels
 
 Tailwind defaults apply: `sm` 640px, `md` 768px, `lg` 1024px, `xl` 1280px.
@@ -144,36 +182,56 @@ Mobile carousel convention:
 - Give cards an explicit mobile width such as `max-md:w-[min(84vw,24rem)]` or `max-lg:w-[min(82vw,22rem)]`.
 - If a card has an absolute badge above it, add mobile top padding to the scroll container because `overflow-x-auto` also clips vertical overflow.
 
-## Existing Reusable Patterns
+## Before You Write a Class String
 
-Reach for these before writing a new inline component.
+1. Identify the UI role being added or changed.
+2. Find that role in the [Partials and Component Index](#partials-and-component-index).
+3. If the index has no owner, search a sibling surface and copy its exact established class string.
+4. Only then create a new class string, and document the reason in the implementation issue.
 
-- `templates/content/_clickable_card_classes.html`: shared outer anchor classes for clickable catalog/preview cards. Owns `group block` and the canonical focus-visible ring.
-- `templates/includes/_accordion.html`: shared `<details>` accordion with sentence-case `text-base font-medium text-foreground`, chevron rotation, card chrome, and optional template/body content.
-- `templates/includes/_list_row.html`: canonical row for drawer, reader, and numbered-list surfaces. Provides `min-h-[44px]`, active state, marker variants, trailing icons, truncation, and focus rings.
-- `templates/content/_gated_access_card.html`: standardized gated/paywall access card with accent border, lock/badge iconography, required-tier copy, and upgrade/sign-up CTAs.
-- `templates/content/reader/_mobile_progress_bar.html`: mobile-only reader progress and drawer trigger, hidden on `lg+` and not meant for gated pages.
-- `templates/includes/testimonial_cards.html`: testimonial grid/mobile carousel with quote icon, `line-clamp-10`, author block, and responsive card width.
-- `templates/content/_content_preview.html`: reusable course/workshop preview media with cover image or fallback, label pill, access label, title, and meta row.
-- `templates/includes/_icon_github.html`: inline GitHub SVG replacement for missing Lucide brand icons; inherits color through `currentColor`.
-- `templates/includes/member_empty_state.html`: standardized member/public empty-state card. Render through `{% member_empty_state %}` with `title`, `body`, Lucide `icon`, `kind="fresh"` or `kind="filter"`, optional primary/secondary CTA label/url/icon/class, and optional `testid` for page-specific selector continuity.
-- `templates/studio/includes/empty_state.html`: standardized Studio list-page empty state. Use `kind="filter"` (inline `<tr>` with `Clear filters` link) when a filter is active and produced zero rows. Use `kind="fresh"` (separate `bg-card` empty card with a `New <noun>` CTA) when no rows exist at all. Render through the `{% studio_empty_state %}` inclusion tag — never hand-roll either branch.
+Hand-rolling markup or classes for a role owned by the index is a review-blocking defect, even when the duplicate renders identically.
+
+## Partials and Component Index
+
+The documented owner is mandatory for every instance of its named role, subject only to the explicit constraints in that component's existing documentation.
+
+| Owner | Use for | Canonical usage |
+|---|---|---|
+| `templates/content/_gated_access_card.html` | Every paid/tier-gated content block, after the view supplies the documented gate context including `required_tier_name`. | `{% include "content/_gated_access_card.html" %}` |
+| `{% member_empty_state %}` from `member_empty_state` | Every member/public collection or section empty state. | `{% load member_empty_state %}` then `{% member_empty_state title='No items yet' body='Check back soon.' icon='inbox' kind='fresh' %}` |
+| `{% studio_empty_state %}` from `studio_filters` | Every Studio list empty state. Use `fresh` when no records exist and `filter` when active filters yield no rows. | `{% load studio_filters %}` then `{% studio_empty_state 'fresh' entity_label='article' entity_label_plural='articles' %}`; filter variant: `{% studio_empty_state 'filter' entity_label='article' entity_label_plural='articles' clear_url='/studio/articles/' colspan=6 %}` |
+| `{% member_tier_badge %}`, `{% member_label_badge %}`, and `{% member_status_badge %}` from `member_badges` | Every member/public tier, label, or status pill whose meaning these tags cover. | `{% load member_badges %}` then `{% member_tier_badge 10 %}`, `{% member_label_badge 'Workshop' %}`, and `{% member_status_badge 'Upcoming' status='upcoming' %}` |
+| `{% button_classes %}` from `accounts_extras` | Every non-Studio product/public/member/marketing CTA. | `{% load accounts_extras %}` then `class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}"` |
+| `templates/content/_content_preview.html` | Every catalog media band for a content type whose contract includes media. | `{% include "content/_content_preview.html" with preview_cover_url=item.cover_url preview_title=item.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="content-card-preview" %}` |
+| `templates/content/_clickable_card_classes.html` | Every fully clickable catalog/preview card anchor. | `class="{% include 'content/_clickable_card_classes.html' %} rounded-lg"` |
+| `templates/includes/_list_row.html` | Every reader, drawer, or numbered navigation row. | `{% include "includes/_list_row.html" with href=item.get_absolute_url title=item.title is_current=False marker_kind="circle" %}` |
+| `templates/accounts/includes/_auth_card.html` | Every standard full-page authentication form. Titles use sentence case; pass the subtitle, form partial, OAuth copy, and legal-action input. | `{% include "accounts/includes/_auth_card.html" with auth_title="Create account" auth_subtitle="Join AI Shipping Labs and start building" form_template="accounts/includes/_register_form.html" oauth_action="Sign up" oauth_divider_text="sign up with" legal_action="creating an account" %}` |
+| `templates/includes/_accordion.html` | Every section-header accordion. | `{% include "includes/_accordion.html" with summary="Show details" body=details_html %}` or `{% include "includes/_accordion.html" with summary="Show transcript" body_template="events/_recording_transcript_body.html" %}` |
+| `templates/includes/testimonial_cards.html` | Every testimonial card collection, with `testimonials` in context. | `{% include "includes/testimonial_cards.html" %}` |
+| `templates/includes/_icon_github.html` | Every GitHub brand mark. | `{% include 'includes/_icon_github.html' with css='h-4 w-4' %}` |
+| `templates/studio/_partials/header_actions.html` | Every Studio entity-detail header/action row. The include is valid only when no local action body is needed; forms or pages that must supply local actions retain the documented inline-markup path. | `{% include "studio/_partials/header_actions.html" with title=object.title subtitle="Entity details" %}` |
+| `templates/content/reader/_mobile_progress_bar.html` | Every eligible ungated mobile course/workshop reader progress control, after its documented context is supplied. Never include it on a gated reader. | `{% include "content/reader/_mobile_progress_bar.html" %}` |
+
+### Deprecated
+
+- `templates/includes/content_gated.html` is deprecated and must never be included by a new or edited template.
+- #1225 owns the project-detail migration only. Blog and tutorial detail remain legacy callers after that issue and require a separately scoped migration before the partial can be deleted.
+- Delete the deprecated partial only after repository search proves no includes remain. This documentation issue does not perform those migrations or deletion.
 
 ## Buttons
 
-Primary filled action (marketing `lg` size):
+Every non-Studio CTA on product, public, member, and marketing surfaces gets its classes from `{% button_classes %}`. New or edited templates must not hand-roll equivalent button class strings. Studio retains the separately documented Studio action and button patterns.
 
-```html
-inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90
+Public and marketing hero, pricing, and conversion CTAs use `size='lg'`. Other public/member CTAs use `size='md'` unless they are genuinely compact row actions (`sm`). Touched legacy hand-rolled buttons migrate to the tag.
+
+Canonical call:
+
+```django
+{% load accounts_extras %}
+<a href="/pricing" class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}">View pricing</a>
 ```
 
-Secondary/outlined action (marketing `lg` size):
-
-```html
-inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary
-```
-
-These two snippets describe the marketing-page hero / pricing CTAs (the `lg` row in the size scale below). Top-level CTAs commonly add `w-full sm:w-auto` on mobile-to-desktop transitions. Real `<button>` elements should include disabled styling such as `disabled:cursor-not-allowed disabled:opacity-50` when the state exists. New product CTAs go through `{% button_classes %}` — see the size scale.
+There are exactly three sizes. The button tag, not a padding pair, is the unit of reuse. `px-5 py-2.5`, bare `py-2.5`, and `px-4 py-2.5` button chrome are forbidden everywhere.
 
 ### Button size scale
 
@@ -182,8 +240,10 @@ Issue #598 — product buttons use one of three named sizes. Pick by role, not b
 | Name | Padding         | Text size  | `min-h-[44px]` | Use case                                                                  |
 |------|-----------------|------------|----------------|---------------------------------------------------------------------------|
 | `sm` | `px-3 py-1.5`   | `text-xs`  | no             | Compact per-row table actions, inline edit controls, narrow card chrome.  |
-| `md` | `px-4 py-2`     | `text-sm`  | yes            | Default for every authenticated CTA — dashboard, account, plans, cohort.  |
-| `lg` | `px-6 py-3`     | `text-base`| yes            | Marketing-page hero CTAs, pricing, top-of-page conversion buttons.        |
+| `md` | `px-4 py-2`     | `text-sm`  | yes            | Default public/member CTA outside conversion roles.                       |
+| `lg` | `px-6 py-3`     | `text-base`| yes            | Public/marketing hero, pricing, and conversion CTAs.                      |
+
+Both `md` and `lg` include `min-h-[44px]` and the complete focus-visible ring. Reuse the tag, not an extracted padding pair.
 
 Tag signature:
 
@@ -197,7 +257,7 @@ Tag signature:
 - `extra` appends after the canonical classes so per-call overrides win the cascade (used by the amber verification banner and the emerald Join sprint button).
 - A positional second argument is treated as `extra` when it is not one of `{sm, md, lg}` — preserves backward compatibility with `{% button_classes 'secondary' 'shrink-0' %}` calls.
 
-Use examples:
+Additional use examples:
 
 ```django
 {% load accounts_extras %}
@@ -230,7 +290,9 @@ Primary, `lg`:
 inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background min-h-[44px] px-6 py-3 text-base bg-accent text-accent-foreground hover:bg-accent/90
 ```
 
-Secondary differs from primary only in the trailing variant cluster:
+If a rendering context cannot invoke the tag and must inline the output, copy it whole.
+
+Secondary uses the same base and size classes and swaps only the trailing variant cluster for:
 
 ```html
 border border-border bg-transparent text-foreground hover:bg-secondary
@@ -242,9 +304,7 @@ Destructive likewise differs only in the variant cluster:
 border border-red-500/30 bg-transparent text-red-400 hover:bg-red-500/10
 ```
 
-Surfaces covered today by the tag at `size='md'`: `templates/content/dashboard.html`, `templates/accounts/account.html`, `templates/plans/my_plan_detail.html`, `templates/plans/member_plan_detail.html`, `templates/plans/sprint_detail.html`, `templates/plans/cohort_board.html`. Per-row cohort table actions in `cohort_board.html` use `size='sm'` deliberately — they are inline row actions, not page-level CTAs. Inline edit controls in `templates/plans/_plan_body.html` keep their bare `px-3 py-1.5` chrome and are not migrated. Public/marketing surfaces (course detail, reader, footer, login/register) are explicitly NOT migrated yet; a follow-up issue will move them to `size='lg'` once a visual review confirms the chrome matches.
-
-A regression lint (`accounts/tests/test_button_class_lint.py`) scans the six scoped templates and fails if a hand-rolled button class with `px-5`, bare `py-2.5`, or bare `py-1` reappears. The lint includes a self-test that injects a known-bad string to prove the regex catches what it claims to catch.
+Per-row cohort table actions in `cohort_board.html` use `size='sm'` deliberately because they are compact row actions, not page-level CTAs. The three-size contract is site-wide for non-Studio CTAs.
 
 ### Studio header + action row
 
@@ -252,7 +312,7 @@ Studio entity-detail pages use one consistent header pattern: breadcrumb or back
 
 Primary entity actions belong in the header action row, not inline with the H1, not in a far-down action card, and not duplicated in a sidebar panel. `View on site` is always a secondary bordered button in this row when the entity has a public URL. Form-edit pages keep the sticky Save/Cancel bar, but header actions such as `View on site`, `Edit on GitHub`, and `Re-sync source` should not be duplicated there. Section-level actions still live in their section, and list pages keep their existing list-header plus per-row Actions-cell pattern.
 
-Use `templates/studio/_partials/header_actions.html` for new detail pages when the template can supply its action block, or copy the same markup inline when local form placement requires it. The partial accepts `eyebrow`, `title`, optional `subtitle`, optional `back_url` / `back_label`, and optional `testid` / `actions_testid` values. The action wrapper defaults to `data-testid="studio-header-actions"`.
+Use `templates/studio/_partials/header_actions.html` for detail headers that need no local action body. Django `{% include %}` cannot override the partial's `{% block actions %}`. Copy the same markup inline when a form or page must supply local actions. The partial accepts `eyebrow`, `title`, optional `subtitle`, optional `back_url` / `back_label`, and optional `testid` / `actions_testid` values. The action wrapper defaults to `data-testid="studio-header-actions"`.
 
 Canonical Studio header button classes:
 
@@ -290,7 +350,7 @@ Status badge palette (`STATUS_BADGE_CLASSES` in `studio/templatetags/studio_filt
 List-page empty states have two flavours, and both ship from the shared `templates/studio/includes/empty_state.html` partial via the `{% studio_empty_state %}` inclusion tag (issue #756):
 
 - Filter-zero — a search or status filter is active and produced zero rows. Use `{% studio_empty_state 'filter' entity_label='sprint' entity_label_plural='sprints' clear_url=... colspan=N %}` inside the table's `<tbody>`. The partial renders an inline `<tr><td colspan>` row with the message `No <plural> match your filters.` and a `Clear filters` link, keeping the table header visible so the operator can adjust filters in place.
-- Fresh-install zero — the entity has no rows at all (no filter active). Wrap the table in `{% if rows or <filter_vars> %}...{% else %} {% studio_empty_state 'fresh' entity_label='sprint' entity_label_plural='sprints' create_url=... %} {% endif %}`. The partial renders a separate `bg-card border border-border rounded-lg p-12 text-center` empty card with an inbox icon, the message `No <plural> yet.`, and a primary `New <noun>` CTA (use `cta_label=...` to override when the page's header CTA uses non-sentence-case copy such as `Add Campaign` or `Create token`).
+- Fresh-install zero — the entity has no rows at all (no filter active). Wrap the table in `{% if rows or <filter_vars> %}...{% else %} {% studio_empty_state 'fresh' entity_label='sprint' entity_label_plural='sprints' create_url=... %} {% endif %}`. The partial renders a separate `bg-card border border-border rounded-lg p-12 text-center` empty card with an inbox icon, the message `No <plural> yet.`, and a primary `New <noun>` CTA. Use `cta_label=...` only when a domain-specific sentence-case action is required.
 
 Distinguish the two cases in the view by exposing the search / status / tag filter variables to the template (most list views already do) or by adding a `filters_active` boolean to the context. The pattern is: when the queryset is empty AND filters are active, the table chrome stays visible with the filter-row; when the queryset is empty AND no filter is active, the table is omitted entirely in favour of the fresh card.
 
@@ -298,12 +358,14 @@ Sync-managed entities (workshops, courses, articles, projects, downloads, record
 
 #### Member/public empty states
 
-Member-facing pages use `templates/includes/member_empty_state.html` via the `{% member_empty_state %}` inclusion tag from `content.templatetags.member_empty_state`. This component is intentionally separate from Studio empty states: it always renders member-page card chrome (`bg-card border border-border rounded-lg`), uses Lucide icons with consistent sizing, and exposes `data-testid="member-empty-state"` for regression tests. If an existing page has a page-specific selector, pass `testid="..."`; the outer card keeps that selector and the component still emits the canonical marker inside it.
+Every zero-collection or zero-filter-result state on a member/public page renders through `{% member_empty_state %}` from `content.templatetags.member_empty_state`. Never hand-roll the icon-plus-muted-copy card or a `p-12 text-center` box. Absence of one optional field inside an otherwise populated record is not a collection empty state.
+
+This component is intentionally separate from Studio empty states: it always renders member-page card chrome (`bg-card border border-border rounded-lg`), uses Lucide icons with consistent sizing, and exposes `data-testid="member-empty-state"` for regression tests. If an existing page has a page-specific selector, pass `testid="..."`; the outer card keeps that selector and the component still emits the canonical marker inside it.
 
 - Fresh-empty — no content exists for the section or catalog yet. Use `kind="fresh"` and copy that does not mention filters or user error, for example `No tutorials yet` with `Check back soon for step-by-step guides.` CTAs are optional and should point to the next useful member journey when one exists.
 - Filter-empty — active filters produced zero results. Use `kind="filter"`, keep the user's context in the message, and include a clear CTA back to the unfiltered list such as `View all articles`, `View all courses`, `View all workshops`, or `View all recordings`.
 
-Pass CTAs as explicit parameters: `primary_cta_label`, `primary_cta_url`, optional `primary_cta_icon`, plus the matching `secondary_*` values when a second action is needed. For dashboard/account/plan surfaces that already load `accounts_extras`, compute classes with `{% button_classes ... as ... %}` and pass `primary_cta_class` / `secondary_cta_class`. Public catalog pages that use inline text links can omit classes and keep the default `text-accent hover:underline` style.
+Pass CTAs as explicit parameters: `primary_cta_label`, `primary_cta_url`, optional `primary_cta_icon`, plus the matching `secondary_*` values when a second action is needed. Compute non-Studio CTA classes with `{% button_classes ... as ... %}` and pass `primary_cta_class` / `secondary_cta_class`. Fresh and filter variants keep the same copy and CTA guidance: a filter-empty state provides a clear route back to the unfiltered collection, while a fresh-empty CTA is optional and points to the next useful journey.
 
 ## Form Controls
 
@@ -340,18 +402,70 @@ The unit test `studio.tests.test_form_components.GlobalSelectStyleTest.test_ever
 
 ## Pills, Badges, and Chips
 
-Canonical shape: `inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium`.
+Member/public pills use the tags in `content/templatetags/member_badges.py`; Studio status pills use the established Studio badge tag. Never inline a pill whose meaning an owning tag covers, even if the classes would be identical.
 
-Common variants:
+Canonical badge shape: `inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium`.
 
-- Subtle accent: `bg-accent/10 text-accent`.
-- Strong accent: `bg-accent px-3 py-1 text-accent-foreground`.
-- Bordered accent: `border border-accent/30 bg-accent/10 text-accent`.
-- Neutral: `bg-secondary text-muted-foreground`.
-- Closed/disabled: `border border-border text-muted-foreground/40`.
-- Success/completed: `bg-green-500/15 text-green-400`.
+| Meaning | Tone |
+|---|---|
+| Access or tier, including Free | Accent |
+| Success, completed, registered, or live-positive | Green |
+| Finished, past, or expired | Neutral/muted |
+| Upcoming or informational schedule state | Blue |
+| Cancelled or error | Red |
+| Draft | Yellow |
+
+Green is reserved for success semantics. Access/Free and Past are never green. `STATUS_TONES['past']` must resolve to neutral; #1232 owns that code change and is not a dependency of this documentation issue.
+
+#1226 owns named tier-badge migrations. This document defines the component contract but performs no implementation migration.
+
+Gate vocabulary is `Basic or above required`, `Main or above required`, and terminal-tier `Premium required`. Never use `Basic tier required`, `Main tier required`, `Premium tier required`, or `Premium or above required`.
+
+Clickable tag chip (no `min-h-[44px]`):
+
+```html
+inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background
+```
+
+Static tag chip (no `min-h-[44px]`):
+
+```html
+inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground
+```
+
+The canonical page-level filter-pill/view-toggle base, matching `templates/content/_workshops_catalog.html`, is:
+
+```html
+inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
+```
+
+The selected state adds `bg-accent text-accent-foreground` and `aria-current="page"`. The unselected state adds `bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground`.
 
 Pill icons are usually `h-3 w-3` or `h-3.5 w-3.5`.
+
+## Tap Targets
+
+| Role | 44px decision |
+|---|---|
+| `md` and `lg` buttons | Apply `min-h-[44px]`. |
+| Page-level filter pills and view toggles | Apply `min-h-[44px]`. |
+| Interactive list/navigation rows | Apply `min-h-[44px]`. |
+| Calendar navigation controls | Apply `min-h-[44px]`. |
+| Icon-only action links | Apply `min-h-[44px]` and `min-w-[44px]`. |
+| Tag chips or metadata pills, even when linked | Do not apply a 44px minimum. |
+| `sm` buttons | Do not apply a 44px minimum. |
+| Inline prose links | Do not apply a 44px minimum. |
+
+Tie-breaker: a page-level control the user came to operate gets the 44px target; an incidental metadata link does not. When a new interaction does not clearly fit, record the decision in its implementation issue.
+
+## Gated Content
+
+- Every paid/tier-gated content block renders `templates/content/_gated_access_card.html`; do not create another gated-card dialect.
+- Views must expose `required_tier_name`; a paid/tier-gated card without its tier pill is incomplete.
+- Gated detail surfaces also expose the relevant shared tier badge above the fold, not only inside the paywall.
+- `templates/includes/content_gated.html` is deprecated as described in [Deprecated](#deprecated).
+- The shared partial itself must use `{% button_classes %}` for CTA chrome when an implementation issue next touches it. Callers must not work around its legacy `px-5 py-2.5` secondary action. #1225 owns the currently scoped partial/template migration work, not this documentation issue.
+- Keep non-tier gates, such as email-verification guidance, distinct when they do not represent a paid/tier access block.
 
 ## Focus, Hover, and Active States
 
@@ -389,7 +503,7 @@ Build and review in light and dark themes. Theme-aware surfaces should use the t
 
 Accessibility checklist:
 
-- Interactive rows and important CTAs have at least a 44px tap target.
+- Apply 44px minimums according to the [Tap Targets](#tap-targets) decision table; compact metadata and inline prose links remain exempt.
 - Icon-only buttons and links have `aria-label` or equivalent hidden text.
 - Active navigation/list items expose `aria-current`.
 - Keyboard focus is visible on anchors, buttons, rows, and custom controls.
@@ -398,9 +512,9 @@ Accessibility checklist:
 
 ## When in Doubt
 
-1. Search for an existing page with the same UI role.
-2. Reuse the closest partial before adding a new component.
-3. Copy established class strings exactly when the visual role matches.
-4. Use CSS variables and Tailwind token classes, not raw hex values.
+1. Follow [Before You Write a Class String](#before-you-write-a-class-string).
+2. Use the owner named in the [Partials and Component Index](#partials-and-component-index) whenever the role is indexed.
+3. Search for an existing sibling surface and copy its established class string exactly when an unindexed visual role matches.
+4. Use CSS variables and Tailwind token classes, not raw hex values; state colors also obey the tone-semantics table.
 5. Verify desktop and mobile screenshots in both themes for UI-heavy changes.
-6. If a new pattern is truly needed, document why in the issue or implementation notes.
+6. If a new pattern is truly needed, document why in the implementation issue.

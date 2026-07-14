@@ -9,6 +9,7 @@ representative helper.
 """
 
 import datetime
+from pathlib import Path
 
 from django.test import SimpleTestCase, TestCase
 
@@ -19,6 +20,7 @@ from content.markdown_extensions import (
 from content.models.article import Article
 from content.models.article import render_markdown as render_article_md
 from content.models.course import render_markdown as render_course_md
+from content.models.workshop import Workshop, WorkshopPage
 from content.models.workshop import render_markdown as render_workshop_md
 from events.models.event import render_markdown as render_event_md
 
@@ -295,3 +297,54 @@ class MermaidScriptTagInclusionTest(TestCase):
         # type="module" is required so the dynamic import() inside the
         # script is allowed by the browser.
         self.assertIn('type="module"', body)
+
+    def test_workshop_tutorial_emits_mermaid_layout_rules_once_in_head(self):
+        historical_workshop_date = datetime.date(2024, 1, 1)
+        workshop = Workshop.objects.create(
+            title='Mermaid Layout Workshop',
+            slug='mermaid-layout-workshop',
+            date=historical_workshop_date,
+            status='published',
+            landing_required_level=0,
+            pages_required_level=0,
+            recording_required_level=0,
+        )
+        WorkshopPage.objects.create(
+            workshop=workshop,
+            title='Diagram',
+            slug='diagram',
+            sort_order=1,
+            body=(
+                '```mermaid\n'
+                'flowchart LR\n'
+                '    A[Start] --> B[Finish]\n'
+                '```\n\nAfter the diagram.'
+            ),
+        )
+
+        response = self.client.get(
+            '/workshops/mermaid-layout-workshop/tutorial/diagram',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        head, rendered_body = body.split('<body', 1)
+        selector = 'div.mermaid:not([data-processed]) { white-space: pre; }'
+        self.assertEqual(body.count(selector), 1)
+        self.assertIn(selector, head)
+        self.assertNotIn(selector, rendered_body)
+        self.assertIn(
+            'div.mermaid { max-width: 100%; overflow-x: auto; }',
+            head,
+        )
+        self.assertIn(
+            'div.mermaid > svg { max-width: none; height: auto; '
+            'display: block; margin: 0 auto; }',
+            head,
+        )
+        self.assertRegex(body, r'js/mermaid-render(\.[0-9a-f]+)?\.js')
+
+        partial = Path('templates/_partials/mermaid_script.html').read_text(
+            encoding='utf-8',
+        )
+        self.assertNotIn('<style>', partial)

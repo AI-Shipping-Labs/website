@@ -23,7 +23,7 @@ from pathlib import Path
 
 from django.apps import apps
 from django.contrib.auth import get_user_model
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, tag
 from django.utils import timezone
 
 from content.access import (
@@ -266,6 +266,27 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         card_index = body.index('data-testid="workshop-card"')
         self.assertLess(landing_index, preview_index)
         self.assertLess(preview_index, card_index)
+
+        browse_cta_index = body.index('data-testid="browse-workshops-cta"')
+        value_points_index = body.index('aria-label="Workshop value points"')
+        self.assertLess(browse_cta_index, value_points_index)
+
+    @tag('visual_regression')
+    def test_landing_uses_single_column_heading_and_value_point_layout(self):
+        response = self.client.get(WORKSHOPS_LANDING_URL)
+
+        self.assertContains(
+            response,
+            'class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl"',
+        )
+        self.assertContains(
+            response,
+            'class="mt-10 grid gap-4 sm:grid-cols-3" '
+            'aria-label="Workshop value points"',
+        )
+        self.assertNotContains(response, 'lg:grid-cols-[')
+        self.assertNotContains(response, 'lg:grid-cols-1')
+        self.assertNotContains(response, 'lg:text-5xl')
 
     def test_catalog_metadata_describes_workshop_landing_offer(self):
         response = self.client.get(WORKSHOPS_LANDING_URL)
@@ -821,21 +842,20 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         with self.assertRaises(LookupError):
             apps.get_model('content', 'Topic')
 
-    def test_catalog_missing_cover_uses_decorative_fallback_preview(self):
+    def test_catalog_missing_cover_renders_no_preview_node(self):
         response = self.client.get(WORKSHOPS_CATALOG_URL)
-        body = response.content.decode()
-        fallback = body.split(
-            'data-testid="workshop-card-preview-fallback"', 1,
-        )[1].split('<div class="min-w-0 p-4 sm:p-5"', 1)[0]
-        self.assertContains(response, 'data-testid="workshop-card-preview-fallback"')
-        self.assertNotIn('Visible Workshop', fallback)
-        self.assertNotIn('Alice', fallback)
-        self.assertNotIn('Apr 21, 2026', fallback)
-        self.assertNotIn('agents', fallback)
+        card = _workshop_card_html(response, 'one')
+
+        self.assertNotIn('data-testid="workshop-card-preview', card)
+        self.assertNotIn('aspect-video', card)
+        self.assertLess(
+            card.index('data-testid="workshop-card-primary-signals"'),
+            card.index('data-testid="workshop-card-title"'),
+        )
         self.assertContains(response, 'group block focus-visible:outline-none')
         self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
 
-    def test_catalog_auto_banner_only_uses_decorative_fallback_preview(self):
+    def test_catalog_auto_banner_only_renders_no_preview_node(self):
         auto_url = 'https://cdn.example/banners/generated-workshop.png'
         self.published.cover_image_url = ''
         self.published.custom_banner_url = ''
@@ -845,11 +865,11 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         response = self.client.get(WORKSHOPS_CATALOG_URL)
         card = _workshop_card_html(response, 'one')
 
-        self.assertIn('data-testid="workshop-card-preview-fallback"', card)
-        self.assertNotIn('data-testid="workshop-card-preview-image"', card)
+        self.assertNotIn('data-testid="workshop-card-preview', card)
+        self.assertNotIn('<img', card)
         self.assertNotIn(auto_url, card)
 
-    def test_landing_embedded_catalog_skips_auto_banner_preview(self):
+    def test_landing_embedded_catalog_auto_banner_only_renders_no_preview_node(self):
         auto_url = 'https://cdn.example/banners/landing-generated-workshop.png'
         self.published.cover_image_url = ''
         self.published.custom_banner_url = ''
@@ -860,8 +880,8 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         card = _workshop_card_html(response, 'one')
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn('data-testid="workshop-card-preview-fallback"', card)
-        self.assertNotIn('data-testid="workshop-card-preview-image"', card)
+        self.assertNotIn('data-testid="workshop-card-preview', card)
+        self.assertNotIn('<img', card)
         self.assertNotIn(auto_url, card)
 
     def test_catalog_cover_image_has_alt_text_and_lazy_loading(self):
@@ -896,7 +916,7 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertNotIn(auto_url, card)
         self.assertNotIn('data-testid="workshop-card-preview-fallback"', card)
 
-    def test_filtered_catalog_keeps_auto_banner_only_fallback(self):
+    def test_filtered_catalog_keeps_auto_banner_only_card_text_first(self):
         Workshop.objects.all().delete()
         agents_auto_url = 'https://cdn.example/banners/agents-generated.png'
         _make_workshop(
@@ -918,7 +938,8 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         card = _workshop_card_html(response, 'agents-card')
 
         self.assertIn('Agents Card', card)
-        self.assertIn('data-testid="workshop-card-preview-fallback"', card)
+        self.assertNotIn('data-testid="workshop-card-preview', card)
+        self.assertNotIn('<img', card)
         self.assertNotIn(agents_auto_url, card)
         self.assertNotContains(response, 'Python Card')
 

@@ -200,9 +200,17 @@ class BuildSpecTest(TestCase):
         props = self._request_body_properties("/api/sprints", "post")
         self.assertIn("event_series", props)
 
+    def test_sprint_create_documents_landing_fields_in_request_body(self):
+        props = self._request_body_properties("/api/sprints", "post")
+        self.assertTrue({"description", "outcomes", "audience"} <= set(props))
+
     def test_sprint_patch_documents_event_series_in_request_body(self):
         props = self._request_body_properties("/api/sprints/{slug}", "patch")
         self.assertIn("event_series", props)
+
+    def test_sprint_patch_documents_landing_fields_in_request_body(self):
+        props = self._request_body_properties("/api/sprints/{slug}", "patch")
+        self.assertTrue({"description", "outcomes", "audience"} <= set(props))
 
     def test_sprint_response_example_includes_event_series_key(self):
         example = (
@@ -210,6 +218,7 @@ class BuildSpecTest(TestCase):
             ["responses"]["200"]["content"]["application/json"]["example"]
         )
         self.assertIn("event_series", example)
+        self.assertTrue({"description", "outcomes", "audience"} <= set(example))
 
     def test_sprint_response_example_documents_lifecycle_badge(self):
         example = (

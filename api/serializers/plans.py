@@ -30,6 +30,9 @@ def serialize_sprint(sprint):
     return {
         "slug": sprint.slug,
         "name": sprint.name,
+        "description": sprint.description,
+        "outcomes": sprint.outcomes,
+        "audience": sprint.audience,
         "start_date": (
             sprint.start_date.isoformat() if sprint.start_date else None
         ),

@@ -7773,7 +7773,9 @@
                 "example": {
                   "sprints": [
                     {
+                      "audience": "Builders with an AI project idea",
                       "created_at": "2026-04-15T12:00:00+00:00",
+                      "description": "Ship a focused AI project with a supportive cohort.",
                       "duration_weeks": 6,
                       "event_series": null,
                       "lifecycle_badge": {
@@ -7781,6 +7783,7 @@
                         "state": "active"
                       },
                       "name": "May 2026",
+                      "outcomes": "A working prototype\nA documented launch",
                       "slug": "may-2026",
                       "start_date": "2026-05-01",
                       "status": "active",
@@ -7810,15 +7813,26 @@
           "content": {
             "application/json": {
               "example": {
+                "audience": "Builders with an AI project idea",
+                "description": "Ship a focused AI project with a supportive cohort.",
                 "duration_weeks": 6,
                 "event_series": "may-2026-community-sprint",
                 "name": "May 2026",
+                "outcomes": "A working prototype\nA documented launch",
                 "slug": "may-2026",
                 "start_date": "2026-05-01",
                 "status": "draft"
               },
               "schema": {
                 "properties": {
+                  "audience": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "description": {
+                    "default": "",
+                    "type": "string"
+                  },
                   "duration_weeks": {
                     "type": "integer"
                   },
@@ -7832,6 +7846,10 @@
                     ]
                   },
                   "name": {
+                    "type": "string"
+                  },
+                  "outcomes": {
+                    "default": "",
                     "type": "string"
                   },
                   "slug": {
@@ -7869,7 +7887,9 @@
             "content": {
               "application/json": {
                 "example": {
+                  "audience": "Builders with an AI project idea",
                   "created_at": "2026-04-15T12:00:00+00:00",
+                  "description": "Ship a focused AI project with a supportive cohort.",
                   "duration_weeks": 6,
                   "event_series": null,
                   "lifecycle_badge": {
@@ -7877,6 +7897,7 @@
                     "state": "active"
                   },
                   "name": "May 2026",
+                  "outcomes": "A working prototype\nA documented launch",
                   "slug": "may-2026",
                   "start_date": "2026-05-01",
                   "status": "active",
@@ -7969,7 +7990,9 @@
             "content": {
               "application/json": {
                 "example": {
+                  "audience": "Builders with an AI project idea",
                   "created_at": "2026-04-15T12:00:00+00:00",
+                  "description": "Ship a focused AI project with a supportive cohort.",
                   "duration_weeks": 6,
                   "event_series": null,
                   "lifecycle_badge": {
@@ -7977,6 +8000,7 @@
                     "state": "active"
                   },
                   "name": "May 2026",
+                  "outcomes": "A working prototype\nA documented launch",
                   "slug": "may-2026",
                   "start_date": "2026-05-01",
                   "status": "active",
@@ -8026,6 +8050,12 @@
               },
               "schema": {
                 "properties": {
+                  "audience": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
                   "duration_weeks": {
                     "type": "integer"
                   },
@@ -8039,6 +8069,9 @@
                     ]
                   },
                   "name": {
+                    "type": "string"
+                  },
+                  "outcomes": {
                     "type": "string"
                   },
                   "start_date": {
@@ -8066,7 +8099,9 @@
             "content": {
               "application/json": {
                 "example": {
+                  "audience": "Builders with an AI project idea",
                   "created_at": "2026-04-15T12:00:00+00:00",
+                  "description": "Ship a focused AI project with a supportive cohort.",
                   "duration_weeks": 6,
                   "event_series": null,
                   "lifecycle_badge": {
@@ -8074,6 +8109,7 @@
                     "state": "active"
                   },
                   "name": "May 2026",
+                  "outcomes": "A working prototype\nA documented launch",
                   "slug": "may-2026",
                   "start_date": "2026-05-01",
                   "status": "active",

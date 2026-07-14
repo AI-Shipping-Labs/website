@@ -202,6 +202,9 @@ def _form_data_from_post(request):
         'status': (request.POST.get('status') or '').strip(),
         'min_tier_level': (request.POST.get('min_tier_level') or '').strip(),
         'event_series': (request.POST.get('event_series') or '').strip(),
+        'description': (request.POST.get('description') or '').strip(),
+        'outcomes': (request.POST.get('outcomes') or '').strip(),
+        'audience': (request.POST.get('audience') or '').strip(),
     }
 
 
@@ -216,6 +219,9 @@ def _form_data_from_sprint(sprint):
         'event_series': (
             str(sprint.event_series_id) if sprint.event_series_id else ''
         ),
+        'description': sprint.description,
+        'outcomes': sprint.outcomes,
+        'audience': sprint.audience,
     }
 
 
@@ -354,6 +360,9 @@ def sprint_create(request):
                 'status': 'draft',
                 'min_tier_level': str(LEVEL_MAIN),
                 'event_series': '',
+                'description': '',
+                'outcomes': '',
+                'audience': '',
             },
         )
 
@@ -417,6 +426,9 @@ def sprint_create(request):
         status=status_value,
         min_tier_level=min_tier_level,
         event_series=event_series,
+        description=form_data['description'],
+        outcomes=form_data['outcomes'],
+        audience=form_data['audience'],
     )
     messages.success(request, f'Sprint "{sprint.name}" created.')
     return redirect('studio_sprint_detail', sprint_id=sprint.pk)
@@ -1208,6 +1220,9 @@ def sprint_edit(request, sprint_id):
     sprint.status = status_value
     sprint.min_tier_level = min_tier_level
     sprint.event_series = event_series
+    sprint.description = form_data['description']
+    sprint.outcomes = form_data['outcomes']
+    sprint.audience = form_data['audience']
     sprint.save()
 
     messages.success(request, f'Sprint "{sprint.name}" updated.')

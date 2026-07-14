@@ -162,6 +162,12 @@ def sprint_detail(request, sprint_slug):
         getattr(event_series, 'ordered_events', []) if event_series else []
     )
     sprint_call_entries = _build_sprint_call_entries(event_series_events, user)
+    sprint_outcomes = [
+        line.strip() for line in sprint.outcomes.splitlines() if line.strip()
+    ]
+    sprint_audience = [
+        line.strip() for line in sprint.audience.splitlines() if line.strip()
+    ]
 
     feedback_response = _viewer_feedback_response(sprint, user)
 
@@ -179,6 +185,8 @@ def sprint_detail(request, sprint_slug):
             'event_series': event_series,
             'event_series_events': event_series_events,
             'sprint_call_entries': sprint_call_entries,
+            'sprint_outcomes': sprint_outcomes,
+            'sprint_audience': sprint_audience,
             'feedback_response': feedback_response,
             'accountability_partners': accountability_partners,
         },

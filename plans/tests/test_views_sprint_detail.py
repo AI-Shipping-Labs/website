@@ -98,6 +98,151 @@ class SprintDetailAnonymousTest(TestCase):
         self.assertNotContains(response, 'data-testid="sprint-cta-join"')
 
 
+class SprintLandingContentTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.series = _event_series('landing-calls')
+        cls.sprint = Sprint.objects.create(
+            name='Build and ship', slug='build-and-ship',
+            start_date=_active_sprint_start_date(), duration_weeks=6,
+            status='active', min_tier_level=20, event_series=cls.series,
+            description='Build a useful AI product.\n\nShip it with your cohort.',
+            outcomes='Working prototype\n\nPublic launch',
+            audience='First-time AI builders\nExperienced engineers',
+        )
+        _series_event(
+            cls.series,
+            title='Kickoff', slug='landing-kickoff',
+            start=timezone.now() + datetime.timedelta(days=1),
+        )
+
+    def _get(self):
+        return self.client.get(reverse(
+            'sprint_detail', kwargs={'sprint_slug': self.sprint.slug},
+        ))
+
+    def test_authored_landing_sections_render_before_primary_action(self):
+        response = self._get()
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        testids = [
+            'sprint-landing-about',
+            'sprint-landing-includes',
+            'sprint-landing-schedule',
+            'sprint-landing-outcomes',
+            'sprint-landing-audience',
+            'sprint-primary-action',
+        ]
+        positions = [body.index(f'data-testid="{testid}"') for testid in testids]
+        self.assertEqual(positions, sorted(positions))
+        self.assertContains(response, 'Build a useful AI product.')
+        self.assertContains(response, 'Ship it with your cohort.')
+        self.assertNotContains(response, 'sprint-landing-about-generic')
+        self.assertContains(response, 'Weekly sprint calls')
+        self.assertContains(response, 'A personal sprint plan')
+        self.assertContains(response, 'Accountability partners')
+        self.assertContains(response, 'The cohort board')
+        self.assertContains(response, '1 call')
+
+    def test_line_fields_render_nonempty_items_and_escape_html(self):
+        self.sprint.outcomes = 'Working prototype\n\n<script>alert(1)</script>'
+        self.sprint.audience = 'Builders\n\nEngineers'
+        self.sprint.description = '<strong>Plain text only</strong>'
+        self.sprint.save(update_fields=['description', 'outcomes', 'audience'])
+
+        response = self._get()
+
+        self.assertContains(response, '&lt;strong&gt;Plain text only&lt;/strong&gt;')
+        self.assertNotContains(response, '<strong>Plain text only</strong>')
+        self.assertContains(response, '&lt;script&gt;alert(1)&lt;/script&gt;')
+        self.assertNotContains(response, '<script>alert(1)</script>')
+        body = response.content.decode()
+        outcomes = body[
+            body.index('data-testid="sprint-landing-outcomes"'):
+            body.index('</section>', body.index('data-testid="sprint-landing-outcomes"'))
+        ]
+        self.assertEqual(outcomes.count('<li>'), 2)
+
+    def test_blank_fields_use_generic_about_and_omit_optional_sections(self):
+        self.sprint.description = ''
+        self.sprint.outcomes = ''
+        self.sprint.audience = ''
+        self.sprint.event_series = None
+        self.sprint.save(update_fields=[
+            'description', 'outcomes', 'audience', 'event_series',
+        ])
+
+        response = self._get()
+        body = response.content.decode()
+
+        self.assertContains(response, 'data-testid="sprint-landing-about-generic"')
+        self.assertContains(response, 'data-testid="sprint-landing-includes"')
+        self.assertContains(response, 'data-testid="sprint-landing-schedule"')
+        self.assertNotContains(response, 'data-testid="sprint-landing-outcomes"')
+        self.assertNotContains(response, 'data-testid="sprint-landing-audience"')
+        self.assertNotContains(response, 'Scheduled calls')
+        self.assertLess(
+            body.index('data-testid="sprint-landing-schedule"'),
+            body.index('data-testid="sprint-primary-action"'),
+        )
+
+    def test_authenticated_non_enrolled_viewers_see_landing_before_their_cta(self):
+        viewers = [
+            (_free_user('landing-free@test.com'), 'sprint-cta-upgrade'),
+            (_main_user('landing-main@test.com'), 'sprint-cta-join'),
+        ]
+        url = reverse('sprint_detail', kwargs={'sprint_slug': self.sprint.slug})
+        for viewer, cta_testid in viewers:
+            with self.subTest(viewer=viewer.email):
+                self.client.force_login(viewer)
+                response = self.client.get(url)
+                body = response.content.decode()
+                self.assertLess(
+                    body.index('data-testid="sprint-landing-about"'),
+                    body.index('data-testid="sprint-primary-action"'),
+                )
+                self.assertContains(response, f'data-testid="{cta_testid}"')
+                self.client.logout()
+
+    def test_enrolled_view_keeps_action_first_and_has_no_landing_sections(self):
+        member = _main_user('landing-enrolled@test.com')
+        SprintEnrollment.objects.create(sprint=self.sprint, user=member)
+        self.client.force_login(member)
+
+        response = self._get()
+        body = response.content.decode()
+
+        self.assertContains(response, 'data-testid="sprint-cta-enrolled"')
+        self.assertNotContains(response, 'data-testid="sprint-landing"')
+        self.assertLess(
+            body.index('data-testid="sprint-primary-action"'),
+            body.index('data-testid="sprint-meeting-schedule"'),
+        )
+
+    def test_cancelled_and_ended_non_enrolled_views_keep_landing_before_action(self):
+        states = [
+            ('cancelled', _active_sprint_start_date(), 'sprint-cta-cancelled'),
+            (
+                'active',
+                timezone.localdate() - datetime.timedelta(weeks=8),
+                'sprint-cta-ended',
+            ),
+        ]
+        url = reverse('sprint_detail', kwargs={'sprint_slug': self.sprint.slug})
+        for status, start_date, cta_testid in states:
+            with self.subTest(status=status, cta_testid=cta_testid):
+                self.sprint.status = status
+                self.sprint.start_date = start_date
+                self.sprint.save(update_fields=['status', 'start_date'])
+                response = self.client.get(url)
+                body = response.content.decode()
+                self.assertContains(response, f'data-testid="{cta_testid}"')
+                self.assertLess(
+                    body.index('data-testid="sprint-landing-schedule"'),
+                    body.index('data-testid="sprint-primary-action"'),
+                )
+
+
 class SprintDetailDraftHidingTest(TestCase):
     """Draft sprints are hidden from anonymous and non-staff users."""
 

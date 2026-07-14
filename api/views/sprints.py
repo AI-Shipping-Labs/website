@@ -75,6 +75,9 @@ _SPRINT_STATUS_ENUM = sorted(VALID_SPRINT_STATUSES)
 _SPRINT_EXAMPLE = {
     "slug": "may-2026",
     "name": "May 2026",
+    "description": "Ship a focused AI project with a supportive cohort.",
+    "outcomes": "A working prototype\nA documented launch",
+    "audience": "Builders with an AI project idea",
     "start_date": "2026-05-01",
     "duration_weeks": 6,
     "status": "active",
@@ -764,6 +767,9 @@ def _validation_error_response(exc):
                 "required": ["name", "slug", "start_date", "duration_weeks"],
                 "properties": {
                     "name": {"type": "string"},
+                    "description": {"type": "string", "default": ""},
+                    "outcomes": {"type": "string", "default": ""},
+                    "audience": {"type": "string", "default": ""},
                     "slug": {"type": "string"},
                     "start_date": {"type": "string", "format": "date"},
                     "duration_weeks": {"type": "integer"},
@@ -776,6 +782,9 @@ def _validation_error_response(exc):
                 },
                 "example": {
                     "name": "May 2026",
+                    "description": "Ship a focused AI project with a supportive cohort.",
+                    "outcomes": "A working prototype\nA documented launch",
+                    "audience": "Builders with an AI project idea",
                     "slug": "may-2026",
                     "start_date": "2026-05-01",
                     "duration_weeks": 6,
@@ -867,6 +876,14 @@ def sprints_collection(request):
             details={"field": "duration_weeks", "expected": "int"},
         )
 
+    for field in ("description", "outcomes", "audience"):
+        if field in data and not isinstance(data[field], str):
+            return error_response(
+                f"{field} must be a string",
+                "invalid_type",
+                details={"field": field, "expected": "string"},
+            )
+
     status_value = data.get("status", "draft")
     if status_value not in VALID_SPRINT_STATUSES:
         return error_response(
@@ -901,6 +918,9 @@ def sprints_collection(request):
         duration_weeks=data["duration_weeks"],
         status=status_value,
         event_series=event_series,
+        description=data.get("description", ""),
+        outcomes=data.get("outcomes", ""),
+        audience=data.get("audience", ""),
     )
     return JsonResponse(serialize_sprint(sprint), status=201)
 
@@ -1005,6 +1025,9 @@ def sprint_roster_activity(request, slug):
             "request_body": {
                 "properties": {
                     "name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "outcomes": {"type": "string"},
+                    "audience": {"type": "string"},
                     "start_date": {"type": "string", "format": "date"},
                     "duration_weeks": {"type": "integer"},
                     "status": {
@@ -1103,9 +1126,20 @@ def sprint_detail(request, slug):
         )
 
     update_fields = []
+    for field in ("description", "outcomes", "audience"):
+        if field in data and not isinstance(data[field], str):
+            return error_response(
+                f"{field} must be a string",
+                "invalid_type",
+                details={"field": field, "expected": "string"},
+            )
     if "name" in data:
         sprint.name = data["name"]
         update_fields.append("name")
+    for field in ("description", "outcomes", "audience"):
+        if field in data:
+            setattr(sprint, field, data[field])
+            update_fields.append(field)
     if "start_date" in data:
         new_date = _parse_iso_date(data["start_date"])
         if new_date is None:

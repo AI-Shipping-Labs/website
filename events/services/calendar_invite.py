@@ -27,7 +27,10 @@ URLs rather than switching to the attendee join flow.
 """
 
 from datetime import timedelta
+from email.utils import getaddresses
 
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.utils import timezone
 from icalendar import Calendar, vCalAddress, vText
 from icalendar import Event as ICalEvent
@@ -52,6 +55,59 @@ VALID_AUDIENCES = {
     AUDIENCE_PUBLIC_FEED,
     AUDIENCE_HOST,
 }
+
+
+class InvalidCalendarOrganizerError(ValueError):
+    """Raised when the transactional sender cannot form a safe ORGANIZER."""
+
+
+def normalize_calendar_organizer_email(sender):
+    """Return the one valid bare mailbox encoded by ``sender``.
+
+    Transactional ``From`` configuration may legitimately include a display
+    name (for example ``AI Shipping Labs <content@example.com>``), but an
+    iCalendar ORGANIZER URI must be ``mailto:`` followed by the mailbox only.
+    Use Python's strict standards-based address parser, then Django's email
+    validator, so malformed, multi-address, and header-injection values fail
+    closed instead of being serialized into an invalid or unsafe invite.
+
+    The caller deliberately receives a generic error that does not echo the
+    configured value; configuration can contain control characters or other
+    sensitive operator mistakes. A truly absent setting is normally resolved
+    to the application's default transactional mailbox before this helper.
+    """
+    raw_value = str(sender or '')
+    # Scan before trimming: CR/LF/tab and every other C0/DEL character must
+    # fail closed even when it appears only at an otherwise valid boundary.
+    if any(ord(char) < 32 or ord(char) == 127 for char in raw_value):
+        raise InvalidCalendarOrganizerError(
+            'Transactional sender must contain exactly one valid mailbox '
+            'for calendar ORGANIZER.',
+        )
+
+    value = raw_value.strip()
+    if not value:
+        raise InvalidCalendarOrganizerError(
+            'Transactional sender must contain exactly one valid mailbox '
+            'for calendar ORGANIZER.',
+        )
+
+    parsed = getaddresses([value], strict=True)
+    if len(parsed) != 1:
+        raise InvalidCalendarOrganizerError(
+            'Transactional sender must contain exactly one valid mailbox '
+            'for calendar ORGANIZER.',
+        )
+
+    _display_name, mailbox = parsed[0]
+    try:
+        validate_email(mailbox)
+    except ValidationError as exc:
+        raise InvalidCalendarOrganizerError(
+            'Transactional sender must contain exactly one valid mailbox '
+            'for calendar ORGANIZER.',
+        ) from exc
+    return mailbox
 
 
 def _event_urls(event):
@@ -215,7 +271,8 @@ def build_vevent(event, audience=AUDIENCE_ATTENDEE, attendee_email=None,
     # subscribed entry shows the same "AI Shipping Labs" identity as
     # the per-event email invites.
     from_email = get_sender_for_kind(EMAIL_KIND_TRANSACTIONAL)
-    organizer = vCalAddress(f'mailto:{from_email}')
+    organizer_email = normalize_calendar_organizer_email(from_email)
+    organizer = vCalAddress(f'mailto:{organizer_email}')
     organizer.params['cn'] = vText('AI Shipping Labs')
     vevent.add('organizer', organizer)
 

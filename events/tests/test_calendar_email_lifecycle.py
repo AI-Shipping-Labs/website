@@ -46,7 +46,13 @@ def _attendee_text(vevent):
 
 
 @tag('core')
-@override_settings(SES_ENABLED=True, SITE_BASE_URL='https://aishippinglabs.com')
+@override_settings(
+    SES_ENABLED=True,
+    SITE_BASE_URL='https://aishippinglabs.com',
+    SES_TRANSACTIONAL_FROM_EMAIL=(
+        'AI Shipping Labs <content@aishippinglabs.com>'
+    ),
+)
 class SingleEventCalendarEmailLifecycleTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -75,6 +81,17 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
             'Content'
         ]['Raw']['Data']
 
+    def _assert_formatted_from_and_bare_organizer(self, raw, cal):
+        msg = email_lib.message_from_string(raw)
+        self.assertEqual(
+            msg['From'],
+            'AI Shipping Labs <content@aishippinglabs.com>',
+        )
+        self.assertEqual(
+            str(_vevent(cal).get('organizer')),
+            'mailto:content@aishippinglabs.com',
+        )
+
     @patch('events.services.registration_email.boto3')
     def test_registration_email_raw_mime_is_request_with_attendee(
         self, mock_boto3,
@@ -85,7 +102,8 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
 
         send_registration_confirmation(self.registration)
 
-        part, cal = _calendar_from_raw(self._last_raw(mock_boto3))
+        raw = self._last_raw(mock_boto3)
+        part, cal = _calendar_from_raw(raw)
         self.assertEqual(part.get_param('method'), 'REQUEST')
         self.assertEqual(str(cal.get('method')), 'REQUEST')
         vevent = _vevent(cal)
@@ -94,7 +112,7 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
             'event-calendar-lifecycle-1073@aishippinglabs.com',
         )
         self.assertEqual(int(vevent.get('sequence')), 0)
-        self.assertIn('mailto:noreply@aishippinglabs.com', str(vevent.get('organizer')))
+        self._assert_formatted_from_and_bare_organizer(raw, cal)
         self.assertEqual(_attendee_text(vevent), 'mailto:attendee1073@test.com')
         join_url = f'https://aishippinglabs.com{self.event.get_join_url()}'
         self.assertEqual(str(vevent.get('url')), join_url)
@@ -121,10 +139,12 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         )
 
         self.assertEqual(result['status'], 'sent')
-        part, cal = _calendar_from_raw(self._last_raw(mock_boto3))
+        raw = self._last_raw(mock_boto3)
+        part, cal = _calendar_from_raw(raw)
         self.assertEqual(part.get_param('method'), 'REQUEST')
         self.assertEqual(str(cal.get('method')), 'REQUEST')
         vevent = _vevent(cal)
+        self._assert_formatted_from_and_bare_organizer(raw, cal)
         self.assertEqual(
             str(vevent.get('uid')),
             'event-calendar-lifecycle-1073@aishippinglabs.com',
@@ -155,10 +175,12 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         result = send_cancellation_notice_one(self.event.pk, self.user.pk)
 
         self.assertEqual(result['status'], 'sent')
-        part, cal = _calendar_from_raw(self._last_raw(mock_boto3))
+        raw = self._last_raw(mock_boto3)
+        part, cal = _calendar_from_raw(raw)
         self.assertEqual(part.get_param('method'), 'CANCEL')
         self.assertEqual(str(cal.get('method')), 'CANCEL')
         vevent = _vevent(cal)
+        self._assert_formatted_from_and_bare_organizer(raw, cal)
         self.assertEqual(
             str(vevent.get('uid')),
             'event-calendar-lifecycle-1073@aishippinglabs.com',

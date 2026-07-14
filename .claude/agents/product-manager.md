@@ -44,6 +44,7 @@ Before writing the spec, understand the existing code:
 - Check existing specs: Read `specs/` for related features
 - Check existing tests: Look at `playwright_tests/` and `{app}/tests/` to understand test patterns
 - Check closed issues: Look for related closed issues that provide context
+- For UI issues, read `Partials and Component Index` in `_docs/design-system.md`, identify every applicable owning partial or template tag, and name each owner in Scope. If no indexed owner exists, Scope must name the matching sibling pattern or explicitly state that implementation may need a new pattern and must document why.
 
 ```bash
 # Example: find models related to the feature
@@ -342,6 +343,7 @@ You don't run code. You read templates, views, and copy. You think like a user.
 - [ ] Does the new feature match the look and feel of existing pages?
 - [ ] Are similar actions handled the same way across the site?
 - [ ] Does the dark theme apply correctly (no white/light elements that stand out)?
+- [ ] Does new or edited UI render through the indexed design-system partials/tags wherever `Partials and Component Index` names an owner? Reject an unexplained hand-rolled duplicate.
 
 ### Edge Cases (user perspective)
 - [ ] What happens when lists are very long? Is there pagination?

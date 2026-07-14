@@ -4,6 +4,10 @@ set -e
 
 cd "$(dirname "$0")"
 
+# Shared monotonic-deadline polling used by this script and wake-dev-ecs.
+# shellcheck source=deploy/readiness_poll.sh
+source "./readiness_poll.sh"
+
 TAG=$1
 ENV=$2
 
@@ -34,47 +38,66 @@ fi
 # exact VERSION tag to appear at /ping after the ECS services-stable waiter
 # times out.
 #
-# Defaults: 150 attempts x 10s = 25 minutes of post-waiter grace. Override
-# DEPLOY_GRACE_ATTEMPTS and/or DEPLOY_GRACE_SLEEP_SECONDS in the shell/CI env
-# to raise or lower the bounded ceiling without editing code. These are
+# Defaults: a HARD 1500-second monotonic post-waiter deadline, polling every
+# 10 seconds, capped at 150 attempts, with 3 consecutive exact VERSION
+# responses required. curl and sleep consume the SAME deadline; a slow curl
+# cannot double the documented ceiling. Override the DEPLOY_GRACE_* values in
+# the shell/CI env to adjust the bounded window without editing code. These are
 # deliberately deploy-time shell variables, not IntegrationSettings: the CI
 # runner must read them before the Django app is reachable, including the
 # failure mode where the app never boots.
+DEFAULT_DEPLOY_GRACE_TIMEOUT_SECONDS=1500
+DEFAULT_DEPLOY_GRACE_POLL_SECONDS=10
 DEFAULT_DEPLOY_GRACE_ATTEMPTS=150
-DEFAULT_DEPLOY_GRACE_SLEEP_SECONDS=10
+DEFAULT_DEPLOY_GRACE_REQUIRED_MATCHES=3
 
-is_non_negative_integer() {
-    case "$1" in
-        ''|*[!0-9]*)
-            return 1
-            ;;
-        *)
-            return 0
-            ;;
-    esac
+configured_deploy_grace_timeout_seconds() {
+    local VALUE="${DEPLOY_GRACE_TIMEOUT_SECONDS:-${DEFAULT_DEPLOY_GRACE_TIMEOUT_SECONDS}}"
+    if ! readiness_is_positive_integer "${VALUE}"; then
+        echo "ERROR: DEPLOY_GRACE_TIMEOUT_SECONDS must be a positive integer; got '${VALUE}'." >&2
+        exit 1
+    fi
+    echo "${VALUE}"
 }
 
-is_positive_integer() {
-    is_non_negative_integer "$1" && [ "$1" -gt 0 ]
+configured_deploy_grace_poll_seconds() {
+    # DEPLOY_GRACE_SLEEP_SECONDS remains a one-release compatibility alias.
+    local VALUE="${DEPLOY_GRACE_POLL_SECONDS:-${DEPLOY_GRACE_SLEEP_SECONDS:-${DEFAULT_DEPLOY_GRACE_POLL_SECONDS}}}"
+    if ! readiness_is_non_negative_integer "${VALUE}"; then
+        echo "ERROR: DEPLOY_GRACE_POLL_SECONDS must be a non-negative integer; got '${VALUE}'." >&2
+        exit 1
+    fi
+    echo "${VALUE}"
 }
 
 configured_deploy_grace_attempts() {
-    local VALUE="${DEPLOY_GRACE_ATTEMPTS:-${DEFAULT_DEPLOY_GRACE_ATTEMPTS}}"
-    if ! is_positive_integer "${VALUE}"; then
+    local VALUE="${DEPLOY_GRACE_MAX_ATTEMPTS:-${DEPLOY_GRACE_ATTEMPTS:-${DEFAULT_DEPLOY_GRACE_ATTEMPTS}}}"
+    if ! readiness_is_positive_integer "${VALUE}"; then
         echo "ERROR: DEPLOY_GRACE_ATTEMPTS must be a positive integer; got '${VALUE}'." >&2
         exit 1
     fi
     echo "${VALUE}"
 }
 
-configured_deploy_grace_sleep_seconds() {
-    local VALUE="${DEPLOY_GRACE_SLEEP_SECONDS:-${DEFAULT_DEPLOY_GRACE_SLEEP_SECONDS}}"
-    if ! is_non_negative_integer "${VALUE}"; then
-        echo "ERROR: DEPLOY_GRACE_SLEEP_SECONDS must be a non-negative integer; got '${VALUE}'." >&2
+configured_deploy_grace_required_matches() {
+    local VALUE="${DEPLOY_GRACE_REQUIRED_MATCHES:-${DEFAULT_DEPLOY_GRACE_REQUIRED_MATCHES}}"
+    if ! readiness_is_positive_integer "${VALUE}"; then
+        echo "ERROR: DEPLOY_GRACE_REQUIRED_MATCHES must be a positive integer; got '${VALUE}'." >&2
         exit 1
     fi
     echo "${VALUE}"
 }
+
+validate_deploy_grace_configuration() {
+    configured_deploy_grace_timeout_seconds > /dev/null
+    configured_deploy_grace_poll_seconds > /dev/null
+    configured_deploy_grace_attempts > /dev/null
+    configured_deploy_grace_required_matches > /dev/null
+}
+
+# Reject invalid deploy controls before registering a task definition or
+# updating a service, even when the normal ECS waiter would have succeeded.
+validate_deploy_grace_configuration
 
 predeploy_migrate_check_enabled() {
     case "${PREDEPLOY_MIGRATE_CHECK_ENABLED:-}" in
@@ -157,26 +180,144 @@ diagnose_service_failure() {
     fi
 }
 
-wait_for_deployed_tag_after_waiter_timeout() {
-    local DEPLOYED_TAG
-    local GRACE_ATTEMPTS
-    local GRACE_SLEEP_SECONDS
+RECOVERY_SERVICE=""
+RECOVERY_TASK_DEF_ARN=""
+RECOVERY_ECS_SUMMARY="not checked"
 
-    GRACE_ATTEMPTS=$(configured_deploy_grace_attempts)
-    GRACE_SLEEP_SECONDS=$(configured_deploy_grace_sleep_seconds)
+recovery_aws_before_deadline() {
+    local DEADLINE=$1
+    shift
+    local NOW
+    local REMAINING
 
-    echo "ECS waiter timed out; polling ${DEPLOY_HOST}/ping for ${TAG} for up to $((GRACE_ATTEMPTS * GRACE_SLEEP_SECONDS))s..."
-    for i in $(seq 1 "${GRACE_ATTEMPTS}"); do
-        DEPLOYED_TAG=$(curl -fsSL --max-time 10 "${DEPLOY_HOST}/ping" 2>/dev/null || true)
-        if [ "${DEPLOYED_TAG}" = "${TAG}" ]; then
-            echo "WARNING: ECS waiter timed out, but ${DEPLOY_HOST}/ping is serving the expected tag '${DEPLOYED_TAG}' after grace attempt ${i}."
-            echo "Treating deployment as successful so post-deploy bookkeeping can continue."
+    NOW=$(readiness_monotonic_seconds) || return 1
+    REMAINING=$((DEADLINE - NOW))
+    if [ "${REMAINING}" -le 0 ]; then
+        return 1
+    fi
+
+    # ``timeout`` bounds AWS network retries inside the same recovery
+    # deadline. Recompute remaining time before every read-only call so a
+    # slow ECS response cannot extend a nominal 1500-second window.
+    timeout --signal=TERM "${REMAINING}s" aws "$@"
+}
+
+verify_recovery_ecs_state() {
+    local DEADLINE=$1
+    local PRIMARY_STATE
+    local PRIMARY_TASK_DEF
+    local DESIRED_COUNT
+    local RUNNING_COUNT
+    local EXPECTED_CONTAINER_NAMES
+    local RUNNING_ARNS
+    local TASK_ARN
+    local TASK_STATE
+    local TASK_DEF
+    local TASK_LAST_STATUS
+    local CONTAINER_STATES
+    local EXPECTED_NAME
+    local MATCHING_TASK=""
+
+    PRIMARY_STATE=$(recovery_aws_before_deadline "${DEADLINE}" ecs describe-services \
+        --cluster "${CLUSTER}" \
+        --services "${RECOVERY_SERVICE}" \
+        --query "services[0].deployments[?status=='PRIMARY'] | [0].[taskDefinition,desiredCount,runningCount]" \
+        --output text 2>/dev/null || true)
+    read -r PRIMARY_TASK_DEF DESIRED_COUNT RUNNING_COUNT <<< "${PRIMARY_STATE}"
+
+    RECOVERY_ECS_SUMMARY="primary=${PRIMARY_TASK_DEF:-<missing>} desired=${DESIRED_COUNT:-<missing>} running=${RUNNING_COUNT:-<missing>} containers=<unchecked>"
+    if [ "${PRIMARY_TASK_DEF}" != "${RECOVERY_TASK_DEF_ARN}" ] || \
+            ! readiness_is_non_negative_integer "${DESIRED_COUNT:-}" || \
+            ! readiness_is_non_negative_integer "${RUNNING_COUNT:-}" || \
+            [ "${RUNNING_COUNT}" -lt "${DESIRED_COUNT}" ]; then
+        echo "ECS recovery state not ready: ${RECOVERY_ECS_SUMMARY}"
+        return 1
+    fi
+
+    EXPECTED_CONTAINER_NAMES=$(recovery_aws_before_deadline "${DEADLINE}" ecs describe-task-definition \
+        --task-definition "${RECOVERY_TASK_DEF_ARN}" \
+        --query 'taskDefinition.containerDefinitions[].name' \
+        --output text 2>/dev/null || true)
+    if [ -z "${EXPECTED_CONTAINER_NAMES}" ] || [ "${EXPECTED_CONTAINER_NAMES}" = "None" ]; then
+        RECOVERY_ECS_SUMMARY="${RECOVERY_ECS_SUMMARY% containers=*} containers=<task-definition-unavailable>"
+        echo "ECS recovery state not ready: ${RECOVERY_ECS_SUMMARY}"
+        return 1
+    fi
+
+    RUNNING_ARNS=$(recovery_aws_before_deadline "${DEADLINE}" ecs list-tasks \
+        --cluster "${CLUSTER}" \
+        --service-name "${RECOVERY_SERVICE}" \
+        --desired-status RUNNING \
+        --query 'taskArns' \
+        --output text 2>/dev/null || true)
+    for TASK_ARN in ${RUNNING_ARNS}; do
+        TASK_STATE=$(recovery_aws_before_deadline "${DEADLINE}" ecs describe-tasks \
+            --cluster "${CLUSTER}" \
+            --tasks "${TASK_ARN}" \
+            --query 'tasks[0].[taskDefinitionArn,lastStatus]' \
+            --output text 2>/dev/null || true)
+        read -r TASK_DEF TASK_LAST_STATUS <<< "${TASK_STATE}"
+        echo "ECS recovery candidate: task=${TASK_ARN} task_definition=${TASK_DEF:-<missing>} last_status=${TASK_LAST_STATUS:-<missing>}"
+        if [ "${TASK_DEF}" != "${RECOVERY_TASK_DEF_ARN}" ] || \
+                [ "${TASK_LAST_STATUS}" != "RUNNING" ]; then
+            continue
+        fi
+
+        CONTAINER_STATES=$(recovery_aws_before_deadline "${DEADLINE}" ecs describe-tasks \
+            --cluster "${CLUSTER}" \
+            --tasks "${TASK_ARN}" \
+            --query 'tasks[0].containers[].[name,lastStatus]' \
+            --output text 2>/dev/null || true)
+        MATCHING_TASK=${TASK_ARN}
+        for EXPECTED_NAME in ${EXPECTED_CONTAINER_NAMES}; do
+            if ! printf '%s\n' "${CONTAINER_STATES}" | awk -v name="${EXPECTED_NAME}" \
+                    '$1 == name && $2 == "RUNNING" { found=1 } END { exit(found ? 0 : 1) }'; then
+                MATCHING_TASK=""
+                break
+            fi
+        done
+        if [ -n "${MATCHING_TASK}" ]; then
+            RECOVERY_ECS_SUMMARY="primary=${PRIMARY_TASK_DEF} desired=${DESIRED_COUNT} running=${RUNNING_COUNT} task=${MATCHING_TASK} task_last_status=${TASK_LAST_STATUS} containers=$(printf '%s' "${CONTAINER_STATES}" | tr '\n' ',' | sed 's/,$//')"
+            echo "ECS recovery state ready: ${RECOVERY_ECS_SUMMARY}"
             return 0
         fi
-        echo "Grace attempt ${i}/${GRACE_ATTEMPTS}: ${DEPLOY_HOST}/ping returned '${DEPLOYED_TAG:-<unreachable>}'; expected '${TAG}'."
-        sleep "${GRACE_SLEEP_SECONDS}"
     done
-    echo "${DEPLOY_HOST}/ping returned '${DEPLOYED_TAG:-<unreachable>}'; expected '${TAG}'."
+
+    RECOVERY_ECS_SUMMARY="${RECOVERY_ECS_SUMMARY% containers=*} containers=<no-matching-all-running-task>"
+    echo "ECS recovery state not ready: ${RECOVERY_ECS_SUMMARY}"
+    return 1
+}
+
+wait_for_deployed_tag_after_waiter_timeout() {
+    local SERVICE=$1
+    local NEW_TASK_DEF_ARN=$2
+    local GRACE_TIMEOUT_SECONDS
+    local GRACE_POLL_SECONDS
+    local GRACE_ATTEMPTS
+    local GRACE_REQUIRED_MATCHES
+
+    GRACE_TIMEOUT_SECONDS=$(configured_deploy_grace_timeout_seconds)
+    GRACE_POLL_SECONDS=$(configured_deploy_grace_poll_seconds)
+    GRACE_ATTEMPTS=$(configured_deploy_grace_attempts)
+    GRACE_REQUIRED_MATCHES=$(configured_deploy_grace_required_matches)
+
+    RECOVERY_SERVICE=${SERVICE}
+    RECOVERY_TASK_DEF_ARN=${NEW_TASK_DEF_ARN}
+    RECOVERY_ECS_SUMMARY="not checked"
+
+    echo "ECS waiter timed out; applying a hard ${GRACE_TIMEOUT_SECONDS}s monotonic recovery deadline for ${DEPLOY_HOST}/ping tag ${TAG} and task definition ${NEW_TASK_DEF_ARN}."
+    if readiness_poll_until_stable \
+            "${DEPLOY_HOST}/ping" "${TAG}" \
+            "${GRACE_TIMEOUT_SECONDS}" "${GRACE_POLL_SECONDS}" \
+            "${GRACE_ATTEMPTS}" "${GRACE_REQUIRED_MATCHES}" \
+            verify_recovery_ecs_state; then
+        echo "WARNING: ECS waiter timed out, but ${DEPLOY_HOST}/ping served the exact expected tag '${TAG}' stably and ECS confirmed the new revision."
+        echo "Recovered deploy evidence: elapsed=${READINESS_ELAPSED_SECONDS}s attempts=${READINESS_ATTEMPTS} consecutive=${READINESS_CONSECUTIVE}/${GRACE_REQUIRED_MATCHES} task_definition=${NEW_TASK_DEF_ARN} ${RECOVERY_ECS_SUMMARY}"
+        echo "Treating deployment as successful so post-deploy bookkeeping can continue."
+        return 0
+    fi
+
+    echo "Recovery deadline exhausted: elapsed=${READINESS_ELAPSED_SECONDS}s attempts=${READINESS_ATTEMPTS} consecutive=${READINESS_CONSECUTIVE}/${GRACE_REQUIRED_MATCHES} response_state=${READINESS_LAST_RESPONSE_STATE} response_bytes=${READINESS_LAST_RESPONSE_BYTES} task_definition=${NEW_TASK_DEF_ARN} ${RECOVERY_ECS_SUMMARY}"
     return 1
 }
 
@@ -403,7 +544,7 @@ roll_service() {
         # finish target registration after the waiter hits its fixed ceiling,
         # so allow the bounded #1140 grace window before declaring failure.
         if [ "${ROLE}" != "worker" ] && [ -n "${DEPLOY_HOST}" ]; then
-            if wait_for_deployed_tag_after_waiter_timeout; then
+            if wait_for_deployed_tag_after_waiter_timeout "${SERVICE}" "${NEW_TASK_DEF_ARN}"; then
                 return 0
             fi
         fi

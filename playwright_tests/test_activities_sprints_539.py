@@ -189,8 +189,9 @@ class TestActivitiesAccessByTierLayout:
         assert benefits.get_attribute("id") == "access-by-tier"
         assert _top(benefits) < _top(sprints)
         assert _top(page.get_by_role("heading", name="Membership benefits by tier")) < 260
-        assert page.locator('[data-testid="activities-tier-filter"]').count() == 4
-        assert page.locator('[data-testid="activity-card"]').count() == 15
+        assert page.locator('[data-testid="activities-tier-filter"]').count() == 0
+        assert page.locator('[data-testid="activity-card"]').count() == 7
+        assert page.locator('[data-testid="activities-anchor-nav"] a').count() == 3
         assert page.locator('[data-testid="activities-quick-comparison"]').is_visible()
 
         page.get_by_role("heading", name="Active community sprints").wait_for()
@@ -220,8 +221,10 @@ class TestActivitiesAccessByTierLayout:
         assert _top(cta) > _top(
             card.locator('[data-testid="activities-sprint-guidance"]')
         )
-        secondary_top = _top(page.locator('[data-testid="activities-secondary-nav"]'))
-        assert _top(card) < secondary_top
+        assert page.locator('[data-testid="activities-secondary-nav"]').count() == 0
+        assert _top(card) < _top(
+            page.locator('[data-testid="activities-live-events-section"]')
+        )
         _assert_no_horizontal_overflow(page)
         _shot(page, "01-activities-anonymous-desktop")
 
@@ -274,7 +277,8 @@ class TestActivitiesAccessByTierLayout:
         assert _top(first_activity) < viewport_height
         assert first_activity.is_visible()
         assert _top(benefits) < _top(sprints)
-        assert page.locator('[data-testid="activities-tier-filter"]').count() == 4
+        assert page.locator('[data-testid="activities-tier-filter"]').count() == 0
+        assert page.locator('[data-testid="activity-card"]').count() == 7
         _assert_no_horizontal_overflow(page)
         _shot(page, "03-activities-anonymous-pixel7")
         context.close()
@@ -454,7 +458,7 @@ class TestActivitiesAccessByTierLayout:
         )
         assert payment_links_after == payment_links_before
 
-    def test_tier_filters_show_cumulative_membership_activities(
+    def test_curated_cards_show_tier_answers_without_filters(
         self, django_server, page, django_db_blocker
     ):
         with django_db_blocker.unblock():
@@ -465,51 +469,30 @@ class TestActivitiesAccessByTierLayout:
             wait_until="domcontentloaded",
         )
 
-        secondary = page.locator('[data-testid="activities-secondary-nav"]')
-        assert secondary.locator('a[href="/events"]').count() == 1
-        assert secondary.locator('a[href="/workshops"]').count() == 1
-
-        basic_filter = page.locator('.tier-filter-btn[data-tier="basic"]')
-        main_filter = page.locator('.tier-filter-btn[data-tier="main"]')
-        premium_filter = page.locator('.tier-filter-btn[data-tier="premium"]')
-
-        basic_filter.click()
-        assert basic_filter.get_attribute("aria-pressed") == "true"
-        basic_titles = _visible_activity_titles(page)
-        assert "Exclusive Substack Content" in basic_titles
-        assert "Closed Community Access" not in basic_titles
-        assert "Mini-Courses on Specialized Topics" not in basic_titles
-        visible_actions = page.locator('[data-testid="activity-card-action"]:visible')
-        assert visible_actions.count() == len(basic_titles)
-        assert visible_actions.first.get_attribute("href") == "/blog"
-        assert "Browse member articles" in visible_actions.first.inner_text()
-        basic_filter.press("Tab")
-        page.keyboard.press("Tab")
-        page.keyboard.press("Tab")
-        assert page.evaluate(
-            "() => document.activeElement?.dataset?.testid"
-        ) == "activity-card-action"
-
-        main_filter.click()
-        assert main_filter.get_attribute("aria-pressed") == "true"
-        assert basic_filter.get_attribute("aria-pressed") == "false"
-        main_titles = _visible_activity_titles(page)
-        assert "Exclusive Substack Content" in main_titles
-        assert "Closed Community Access" in main_titles
-        assert "Interactive Group Coding Sessions" in main_titles
-        assert "Profile Teardowns" not in main_titles
+        assert page.locator('[data-testid="activities-secondary-nav"]').count() == 0
+        assert page.locator('[data-testid="activities-tier-filter"]').count() == 0
+        assert _visible_activity_titles(page) == [
+            "Community sprints",
+            "Live events",
+            "Hands-on workshops",
+            "Private Slack community",
+            "Personalized plans and accountability",
+            "Exclusive written content",
+            "Mini-courses",
+        ]
         assert page.locator(
-            '[data-testid="activity-card"]:visible '
-            '[data-testid="activity-card-action"][href="/sprints"]'
-        ).count() >= 1
-
-        premium_filter.click()
-        assert premium_filter.get_attribute("aria-pressed") == "true"
-        premium_titles = _visible_activity_titles(page)
-        assert "Mini-Courses on Specialized Topics" in premium_titles
-        assert "Vote on Course Topics" in premium_titles
-        assert "Profile Teardowns" in premium_titles
-        assert len(premium_titles) == 15
+            '[data-testid="activity-tier-badge"]'
+            '[data-tier="basic"][data-included="true"]'
+        ).count() == 1
+        assert page.locator(
+            '[data-testid="activity-tier-badge"]'
+            '[data-tier="main"][data-included="true"]'
+        ).count() == 6
+        assert page.locator(
+            '[data-testid="activity-tier-badge"]'
+            '[data-tier="premium"][data-included="true"]'
+        ).count() == 7
+        assert page.locator('[data-testid="activity-card-action"]:visible').count() == 7
         assert page.locator(
             '[data-testid="activity-card"]:visible '
             '[data-testid="activity-card-action"][href="/courses"]'
@@ -518,7 +501,7 @@ class TestActivitiesAccessByTierLayout:
         page.get_by_text("Quick comparison").scroll_into_view_if_needed()
         assert page.get_by_text("Quick comparison").is_visible()
 
-    def test_missing_tier_activity_config_shows_empty_state(
+    def test_missing_tier_activity_config_keeps_curated_grid(
         self, django_server, page, django_db_blocker
     ):
         with django_db_blocker.unblock():
@@ -532,11 +515,11 @@ class TestActivitiesAccessByTierLayout:
             wait_until="domcontentloaded",
         )
 
-        empty = page.locator('[data-testid="activities-tier-empty"]')
-        assert empty.is_visible()
-        assert "Membership activities are being updated" in empty.inner_text()
-        assert empty.locator('a[href="/pricing"]').count() == 1
-        assert page.locator('[data-testid="activity-card"]').count() == 0
+        assert page.locator('[data-testid="activities-tier-empty"]').count() == 0
+        assert page.locator('[data-testid="activity-card"]').count() == 7
+        assert page.get_by_test_id("activities-pricing-cta").get_attribute(
+            "href"
+        ) == "/pricing"
 
     def test_resources_stays_library_without_sprint_hub(
         self, django_server, page, django_db_blocker

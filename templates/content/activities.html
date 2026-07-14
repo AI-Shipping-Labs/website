@@ -1,11 +1,14 @@
 {% extends "base.html" %}
+{% load accounts_extras %}
+{% load member_empty_state %}
 {% load member_badges %}
 {% load sprint_extras %}
 
-{% block title %}Activities and Community Sprints | AI Shipping Labs{% endblock %}
+{% block title %}Activities and community sprints | AI Shipping Labs{% endblock %}
 {% block meta_description %}Compare membership benefits, participation modes, community sprints, live events, and workshop access by tier at AI Shipping Labs.{% endblock %}
 
 {% block body %}
+{% button_classes 'secondary' as secondary_button_classes %}
 <main class="min-h-screen">
   {% include "includes/header.html" %}
 
@@ -14,7 +17,7 @@
       <div class="mx-auto max-w-3xl text-center" data-testid="activities-access-by-tier-intro">
         <p class="inline-flex items-center gap-2 text-sm font-medium uppercase tracking-widest text-accent">
           <i data-lucide="layers-3" class="h-4 w-4"></i>
-          Access by Tier
+          Access by tier
         </p>
         <h1 class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
           Membership benefits by tier
@@ -26,42 +29,24 @@
         <p class="mt-4 text-sm leading-relaxed text-muted-foreground">
           Activities are membership benefits and participation modes: use them to understand how each tier connects to sprints, live events, workshops, and pricing.
         </p>
-        <div class="mt-6 flex flex-wrap items-center justify-center gap-3" data-testid="activities-taxonomy-links">
-          <a href="/pricing" class="inline-flex min-h-[44px] items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90">
-            Compare pricing
-          </a>
-          <a href="/sprints" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80">
+        <nav class="mt-6 flex flex-wrap items-center justify-center gap-3" aria-label="Explore activities on this page" data-testid="activities-anchor-nav">
+          <a href="#community-sprints" class="{% button_classes 'secondary' %}">
             Community sprints
           </a>
-          <a href="/events" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80">
+          <a href="#live-events" class="{% button_classes 'secondary' %}">
             Live events
           </a>
-          <a href="/workshops" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80">
+          <a href="#workshops" class="{% button_classes 'secondary' %}">
             Workshops
           </a>
-        </div>
-      </div>
-
-      {% if activities %}
-      <div class="mx-auto mt-10 flex flex-wrap items-center justify-center gap-3" aria-label="Filter activities by membership tier">
-        <button type="button" onclick="filterActivities('all')" class="tier-filter-btn active rounded-full px-4 py-2 text-sm font-medium bg-accent text-accent-foreground" data-tier="all" data-testid="activities-tier-filter" aria-pressed="true">
-          All
-        </button>
-        <button type="button" onclick="filterActivities('basic')" class="tier-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground" data-tier="basic" data-testid="activities-tier-filter" aria-pressed="false">
-          Basic
-        </button>
-        <button type="button" onclick="filterActivities('main')" class="tier-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground" data-tier="main" data-testid="activities-tier-filter" aria-pressed="false">
-          Main
-        </button>
-        <button type="button" onclick="filterActivities('premium')" class="tier-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground" data-tier="premium" data-testid="activities-tier-filter" aria-pressed="false">
-          Premium
-        </button>
+        </nav>
       </div>
 
       <div class="mx-auto mt-12 grid max-w-6xl gap-6 md:grid-cols-2" id="activities-grid" data-testid="activities-grid">
         {% for activity in activities %}
         <article class="activity-card group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50"
                  data-tiers="{{ activity.tiers|join:',' }}"
+                 data-activity="{{ activity.slug }}"
                  data-testid="activity-card">
           <div class="flex items-start gap-4">
             <div class="shrink-0 rounded-lg bg-secondary p-3" aria-hidden="true">
@@ -103,7 +88,7 @@
                 {% endif %}
               </div>
               <a href="{{ activity.action_url }}"
-                 class="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-md border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:bg-secondary/80 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-background"
+                 class="{% button_classes 'secondary' extra='mt-5' %}"
                  data-testid="activity-card-action">
                 {{ activity.action_label }}
                 <i data-lucide="arrow-right" class="h-4 w-4"></i>
@@ -136,7 +121,7 @@
               {% endfor %}
             </ul>
             <div class="mt-4 border-t border-border pt-4">
-              <p class="text-xs text-muted-foreground">{{ basic_count }} activities</p>
+              <p class="text-xs text-muted-foreground">{{ basic_count }} activit{{ basic_count|pluralize:"y,ies" }}</p>
             </div>
           </div>
 
@@ -186,30 +171,23 @@
             </div>
           </div>
         </div>
+        <div class="mt-8 flex justify-center">
+          <a href="/pricing" class="{% button_classes 'primary' size='lg' %}" data-testid="activities-pricing-cta">
+            Compare pricing
+            <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          </a>
+        </div>
       </div>
-      {% else %}
-      <div class="mx-auto mt-12 max-w-2xl rounded-lg border border-border bg-card p-6 text-center shadow-sm sm:p-8" data-testid="activities-tier-empty">
-        <i data-lucide="refresh-cw" class="mx-auto h-9 w-9 text-muted-foreground"></i>
-        <h2 class="mt-4 text-xl font-semibold text-foreground">Membership activities are being updated</h2>
-        <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
-          We are refreshing the benefits list. You can still compare membership prices and choose the tier that fits your goals.
-        </p>
-        <a href="/pricing" class="mt-5 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90">
-          View membership options
-          <i data-lucide="arrow-right" class="h-4 w-4"></i>
-        </a>
-      </div>
-      {% endif %}
     </div>
   </section>
 
-  <section id="community-sprints" class="border-t border-border bg-background py-16 sm:py-20" data-testid="activities-sprints-section">
-    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+  <section id="community-sprints" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28" data-testid="activities-sprints-section">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="space-y-8">
         <div class="max-w-3xl" data-testid="activities-sprints-intro-row">
           <p class="inline-flex items-center gap-2 text-sm font-medium uppercase tracking-widest text-accent">
             <i data-lucide="timer" class="h-4 w-4"></i>
-            Community Sprints
+            Community sprints
           </p>
           <h2 class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
             Active community sprints
@@ -233,10 +211,7 @@
                   {% member_status_badge item.sprint.get_status_display size="sm" uppercase=True testid="activities-sprint-status" %}
                   {% member_tier_badge item.required_tier_level tone="accent_strong" size="sm" icon="lock" testid="activities-sprint-tier" %}
                   {% if item.enrolled %}
-                  <span class="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-300" data-testid="activities-sprint-enrolled">
-                    <i data-lucide="check" class="h-3.5 w-3.5"></i>
-                    You're enrolled
-                  </span>
+                  {% member_status_badge "You're enrolled" status="registered" icon="check" testid="activities-sprint-enrolled" %}
                   {% endif %}
                 </div>
                 <h2 class="text-xl font-semibold text-foreground" data-testid="activities-sprint-name">
@@ -258,13 +233,13 @@
                 </p>
                 <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                   <a href="{{ item.detail_url }}"
-                     class="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80 sm:w-fit"
+                     class="{% button_classes 'secondary' extra='w-full sm:w-fit' %}"
                      data-testid="activities-sprint-detail-link">
                     View sprint details
                     <i data-lucide="arrow-right" class="h-4 w-4"></i>
                   </a>
                   <a href="{{ item.cta_url }}"
-                     class="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 sm:w-fit"
+                     class="{% button_classes 'primary' extra='w-full sm:w-fit' %}"
                      data-testid="activities-sprint-cta">
                     {{ item.cta_label }}
                     <i data-lucide="arrow-right" class="h-4 w-4"></i>
@@ -275,74 +250,80 @@
             {% endfor %}
           </div>
           {% else %}
-          <div class="rounded-lg border border-border bg-card p-6 shadow-sm sm:p-8" data-testid="activities-sprints-empty">
-            <i data-lucide="timer-off" class="h-9 w-9 text-muted-foreground"></i>
-            <h2 class="mt-4 text-xl font-semibold text-foreground">Next sprint coming soon</h2>
-            <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
-              The next community sprint is not open yet. Live events and workshops are still available while the next cohort window is prepared.
-            </p>
-            <div class="mt-5 flex flex-wrap gap-3">
-              <a href="/events" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80">
-                <i data-lucide="calendar-days" class="h-4 w-4"></i>
-                Events
-              </a>
-              <a href="/workshops" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80">
-                <i data-lucide="presentation" class="h-4 w-4"></i>
-                Workshops
-              </a>
-            </div>
-          </div>
+          {% member_empty_state title='Next sprint coming soon' body='The next community sprint is not open yet. Live events and workshops are still available while the next cohort window is prepared.' icon='timer-off' kind='fresh' primary_cta_label='Events' primary_cta_url='/events' primary_cta_icon='calendar-days' primary_cta_class=secondary_button_classes secondary_cta_label='Workshops' secondary_cta_url='/workshops' secondary_cta_icon='presentation' secondary_cta_class=secondary_button_classes testid='activities-sprints-empty' %}
           {% endif %}
         </div>
       </div>
+    </div>
+  </section>
 
-      <div class="mt-10 border-t border-border pt-8" data-testid="activities-secondary-nav">
-        <p class="text-sm font-medium uppercase tracking-widest text-muted-foreground">More live activity</p>
-        <div class="mt-4 grid gap-4 sm:grid-cols-2">
-          <a href="/events" class="group flex items-start gap-4 rounded-lg border border-border bg-secondary/40 p-5 transition-colors hover:border-accent/50 hover:bg-secondary/70">
-            <span class="shrink-0 rounded-md bg-background p-2">
-              <i data-lucide="calendar-days" class="h-5 w-5 text-accent"></i>
-            </span>
-            <span>
-              <span class="block font-semibold text-foreground">Events</span>
-              <span class="mt-1 block text-sm leading-relaxed text-muted-foreground">Upcoming live sessions and community moments.</span>
-            </span>
-          </a>
-          <a href="/workshops" class="group flex items-start gap-4 rounded-lg border border-border bg-secondary/40 p-5 transition-colors hover:border-accent/50 hover:bg-secondary/70">
-            <span class="shrink-0 rounded-md bg-background p-2">
-              <i data-lucide="presentation" class="h-5 w-5 text-accent"></i>
-            </span>
-            <span>
-              <span class="block font-semibold text-foreground">Workshops</span>
-              <span class="mt-1 block text-sm leading-relaxed text-muted-foreground">Guided sessions and practical walkthroughs for builders.</span>
-            </span>
-          </a>
+  <section id="live-events" class="border-t border-border bg-card py-12 sm:py-20 lg:py-28" data-testid="activities-live-events-section">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div class="max-w-3xl">
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">Live events</p>
+          <h2 class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Upcoming community sessions</h2>
+          <p class="mt-4 text-base leading-relaxed text-muted-foreground">See the next building sessions, office hours, mock interviews, and career conversations on the community calendar.</p>
         </div>
+        <a href="/events" class="{% button_classes 'secondary' %}" data-testid="activities-view-all-events">View all events</a>
       </div>
+
+      {% if upcoming_events %}
+      <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3" data-testid="activities-live-events-grid">
+        {% for event in upcoming_events %}
+        <article class="rounded-lg border border-border bg-background p-6" data-testid="activities-live-event-card">
+          <a href="{{ event.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="activities-live-event-link">
+            <h3 class="text-lg font-semibold text-foreground group-hover:text-accent">{{ event.title }}</h3>
+            <p class="mt-3 flex items-center gap-2 text-sm text-muted-foreground" data-testid="activities-live-event-date">
+              <i data-lucide="calendar" class="h-4 w-4"></i>
+              {% include "events/_event_list_datetime.html" with event=event %}
+            </p>
+          </a>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="mt-10">
+        {% member_empty_state title='No live events scheduled yet' body='New community sessions will appear here as soon as they are announced.' icon='calendar-days' kind='fresh' primary_cta_label='View events' primary_cta_url='/events' primary_cta_icon='arrow-right' primary_cta_class=secondary_button_classes testid='activities-live-events-empty' %}
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section id="workshops" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28" data-testid="activities-workshops-section">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div class="max-w-3xl">
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">Workshops</p>
+          <h2 class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Recent hands-on workshops</h2>
+          <p class="mt-4 text-base leading-relaxed text-muted-foreground">Preview recent workshops with recordings, step-by-step tutorials, and practical materials.</p>
+        </div>
+        <a href="/workshops" class="{% button_classes 'secondary' %}" data-testid="activities-view-all-workshops">View all workshops</a>
+      </div>
+
+      {% if recent_workshops %}
+      <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3" data-testid="activities-workshops-grid">
+        {% for workshop in recent_workshops %}
+        <article class="rounded-lg border border-border bg-card p-6" data-testid="activities-workshop-card">
+          <a href="{{ workshop.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="activities-workshop-link">
+            <h3 class="text-lg font-semibold text-foreground group-hover:text-accent">{{ workshop.title }}</h3>
+            <p class="mt-3 flex items-center gap-2 text-sm text-muted-foreground" data-testid="activities-workshop-date">
+              <i data-lucide="calendar" class="h-4 w-4"></i>
+              <time datetime="{{ workshop.date|form_date_value }}">{{ workshop.date|member_short_date }}</time>
+            </p>
+          </a>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="mt-10">
+        {% member_empty_state title='No workshops published yet' body='New hands-on workshop materials will appear here when they are ready.' icon='presentation' kind='fresh' primary_cta_label='View workshops' primary_cta_url='/workshops' primary_cta_icon='arrow-right' primary_cta_class=secondary_button_classes testid='activities-workshops-empty' %}
+      </div>
+      {% endif %}
     </div>
   </section>
 
   {% include "includes/footer.html" %}
 </main>
 
-<script>
-function filterActivities(tier) {
-  document.querySelectorAll('.tier-filter-btn').forEach(function(btn) {
-    if (btn.dataset.tier === tier) {
-      btn.className = 'tier-filter-btn active rounded-full px-4 py-2 text-sm font-medium bg-accent text-accent-foreground';
-      btn.setAttribute('aria-pressed', 'true');
-    } else {
-      btn.className = 'tier-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground';
-      btn.setAttribute('aria-pressed', 'false');
-    }
-  });
-  document.querySelectorAll('.activity-card').forEach(function(card) {
-    if (tier === 'all' || card.dataset.tiers.split(',').indexOf(tier) !== -1) {
-      card.style.display = '';
-    } else {
-      card.style.display = 'none';
-    }
-  });
-}
-</script>
 {% endblock %}

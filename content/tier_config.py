@@ -42,6 +42,102 @@ def get_tiers_with_features():
     return result
 
 
+CURATED_ACTIVITIES = (
+    {
+        'slug': 'community-sprints',
+        'icon': 'timer',
+        'title': 'Community sprints',
+        'description': (
+            'Time-boxed cohorts with check-ins, deadlines, and accountability '
+            'for shipping one project per sprint.'
+        ),
+        'tiers': ('main', 'premium'),
+        'action_label': 'Explore community sprints',
+        'action_url': '/sprints',
+    },
+    {
+        'slug': 'live-events',
+        'icon': 'calendar-days',
+        'title': 'Live events',
+        'description': (
+            'Regular live building sessions, office hours, mock interviews, '
+            'and career sessions.'
+        ),
+        'tiers': ('main', 'premium'),
+        'action_label': 'View live events',
+        'action_url': '/events',
+    },
+    {
+        'slug': 'workshops',
+        'icon': 'presentation',
+        'title': 'Hands-on workshops',
+        'description': (
+            'Hands-on workshops with recordings, step-by-step tutorials, and '
+            'materials for putting ideas into practice.'
+        ),
+        'tiers': ('main', 'premium'),
+        'action_label': 'Browse workshops',
+        'action_url': '/workshops',
+    },
+    {
+        'slug': 'slack-community',
+        'icon': 'messages-square',
+        'title': 'Private Slack community',
+        'description': (
+            'A private Slack space for questions, feedback, group learning, '
+            'and trend breakdowns.'
+        ),
+        'tiers': ('main', 'premium'),
+        'action_label': 'Compare community membership',
+        'action_url': '/pricing',
+    },
+    {
+        'slug': 'personal-plans',
+        'icon': 'list-checks',
+        'title': 'Personalized plans and accountability',
+        'description': (
+            'A personalized plan tailored to your goals and used inside '
+            'sprints and accountability check-ins.'
+        ),
+        'tiers': ('main', 'premium'),
+        'action_label': 'See how sprints work',
+        'action_url': '/sprints',
+    },
+    {
+        'slug': 'exclusive-content',
+        'icon': 'file-text',
+        'title': 'Exclusive written content',
+        'description': (
+            'Exclusive articles, tutorials with code examples, and practical '
+            'AI tool breakdowns.'
+        ),
+        'tiers': ('basic', 'main', 'premium'),
+        'action_label': 'Browse member articles',
+        'action_url': '/blog',
+    },
+    {
+        'slug': 'courses',
+        'icon': 'book-open',
+        'title': 'Mini-courses',
+        'description': 'Structured mini-courses on specialized topics.',
+        'tiers': ('premium',),
+        'action_label': 'Browse courses',
+        'action_url': '/courses',
+    },
+)
+
+
+def get_curated_activities():
+    """Return the stable, code-owned activities shown on ``/activities``.
+
+    Copies keep callers from mutating the shared marketing contract while the
+    tuple-valued tier mapping remains deterministic and easy to compare.
+    ``get_activities()`` intentionally remains the synced-data path consumed
+    by the separate ``/community`` surface.
+    """
+    return [dict(activity) for activity in CURATED_ACTIVITIES]
+
+
 ACTIVITY_ACTIONS = {
     'Exclusive Substack Content': {
         'label': 'Browse member articles',

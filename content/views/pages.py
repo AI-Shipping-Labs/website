@@ -11,9 +11,18 @@ from content.access import (
     get_required_tier_name,
     get_user_level,
 )
-from content.models import Article, CuratedLink, Download, Project, TagRule, Tutorial
+from content.models import (
+    Article,
+    CuratedLink,
+    Download,
+    Project,
+    TagRule,
+    Tutorial,
+    Workshop,
+)
 from content.services.related_content import build_related_content_rail
-from content.tier_config import get_activities
+from content.tier_config import get_curated_activities
+from events.services.time_windows import upcoming_events_queryset
 from plans.models import Plan, Sprint, SprintEnrollment
 
 
@@ -222,8 +231,17 @@ def about(request):
 
 def activities(request):
     """Activities page."""
-    all_activities = get_activities()
+    all_activities = get_curated_activities()
     activity_sprints = _get_activity_sprints(request.user)
+    upcoming_events = list(
+        upcoming_events_queryset()
+        .filter(published=True)
+        .select_related('event_series')
+        .order_by('start_datetime')[:3]
+    )
+    recent_workshops = list(
+        Workshop.objects.filter(status='published').order_by('-date')[:3]
+    )
 
     # Count activities per tier
     basic_activities = [a for a in all_activities if 'basic' in a['tiers']]
@@ -239,6 +257,8 @@ def activities(request):
         'main_count': len(main_activities),
         'premium_count': len(premium_activities),
         'activity_sprints': activity_sprints,
+        'upcoming_events': upcoming_events,
+        'recent_workshops': recent_workshops,
     }
     return render(request, 'content/activities.html', context)
 

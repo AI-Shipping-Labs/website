@@ -178,9 +178,10 @@ def test_desktop_visitor_taxonomy_journey(django_server, page):
 
     page.goto(f"{django_server}/activities#access-by-tier", wait_until="domcontentloaded")
     expect(page.get_by_role("heading", name="Membership benefits by tier")).to_be_visible()
-    taxonomy_links = page.locator('[data-testid="activities-taxonomy-links"]')
-    for label in ["Compare pricing", "Community sprints", "Live events", "Workshops"]:
-        expect(taxonomy_links.get_by_role("link", name=label)).to_be_visible()
+    anchor_nav = page.locator('[data-testid="activities-anchor-nav"]')
+    for label in ["Community sprints", "Live events", "Workshops"]:
+        expect(anchor_nav.get_by_role("link", name=label)).to_be_visible()
+    expect(page.get_by_test_id("activities-pricing-cta")).to_be_visible()
 
     page.goto(f"{django_server}/sprints", wait_until="domcontentloaded")
     expect(page.get_by_role("heading", name="Community Sprints")).to_be_visible()

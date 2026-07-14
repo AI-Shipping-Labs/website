@@ -48,8 +48,10 @@ jobs:
           ecs-service: ai-shipping-labs-dev
           desired-count: "1"
           ping-url: https://dev.aishippinglabs.com/ping
+          timeout-seconds: "300"
+          poll-seconds: "10"
           max-attempts: "30"
-          sleep-seconds: "10"
+          required-consecutive: "3"
 
   playwright-dev:
     name: Playwright Dev Suite (${{ matrix.shard_name }})

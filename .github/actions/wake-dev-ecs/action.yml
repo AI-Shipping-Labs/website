@@ -19,17 +19,25 @@ inputs:
     description: URL to poll for readiness.
     required: true
   expected-text:
-    description: Optional text that must appear in the ping response body.
+    description: Optional exact response body required from the ping endpoint.
     required: false
     default: ""
-  max-attempts:
-    description: Number of readiness polling attempts. Default aligns with deploy/deploy_dev.sh's #1140 post-waiter grace window.
+  timeout-seconds:
+    description: Hard monotonic readiness deadline, including request and sleep time.
     required: true
-    default: "150"
-  sleep-seconds:
-    description: Seconds to sleep between polling attempts.
+    default: "1500"
+  poll-seconds:
+    description: Seconds between readiness requests, capped by the remaining deadline.
     required: true
     default: "10"
+  max-attempts:
+    description: Secondary cap on readiness requests within the hard deadline.
+    required: true
+    default: "150"
+  required-consecutive:
+    description: Consecutive exact responses required before readiness succeeds.
+    required: true
+    default: "3"
 
 runs:
   using: composite
@@ -43,10 +51,23 @@ runs:
         DESIRED_COUNT: ${{ inputs.desired-count }}
         PING_URL: ${{ inputs.ping-url }}
         EXPECTED_TEXT: ${{ inputs.expected-text }}
+        TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+        POLL_SECONDS: ${{ inputs.poll-seconds }}
         MAX_ATTEMPTS: ${{ inputs.max-attempts }}
-        SLEEP_SECONDS: ${{ inputs.sleep-seconds }}
+        REQUIRED_CONSECUTIVE: ${{ inputs.required-consecutive }}
       run: |
         set -euo pipefail
+
+        # Shared with deploy/deploy_dev.sh: one monotonic deadline includes
+        # both curl and sleep time, and stable readiness requires consecutive
+        # exact responses instead of a single transient hit.
+        source "${GITHUB_ACTION_PATH}/../../../deploy/readiness_poll.sh"
+
+        # Fail before changing ECS state when an input cannot form a bounded
+        # polling window. The helper validates again at invocation time.
+        readiness_validate_configuration \
+          "${TIMEOUT_SECONDS}" "${POLL_SECONDS}" \
+          "${MAX_ATTEMPTS}" "${REQUIRED_CONSECUTIVE}"
 
         echo "Scaling ECS service ${ECS_SERVICE} in cluster ${ECS_CLUSTER} to desired count ${DESIRED_COUNT}..."
         aws ecs update-service \
@@ -56,23 +77,13 @@ runs:
           --desired-count "${DESIRED_COUNT}" \
           > /dev/null
 
-        echo "Polling ${PING_URL} for readiness for up to $((MAX_ATTEMPTS * SLEEP_SECONDS))s..."
-        for i in $(seq 1 "${MAX_ATTEMPTS}"); do
-          response="$(curl -fsSL --max-time 10 "${PING_URL}" 2>/dev/null || true)"
-          if [ -n "${response}" ]; then
-            if [ -z "${EXPECTED_TEXT}" ]; then
-              echo "::notice ::${PING_URL} returned HTTP 200 after ${i} attempt(s)."
-              exit 0
-            fi
-            if [ "${response}" = "${EXPECTED_TEXT}" ]; then
-              echo "::notice ::${PING_URL} returned exactly '${response}' after ${i} attempt(s)."
-              exit 0
-            fi
-          fi
+        if readiness_poll_until_stable \
+            "${PING_URL}" "${EXPECTED_TEXT}" \
+            "${TIMEOUT_SECONDS}" "${POLL_SECONDS}" \
+            "${MAX_ATTEMPTS}" "${REQUIRED_CONSECUTIVE}"; then
+          echo "::notice ::${PING_URL} satisfied its response expectation stably after ${READINESS_ATTEMPTS} attempt(s) and ${READINESS_ELAPSED_SECONDS}s."
+          exit 0
+        fi
 
-          echo "Attempt ${i}/${MAX_ATTEMPTS}: ${PING_URL} returned '${response:-<unreachable>}'; expected '${EXPECTED_TEXT:-HTTP 200}'. Sleeping ${SLEEP_SECONDS}s..."
-          sleep "${SLEEP_SECONDS}"
-        done
-
-        echo "::error ::Readiness timeout: ${PING_URL} did not return '${EXPECTED_TEXT:-HTTP 200}' after $((MAX_ATTEMPTS * SLEEP_SECONDS))s."
+        echo "::error ::Readiness timeout: ${PING_URL} did not satisfy its response expectation stably within the hard ${TIMEOUT_SECONDS}s deadline (attempts=${READINESS_ATTEMPTS}, consecutive=${READINESS_CONSECUTIVE}/${REQUIRED_CONSECUTIVE}, response_state=${READINESS_LAST_RESPONSE_STATE}, response_bytes=${READINESS_LAST_RESPONSE_BYTES})."
         exit 1

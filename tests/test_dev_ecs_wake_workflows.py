@@ -22,13 +22,16 @@ class DevEcsWakeActionTest(SimpleTestCase):
         run_script = action["runs"]["steps"][0]["run"]
 
         scale_index = run_script.index("aws ecs update-service")
-        poll_index = run_script.index("curl -fsSL")
+        poll_index = run_script.index("readiness_poll_until_stable")
+        validation_index = run_script.index("readiness_validate_configuration")
 
+        self.assertLess(validation_index, scale_index)
         self.assertLess(scale_index, poll_index)
         self.assertIn('--cluster "${ECS_CLUSTER}"', run_script)
         self.assertIn('--service "${ECS_SERVICE}"', run_script)
         self.assertIn('--desired-count "${DESIRED_COUNT}"', run_script)
-        self.assertIn('if [ "${response}" = "${EXPECTED_TEXT}" ]; then', run_script)
+        self.assertIn('source "${GITHUB_ACTION_PATH}/../../../deploy/readiness_poll.sh"', run_script)
+        self.assertIn('"${REQUIRED_CONSECUTIVE}"', run_script)
         self.assertNotIn("grep -Fq", run_script)
 
     def test_shared_action_exposes_required_configuration_inputs(self):
@@ -42,14 +45,22 @@ class DevEcsWakeActionTest(SimpleTestCase):
             "desired-count",
             "ping-url",
             "expected-text",
+            "timeout-seconds",
+            "poll-seconds",
             "max-attempts",
-            "sleep-seconds",
+            "required-consecutive",
         ):
             with self.subTest(name=name):
                 self.assertIn(name, inputs)
 
+        self.assertEqual(inputs["timeout-seconds"]["default"], "1500")
+        self.assertEqual(inputs["poll-seconds"]["default"], "10")
         self.assertEqual(inputs["max-attempts"]["default"], "150")
-        self.assertEqual(inputs["sleep-seconds"]["default"], "10")
+        self.assertEqual(inputs["required-consecutive"]["default"], "3")
+        self.assertIn(
+            "exact response body",
+            inputs["expected-text"]["description"],
+        )
 
 
 @tag("core")
@@ -88,8 +99,10 @@ class ScheduledPlaywrightDevWakeWorkflowTest(SimpleTestCase):
         self.assertEqual(wake_step["with"]["ecs-service"], "ai-shipping-labs-dev")
         self.assertEqual(wake_step["with"]["desired-count"], "1")
         self.assertEqual(wake_step["with"]["ping-url"], "https://dev.aishippinglabs.com/ping")
+        self.assertEqual(wake_step["with"]["timeout-seconds"], "300")
+        self.assertEqual(wake_step["with"]["poll-seconds"], "10")
         self.assertEqual(wake_step["with"]["max-attempts"], "30")
-        self.assertEqual(wake_step["with"]["sleep-seconds"], "10")
+        self.assertEqual(wake_step["with"]["required-consecutive"], "3")
 
     def test_playwright_matrix_and_marker_filter_remain_unchanged(self):
         workflow = _load_yaml(SCHEDULED_WORKFLOW_PATH)
@@ -128,32 +141,52 @@ class DeployDevWakeWorkflowTest(SimpleTestCase):
         deploy_job = workflow["jobs"]["deploy"]
         deploy_env = deploy_job["env"]
 
+        self.assertEqual(deploy_env["DEV_DEPLOY_GRACE_TIMEOUT_SECONDS"], "1500")
+        self.assertEqual(deploy_env["DEV_DEPLOY_GRACE_POLL_SECONDS"], "10")
         self.assertEqual(deploy_env["DEV_DEPLOY_GRACE_ATTEMPTS"], "150")
-        self.assertEqual(deploy_env["DEV_DEPLOY_GRACE_SLEEP_SECONDS"], "10")
+        self.assertEqual(deploy_env["DEV_DEPLOY_GRACE_REQUIRED_MATCHES"], "3")
 
         deploy_step = next(step for step in deploy_job["steps"] if step.get("name") == "Deploy to Dev")
+        self.assertEqual(
+            deploy_step["env"]["DEPLOY_GRACE_TIMEOUT_SECONDS"],
+            "${{ env.DEV_DEPLOY_GRACE_TIMEOUT_SECONDS }}",
+        )
+        self.assertEqual(
+            deploy_step["env"]["DEPLOY_GRACE_POLL_SECONDS"],
+            "${{ env.DEV_DEPLOY_GRACE_POLL_SECONDS }}",
+        )
         self.assertEqual(
             deploy_step["env"]["DEPLOY_GRACE_ATTEMPTS"],
             "${{ env.DEV_DEPLOY_GRACE_ATTEMPTS }}",
         )
         self.assertEqual(
-            deploy_step["env"]["DEPLOY_GRACE_SLEEP_SECONDS"],
-            "${{ env.DEV_DEPLOY_GRACE_SLEEP_SECONDS }}",
+            deploy_step["env"]["DEPLOY_GRACE_REQUIRED_MATCHES"],
+            "${{ env.DEV_DEPLOY_GRACE_REQUIRED_MATCHES }}",
         )
 
         verify_step = next(step for step in deploy_job["steps"] if step.get("name") == "Verify deploy landed")
+        self.assertEqual(
+            verify_step["with"]["timeout-seconds"],
+            "${{ env.DEV_DEPLOY_GRACE_TIMEOUT_SECONDS }}",
+        )
+        self.assertEqual(
+            verify_step["with"]["poll-seconds"],
+            "${{ env.DEV_DEPLOY_GRACE_POLL_SECONDS }}",
+        )
         self.assertEqual(
             verify_step["with"]["max-attempts"],
             "${{ env.DEV_DEPLOY_GRACE_ATTEMPTS }}",
         )
         self.assertEqual(
-            verify_step["with"]["sleep-seconds"],
-            "${{ env.DEV_DEPLOY_GRACE_SLEEP_SECONDS }}",
+            verify_step["with"]["required-consecutive"],
+            "${{ env.DEV_DEPLOY_GRACE_REQUIRED_MATCHES }}",
         )
 
         script = DEPLOY_SCRIPT_PATH.read_text()
+        self.assertIn("DEFAULT_DEPLOY_GRACE_TIMEOUT_SECONDS=1500", script)
+        self.assertIn("DEFAULT_DEPLOY_GRACE_POLL_SECONDS=10", script)
         self.assertIn("DEFAULT_DEPLOY_GRACE_ATTEMPTS=150", script)
-        self.assertIn("DEFAULT_DEPLOY_GRACE_SLEEP_SECONDS=10", script)
+        self.assertIn("DEFAULT_DEPLOY_GRACE_REQUIRED_MATCHES=3", script)
         self.assertIn("DataTalksClub/aws-infra#11", script)
         self.assertIn("not IntegrationSettings", script)
 

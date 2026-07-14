@@ -119,6 +119,13 @@ def _html_from_raw(raw):
     raise AssertionError('no text/html part in message')
 
 
+def _assert_bare_organizers(ics_text, expected_email):
+    for vevent in _vevents(_parse(ics_text)):
+        organizer = vevent.get('organizer')
+        if str(organizer) != f'mailto:{expected_email}':
+            raise AssertionError(f'unexpected organizer: {organizer!s}')
+
+
 @tag('core')
 class GenerateSeriesIcsTest(TestCase):
     """The multi-event invite builder structure."""
@@ -169,7 +176,12 @@ class GenerateSeriesIcsTest(TestCase):
 
 
 @tag('core')
-@override_settings(SES_ENABLED=True)
+@override_settings(
+    SES_ENABLED=True,
+    SES_TRANSACTIONAL_FROM_EMAIL=(
+        'AI Shipping Labs <series-calendar@aishippinglabs.com>'
+    ),
+)
 class SendSeriesRegistrationInviteTest(TierSetupMixin, TestCase):
     """Registration confirmation attaches a multi-event REQUEST invite."""
 
@@ -199,6 +211,7 @@ class SendSeriesRegistrationInviteTest(TierSetupMixin, TestCase):
         self.assertEqual(log.email_type, 'series_registration')
         raw = client.send_email.call_args.kwargs['Content']['Raw']['Data']
         ics, method = _ics_from_raw(raw)
+        _assert_bare_organizers(ics, 'series-calendar@aishippinglabs.com')
         self.assertEqual(method, 'REQUEST')
         cal = _parse(ics)
         self.assertEqual(str(cal.get('method')), 'REQUEST')
@@ -264,7 +277,12 @@ class SesKillSwitchTest(TierSetupMixin, TestCase):
 
 
 @tag('core')
-@override_settings(SES_ENABLED=True)
+@override_settings(
+    SES_ENABLED=True,
+    SES_TRANSACTIONAL_FROM_EMAIL=(
+        'AI Shipping Labs <series-calendar@aishippinglabs.com>'
+    ),
+)
 class SendSeriesUpdateTest(TierSetupMixin, TestCase):
     """Time-change / addition fan-out to subscribers."""
 
@@ -299,6 +317,7 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
         self.assertEqual(sent, 2)
         raw = client.send_email.call_args.kwargs['Content']['Raw']['Data']
         ics, method = _ics_from_raw(raw)
+        _assert_bare_organizers(ics, 'series-calendar@aishippinglabs.com')
         self.assertEqual(method, 'REQUEST')
         cal = _parse(ics)
         # The changed occurrence appears with its bumped SEQUENCE 2.
@@ -386,7 +405,12 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
 
 
 @tag('core')
-@override_settings(SES_ENABLED=True)
+@override_settings(
+    SES_ENABLED=True,
+    SES_TRANSACTIONAL_FROM_EMAIL=(
+        'AI Shipping Labs <series-calendar@aishippinglabs.com>'
+    ),
+)
 class SendSeriesCancellationTest(TierSetupMixin, TestCase):
     """Cancellation fan-out to subscribers registered for the occurrence."""
 
@@ -423,6 +447,7 @@ class SendSeriesCancellationTest(TierSetupMixin, TestCase):
         self.assertEqual(sent, 1)
         raw = client.send_email.call_args.kwargs['Content']['Raw']['Data']
         ics, method = _ics_from_raw(raw)
+        _assert_bare_organizers(ics, 'series-calendar@aishippinglabs.com')
         self.assertEqual(method, 'CANCEL')
         cal = _parse(ics)
         self.assertEqual(str(cal.get('method')), 'CANCEL')

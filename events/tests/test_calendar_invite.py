@@ -17,8 +17,10 @@ from events.services.calendar_invite import (
     AUDIENCE_ATTENDEE,
     AUDIENCE_HOST,
     AUDIENCE_PUBLIC_FEED,
+    InvalidCalendarOrganizerError,
     build_vevent,
     generate_ics,
+    normalize_calendar_organizer_email,
 )
 from events.services.registration_email import send_registration_confirmation
 from payments.models import Tier
@@ -142,7 +144,68 @@ class GenerateIcsTest(TestCase):
         vevent = [c for c in cal.walk() if c.name == 'VEVENT'][0]
 
         organizer = vevent.get('organizer')
-        self.assertIn('noreply@aishippinglabs.com', str(organizer))
+        self.assertEqual(str(organizer), 'mailto:noreply@aishippinglabs.com')
+        self.assertEqual(str(organizer.params['CN']), 'AI Shipping Labs')
+
+    @override_settings(
+        SES_TRANSACTIONAL_FROM_EMAIL=(
+            'AI Shipping Labs <content@aishippinglabs.com>'
+        ),
+    )
+    def test_formatted_sender_uses_bare_mailbox_in_organizer(self):
+        organizer = self._vevent(generate_ics(self.event)).get('organizer')
+
+        self.assertEqual(str(organizer), 'mailto:content@aishippinglabs.com')
+        self.assertEqual(str(organizer.params['CN']), 'AI Shipping Labs')
+        self.assertNotIn('AI Shipping Labs <', str(organizer))
+
+    @override_settings(SES_TRANSACTIONAL_FROM_EMAIL='')
+    def test_missing_sender_uses_existing_transactional_default(self):
+        organizer = self._vevent(generate_ics(self.event)).get('organizer')
+
+        self.assertEqual(str(organizer), 'mailto:noreply@aishippinglabs.com')
+
+    @override_settings(SES_TRANSACTIONAL_FROM_EMAIL='not-an-email')
+    def test_invalid_resolved_sender_prevents_calendar_generation(self):
+        with self.assertRaises(InvalidCalendarOrganizerError):
+            generate_ics(self.event)
+
+    def test_invalid_or_injected_sender_fails_closed_without_echoing_value(self):
+        unsafe_values = [
+            '',
+            'not-an-email',
+            'first@example.com, second@example.com',
+            'Sender\r\nBcc: victim@example.com <sender@example.com>',
+            '\rleading@example.com',
+            'trailing@example.com\r',
+            '\nleading@example.com',
+            'trailing@example.com\n',
+            '\tleading@example.com',
+            'trailing@example.com\t',
+            '\r\n\tMixed <mixed@example.com>\t\n\r',
+        ]
+
+        for value in unsafe_values:
+            with self.subTest(value=repr(value)):
+                with self.assertRaises(InvalidCalendarOrganizerError) as ctx:
+                    normalize_calendar_organizer_email(value)
+                if value:
+                    self.assertNotIn(value, str(ctx.exception))
+
+    def test_normalizer_preserves_valid_bare_and_formatted_sender_cases(self):
+        valid_cases = {
+            'content@aishippinglabs.com': 'content@aishippinglabs.com',
+            'AI Shipping Labs <content@aishippinglabs.com>': (
+                'content@aishippinglabs.com'
+            ),
+            '  AI Shipping Labs <content@aishippinglabs.com>  ': (
+                'content@aishippinglabs.com'
+            ),
+        }
+
+        for value, expected in valid_cases.items():
+            with self.subTest(value=value):
+                self.assertEqual(normalize_calendar_organizer_email(value), expected)
 
     def test_generate_ics_join_url_not_zoom(self):
         """Attendee community invites point at /join, not raw Zoom."""

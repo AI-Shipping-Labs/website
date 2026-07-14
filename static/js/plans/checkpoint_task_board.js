@@ -689,7 +689,14 @@
       }
 
       card.addEventListener('keydown', function (e) {
-        if (!editable || card.dataset.editing === 'true') { return; }
+        // Inline editors and delete-confirmation buttons own their keyboard
+        // events. In particular, Enter on the focused "Yes" button must keep
+        // its native button activation instead of bubbling into card edit.
+        if (
+          !editable
+          || card.dataset.editing === 'true'
+          || card.dataset.confirming === 'true'
+        ) { return; }
         if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
           e.preventDefault();
           keyboardMove(card, e.key === 'ArrowUp' ? -1 : 1, e.altKey);

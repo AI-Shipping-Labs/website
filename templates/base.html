@@ -307,6 +307,13 @@
     .prose img { border-radius: 0.5rem; border: 1px solid hsl(var(--border)); width: 100%; margin: 1rem 0; }
     .prose figure { margin: 3rem 0; border: 1px solid hsl(var(--border) / 0.5); border-radius: 0.5rem; padding: 1rem; background: hsl(var(--card) / 0.3); }
     .prose figure img { margin: 0; }
+    /* Issue #359: preserve Mermaid's natural SVG width inside a local
+       horizontal scroll container. Keeping these rules in the document
+       head also gives unprocessed diagrams their final preformatted height
+       at first paint, before the lazy renderer runs (issue #1237). */
+    div.mermaid { max-width: 100%; overflow-x: auto; }
+    div.mermaid > svg { max-width: none; height: auto; display: block; margin: 0 auto; }
+    div.mermaid:not([data-processed]) { white-space: pre; }
     .prose figcaption { text-align: center; font-size: 0.875rem; font-style: italic; color: hsl(var(--muted-foreground) / 0.8); margin-top: 1rem; }
     .prose strong { color: hsl(var(--foreground)); font-weight: 600; }
     .prose table { width: 100%; border-collapse: collapse; margin-top: 1rem; margin-bottom: 1rem; font-size: 0.875rem; overflow-x: auto; display: block; }

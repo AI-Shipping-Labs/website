@@ -156,7 +156,9 @@
       {% with workshop_primary_instructor=workshop.card_primary_instructor %}
       <article class="group flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50" data-testid="workshop-card" data-workshop-slug="{{ workshop.slug }}">
         <a href="{{ workshop.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %} flex flex-1 flex-col" data-testid="workshop-card-link" aria-label="Open {{ workshop.title }}">
-          {% include "content/_content_preview.html" with preview_cover_url=workshop.card_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label=workshop.pages_required_level|required_tier_label preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|member_short_date preview_tags=workshop.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
+          {% if workshop.card_image_url %}
+          {% include "content/_content_preview.html" with preview_cover_url=workshop.card_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label=workshop.pages_required_level|required_tier_label preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|member_short_date preview_tags=workshop.tags preview_image_loading="lazy" %}
+          {% endif %}
           <div class="min-w-0 p-4 sm:p-5">
             <div class="mb-3 flex flex-wrap items-center gap-2" data-testid="workshop-card-primary-signals">
               {% member_label_badge "Workshop" tone="muted" icon="graduation-cap" testid="workshop-card-type" %}

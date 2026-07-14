@@ -196,6 +196,18 @@ class TestVisitorBrowsesCatalog:
         assert 'step-by-step writeups or tutorial pages' in landing_text
         assert 'runnable code or materials' in landing_text
 
+        preview_cards = page.locator(
+            '[data-testid="workshops-preview"] [data-testid="workshop-card"]',
+        )
+        assert preview_cards.count() == 2
+        for index in range(preview_cards.count()):
+            card = preview_cards.nth(index)
+            assert card.locator('[data-testid^="workshop-card-preview"]').count() == 0
+            assert card.locator('.aspect-video').count() == 0
+            assert card.locator(
+                '[data-testid="workshop-card-primary-signals"]',
+            ).is_visible()
+
         assert page.evaluate(
             """() => {
                 const landing = document.querySelector(
@@ -294,8 +306,9 @@ class TestVisitorBrowsesCatalog:
         assert 'Python Workshop' not in page.content()
         agent_card = page.locator('article:has(a[href="/workshops/agents-ws"])')
         assert agent_card.locator(
-            '[data-testid="workshop-card-preview-fallback"]',
-        ).count() == 1
+            '[data-testid^="workshop-card-preview"]',
+        ).count() == 0
+        assert agent_card.locator('.aspect-video').count() == 0
         assert agent_card.locator(f'img[src="{agents_auto_url}"]').count() == 0
 
         clear_link = page.locator('[data-testid="clear-workshop-filter"]')
@@ -818,13 +831,13 @@ class TestVisitorBrowsesCatalog:
         production_card = page.locator(
             'article:has(a[href="/workshops/ws"])',
         )
-        production_fallback = production_card.locator(
-            '[data-testid="workshop-card-preview-fallback"]',
-        )
-        assert production_fallback.count() == 1
-        assert 'Production Agents' not in production_fallback.inner_text()
-        assert 'Alexey' not in production_fallback.inner_text()
-        assert 'Apr 21, 2026' not in production_fallback.inner_text()
+        assert production_card.locator(
+            '[data-testid^="workshop-card-preview"]',
+        ).count() == 0
+        assert production_card.locator('.aspect-video').count() == 0
+        assert production_card.locator(
+            '[data-testid="workshop-card-primary-signals"]',
+        ).is_visible()
         assert production_card.locator('.h-12.w-12').count() == 0
         assert production_card.locator(f'img[src="{generated_url}"]').count() == 0
 
@@ -897,11 +910,11 @@ class TestVisitorBrowsesCatalog:
             'document.documentElement.clientWidth',
         )
         card = page.locator('article:has(a[href="/workshops/mobile-workshop"])')
-        fallback = card.locator('[data-testid="workshop-card-preview-fallback"]')
-        assert fallback.count() == 1
-        assert title not in fallback.inner_text()
-        assert 'Alexey Grigorev' not in fallback.inner_text()
-        assert 'retrieval-augmented-generation' not in fallback.inner_text()
+        assert card.locator('[data-testid^="workshop-card-preview"]').count() == 0
+        assert card.locator('.aspect-video').count() == 0
+        assert card.locator(
+            '[data-testid="workshop-card-primary-signals"]',
+        ).is_visible()
 
         card.locator('a').first.screenshot(
             path=str(tmp_path / 'issue-480-workshops-mobile-card.png'),
@@ -920,6 +933,112 @@ class TestVisitorBrowsesCatalog:
         page.locator('main').screenshot(
             path=str(tmp_path / 'issue-480-workshops-mobile-detail.png'),
         )
+
+    def test_workshop_tutorial_mermaid_waits_without_downshift_and_scrolls_locally(
+        self, django_server, page,
+    ):
+        _clear_workshops()
+        _create_workshop(
+            slug='stable-mermaid',
+            title='Stable Mermaid Workshop',
+            pages=0,
+            recording=0,
+            with_event=False,
+            pages_data=[(
+                'diagram',
+                'Diagram',
+                (
+                    '```mermaid\n'
+                    'flowchart LR\n'
+                    '    A[Start] --> B[Plan] --> C[Build] --> D[Test] --> E[Ship]\n'
+                    '```\n\n'
+                    'After the diagram, continue with the implementation notes.'
+                ),
+            )],
+        )
+
+        fake_mermaid_module = """
+            const mermaid = {
+              initialize() {},
+              run({ nodes }) {
+                return new Promise((resolve) => {
+                  window.__releaseMermaidForWorkshopTest = () => {
+                    nodes.forEach((node) => {
+                      node.innerHTML = `
+                        <svg viewBox="0 0 1600 180"
+                             xmlns="http://www.w3.org/2000/svg">
+                          <rect width="1600" height="180" fill="transparent" />
+                          <text x="20" y="90">Start → Plan → Build → Test → Ship</text>
+                        </svg>`;
+                      node.setAttribute('data-processed', 'true');
+                    });
+                    resolve();
+                  };
+                });
+              },
+            };
+            export default mermaid;
+        """
+        page.route(
+            '**/vendor/mermaid/10/mermaid.esm.min.mjs*',
+            lambda route: route.fulfill(
+                status=200,
+                content_type='text/javascript',
+                body=fake_mermaid_module,
+            ),
+        )
+
+        for width in (1280, 393):
+            page.set_viewport_size({'width': width, 'height': 900})
+            response = page.goto(
+                f'{django_server}/workshops/stable-mermaid/tutorial/diagram',
+                wait_until='domcontentloaded',
+            )
+            assert response is not None and response.status == 200
+
+            page.wait_for_function(
+                '() => typeof window.__releaseMermaidForWorkshopTest === "function"',
+            )
+            below = page.locator(
+                '[data-testid="page-body"] p:has-text("After the diagram")',
+            )
+            assert below.is_visible()
+            at_domcontentloaded = below.bounding_box()
+            assert at_domcontentloaded is not None
+
+            before_release_y = page.evaluate(
+                """async () => {
+                    await new Promise(requestAnimationFrame);
+                    await new Promise(requestAnimationFrame);
+                    return document.querySelector(
+                      '[data-testid="page-body"] p:last-child'
+                    ).getBoundingClientRect().y;
+                }""",
+            )
+            assert before_release_y <= at_domcontentloaded['y'] + 1
+
+            page.evaluate('() => window.__releaseMermaidForWorkshopTest()')
+            page.wait_for_function(
+                """() => window.__ASL_MERMAID_STATUS__?.state === 'rendered'""",
+            )
+
+            diagram = page.locator('div.mermaid[data-processed="true"]')
+            assert diagram.locator('svg').count() == 1
+            scroll_state = diagram.evaluate(
+                """node => ({
+                    clientWidth: node.clientWidth,
+                    scrollWidth: node.scrollWidth,
+                    pageFits: document.documentElement.scrollWidth <= window.innerWidth,
+                })""",
+            )
+            assert scroll_state['scrollWidth'] > scroll_state['clientWidth']
+            assert scroll_state['pageFits']
+            assert diagram.evaluate(
+                """node => {
+                    node.scrollLeft = 80;
+                    return node.scrollLeft > 0;
+                }""",
+            )
 
 
 @pytest.mark.django_db(transaction=True)

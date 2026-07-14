@@ -6,18 +6,11 @@ a div.mermaid node. The shim itself self-guards on the absence of those
 nodes and only then imports the heavy vendored Mermaid runtime, so this
 partial costs ~7.5 KB on markdown pages and zero bytes everywhere else.
 
-Inline <style> block below (#359): make div.mermaid a horizontal scroll
-container so wide diagrams retain their natural rendered size on narrow
-viewports. The SVG rule defeats Mermaid's default `max-width: 100%` so
-the diagram does not auto-shrink below readability; instead it stays at
-its natural width and the user can swipe across it on mobile while the
-page itself does not scroll horizontally.
+The #359 horizontal-scroll rules live in the document head in base.html,
+so unprocessed diagram source has its final preformatted layout before
+first paint (#1237). The SVG remains at its natural width and users can
+swipe within the diagram on mobile without moving the page itself.
 {% endcomment %}
-<style>
-  div.mermaid { max-width: 100%; overflow-x: auto; }
-  div.mermaid > svg { max-width: none; height: auto; display: block; margin: 0 auto; }
-  div.mermaid:not([data-processed]) { white-space: pre; }
-</style>
 <script>
   window.__ASL_MERMAID_MODULE_URL__ = "{% static 'vendor/mermaid/10/mermaid.esm.min.mjs' %}";
 </script>

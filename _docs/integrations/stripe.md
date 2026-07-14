@@ -71,6 +71,12 @@ Mixing modes (e.g. live `STRIPE_SECRET_KEY` with a test-mode webhook
 secret) silently drops all incoming webhooks because the signing secret
 won't match the live-mode signatures.
 
+The membership fulfillment handler also compares the Checkout Session's
+`livemode` boolean with this key prefix. A test Session delivered to a live
+deployment (or the reverse) is quarantined as `stripe_mode_mismatch`; it never
+grants access. Sessions must also report `payment_status=paid` and
+`status=complete` before identity or Price validation begins.
+
 ## STRIPE_WEBHOOK_SECRET
 
 Purpose: Stripe signs every webhook delivery with this secret. The
@@ -227,3 +233,71 @@ Stripe account, update this value once.
 Test vs live: n/a. The account ID is the same in test and live mode for
 a given Stripe account — Stripe's `/test/` URL prefix only swaps which
 data set the dashboard shows.
+
+## AUTHENTICATED_CHECKOUT_BINDING_ENABLED
+
+Purpose: Emergency kill switch for authenticated membership checkout.
+The default is `true`. Set it to `false` in Studio to stop issuing new
+opaque checkout bindings while leaving anonymous Payment Links, webhook
+quarantine, and operator recovery available.
+
+Rollback: Disable this setting before rolling back application code. Existing
+opaque references then expire naturally and remain visible in the payment
+mismatch audit instead of falling back to email or numeric identity.
+
+## CHECKOUT_BINDING_TTL_MINUTES
+
+Purpose: Lifetime of a server-issued authenticated checkout binding. The
+default is 120 minutes; runtime values are clamped between 5 and 1440 minutes.
+Shorter values reduce replay opportunity while longer values give members more
+time to finish Stripe-hosted checkout.
+
+## LEGACY_NUMERIC_CHECKOUT_REFERENCE_ENABLED
+
+Purpose: Temporary migration switch for old Payment Links that still send a
+numeric local user ID. While enabled, the webhook accepts one only when the
+Stripe billing email already resolves to that exact canonical account. New
+pricing links never emit numeric references. This switch cannot extend access
+past `LEGACY_NUMERIC_CHECKOUT_REFERENCE_CUTOFF`; numeric references are then
+quarantined for operator review even if the switch was accidentally left on.
+
+## LEGACY_NUMERIC_CHECKOUT_REFERENCE_CUTOFF
+
+Purpose: Enforced UTC end of the numeric-reference migration window. The
+default is `2026-08-01T00:00:00Z`. At or after the cutoff, or when the value is
+missing/malformed, every numeric reference is quarantined. Set the enabled
+switch to `false` once old Payment Link sessions have drained; do not move the
+cutoff without a separately reviewed migration decision.
+
+## Legacy Stripe alias recovery
+
+Older checkout behavior could create `stripe_relay` authentication aliases
+from a billing email. Audit these rows before removing or merging anything:
+
+```bash
+uv run python manage.py audit_stripe_checkout_aliases
+```
+
+The command is read-only. For every alias it prints the canonical member,
+linked OAuth provider/UID and provider email, Checkout Session fulfillment
+status, payment-mismatch rows, and the matching audit-log context.
+
+Recovery procedure:
+
+1. Confirm the canonical account and inspect every linked OAuth identity. An
+   alias that matches an OAuth provider email may still be a valid login path.
+2. Open each reported Checkout Session and mismatch in Stripe/Studio. Confirm
+   the customer, subscription, paid Price, and final fulfillment outcome.
+3. If two accounts genuinely belong to one person, use the existing account
+   merge preview first; do not reassign subscriptions or aliases manually.
+4. Remove an alias only after the member has another verified login identity
+   and the Checkout/audit evidence shows the alias was system-created billing
+   data rather than an intended authentication address.
+5. Record the operator decision in the mismatch resolution note. `resolved`
+   means the review is closed, not that a repair occurred; the fulfillment
+   record remains the authority for whether access was granted or quarantined.
+   `ignored` means reviewed and intentionally retained.
+
+Rollback: the audit command never writes. If the evidence is incomplete, leave
+the alias and mismatch unchanged, keep fulfillment quarantined, and escalate
+with the printed Session, OAuth, and audit identifiers.

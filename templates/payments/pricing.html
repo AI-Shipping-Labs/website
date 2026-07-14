@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load accounts_extras %}
 
 {% block title %}Pricing | {{ site_name }}{% endblock %}
 {% block meta_description %}Choose your membership tier. Free newsletter, or paid access to exclusive content, community, courses, and personalized feedback.{% endblock %}
@@ -40,6 +41,23 @@
   {# Issue #510: tighten mobile vertical spacing on the pricing tier section #}
   <section class="overflow-x-hidden max-lg:pb-6 pt-32 sm:pb-24 lg:pb-32" id="pricing-section">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      {% if checkout_error %}
+      <div class="mb-8 rounded-xl border border-red-500/30 bg-red-500/10 p-4" role="alert" data-testid="checkout-recovery-banner">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-start gap-3">
+            <i data-lucide="circle-alert" class="mt-0.5 h-5 w-5 shrink-0 text-red-700 dark:text-red-400"></i>
+            <div>
+              <p class="font-medium text-red-800 dark:text-red-300">We couldn’t start checkout</p>
+              <p class="mt-1 text-sm text-red-700 dark:text-red-200">{{ checkout_error }}</p>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-3">
+            <a href="#pricing-section" class="{% button_classes 'secondary' size='lg' %}">View membership tiers</a>
+            <a href="mailto:contact@aishippinglabs.com?subject=Membership%20checkout%20help" class="{% button_classes 'primary' size='lg' %}">Contact support</a>
+          </div>
+        </div>
+      </div>
+      {% endif %}
       <div id="checkout-cancelled-banner" class="mb-8 hidden rounded-xl border border-amber-500/30 bg-amber-500/10 p-4" role="alert">
         <div class="flex items-center justify-between gap-4">
           <div class="flex items-center gap-3">
@@ -191,13 +209,25 @@
               {{ item.state.action_label }}
             </a>
             {% else %}
+            {% if item.checkout_is_bound %}
+            <form method="post" action="{{ item.payment_link_annual }}"
+                  class="tier-cta-form"
+                  data-link-monthly="{{ item.payment_link_monthly }}"
+                  data-link-annual="{{ item.payment_link_annual }}">
+              {% csrf_token %}
+              <button type="submit"
+                      class="{% if item.tier.slug == 'main' %}{% button_classes 'primary' size='lg' extra='w-full' %}{% else %}{% button_classes 'secondary' size='lg' extra='w-full' %}{% endif %}">
+                {{ item.state.action_label }}
+              </button>
+            </form>
+            {% else %}
             <a href="{{ item.payment_link_annual }}"
-               class="tier-cta-link block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors cursor-pointer min-h-[44px] flex items-center justify-center {% if item.tier.slug == 'main' %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
+               class="tier-cta-link {% if item.tier.slug == 'main' %}{% button_classes 'primary' size='lg' extra='w-full' %}{% else %}{% button_classes 'secondary' size='lg' extra='w-full' %}{% endif %}"
                data-link-monthly="{{ item.payment_link_monthly }}"
-               data-link-annual="{{ item.payment_link_annual }}"
-               {% if item.tier.slug == 'main' %}style="box-shadow: 0 10px 25px -5px hsl(75 100% 50% / 0.2);"{% endif %}>
+               data-link-annual="{{ item.payment_link_annual }}">
               {{ item.state.action_label }}
             </a>
+            {% endif %}
             {% endif %}
           </div>
         </div>
@@ -299,6 +329,9 @@ document.getElementById('billing-toggle').addEventListener('click', function() {
   // Update CTA links
   document.querySelectorAll('.tier-cta-link').forEach(function(el) {
     el.href = isAnnual ? el.dataset.linkAnnual : el.dataset.linkMonthly;
+  });
+  document.querySelectorAll('.tier-cta-form').forEach(function(el) {
+    el.action = isAnnual ? el.dataset.linkAnnual : el.dataset.linkMonthly;
   });
 });
 

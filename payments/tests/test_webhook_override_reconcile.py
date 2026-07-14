@@ -26,12 +26,11 @@ from accounts.models import TierOverride, User
 from content.access import get_user_level
 from payments.models import Tier
 from payments.services import (
-    handle_checkout_completed,
     handle_subscription_deleted,
     handle_subscription_updated,
 )
 
-from .test_webhooks import QuietSubscriptionLookupMixin
+from .test_webhooks import QuietSubscriptionLookupMixin, handle_checkout_completed
 
 
 def _make_override(user, override_tier, *, expires_in_days=30, is_active=True):

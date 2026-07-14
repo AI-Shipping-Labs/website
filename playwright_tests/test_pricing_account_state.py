@@ -1,7 +1,7 @@
 """Production-mode Playwright smokes for pricing and account billing."""
 
 import datetime as dt
-from urllib.parse import parse_qs, urlparse
+from pathlib import Path
 
 import pytest
 from django.conf import settings
@@ -122,14 +122,12 @@ def _tier_card(page, slug):
     return page.locator(f'[data-testid="pricing-tier-card"][data-tier-card="{slug}"]')
 
 
-def _assert_locked_payment_link(href, expected_base, *, email, user_id):
-    assert href.startswith(expected_base)
-    assert "/api/checkout/create" not in href
-    parsed = urlparse(href)
-    query = parse_qs(parsed.query)
-    assert query["client_reference_id"] == [str(user_id)]
-    assert query["locked_prefilled_email"] == [email]
-    assert "prefilled_email" not in query
+def _assert_bound_checkout_form(form, tier_slug, period, *, email, user_id):
+    action = form.get_attribute("action")
+    assert action.endswith(f"/payments/checkout/{tier_slug}/{period}")
+    assert str(user_id) not in action
+    assert email not in action
+    assert "client_reference_id" not in action
 
 
 @pytest.fixture
@@ -150,7 +148,7 @@ def paid_account_user(django_server, django_db_blocker):
 
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
-def test_signed_in_pricing_uses_payment_links_with_locked_email_and_user_reference(
+def test_signed_in_pricing_uses_server_bound_checkout_posts(
     django_server,
     browser,
     django_db_blocker,
@@ -166,26 +164,145 @@ def test_signed_in_pricing_uses_payment_links_with_locked_email_and_user_referen
         assert page.locator("text=Current free plan").is_visible()
 
         for tier_slug in ("basic", "main", "premium"):
-            cta = _tier_card(page, tier_slug).locator(".tier-cta-link")
-            assert cta.inner_text().strip() == "Upgrade"
-            _assert_locked_payment_link(
-                cta.get_attribute("href"),
-                settings.STRIPE_PAYMENT_LINKS[tier_slug]["annual"],
+            form = _tier_card(page, tier_slug).locator(".tier-cta-form")
+            assert form.locator('button[type="submit"]').inner_text().strip() == "Upgrade"
+            _assert_bound_checkout_form(
+                form,
+                tier_slug,
+                "annual",
                 email=email,
                 user_id=pricing_payment_link_user.pk,
             )
 
         page.locator("#billing-toggle").click()
         for tier_slug in ("basic", "main", "premium"):
-            cta = _tier_card(page, tier_slug).locator(".tier-cta-link")
-            _assert_locked_payment_link(
-                cta.get_attribute("href"),
-                settings.STRIPE_PAYMENT_LINKS[tier_slug]["monthly"],
+            form = _tier_card(page, tier_slug).locator(".tier-cta-form")
+            _assert_bound_checkout_form(
+                form,
+                tier_slug,
+                "monthly",
                 email=email,
                 user_id=pricing_payment_link_user.pk,
             )
     finally:
         context.close()
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+def test_disabled_checkout_returns_to_visible_recovery_ui(
+    django_server,
+    browser,
+    django_db_blocker,
+    pricing_payment_link_user,
+):
+    from integrations.config import clear_config_cache
+    from integrations.models import IntegrationSetting
+
+    with django_db_blocker.unblock():
+        IntegrationSetting.objects.update_or_create(
+            key="AUTHENTICATED_CHECKOUT_BINDING_ENABLED",
+            defaults={"value": "false", "group": "stripe"},
+        )
+        clear_config_cache()
+
+    context = _auth_context(
+        browser,
+        pricing_payment_link_user.email,
+        django_db_blocker,
+    )
+    page = context.new_page()
+    try:
+        page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+        _tier_card(page, "basic").locator('button[type="submit"]').click()
+
+        banner = page.get_by_test_id("checkout-recovery-banner")
+        banner.wait_for(state="visible")
+        assert "checkout_error=temporarily_unavailable" in page.url
+        assert "Checkout is temporarily unavailable" in banner.inner_text()
+        assert banner.get_by_role("link", name="View membership tiers").is_visible()
+        support = banner.get_by_role("link", name="Contact support")
+        assert support.is_visible()
+        assert support.get_attribute("href").startswith(
+            "mailto:contact@aishippinglabs.com"
+        )
+        screenshot = Path(".tmp/screenshots/issue-1105-checkout-recovery.png")
+        screenshot.parent.mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=str(screenshot), full_page=True)
+    finally:
+        context.close()
+        clear_config_cache()
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+def test_operator_queue_shows_complete_stripe_repair_trail(
+    django_server,
+    browser,
+    django_db_blocker,
+):
+    from accounts.models import User
+    from integrations.config import clear_config_cache
+    from integrations.models import IntegrationSetting
+    from payments.models import CheckoutFulfillment, PaymentAccountMismatch, Tier
+    from playwright_tests.conftest import ensure_tiers
+
+    with django_db_blocker.unblock():
+        ensure_tiers()
+        staff = User.objects.create_user(
+            email="payment-trail-staff@test.com",
+            password=DEFAULT_PASSWORD,
+            is_staff=True,
+        )
+        paid = User.objects.create_user(email="payment-trail-paid@test.com")
+        paid.tier = Tier.objects.get(slug="free")
+        paid.save(update_fields=["tier"])
+        mismatch = PaymentAccountMismatch.objects.create(
+            stripe_session_id="cs_operator_trail_1105",
+            stripe_customer_id="cus_operator_trail_1105",
+            stripe_subscription_id="sub_operator_trail_1105",
+            stripe_email="different-billing@test.com",
+            paid_user=paid,
+            reason=PaymentAccountMismatch.REASON_BILLING_EMAIL_MISMATCH,
+        )
+        CheckoutFulfillment.objects.create(
+            stripe_session_id=mismatch.stripe_session_id,
+            user=paid,
+            status=CheckoutFulfillment.STATUS_QUARANTINED,
+            reason=PaymentAccountMismatch.REASON_BILLING_EMAIL_MISMATCH,
+        )
+        IntegrationSetting.objects.update_or_create(
+            key="STRIPE_DASHBOARD_ACCOUNT_ID",
+            defaults={"value": "acct_operator_1105", "group": "stripe"},
+        )
+        clear_config_cache()
+
+    context = _auth_context(browser, staff.email, django_db_blocker)
+    page = context.new_page()
+    try:
+        page.goto(
+            f"{django_server}/studio/users/payment-mismatches/",
+            wait_until="domcontentloaded",
+        )
+        row = page.get_by_test_id("payment-mismatch-row")
+        row.wait_for(state="visible")
+        assert "Outcome: quarantined" in row.inner_text()
+        assert "cs_operator_trail_1105" in row.inner_text()
+        assert "cus_operator_trail_1105" in row.locator(
+            'a[href*="/customers/"]'
+        ).get_attribute("href")
+        assert "sub_operator_trail_1105" in row.get_by_test_id(
+            "stripe-subscription-link"
+        ).inner_text()
+        assert "/checkout/sessions/cs_operator_trail_1105" in row.get_by_test_id(
+            "stripe-session-link"
+        ).get_attribute("href")
+        screenshot = Path(".tmp/screenshots/issue-1105-operator-repair-trail.png")
+        screenshot.parent.mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=str(screenshot), full_page=True)
+    finally:
+        context.close()
+        clear_config_cache()
 
 
 @pytest.mark.core

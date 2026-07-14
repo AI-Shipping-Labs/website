@@ -83,7 +83,7 @@ class PricingPaymentLinksTest(TierSetupMixin, TestCase):
                 )
                 self.assertContains(response, f'href="{links["annual"]}"')
 
-    def test_logged_in_user_gets_client_reference_and_locked_email(self):
+    def test_logged_in_user_gets_local_post_targets_without_identity_query(self):
         user = User.objects.create_user(
             email="prefill+stripe@test.com",
             password="testpass123",
@@ -100,20 +100,16 @@ class PricingPaymentLinksTest(TierSetupMixin, TestCase):
             for period in ("monthly", "annual"):
                 with self.subTest(tier=tier_slug, period=period):
                     link = item[f"payment_link_{period}"]
-                    query = parse_qs(urlparse(link).query)
                     self.assertEqual(
-                        query["client_reference_id"],
-                        [str(user.pk)],
-                    )
-                    self.assertEqual(
-                        query["locked_prefilled_email"],
-                        ["prefill+stripe@test.com"],
-                    )
-                    self.assertNotIn("prefilled_email", query)
-                    self.assertIn(
-                        "locked_prefilled_email=prefill%2Bstripe%40test.com",
                         link,
+                        f"/payments/checkout/{tier_slug}/{period}",
                     )
+                    self.assertNotIn(str(user.pk), link)
+                    self.assertNotIn(user.email, link)
+                    if period == "annual":
+                        self.assertContains(response, f'action="{link}"')
+                    else:
+                        self.assertContains(response, f'data-link-monthly="{link}"')
 
     def test_paid_user_upgrade_actions_use_customer_portal(self):
         user = User.objects.create_user(

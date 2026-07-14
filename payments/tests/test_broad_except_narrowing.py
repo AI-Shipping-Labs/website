@@ -175,6 +175,9 @@ class WebhookAttributionIntentionalBroadCatchTest(TestCase):
                 'subscription': 'sub_attr',
                 'customer_details': {'email': 'attr@test.com'},
                 'metadata': {'tier_slug': self.tier.slug},
+                'payment_status': 'paid',
+                'status': 'complete',
+                'livemode': False,
             }
             # The webhook handler must complete without raising even
             # though attribution failed — the user gets the tier.

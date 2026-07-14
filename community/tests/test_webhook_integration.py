@@ -9,12 +9,27 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from accounts.models import User
+from payments import services as payment_services
 from payments.models import Tier
 from payments.services import (
-    handle_checkout_completed,
+    handle_checkout_completed as _handle_checkout_completed,
+)
+from payments.services import (
     handle_subscription_deleted,
     handle_subscription_updated,
 )
+
+
+def handle_checkout_completed(session_data):
+    payload = {
+        "payment_status": "paid",
+        "status": "complete",
+        "livemode": str(payment_services.get_config("STRIPE_SECRET_KEY", "")).startswith(
+            ("sk_live_", "rk_live_")
+        ),
+    }
+    payload.update(session_data)
+    return _handle_checkout_completed(payload)
 
 
 class CheckoutCompletedCommunityTest(TestCase):

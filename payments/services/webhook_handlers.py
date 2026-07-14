@@ -25,6 +25,9 @@ from smtplib import SMTPException
 
 import stripe
 from django.core.mail import BadHeaderError
+from django.db import IntegrityError, transaction
+from django.utils import timezone as django_timezone
+from django.utils.dateparse import parse_datetime
 
 from accounts.models import EmailAlias, User
 from accounts.services.email_resolution import normalize_email, resolve_user_by_email
@@ -32,13 +35,37 @@ from accounts.utils.names import set_name_from_external
 from community.models import CommunityAuditLog
 from payments import services as _services
 from payments.exceptions import WebhookPermanentError
-from payments.models import PaymentAccountMismatch, Tier
+from payments.models import (
+    CHECKOUT_BINDING_PREFIX,
+    CheckoutAccountBinding,
+    CheckoutFulfillment,
+    PaymentAccountMismatch,
+    Tier,
+)
 from payments.services.import_stripe import (
     CONFIGURATION_ERRORS,
     _price_to_tier_map,
     _subscription_price_id,
 )
 from payments.services.stripe_tags import reconcile_stripe_status_tags
+
+LEGACY_NUMERIC_REFERENCE_CUTOFF_DEFAULT = "2026-08-01T00:00:00Z"
+
+
+def _legacy_numeric_reference_allowed():
+    enabled = _services.get_config(
+        "LEGACY_NUMERIC_CHECKOUT_REFERENCE_ENABLED", "true"
+    )
+    if str(enabled).strip().lower() not in {"true", "1", "yes"}:
+        return False
+    cutoff_raw = _services.get_config(
+        "LEGACY_NUMERIC_CHECKOUT_REFERENCE_CUTOFF",
+        LEGACY_NUMERIC_REFERENCE_CUTOFF_DEFAULT,
+    )
+    cutoff = parse_datetime(str(cutoff_raw).strip())
+    if cutoff is None or django_timezone.is_naive(cutoff):
+        return False
+    return django_timezone.now() < cutoff
 
 
 def handle_checkout_completed(session_data):
@@ -63,16 +90,133 @@ def handle_checkout_completed(session_data):
         _handle_course_purchase(session_data, course_id)
         return
 
-    # Look up user: first by client_reference_id (user PK), then by email
+    if not session_id:
+        raise WebhookPermanentError(
+            "checkout.session.completed: membership checkout missing session id"
+        )
+
+    try:
+        fulfillment, _created = CheckoutFulfillment.objects.get_or_create(
+            stripe_session_id=session_id,
+            defaults={
+                "stripe_customer_id": customer_id,
+                "stripe_subscription_id": subscription_id,
+                "status": CheckoutFulfillment.STATUS_PROCESSING,
+            },
+        )
+    except IntegrityError:
+        fulfillment = CheckoutFulfillment.objects.get(stripe_session_id=session_id)
+    if fulfillment.status in {
+        CheckoutFulfillment.STATUS_FULFILLED,
+        CheckoutFulfillment.STATUS_QUARANTINED,
+    }:
+        return
+
+    rejection = _checkout_session_rejection(session_data)
+    if rejection is not None:
+        reason, details = rejection
+        _quarantine_checkout(
+            fulfillment=fulfillment,
+            session_data=session_data,
+            reason=reason,
+            extra_details=details,
+        )
+        return
+
+    # Resolve identity. Opaque bindings are account authority; legacy numeric
+    # references are accepted only when Stripe's email already resolves to the
+    # same canonical user. Any other present reference is quarantined.
     user = None
     was_new_user = False
     user_resolved_by_client_reference = False
-    if client_reference_id:
+    binding = None
+    if client_reference_id and str(client_reference_id).startswith(
+        CHECKOUT_BINDING_PREFIX
+    ):
+        binding = CheckoutAccountBinding.from_reference(str(client_reference_id))
+        if binding is None:
+            _quarantine_checkout(
+                fulfillment=fulfillment,
+                session_data=session_data,
+                reason=PaymentAccountMismatch.REASON_INVALID_BINDING,
+            )
+            return
+        if (
+            binding.source != CheckoutAccountBinding.SOURCE_AUTHENTICATED_PRICING
+            or binding.purpose
+            != CheckoutAccountBinding.PURPOSE_MEMBERSHIP_CHECKOUT
+        ):
+            _quarantine_checkout(
+                fulfillment=fulfillment,
+                binding=binding,
+                session_data=session_data,
+                reason=PaymentAccountMismatch.REASON_BINDING_PURPOSE_MISMATCH,
+                extra_details={
+                    "binding_source": binding.source,
+                    "binding_purpose": binding.purpose,
+                },
+            )
+            return
+        existing_binding_fulfillment = CheckoutFulfillment.objects.filter(
+            binding=binding,
+        ).exclude(pk=fulfillment.pk).first()
+        if existing_binding_fulfillment is not None:
+            _quarantine_checkout(
+                fulfillment=fulfillment,
+                session_data=session_data,
+                reason=PaymentAccountMismatch.REASON_BINDING_REUSED,
+                extra_details={"binding_id": binding.pk},
+            )
+            return
+        if binding.revoked_at or binding.expires_at <= django_timezone.now():
+            _quarantine_checkout(
+                fulfillment=fulfillment,
+                binding=binding,
+                session_data=session_data,
+                reason=PaymentAccountMismatch.REASON_EXPIRED_BINDING,
+            )
+            return
+        if binding.user is None or not binding.user.is_active:
+            _quarantine_checkout(
+                fulfillment=fulfillment,
+                binding=binding,
+                session_data=session_data,
+                reason=PaymentAccountMismatch.REASON_BINDING_USER_UNAVAILABLE,
+            )
+            return
+        user = binding.user
+        user_resolved_by_client_reference = True
+    elif client_reference_id and str(client_reference_id).isdigit():
+        if not _legacy_numeric_reference_allowed():
+            _quarantine_checkout(
+                fulfillment=fulfillment,
+                session_data=session_data,
+                reason=PaymentAccountMismatch.REASON_LEGACY_REFERENCE_MISMATCH,
+                extra_details={"legacy_reference_disabled": True},
+            )
+            return
         user = User.objects.filter(
             pk=client_reference_id,
             is_active=True,
         ).first()
-        user_resolved_by_client_reference = user is not None
+        email_owner = resolve_user_by_email(customer_email) if customer_email else None
+        if user is None or email_owner is None or email_owner.pk != user.pk:
+            _quarantine_checkout(
+                fulfillment=fulfillment,
+                session_data=session_data,
+                paid_user=user,
+                candidate_user=email_owner,
+                reason=PaymentAccountMismatch.REASON_LEGACY_REFERENCE_MISMATCH,
+            )
+            return
+        user_resolved_by_client_reference = True
+    elif client_reference_id:
+        _quarantine_checkout(
+            fulfillment=fulfillment,
+            session_data=session_data,
+            reason=PaymentAccountMismatch.REASON_INVALID_BINDING,
+        )
+        return
     if user is None and customer_email:
         user = User.objects.filter(email=customer_email).first()
     if user is None and customer_email:
@@ -116,14 +260,13 @@ def handle_checkout_completed(session_data):
             "session_id=%s",
             session_data.get("id"),
         )
-        return
-
-    if user_resolved_by_client_reference:
-        _reconcile_checkout_billing_email(
-            user=user,
-            customer_email=customer_email,
+        _quarantine_checkout(
+            fulfillment=fulfillment,
+            binding=binding,
             session_data=session_data,
+            reason=PaymentAccountMismatch.REASON_UNKNOWN_REFERENCE,
         )
+        return
 
     # Look up the purchased tier. Session-metadata ``tier_slug`` keeps
     # precedence (today's behaviour); the resolver below is a fallback
@@ -162,7 +305,55 @@ def handle_checkout_completed(session_data):
             subscription_id,
             price_id_for_log,
         )
+        _quarantine_checkout(
+            fulfillment=fulfillment,
+            binding=binding,
+            session_data=session_data,
+            paid_user=user,
+            reason=PaymentAccountMismatch.REASON_TIER_MISMATCH,
+        )
         return
+
+    if binding is not None:
+        expected_price_id = (
+            binding.tier.stripe_price_id_monthly
+            if binding.billing_period == CheckoutAccountBinding.PERIOD_MONTHLY
+            else binding.tier.stripe_price_id_yearly
+        )
+        actual_price_id = _bound_checkout_price_id(subscription_id) if subscription_id else ""
+        if not actual_price_id:
+            _quarantine_checkout(
+                fulfillment=fulfillment,
+                binding=binding,
+                session_data=session_data,
+                paid_user=user,
+                reason=PaymentAccountMismatch.REASON_MISSING_PRICE,
+                extra_details={
+                    "expected_tier": binding.tier.slug,
+                    "reported_tier": tier.slug,
+                    "expected_price_id": expected_price_id,
+                },
+            )
+            return
+        if (
+            tier.pk != binding.tier_id
+            or not expected_price_id
+            or actual_price_id != expected_price_id
+        ):
+            _quarantine_checkout(
+                fulfillment=fulfillment,
+                binding=binding,
+                session_data=session_data,
+                paid_user=user,
+                reason=PaymentAccountMismatch.REASON_TIER_MISMATCH,
+                extra_details={
+                    "expected_tier": binding.tier.slug,
+                    "reported_tier": tier.slug,
+                    "expected_price_id": expected_price_id,
+                    "reported_price_id": actual_price_id,
+                },
+            )
+            return
 
     # Remember the previous tier so we can tell upgrade-vs-new-paid-user
     # apart when building the operator notification email below.
@@ -178,34 +369,103 @@ def handle_checkout_completed(session_data):
     # can never be returning, hence the ``not was_new_user`` guard.
     is_returning = (not was_new_user) and ("stripe:churned" in (user.tags or []))
 
-    # Update user fields
-    user.tier = tier
-    user.stripe_customer_id = customer_id or user.stripe_customer_id
-    user.subscription_id = subscription_id or user.subscription_id
-    user.pending_tier = None  # Clear any pending downgrade
+    # Lock the fulfillment row and entitled account together. A concurrent
+    # delivery for the same Checkout Session blocks here, observes the
+    # terminal status, and performs no second entitlement write.
+    with transaction.atomic():
+        fulfillment = CheckoutFulfillment.objects.select_for_update().get(
+            pk=fulfillment.pk
+        )
+        if fulfillment.status != CheckoutFulfillment.STATUS_PROCESSING:
+            return
+        if binding is not None:
+            binding = CheckoutAccountBinding.objects.select_for_update().get(
+                pk=binding.pk
+            )
+            if CheckoutFulfillment.objects.filter(binding=binding).exclude(
+                pk=fulfillment.pk
+            ).exists():
+                _quarantine_checkout(
+                    fulfillment=fulfillment,
+                    session_data=session_data,
+                    reason=PaymentAccountMismatch.REASON_BINDING_REUSED,
+                    extra_details={"binding_id": binding.pk},
+                )
+                return
+        user = User.objects.select_for_update().get(pk=user.pk)
+        if (
+            user.stripe_customer_id
+            and customer_id
+            and user.stripe_customer_id != customer_id
+        ):
+            _quarantine_checkout(
+                fulfillment=fulfillment,
+                binding=binding,
+                session_data=session_data,
+                paid_user=user,
+                reason=PaymentAccountMismatch.REASON_CUSTOMER_CONFLICT,
+                extra_details={"existing_customer_id": user.stripe_customer_id},
+            )
+            return
+        if (
+            user.subscription_id
+            and subscription_id
+            and user.subscription_id != subscription_id
+        ):
+            _quarantine_checkout(
+                fulfillment=fulfillment,
+                binding=binding,
+                session_data=session_data,
+                paid_user=user,
+                reason=PaymentAccountMismatch.REASON_SUBSCRIPTION_CONFLICT,
+                extra_details={"existing_subscription_id": user.subscription_id},
+            )
+            return
 
-    # Set billing_period_end from subscription if available
-    if subscription_id:
-        billing_end = _services._get_subscription_period_end(subscription_id)
-        if billing_end:
-            user.billing_period_end = billing_end
+        # A differing Stripe billing email is diagnostic only. It is written
+        # after the bound Price has been verified and inside the same atomic
+        # unit as entitlement so a transient fulfillment failure leaves no
+        # misleading mismatch/audit trail behind.
+        if user_resolved_by_client_reference:
+            _reconcile_checkout_billing_email(
+                user=user,
+                customer_email=customer_email,
+                session_data=session_data,
+            )
 
-    # Capture name from Stripe receipt (issue #699). Stripe sends the
-    # full name as a single string on ``customer_details.name``; the
-    # helper splits on the LAST whitespace and refuses to overwrite a
-    # value the user already has.
-    update_fields = [
-        "tier",
-        "stripe_customer_id",
-        "subscription_id",
-        "billing_period_end",
-        "pending_tier",
-    ]
-    stripe_name = session_data.get("customer_details", {}).get("name", "") or ""
-    if set_name_from_external(user, full_name=stripe_name, source="stripe"):
-        update_fields.extend(["first_name", "last_name"])
+        user.tier = tier
+        user.stripe_customer_id = customer_id or user.stripe_customer_id
+        user.subscription_id = subscription_id or user.subscription_id
+        user.pending_tier = None
 
-    user.save(update_fields=update_fields)
+        if subscription_id:
+            billing_end = _services._get_subscription_period_end(subscription_id)
+            if billing_end:
+                user.billing_period_end = billing_end
+        # Capture name from Stripe receipt (issue #699). The helper refuses
+        # to overwrite a name the member already supplied.
+        update_fields = [
+            "tier",
+            "stripe_customer_id",
+            "subscription_id",
+            "billing_period_end",
+            "pending_tier",
+        ]
+        stripe_name = session_data.get("customer_details", {}).get("name", "") or ""
+        if set_name_from_external(user, full_name=stripe_name, source="stripe"):
+            update_fields.extend(["first_name", "last_name"])
+        user.save(update_fields=update_fields)
+        fulfillment.binding = binding
+        fulfillment.user = user
+        fulfillment.tier = tier
+        fulfillment.stripe_customer_id = customer_id
+        fulfillment.stripe_subscription_id = subscription_id
+        fulfillment.status = CheckoutFulfillment.STATUS_FULFILLED
+        fulfillment.reason = ""
+        fulfillment.save(update_fields=[
+            "binding", "user", "tier", "stripe_customer_id",
+            "stripe_subscription_id", "status", "reason", "updated_at",
+        ])
     _services.logger.info(
         "checkout.session.completed: user=%s tier=%s", user.email, tier.slug,
     )
@@ -365,8 +625,35 @@ def handle_checkout_completed(session_data):
             )
 
 
+def _checkout_session_rejection(session_data):
+    """Return a durable rejection reason for an unsafe membership Session."""
+    payment_status = session_data.get("payment_status")
+    if payment_status != "paid":
+        return PaymentAccountMismatch.REASON_UNPAID_CHECKOUT, {
+            "payment_status": payment_status or "missing",
+        }
+
+    checkout_status = session_data.get("status")
+    if checkout_status != "complete":
+        return PaymentAccountMismatch.REASON_INCOMPLETE_CHECKOUT, {
+            "checkout_status": checkout_status or "missing",
+        }
+
+    # Stripe key prefixes are the authoritative local mode signal. Never put
+    # the key itself in diagnostics; only persist expected/received booleans.
+    secret_key = str(_services.get_config("STRIPE_SECRET_KEY", "") or "")
+    expected_livemode = secret_key.startswith(("sk_live_", "rk_live_"))
+    received_livemode = session_data.get("livemode")
+    if not isinstance(received_livemode, bool) or received_livemode != expected_livemode:
+        return PaymentAccountMismatch.REASON_STRIPE_MODE_MISMATCH, {
+            "expected_livemode": expected_livemode,
+            "received_livemode": received_livemode,
+        }
+    return None
+
+
 def _reconcile_checkout_billing_email(*, user, customer_email, session_data):
-    """Attach or flag a differing Stripe billing email for a client-ref checkout."""
+    """Record a differing billing email without making it an auth alias."""
     normalized = normalize_email(customer_email)
     user_email = normalize_email(user.email)
     if not normalized or normalized == user_email:
@@ -379,7 +666,13 @@ def _reconcile_checkout_billing_email(*, user, customer_email, session_data):
         "stripe_session_id": session_id,
         "stripe_customer_id": customer_id,
         "stripe_subscription_id": subscription_id,
-        "client_reference_id": session_data.get("client_reference_id") or "",
+        "reference_kind": (
+            "opaque_binding"
+            if str(session_data.get("client_reference_id") or "").startswith(
+                CHECKOUT_BINDING_PREFIX
+            )
+            else "legacy_numeric"
+        ),
         "paid_user_email": user.email,
         "stripe_email": normalized,
     }
@@ -412,38 +705,59 @@ def _reconcile_checkout_billing_email(*, user, customer_email, session_data):
             )
         return
 
-    note = (
-        "Added from Stripe checkout billing email; "
-        f"session={session_id}; customer={customer_id}; "
-        f"subscription={subscription_id}"
+    _record_payment_account_mismatch(
+        paid_user=user,
+        candidate_user=None,
+        stripe_email=normalized,
+        reason=PaymentAccountMismatch.REASON_BILLING_EMAIL_MISMATCH,
+        details=details,
     )
-    alias, created = EmailAlias.objects.get_or_create(
-        email=normalized,
-        defaults={
-            "user": user,
-            "source": EmailAlias.SOURCE_STRIPE_RELAY,
-            "note": note,
-            "created_by": None,
-        },
-    )
-    if not created:
-        return
 
-    CommunityAuditLog.objects.create(
-        user=user,
-        action="email_alias_added",
-        details=(
-            f"added alias {normalized!r} from Stripe checkout; "
-            f"session={session_id}; customer={customer_id}; "
-            f"subscription={subscription_id}; actor=system"
-        ),
+
+def _quarantine_checkout(
+    *,
+    fulfillment,
+    session_data,
+    reason,
+    binding=None,
+    paid_user=None,
+    candidate_user=None,
+    extra_details=None,
+):
+    """Persist a safe operator-recoverable outcome without granting access."""
+    customer_email = normalize_email(
+        session_data.get("customer_details", {}).get("email", "")
     )
-    _services.logger.info(
-        "checkout.session.completed: added Stripe billing alias email=%s "
-        "to user=%s session=%s",
-        normalized,
-        user.email,
-        session_id,
+    reference = str(session_data.get("client_reference_id") or "")
+    details = {
+        "stripe_session_id": session_data.get("id", "") or "",
+        "stripe_customer_id": session_data.get("customer", "") or "",
+        "stripe_subscription_id": session_data.get("subscription", "") or "",
+        "reference_kind": (
+            "opaque_binding" if reference.startswith(CHECKOUT_BINDING_PREFIX)
+            else "legacy_numeric" if reference.isdigit()
+            else "present_invalid" if reference else "absent"
+        ),
+    }
+    if extra_details:
+        details.update(extra_details)
+    fulfillment.binding = binding
+    fulfillment.user = paid_user
+    fulfillment.stripe_customer_id = details["stripe_customer_id"]
+    fulfillment.stripe_subscription_id = details["stripe_subscription_id"]
+    fulfillment.status = CheckoutFulfillment.STATUS_QUARANTINED
+    fulfillment.reason = reason
+    fulfillment.details = details
+    fulfillment.save(update_fields=[
+        "binding", "user", "stripe_customer_id", "stripe_subscription_id",
+        "status", "reason", "details", "updated_at",
+    ])
+    _record_payment_account_mismatch(
+        paid_user=paid_user,
+        candidate_user=candidate_user,
+        stripe_email=customer_email or "unknown@invalid.local",
+        reason=reason,
+        details=details,
     )
 
 
@@ -460,7 +774,7 @@ def _record_payment_account_mismatch(
         _services.logger.warning(
             "checkout.session.completed: cannot record payment mismatch "
             "without Stripe session id for paid_user=%s stripe_email=%s",
-            paid_user.email,
+            paid_user.email if paid_user else "",
             stripe_email,
         )
         return
@@ -478,7 +792,7 @@ def _record_payment_account_mismatch(
         stripe_session_id=session_id,
         defaults=defaults,
     )
-    if created:
+    if created and paid_user is not None:
         CommunityAuditLog.objects.create(
             user=paid_user,
             action="payment_mismatch_recorded",
@@ -497,7 +811,7 @@ def _record_payment_account_mismatch(
         "checkout.session.completed: payment account mismatch %s "
         "paid_user=%s candidate_user=%s stripe_email=%s reason=%s",
         "created" if created else "updated",
-        paid_user.email,
+        paid_user.email if paid_user else "",
         candidate_user.email if candidate_user else "",
         stripe_email,
         reason,
@@ -742,7 +1056,19 @@ def handle_subscription_updated(subscription_data):
     # Find the user by subscription_id or customer_id
     user = User.objects.filter(subscription_id=subscription_id).first()
     if user is None and customer_id:
-        user = User.objects.filter(stripe_customer_id=customer_id).first()
+        customer_user = User.objects.filter(stripe_customer_id=customer_id).first()
+        if (
+            customer_user is not None
+            and customer_user.subscription_id
+            and customer_user.subscription_id != subscription_id
+        ):
+            _ignore_stale_subscription_event(
+                user=customer_user,
+                event_type="customer.subscription.updated",
+                event_subscription_id=subscription_id,
+            )
+            return
+        user = customer_user
 
     if user is None:
         _services.logger.error(
@@ -1011,7 +1337,19 @@ def handle_subscription_deleted(subscription_data):
 
     user = User.objects.filter(subscription_id=subscription_id).first()
     if user is None and customer_id:
-        user = User.objects.filter(stripe_customer_id=customer_id).first()
+        customer_user = User.objects.filter(stripe_customer_id=customer_id).first()
+        if (
+            customer_user is not None
+            and customer_user.subscription_id
+            and customer_user.subscription_id != subscription_id
+        ):
+            _ignore_stale_subscription_event(
+                user=customer_user,
+                event_type="customer.subscription.deleted",
+                event_subscription_id=subscription_id,
+            )
+            return
+        user = customer_user
 
     if user is None:
         _services.logger.error(
@@ -1061,6 +1399,40 @@ def handle_subscription_deleted(subscription_data):
 
     if had_community and get_user_level(user) < LEVEL_MAIN:
         _services._community_remove(user)
+
+
+def _ignore_stale_subscription_event(*, user, event_type, event_subscription_id):
+    """Quarantine an old subscription event that cannot mutate authority."""
+    diagnostic_id = f"stale:{event_type}:{event_subscription_id}"
+    details = {
+        "stripe_session_id": diagnostic_id,
+        "stripe_customer_id": user.stripe_customer_id,
+        "stripe_subscription_id": event_subscription_id,
+        "event_type": event_type,
+        "event_subscription_id": event_subscription_id,
+        "authoritative_subscription_id": user.subscription_id,
+        "reference_kind": "subscription_event",
+        "actor": "system",
+    }
+    _record_payment_account_mismatch(
+        paid_user=user,
+        candidate_user=None,
+        stripe_email=user.email,
+        reason=PaymentAccountMismatch.REASON_OUT_OF_ORDER_SUBSCRIPTION_EVENT,
+        details=details,
+    )
+    CommunityAuditLog.objects.create(
+        user=user,
+        action="stale_subscription_event_ignored",
+        details=json.dumps(details, sort_keys=True),
+    )
+    _services.logger.warning(
+        "%s: ignored stale subscription=%s; user=%s authority=%s",
+        event_type,
+        event_subscription_id,
+        user.pk,
+        user.subscription_id,
+    )
 
 
 def handle_invoice_payment_failed(invoice_data):
@@ -1186,10 +1558,11 @@ def _retrieve_subscription_with_price(subscription_id):
     Returns the subscription payload (dict or ``StripeObject``) so the
     3-step resolver can read both ``price.metadata.tier_slug`` and
     ``price.unit_amount`` / ``recurring.interval`` from it. Returns
-    ``None`` if Stripe is unreachable, the secret key is missing, the
-    subscription does not exist, or the SDK raises any other
-    ``StripeError`` — the webhook caller logs and falls back to a
-    "could not determine tier" branch in that case.
+    ``None`` only when Stripe authoritatively reports that the subscription
+    does not exist.  Transport, rate-limit, authentication, permission, and
+    other configuration failures propagate so the webhook returns 500 and
+    Stripe retries; treating those as an unmapped price would terminally
+    quarantine a valid Payment Link checkout.
 
     The expand depth matches ``backfill_tiers._active_subscriptions_for_customer``:
     ``items.data.price`` is 3 levels deep (well under Stripe's 4-level
@@ -1202,10 +1575,35 @@ def _retrieve_subscription_with_price(subscription_id):
             subscription_id,
             params={"expand": ["items.data.price"]},
         )
-    except (stripe.StripeError, *CONFIGURATION_ERRORS):
+    except stripe.InvalidRequestError as exc:
+        if getattr(exc, "code", None) == "resource_missing" or getattr(
+            exc, "http_status", None
+        ) == 404:
+            _services.logger.warning(
+                "checkout.session.completed: subscription %s was not found",
+                subscription_id,
+            )
+            return None
         _services.logger.exception(
             "checkout.session.completed: failed to retrieve subscription %s "
             "with expanded price",
             subscription_id,
         )
-        return None
+        raise
+    except (stripe.StripeError, *CONFIGURATION_ERRORS):
+        _services.logger.exception(
+            "checkout.session.completed: transient/configuration failure "
+            "retrieving subscription %s with expanded price",
+            subscription_id,
+        )
+        raise
+
+
+def _bound_checkout_price_id(subscription_id):
+    """Load the actual Stripe Price for a bound checkout, retrying on outage."""
+    client = _services._get_stripe_client()
+    subscription = client.subscriptions.retrieve(
+        subscription_id,
+        params={"expand": ["items.data.price"]},
+    )
+    return _subscription_price_id(subscription)

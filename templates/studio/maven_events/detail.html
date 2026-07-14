@@ -1,0 +1,28 @@
+{% extends "studio/base.html" %}
+{% block studio_title %}Maven occurrence #{{ event.pk }}{% endblock %}
+{% block studio_content %}
+<a href="{% url 'studio_maven_event_list' %}" class="text-sm text-muted-foreground hover:text-foreground">&larr; Back to Maven occurrences</a>
+<h1 class="mt-2 text-2xl font-semibold text-foreground">Maven occurrence #{{ event.pk }}</h1>
+<p class="mt-1 text-muted-foreground">{{ event.course|default:'Course' }} / {{ event.cohort|default:'cohort' }} &middot; {{ event.lifecycle }}</p>
+<p class="mt-2 text-sm text-muted-foreground" data-testid="maven-occurrence-member">
+  Canonical member:
+  {% if event.user_id %}
+  <a href="{% url 'studio_user_detail' event.user_id %}" class="text-accent hover:underline">{{ event.user.email }} (#{{ event.user_id }})</a>
+  {% else %}
+  <span>Unknown user</span>
+  {% endif %}
+</p>
+<div class="mt-6 grid gap-4 md:grid-cols-2" data-testid="maven-occurrence-detail">
+{% for step in steps %}
+<div class="rounded-lg border border-border bg-card p-4">
+  <div class="flex items-center justify-between"><h2 class="font-medium capitalize">{{ step.name }}</h2><span>{{ step.status }}</span></div>
+  <p class="mt-2 text-xs text-muted-foreground">Attempts: {{ step.attempts }}{% if step.error %} &middot; Last error: {{ step.error }}{% endif %}</p>
+  <p class="mt-1 text-xs text-muted-foreground">
+    Last attempted: {{ step.attempted_at|default:'Never' }}
+    {% if step.completed_at %}&middot; Completed: {{ step.completed_at }}{% endif %}
+  </p>
+  <form method="post" action="{% url 'studio_maven_event_retry' event.pk step.name %}" class="mt-3">{% csrf_token %}<button class="rounded bg-accent px-3 py-1.5 text-sm text-accent-foreground" type="submit">Retry safely</button></form>
+</div>
+{% endfor %}
+</div>
+{% endblock %}

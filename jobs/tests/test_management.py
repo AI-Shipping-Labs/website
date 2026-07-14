@@ -243,6 +243,8 @@ class SetupSchedulesCommandTest(TestCase):
             'health-check',
             'cleanup-webhook-logs',
             'cleanup-webhook-deliveries',
+            'redact-maven-enrollment-pii',
+            'retry-maven-enrollment-steps',
             'purge-user-activity',
             'event-reminders',
             'complete-finished-events',

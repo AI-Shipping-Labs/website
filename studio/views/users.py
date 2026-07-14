@@ -1494,11 +1494,11 @@ def user_tier_override_create(request, user_id):
         messages.error(request, f'Invalid duration: {duration}.')
         return redirect(redirect_url)
 
-    # Deactivate any existing active override so the "one active per user"
-    # invariant of the standalone page is preserved here too.
-    TierOverride.objects.filter(user=user, is_active=True).update(
-        is_active=False,
-    )
+    # Replace only operator-authored grants. Source-specific entitlements such
+    # as Maven remain independently active for their promised duration.
+    TierOverride.objects.filter(user=user, is_active=True).exclude(
+        source__startswith='maven:',
+    ).update(is_active=False)
 
     TierOverride.objects.create(
         user=user,
@@ -1507,6 +1507,7 @@ def user_tier_override_create(request, user_id):
         expires_at=expires_at,
         granted_by=request.user,
         is_active=True,
+        source='staff',
     )
 
     messages.success(

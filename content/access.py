@@ -124,6 +124,7 @@ def _get_override_level(user):
         TierOverride.objects
         .filter(user=user, is_active=True, expires_at__gt=timezone.now())
         .select_related('override_tier')
+        .order_by('-override_tier__level', '-expires_at')
         .first()
     )
     if override is not None:
@@ -147,6 +148,7 @@ def get_active_override(user):
         TierOverride.objects
         .filter(user=user, is_active=True, expires_at__gt=timezone.now())
         .select_related('override_tier')
+        .order_by('-override_tier__level', '-expires_at')
         .first()
     )
 

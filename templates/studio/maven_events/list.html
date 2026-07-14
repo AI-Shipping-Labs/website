@@ -1,0 +1,33 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+{% block studio_title %}Maven occurrences{% endblock %}
+{% block studio_content %}
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Maven enrollment occurrences</h1>
+    <p class="text-muted-foreground mt-1 hidden md:block">Inspect lifecycle and retryable delivery state without exposing webhook payloads.</p>
+  </div>
+</div>
+{% if events %}
+<div class="{% studio_list_class 'wrapper' %}" data-testid="maven-occurrence-list">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}"><tr>
+      <th class="{% studio_list_class 'th' %}">Occurrence</th><th class="{% studio_list_class 'th' %}">Course / cohort</th><th class="{% studio_list_class 'th' %}">Lifecycle</th><th class="{% studio_list_class 'th' %}">Entitlement</th><th class="{% studio_list_class 'th' %}">Slack</th><th class="{% studio_list_class 'th' %}">Welcome</th><th class="{% studio_list_class 'th' %}">Removal</th>
+    </tr></thead>
+    <tbody class="{% studio_list_class 'tbody' %}">
+    {% for event in events %}<tr class="{% studio_list_class 'row' %}">
+      <td class="px-6 py-3 text-sm" data-label="Occurrence"><a class="text-accent hover:underline" href="{% url 'studio_maven_event_detail' event.pk %}">#{{ event.pk }}</a><div class="text-xs text-muted-foreground">{{ event.created_at }}</div></td>
+      <td class="px-6 py-3 text-sm" data-label="Course / cohort">{{ event.course|default:'—' }}<div class="text-xs text-muted-foreground">{{ event.cohort|default:'—' }}</div></td>
+      <td class="px-6 py-3 text-sm" data-label="Lifecycle">{{ event.lifecycle }}</td>
+      <td class="px-6 py-3 text-sm" data-label="Entitlement">{{ event.override_status }}</td>
+      <td class="px-6 py-3 text-sm" data-label="Slack">{{ event.slack_status }}</td>
+      <td class="px-6 py-3 text-sm" data-label="Welcome">{{ event.welcome_status }}</td>
+      <td class="px-6 py-3 text-sm" data-label="Removal">{{ event.removal_status }}</td>
+    </tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  {% studio_empty_state 'fresh' entity_label='Maven occurrence' entity_label_plural='Maven occurrences' create_url=None testid_suffix='maven-occurrences' %}
+{% endif %}
+{% endblock %}

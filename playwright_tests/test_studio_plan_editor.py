@@ -12,9 +12,11 @@ The drag and keyboard scenarios use Playwright's real drag primitives
 
 import datetime
 import os
+import re
 from pathlib import Path
 
 import pytest
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -175,6 +177,37 @@ def _checkpoint_descriptions(page, week_number):
         )
         .all_text_contents()
     )
+
+
+def _checkpoint_chip(page, week_number, description):
+    """Locate one checkpoint by exact text, then pin it to its server id."""
+    text = page.locator(
+        '[data-testid="checkpoint-text"]',
+        has_text=re.compile(rf"^{re.escape(description)}$"),
+    )
+    match = page.locator(
+        f'[data-week-number="{week_number}"] '
+        '[data-testid="checkpoint-chip"]',
+        has=text,
+    )
+    expect(match).to_have_count(1)
+    checkpoint_id = match.get_attribute("data-checkpoint-id")
+    assert checkpoint_id and checkpoint_id.isdigit()
+    return page.locator(
+        f'[data-week-number="{week_number}"] '
+        f'[data-testid="checkpoint-chip"][data-checkpoint-id="{checkpoint_id}"]'
+    )
+
+
+def _wait_for_editor(page):
+    """Wait for server-rendered editor state, never ambient network silence."""
+    page.locator('[data-testid="plan-editor"]').wait_for(state="visible")
+    page.locator('[data-testid="save-indicator"][data-state="saved"]').wait_for()
+
+
+def _reload_editor(page):
+    page.reload(wait_until="domcontentloaded")
+    _wait_for_editor(page)
 
 
 def _focused_checkpoint_text(page):
@@ -348,7 +381,7 @@ class TestStaffDragsCheckpointAcrossWeeks:
         page = context.new_page()
         page.goto(
             f"{django_server}/studio/plans/{plan.pk}/edit/",
-            wait_until="networkidle",
+            wait_until="domcontentloaded",
         )
 
         source = page.locator(
@@ -371,7 +404,7 @@ class TestStaffDragsCheckpointAcrossWeeks:
         assert "Build prototype" not in _checkpoint_descriptions(page, 1)
 
         # And the move persisted -- reload and re-check from the server.
-        page.reload(wait_until="networkidle")
+        page.reload(wait_until="domcontentloaded")
         assert _checkpoint_descriptions(page, 1) == ["Read paper"]
         assert _checkpoint_descriptions(page, 2) == [
             "Build prototype", "Write blog post",
@@ -396,7 +429,7 @@ class TestStaffReordersWithinWeekViaDrag:
         page = context.new_page()
         page.goto(
             f"{django_server}/studio/plans/{plan.pk}/edit/",
-            wait_until="networkidle",
+            wait_until="domcontentloaded",
         )
 
         c_chip = page.locator(
@@ -410,7 +443,7 @@ class TestStaffReordersWithinWeekViaDrag:
         page.locator(
             '[data-testid="save-indicator"][data-state="saved"]'
         ).wait_for()
-        page.reload(wait_until="networkidle")
+        page.reload(wait_until="domcontentloaded")
 
         # Read the inner ``checkpoint-text`` rather than the whole chip
         # so the assertion isn't polluted by ``::`` (drag handle) or
@@ -436,7 +469,7 @@ class TestStaffReordersByKeyboard:
         page = context.new_page()
         page.goto(
             f"{django_server}/studio/plans/{plan.pk}/edit/",
-            wait_until="networkidle",
+            wait_until="domcontentloaded",
         )
 
         # Use ``focus()`` rather than ``click()``: a click lands on the
@@ -478,7 +511,7 @@ class TestStaffReordersByKeyboard:
             f"focus drifted off the moved chip: {focused_id!r} vs {c_id!r}"
         )
 
-        page.reload(wait_until="networkidle")
+        page.reload(wait_until="domcontentloaded")
         assert _checkpoint_descriptions(page, 1) == ["C", "A", "B"]
 
 
@@ -500,7 +533,7 @@ class TestStaffMovesCheckpointAcrossWeeksByKeyboard:
         page = context.new_page()
         page.goto(
             f"{django_server}/studio/plans/{plan.pk}/edit/",
-            wait_until="networkidle",
+            wait_until="domcontentloaded",
         )
 
         # ``focus()`` instead of ``click()`` -- click on the chip lands
@@ -518,7 +551,7 @@ class TestStaffMovesCheckpointAcrossWeeksByKeyboard:
         page.locator(
             '[data-testid="save-indicator"][data-state="saved"]'
         ).wait_for()
-        page.reload(wait_until="networkidle")
+        page.reload(wait_until="domcontentloaded")
 
         # Week 1 is empty; week 2 now has [A, B] in that order.
         week_1_count = page.locator(
@@ -560,7 +593,7 @@ class TestStaffRetryPaths:
         page.route("**/api/checkpoints/*/move", _fail_once)
         page.goto(
             f"{django_server}/studio/plans/{plan.pk}/edit/",
-            wait_until="networkidle",
+            wait_until="domcontentloaded",
         )
 
         b_chip = page.locator(
@@ -580,7 +613,7 @@ class TestStaffRetryPaths:
         assert _checkpoint_descriptions(page, 1) == ["B", "A"]
         assert _focused_checkpoint_text(page) == "B"
 
-        page.reload(wait_until="networkidle")
+        page.reload(wait_until="domcontentloaded")
         assert _checkpoint_descriptions(page, 1) == ["B", "A"]
 
 
@@ -604,7 +637,7 @@ class TestStaffEditsSummaryInline:
         page = context.new_page()
         page.goto(
             f"{django_server}/studio/plans/{plan.pk}/edit/",
-            wait_until="networkidle",
+            wait_until="domcontentloaded",
         )
 
         ta = page.locator('[data-testid="summary-goal"]')
@@ -616,7 +649,7 @@ class TestStaffEditsSummaryInline:
             '[data-testid="save-indicator"][data-state="saved"]'
         ).wait_for()
 
-        page.reload(wait_until="networkidle")
+        page.reload(wait_until="domcontentloaded")
         ta = page.locator('[data-testid="summary-goal"]')
         assert ta.input_value() == "Ship two projects in six weeks"
 
@@ -638,20 +671,36 @@ class TestStaffAddsAndDeletesCheckpoint:
         page = context.new_page()
         page.goto(
             f"{django_server}/studio/plans/{plan.pk}/edit/",
-            wait_until="networkidle",
+            wait_until="domcontentloaded",
         )
+        _wait_for_editor(page)
 
         # Add a checkpoint: click ``+ Add checkpoint``, fill the inline
         # textarea that auto-opens, blur to commit. Two API calls run
         # under the hood -- POST /api/weeks/<id>/checkpoints (create
         # empty), then PATCH /api/checkpoints/<id> with the text.
-        page.locator(
-            '[data-week-number="1"] [data-testid="add-checkpoint"]'
-        ).click()
+        with page.expect_response(
+            lambda response: response.request.method == "POST"
+            and "/api/weeks/" in response.url
+            and response.url.endswith("/checkpoints")
+        ) as create_response:
+            page.locator(
+                '[data-week-number="1"] [data-testid="add-checkpoint"]'
+            ).click()
+        assert create_response.value.status == 201
         edit_ta = page.locator('[data-testid="checkpoint-edit-textarea"]')
         edit_ta.wait_for(state="visible")
         edit_ta.fill("New checkpoint")
-        page.locator('[data-testid="summary-goal"]').click()  # blur
+        new_chip = edit_ta.locator(
+            'xpath=ancestor::*[@data-testid="checkpoint-chip"]'
+        )
+        expect(new_chip).to_have_attribute("data-checkpoint-id", re.compile(r"^\d+$"))
+        with page.expect_response(
+            lambda response: response.request.method == "PATCH"
+            and "/api/checkpoints/" in response.url
+        ) as edit_response:
+            page.locator('[data-testid="summary-goal"]').click()  # blur
+        assert edit_response.value.status == 200
         page.locator(
             '[data-testid="save-indicator"][data-state="saved"]'
         ).wait_for()
@@ -659,20 +708,114 @@ class TestStaffAddsAndDeletesCheckpoint:
         # Both chips now exist with the right text content.
         assert _checkpoint_descriptions(page, 1) == ["A", "New checkpoint"]
 
-        # Delete chip A. The delete button has ``opacity-0`` until
-        # hover, so ``force=True`` is required.
-        a_chip = page.locator(
-            '[data-week-number="1"] [data-testid="checkpoint-chip"]'
-        ).filter(has_text="A")
-        a_chip.locator('[data-testid="checkpoint-delete"]').click(force=True)
-        page.locator('[data-testid="checkpoint-delete-confirm"]').click()
+        # Exercise the same hover-revealed, normally actionable control a user sees.
+        delete_requests = []
+        page.on(
+            "request",
+            lambda request: delete_requests.append(request)
+            if request.method == "DELETE" and "/api/checkpoints/" in request.url
+            else None,
+        )
+        a_chip = _checkpoint_chip(page, 1, "A")
+        a_chip.hover()
+        delete_button = a_chip.locator('[data-testid="checkpoint-delete"]')
+        expect(delete_button).to_be_visible()
+        delete_button.click()
+        confirmation = a_chip.locator('[data-testid="checkpoint-delete-confirm"]')
+        expect(confirmation).to_be_visible()
+        assert delete_requests == []
+        with page.expect_response(
+            lambda response: response.request.method == "DELETE"
+            and "/api/checkpoints/" in response.url
+        ) as delete_response:
+            confirmation.click()
+        assert delete_response.value.status == 204
         page.locator(
             '[data-testid="save-indicator"][data-state="saved"]'
         ).wait_for()
+        expect(a_chip).to_have_count(0)
+        expect(_checkpoint_chip(page, 1, "New checkpoint")).to_have_count(1)
 
         # Reload and verify the survivor is the new checkpoint, not A.
-        page.reload(wait_until="networkidle")
+        _reload_editor(page)
         assert _checkpoint_descriptions(page, 1) == ["New checkpoint"]
+
+    def test_cancel_delete_keeps_checkpoint_and_restores_focus(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_staff_user("staff@test.com")
+        _create_user("member@test.com", tier_slug="free", email_verified=True)
+        plan = _seed_plan("staff@test.com", "member@test.com", [["A", "B"]])
+
+        context = _auth_context(browser, "staff@test.com")
+        page = context.new_page()
+        delete_requests = []
+        page.on(
+            "request",
+            lambda request: delete_requests.append(request)
+            if request.method == "DELETE" and "/api/checkpoints/" in request.url
+            else None,
+        )
+        page.goto(
+            f"{django_server}/studio/plans/{plan.pk}/edit/",
+            wait_until="domcontentloaded",
+        )
+        _wait_for_editor(page)
+
+        a_chip = _checkpoint_chip(page, 1, "A")
+        a_chip.hover()
+        delete_button = a_chip.locator('[data-testid="checkpoint-delete"]')
+        expect(delete_button).to_be_visible()
+        delete_button.click()
+        confirmation = a_chip.locator('[data-testid="checkpoint-delete-confirm"]')
+        cancel = a_chip.locator('[data-testid="checkpoint-delete-cancel"]')
+        expect(confirmation).to_be_visible()
+        assert delete_requests == []
+        cancel.click()
+
+        assert delete_requests == []
+        assert _checkpoint_descriptions(page, 1) == ["A", "B"]
+        expect(_checkpoint_chip(page, 1, "A")).to_be_focused()
+
+    def test_keyboard_delete_confirms_and_persists(self, django_server, browser):
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_staff_user("staff@test.com")
+        _create_user("member@test.com", tier_slug="free", email_verified=True)
+        plan = _seed_plan("staff@test.com", "member@test.com", [["A", "B"]])
+
+        context = _auth_context(browser, "staff@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/studio/plans/{plan.pk}/edit/",
+            wait_until="domcontentloaded",
+        )
+        _wait_for_editor(page)
+
+        a_chip = _checkpoint_chip(page, 1, "A")
+        a_chip.focus()
+        a_chip.press("Delete")
+        confirmation = a_chip.locator('[data-testid="checkpoint-delete-confirm"]')
+        cancel = a_chip.locator('[data-testid="checkpoint-delete-cancel"]')
+        expect(confirmation).to_be_visible()
+        expect(cancel).to_be_visible()
+        page.keyboard.press("Tab")
+        expect(confirmation).to_be_focused()
+        with page.expect_response(
+            lambda response: response.request.method == "DELETE"
+            and "/api/checkpoints/" in response.url
+        ) as delete_response:
+            confirmation.press("Enter")
+        assert delete_response.value.status == 204
+        page.locator(
+            '[data-testid="save-indicator"][data-state="saved"]'
+        ).wait_for()
+        assert _checkpoint_descriptions(page, 1) == ["B"]
+
+        _reload_editor(page)
+        assert _checkpoint_descriptions(page, 1) == ["B"]
 
 
 @pytest.mark.django_db(transaction=True)
@@ -704,24 +847,28 @@ class TestStaffDeleteRollback:
         page.route("**/api/checkpoints/*", _fail_delete)
         page.goto(
             f"{django_server}/studio/plans/{plan.pk}/edit/",
-            wait_until="networkidle",
+            wait_until="domcontentloaded",
         )
+        _wait_for_editor(page)
 
-        a_chip = page.locator(
-            '[data-week-number="1"] [data-testid="checkpoint-chip"]'
-        ).filter(has_text="A")
-        a_chip.locator('[data-testid="checkpoint-delete"]').click(force=True)
-        page.locator('[data-testid="checkpoint-delete-confirm"]').click()
+        a_chip = _checkpoint_chip(page, 1, "A")
+        a_chip.hover()
+        delete_button = a_chip.locator('[data-testid="checkpoint-delete"]')
+        expect(delete_button).to_be_visible()
+        delete_button.click()
+        confirmation = a_chip.locator('[data-testid="checkpoint-delete-confirm"]')
+        expect(confirmation).to_be_visible()
+        confirmation.click()
 
         page.locator(
             '[data-testid="save-indicator"][data-state="failed"]'
         ).wait_for()
         assert delete_attempts["count"] == 2
         assert _checkpoint_descriptions(page, 1) == ["A", "B"]
-        assert page.locator('[data-testid="checkpoint-delete-confirm"]').count() == 0
+        assert a_chip.locator('[data-testid="checkpoint-delete-confirm"]').count() == 0
         assert _focused_checkpoint_text(page) == "A"
 
-        page.reload(wait_until="networkidle")
+        _reload_editor(page)
         assert _checkpoint_descriptions(page, 1) == ["A", "B"]
 
 
@@ -760,7 +907,7 @@ class TestStaffSeesRevertOnApiFailure:
         )
         page.goto(
             f"{django_server}/studio/plans/{plan.pk}/edit/",
-            wait_until="networkidle",
+            wait_until="domcontentloaded",
         )
 
         a_chip = page.locator(
@@ -808,7 +955,7 @@ class TestStaffTogglesCheckpointDone:
         page = context.new_page()
         page.goto(
             f"{django_server}/studio/plans/{plan.pk}/edit/",
-            wait_until="networkidle",
+            wait_until="domcontentloaded",
         )
 
         chip = page.locator('[data-testid="checkpoint-chip"]').filter(has_text="Read paper")
@@ -820,7 +967,7 @@ class TestStaffTogglesCheckpointDone:
         # The chip carries data-done="true" after the toggle.
         assert chip.get_attribute("data-done") == "true"
 
-        page.reload(wait_until="networkidle")
+        page.reload(wait_until="domcontentloaded")
         chip = page.locator('[data-testid="checkpoint-chip"]').filter(has_text="Read paper")
         assert chip.get_attribute("data-done") == "true"
 
@@ -857,7 +1004,7 @@ class TestEditorSurfacesNoErrorsDuringSession:
 
         page.goto(
             f"{django_server}/studio/plans/{plan.pk}/edit/",
-            wait_until="networkidle",
+            wait_until="domcontentloaded",
         )
 
         # Edit each summary field.

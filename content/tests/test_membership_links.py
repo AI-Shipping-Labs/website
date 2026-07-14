@@ -149,16 +149,16 @@ class HomepageTiersAnchorStillWorksTest(TestCase):
         self.assertIn('id="tiers"', content)
 
     def test_homepage_anon_flow_cta_still_uses_anchor(self):
-        # The CTA above the fold (`templates/home.html:51`) is intentionally
-        # kept as an anchor so it scrolls within the same page. Guard against
-        # accidental change that would break the in-page scroll behaviour.
         response = self.client.get("/")
         content = response.content.decode()
-        # Look for the CTA (the same text appears on /about which now uses
-        # /pricing -- here we restrict to the homepage response).
         match = re.search(
-            r'<a[^>]*href="([^"]+)"[^>]*>\s*View Membership Tiers\s*(?:<i[^>]*></i>\s*)?</a>',
+            r'<a\b(?=[^>]*data-testid="home-hero-tiers-cta")'
+            r'(?=[^>]*href="(?P<href>[^"]+)")[^>]*>'
+            r'(?P<body>.*?)</a>',
             content,
+            re.DOTALL,
         )
-        self.assertIsNotNone(match)
-        self.assertEqual(match.group(1), "/#tiers")
+        self.assertIsNotNone(match, "semantic hero membership CTA is missing")
+        self.assertEqual(match.group("href"), "/#tiers")
+        text = re.sub(r"<[^>]+>", "", match.group("body"))
+        self.assertEqual(" ".join(text.split()), "View membership tiers")

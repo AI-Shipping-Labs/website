@@ -38,22 +38,36 @@ class HomePostLaunchCopyTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, "Invite-only community")
 
     def test_hero_primary_button_points_to_membership_tiers(self):
+        from accounts.templatetags.accounts_extras import button_classes
+
         response = self.client.get("/")
-        # Match button-cell content rather than the whole HTML body so
-        # we fail if the locked text disappears or changes.
-        self.assertInHTML(
-            (
-                '<a href="/#tiers" '
-                'class="inline-flex min-h-[44px] w-full items-center '
-                'justify-center gap-2 rounded-md bg-accent px-6 py-3 '
-                'text-sm font-medium text-accent-foreground transition-colors '
-                'hover:bg-accent/90 sm:w-auto">'
-                "View Membership Tiers"
-                '<i data-lucide="arrow-right" class="h-4 w-4"></i>'
-                "</a>"
-            ),
-            response.content.decode(),
-        )
+        content = response.content.decode()
+
+        def hero_cta(testid):
+            match = re.search(
+                rf'<a\b(?=[^>]*data-testid="{testid}")'
+                r'(?=[^>]*href="(?P<href>[^"]+)")'
+                r'(?=[^>]*class="(?P<class>[^"]+)")[^>]*>'
+                r'(?P<body>.*?)</a>',
+                content,
+                re.DOTALL,
+            )
+            self.assertIsNotNone(match, f"missing semantic hero CTA {testid}")
+            text = re.sub(r"<[^>]+>", "", match.group("body"))
+            return match.group("href"), match.group("class"), " ".join(text.split())
+
+        primary = hero_cta("home-hero-activities-cta")
+        secondary = hero_cta("home-hero-tiers-cta")
+        self.assertEqual(primary[0], "/#activities")
+        self.assertEqual(primary[1], button_classes(
+            "primary", size="lg", extra="w-full sm:w-auto"
+        ))
+        self.assertEqual(primary[2], "See what members get")
+        self.assertEqual(secondary[0], "/#tiers")
+        self.assertEqual(secondary[1], button_classes(
+            "secondary", size="lg", extra="w-full sm:w-auto"
+        ))
+        self.assertEqual(secondary[2], "View membership tiers")
         self.assertNotContains(response, "Subscribe for updates")
         self.assertNotContains(response, "Get the Friday newsletter")
 
@@ -95,13 +109,13 @@ class HomePostLaunchCopyTest(TierSetupMixin, TestCase):
 
     def test_events_empty_state_no_coming_soon(self):
         response = self.client.get("/")
-        # Empty-state text is in this branch when no recordings exist.
-        self.assertContains(
+        self.assertNotContains(response, 'id="upcoming-events"')
+        self.assertNotContains(response, 'data-testid="home-upcoming-events-section"')
+        self.assertNotContains(
             response,
             "New event recordings drop after each live session. "
             "The newsletter has them first.",
         )
-        # Old phrasing must be gone from this paragraph.
         self.assertNotContains(
             response,
             "Event recordings coming soon. Check back",

@@ -374,12 +374,18 @@ class HomepageRecordingsCardTest(TestCase):
         )
 
     def test_homepage_recording_card_wraps_to_event_detail(self):
-        response = self.client.get('/')
-        self.assertEqual(response.status_code, 200)
-        scan = _scan_anchors(response.content.decode())
-        # Issue #673: cards link to ``/events/<id>/<slug>`` via
-        # ``Event.get_absolute_url``.
         expected_href = self.event.get_absolute_url()
+        home = self.client.get('/')
+        self.assertEqual(home.status_code, 200)
+        home_body = home.content.decode()
+        self.assertNotIn('id="resources"', home_body)
+        self.assertNotIn(expected_href, home_body)
+        self.assertNotIn(self.event.title, home_body)
+
+        past = self.client.get('/events?filter=past')
+        self.assertEqual(past.status_code, 200)
+        self.assertContains(past, self.event.title)
+        scan = _scan_anchors(past.content.decode())
         wrapper_links = [
             a for a in scan.anchors
             if a['href'] == expected_href
@@ -387,7 +393,7 @@ class HomepageRecordingsCardTest(TestCase):
         ]
         self.assertGreaterEqual(
             len(wrapper_links), 1,
-            'Homepage #resources card should wrap to '
+            'Past-events recording card should wrap to '
             f'{expected_href} with the shared focus-visible ring.',
         )
 

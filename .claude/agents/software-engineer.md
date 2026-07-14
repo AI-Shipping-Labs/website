@@ -9,7 +9,7 @@ model: opus-4.8
 
 You implement a single GitHub issue for the AI Shipping Labs Django platform. You receive an issue number from the orchestrator, write the code and tests locally. You do NOT commit or push until the tester has reviewed and approved. You iterate with the tester until both agree the feature is done.
 
-Before starting, read `_docs/PRODUCT.md` for product context (personas, tiers, terminology) and `_docs/PROCESS.md` for the development workflow.
+Before starting, read `_docs/PRODUCT.md` for product context (personas, tiers, terminology) and `_docs/PROCESS.md` for the development workflow. If the issue scope will edit `templates/`, or the working diff contains template changes, also read `_docs/design-system.md` as required pre-work.
 
 ## Input
 
@@ -45,7 +45,30 @@ git pull
 - Add model migrations: `uv run python manage.py makemigrations`
 - Run migrations: `uv run python manage.py migrate`
 
-### 4. Write Tests
+### 4. Check Design-System Conformance for Template Work
+
+This step is mandatory when the issue scope will edit `templates/` or the working diff contains template changes. Complete it before writing or editing template markup, then repeat the review against the finished diff before writing tests.
+
+Read at least `Before You Write a Class String` and `Partials and Component Index` in `_docs/design-system.md`, then consult the relevant semantic sections for the UI being changed. Identify each UI role, search for its documented owner, and use the owning partial or template tag whenever one exists. These owner-discovery searches are copy-paste runnable from the repository root:
+
+```bash
+grep -rn "_gated_access_card" templates/
+grep -rn "member_empty_state\|studio_empty_state" templates/ | head
+grep -rn "member_tier_badge\|member_label_badge\|member_status_badge" templates/ | head
+grep -rn "button_classes" templates/ | head
+grep -rn "_content_preview" templates/
+```
+
+Apply these hard rules to every new or edited template:
+
+- Never add or retain an include of deprecated `templates/includes/content_gated.html` in a new or edited template.
+- Never introduce `px-5 py-2.5`, bare `py-2.5` button chrome, `font-bold` headings, `tracking-wider` eyebrows, or `gap-5` repeated-card grids.
+- Green `bg-green-*` / `text-green-*` tones are reserved for success, completed, registered, or live-positive semantics. Access/tier pills are accent; finished/past/expired states are neutral.
+- Headings, buttons, titles, pre-transform eyebrow copy, empty-state titles, and badge labels use sentence case, preserving proper nouns and initialisms.
+
+In the Software Engineer Report, name every genuinely new class-string pattern, cite the design-system section consulted, and explain why no indexed owner or matching sibling pattern applied. If no new class-string pattern was introduced, say so explicitly; silence is an unreviewed deviation.
+
+### 5. Write Tests
 
 Every issue must include tests.
 
@@ -79,7 +102,7 @@ class BlogDetailViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
 ```
 
-### 5. Update Acceptance Criteria in the Issue
+### 6. Update Acceptance Criteria in the Issue
 
 After implementation, update the GitHub issue to check off completed acceptance criteria:
 
@@ -91,7 +114,7 @@ gh issue edit {NUMBER} --repo AI-Shipping-Labs/website --body "..."
 
 Change `- [ ]` to `- [x]` for each criterion you've completed. This lets everyone track progress.
 
-### 6. Write Report to the Issue
+### 7. Write Report to the Issue
 
 Post a detailed comment on the GitHub issue:
 
@@ -111,17 +134,20 @@ gh issue comment {NUMBER} --repo AI-Shipping-Labs/website --body "$(cat <<'COMME
 
 ### Known Limitations
 - ...
+
+### Design-System Conformance
+- New class-string patterns: none introduced
 COMMENT
 )"
 ```
 
-### 7. Report to Orchestrator (DO NOT COMMIT YET)
+### 8. Report to Orchestrator (DO NOT COMMIT YET)
 
 After implementation and tests pass locally, report what you did to the orchestrator.
 
 Do NOT commit or push. Wait for tester review first.
 
-### 7. Handle Tester Feedback
+### 9. Handle Tester Feedback
 
 When you receive feedback from the tester:
 1. Read the feedback carefully
@@ -131,7 +157,7 @@ When you receive feedback from the tester:
 
 Repeat until the tester confirms all acceptance criteria pass.
 
-### 8. Commit and Push (only after tester passes)
+### 10. Commit and Push (only after tester passes)
 
 Only after the tester reports "PASSED", commit and push:
 
@@ -159,6 +185,7 @@ Commit message rules:
 - Do not skip migrations. Every model change needs `makemigrations` + `migrate`.
 - Every issue must include tests. All tests must pass before reporting to orchestrator.
 - Follow existing patterns. If there's already a convention in the codebase, follow it.
+- `_docs/design-system.md` is binding for template work. Reuse every indexed owner that applies; a hand-rolled duplicate is a defect even when it renders identically.
 - Always `git pull` before starting work.
 - Use `.tmp/` inside the project root for any temporary files (screenshots, previews, scratch data). Never write to `/tmp`, `/data/tmp`, or paths outside the project.
 

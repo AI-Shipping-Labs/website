@@ -54,6 +54,8 @@ Verify against the spec:
 - [ ] Gated content shows teasers + CTAs (not 404)
 - [ ] SEO tags where required
 - [ ] Links work
+- [ ] Added template lines do not hand-roll gated cards, member/public or Studio collection empty states, member tier/label/status pills, product CTAs, or catalog media bands when `_docs/design-system.md` → `Partials and Component Index` names an owner
+- [ ] Added template lines contain no forbidden design-system class pattern
 
 #### Tests
 - [ ] Tests exist for this issue (in `{app}/tests/` folder, not single file)
@@ -71,7 +73,43 @@ Verify against the spec:
 - [ ] Webhook signature validation
 - [ ] No raw SQL
 
-### 3. Run the Code
+### 3. Review Design-System Conformance in the Template Diff
+
+This step is mandatory whenever tracked or untracked `*.html` files under `templates/` are changed. Review only the current issue's changed lines and files; do not fail the issue for untouched legacy violations. #1240 owns the repository-wide shrink-only lint ratchet.
+
+First include untracked templates in the review boundary:
+
+```bash
+git status --short -- '*.html'
+```
+
+Run all three scans over tracked added diff lines. `^+[^+]` intentionally excludes the `+++ b/...` diff header:
+
+```bash
+git diff -U0 -- '*.html' | grep '^+[^+]' | grep -nE 'px-5 py-2\.5|font-bold|tracking-wider[^s]|gap-5|content_gated\.html|p-12 text-center' && echo "DESIGN CHECK: review each hit" || echo "DESIGN CHECK: clean"
+git diff -U0 -- '*.html' | grep '^+[^+]' | grep -nE 'bg-green-500|text-green-400'
+git diff -U0 -- '*.html' | grep '^+[^+]' | grep -nE 'border-accent/30 bg-accent/5'
+```
+
+Ordinary `git diff` omits untracked files. Run the same three patterns directly against every untracked template reported by `git status`:
+
+```bash
+for file in $(git ls-files --others --exclude-standard -- 'templates/**/*.html' 'templates/*.html'); do
+  grep -nE 'px-5 py-2\.5|font-bold|tracking-wider[^s]|gap-5|content_gated\.html|p-12 text-center' "$file" && echo "DESIGN CHECK: review each hit in $file" || echo "DESIGN CHECK: clean: $file"
+  grep -nE 'bg-green-500|text-green-400' "$file" || true
+  grep -nE 'border-accent/30 bg-accent/5' "$file" || true
+done
+```
+
+Classify every scan hit in context:
+
+- A forbidden-pattern hit is a FAIL unless the regex matched a non-applicable context and the report records the exact line and reason.
+- A green-tone or accent-gated-card heuristic hit is acceptable only when its meaning follows `Pills, Badges, and Chips` in `_docs/design-system.md`, or the markup is the indexed owning component itself. Otherwise, require an explicit design-system citation and rationale from the SWE or FAIL.
+- Hand-rolled markup duplicating `templates/content/_gated_access_card.html`, `{% member_empty_state %}`, `{% studio_empty_state %}`, `{% member_tier_badge %}`, `{% member_label_badge %}`, `{% member_status_badge %}`, `{% button_classes %}`, or `templates/content/_content_preview.html` is always a FAIL, even when the rendered output is identical.
+- For every added `<a>` or `<button>` class attribute containing `hover:`, require `focus-visible:` in that same class attribute. The only exception is a class attribute delegated to an indexed owner, such as `{% button_classes %}` or `templates/content/_clickable_card_classes.html`, that supplies the focus contract.
+- Review the SWE report for every genuinely new class-string pattern. An unexplained new pattern is a FAIL.
+
+### 4. Run the Code
 
 #### Setup (if not already done)
 
@@ -129,7 +167,7 @@ Verify:
 - Data displays correctly
 - Features work as described
 
-### 4. Check Acceptance Criteria
+### 5. Check Acceptance Criteria
 
 Go through each criterion from the issue. Mark pass/fail with specifics:
 
@@ -148,7 +186,7 @@ Go through each criterion from the issue. Mark pass/fail with specifics:
 - Bug: excerpt not auto-generated when left blank
 ```
 
-### 5. Update Acceptance Criteria in the Issue
+### 6. Update Acceptance Criteria in the Issue
 
 After review, update the GitHub issue to reflect verified criteria:
 
@@ -158,7 +196,7 @@ gh issue edit {NUMBER} --repo AI-Shipping-Labs/website --body "..."
 
 Change `- [ ]` to `- [x]` for criteria you've verified as passing. Leave `- [ ]` for failures. This lets everyone track progress.
 
-### 6. Write Report to the Issue
+### 7. Write Report to the Issue
 
 Post a detailed comment on the GitHub issue with your findings:
 
@@ -183,7 +221,7 @@ COMMENT
 )"
 ```
 
-### 7. Capture Screenshots (MANDATORY)
+### 8. Capture Screenshots (MANDATORY)
 
 This step is NOT optional. Screenshots are used by agents to verify pages rendered correctly, not just for human review. After tests pass, capture screenshots of the feature's key pages, upload each one via the `sandbox-screenshots` service, and post a single comment on the issue with the resulting CloudFront URLs.
 
@@ -240,7 +278,7 @@ COMMENT
 )"
 ```
 
-### 8. Give Verdict
+### 9. Give Verdict
 
 Report your findings to the orchestrator:
 
@@ -253,7 +291,7 @@ The implementer will fix and you will re-review.
 
 PASS — approve for commit: Confirm all acceptance criteria met. Tell the orchestrator the feature is approved and the software engineer should commit and push.
 
-### 9. Re-review After Fixes
+### 10. Re-review After Fixes
 
 When the software engineer applies fixes (still uncommitted):
 1. Review the changed files again
@@ -290,6 +328,9 @@ Exception: Some criteria require human verification (e.g. OAuth login flow, visu
 - Core acceptance criteria not met
 - Large files (images, binaries), databases (*.sqlite3), secrets (.env) not in .gitignore
 - Any acceptance criterion not actually verified by running a command
+- A new or edited template hand-rolls a role owned by the design-system index
+- A new or edited template reintroduces a forbidden design-system pattern
+- A new or edited template contains an unexplained new class-string pattern
 
 ### Pass with note (don't block)
 - Minor style issues

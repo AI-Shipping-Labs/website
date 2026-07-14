@@ -153,20 +153,22 @@ Do not use arbitrary-fraction or two-column heroes for decorative value-point st
 
 ## Card Media Slots
 
-For each content type, the `aspect-video` media band is all-or-nothing across its cards and renders through `templates/content/_content_preview.html`: every card receives a real cover or fallback, or no card renders a media band. Never branch on cover presence per card.
+Choose one documented media policy per content type and render every media band through `templates/content/_content_preview.html`: always render a real cover or fallback, never render a media band, or use a specifically documented conditional-explicit policy. Do not introduce per-card cover branching unless the per-type decision below explicitly requires it.
 
-A grid in which every card shows the fallback is a defect. If real images do not exist for that content type, remove the media band rather than ship a placeholder wall.
+A grid in which every card shows the fallback is a defect. If real images do not exist for that content type, remove the media band rather than ship a placeholder wall. For a conditional-explicit content type, a card without an approved explicit image starts directly with its existing signals and body; it gets no fallback, empty wrapper, or reserved `aspect-video` space.
 
 Current per-type decisions:
 
 | Content type | Media band |
 |---|---|
-| Workshops | Render |
+| Workshops | Conditional explicit media: render exactly one slot for an authored `cover_image_url` or operator `custom_banner_url`; render no slot for coverless or auto-only cards. Generated `auto_banner_url` remains social/Studio media only. |
 | Courses | Render |
 | Projects | Render |
 | Downloads | Do not render |
 | Curated Links (`/resources`) | Do not render |
 | Blog list rows | Do not render |
+
+Workshops are the deliberate conditional-explicit exception. Public cards use `Workshop.card_image_url` (`cover_image_url` → `custom_banner_url` → empty) and include `_content_preview.html` exactly once only when that value is nonempty. Never pass a decorative fallback for a coverless or auto-only workshop. `Workshop.display_image_url` keeps cover → custom → auto precedence for SEO, social sharing, and Studio; suppressing an auto banner on a public card does not delete or disable that sharing asset.
 
 ## Breakpoints and Mobile Carousels
 
@@ -202,7 +204,7 @@ The documented owner is mandatory for every instance of its named role, subject 
 | `{% studio_empty_state %}` from `studio_filters` | Every Studio list empty state. Use `fresh` when no records exist and `filter` when active filters yield no rows. | `{% load studio_filters %}` then `{% studio_empty_state 'fresh' entity_label='article' entity_label_plural='articles' %}`; filter variant: `{% studio_empty_state 'filter' entity_label='article' entity_label_plural='articles' clear_url='/studio/articles/' colspan=6 %}` |
 | `{% member_tier_badge %}`, `{% member_label_badge %}`, and `{% member_status_badge %}` from `member_badges` | Every member/public tier, label, or status pill whose meaning these tags cover. | `{% load member_badges %}` then `{% member_tier_badge 10 %}`, `{% member_label_badge 'Workshop' %}`, and `{% member_status_badge 'Upcoming' status='upcoming' %}` |
 | `{% button_classes %}` from `accounts_extras` | Every non-Studio product/public/member/marketing CTA. | `{% load accounts_extras %}` then `class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}"` |
-| `templates/content/_content_preview.html` | Every catalog media band for a content type whose contract includes media. | `{% include "content/_content_preview.html" with preview_cover_url=item.cover_url preview_title=item.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="content-card-preview" %}` |
+| `templates/content/_content_preview.html` | Every rendered catalog media band for a content type whose contract includes media. Workshop cards use it only for explicit cover/custom media; coverless and auto-only workshops omit the slot entirely. | `{% if workshop.card_image_url %}{% include "content/_content_preview.html" with preview_cover_url=workshop.card_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" %}{% endif %}` |
 | `templates/content/_clickable_card_classes.html` | Every fully clickable catalog/preview card anchor. | `class="{% include 'content/_clickable_card_classes.html' %} rounded-lg"` |
 | `templates/includes/_list_row.html` | Every reader, drawer, or numbered navigation row. | `{% include "includes/_list_row.html" with href=item.get_absolute_url title=item.title is_current=False marker_kind="circle" %}` |
 | `templates/accounts/includes/_auth_card.html` | Every standard full-page authentication form. Titles use sentence case; pass the subtitle, form partial, OAuth copy, and legal-action input. | `{% include "accounts/includes/_auth_card.html" with auth_title="Create account" auth_subtitle="Join AI Shipping Labs and start building" form_template="accounts/includes/_register_form.html" oauth_action="Sign up" oauth_divider_text="sign up with" legal_action="creating an account" %}` |

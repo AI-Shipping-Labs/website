@@ -317,6 +317,21 @@
 
         <div class="flex items-center justify-between mt-6 pt-6 border-t border-border">
           <div>
+            <p class="text-foreground font-medium">Maven course emails</p>
+            <p class="text-sm text-muted-foreground mt-1">Receive welcome and course-specific emails for Maven enrollments. Turning this off does not change access.</p>
+          </div>
+          <div class="touch-target-toggle">
+            <button type="button" id="maven-emails-toggle" data-testid="maven-emails-toggle"
+                    class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors {% if maven_emails_enabled %}bg-accent{% else %}bg-secondary{% endif %}"
+                    onclick="toggleMavenEmails()" aria-label="Toggle Maven course emails">
+              <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full shadow ring-0 transition-transform {% if maven_emails_enabled %}translate-x-5 bg-accent-foreground{% else %}translate-x-0 bg-foreground{% endif %}" id="maven-emails-toggle-dot"></span>
+            </button>
+          </div>
+        </div>
+        <p class="mt-4 hidden text-sm text-foreground" id="maven-emails-status" data-testid="maven-emails-status" aria-live="polite"></p>
+
+        <div class="flex items-center justify-between mt-6 pt-6 border-t border-border">
+          <div>
             <p class="text-foreground font-medium">Sprint reminders</p>
             <p class="text-sm text-muted-foreground mt-1">Receive weekly sprint plan and note reminder emails.</p>
           </div>
@@ -940,6 +955,27 @@ function toggleSprintCadenceEmails() {
   .catch(function() {
     alert('An error occurred. Please try again.');
   });
+}
+
+function toggleMavenEmails() {
+  var toggle = document.getElementById('maven-emails-toggle');
+  var dot = document.getElementById('maven-emails-toggle-dot');
+  var status = document.getElementById('maven-emails-status');
+  var newValue = !dot.classList.contains('translate-x-5');
+  fetch('/account/api/email-preferences', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+    body: JSON.stringify({maven_emails: newValue}),
+  }).then(function(resp) { return resp.json(); }).then(function(data) {
+    if (data.status !== 'ok') { throw new Error(data.error || 'Failed to update preference'); }
+    dot.classList.toggle('translate-x-5', data.maven_emails);
+    dot.classList.toggle('translate-x-0', !data.maven_emails);
+    dot.classList.toggle('bg-accent-foreground', data.maven_emails);
+    dot.classList.toggle('bg-foreground', !data.maven_emails);
+    toggle.classList.toggle('bg-accent', data.maven_emails);
+    toggle.classList.toggle('bg-secondary', !data.maven_emails);
+    showInlineStatus(status, data.maven_emails ? 'Maven course emails turned on.' : 'Maven course emails turned off. Access is unchanged.');
+  }).catch(function() { alert('An error occurred. Please try again.'); });
 }
 
 // Newsletter toggle

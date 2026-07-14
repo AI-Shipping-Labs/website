@@ -133,6 +133,7 @@ from studio.views.marketing_pages import (
     marketing_page_new,
     marketing_page_regenerate_preview_token,
 )
+from studio.views.maven_events import maven_event_detail, maven_event_list, maven_event_retry
 from studio.views.member_notes import (
     member_note_create,
     member_note_delete,
@@ -1296,6 +1297,9 @@ urlpatterns = [
         ses_event_detail,
         name='studio_ses_event_detail',
     ),
+    path('maven-events/', maven_event_list, name='studio_maven_event_list'),
+    path('maven-events/<int:pk>/', maven_event_detail, name='studio_maven_event_detail'),
+    path('maven-events/<int:pk>/retry/<str:step>', maven_event_retry, name='studio_maven_event_retry'),
 
     # Content Sync
     path('sync/', sync_dashboard, name='studio_sync_dashboard'),

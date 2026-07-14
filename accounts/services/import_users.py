@@ -569,6 +569,7 @@ def _apply_tier_override(
             is_active=True,
             expires_at__gt=timezone.now(),
         )
+        .exclude(source__startswith="maven:")
         .select_related("override_tier")
         .first()
     )
@@ -597,6 +598,7 @@ def _apply_tier_override(
         expires_at=expires_at,
         granted_by=actor,
         is_active=True,
+        source=f"import:{source}"[:80],
     )
 
 
@@ -609,7 +611,7 @@ def _apply_stripe_subscription_tier(user, tier):
         user=user,
         override_tier=tier,
         is_active=True,
-    ).update(is_active=False)
+    ).exclude(source__startswith="maven:").update(is_active=False)
 
 
 def _append_conflict(

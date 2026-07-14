@@ -343,7 +343,7 @@ class MavenEnrolledTest(TestCase):
         self.assertEqual(email_service.return_value.send.call_count, 2)
 
     @patch("integrations.services.maven.EmailService")
-    def test_transient_failure_returns_500_and_writes_no_dedupe_row(self, email_service):
+    def test_transient_failure_returns_500_and_persists_retryable_step(self, email_service):
         with patch(
             "integrations.services.maven._grant_or_refresh_override",
             side_effect=RuntimeError("boom"),
@@ -352,9 +352,9 @@ class MavenEnrolledTest(TestCase):
                 {"event": "user_cohort.enrolled", "email": "fail@test.com"}
             )
         self.assertEqual(response.status_code, 500)
-        self.assertFalse(
-            MavenEnrollmentEvent.objects.filter(email="fail@test.com").exists()
-        )
+        event = MavenEnrollmentEvent.objects.get(email="fail@test.com")
+        self.assertEqual(event.override_status, MavenEnrollmentEvent.STEP_FAILED)
+        self.assertEqual(event.override_attempts, 1)
         # No half-committed override.
         self.assertFalse(
             TierOverride.objects.filter(user__email="fail@test.com").exists()

@@ -337,6 +337,7 @@ def _render_account_page(
         "sprint_cadence_emails_enabled": user.email_preferences.get(
             "sprint_cadence_emails", True
         ),
+        "maven_emails_enabled": user.email_preferences.get("maven_emails", True),
         "timezone_options": build_timezone_options(),
         "preferred_timezone_label": get_timezone_label(user.preferred_timezone),
         "active_override": active_override,
@@ -681,20 +682,23 @@ def email_preferences_view(request):
     newsletter = data.get("newsletter")
     workshop_emails = data.get("workshop_emails")
     sprint_cadence_emails = data.get("sprint_cadence_emails")
+    maven_emails = data.get("maven_emails")
 
     newsletter_provided = isinstance(newsletter, bool)
     workshop_emails_provided = isinstance(workshop_emails, bool)
     sprint_cadence_emails_provided = isinstance(sprint_cadence_emails, bool)
+    maven_emails_provided = isinstance(maven_emails, bool)
 
     if (
         not newsletter_provided
         and not workshop_emails_provided
         and not sprint_cadence_emails_provided
+        and not maven_emails_provided
     ):
         return JsonResponse(
             {
                 "error": (
-                    "newsletter, workshop_emails, or sprint_cadence_emails "
+                    "newsletter, workshop_emails, sprint_cadence_emails, or maven_emails "
                     "boolean field is required"
                 ),
             },
@@ -718,6 +722,10 @@ def email_preferences_view(request):
     if sprint_cadence_emails_provided:
         user.email_preferences["sprint_cadence_emails"] = sprint_cadence_emails
         response["sprint_cadence_emails"] = sprint_cadence_emails
+
+    if maven_emails_provided:
+        user.email_preferences["maven_emails"] = maven_emails
+        response["maven_emails"] = maven_emails
 
     user.save(update_fields=update_fields)
 

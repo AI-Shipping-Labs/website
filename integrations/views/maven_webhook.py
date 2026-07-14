@@ -48,6 +48,7 @@ def maven_webhook(request):
         return JsonResponse({"status": "disabled"}, status=200)
 
     if not _authenticated(request):
+        logger.warning("Rejected Maven webhook request: authentication failed")
         return JsonResponse({"error": "forbidden"}, status=403)
 
     try:
@@ -64,7 +65,8 @@ def maven_webhook(request):
         # Currently only "missing_email".
         return JsonResponse({"error": str(exc)}, status=400)
     except MavenTransientError:
-        # Retryable — tell the sender to redeliver. No dedupe row was written.
+        # Retryable — the occurrence and failed entitlement attempt are
+        # already persisted, so redelivery resumes only that failed step.
         logger.warning("Maven webhook transient failure; returning 500 for retry")
         return JsonResponse({"error": "processing_failed"}, status=500)
 

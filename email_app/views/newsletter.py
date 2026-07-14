@@ -279,6 +279,36 @@ def unsubscribe_api(request):
     )
 
 
+@csrf_exempt
+def maven_email_opt_out(request):
+    """Disable only Maven course emails; membership and other mail stay intact."""
+    token = request.GET.get("token", "")
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    except jwt.InvalidTokenError:
+        payload = {}
+    if payload.get("action") != "maven_email_opt_out":
+        message = "Invalid Maven email preference link."
+        if request.method == "POST":
+            return HttpResponse(message, status=400, content_type="text/plain")
+        return render(request, "email_app/unsubscribe_result.html", {"success": False, "message": message})
+    try:
+        user = User.objects.get(pk=payload.get("user_id"))
+    except User.DoesNotExist:
+        message = "User not found."
+        if request.method == "POST":
+            return HttpResponse(message, status=400, content_type="text/plain")
+        return render(request, "email_app/unsubscribe_result.html", {"success": False, "message": message})
+    preferences = dict(user.email_preferences or {})
+    preferences["maven_emails"] = False
+    user.email_preferences = preferences
+    user.save(update_fields=["email_preferences"])
+    message = "Maven course emails are off. Your course and community access are unchanged. You can turn them on again from Account."
+    if request.method == "POST":
+        return HttpResponse(message, content_type="text/plain")
+    return render(request, "email_app/unsubscribe_result.html", {"success": True, "message": message})
+
+
 @ensure_csrf_cookie
 def subscribe_page(request):
     """Render the dedicated /subscribe page with the subscribe form."""

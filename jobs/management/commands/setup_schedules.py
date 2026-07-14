@@ -43,6 +43,21 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: cleanup-webhook-deliveries (daily at 03:10 UTC)'))
 
+        schedule(
+            'jobs.tasks.cleanup.redact_old_maven_enrollment_pii',
+            cron='20 3 * * *',
+            name='redact-maven-enrollment-pii',
+            days=30,
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: redact-maven-enrollment-pii (daily at 03:20 UTC)'))
+
+        schedule(
+            'jobs.tasks.cleanup.retry_maven_enrollment_steps',
+            cron='*/5 * * * *',
+            name='retry-maven-enrollment-steps',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: retry-maven-enrollment-steps (five-minute cadence)'))
+
         # Purge old per-user CRM activity timeline rows daily at 03:30 UTC
         # (issue #853). Off-peak, after the webhook-log cleanup. The
         # retention window comes from the Studio-editable

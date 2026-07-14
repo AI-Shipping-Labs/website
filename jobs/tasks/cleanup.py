@@ -5,6 +5,7 @@ Cleanup tasks for removing old data.
 import logging
 from datetime import timedelta
 
+from django.db.models import Q
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -62,3 +63,44 @@ def cleanup_old_webhook_deliveries(days=30):
         days,
     )
     return {'deleted': deleted_count, 'cutoff_days': days}
+
+
+def redact_old_maven_enrollment_pii(days=30):
+    """Redact Maven occurrence email and legacy payload PII after ``days``."""
+    from integrations.models import MavenEnrollmentEvent
+
+    cutoff = timezone.now() - timedelta(days=days)
+    redacted = MavenEnrollmentEvent.objects.filter(
+        created_at__lt=cutoff,
+        payload_redacted_at__isnull=True,
+    ).update(email='', payload={}, payload_redacted_at=timezone.now())
+    logger.info("Redacted %d Maven occurrences older than %d days", redacted, days)
+    return {'redacted': redacted, 'cutoff_days': days}
+
+
+def retry_maven_enrollment_steps(limit=100):
+    """Retry incomplete Maven side effects, bounded by their persisted attempts."""
+    from integrations.models import MavenEnrollmentEvent
+    from integrations.services.maven import MAX_STEP_ATTEMPTS, run_occurrence_steps
+
+    retryable = Q()
+    for name in ("override", "slack", "welcome", "removal"):
+        retryable |= Q(
+            **{
+                f"{name}_status__in": [
+                    MavenEnrollmentEvent.STEP_PENDING,
+                    MavenEnrollmentEvent.STEP_FAILED,
+                    MavenEnrollmentEvent.STEP_RUNNING,
+                ],
+                f"{name}_attempts__lt": MAX_STEP_ATTEMPTS,
+            }
+        )
+    occurrences = list(
+        MavenEnrollmentEvent.objects.filter(retryable)
+        .select_related("user")
+        .order_by("updated_at")[:limit]
+    )
+    for occurrence in occurrences:
+        run_occurrence_steps(occurrence)
+    logger.info("Processed %d retryable Maven enrollment occurrences", len(occurrences))
+    return {"processed": len(occurrences), "limit": limit}

@@ -52,14 +52,14 @@ class MavenWelcomeEmailContentTest(TestCase):
         self.assertIn(context["opt_out_url"], body_html)
         self.assertIn("reply", body_html.lower())
 
-    def test_opt_out_url_uses_unsubscribe_token_endpoint(self):
+    def test_opt_out_url_uses_scoped_maven_token_endpoint(self):
         user = User.objects.create_user(email="o@test.com", password="x")
         context = _welcome_context(user, "Course")
-        self.assertIn("/api/unsubscribe?token=", context["opt_out_url"])
+        self.assertIn("/api/maven-email-opt-out?token=", context["opt_out_url"])
 
         payload = _decode_user_action_token(_extract_token(context["opt_out_url"]))
         self.assertEqual(payload["user_id"], user.pk)
-        self.assertEqual(payload["action"], "unsubscribe")
+        self.assertEqual(payload["action"], "maven_email_opt_out")
         self.assertNotIn("exp", payload)
 
     def test_password_reset_url_uses_password_reset_token_with_day_expiry(self):

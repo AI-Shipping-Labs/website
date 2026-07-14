@@ -10,8 +10,9 @@ class TierOverride(models.Model):
     subscription tier (user.tier) so there are no conflicts with Stripe
     webhooks.
 
-    Constraint: only one active override per user at a time. Creating a new
-    override deactivates any existing active one.
+    Normal staff tooling keeps one manual override active. Source-specific
+    grants (such as Maven) may coexist; effective access uses the strongest
+    active grant and each source retains its own expiry.
     """
 
     user = models.ForeignKey(
@@ -48,6 +49,16 @@ class TierOverride(models.Model):
     is_active = models.BooleanField(
         default=True,
         help_text="Set False on expiry or manual revocation.",
+    )
+    source = models.CharField(
+        max_length=80,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text=(
+            "Stable grant source. Maven uses maven:<occurrence identity> so its "
+            "entitlement can coexist with staff and billing grants."
+        ),
     )
 
     class Meta:

@@ -487,12 +487,10 @@ def _apply_tag(user, normalized_tag):
 
 
 def _apply_tier_override(user, override_tier, granted_by):
-    """Create a 10-year ``TierOverride`` and deactivate any existing active one.
-
-    Mirrors the invariant enforced in ``studio/views/tier_overrides.py``: a
-    user has at most one active override at a time.
-    """
-    TierOverride.objects.filter(user=user, is_active=True).update(is_active=False)
+    """Replace the manual grant while preserving source-specific access."""
+    TierOverride.objects.filter(user=user, is_active=True).exclude(
+        source__startswith='maven:',
+    ).update(is_active=False)
     TierOverride.objects.create(
         user=user,
         original_tier=user.tier,
@@ -500,6 +498,7 @@ def _apply_tier_override(user, override_tier, granted_by):
         expires_at=timezone.now() + OVERRIDE_DURATION,
         granted_by=granted_by,
         is_active=True,
+        source='staff',
     )
 
 

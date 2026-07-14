@@ -195,15 +195,15 @@ class ActivitiesSprintHubTest(TestCase):
             'data-testid="activities-sprints-section"'
         )
         sprint_card_index = content.index('data-testid="activities-sprint-card"')
-        secondary_nav_index = content.index(
-            'data-testid="activities-secondary-nav"'
+        live_events_index = content.index(
+            'data-testid="activities-live-events-section"'
         )
-        tier_empty_index = content.index('data-testid="activities-tier-empty"')
 
-        self.assertLess(access_by_tier_index, tier_empty_index)
-        self.assertLess(tier_empty_index, sprint_section_index)
+        self.assertLess(access_by_tier_index, sprint_section_index)
         self.assertLess(sprint_section_index, sprint_card_index)
-        self.assertLess(sprint_card_index, secondary_nav_index)
+        self.assertLess(sprint_card_index, live_events_index)
+        self.assertNotIn('data-testid="activities-secondary-nav"', content)
+        self.assertNotIn('data-testid="activities-tier-empty"', content)
 
     def test_draft_sprint_is_hidden_from_anonymous_and_member(self):
         Sprint.objects.create(
@@ -360,11 +360,11 @@ class ActivitiesCardActionTest(TestCase):
     def setUpTestData(cls):
         _seed_full_tier_config()
 
-    def _card_markup(self, response, title):
+    def _card_markup(self, response, slug):
         content = response.content.decode()
-        title_index = content.index(title)
+        title_index = content.index(f'data-activity="{slug}"')
         return content[
-            content.rfind('data-testid="activity-card"', 0, title_index):
+            content.rfind('<article', 0, title_index):
             content.find('</article>', title_index)
         ]
 
@@ -372,21 +372,21 @@ class ActivitiesCardActionTest(TestCase):
         response = self.client.get('/activities#access-by-tier')
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="activity-card-action"', count=15)
-        self.assertContains(response, 'data-testid="activity-card-next-step"', count=15)
+        self.assertContains(response, 'data-testid="activity-card-action"', count=7)
+        self.assertContains(response, 'data-testid="activity-card-next-step"', count=7)
 
-        content_card = self._card_markup(response, 'Exclusive Substack Content')
-        self.assertIn('Full access to premium paywalled articles', content_card)
+        content_card = self._card_markup(response, 'exclusive-content')
+        self.assertIn('Exclusive articles, tutorials with code examples', content_card)
         self.assertIn('Browse member articles', content_card)
         self.assertIn('href="/blog"', content_card)
         self.assertIn('data-tier="basic" data-included="true"', content_card)
 
-        sprint_card = self._card_markup(response, 'Guided Project-Based Learning')
-        self.assertIn('Explore sprints', sprint_card)
+        sprint_card = self._card_markup(response, 'community-sprints')
+        self.assertIn('Explore community sprints', sprint_card)
         self.assertIn('href="/sprints"', sprint_card)
         self.assertIn('data-tier="main" data-included="true"', sprint_card)
 
-        course_card = self._card_markup(response, 'Mini-Courses on Specialized Topics')
+        course_card = self._card_markup(response, 'courses')
         self.assertIn('Browse courses', course_card)
         self.assertIn('href="/courses"', course_card)
         self.assertIn('data-tier="premium" data-included="true"', course_card)

@@ -264,7 +264,7 @@ class TestScenario3FreeMemberDiscoversCommunityOnActivities:
         self, django_server
     , browser):
         """Given a user logged in as free@test.com (Free tier).
-        Navigate to /activities. 'Closed Community Access' is listed
+        Navigate to /activities. 'Private Slack community' is listed
         as an activity available at Main and Premium tiers, not Free
         or Basic. Click the Membership link in the header to navigate
         to the tiers section."""
@@ -282,21 +282,14 @@ class TestScenario3FreeMemberDiscoversCommunityOnActivities:
         body = page.content()
 
         # Step 2: Look at the activity cards
-        # Then: "Closed Community Access" is listed
-        assert "Closed Community Access" in body
+        # Then: "Private Slack community" is listed
+        assert "Private Slack community" in body
 
-        # Find the Closed Community Access activity card
-        activity_cards = page.locator(".activity-card")
-        community_card = None
-        for i in range(activity_cards.count()):
-            card = activity_cards.nth(i)
-            if "Closed Community Access" in card.inner_text():
-                community_card = card
-                break
-
-        assert community_card is not None, (
-            "Could not find 'Closed Community Access' activity card"
+        # Find the stable curated Slack activity card.
+        community_card = page.locator(
+            '[data-testid="activity-card"][data-activity="slack-community"]'
         )
+        assert community_card.count() == 1
 
         # Then: The card has data-tiers containing main and premium
         tiers_attr = community_card.get_attribute("data-tiers")

@@ -110,9 +110,7 @@ def test_visitor_moves_from_activities_to_pricing_sprints_and_events(
     ).to_be_visible()
     expect(page.get_by_test_id("activities-access-by-tier-section")).to_be_visible()
 
-    page.get_by_test_id("activities-taxonomy-links").get_by_role(
-        "link", name="Compare pricing"
-    ).click()
+    page.get_by_test_id("activities-pricing-cta").click()
     page.wait_for_url("**/pricing")
     expect(
         page.get_by_role("heading", name="Choose your level of engagement")

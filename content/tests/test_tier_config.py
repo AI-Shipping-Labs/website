@@ -1,7 +1,12 @@
 from django.test import TestCase
 
 from content.models import SiteConfig
-from content.tier_config import get_activities, get_tiers, get_tiers_with_features
+from content.tier_config import (
+    get_activities,
+    get_curated_activities,
+    get_tiers,
+    get_tiers_with_features,
+)
 
 # Minimal valid tier data for tests
 SAMPLE_TIERS_DATA = [
@@ -302,6 +307,59 @@ class GetActivitiesTest(TestCase):
         self.assertEqual(unique['tiers'], ['main'])
 
 
+class GetCuratedActivitiesTest(TestCase):
+    def test_returns_exact_code_owned_activity_contract(self):
+        activities = get_curated_activities()
+
+        self.assertEqual(
+            [activity['slug'] for activity in activities],
+            [
+                'community-sprints',
+                'live-events',
+                'workshops',
+                'slack-community',
+                'personal-plans',
+                'exclusive-content',
+                'courses',
+            ],
+        )
+        self.assertEqual(
+            [activity['title'] for activity in activities],
+            [
+                'Community sprints',
+                'Live events',
+                'Hands-on workshops',
+                'Private Slack community',
+                'Personalized plans and accountability',
+                'Exclusive written content',
+                'Mini-courses',
+            ],
+        )
+        self.assertEqual(
+            [activity['tiers'] for activity in activities],
+            [
+                ('main', 'premium'),
+                ('main', 'premium'),
+                ('main', 'premium'),
+                ('main', 'premium'),
+                ('main', 'premium'),
+                ('basic', 'main', 'premium'),
+                ('premium',),
+            ],
+        )
+
+    def test_returns_fresh_dicts_without_reading_site_config(self):
+        SiteConfig.objects.create(key='tiers', data=[])
+
+        first = get_curated_activities()
+        first[0]['title'] = 'Changed by caller'
+
+        self.assertEqual(
+            get_curated_activities()[0]['title'],
+            'Community sprints',
+        )
+
+
 class ProductionYamlTest(TestCase):
     """Tests that production tiers.yaml data (loaded into DB) matches expected structure."""
 
@@ -396,7 +454,7 @@ class ProductionYamlTest(TestCase):
 
 
 class ActivitiesViewIntegrationTest(TestCase):
-    """Test that the activities view correctly uses DB-backed data."""
+    """Test that the activities view uses the curated code-owned data."""
 
     @classmethod
     def setUpTestData(cls):
@@ -408,28 +466,29 @@ class ActivitiesViewIntegrationTest(TestCase):
             tiers_data = yaml.safe_load(f)
         SiteConfig.objects.create(key='tiers', data=tiers_data)
 
-    def test_activities_page_shows_all_15_activities(self):
+    def test_activities_page_shows_exactly_seven_curated_activities(self):
         response = self.client.get('/activities')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.context['activities']), 15)
+        self.assertEqual(len(response.context['activities']), 7)
+        self.assertContains(response, 'data-testid="activity-card"', count=7)
 
     def test_activities_page_basic_count(self):
         response = self.client.get('/activities')
-        self.assertEqual(response.context['basic_count'], 3)
+        self.assertEqual(response.context['basic_count'], 1)
 
     def test_activities_page_main_count(self):
         response = self.client.get('/activities')
-        self.assertEqual(response.context['main_count'], 12)
+        self.assertEqual(response.context['main_count'], 6)
 
     def test_activities_page_premium_count(self):
         response = self.client.get('/activities')
-        self.assertEqual(response.context['premium_count'], 15)
+        self.assertEqual(response.context['premium_count'], 7)
 
     def test_activities_page_contains_tier_specific_activity(self):
         response = self.client.get('/activities')
-        self.assertContains(response, 'Exclusive Substack Content')
-        self.assertContains(response, 'Closed Community Access')
-        self.assertContains(response, 'Mini-Courses on Specialized Topics')
+        self.assertContains(response, 'Exclusive written content')
+        self.assertContains(response, 'Private Slack community')
+        self.assertContains(response, 'Mini-courses')
 
     def test_access_by_tier_section_is_first_activity_surface(self):
         response = self.client.get('/activities')
@@ -446,48 +505,34 @@ class ActivitiesViewIntegrationTest(TestCase):
         self.assertContains(response, 'Membership benefits by tier')
         self.assertContains(response, 'Compare what Basic, Main, and Premium unlock')
 
-    def test_filter_buttons_expose_selected_state_accessibly(self):
+    def test_obsolete_filter_controls_and_script_are_absent(self):
         response = self.client.get('/activities')
 
-        self.assertContains(
-            response,
-            'data-tier="all" data-testid="activities-tier-filter" aria-pressed="true"',
-        )
-        self.assertContains(
-            response,
-            'data-tier="basic" data-testid="activities-tier-filter" aria-pressed="false"',
-        )
-        self.assertContains(
-            response,
-            'data-tier="main" data-testid="activities-tier-filter" aria-pressed="false"',
-        )
-        self.assertContains(
-            response,
-            'data-tier="premium" data-testid="activities-tier-filter" aria-pressed="false"',
-        )
+        self.assertNotContains(response, 'data-testid="activities-tier-filter"')
+        self.assertNotContains(response, 'filterActivities')
 
     def test_activity_cards_render_required_fields_and_tier_inclusion(self):
         response = self.client.get('/activities')
         body = response.content.decode()
 
-        basic_start = body.index('Exclusive Substack Content')
+        basic_start = body.index('Exclusive written content')
         basic_card = body[
             body.rfind('data-testid="activity-card"', 0, basic_start):
             body.find('</article>', basic_start)
         ]
-        main_start = body.index('Closed Community Access')
+        main_start = body.index('Private Slack community')
         main_card = body[
             body.rfind('data-testid="activity-card"', 0, main_start):
             body.find('</article>', main_start)
         ]
-        premium_start = body.index('Profile Teardowns')
+        premium_start = body.index('Mini-courses')
         premium_card = body[
             body.rfind('data-testid="activity-card"', 0, premium_start):
             body.find('</article>', premium_start)
         ]
 
-        self.assertIn('data-lucide="book-open"', basic_card)
-        self.assertIn('Full access to premium paywalled articles', basic_card)
+        self.assertIn('data-lucide="file-text"', basic_card)
+        self.assertIn('Exclusive articles, tutorials with code examples', basic_card)
         self.assertIn('data-tier="basic" data-included="true"', basic_card)
         self.assertIn('data-tier="main" data-included="true"', basic_card)
         self.assertIn('data-tier="premium" data-included="true"', basic_card)
@@ -505,31 +550,30 @@ class ActivitiesViewIntegrationTest(TestCase):
         body = response.content.decode()
 
         quick_comparison = body[body.index('data-testid="activities-quick-comparison"'):]
-        self.assertIn('3 activities', quick_comparison)
-        self.assertIn('12 activities', quick_comparison)
-        self.assertIn('All 15 activities', quick_comparison)
+        self.assertIn('1 activity', quick_comparison)
+        self.assertIn('6 activities', quick_comparison)
+        self.assertIn('All 7 activities', quick_comparison)
 
 
 class ActivitiesViewFallbackTest(TestCase):
-    def test_missing_tier_config_renders_empty_state_with_pricing_link(self):
+    def test_missing_tier_config_does_not_change_curated_activity_grid(self):
         response = self.client.get('/activities#access-by-tier')
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['activities'], [])
-        self.assertContains(response, 'data-testid="activities-tier-empty"')
-        self.assertContains(response, 'Membership activities are being updated')
+        self.assertEqual(len(response.context['activities']), 7)
+        self.assertNotContains(response, 'data-testid="activities-tier-empty"')
         self.assertContains(response, 'href="/pricing"')
-        self.assertNotContains(response, 'data-testid="activity-card"')
+        self.assertContains(response, 'data-testid="activity-card"', count=7)
 
-    def test_empty_tier_config_renders_empty_state_with_pricing_link(self):
+    def test_empty_tier_config_does_not_change_curated_activity_grid(self):
         _seed_tiers([])
 
         response = self.client.get('/activities')
 
-        self.assertEqual(response.context['activities'], [])
-        self.assertContains(response, 'data-testid="activities-tier-empty"')
+        self.assertEqual(len(response.context['activities']), 7)
+        self.assertNotContains(response, 'data-testid="activities-tier-empty"')
         self.assertContains(response, 'href="/pricing"')
-        self.assertNotContains(response, 'id="activities-grid"')
+        self.assertContains(response, 'id="activities-grid"')
 
 
 class HomepageTiersIntegrationTest(TestCase):

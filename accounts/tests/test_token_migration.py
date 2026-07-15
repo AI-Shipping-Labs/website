@@ -54,6 +54,12 @@ class OperatorTokenHashMigrationTest(TransactionTestCase):
             self.assertNotIn(plaintext_key, stdout.getvalue())
             self.assertNotIn(plaintext_key, stderr.getvalue())
 
+            # Current ORM code must run against the current schema. The
+            # historical migration state intentionally predates newer User
+            # fields, so restore the graph before exercising authentication.
+            executor = MigrationExecutor(connection)
+            executor.migrate(latest_targets)
+
             from accounts.models import Token
 
             authenticated = Token.authenticate(plaintext_key)

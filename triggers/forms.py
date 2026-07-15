@@ -46,7 +46,6 @@ class TriggerSubscriptionForm(forms.ModelForm):
             "event_type",
             "property_filter",
             "target_url",
-            "secret",
             "description",
             "is_active",
         ]
@@ -83,9 +82,25 @@ class TriggerSubscriptionForm(forms.ModelForm):
         if not secret:
             if self.instance and self.instance.pk:
                 # Keep the stored secret unchanged on edit.
-                return self.instance.secret
+                return ""
             raise forms.ValidationError("A signing secret is required.")
         return secret
+
+    def clean(self):
+        cleaned = super().clean()
+        secret = cleaned.get("secret")
+        if secret:
+            # ModelForm runs model validation before save(); apply the custom
+            # write-only field to the instance in time for that validation.
+            self.instance.set_secret(secret)
+        return cleaned
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
 
 
 class EventWidgetForm(forms.ModelForm):

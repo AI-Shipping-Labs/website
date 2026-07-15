@@ -23,7 +23,7 @@ from integrations.config import get_config, is_enabled, site_base_url
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = "2026-07-11.1"
+SCHEMA_VERSION = "2026-07-14.1"
 REDACTED = "[privacy-redacted]"
 SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 SENSITIVE_METADATA_KEY_PARTS = (
@@ -822,7 +822,50 @@ def _communications_activity(user):
         "trigger_event_emissions": _values(
             _model("triggers", "EventEmission"),
             Q(user=user),
-            ["id", "event_name", "properties", "envelope_id", "created_at"],
+            [
+                "id",
+                "event_name",
+                "properties",
+                "envelope_id",
+                "occurred_at",
+                "envelope",
+                "created_at",
+            ],
+        ),
+        "trigger_delivery_jobs": _values(
+            _model("triggers", "WebhookDeliveryJob"),
+            Q(emission__user=user),
+            [
+                "id",
+                "emission_id",
+                "subscription_id",
+                "target_url",
+                "secret_version",
+                "request_body",
+                "status",
+                "attempt_count",
+                "max_attempts",
+                "last_error",
+                "created_at",
+                "updated_at",
+            ],
+        ),
+        "trigger_webhook_deliveries": _values(
+            _model("triggers", "WebhookDelivery"),
+            Q(emission__user=user),
+            [
+                "id",
+                "job_id",
+                "subscription_id",
+                "target_url",
+                "request_body",
+                "response_status",
+                "response_body",
+                "attempt",
+                "succeeded",
+                "error",
+                "created_at",
+            ],
         ),
     }
 

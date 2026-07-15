@@ -106,12 +106,12 @@ class EmitEventTest(TestCase):
             )
 
         subscription = TriggerSubscription.objects.get()
-        with patch("triggers.tasks.requests.post") as mock_post:
+        with patch("triggers.tasks.post_pinned_https") as mock_post:
             mock_post.return_value = _FakeDeliveryResponse(200)
             deliver_webhook(emission.id, subscription.id)
 
         _args, kwargs = mock_post.call_args
-        envelope = json.loads(kwargs["data"].decode("utf-8"))
+        envelope = json.loads(kwargs["body"].decode("utf-8"))
         self.assertEqual(envelope["data"]["min_level"], 5)
 
     def test_flag_off_records_nothing_and_dispatches_nothing(self):
@@ -160,6 +160,23 @@ class EmitEventTest(TestCase):
             emit_event("v0_workshop", self.user, {"name": "anything"})
         dispatched_sub_ids = {call.args[2] for call in mock_task.call_args_list}
         self.assertIn(catch_all.id, dispatched_sub_ids)
+
+    def test_queue_outage_leaves_recoverable_job_without_failing_emit(self):
+        from triggers.models import WebhookDeliveryJob
+
+        TriggerSubscription.objects.create(
+            event_type="custom",
+            property_filter={},
+            target_url="https://handler.example.com/all",
+            secret="s",
+        )
+        with patch("triggers.dispatch.async_task", side_effect=RuntimeError("queue down")):
+            emission, created = emit_event("v0_workshop", self.user, {"name": "anything"})
+        self.assertTrue(created)
+        self.assertEqual(
+            WebhookDeliveryJob.objects.get(emission=emission).status,
+            WebhookDeliveryJob.STATUS_PENDING,
+        )
 
     def test_inactive_subscription_does_not_fire(self):
         inactive = TriggerSubscription.objects.create(

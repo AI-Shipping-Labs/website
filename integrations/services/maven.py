@@ -2,13 +2,14 @@
 
 import hashlib
 import logging
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, OperationalError, transaction
+from django.db import IntegrityError, OperationalError, connection, transaction
 from django.utils import timezone
 
 from accounts.models import TierOverride
@@ -32,6 +33,7 @@ MAX_STEP_ATTEMPTS = 3
 MAX_DATABASE_CONTENTION_RETRIES = 10
 RUNNING_STEP_LEASE = timedelta(minutes=15)
 STEP_NAMES = ("override", "slack", "welcome", "removal")
+_SQLITE_DELIVERY_LOCK = threading.Lock()
 
 
 class MavenTransientError(Exception):
@@ -109,6 +111,19 @@ def handle_maven_event(payload, *, dry_run=False):
     identity_hash = _identity(email, course_key, cohort_key)
     handler = _handle_enrolled if event_type == EVENT_ENROLLED else _handle_removed
     args = (payload, email, course, cohort, course_key, cohort_key, identity_hash)
+
+    # SQLite has a single writer. Serializing deliveries within one process
+    # prevents two valid webhook requests from repeatedly colliding while
+    # they create the occurrence and claim its durable steps. Other database
+    # engines retain normal concurrency, and the retry loop below still
+    # protects SQLite when contention comes from another process.
+    if connection.vendor == "sqlite":
+        with _SQLITE_DELIVERY_LOCK:
+            return _handle_with_contention_retries(handler, args)
+    return _handle_with_contention_retries(handler, args)
+
+
+def _handle_with_contention_retries(handler, args):
     for attempt in range(MAX_DATABASE_CONTENTION_RETRIES):
         try:
             return handler(*args)

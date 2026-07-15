@@ -30,6 +30,31 @@
   <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90" data-testid="delivery-filter-apply">Filter</button>
 </form>
 
+{% if delivery_jobs %}
+<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto mb-6" data-testid="delivery-jobs-list">
+  <table class="w-full">
+    <thead class="bg-secondary"><tr>
+      <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase">Job</th>
+      <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase">Target</th>
+      <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase">State</th>
+      <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase">Attempts</th>
+      <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase">Secret</th>
+    </tr></thead>
+    <tbody class="divide-y divide-border">
+      {% for job in delivery_jobs %}
+      <tr data-testid="delivery-job-row">
+        <td class="px-4 py-2.5 text-sm" data-label="Job">#{{ job.id }}</td>
+        <td class="px-4 py-2.5 text-xs font-mono break-all" data-label="Target">{{ job.target_url }}</td>
+        <td class="px-4 py-2.5 text-sm" data-label="State" data-testid="delivery-job-status">{{ job.get_status_display }}</td>
+        <td class="px-4 py-2.5 text-sm" data-label="Attempts">{{ job.attempt_count }}/{{ job.max_attempts }}</td>
+        <td class="px-4 py-2.5 text-sm" data-label="Secret">v{{ job.secret_version }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
 {% if deliveries %}
 <div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="deliveries-list">
   <table class="w-full">

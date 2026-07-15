@@ -300,15 +300,17 @@ def get_teaser_text(content, max_chars=200):
 
     Returns a plain text string.
     """
+    from content.utils.markdown import markdown_to_plain_text
+
     # Prefer description if available and non-empty
     description = getattr(content, 'description', '')
     if description:
-        return description[:max_chars]
+        return markdown_to_plain_text(description)[:max_chars]
 
     # Fall back to markdown content
     markdown = getattr(content, 'content_markdown', '')
     if markdown:
-        return markdown[:max_chars]
+        return markdown_to_plain_text(markdown)[:max_chars]
 
     return ''
 

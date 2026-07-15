@@ -257,6 +257,7 @@ class SetupSchedulesCommandTest(TestCase):
             'cleanup-calendly-webhook-logs',
             'retry-calendly-webhooks',
             'cleanup-webhook-deliveries',
+            'resume-webhook-deliveries',
             'redact-maven-enrollment-pii',
             'retry-maven-enrollment-steps',
             'purge-user-activity',

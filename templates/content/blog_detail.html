@@ -42,7 +42,7 @@
         </h1>
 
         {% if article.description %}
-        <p class="mt-4 text-xl text-muted-foreground">{{ article.description }}</p>
+        <p class="mt-4 text-xl text-muted-foreground" data-testid="article-description">{{ article.description|strip_markdown }}</p>
         {% endif %}
 
         <div class="mt-6 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">

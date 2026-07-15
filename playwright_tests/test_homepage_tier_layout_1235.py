@@ -82,7 +82,7 @@ def test_desktop_cards_use_intrinsic_heights_and_preserve_billing(
 
     free_cta = carousel.locator('[data-testid="home-free-tier-cta"]')
     basic_cta = carousel.locator('[data-tier-card="basic"] .tier-cta-link')
-    expect(free_cta).to_have_attribute('href', '/accounts/register/')
+    expect(free_cta).to_have_attribute('href', '/#join-free')
     expect(carousel.locator('[data-tier-card="main"]')).to_contain_text(
         'Most Popular'
     )
@@ -92,7 +92,7 @@ def test_desktop_cards_use_intrinsic_heights_and_preserve_billing(
     expect(basic_cta).to_have_attribute('href', monthly_link)
     page.locator('#billing-toggle').click()
     expect(basic_cta).to_have_attribute('href', annual_link)
-    expect(free_cta).to_have_attribute('href', '/accounts/register/')
+    expect(free_cta).to_have_attribute('href', '/#join-free')
     page.locator('#billing-toggle').click()
     expect(basic_cta).to_have_attribute('href', monthly_link)
 

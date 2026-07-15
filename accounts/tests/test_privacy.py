@@ -25,6 +25,7 @@ from content.models import Course, Enrollment, Project, UserContentCompletion
 from crm.models import CRMRecord, SlackMessage, SlackThread
 from email_app.models import EmailLog
 from events.models import Event, EventRegistration
+from integrations.models import WebhookLog
 from notifications.models import Notification
 from payments.models import (
     ConversionAttribution,
@@ -621,3 +622,30 @@ class PrivacyRequestLogAdminTest(TestCase):
         self.assertContains(detail, "hash-only")
         self.assertContains(detail, "ip-hash")
         self.assertNotContains(detail, "primary_email")
+
+
+@tag('core')
+class CalendlyPrivacyLifecycleTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email='calendly-privacy@test.com')
+        EmailAlias.objects.create(user=self.user, email='call-alias@test.com')
+        self.log = WebhookLog.objects.create(
+            service='calendly', event_type='invitee.created', processed=True,
+            payload={
+                'event': 'invitee.created',
+                'payload': {'email': 'call-alias@test.com', 'name': 'Private Name'},
+            },
+        )
+
+    def test_export_includes_matching_calendly_delivery(self):
+        exported = build_user_data_export(self.user)
+        rows = exported['events_community']['calendly_webhook_deliveries']
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['payload']['payload']['email'], 'call-alias@test.com')
+
+    @patch('accounts.services.privacy.notify_privacy_staff')
+    def test_delete_scrubs_primary_and_alias_from_durable_delivery(self, _notify):
+        result = delete_account_for_privacy(self.user)
+        self.assertTrue(result.success)
+        self.log.refresh_from_db()
+        self.assertEqual(self.log.payload['payload']['email'], REDACTED)

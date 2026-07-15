@@ -359,13 +359,13 @@ INTEGRATION_GROUPS = [
                     'subscription is created. Verifies that '
                     'invitee.created / invitee.canceled callbacks really '
                     'came from Calendly. When blank, webhook calls are '
-                    'rejected in production but allowed locally for replay.'
+                    'rejected in every environment.'
                 ),
                 'docs_url': '_docs/integrations/calendly.md#calendly_webhook_signing_key',
             },
             {
                 'key': 'CALENDLY_OAUTH_CLIENT_ID',
-                'is_secret': True,
+                'is_secret': False,
                 'optional': True,
                 'description': (
                     'Calendly OAuth app client ID. Used for the optional '
@@ -386,17 +386,58 @@ INTEGRATION_GROUPS = [
                 'docs_url': '_docs/integrations/calendly.md#calendly_oauth_client_secret',
             },
             {
-                'key': 'CALENDLY_WEBHOOK_VALIDATION_ENABLED',
-                'is_secret': False,
-                'is_boolean': True,
+                'key': 'CALENDLY_REFRESH_TOKEN',
+                'is_secret': True,
                 'optional': True,
+                'description': 'Managed rotating OAuth refresh token. Do not edit manually.',
+                'docs_url': '_docs/integrations/calendly.md#calendly_refresh_token',
+            },
+            {
+                'key': 'CALENDLY_ACCESS_TOKEN_EXPIRES_AT',
+                'is_secret': False,
+                'optional': True,
+                'description': 'Managed ISO timestamp for OAuth access-token refresh.',
+                'docs_url': '_docs/integrations/calendly.md#managed_oauth_state',
+            },
+            {
+                'key': 'CALENDLY_CONNECTED_USER_URI',
+                'is_secret': False,
+                'optional': True,
+                'description': 'Validated Calendly user URI for operator diagnostics.',
+                'docs_url': '_docs/integrations/calendly.md#managed_oauth_state',
+            },
+            {
+                'key': 'CALENDLY_ORGANIZATION_URI',
+                'is_secret': False,
+                'optional': True,
+                'description': 'Validated Calendly organization used for webhook provisioning.',
+                'docs_url': '_docs/integrations/calendly.md#managed_oauth_state',
+            },
+            {
+                'key': 'CALENDLY_WEBHOOK_SUBSCRIPTION_URI',
+                'is_secret': False,
+                'optional': True,
+                'description': 'Managed active webhook subscription URI.',
+                'docs_url': '_docs/integrations/calendly.md#managed_oauth_state',
+            },
+            {
+                'key': 'CALENDLY_WEBHOOK_TOLERANCE_SECONDS',
+                'is_secret': False,
+                'optional': True,
+                'default': '300',
                 'description': (
-                    'Set true to require a valid Calendly-Webhook-Signature '
-                    'header on the booked-call webhook (recommended in '
-                    'production). When false, signatures are not enforced so '
-                    'local replay works without the signing key.'
+                    'Maximum accepted webhook signature age/future skew in seconds. '
+                    'Signatures are always required.'
                 ),
-                'docs_url': '_docs/integrations/calendly.md#calendly_webhook_validation_enabled',
+                'docs_url': '_docs/integrations/calendly.md#calendly_webhook_tolerance_seconds',
+            },
+            {
+                'key': 'CALENDLY_WEBHOOK_RETENTION_DAYS',
+                'is_secret': False,
+                'optional': True,
+                'default': '30',
+                'description': 'Days to retain processed Calendly webhook payloads.',
+                'docs_url': '_docs/integrations/calendly.md#calendly_webhook_retention_days',
             },
         ],
     },

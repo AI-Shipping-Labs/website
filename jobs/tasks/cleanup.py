@@ -30,10 +30,23 @@ def cleanup_old_webhook_logs(days=30):
     deleted_count, _ = WebhookLog.objects.filter(
         received_at__lt=cutoff,
         processed=True,
-    ).delete()
+    ).exclude(service='calendly').delete()
 
     logger.info("Cleaned up %d processed webhook logs older than %d days", deleted_count, days)
     return {'deleted': deleted_count, 'cutoff_days': days}
+
+
+def cleanup_calendly_webhook_logs():
+    """Apply the Studio-configured retention window to processed Calendly PII."""
+    from community.calendly_config import calendly_webhook_retention_days
+    from integrations.models import WebhookLog
+
+    days = calendly_webhook_retention_days()
+    cutoff = timezone.now() - timedelta(days=days)
+    deleted, _ = WebhookLog.objects.filter(
+        service='calendly', processed=True, received_at__lt=cutoff,
+    ).delete()
+    return {'deleted': deleted, 'cutoff_days': days}
 
 
 def cleanup_old_webhook_deliveries(days=30):

@@ -49,6 +49,8 @@ class EntrypointRegistersSchedulesTest(TestCase):
         expected = {
             'health-check',
             'cleanup-webhook-logs',
+            'cleanup-calendly-webhook-logs',
+            'retry-calendly-webhooks',
             'cleanup-webhook-deliveries',
             'redact-maven-enrollment-pii',
             'retry-maven-enrollment-steps',

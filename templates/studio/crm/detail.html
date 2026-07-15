@@ -243,7 +243,7 @@
         data-testid="crm-booked-call-item">
       <div class="min-w-0">
         <p class="text-sm font-medium text-foreground" data-testid="crm-booked-call-host">
-          With {{ call.host.name }}
+          {% if call.host %}With {{ call.host.name }}{% else %}Calendly host needs matching{% endif %}
         </p>
         <p class="text-xs text-muted-foreground" data-testid="crm-booked-call-time">
           {% if call.scheduled_at %}{{ call.scheduled_at|operator_datetime }}{% else %}Time not set{% endif %}

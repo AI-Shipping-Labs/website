@@ -21,22 +21,22 @@ Design guarantees (acceptance criteria on #884):
 import hashlib
 import hmac
 import logging
+import time
+from urllib.parse import urlsplit, urlunsplit
 
-from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
+from accounts.services.email_resolution import resolve_user_by_email
 from community.calendly_config import (
-    calendly_webhook_validation_enabled,
+    calendly_webhook_tolerance_seconds,
     get_calendly_webhook_signing_key,
 )
 from community.models import STATUS_BOOKED, STATUS_CANCELED, BookedCall, CallHost
 
 logger = logging.getLogger(__name__)
-
-User = get_user_model()
 
 EVENT_INVITEE_CREATED = 'invitee.created'
 EVENT_INVITEE_CANCELED = 'invitee.canceled'
@@ -53,12 +53,9 @@ def verify_signature(request):
     replay works without a signing key. When validation is enabled but
     the key or header is missing/invalid, returns False.
     """
-    if not calendly_webhook_validation_enabled():
-        return True
-
     signing_key = get_calendly_webhook_signing_key()
     if not signing_key:
-        logger.warning('Calendly webhook validation enabled but signing key not set')
+        logger.warning('Calendly webhook signing key not set; rejecting request')
         return False
 
     header = request.headers.get('Calendly-Webhook-Signature', '')
@@ -66,7 +63,16 @@ def verify_signature(request):
     if not timestamp or not signature:
         return False
 
-    body = request.body.decode('utf-8')
+    try:
+        timestamp_int = int(timestamp)
+    except (TypeError, ValueError):
+        return False
+    if abs(int(time.time()) - timestamp_int) > calendly_webhook_tolerance_seconds():
+        return False
+    try:
+        body = request.body.decode('utf-8')
+    except UnicodeDecodeError:
+        return False
     signed_payload = f'{timestamp}.{body}'
     expected = hmac.new(
         signing_key.encode('utf-8'),
@@ -74,6 +80,12 @@ def verify_signature(request):
         hashlib.sha256,
     ).hexdigest()
     return hmac.compare_digest(expected, signature)
+
+
+def delivery_fingerprint(request):
+    """Stable, non-secret replay key for an already-verified delivery."""
+    header = request.headers.get('Calendly-Webhook-Signature', '')
+    return hashlib.sha256(header.encode() + b'\0' + request.body).hexdigest()
 
 
 def _parse_signature_header(header):
@@ -97,13 +109,22 @@ def _match_host(payload_resource):
     Calendly link). When no host matches we still record the call but
     cannot adjust a specific host's load — so we skip silently and log.
     """
-    scheduling_url = (payload_resource.get('scheduling_url') or '').strip()
+    scheduling_url = _normalize_url(payload_resource.get('scheduling_url'))
     if scheduling_url:
-        host = CallHost.objects.filter(booking_url=scheduling_url).first()
-        if host is not None:
-            return host
+        for host in CallHost.objects.exclude(booking_url=''):
+            if _normalize_url(host.booking_url) == scheduling_url:
+                return host
     # Fall back to event-type membership URI prefix matching.
     return None
+
+
+def _normalize_url(value):
+    raw = (value or '').strip()
+    if not raw:
+        return ''
+    parts = urlsplit(raw)
+    path = parts.path.rstrip('/') or '/'
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, '', ''))
 
 
 def _extract_invitee(payload_resource):
@@ -127,6 +148,12 @@ def _extract_event(payload_resource):
     return event_uri, scheduled_at
 
 
+def _event_time(payload, resource, *, canceled=False):
+    raw = resource.get('canceled_at') if canceled else None
+    raw = raw or payload.get('created_at') or resource.get('created_at')
+    return parse_datetime(raw) if raw else timezone.now()
+
+
 @transaction.atomic
 def handle_invitee_created(payload):
     """Record a booked call and consume one slot of host capacity.
@@ -143,7 +170,8 @@ def handle_invitee_created(payload):
 
     email, name, invitee_uri = _extract_invitee(resource)
     host = _match_host(resource)
-    member = User.objects.filter(email__iexact=email).first() if email else None
+    member = resolve_user_by_email(email)
+    event_at = _event_time(payload, resource)
 
     # Lock the row (if any) to make the create-or-update idempotent under
     # concurrent re-deliveries.
@@ -158,30 +186,42 @@ def handle_invitee_created(payload):
         # Re-delivery (or a previously canceled booking re-created). Only
         # bump capacity when transitioning back into the booked state.
         was_active = existing.is_active
+        host_was_missing = existing.host_id is None
         existing.invitee_email = email or existing.invitee_email
         existing.invitee_name = name or existing.invitee_name
         existing.scheduled_at = scheduled_at or existing.scheduled_at
         existing.calendly_invitee_uri = invitee_uri or existing.calendly_invitee_uri
         existing.member = member or existing.member
-        existing.status = STATUS_BOOKED
-        existing.canceled_at = None
+        # A cancellation tombstone is terminal for this event URI. Calendly
+        # reschedules with a new event URI, so a late create must not resurrect it.
+        if existing.status != STATUS_CANCELED:
+            existing.status = STATUS_BOOKED
+            existing.canceled_at = None
+        existing.host = existing.host or host
+        existing.last_event_at = max(filter(None, [existing.last_event_at, event_at]))
         existing.save()
-        if host is not None and not was_active:
+        if (
+            host is not None and existing.is_active
+            and (not was_active or host_was_missing)
+        ):
             _increment_load(host)
         return existing
 
-    booked = BookedCall.objects.create(
-        host=host,
-        member=member,
-        invitee_email=email,
-        invitee_name=name,
-        scheduled_at=scheduled_at,
-        status=STATUS_BOOKED,
-        calendly_event_uri=event_uri,
-        calendly_invitee_uri=invitee_uri,
-        reschedule_url=(resource.get('reschedule_url') or '')[:500],
-        cancel_url=(resource.get('cancel_url') or '')[:500],
-    )
+    try:
+        with transaction.atomic():
+            booked = BookedCall.objects.create(
+                host=host, member=member, invitee_email=email,
+                invitee_name=name, scheduled_at=scheduled_at,
+                status=STATUS_BOOKED, calendly_event_uri=event_uri,
+                calendly_invitee_uri=invitee_uri,
+                reschedule_url=(resource.get('reschedule_url') or '')[:500],
+                cancel_url=(resource.get('cancel_url') or '')[:500],
+                last_event_at=event_at,
+            )
+    except IntegrityError:
+        # A concurrent first delivery won the unique event-URI insert. Re-run
+        # under a row lock without incrementing capacity twice.
+        return handle_invitee_created(payload)
     if host is not None:
         _increment_load(host)
     return booked
@@ -205,16 +245,27 @@ def handle_invitee_canceled(payload):
         booked = qs.filter(calendly_event_uri=event_uri).first()
     if booked is None and invitee_uri:
         booked = qs.filter(calendly_invitee_uri=invitee_uri).first()
+    event_at = _event_time(payload, resource, canceled=True)
     if booked is None:
-        logger.info('Calendly invitee.canceled for unknown booking; ignoring')
-        return None
+        if not event_uri:
+            logger.info('Calendly invitee.canceled without event URI; ignoring')
+            return None
+        email, name, invitee_uri = _extract_invitee(resource)
+        # Persist a terminal tombstone so a delayed create cannot resurrect it.
+        return BookedCall.objects.create(
+            host=_match_host(resource), member=resolve_user_by_email(email),
+            invitee_email=email, invitee_name=name, status=STATUS_CANCELED,
+            calendly_event_uri=event_uri, calendly_invitee_uri=invitee_uri,
+            canceled_at=event_at, last_event_at=event_at,
+        )
 
     if not booked.is_active:
         return booked
 
     booked.status = STATUS_CANCELED
-    booked.canceled_at = timezone.now()
-    booked.save(update_fields=['status', 'canceled_at', 'updated_at'])
+    booked.canceled_at = event_at
+    booked.last_event_at = event_at
+    booked.save(update_fields=['status', 'canceled_at', 'last_event_at', 'updated_at'])
     if booked.host_id is not None:
         _decrement_load(booked.host)
     return booked

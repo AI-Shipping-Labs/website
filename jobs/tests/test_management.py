@@ -82,7 +82,19 @@ class SetupSchedulesCommandTest(TestCase):
             'complete-finished-events (daily at 04:00 UTC)',
             out.getvalue(),
         )
-        self.assertNotIn('every 5 min', out.getvalue())
+
+    def test_creates_calendly_recovery_schedules(self):
+        out = StringIO()
+        call_command('setup_schedules', stdout=out)
+        retry = Schedule.objects.get(name='retry-calendly-webhooks')
+        cleanup = Schedule.objects.get(name='cleanup-calendly-webhook-logs')
+        self.assertEqual(retry.func, 'jobs.tasks.calendly.retry_calendly_webhooks')
+        self.assertEqual(retry.cron, '*/5 * * * *')
+        self.assertEqual(
+            cleanup.func, 'jobs.tasks.cleanup.cleanup_calendly_webhook_logs',
+        )
+        self.assertEqual(cleanup.cron, '5 3 * * *')
+        self.assertIn('retry-calendly-webhooks (every 5 min)', out.getvalue())
 
     def test_creates_expire_tier_overrides_schedule(self):
         """Command creates expire-tier-overrides schedule."""
@@ -242,6 +254,8 @@ class SetupSchedulesCommandTest(TestCase):
         expected = {
             'health-check',
             'cleanup-webhook-logs',
+            'cleanup-calendly-webhook-logs',
+            'retry-calendly-webhooks',
             'cleanup-webhook-deliveries',
             'redact-maven-enrollment-pii',
             'retry-maven-enrollment-steps',

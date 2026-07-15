@@ -1,71 +1,84 @@
 # Calendly
 
-Calendly powers the deepened "Request a call" integration (issue #884, Phase 2).
-Phase 1 (#870) shipped a plain configurable scheduler link per host. Phase 2
-captures booked calls back into the CRM and auto-maintains host availability.
+Calendly powers Request a call Phase 2 (#884) for Alexey. Valeria remains on
+the plain Google appointment link because that scheduler has no equivalent API.
 
-This integration is Calendly-specific and applies to the Alexey host only.
-Valeria stays on the plain configurable Google appointment-scheduling link from
-Phase 1 because Google appointment scheduling has no equivalent booking API.
+## Flow
 
-## How it works
+1. A staff member configures a personal access token or uses **Connect
+   Calendly**. OAuth uses one-time state, PKCE S256, and the minimum
+   `scheduled_events:read webhooks:write` scopes.
+2. OAuth access/rotating refresh tokens are stored as secret integration
+   settings. The platform validates `/users/me`, discovers the organization,
+   and idempotently finds or creates the organization webhook subscription.
+3. `POST /api/webhooks/calendly` requires a valid, current HMAC signature.
+   Accepted payloads receive a durable replay fingerprint and are recorded in
+   `WebhookLog` before processing.
+4. `invitee.created` records a `BookedCall`, resolves primary or alias email to
+   the canonical active member, and increments matched host capacity.
+   `invitee.canceled` decrements capacity. Cancel-before-create produces a
+   terminal tombstone so late delivery cannot resurrect a canceled event.
+5. Matched calls appear on the CRM record. An unmatched scheduling URL still
+   creates a nullable-host record for diagnosis, but changes no host capacity.
 
-1. Alexey configures a Calendly host access token (or authorizes via the
-   optional OAuth flow). The platform uses that token to register a webhook
-   subscription for `invitee.created` and `invitee.canceled`.
-2. When a member books a call, Calendly POSTs `invitee.created` to
-   `/api/webhooks/calendly`. The platform verifies the signature, matches the
-   invitee email to a member, records a `BookedCall` row, and increments the
-   host's `current_load` so `/request-a-call` availability reflects reality.
-3. On `invitee.canceled`, the matching `BookedCall` is marked canceled and the
-   host's `current_load` is decremented.
-4. The booked call appears on the member's CRM record (issue #871).
+Processing failures return 500 for provider retry and remain visible/replayable;
+they are never acknowledged and silently dropped. Automatic replay runs every
+five minutes. Manual recovery is available with:
 
-Webhook handling is best-effort and signature-verified: a webhook failure logs
-and returns 200 (so Calendly does not retry forever) and never corrupts CRM
-data — capacity is only ever changed inside the same transaction that records
-or cancels the call, and double-deliveries are idempotent on the Calendly event
-URI.
+```
+uv run python manage.py retry_calendly_webhooks --limit 100
+```
+
+Webhook logs are also visible in Django admin.
 
 ## Settings
 
 ### calendly_access_token
 
-Calendly host access token (a personal access token or an OAuth access token)
-used to read scheduled events and create the webhook subscription. Get a
-personal token from Calendly > Integrations > API & Webhooks. Without it the
-platform cannot register the booked-call webhook or fetch event details.
+Secret personal or OAuth access token. OAuth tokens refresh automatically before
+their two-hour expiry.
+
+### calendly_refresh_token
+
+Managed OAuth secret. Calendly refresh tokens are single-use; every successful
+refresh atomically replaces this value. Do not edit it manually.
+
+### managed_oauth_state
+
+`CALENDLY_ACCESS_TOKEN_EXPIRES_AT`, `CALENDLY_CONNECTED_USER_URI`,
+`CALENDLY_ORGANIZATION_URI`, and `CALENDLY_WEBHOOK_SUBSCRIPTION_URI` are managed
+diagnostic values written by Connect Calendly / Verify subscription.
 
 ### calendly_webhook_signing_key
 
-Signing key Calendly returns when the webhook subscription is created. Verifies
-that `invitee.created` / `invitee.canceled` callbacks really came from Calendly
-via the `Calendly-Webhook-Signature` header (HMAC-SHA256 over `t=<timestamp>`
-plus the raw body). When blank, webhook calls are rejected in production but
-allowed locally for replay.
+Secret Calendly OAuth-app signing key. It is mandatory in every environment;
+an unset key rejects every webhook.
 
 ### calendly_oauth_client_id
 
-Calendly OAuth app client ID. Used for the optional authorize-Calendly flow that
-mints a host access token without pasting a personal token. Get it from Calendly
-> Integrations > OAuth applications. The redirect URI to register is
-`{SITE_BASE_URL}/studio/integrations/calendly/callback`.
+OAuth application client ID. Register
+`{SITE_BASE_URL}/studio/integrations/calendly/callback` as the exact redirect.
 
 ### calendly_oauth_client_secret
 
-Calendly OAuth app client secret paired with the client ID above. Required only
-for the authorize flow.
+OAuth application client secret.
 
-### calendly_webhook_validation_enabled
+### calendly_webhook_tolerance_seconds
 
-Set true to require a valid `Calendly-Webhook-Signature` header on the
-booked-call webhook (recommended in production). When false, signatures are not
-enforced so local replay works without the signing key.
+Maximum accepted signature age or future clock skew, default 300 seconds.
 
-## Notes
+### calendly_webhook_retention_days
 
-- Webhook endpoint: `POST /api/webhooks/calendly`
-- OAuth connect (staff-only): `GET /studio/integrations/calendly/connect`
-- OAuth callback (staff-only): `GET /studio/integrations/calendly/callback`
-- The OAuth round-trip against the real Calendly account is verified manually
-  ([HUMAN] criteria on issue #884).
+Processed raw delivery payloads are pruned after this many days, default 30.
+Failed deliveries remain until recovered so failures are not silently lost.
+
+## Operator checks
+
+- **Connect Calendly** performs authorization, identity validation, and
+  subscription provisioning.
+- **Verify subscription** is an idempotent staff POST action for token and
+  subscription health.
+- OAuth failure/expiry directs the operator to reconnect; invalid rotating
+  refresh credentials are cleared rather than retried indefinitely.
+- A real OAuth round trip and real booking remain the two `[HUMAN]` criteria on
+  #884. Do not mark them complete from mocked tests.

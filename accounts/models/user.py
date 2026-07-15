@@ -131,6 +131,26 @@ class User(AbstractUser):
             "sent. Prevents the daily reminder task from spamming."
         ),
     )
+    # Cross-worker resend throttle claim (issue #449). The timestamp uses the
+    # database clock; the opaque UUID is an operational compare-and-clear
+    # token, never an email-verification credential.
+    verification_resend_claimed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Database time when the current verification-email resend "
+            "throttle window was claimed."
+        ),
+    )
+    verification_resend_claim_token = models.UUIDField(
+        null=True,
+        blank=True,
+        editable=False,
+        help_text=(
+            "Opaque operational token used to release only the matching "
+            "failed resend claim; not an email-verification token."
+        ),
+    )
     unsubscribed = models.BooleanField(
         default=False,
         help_text="Whether the user has unsubscribed from emails.",

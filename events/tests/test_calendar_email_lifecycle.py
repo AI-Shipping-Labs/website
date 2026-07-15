@@ -167,6 +167,32 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         )
 
     @patch('events.services.registration_email.boto3')
+    def test_rename_reschedule_and_cancel_reuse_original_uid(self, mock_boto3):
+        """Mutable public slugs never split one event into duplicate entries."""
+        mock_boto3.client.return_value.send_email.return_value = {
+            'MessageId': 'ses-lifecycle',
+        }
+        original_uid = self.event.calendar_uid
+        self.event.slug = 'renamed-calendar-lifecycle-1073'
+        self.event.start_datetime = self.start + timedelta(days=1)
+        self.event.save()
+
+        send_reschedule_notice_one(
+            self.event.pk,
+            self.user.pk,
+            self.start.isoformat(),
+        )
+        _, reschedule_cal = _calendar_from_raw(self._last_raw(mock_boto3))
+        self.assertEqual(str(_vevent(reschedule_cal).get('uid')), original_uid)
+
+        self.event.status = 'cancelled'
+        self.event.ics_sequence += 1
+        self.event.save(update_fields=['status', 'ics_sequence'])
+        send_cancellation_notice_one(self.event.pk, self.user.pk)
+        _, cancellation_cal = _calendar_from_raw(self._last_raw(mock_boto3))
+        self.assertEqual(str(_vevent(cancellation_cal).get('uid')), original_uid)
+
+    @patch('events.services.registration_email.boto3')
     def test_cancellation_email_raw_mime_is_cancel_with_status_cancelled(
         self, mock_boto3,
     ):

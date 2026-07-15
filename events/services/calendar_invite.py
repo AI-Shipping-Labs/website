@@ -214,12 +214,18 @@ def build_vevent(event, audience=AUDIENCE_ATTENDEE, attendee_email=None,
     if method == 'CANCEL':
         vevent.add('status', 'CANCELLED')
 
-    # Stable UID per event. Per RFC 5545 the UID must be globally
+    # Stable UID per event. ``calendar_uid`` captures the creation-time slug,
+    # because the public slug itself is editable in Studio and the API. Keep a
+    # slug-derived fallback for lightweight test/integration stubs that are not
+    # real Event model instances. Per RFC 5545 the UID must be globally
     # stable across iCal client reloads — DO NOT swap this for
     # SITE_BASE_URL. If the apex domain changes between dev/prod, a
     # calendar that received the dev invite would treat the prod invite
     # as a different event instead of an update.
-    vevent.add('uid', f'event-{event.slug}@aishippinglabs.com')
+    calendar_uid = getattr(event, 'calendar_uid', '') or (
+        f'event-{event.slug}@aishippinglabs.com'
+    )
+    vevent.add('uid', calendar_uid)
 
     detail_url, join_url = _event_urls(event)
     if audience == AUDIENCE_ATTENDEE:

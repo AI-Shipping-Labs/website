@@ -17,18 +17,11 @@ Chain ``truncatechars``/``truncatewords`` AFTER ``strip_markdown`` so the
 per-surface truncation length is preserved.
 """
 
-import html as html_lib
-import re
-
 from django import template
-from django.utils.html import strip_tags
 
-from content.utils.markdown import render_markdown
+from content.utils.markdown import markdown_to_plain_text
 
 register = template.Library()
-
-_WHITESPACE_RE = re.compile(r'\s+')
-
 
 @register.filter
 def strip_markdown(value):
@@ -42,14 +35,4 @@ def strip_markdown(value):
     Mermaid/external-link extensions are disabled here — they add nothing to a
     plain-text excerpt and only cost render time.
     """
-    if not value:
-        return ''
-    html = render_markdown(
-        str(value),
-        include_mermaid=False,
-        include_external_links=False,
-    )
-    # strip_tags removes markup but leaves HTML entities (&amp;, &lt;, ...);
-    # unescape so the excerpt is true plain text.
-    text = html_lib.unescape(strip_tags(html))
-    return _WHITESPACE_RE.sub(' ', text).strip()
+    return markdown_to_plain_text(value)

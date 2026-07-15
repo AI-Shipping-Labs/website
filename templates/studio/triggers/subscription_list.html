@@ -40,7 +40,9 @@
         <td class="px-4 py-2.5 align-top text-sm text-foreground" data-label="Event type">{{ sub.event_type }}</td>
         <td class="px-4 py-2.5 align-top text-xs text-muted-foreground" data-label="Filter">{{ sub.property_filter|property_filter_preview }}</td>
         <td class="px-4 py-2.5 align-top text-xs text-muted-foreground font-mono break-all" data-label="Target URL">{{ sub.target_url }}</td>
-        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground font-mono" data-label="Secret" data-testid="subscription-secret-masked">••••••••</td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground font-mono" data-label="Secret" data-testid="subscription-secret-masked">
+          •••••••• <span class="text-muted-foreground">v{{ sub.secret_version }}</span>
+        </td>
         <td class="px-4 py-2.5 align-top text-sm" data-label="Status">
           {% if sub.is_active %}
             <span class="inline-flex items-center rounded-full bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-500" data-testid="subscription-active">Active</span>

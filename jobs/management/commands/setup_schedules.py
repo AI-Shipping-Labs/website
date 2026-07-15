@@ -43,6 +43,15 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: cleanup-webhook-deliveries (daily at 03:10 UTC)'))
 
+        # Durable trigger jobs own retry count/backoff in the database. This
+        # minute-level wake-up also recovers a worker that died after leasing.
+        schedule(
+            'triggers.tasks.resume_due_webhook_deliveries',
+            cron='* * * * *',
+            name='resume-webhook-deliveries',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: resume-webhook-deliveries (every minute)'))
+
         # Purge old per-user CRM activity timeline rows daily at 03:30 UTC
         # (issue #853). Off-peak, after the webhook-log cleanup. The
         # retention window comes from the Studio-editable

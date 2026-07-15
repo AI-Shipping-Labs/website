@@ -71,6 +71,10 @@ the trust boundary:
    `EventEmission`, and dispatches matching subscriptions.
 3. A duplicate claim is a no-op that returns the already-claimed state.
 
+Claim POSTs are additionally limited per member and direct peer IP. A burst
+over the limit returns `429` with a friendly wait-and-retry state; it never
+records or dispatches an extra emission.
+
 The global `TRIGGERS_ENABLED` flag (Studio settings, `Event triggers`
 group) is the master switch. When off, claims short-circuit to a friendly
 "claims are paused" state and nothing is recorded.

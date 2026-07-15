@@ -17,6 +17,9 @@ States returned by ``/state``:
 - ``claimable``       — eligible and not yet claimed.
 """
 
+import time
+
+from django.core.cache import cache
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET, require_POST
 
@@ -24,6 +27,39 @@ from content.access import LEVEL_BASIC, LEVEL_REGISTERED, get_user_level
 from integrations.config import is_enabled
 from triggers.dispatch import emit_event
 from triggers.models import EventEmission, EventWidget
+
+CLAIM_USER_LIMIT_PER_MINUTE = 5
+CLAIM_IP_LIMIT_PER_MINUTE = 20
+
+
+def _increment_rate(key, timeout):
+    if cache.add(key, 1, timeout=timeout):
+        return 1
+    try:
+        return cache.incr(key)
+    except ValueError:
+        cache.set(key, 1, timeout=timeout)
+        return 1
+
+
+def _claim_is_rate_limited(request, widget):
+    """Enforce fixed-window user and direct-peer-IP claim budgets."""
+    now = int(time.time())
+    bucket = now // 60
+    timeout = 61 - (now % 60)
+    user_count = _increment_rate(
+        f"trigger-claim:user:{request.user.pk}:{widget.pk}:{bucket}",
+        timeout,
+    )
+    peer = request.META.get("REMOTE_ADDR") or "unknown"
+    ip_count = _increment_rate(
+        f"trigger-claim:ip:{peer}:{widget.pk}:{bucket}",
+        timeout,
+    )
+    return (
+        user_count > CLAIM_USER_LIMIT_PER_MINUTE
+        or ip_count > CLAIM_IP_LIMIT_PER_MINUTE
+    )
 
 
 def _active_widget(slug):
@@ -138,6 +174,18 @@ def widget_claim(request, slug):
                 "pricing_url": "/pricing",
             },
             status=403,
+        )
+
+    if _claim_is_rate_limited(request, widget):
+        return JsonResponse(
+            {
+                "slug": slug,
+                "state": "rate_limited",
+                "error": "Too many claim attempts. Please wait a minute and try again.",
+                "retry_after": 60,
+            },
+            status=429,
+            headers={"Retry-After": "60"},
         )
 
     emit_event(

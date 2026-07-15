@@ -11,6 +11,7 @@ Usage:
 """
 
 import os
+from pathlib import Path
 
 import pytest
 from playwright.sync_api import expect
@@ -39,6 +40,30 @@ pytestmark = [
     pytest.mark.core,
     pytest.mark.django_db(transaction=True),
 ]
+
+SCREENSHOT_DIR = Path(__file__).parent.parent / ".tmp" / "issue-1070-correction"
+
+
+def _assert_clean_article_description(page):
+    description = page.locator('[data-testid="article-description"]')
+    expect(page.locator("h1")).to_have_text("Widget Host Article")
+    expect(page.locator("h1")).to_be_visible()
+    expect(description).to_be_visible()
+    expect(description).to_have_text("Intro paragraph. Outro paragraph.")
+    meta_description = page.locator('meta[name="description"]').get_attribute(
+        "content"
+    )
+    assert meta_description == "Intro paragraph. Outro paragraph."
+    body_text = page.locator("body").inner_text()
+    for leaked_text in ("eventwidget", "slug:", "Loading…"):
+        assert leaked_text not in body_text
+
+
+def _prepare_article_screenshot(page):
+    page.set_viewport_size({"width": 1280, "height": 900})
+    expect(page.locator("header").first).to_be_visible()
+    expect(page.locator("footer")).to_be_visible()
+    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _set_triggers_enabled(value):
@@ -127,6 +152,7 @@ def test_registered_member_claims_and_dedup_persists(browser, django_server):
     _create_user("claimer@test.com", tier_slug="free", email_verified=True)
 
     context = _auth_context(browser, "claimer@test.com")
+    context.add_init_script("localStorage.setItem('theme', 'dark')")
     page = context.new_page()
     try:
         page.goto(f"{django_server}/blog/evt-widget-claim")
@@ -134,6 +160,12 @@ def test_registered_member_claims_and_dedup_persists(browser, django_server):
         expect(claim_btn).to_be_visible()
         expect(page.locator('[data-testid="event-widget-body"]')).to_contain_text(
             "Get your v0 credit"
+        )
+        _assert_clean_article_description(page)
+        _prepare_article_screenshot(page)
+        page.screenshot(
+            path=SCREENSHOT_DIR / "article-active-widget-clean-description.png",
+            full_page=True,
         )
 
         claim_btn.click()
@@ -234,6 +266,7 @@ def test_deactivated_widget_renders_nothing(browser, django_server):
     _create_user("inactive@test.com", tier_slug="free", email_verified=True)
 
     context = _auth_context(browser, "inactive@test.com")
+    context.add_init_script("localStorage.setItem('theme', 'dark')")
     page = context.new_page()
     try:
         page.goto(f"{django_server}/blog/evt-widget-inactive")
@@ -248,6 +281,12 @@ def test_deactivated_widget_renders_nothing(browser, django_server):
         expect(widget_node).to_have_text("")
         # The page itself still rendered (outro paragraph present).
         expect(page.locator("body")).to_contain_text("Outro paragraph")
+        _assert_clean_article_description(page)
+        _prepare_article_screenshot(page)
+        page.screenshot(
+            path=SCREENSHOT_DIR / "article-inactive-widget-clean-description.png",
+            full_page=True,
+        )
     finally:
         context.close()
         _reset()

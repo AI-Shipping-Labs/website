@@ -1,5 +1,6 @@
 """Config-flag registration + model behaviour tests (issue #1070)."""
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase, tag
 
 from integrations.config import clear_config_cache, is_enabled
@@ -47,6 +48,14 @@ class SubscriptionMatchesTest(TestCase):
     def test_non_dict_properties_do_not_match_a_filter(self):
         sub = TriggerSubscription(property_filter={"name": "x"})
         self.assertFalse(sub.matches(None))
+
+    def test_non_object_filter_is_rejected_at_model_boundary(self):
+        with self.assertRaises(ValidationError):
+            TriggerSubscription.objects.create(
+                property_filter=["not", "an", "object"],
+                target_url="https://handler.example.com/hook",
+                secret="s",
+            )
 
 
 @tag("core")

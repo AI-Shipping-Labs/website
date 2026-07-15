@@ -34,6 +34,12 @@ class EventWidgetShortcodeTest(TestCase):
         self.assertNotIn("event-widget", html)
         self.assertNotIn("eventwidget", html)
 
+    def test_unclosed_shortcode_does_not_leak(self):
+        html = render_markdown("Before.\n\n```eventwidget\nslug: v0-claim")
+        self.assertIn("Before.", html)
+        self.assertNotIn("eventwidget", html)
+        self.assertNotIn("slug:", html)
+
     def test_slug_is_slugified(self):
         html = render_markdown("```eventwidget\nslug: V0 Claim!\n```")
         self.assertIn('data-event-widget="v0-claim"', html)
@@ -50,3 +56,5 @@ class EventWidgetShortcodeTest(TestCase):
 
         html = render_email_markdown("```eventwidget\nslug: v0-claim\n```")
         self.assertNotIn("event-widget", html)
+        self.assertNotIn("eventwidget", html)
+        self.assertNotIn("slug:", html)

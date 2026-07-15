@@ -1,6 +1,6 @@
 """Authenticated operator API for the event-hooks subsystem (issue #1070).
 
-Staff-token-gated (via ``token_required``) management + observability:
+Staff-token or CSRF-checked staff-session management + observability:
 
 - ``GET/POST /api/triggers/subscriptions`` and
   ``GET/PATCH /api/triggers/subscriptions/<id>``
@@ -13,10 +13,9 @@ so the no-deletes-via-API policy guard stays green. Subscription/widget
 secrets are accepted on write but NEVER returned in responses.
 """
 
+from django.core.exceptions import ValidationError
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 
-from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import (
@@ -25,6 +24,7 @@ from api.utils import (
     parse_bool_query,
     parse_json_body,
     require_methods,
+    staff_token_or_session_required,
     validation_response,
 )
 from triggers.models import (
@@ -33,6 +33,7 @@ from triggers.models import (
     EventWidget,
     TriggerSubscription,
     WebhookDelivery,
+    WebhookDeliveryJob,
 )
 
 # ---------------------------------------------------------------------------
@@ -52,7 +53,9 @@ def _serialize_subscription(sub):
         "target_url": sub.target_url,
         # ``has_secret`` lets a client confirm a secret is set without ever
         # seeing the value; the raw secret is intentionally omitted.
-        "has_secret": bool(sub.secret),
+        "has_secret": bool(sub.encrypted_secret),
+        "secret_version": sub.secret_version,
+        "previous_secret_valid_until": _iso(sub.previous_secret_valid_until),
         "is_active": sub.is_active,
         "description": sub.description,
         "created_at": _iso(sub.created_at),
@@ -96,9 +99,29 @@ def _serialize_delivery(d):
         "target_url": d.target_url,
         "response_status": d.response_status,
         "attempt": d.attempt,
+        "job_id": d.job_id,
+        "job_status": d.job.status if d.job_id else None,
         "succeeded": d.succeeded,
         "error": d.error,
         "created_at": _iso(d.created_at),
+    }
+
+
+def _serialize_delivery_job(job):
+    return {
+        "id": job.pk,
+        "emission_id": job.emission_id,
+        "subscription_id": job.subscription_id,
+        "target_url": job.target_url,
+        "secret_version": job.secret_version,
+        "status": job.status,
+        "attempt_count": job.attempt_count,
+        "max_attempts": job.max_attempts,
+        "next_attempt_at": _iso(job.next_attempt_at),
+        "lease_expires_at": _iso(job.lease_expires_at),
+        "last_error": job.last_error,
+        "created_at": _iso(job.created_at),
+        "updated_at": _iso(job.updated_at),
     }
 
 
@@ -166,8 +189,7 @@ _SUBSCRIPTION_EXAMPLE = {
 }
 
 
-@token_required
-@csrf_exempt
+@staff_token_or_session_required
 @require_methods("GET", "POST")
 @openapi_spec(
     tag="Triggers",
@@ -234,12 +256,14 @@ def subscriptions_collection(request):
         return validation_response(errors)
 
     sub = TriggerSubscription(**values)
-    sub.save()
+    try:
+        sub.save()
+    except ValidationError as exc:
+        return validation_response(exc.message_dict)
     return JsonResponse(_serialize_subscription(sub), status=201)
 
 
-@token_required
-@csrf_exempt
+@staff_token_or_session_required
 @require_methods("GET", "PATCH")
 @openapi_spec(
     tag="Triggers",
@@ -296,7 +320,10 @@ def subscription_detail(request, subscription_id):
 
     for field, value in values.items():
         setattr(sub, field, value)
-    sub.save()
+    try:
+        sub.save()
+    except ValidationError as exc:
+        return validation_response(exc.message_dict)
     return JsonResponse(_serialize_subscription(sub), status=200)
 
 
@@ -366,8 +393,7 @@ _WIDGET_EXAMPLE = {
 }
 
 
-@token_required
-@csrf_exempt
+@staff_token_or_session_required
 @require_methods("GET", "POST")
 @openapi_spec(
     tag="Triggers",
@@ -429,12 +455,15 @@ def widgets_collection(request):
         return validation_response({"slug": "A widget with that slug already exists."})
 
     widget = EventWidget(**values)
-    widget.save()
+    try:
+        widget.full_clean()
+        widget.save()
+    except ValidationError as exc:
+        return validation_response(exc.message_dict)
     return JsonResponse(_serialize_widget(widget), status=201)
 
 
-@token_required
-@csrf_exempt
+@staff_token_or_session_required
 @require_methods("GET", "PATCH")
 @openapi_spec(
     tag="Triggers",
@@ -496,12 +525,15 @@ def widget_detail(request, widget_id):
 
     for field, value in values.items():
         setattr(widget, field, value)
-    widget.save()
+    try:
+        widget.full_clean()
+        widget.save()
+    except ValidationError as exc:
+        return validation_response(exc.message_dict)
     return JsonResponse(_serialize_widget(widget), status=200)
 
 
-@token_required
-@csrf_exempt
+@staff_token_or_session_required
 @require_methods("GET")
 @openapi_spec(
     tag="Triggers",
@@ -534,8 +566,7 @@ def emissions_collection(request):
     )
 
 
-@token_required
-@csrf_exempt
+@staff_token_or_session_required
 @require_methods("GET")
 @openapi_spec(
     tag="Triggers",
@@ -556,13 +587,24 @@ def emissions_collection(request):
 )
 def deliveries_collection(request):
     """GET ``/api/triggers/deliveries``. Read-only log."""
-    qs = WebhookDelivery.objects.all()
+    qs = WebhookDelivery.objects.select_related("job")
     subscription = request.GET.get("subscription")
     if subscription:
         qs = qs.filter(subscription_id=subscription)
     succeeded = parse_bool_query(request.GET.get("succeeded"))
     if succeeded is not None:
         qs = qs.filter(succeeded=succeeded)
+    jobs = WebhookDeliveryJob.objects.all()
+    if subscription:
+        jobs = jobs.filter(subscription_id=subscription)
+    if succeeded is True:
+        jobs = jobs.filter(status=WebhookDeliveryJob.STATUS_SUCCEEDED)
+    elif succeeded is False:
+        jobs = jobs.exclude(status=WebhookDeliveryJob.STATUS_SUCCEEDED)
     return JsonResponse(
-        {"deliveries": [_serialize_delivery(d) for d in qs[:500]]}, status=200,
+        {
+            "jobs": [_serialize_delivery_job(job) for job in jobs[:500]],
+            "deliveries": [_serialize_delivery(d) for d in qs[:500]],
+        },
+        status=200,
     )

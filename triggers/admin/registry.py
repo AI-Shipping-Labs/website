@@ -11,6 +11,7 @@ from triggers.models import (
     EventWidget,
     TriggerSubscription,
     WebhookDelivery,
+    WebhookDeliveryJob,
 )
 
 
@@ -20,7 +21,12 @@ class TriggerSubscriptionAdmin(admin.ModelAdmin):
     list_filter = ("is_active", "event_type")
     search_fields = ("target_url", "description")
     # Never expose the signing secret in the admin changelist/detail.
-    exclude = ("secret",)
+    exclude = (
+        "encrypted_secret",
+        "previous_encrypted_secret",
+        "previous_secret_valid_until",
+    )
+    readonly_fields = ("secret_version",)
 
 
 @admin.register(EventWidget)
@@ -53,6 +59,7 @@ class WebhookDeliveryAdmin(admin.ModelAdmin):
     list_filter = ("succeeded",)
     search_fields = ("target_url", "error")
     readonly_fields = (
+        "job",
         "emission",
         "subscription",
         "target_url",
@@ -64,3 +71,33 @@ class WebhookDeliveryAdmin(admin.ModelAdmin):
         "error",
         "created_at",
     )
+
+
+@admin.register(WebhookDeliveryJob)
+class WebhookDeliveryJobAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "subscription",
+        "status",
+        "attempt_count",
+        "max_attempts",
+        "secret_version",
+        "updated_at",
+    )
+    list_filter = ("status",)
+    readonly_fields = (
+        "emission",
+        "subscription",
+        "target_url",
+        "secret_version",
+        "request_body",
+        "status",
+        "attempt_count",
+        "max_attempts",
+        "next_attempt_at",
+        "lease_expires_at",
+        "last_error",
+        "created_at",
+        "updated_at",
+    )
+    exclude = ("encrypted_secret",)

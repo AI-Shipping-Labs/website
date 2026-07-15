@@ -18,6 +18,7 @@ The Lambda fulfilment (code pool + SES send) is out of scope here; this
 module only signs and dispatches the envelope.
 """
 
+import json
 import logging
 import uuid
 
@@ -31,6 +32,7 @@ from triggers.models import (
     EVENT_TYPE_CUSTOM,
     EventEmission,
     TriggerSubscription,
+    WebhookDeliveryJob,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,7 +42,15 @@ logger = logging.getLogger(__name__)
 DELIVERY_MAX_RETRIES = 3
 
 
-def build_envelope(name, user, properties, *, envelope_id, min_level=None):
+def build_envelope(
+    name,
+    user,
+    properties,
+    *,
+    envelope_id,
+    min_level=None,
+    occurred_at=None,
+):
     """Build the wire envelope for an emitted event.
 
     Kept pure (no DB writes) so tests and the signer can reuse it.
@@ -55,7 +65,7 @@ def build_envelope(name, user, properties, *, envelope_id, min_level=None):
     return {
         "event": name,
         "id": envelope_id,
-        "occurred_at": timezone.now().isoformat(),
+        "occurred_at": (occurred_at or timezone.now()).isoformat(),
         "data": data,
     }
 
@@ -99,14 +109,26 @@ def emit_event(name, user, properties=None, *, min_level=None):
         return None, False
 
     envelope_id = f"evt_{uuid.uuid4().hex}"
+    occurred_at = timezone.now()
+    authenticated_user = user if (user is not None and user.is_authenticated) else None
+    envelope = build_envelope(
+        name,
+        authenticated_user,
+        properties,
+        envelope_id=envelope_id,
+        min_level=properties.get("min_level"),
+        occurred_at=occurred_at,
+    )
 
     try:
         with transaction.atomic():
             emission = EventEmission.objects.create(
-                user=user if (user is not None and user.is_authenticated) else None,
+                user=authenticated_user,
                 event_name=name,
                 properties=properties,
                 envelope_id=envelope_id,
+                occurred_at=occurred_at,
+                envelope=envelope,
             )
     except IntegrityError:
         # Duplicate (user, event_name): one-shot dedup. Return the existing
@@ -130,14 +152,41 @@ def _dispatch_to_subscriptions(emission, name, properties):
     for subscription in subscriptions:
         if not subscription.matches(properties):
             continue
-        async_task(
-            "triggers.tasks.deliver_webhook",
-            emission.id,
-            subscription.id,
-            max_retries=DELIVERY_MAX_RETRIES,
-            task_name=build_task_name(
-                "Deliver webhook",
-                name,
-                f"subscription {subscription.id}",
-            ),
+        raw_body = json.dumps(
+            emission.envelope,
+            separators=(",", ":"),
+            sort_keys=True,
         )
+        WebhookDeliveryJob.objects.get_or_create(
+            emission=emission,
+            subscription=subscription,
+            defaults={
+                "target_url": subscription.target_url,
+                "encrypted_secret": subscription.encrypted_secret,
+                "secret_version": subscription.secret_version,
+                "request_body": raw_body,
+                "max_attempts": DELIVERY_MAX_RETRIES + 1,
+            },
+        )
+        try:
+            async_task(
+                "triggers.tasks.deliver_webhook",
+                emission.id,
+                subscription.id,
+                # Retry ownership lives in WebhookDeliveryJob. django-q only
+                # wakes the durable state machine and must add no attempts.
+                max_retries=0,
+                task_name=build_task_name(
+                    "Deliver webhook",
+                    name,
+                    f"subscription {subscription.id}",
+                ),
+            )
+        except Exception:
+            # The durable pending row is recoverable by the minute schedule;
+            # queue availability must never turn a valid claim into a 500.
+            logger.exception(
+                "Initial webhook enqueue failed for emission=%s subscription=%s",
+                emission.pk,
+                subscription.pk,
+            )

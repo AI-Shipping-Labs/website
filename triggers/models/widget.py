@@ -8,6 +8,7 @@ endpoint; the claim POST calls ``emit_event`` server-side after enforcing
 partnership is a new row.
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from content.access import LEVEL_REGISTERED
@@ -64,6 +65,13 @@ class EventWidget(models.Model):
 
     def __str__(self):
         return self.slug
+
+    def clean(self):
+        super().clean()
+        if self.min_level not in {0, 5, 10, 20, 30}:
+            raise ValidationError(
+                {"min_level": "Choose one of the supported access levels: 0, 5, 10, 20, 30."},
+            )
 
     @property
     def embed_shortcode(self):

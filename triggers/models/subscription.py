@@ -8,7 +8,14 @@ POST. v0 credits is only the FIRST partner — each future partnership is a
 new subscription row, no core changes.
 """
 
+from datetime import timedelta
+
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
+
+from triggers.destinations import validate_outbound_url
+from triggers.secrets import decrypt_secret, encrypt_secret
 
 EVENT_TYPE_CUSTOM = "custom"
 
@@ -39,12 +46,15 @@ class TriggerSubscription(models.Model):
     )
     target_url = models.URLField(
         max_length=500,
+        validators=[validate_outbound_url],
         help_text="The external handler (e.g. a Lambda Function URL).",
     )
-    secret = models.CharField(
-        max_length=255,
-        help_text="HMAC signing secret shared with the handler. Write-only.",
+    encrypted_secret = models.TextField(
+        help_text="Encrypted HMAC signing secret. Never render this value.",
     )
+    previous_encrypted_secret = models.TextField(blank=True, default="")
+    secret_version = models.PositiveIntegerField(default=1)
+    previous_secret_valid_until = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     description = models.CharField(
         max_length=255,
@@ -62,6 +72,70 @@ class TriggerSubscription(models.Model):
 
     def __str__(self):
         return f"{self.event_type} -> {self.target_url}"
+
+    def __init__(self, *args, **kwargs):
+        plaintext_secret = kwargs.pop("secret", None)
+        super().__init__(*args, **kwargs)
+        self._loaded_target_url = self.__dict__.get("target_url")
+        if plaintext_secret is not None:
+            self.set_secret(plaintext_secret)
+
+    @property
+    def secret(self):
+        """Decrypt the current signing secret only at its point of use."""
+        return decrypt_secret(self.encrypted_secret)
+
+    @secret.setter
+    def secret(self, value):
+        self.set_secret(value)
+
+    def set_secret(self, value, *, grace_period=timedelta(hours=24)):
+        """Rotate the secret, retaining the prior version for a bounded grace."""
+        if not value:
+            raise ValidationError({"secret": "A signing secret is required."})
+        if len(value) > 255:
+            raise ValidationError({"secret": "Signing secret must be 255 characters or fewer."})
+        if self.encrypted_secret:
+            self.previous_encrypted_secret = self.encrypted_secret
+            self.previous_secret_valid_until = timezone.now() + grace_period
+            self.secret_version += 1
+        else:
+            self.secret_version = max(self.secret_version or 0, 1)
+        self.encrypted_secret = encrypt_secret(value)
+
+    def secret_candidates(self):
+        """Return current and still-valid previous secrets with their versions."""
+        candidates = [(self.secret_version, self.secret)]
+        if (
+            self.previous_encrypted_secret
+            and self.previous_secret_valid_until
+            and self.previous_secret_valid_until > timezone.now()
+        ):
+            candidates.append(
+                (self.secret_version - 1, decrypt_secret(self.previous_encrypted_secret)),
+            )
+        return candidates
+
+    def clean(self):
+        super().clean()
+        if not self.encrypted_secret:
+            raise ValidationError({"secret": "A signing secret is required."})
+        if not isinstance(self.property_filter, dict):
+            raise ValidationError({"property_filter": "Must be a JSON object (key/value map)."})
+
+    def save(self, *args, **kwargs):
+        # Model-level enforcement covers scripts/admin/API, not just ModelForms.
+        # Emergency pause writes must remain possible while handler DNS is down.
+        excludes = []
+        update_fields = kwargs.get("update_fields")
+        if self.pk and self.target_url == self._loaded_target_url:
+            excludes.append("target_url")
+        if update_fields is not None and "target_url" not in update_fields:
+            excludes.append("target_url")
+        self.full_clean(exclude=set(excludes))
+        result = super().save(*args, **kwargs)
+        self._loaded_target_url = self.target_url
+        return result
 
     def matches(self, properties):
         """True if every key in ``property_filter`` equals ``properties``.

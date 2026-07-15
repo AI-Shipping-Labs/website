@@ -28,9 +28,14 @@ maps an emitted event to an external handler:
 - `property_filter` — an exact-match JSON map. ALL keys must equal the
   emitted event's `properties` for the subscription to fire. An empty `{}`
   matches every event of that type. Example: `{"name": "v0_workshop"}`.
-- `target_url` — the handler (e.g. a Lambda Function URL).
+- `target_url` — an HTTPS handler on port 443. Literal/private/loopback/
+  link-local/reserved addresses and hostnames resolving to any such address
+  are rejected. Delivery pins the validated public peer IP while preserving
+  TLS SNI/certificate and Host validation; redirects are never followed.
 - `secret` — the HMAC signing secret shared with the handler. Write-only:
-  it is masked everywhere and never returned by the API.
+  it is encrypted at rest, masked everywhere, and never returned by the API.
+  Rotations increment a visible secret version and retain the prior encrypted
+  version for a 24-hour operator grace window.
 - `is_active` — deactivate (never delete) to stop a subscription firing.
 
 ## Signature scheme
@@ -44,6 +49,7 @@ Each delivery POSTs the envelope (see below) with these headers:
   window).
 - `X-AISL-Event-Id: <envelope_id>` — the `evt_<uuid>` id for the handler's
   own dedup.
+- `X-AISL-Secret-Version: <integer>` — the snapshotted signing-key version.
 
 This mirrors the inbound GitHub webhook verification helper. The handler
 recomputes the HMAC over `"<X-AISL-Timestamp>.<raw_body>"` and compares
@@ -78,9 +84,18 @@ Old `WebhookDelivery` rows are pruned by the daily
 `cleanup-webhook-deliveries` scheduled job (30-day retention), reusing the
 same wiring as the inbound webhook-log cleanup.
 
+Each emission/subscription pair also owns a durable delivery job. Its target,
+secret version, envelope id, `occurred_at`, and raw body are immutable. The
+database leases one worker at a time, records at most four attempts (one plus
+three retries with bounded backoff), and suppresses work after success. A
+minute-level recovery schedule wakes due/expired leases independently of
+django-q's global retry settings. Deactivating a subscription immediately
+pauses queued attempts; reactivation lets the recovery schedule resume them.
+
 ## Authenticated API
 
-Staff-token-gated (`Authorization: Token <key>`), all under `/api/`:
+Staff-gated, using either `Authorization: Token <key>` or a staff browser
+session (unsafe session methods also require CSRF), all under `/api/`:
 
 - `GET/POST /api/triggers/subscriptions`, `GET/PATCH /api/triggers/subscriptions/<id>`
 - `GET/POST /api/triggers/widgets`, `GET/PATCH /api/triggers/widgets/<id>`

@@ -50,6 +50,7 @@ class EntrypointRegistersSchedulesTest(TestCase):
             'health-check',
             'cleanup-webhook-logs',
             'cleanup-webhook-deliveries',
+            'resume-webhook-deliveries',
             'purge-user-activity',
             'event-reminders',
             'complete-finished-events',

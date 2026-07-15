@@ -11,6 +11,7 @@ from django.http import JsonResponse
 from django.middleware.csrf import CsrfViewMiddleware
 
 from accounts.auth import token_required
+from accounts.utils.user_checks import is_staff_user
 from api.safety import error_response
 
 
@@ -130,5 +131,34 @@ def token_or_session_required(view_func):
             return failure_response
         return view_func(request, *args, **kwargs)
 
+    wrapper.csrf_exempt = True
+    return wrapper
+
+
+def staff_token_or_session_required(view_func):
+    """Allow a staff token or a CSRF-checked staff browser session."""
+    token_view = token_required(view_func)
+    csrf_checker = CsrfViewMiddleware(lambda request: None)
+
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if request.headers.get("Authorization"):
+            return token_view(request, *args, **kwargs)
+        if not getattr(request.user, "is_authenticated", False):
+            return JsonResponse({"error": "Authentication required"}, status=401)
+        if not is_staff_user(request.user):
+            return JsonResponse({"error": "Staff access required"}, status=403)
+        failure_response = csrf_checker.process_view(
+            request,
+            lambda request, *args, **kwargs: None,
+            args,
+            kwargs,
+        )
+        if failure_response is not None:
+            return failure_response
+        return view_func(request, *args, **kwargs)
+
+    # Token clients are exempt at middleware level; session requests are
+    # explicitly checked above before reaching the view.
     wrapper.csrf_exempt = True
     return wrapper

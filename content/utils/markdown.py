@@ -1,9 +1,11 @@
 """Shared markdown rendering helpers for content and event models."""
 
+import html as html_lib
 import re
 
 import markdown as markdown_lib
 import nh3
+from django.utils.html import strip_tags
 
 from content.markdown_extensions import (
     EventWidgetExtension,
@@ -140,12 +142,15 @@ def _build_extensions(
     include_external_links=True,
     include_codehilite=True,
     include_event_widget=True,
+    render_event_widget_placeholder=True,
 ):
     extensions = []
     if include_mermaid:
         extensions.append(MermaidExtension())
     if include_event_widget:
-        extensions.append(EventWidgetExtension())
+        extensions.append(EventWidgetExtension(
+            render_placeholder=render_event_widget_placeholder,
+        ))
     if include_external_links:
         extensions.append(ExternalLinksExtension())
     for name in MARKDOWN_CORE_EXTENSIONS:
@@ -173,6 +178,7 @@ def render_markdown(
     include_external_links=True,
     include_codehilite=True,
     include_event_widget=True,
+    render_event_widget_placeholder=True,
     codehilite_guess_lang=False,
 ):
     """Convert markdown to HTML with the platform's runtime extension set.
@@ -189,12 +195,35 @@ def render_markdown(
             include_external_links=include_external_links,
             include_codehilite=include_codehilite,
             include_event_widget=include_event_widget,
+            render_event_widget_placeholder=render_event_widget_placeholder,
         ),
         extension_configs=_build_extension_configs(
             codehilite_guess_lang=codehilite_guess_lang,
             include_codehilite=include_codehilite,
         ),
     )
+
+
+def markdown_to_plain_text(text):
+    """Derive readable prose from markdown while dropping semantic widgets.
+
+    This is the canonical path for descriptions, metadata, and excerpts. It
+    parses markdown instead of slicing or regex-replacing source text, so
+    links, emphasis, headings, and custom ``eventwidget`` directive blocks
+    are handled according to their meaning. Widget directives are consumed
+    without emitting the browser-only loading placeholder.
+    """
+    if not text:
+        return ''
+    rendered = render_markdown(
+        str(text),
+        include_mermaid=False,
+        include_external_links=False,
+        include_codehilite=False,
+        render_event_widget_placeholder=False,
+    )
+    plain_text = html_lib.unescape(strip_tags(rendered))
+    return re.sub(r'\s+', ' ', plain_text).strip()
 
 
 def render_email_markdown(text):
@@ -217,8 +246,8 @@ def render_email_markdown(text):
         include_mermaid=False,
         include_codehilite=False,
         # The claim widget needs the site's JS hydration runtime, which an
-        # inbox can't run — drop the shortcode placeholder in email.
-        include_event_widget=False,
+        # inbox can't run — consume the directive without a placeholder.
+        render_event_widget_placeholder=False,
     )
 
 

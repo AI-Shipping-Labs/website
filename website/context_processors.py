@@ -4,7 +4,12 @@ import uuid
 from urllib.parse import urlparse
 
 from django.conf import settings
+from django.middleware.csrf import get_token
 
+from analytics.consent import (
+    analytics_consent_granted,
+    analytics_consent_state,
+)
 from content.nav_availability import (
     get_marketing_pages_nav,
     has_published_downloads_for_nav,
@@ -226,7 +231,9 @@ def site_context(request):
                     'params_json': params_json,
                 }
 
-    aslab_anon_id = _validated_aslab_anon_id(request)
+    consent_state = analytics_consent_state(request)
+    consent_granted = analytics_consent_granted(request)
+    aslab_anon_id = _validated_aslab_anon_id(request) if consent_granted else ''
     ga_login_state = _ga_login_state(request)
     ga_member_tier = _ga_member_tier_slug(request)
 
@@ -257,13 +264,19 @@ def site_context(request):
         # migrations or partial deploys before the table exists.
         marketing_nav = {'about': [], 'community': [], 'resources': []}
 
+    google_analytics_id = (
+        get_config('GOOGLE_ANALYTICS_ID', '') if consent_granted else ''
+    )
+
     return {
         'VERSION': settings.VERSION,
         'site_name': settings.SITE_NAME,
         'site_url': site_base_url(),
         'site_description': settings.SITE_DESCRIPTION,
         'stripe_customer_portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
-        'google_analytics_id': get_config('GOOGLE_ANALYTICS_ID', ''),
+        'google_analytics_id': google_analytics_id,
+        'analytics_consent_state': consent_state,
+        'analytics_consent_csrf_token': get_token(request),
         'aslab_anon_id': aslab_anon_id,
         'ga_login_state': ga_login_state,
         'ga_member_tier': ga_member_tier,

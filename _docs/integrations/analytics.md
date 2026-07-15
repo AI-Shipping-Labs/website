@@ -12,11 +12,11 @@ not depend on this group.
 
 ## GOOGLE_ANALYTICS_ID
 
-Purpose: Google Analytics 4 measurement ID injected into the GA loader
-script in `templates/base.html`. When set, every public page renders the
-standard `gtag.js` snippet that reports pageviews to the configured GA4
-property. The value is exposed to templates as `google_analytics_id` by
-`website/context_processors.py:site_context`.
+Purpose: Google Analytics 4 measurement ID used by the consent-gated GA
+loader in `templates/base.html`. When set, public pages render the standard
+`gtag.js` snippet only after that visitor affirmatively allows analytics.
+The value is exposed to templates as `google_analytics_id` by
+`website/context_processors.py:site_context` only while consent is granted.
 
 Without it: No GA loader is emitted — pages render with no
 `googletagmanager.com` script tag and no `gtag` call. Browsers make no
@@ -24,6 +24,14 @@ network call to Google. This is the default for fresh installs, local
 dev, and CI: there is no DB row, no Django setting, and no env var
 shipped, so GA stays disabled unless an operator deliberately turns it
 on through Studio.
+
+Consent contract: optional analytics fails closed. Before a choice, and after
+a visitor chooses "Keep analytics off", the site does not load GA, contact
+Google Analytics, create attribution rows, or set `aslab_aid`, `aslab_ft`, or
+`aslab_ft_ref`. The necessary `aslab_analytics_consent` cookie remembers the
+choice. Visitors can reopen Analytics preferences from the footer; withdrawal
+expires the optional first-party cookies and clears session attribution.
+Rejecting analytics does not block product functionality.
 
 Where to find it:
 
@@ -50,8 +58,11 @@ The change takes effect on the next request — there is no deploy
 required. The old property stops receiving traffic immediately; the new
 one starts.
 
-Production currently uses `G-HXSHF376NY`. Rotating it is a Studio
-Settings change, not a deploy.
+The production GA4 property has measurement ID `G-HXSHF376NY`, but the
+Studio `GOOGLE_ANALYTICS_ID` value must remain blank during the consent/privacy
+holding state described below. After an authorized privacy owner approves the
+public wording and production enablement, setting or rotating the ID is a
+Studio Settings change, not a deploy.
 
 Test vs live: GA does not distinguish test from live properties at the
 measurement-ID layer — a property is a property. To keep dev/staging
@@ -68,7 +79,8 @@ default; no test setup is required to suppress GA during
 
 ## `aslab_aid`, `login_state`, and `member_tier`
 
-The direct `gtag.js` bootstrap in `templates/base.html` now sets:
+After analytics consent, the direct `gtag.js` bootstrap in
+`templates/base.html` sets:
 
 - `user_id = aslab_aid` when the `aslab_aid` cookie is present and
   parses as a UUID4.
@@ -198,10 +210,35 @@ If GTM cannot be configured without duplicating the direct `gtag.js`
 events, leave GTM out of the path and keep the direct loader as the
 single source of truth.
 
+### CSP and consent boundary
+
+The Django application does not install a GTM container and does not own an
+edge/CDN Content Security Policy. If production adds a CSP outside this
+repository, the operator must allow the configured direct GA path before
+enabling measurement: `script-src https://www.googletagmanager.com` and the
+corresponding GA collection hosts in `connect-src` (including
+`https://www.google-analytics.com`). Confirm the final host list from the
+browser network panel because Google can use regional collection endpoints.
+Do not weaken unrelated CSP directives or add `unsafe-inline` solely for GTM;
+the site's existing inline-script policy must be handled by the owning CSP
+configuration.
+
+The application implements basic affirmative consent for optional analytics:
+the global consent panel keeps analytics off until a visitor chooses "Allow
+analytics", and the persistent Analytics preferences action in the footer lets
+the visitor reject or withdraw that choice later. This application-level gate
+blocks the direct Google loader and local attribution identifiers before
+consent; it does not install Google's advanced consent mode or a separate
+consent-management platform. Any future CMP must continue to gate this single
+GA path rather than installing a second pageview/event source.
+
 ## Production / Staging Checklist
 
-- Production: set the live GA4 measurement ID in Studio >
-  Settings > Analytics > `GOOGLE_ANALYTICS_ID`.
+- Production holding state: leave Studio > Settings > Analytics >
+  `GOOGLE_ANALYTICS_ID` blank until an authorized privacy owner approves the
+  public wording and production analytics enablement.
+- After that approval: set the live GA4 measurement ID in Studio and verify the
+  affirmative grant, rejection, and withdrawal paths before relying on data.
 - Staging / dev: either leave `GOOGLE_ANALYTICS_ID` blank or set a
   separate non-production GA4 property.
 - Never point staging/dev at the production measurement ID.

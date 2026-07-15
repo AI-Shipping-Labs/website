@@ -21,6 +21,7 @@ urlpatterns = [
     # ALB's IP-based health checks don't trip ALLOWED_HOSTS.
     # Integrations URLs must come before admin/ to allow /admin/sync/ to resolve
     path('', include('integrations.urls')),
+    path('', include('analytics.urls')),
     path('admin/', admin.site.urls),
     path('accounts/', include('accounts.urls')),
     path('account/', include(account_urlpatterns)),

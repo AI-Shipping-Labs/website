@@ -29,6 +29,12 @@ from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from website.context_processors import site_context
 
+CONSENT_COOKIE = 'aslab_analytics_consent'
+
+
+def _grant_consent(target):
+    target.COOKIES[CONSENT_COOKIE] = 'granted'
+
 
 def _set_ga_id(value='G-TESTXYZ'):
     IntegrationSetting.objects.create(
@@ -77,6 +83,7 @@ class AslabAnonIdContextProcessorTest(TestCase):
         anon_id = str(uuid.uuid4())
         request = RequestFactory().get('/')
         request.COOKIES['aslab_aid'] = anon_id
+        _grant_consent(request)
         context = site_context(request)
         self.assertEqual(context['aslab_anon_id'], anon_id)
 
@@ -86,12 +93,14 @@ class AslabAnonIdContextProcessorTest(TestCase):
         # user_property + user_id calls in base.html.
         request = RequestFactory().get('/')
         request.COOKIES['aslab_aid'] = 'not-a-uuid'
+        _grant_consent(request)
         context = site_context(request)
         self.assertEqual(context['aslab_anon_id'], '')
 
     def test_empty_string_cookie_yields_empty_string(self):
         request = RequestFactory().get('/')
         request.COOKIES['aslab_aid'] = ''
+        _grant_consent(request)
         context = site_context(request)
         self.assertEqual(context['aslab_anon_id'], '')
 
@@ -109,6 +118,7 @@ class GaContextSegmentationTest(TestCase):
     def test_anonymous_context_exposes_join_key_and_login_state(self):
         request = RequestFactory().get('/')
         request.COOKIES['aslab_aid'] = self.anon_id
+        _grant_consent(request)
 
         context = site_context(request)
 
@@ -145,6 +155,7 @@ class GaContextSegmentationTest(TestCase):
         request = RequestFactory().get('/account/')
         request.user = user
         request.COOKIES['aslab_aid'] = self.anon_id
+        _grant_consent(request)
 
         context = site_context(request)
         user_properties_json = context['ga_user_properties_json']
@@ -176,6 +187,7 @@ class GtagEnrichmentRenderingTest(TestCase):
     def setUp(self):
         clear_config_cache()
         self.anon_id = str(uuid.uuid4())
+        self.client.cookies[CONSENT_COOKIE] = 'granted'
 
     def tearDown(self):
         clear_config_cache()
@@ -336,6 +348,7 @@ class GtagPendingEventRenderingTest(TestCase):
 
     def setUp(self):
         clear_config_cache()
+        self.client.cookies[CONSENT_COOKIE] = 'granted'
 
     def tearDown(self):
         clear_config_cache()

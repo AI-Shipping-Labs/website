@@ -187,7 +187,9 @@
     </button>
   </nav>
 
-  <div class="border-t border-border bg-background md:hidden hidden max-h-[calc(100vh-5rem)] overflow-y-auto" id="mobile-menu">
+  <div class="border-t border-border bg-background md:hidden hidden overflow-y-auto"
+       id="mobile-menu"
+       style="max-height: max(11rem, calc(100dvh - 5rem - var(--analytics-consent-clearance, 0px)));">
     <div class="space-y-0 px-6 py-3">
       <div class="mb-1 flex items-center justify-between border-b border-border py-1 pb-2" data-testid="mobile-theme-row">
         <span class="text-sm text-muted-foreground">Theme</span>

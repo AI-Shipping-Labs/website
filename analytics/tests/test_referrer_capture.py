@@ -29,7 +29,9 @@ SYNC_Q_CLUSTER = {'sync': True, 'orm': 'default', 'name': 'test', 'workers': 1}
 
 
 def make_browser_client():
-    return Client(HTTP_USER_AGENT=BROWSER_UA)
+    client = Client(HTTP_USER_AGENT=BROWSER_UA)
+    client.cookies['aslab_analytics_consent'] = 'granted'
+    return client
 
 
 def signup_email_password(client, email='new@test.com', password='pw1234ABcd'):
@@ -213,6 +215,7 @@ class BotReferrerSkipTest(TestCase):
 
     def test_googlebot_with_linkedin_referrer_writes_no_cookie(self):
         c = Client(HTTP_USER_AGENT='Googlebot/2.1 (+http://www.google.com/bot.html)')
+        c.cookies['aslab_analytics_consent'] = 'granted'
         resp = c.get('/blog', HTTP_REFERER='https://www.linkedin.com/feed/abc')
         self.assertNotIn(FIRST_TOUCH_REFERRER_COOKIE, resp.cookies)
         self.assertIsNone(c.session.get(SESSION_LAST_TOUCH_REFERRER))

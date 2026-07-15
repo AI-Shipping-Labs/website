@@ -342,7 +342,9 @@ def test_mobile_footer_targets_navigation_and_newsletter_suppression(
 
         page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
         page.locator("footer").scroll_into_view_if_needed()
-        privacy = page.get_by_role("link", name="Privacy Policy")
+        privacy = page.locator("footer").get_by_role(
+            "link", name="Privacy Policy", exact=True
+        )
         _assert_target_size(privacy, "footer Privacy Policy")
         privacy.click()
         page.wait_for_url(f"{django_server}/privacy", timeout=5000)

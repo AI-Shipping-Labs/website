@@ -32,7 +32,9 @@ SYNC_Q_CLUSTER = {'sync': True, 'orm': 'default', 'name': 'test', 'workers': 1}
 
 def make_browser_client():
     """Django test Client with a non-bot User-Agent header."""
-    return Client(HTTP_USER_AGENT=BROWSER_UA)
+    client = Client(HTTP_USER_AGENT=BROWSER_UA)
+    client.cookies['aslab_analytics_consent'] = 'granted'
+    return client
 
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
@@ -210,6 +212,7 @@ class BotFilterTest(TestCase):
 
     def test_googlebot_produces_no_visit(self):
         c = Client(HTTP_USER_AGENT='Googlebot/2.1 (+http://www.google.com/bot.html)')
+        c.cookies['aslab_analytics_consent'] = 'granted'
         r = c.get('/blog?utm_source=newsletter&utm_campaign=launch_april2026')
         self.assertEqual(CampaignVisit.objects.count(), 0)
         self.assertNotIn(ANON_ID_COOKIE, r.cookies)
@@ -217,6 +220,7 @@ class BotFilterTest(TestCase):
 
     def test_python_requests_produces_no_visit(self):
         c = Client(HTTP_USER_AGENT='python-requests/2.31.0')
+        c.cookies['aslab_analytics_consent'] = 'granted'
         r = c.get('/blog?utm_source=newsletter&utm_campaign=launch_april2026')
         self.assertEqual(CampaignVisit.objects.count(), 0)
         self.assertNotIn(ANON_ID_COOKIE, r.cookies)
@@ -224,6 +228,7 @@ class BotFilterTest(TestCase):
 
     def test_curl_produces_no_visit(self):
         c = Client(HTTP_USER_AGENT='curl/8.0.1')
+        c.cookies['aslab_analytics_consent'] = 'granted'
         r = c.get('/blog?utm_source=newsletter&utm_campaign=launch_april2026')
         self.assertEqual(CampaignVisit.objects.count(), 0)
         self.assertNotIn(ANON_ID_COOKIE, r.cookies)

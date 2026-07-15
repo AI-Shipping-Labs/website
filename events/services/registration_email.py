@@ -45,6 +45,26 @@ def send_registration_confirmation(registration):
     """
     user = registration.user
     event = registration.event
+    is_host = is_host_registration(registration)
+    if is_host:
+        # Host delivery belongs to the current assignment/access generation,
+        # even when the underlying attendee registration already existed.
+        dedupe_key = (
+            f'event-host-registration:{event.pk}:{user.pk}:'
+            f'{event.host_access_version}'
+        )
+    else:
+        # An attendee may cancel and later register for the same event again.
+        # Scope idempotency to that concrete registration lifecycle so repeat
+        # processing is safe without suppressing the new calendar REQUEST.
+        dedupe_key = (
+            f'event-registration:{event.pk}:{user.pk}:{registration.pk}'
+        )
+
+    from email_app.models import EmailLog
+    existing_log = EmailLog.objects.filter(dedupe_key=dedupe_key).first()
+    if existing_log is not None:
+        return existing_log
 
     site_url = site_base_url()
     # Issue #1082: id-canonical join URL via ``Event.get_join_url``.
@@ -55,7 +75,6 @@ def send_registration_confirmation(registration):
     )
 
     calendar_links = build_calendar_links(event)
-    is_host = is_host_registration(registration)
     host_links = build_host_management_links(event) if is_host else {}
 
     # Render the email template
@@ -107,11 +126,12 @@ def send_registration_confirmation(registration):
     )
 
     # Log the send
-    from email_app.models import EmailLog
     email_log = EmailLog.objects.create(
         user=user,
+        event=event,
         email_type='event_registration',
         ses_message_id=ses_message_id,
+        dedupe_key=dedupe_key,
     )
 
     logger.info(

@@ -188,6 +188,13 @@
       <p class="text-xs text-muted-foreground mt-1">
         Platform user to auto-register as the host attendee when the event is published. Leave blank to skip host auto-registration.
       </p>
+      {% if host_invite_deliveries %}
+      <div class="mt-2 space-y-1 text-xs text-muted-foreground" data-testid="host-invite-delivery-status">
+        {% for delivery in host_invite_deliveries %}
+          <p>{{ delivery.user.email }}: {{ delivery.get_status_display }} (attempt {{ delivery.attempt_count }}/3){% if delivery.operator_error_message %} — {{ delivery.operator_error_message }}{% endif %}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
 
     <div>

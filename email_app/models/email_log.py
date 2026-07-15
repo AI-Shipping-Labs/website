@@ -65,6 +65,16 @@ class EmailLog(models.Model):
         default='',
         help_text='Amazon SES message ID for delivery tracking.',
     )
+    dedupe_key = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        unique=True,
+        help_text=(
+            'Optional application-level idempotency key for lifecycle sends. '
+            'Null keeps legacy transactional sends unrestricted.'
+        ),
+    )
     opened_at = models.DateTimeField(
         null=True,
         blank=True,

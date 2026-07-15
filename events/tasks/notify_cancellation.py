@@ -12,8 +12,9 @@ from accounts.services.timezones import (
 )
 from email_app.services.email_service import EmailService
 from events.models import Event, EventRegistration, SeriesRegistration
-from events.services.calendar_invite import generate_ics
+from events.services.calendar_invite import AUDIENCE_HOST, generate_ics
 from events.services.calendar_lifecycle import user_has_permanent_bounce
+from events.services.host_registration import is_host_registration
 from events.services.registration_email import _send_raw_email
 from integrations.config import site_base_url
 
@@ -92,7 +93,7 @@ def send_cancellation_notice_one(event_id, user_id):
         }
 
     try:
-        EventRegistration.objects.get(event=event, user=user)
+        registration = EventRegistration.objects.get(event=event, user=user)
     except EventRegistration.DoesNotExist:
         return {
             "status": "skipped",
@@ -110,6 +111,17 @@ def send_cancellation_notice_one(event_id, user_id):
         }
 
     site_url = site_base_url()
+    is_host = is_host_registration(registration)
+
+    from email_app.models import EmailLog
+    dedupe_key = f'event-cancelled:{event.pk}:{user.pk}:{event.ics_sequence}'
+    existing_log = EmailLog.objects.filter(dedupe_key=dedupe_key).first()
+    if existing_log is not None:
+        return {
+            'status': 'deduplicated',
+            'user_id': user_id,
+            'email_log_id': existing_log.pk,
+        }
     email_service = EmailService()
     subject, body_html = email_service._render_template(
         'event_cancelled',
@@ -129,6 +141,7 @@ def send_cancellation_notice_one(event_id, user_id):
     ics_content = generate_ics(
         event,
         method='CANCEL',
+        audience=AUDIENCE_HOST if is_host else 'attendee',
         attendee_email=user.email,
     )
     ses_message_id = _send_raw_email(
@@ -139,11 +152,12 @@ def send_cancellation_notice_one(event_id, user_id):
         method='CANCEL',
     )
 
-    from email_app.models import EmailLog
     email_log = EmailLog.objects.create(
         user=user,
+        event=event,
         email_type='event_cancelled',
         ses_message_id=ses_message_id,
+        dedupe_key=dedupe_key,
     )
 
     logger.info(

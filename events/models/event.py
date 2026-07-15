@@ -1,3 +1,4 @@
+import uuid
 from datetime import timedelta
 
 from django.core.exceptions import ValidationError
@@ -428,6 +429,14 @@ class Event(
             'auto-registration.'
         ),
     )
+    host_access_version = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        help_text=(
+            'Rotated whenever host_email changes so previously issued '
+            'host-management links are revoked.'
+        ),
+    )
     event_series = models.ForeignKey(
         'events.EventSeries',
         null=True, blank=True,
@@ -532,6 +541,7 @@ class Event(
             update_field_names = set(update_fields)
 
         old_schedule = None
+        old_host_email = None
         should_check_schedule = not self._state.adding and self.pk is not None
         if should_check_schedule and update_field_names is not None:
             should_check_schedule = bool(
@@ -544,6 +554,20 @@ class Event(
                 .values('start_datetime', 'end_datetime', 'ics_sequence')
                 .first()
             )
+
+        if not self._state.adding and self.pk is not None:
+            old_host_email = (
+                type(self).objects.filter(pk=self.pk)
+                .values_list('host_email', flat=True)
+                .first()
+            )
+            if (old_host_email or '').strip().lower() != (
+                self.host_email or ''
+            ).strip().lower():
+                self.host_access_version = uuid.uuid4()
+                if update_field_names is not None:
+                    update_field_names.update({'host_access_version', 'updated_at'})
+                    kwargs['update_fields'] = update_field_names
 
         from content.utils.tags import normalize_tags
         self.tags = normalize_tags(self.tags)

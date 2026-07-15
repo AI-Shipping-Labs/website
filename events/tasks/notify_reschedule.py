@@ -35,7 +35,7 @@ from accounts.services.timezones import (
     format_user_datetime,
 )
 from events.models import Event, EventRegistration, SeriesRegistration
-from events.services.calendar_invite import generate_ics
+from events.services.calendar_invite import AUDIENCE_HOST, generate_ics
 from events.services.calendar_lifecycle import user_has_permanent_bounce
 from events.services.cancel_token import generate_cancel_token
 from events.services.host_registration import (
@@ -186,6 +186,31 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
     is_host = is_host_registration(registration)
     host_links = build_host_management_links(event) if is_host else {}
 
+    if is_host:
+        from events.models import HostInviteDelivery
+        if HostInviteDelivery.objects.filter(
+            event=event,
+            user=user,
+            access_version=event.host_access_version,
+            status=HostInviteDelivery.STATUS_SENT,
+            sent_ics_sequence__gte=event.ics_sequence,
+        ).exists():
+            return {
+                'status': 'deduplicated',
+                'reason': 'host_initial_invite_has_current_sequence',
+                'user_id': user_id,
+            }
+
+    from email_app.models import EmailLog
+    dedupe_key = f'event-rescheduled:{event.pk}:{user.pk}:{event.ics_sequence}'
+    existing_log = EmailLog.objects.filter(dedupe_key=dedupe_key).first()
+    if existing_log is not None:
+        return {
+            'status': 'deduplicated',
+            'user_id': user_id,
+            'email_log_id': existing_log.pk,
+        }
+
     # Lazy import to avoid pulling the full EmailService at module load.
     from email_app.services.email_service import EmailService
 
@@ -232,6 +257,7 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
     ics_content = generate_ics(
         event,
         method='REQUEST',
+        audience=AUDIENCE_HOST if is_host else 'attendee',
         attendee_email=user.email,
     )
 
@@ -243,11 +269,12 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
         method='REQUEST',
     )
 
-    from email_app.models import EmailLog
     email_log = EmailLog.objects.create(
         user=user,
+        event=event,
         email_type='event_rescheduled',
         ses_message_id=ses_message_id,
+        dedupe_key=dedupe_key,
     )
 
     logger.info(

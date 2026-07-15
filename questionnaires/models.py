@@ -13,6 +13,7 @@ literals.
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -451,6 +452,7 @@ class OnboardingConversation(TimestampedModelMixin, models.Model):
     )
     transcript = models.JSONField(default=list, blank=True)
     persona_signal = models.CharField(max_length=20, blank=True, default='')
+    turn_version = models.PositiveBigIntegerField(default=0)
 
     def __str__(self):
         return f'AI onboarding conversation for response {self.response_id}'
@@ -461,3 +463,96 @@ class OnboardingConversation(TimestampedModelMixin, models.Model):
             self.transcript = []
         self.transcript.append({'role': role, 'content': content})
         return self.transcript
+
+
+class OnboardingTurnAttempt(TimestampedModelMixin, models.Model):
+    """Durable admission, budget, and safe telemetry for one chat turn.
+
+    Member and assistant content deliberately never lands on this row.  The
+    request UUID plus a SHA-256 message hash are enough to deduplicate a
+    browser retry without copying onboarding answers into operational data.
+    """
+
+    TRANSPORT_CHOICES = [
+        ('stream', 'Stream'),
+        ('non_stream', 'Non-stream'),
+    ]
+    STATUS_CHOICES = [
+        ('processing', 'Processing'),
+        ('succeeded', 'Succeeded'),
+        ('failed', 'Failed'),
+    ]
+    NOTIFICATION_STATUS_CHOICES = [
+        ('not_needed', 'Not needed'),
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('succeeded', 'Succeeded'),
+        ('failed', 'Failed'),
+    ]
+
+    conversation = models.ForeignKey(
+        OnboardingConversation,
+        on_delete=models.CASCADE,
+        related_name='turn_attempts',
+    )
+    request_id = models.UUIDField()
+    member_message_hash = models.CharField(max_length=64)
+    admitted_version = models.PositiveBigIntegerField()
+    transport = models.CharField(max_length=16, choices=TRANSPORT_CHOICES)
+    status = models.CharField(
+        max_length=16, choices=STATUS_CHOICES, default='processing',
+    )
+    outcome = models.CharField(max_length=32, blank=True, default='')
+    error_code = models.CharField(max_length=32, blank=True, default='')
+    provider = models.CharField(max_length=32, blank=True, default='')
+    model = models.CharField(max_length=120, blank=True, default='')
+    provider_call_count = models.PositiveSmallIntegerField(default=0)
+    retry_count = models.PositiveSmallIntegerField(default=0)
+    fallback_used = models.BooleanField(default=False)
+    timed_out = models.BooleanField(default=False)
+    disconnected = models.BooleanField(default=False)
+    input_tokens = models.PositiveIntegerField(null=True, blank=True)
+    output_tokens = models.PositiveIntegerField(null=True, blank=True)
+    cache_read_tokens = models.PositiveIntegerField(null=True, blank=True)
+    cache_write_tokens = models.PositiveIntegerField(null=True, blank=True)
+    started_at = models.DateTimeField()
+    provider_started_at = models.DateTimeField(null=True, blank=True)
+    first_delta_at = models.DateTimeField(null=True, blank=True)
+    last_delta_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    lease_expires_at = models.DateTimeField()
+    admission_to_provider_ms = models.PositiveIntegerField(null=True, blank=True)
+    ttft_ms = models.PositiveIntegerField(null=True, blank=True)
+    provider_duration_ms = models.PositiveIntegerField(null=True, blank=True)
+    persistence_tail_ms = models.PositiveIntegerField(null=True, blank=True)
+    persistence_to_done_ms = models.PositiveIntegerField(null=True, blank=True)
+    total_duration_ms = models.PositiveIntegerField(null=True, blank=True)
+    notification_status = models.CharField(
+        max_length=16,
+        choices=NOTIFICATION_STATUS_CHOICES,
+        default='not_needed',
+    )
+    notification_attempt_count = models.PositiveSmallIntegerField(default=0)
+    notification_lease_expires_at = models.DateTimeField(null=True, blank=True)
+    notification_last_error = models.CharField(
+        max_length=120, blank=True, default='',
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['conversation', 'request_id'],
+                name='unique_onboarding_turn_request',
+            ),
+            models.UniqueConstraint(
+                fields=['conversation'],
+                condition=Q(status='processing'),
+                name='one_processing_onboarding_turn',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['status', 'lease_expires_at'],
+                name='questionnai_status_1aef50_idx',
+            ),
+        ]

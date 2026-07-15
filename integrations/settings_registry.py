@@ -768,6 +768,27 @@ INTEGRATION_GROUPS = [
                 'docs_url': '_docs/integrations/llm.md#onboarding_ai_streaming',
             },
             {
+                'key': 'ONBOARDING_AI_DEADLINE_SECONDS',
+                'is_secret': False,
+                'default': '25',
+                'description': (
+                    'Deadline for each onboarding provider call. Values are '
+                    'clamped to 5-28 seconds so a stuck call releases the '
+                    'default 30-second sync web worker.'
+                ),
+                'docs_url': '_docs/integrations/llm.md#onboarding-ai-latency-runbook',
+            },
+            {
+                'key': 'ONBOARDING_AI_MAX_ATTEMPTS',
+                'is_secret': False,
+                'default': '2',
+                'description': (
+                    'Total provider calls for one logical onboarding turn, '
+                    'including stream-to-form recovery. Clamped to 1-3.'
+                ),
+                'docs_url': '_docs/integrations/llm.md#onboarding-ai-latency-runbook',
+            },
+            {
                 'key': 'NEXT_SPRINT_DRAFT_USE_PROFILE',
                 'is_secret': False,
                 'is_boolean': True,

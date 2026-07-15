@@ -44,8 +44,10 @@ by this service (asserted in tests, mirroring banner_generator).
 from .backends import (
     STREAM_DONE,
     STREAM_TEXT_DELTA,
+    CancellationToken,
     LLMError,
     LLMResult,
+    LLMTimeoutError,
     StreamEvent,
 )
 from .service import complete, is_enabled, stream
@@ -53,7 +55,9 @@ from .service import complete, is_enabled, stream
 __all__ = [
     'STREAM_DONE',
     'STREAM_TEXT_DELTA',
+    'CancellationToken',
     'LLMError',
+    'LLMTimeoutError',
     'LLMResult',
     'StreamEvent',
     'complete',

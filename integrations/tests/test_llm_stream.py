@@ -22,6 +22,7 @@ from integrations.services import llm
 from integrations.services.llm import (
     STREAM_DONE,
     STREAM_TEXT_DELTA,
+    CancellationToken,
     LLMError,
     LLMResult,
 )
@@ -45,6 +46,7 @@ def _final_text_message(text):
     block.text = text
     message = MagicMock()
     message.content = [block]
+    message.usage = None
     return message
 
 
@@ -56,6 +58,7 @@ def _final_tool_message(tool_name, tool_input):
     block.input = tool_input
     message = MagicMock()
     message.content = [block]
+    message.usage = None
     return message
 
 
@@ -109,6 +112,19 @@ class _Mixin:
 @LLM_ON
 class StreamAssemblyTest(_Mixin, TestCase):
 
+    def test_cancellation_token_closes_stream_provider_client(self):
+        token = CancellationToken()
+        with patch(ANTHROPIC_PATCH) as mock_cls:
+            client = mock_cls.return_value
+            client.messages.stream.return_value = _stream_cm(
+                ['done'], _final_text_message('done'),
+            )
+            list(llm.stream(
+                [{'role': 'user', 'content': 'hi'}], cancellation=token,
+            ))
+            token.cancel()
+        client.close.assert_called_once_with()
+
     def test_yields_deltas_then_terminal_done(self):
         with patch(ANTHROPIC_PATCH) as mock_cls:
             mock_cls.return_value.messages.stream.return_value = _stream_cm(
@@ -161,6 +177,28 @@ class StreamAssemblyTest(_Mixin, TestCase):
             events = list(llm.stream([{'role': 'user', 'content': 'done'}]))
         terminal = events[-1]
         self.assertEqual(terminal.result.tool_input, {'persona_signal': 'alex'})
+
+    def test_terminal_result_carries_provider_usage(self):
+        message = _final_text_message('done')
+        message.usage = MagicMock(
+            input_tokens=40,
+            output_tokens=8,
+            cache_read_input_tokens=6,
+            cache_creation_input_tokens=2,
+        )
+        with patch(ANTHROPIC_PATCH) as mock_cls:
+            mock_cls.return_value.messages.stream.return_value = _stream_cm(
+                ['done'], message,
+            )
+            terminal = list(llm.stream([
+                {'role': 'user', 'content': 'hi'},
+            ]))[-1]
+        self.assertEqual(
+            (terminal.result.input_tokens, terminal.result.output_tokens,
+             terminal.result.cache_read_tokens,
+             terminal.result.cache_write_tokens),
+            (40, 8, 6, 2),
+        )
 
     def test_client_built_per_call_from_config(self):
         with patch(ANTHROPIC_PATCH) as mock_cls:

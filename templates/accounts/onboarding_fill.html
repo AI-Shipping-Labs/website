@@ -2,6 +2,8 @@
 
 {% block title %}Onboarding | {{ site_name }}{% endblock %}
 
+{% block messages %}{% endblock %}
+
 {% block body %}
 <main class="min-h-screen">
   {% include "includes/header.html" %}
@@ -9,6 +11,8 @@
   <section class="relative min-h-screen overflow-hidden pt-24">
     <div class="absolute inset-0 hero-gradient"></div>
     <div class="relative mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
+
+      {% include "_partials/messages.html" %}
 
       <header class="mb-8">
         <p class="text-sm uppercase tracking-wide text-muted-foreground">Onboarding</p>

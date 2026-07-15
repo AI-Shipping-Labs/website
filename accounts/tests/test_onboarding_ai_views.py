@@ -8,6 +8,7 @@ already-onboarded confirmation, and that the internal persona signal
 never reaches a member-facing page.
 """
 
+import uuid
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -17,6 +18,7 @@ from django.urls import reverse
 from integrations.services.llm import LLMError, LLMResult
 from questionnaires.models import OnboardingConversation, Response
 from questionnaires.services_onboarding_ai import (
+    TurnRequestError,
     get_or_create_ai_onboarding_response,
 )
 from questionnaires.tests.test_onboarding_ai_core import VALID_EXTRACTION
@@ -40,6 +42,10 @@ LLM_ON = override_settings(
     LLM_API_KEY='sk-test-fake', LLM_PROVIDER='anthropic',
     ONBOARDING_AI_ENABLED='true',
 )
+
+
+def _turn(message):
+    return {'message': message, 'request_id': str(uuid.uuid4())}
 
 
 @tag('core')
@@ -86,6 +92,13 @@ class RoutingGatingTest(TestCase):
     def test_chat_shows_switch_to_form_link(self):
         resp = self.client.get('/onboarding/chat')
         self.assertContains(resp, 'data-testid="onboarding-switch-to-form"')
+
+    def test_chat_renders_logical_request_and_browser_deadline_controls(self):
+        resp = self.client.get('/onboarding/chat')
+        self.assertContains(resp, 'data-testid="onboarding-chat-request-id"')
+        self.assertContains(resp, 'data-deadline-ms="28000"')
+        self.assertContains(resp, 'new AbortController()')
+        self.assertContains(resp, "addEventListener('pagehide'")
 
     @override_settings(ONBOARDING_AI_ENABLED='false')
     def test_flag_off_renders_form_not_chat(self):
@@ -148,10 +161,57 @@ class ChatTurnTest(TestCase):
         ):
             resp = self.client.post(
                 '/onboarding/chat/message',
-                {'message': 'I want to ship a RAG app'},
+                _turn('I want to ship a RAG app'),
             )
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'What blocks your consistency?')
+
+    def test_member_turn_requires_logical_request_uuid(self):
+        with patch(
+            'questionnaires.onboarding_ai.llm.complete',
+        ) as provider:
+            resp = self.client.post(
+                '/onboarding/chat/message', {'message': 'hello'},
+            )
+        self.assertEqual(resp.status_code, 400)
+        provider.assert_not_called()
+
+    def test_retryable_blocking_error_preserves_request_id_and_message(self):
+        request_id = str(uuid.uuid4())
+        message = 'Keep this exact member reply'
+        with patch(
+            'accounts.views.onboarding_ai.run_logical_member_turn',
+            side_effect=TurnRequestError('busy'),
+        ):
+            resp = self.client.post(
+                '/onboarding/chat/message',
+                {'message': message, 'request_id': request_id},
+            )
+
+        self.assertEqual(resp.status_code, 409)
+        self.assertContains(resp, f'value="{request_id}"', status_code=409)
+        self.assertContains(resp, message, status_code=409)
+        self.assertEqual(str(resp.context['turn_request_id']), request_id)
+        self.assertEqual(resp.context['draft_message'], message)
+
+    def test_exhausted_blocking_attempt_preserves_message_with_fresh_uuid(self):
+        exhausted_id = str(uuid.uuid4())
+        message = 'Safe fresh logical attempt'
+        with patch(
+            'accounts.views.onboarding_ai.run_logical_member_turn',
+            side_effect=TurnRequestError('attempts_exhausted'),
+        ):
+            resp = self.client.post(
+                '/onboarding/chat/message',
+                {'message': message, 'request_id': exhausted_id},
+            )
+
+        self.assertEqual(resp.status_code, 409)
+        fresh_id = str(resp.context['turn_request_id'])
+        self.assertNotEqual(fresh_id, exhausted_id)
+        uuid.UUID(fresh_id)
+        self.assertEqual(resp.context['draft_message'], message)
+        self.assertContains(resp, message, status_code=409)
 
     def test_completion_redirects_with_thank_you(self):
         with patch(
@@ -163,7 +223,7 @@ class ChatTurnTest(TestCase):
             ),
         ):
             resp = self.client.post(
-                '/onboarding/chat/message', {'message': 'all answered'},
+                '/onboarding/chat/message', _turn('all answered'),
             )
         self.assertEqual(resp.status_code, 302)
         # Land on the end-of-onboarding completion screen (#951), not home.
@@ -177,7 +237,7 @@ class ChatTurnTest(TestCase):
             side_effect=LLMError('down'),
         ):
             resp = self.client.post(
-                '/onboarding/chat/message', {'message': 'hello'},
+                '/onboarding/chat/message', _turn('hello'),
             )
         self.assertEqual(resp.status_code, 302)
         response = Response.objects.get(respondent=self.member)

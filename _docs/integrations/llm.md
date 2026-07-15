@@ -131,6 +131,31 @@ even when the LLM is configured.
 Test vs live: The automated tests mock the LLM at the boundary, so this
 flag is exercised both on and off without a live call.
 
+## ONBOARDING_AI_STREAMING
+
+Default `true`. When false, onboarding uses the blocking POST transport.
+Both transports retain the same request UUID, provider deadline, attempt
+budget, atomic persistence, and telemetry contract.
+
+## ONBOARDING_AI_DEADLINE_SECONDS
+
+Default `25`; runtime values are clamped to 5-28 seconds. One absolute
+monotonic deadline wraps the complete call or entire stream iteration; the
+same ceiling is passed to the provider SDK. Per-read activity cannot extend
+the logical turn beyond it. A cancellation token synchronously closes the
+provider client at the deadline for both streaming and blocking calls, and the
+bounded worker confirms cleanup before returning the timeout. The ceiling
+stays below the default 30-second sync Gunicorn worker timeout. The browser
+deadline is three seconds higher; an
+abort restores the same UUID/message and never races an automatic blocking POST.
+
+## ONBOARDING_AI_MAX_ATTEMPTS
+
+Default `2`; runtime values are clamped to 1-3. This is the total outbound
+provider-call budget for one logical request UUID, including a streaming
+failure followed by blocking recovery. Onboarding passes `max_retries=0` to
+the provider client so SDK retries cannot multiply this budget.
+
 ## Structured output
 
 `complete(...)` works for plain text and for structured output. For
@@ -206,10 +231,10 @@ Contract:
   event whose `.result` is the SAME `LLMResult` `complete()` would return
   for the same input (`.text` is the concatenation of every delta;
   `.tool_input` is populated when a tool was used).
-- Tools / structured output are intentionally NOT part of the streaming
-  surface — it targets plain-text conversational turns. The onboarding
-  assistant streams the conversational text and keeps the structured
-  final-turn extraction on the non-streaming `complete()` path.
+- Tools are supported on the streaming surface. The terminal event carries
+  the same provider-neutral tool input and token-usage fields as `complete()`.
+  Onboarding uses that terminal result for final extraction, preserving one
+  provider generation on a successful streamed turn.
 - Provider selection mirrors `complete()`: the backend is chosen from
   `LLM_PROVIDER` via the registry; an unimplemented provider raises
   `LLMError` ("provider X not supported yet") before any network call.
@@ -246,37 +271,104 @@ reader and parses the SSE frames itself (vanilla JS in
 `templates/accounts/onboarding_chat.html`, no build step). SSE event
 kinds: `delta` (`{"text": ...}`), `done`
 (`{"complete": bool, "redirect": url|null}`), and `fallback`
-(`{"reason": ...}`).
+(`{"reason": ...}`). Typed `error` events keep the input usable and offer
+the always-visible switch-to-form path.
 
 Streaming is gated by `ONBOARDING_AI_STREAMING` (default on when the AI
 path is on; Studio-configurable, switchable without a redeploy). When off
 or when the LLM is disabled, the chat uses the non-streaming v1 transport
 (`POST /onboarding/chat/message`) and opens no SSE connection.
 
+Every member submission carries a browser-generated UUID in both streaming
+and blocking POSTs. `OnboardingTurnAttempt` durably hashes the message and
+admits at most one processing call per conversation. A successful duplicate
+reloads the durable transcript without provider work; an in-flight or
+different-tab request returns `busy` while preserving the submitted UUID and
+message; reusing a UUID for different content is rejected. An exhausted failed
+UUID receives a fresh UUID before another provider call. The provider call
+runs outside a database transaction, then conversation/response rows are
+locked and a version check atomically applies exactly one transcript pair and
+any final answers.
+
 Graceful degradation is mandatory: the persisted #800 `Response` /
 `ResponseQuestion` / `Answer` artifacts are IDENTICAL whether the turn
 streamed or not (the streaming view reuses the v1 `run_onboarding_turn`
 decision logic and the v1 finalization). The server persists the turn only
 AFTER the authoritative result is assembled, so a stream failure writes
-nothing — the client then re-issues the SAME message via
-`/onboarding/chat/message`, which is the first and only write (no
-duplicate transcript turn, no duplicate `Answer` rows). A hard `LLMError`
-routes the member to the #802 form fallback with the v1 friendly message.
+nothing. Recovery re-issues the SAME message and request UUID through
+`/onboarding/chat/message`, consuming the next call in the shared bounded
+budget. Deadline/client-abort recovery does not auto-submit while the original
+request may still commit. A hard provider failure routes the member to the
+#802 form fallback.
+
+Final member state commits independently of staff notification delivery. The
+final attempt row is a durable outbox: pending enqueue failures, delivery
+failures, and expired `processing` leases are retried by the
+`onboarding-staff-notification-recovery` five-minute schedule. Its attempt
+count, lease, and safe exception class never contain member content.
 
 ### Worker-model and proxy implications
 
 - Gunicorn runs sync workers. A long-lived SSE response holds ONE sync
   worker for the full duration of the stream. Onboarding streams are short
-  and low-concurrency, so sync workers are acceptable here — but an
-  operator scaling this feature up must provision enough workers (and may
-  want a modest per-stream time cap). A future move to `gevent`/async
-  workers would relax the one-worker-per-stream cost.
+  and low-concurrency, so sync workers are acceptable here. The enforced
+  provider deadline is the worker-protection mechanism. A future move to
+  `gevent`/async workers would relax the one-worker-per-stream cost.
 - Buffering proxies: nginx and CloudFront may buffer `text/event-stream`,
   defeating incremental delivery. The response sets `Cache-Control:
   no-cache` and `X-Accel-Buffering: no` (nginx honours the latter) to
-  discourage buffering. If a proxy buffers anyway, the member still
-  receives the COMPLETE reply (just not token-by-token) — the client
-  fallback is the safety net. Any nginx/CloudFront buffering config lives
+  discourage buffering. These headers do NOT guarantee CloudFront chunk
+  pass-through. A correctly buffered response can arrive only at completion
+  and cannot be detected as an error by the browser. Any nginx/CloudFront
+  buffering config lives
   in the infra repo (`AI-Shipping-Labs/ai-shipping-labs-infra`); file a
   follow-up there if buffering is observed in production. It is NOT
   provisioned from this repo.
+
+### Onboarding AI latency runbook
+
+The durable attempt row and structured `onboarding_turn_terminal` records
+contain only internal IDs, hashes, enums, numeric timings, call counts, model,
+and token usage. Each logical request emits exactly one terminal record. A
+recoverable streaming failure is retained on the durable row but is not logged
+as terminal before its same-request fallback reaches the final outcome.
+Fallback success preserves the first-stream error and TTFT; total wall time
+aggregates monotonic elapsed intervals across bounded attempts. Never add
+member messages, transcript, prompts, assistant
+text, tool input/answers, persona content, email, credentials, or raw provider
+exceptions to this record.
+
+PostgreSQL p50/p95 over the last 24 hours:
+
+```sql
+SELECT
+  percentile_cont(0.50) WITHIN GROUP (ORDER BY ttft_ms) AS p50_ttft_ms,
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY ttft_ms) AS p95_ttft_ms,
+  percentile_cont(0.50) WITHIN GROUP (ORDER BY total_duration_ms) AS p50_total_ms,
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY total_duration_ms) AS p95_total_ms
+FROM questionnaires_onboardingturnattempt
+WHERE created_at >= now() - interval '24 hours' AND status = 'succeeded';
+```
+
+Rates, calls, and token cost proxies:
+
+```sql
+SELECT
+  avg(timed_out::int) AS timeout_rate,
+  avg(fallback_used::int) AS fallback_rate,
+  avg(provider_call_count) FILTER (WHERE status = 'succeeded') AS calls_per_success,
+  avg(input_tokens) AS avg_input_tokens,
+  avg(output_tokens) AS avg_output_tokens,
+  avg(cache_read_tokens) AS avg_cache_read_tokens,
+  avg(cache_write_tokens) AS avg_cache_write_tokens,
+  model
+FROM questionnaires_onboardingturnattempt
+WHERE created_at >= now() - interval '24 hours'
+GROUP BY model;
+```
+
+Correlate an incident by attempt ID from the structured log to the durable row.
+Rollback order is: set `ONBOARDING_AI_STREAMING=false` first for SSE/proxy
+problems; set `ONBOARDING_AI_ENABLED=false` second to return all members to
+the form. Absence or failure of Logfire does not affect persistence or the
+member response.

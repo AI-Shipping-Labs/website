@@ -9,6 +9,8 @@ non-streaming path, the open-error fallback signal, and idempotency on a
 v1 retry after a streaming failure.
 """
 
+import uuid
+from threading import Event
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -20,6 +22,7 @@ from integrations.services.llm import (
     STREAM_TEXT_DELTA,
     LLMError,
     LLMResult,
+    LLMTimeoutError,
     StreamEvent,
 )
 from questionnaires.models import OnboardingConversation, Response
@@ -73,6 +76,13 @@ def _read(resp):
     return b''.join(resp.streaming_content).decode()
 
 
+def _turn(message, request_id=None):
+    return {
+        'message': message,
+        'request_id': request_id or str(uuid.uuid4()),
+    }
+
+
 @tag('core')
 class StreamAccessControlTest(TestCase):
     def test_anonymous_redirected_to_login(self):
@@ -106,7 +116,7 @@ class StreamResponseShapeTest(TestCase):
             return_value=LLMResult(text=reply),
         ):
             resp = self.client.post(
-                '/onboarding/chat/stream', {'message': 'ship a RAG app'},
+                '/onboarding/chat/stream', _turn('ship a RAG app'),
             )
             body = _read(resp)
         self.assertEqual(resp['Content-Type'], 'text/event-stream')
@@ -119,6 +129,15 @@ class StreamResponseShapeTest(TestCase):
         self.assertIn('event: done', body)
         self.assertIn('"complete": false', body)
 
+    def test_stream_requires_logical_request_uuid_without_provider_work(self):
+        with patch('questionnaires.onboarding_ai.llm.stream') as provider:
+            response = self.client.post(
+                '/onboarding/chat/stream', {'message': 'hello'},
+            )
+            body = _read(response)
+        self.assertIn('invalid_request_id', body)
+        provider.assert_not_called()
+
     def test_no_persona_name_in_stream(self):
         reply = 'Tell me more about your goals.'
         with patch(
@@ -129,11 +148,52 @@ class StreamResponseShapeTest(TestCase):
             return_value=LLMResult(text=reply),
         ):
             resp = self.client.post(
-                '/onboarding/chat/stream', {'message': 'about me'},
+                '/onboarding/chat/stream', _turn('about me'),
             )
             body = _read(resp)
         for name in PERSONA_NAMES:
             self.assertNotIn(name, body)
+
+    def test_lost_done_replay_instructs_browser_to_reload_durable_transcript(self):
+        request_id = str(uuid.uuid4())
+        scripted = _scripted_stream(['Persisted reply'], 'Persisted reply')
+        with patch(
+            'questionnaires.onboarding_ai.llm.stream', side_effect=scripted,
+        ) as provider:
+            first = _read(self.client.post(
+                '/onboarding/chat/stream', _turn('my answer', request_id),
+            ))
+            replay = _read(self.client.post(
+                '/onboarding/chat/stream', _turn('my answer', request_id),
+            ))
+
+        self.assertIn('event: done', first)
+        self.assertIn('"replayed": true', replay)
+        self.assertIn('"reload": true', replay)
+        self.assertEqual(provider.call_count, 1)
+        conversation = OnboardingConversation.objects.get(
+            response__respondent=self.member,
+        )
+        self.assertEqual(conversation.transcript[-1], {
+            'role': 'assistant', 'content': 'Persisted reply',
+        })
+
+    def test_server_deadline_emits_retryable_error_not_blocking_fallback(self):
+        def timed_out(*args, **kwargs):
+            raise LLMTimeoutError('hard deadline')
+            yield  # pragma: no cover - makes this a generator
+
+        with patch(
+            'accounts.views.onboarding_ai.stream_logical_member_turn',
+            side_effect=timed_out,
+        ):
+            body = _read(self.client.post(
+                '/onboarding/chat/stream', _turn('keep me'),
+            ))
+
+        self.assertIn('event: error', body)
+        self.assertIn('"reason": "timeout"', body)
+        self.assertNotIn('event: fallback', body)
 
 
 @LLM_ON
@@ -161,7 +221,7 @@ class StreamCompletionTest(TestCase):
             'questionnaires.onboarding_ai.llm.complete',
         ) as mock_complete:
             resp = self.client.post(
-                '/onboarding/chat/stream', {'message': 'all answered'},
+                '/onboarding/chat/stream', _turn('all answered'),
             )
             body = _read(resp)
         # The completing turn rode the SAME streamed generation: no second
@@ -194,7 +254,7 @@ class StreamCompletionTest(TestCase):
             return_value=tool_result,
         ):
             _read(self.client.post(
-                '/onboarding/chat/stream', {'message': 'all answered'},
+                '/onboarding/chat/stream', _turn('all answered'),
             ))
         streamed = Response.objects.get(respondent=self.member)
 
@@ -249,7 +309,7 @@ class StreamFallbackTest(TestCase):
             side_effect=LLMError('open failed'),
         ):
             resp = self.client.post(
-                '/onboarding/chat/stream', {'message': 'hello'},
+                '/onboarding/chat/stream', _turn('hello'),
             )
             body = _read(resp)
         self.assertIn('event: fallback', body)
@@ -265,19 +325,20 @@ class StreamFallbackTest(TestCase):
     def test_retry_via_v1_after_stream_failure_is_idempotent(self):
         # Stream fails (nothing persisted), then the client retries the
         # SAME message via the v1 non-streaming endpoint.
+        request_id = str(uuid.uuid4())
         with patch(
             'questionnaires.onboarding_ai.llm.stream',
             side_effect=LLMError('open failed'),
         ):
             _read(self.client.post(
-                '/onboarding/chat/stream', {'message': 'my reply'},
+                '/onboarding/chat/stream', _turn('my reply', request_id),
             ))
         with patch(
             'questionnaires.onboarding_ai.llm.complete',
             return_value=LLMResult(text='Thanks, tell me more.'),
         ):
             self.client.post(
-                '/onboarding/chat/message', {'message': 'my reply'},
+                '/onboarding/chat/message', _turn('my reply', request_id),
             )
         conversation = OnboardingConversation.objects.get(
             response__respondent=self.member,
@@ -297,7 +358,7 @@ class StreamFallbackTest(TestCase):
             'questionnaires.onboarding_ai.llm.stream', side_effect=gen,
         ):
             resp = self.client.post(
-                '/onboarding/chat/stream', {'message': 'hello'},
+                '/onboarding/chat/stream', _turn('hello'),
             )
             body = _read(resp)
         self.assertIn('event: delta', body)
@@ -309,6 +370,58 @@ class StreamFallbackTest(TestCase):
         )
         self.assertEqual(
             [t['role'] for t in conversation.transcript], ['assistant'],
+        )
+
+    def test_abort_busy_recovery_preserves_identity_then_replays_original(self):
+        request_id = str(uuid.uuid4())
+        message = 'same logical answer'
+        release = Event()
+
+        def delayed_success(messages, **kwargs):
+            yield StreamEvent(kind=STREAM_TEXT_DELTA, text='Working')
+            release.wait(timeout=2)
+            yield StreamEvent(
+                kind=STREAM_DONE,
+                result=LLMResult(text='Persisted original result'),
+            )
+
+        with patch(
+            'questionnaires.onboarding_ai.llm.stream',
+            side_effect=delayed_success,
+        ) as provider:
+            stream_response = self.client.post(
+                '/onboarding/chat/stream', _turn(message, request_id),
+            )
+            chunks = iter(stream_response.streaming_content)
+            self.assertIn('event: delta', next(chunks).decode())
+
+            busy = self.client.post(
+                '/onboarding/chat/message', _turn(message, request_id),
+            )
+            self.assertEqual(busy.status_code, 409)
+            self.assertEqual(str(busy.context['turn_request_id']), request_id)
+            self.assertEqual(busy.context['draft_message'], message)
+
+            release.set()
+            remaining = b''.join(chunks).decode()
+            self.assertIn('event: done', remaining)
+
+            replay = self.client.post(
+                '/onboarding/chat/message', _turn(message, request_id),
+            )
+
+        self.assertEqual(replay.status_code, 200)
+        self.assertContains(replay, 'Persisted original result')
+        self.assertEqual(provider.call_count, 1)
+        conversation = OnboardingConversation.objects.get(
+            response__respondent=self.member,
+        )
+        self.assertEqual(
+            sum(
+                turn['role'] == 'user' and turn['content'] == message
+                for turn in conversation.transcript
+            ),
+            1,
         )
 
 
@@ -418,7 +531,7 @@ class StreamCrossMemberIsolationTest(TestCase):
             return_value=LLMResult(text='Hi A'),
         ):
             resp = self.client.post(
-                '/onboarding/chat/stream', {'message': 'hello'},
+                '/onboarding/chat/stream', _turn('hello'),
             )
             _read(resp)
         # A's turn landed on A's own conversation; B's transcript is empty.

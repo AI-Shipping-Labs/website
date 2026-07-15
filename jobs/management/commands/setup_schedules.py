@@ -182,4 +182,17 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: onboarding-reminders (daily at 06:30 UTC)'))
 
+        # Durable outbox recovery for onboarding completion notifications.
+        # Pending enqueue failures and expired worker claims are safe to retry
+        # because the final logical attempt is the idempotency key.
+        schedule(
+            'questionnaires.tasks.reconcile_onboarding_staff_notifications',
+            cron='*/5 * * * *',
+            name='onboarding-staff-notification-recovery',
+        )
+        self.stdout.write(self.style.SUCCESS(
+            'Registered: onboarding-staff-notification-recovery '
+            '(five-minute cadence)'
+        ))
+
         self.stdout.write(self.style.SUCCESS('All default schedules registered.'))

@@ -8,7 +8,7 @@ logs. No DELETE endpoint exists (deactivate via is_active).
 import json
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, tag
+from django.test import Client, TestCase, tag
 
 from accounts.models import Token
 from triggers.models import (
@@ -46,6 +46,17 @@ class TriggersApiTestBase(TestCase):
 
 
 class SubscriptionApiTest(TriggersApiTestBase):
+    def test_staff_session_can_read_but_session_mutation_requires_csrf(self):
+        session_client = Client(enforce_csrf_checks=True)
+        session_client.force_login(self.staff)
+        self.assertEqual(session_client.get("/api/triggers/subscriptions").status_code, 200)
+        response = session_client.post(
+            "/api/triggers/subscriptions",
+            data=json.dumps({"target_url": "https://handler.example.com/hook", "secret": "s"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
     def test_requires_token(self):
         resp = self.client.get("/api/triggers/subscriptions")
         self.assertEqual(resp.status_code, 401)
@@ -75,6 +86,7 @@ class SubscriptionApiTest(TriggersApiTestBase):
         # The secret is stored even though it isn't returned.
         sub = TriggerSubscription.objects.get(pk=body["id"])
         self.assertEqual(sub.secret, "topsecret")
+        self.assertNotIn("topsecret", sub.encrypted_secret)
 
     def test_create_requires_secret_and_target(self):
         resp = self.client.post(
@@ -87,6 +99,17 @@ class SubscriptionApiTest(TriggersApiTestBase):
         details = resp.json()["details"]
         self.assertIn("secret", details)
         self.assertIn("target_url", details)
+
+    def test_rejects_internal_or_non_https_destination(self):
+        for target in ("http://handler.example.com/hook", "https://127.0.0.1/hook", "https://169.254.169.254/latest/meta-data/"):
+            with self.subTest(target=target):
+                response = self.client.post(
+                    "/api/triggers/subscriptions",
+                    data=json.dumps({"target_url": target, "secret": "s"}),
+                    content_type="application/json",
+                    **self._auth(),
+                )
+                self.assertEqual(response.status_code, 422)
 
     def test_detail_omits_secret(self):
         sub = TriggerSubscription.objects.create(
@@ -176,6 +199,15 @@ class WidgetApiTest(TriggersApiTestBase):
             **self._auth(),
         )
         self.assertEqual(resp.status_code, 422)
+
+    def test_invalid_slug_and_access_level_are_rejected(self):
+        response = self.client.post(
+            "/api/triggers/widgets",
+            data=json.dumps({"slug": "not a slug", "event_name": "x", "min_level": 17}),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 422)
 
 
 class EmissionAndDeliveryApiTest(TriggersApiTestBase):

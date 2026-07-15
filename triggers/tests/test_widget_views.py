@@ -7,6 +7,7 @@ flag-off paused short-circuit, dedup persistence, and CSRF enforcement.
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import Client, TestCase, tag
 
 from content.access import LEVEL_MAIN, LEVEL_REGISTERED
@@ -43,6 +44,7 @@ class WidgetStateViewTest(TestCase):
         )
 
     def setUp(self):
+        cache.clear()
         _set_flag(True)
 
     def tearDown(self):
@@ -114,6 +116,7 @@ class WidgetClaimViewTest(TestCase):
         )
 
     def setUp(self):
+        cache.clear()
         _set_flag(True)
 
     def tearDown(self):
@@ -176,3 +179,13 @@ class WidgetClaimViewTest(TestCase):
             resp = csrf_client.post("/widgets/v0-claim/claim")
         self.assertEqual(resp.status_code, 403)
         self.assertEqual(EventEmission.objects.count(), 0)
+
+    def test_repeated_claim_attempts_are_rate_limited_with_retry_hint(self):
+        self.client.force_login(self.member)
+        with patch("triggers.dispatch.async_task"):
+            responses = [self.client.post("/widgets/v0-claim/claim") for _ in range(6)]
+        self.assertEqual([response.status_code for response in responses[:5]], [200] * 5)
+        self.assertEqual(responses[5].status_code, 429)
+        self.assertEqual(responses[5].json()["state"], "rate_limited")
+        self.assertEqual(responses[5]["Retry-After"], "60")
+        self.assertEqual(EventEmission.objects.count(), 1)

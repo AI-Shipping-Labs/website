@@ -1,4 +1,4 @@
-from triggers.models.emission import EventEmission, WebhookDelivery
+from triggers.models.emission import EventEmission, WebhookDelivery, WebhookDeliveryJob
 from triggers.models.subscription import (
     EVENT_TYPE_CHOICES,
     EVENT_TYPE_CUSTOM,
@@ -13,4 +13,5 @@ __all__ = [
     "EventWidget",
     "TriggerSubscription",
     "WebhookDelivery",
+    "WebhookDeliveryJob",
 ]

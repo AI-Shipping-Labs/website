@@ -110,6 +110,12 @@
         'Claims are paused right now. Please check back later.',
         'event-widget-paused'
       );
+    } else if (state === 'rate_limited') {
+      renderMessage(
+        node,
+        data.error || 'Too many claim attempts. Please wait a minute and try again.',
+        'event-widget-rate-limited'
+      );
     } else {
       // unavailable / unknown: render nothing visible.
       clear(node);

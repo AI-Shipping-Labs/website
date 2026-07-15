@@ -12,7 +12,7 @@ from content.models.mixins import (
     TimestampedModelMixin,
 )
 from content.utils.h1 import strip_leading_title_h1
-from content.utils.markdown import render_markdown
+from content.utils.markdown import markdown_to_plain_text, render_markdown
 
 STATUS_CHOICES = [
     ('draft', 'Draft'),
@@ -139,7 +139,7 @@ class Article(
 
         # Auto-generate excerpt from markdown if description is empty
         if not self.description and self.content_markdown:
-            self.description = self.content_markdown[:200]
+            self.description = markdown_to_plain_text(body_md)[:200]
 
         # Keep status in sync with published flag.
         # The `published` boolean is the source of truth for views.
@@ -157,7 +157,7 @@ class Article(
         if update_fields is not None:
             update_fields = set(update_fields)
             if 'content_markdown' in update_fields:
-                update_fields.update(['content_html', 'reading_time'])
+                update_fields.update(['content_html', 'reading_time', 'description'])
             if 'published' in update_fields:
                 update_fields.update(['status', 'published_at'])
             kwargs['update_fields'] = list(update_fields)

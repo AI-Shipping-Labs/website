@@ -50,7 +50,7 @@ def cleanup_calendly_webhook_logs():
 
 
 def cleanup_old_webhook_deliveries(days=30):
-    """Delete outbound ``triggers.WebhookDelivery`` rows older than ``days``.
+    """Delete terminal outbound jobs and attempt rows older than ``days``.
 
     Sibling of :func:`cleanup_old_webhook_logs` (issue #1070). Reuses the
     same scheduled-job wiring rather than a new bespoke cron. The outbound
@@ -63,19 +63,38 @@ def cleanup_old_webhook_deliveries(days=30):
     Returns:
         dict with count of deleted records.
     """
-    from triggers.models import WebhookDelivery
+    from triggers.models import WebhookDelivery, WebhookDeliveryJob
 
     cutoff = timezone.now() - timedelta(days=days)
-    deleted_count, _ = WebhookDelivery.objects.filter(
+    # Terminal durable jobs contain the snapshotted PII envelope and encrypted
+    # signing key. Delete them first so their attempt rows cascade; preserve
+    # pending/running/paused jobs until they reach a terminal state.
+    terminal_jobs = WebhookDeliveryJob.objects.filter(
+        status__in=[
+            WebhookDeliveryJob.STATUS_SUCCEEDED,
+            WebhookDeliveryJob.STATUS_FAILED,
+        ],
+        updated_at__lt=cutoff,
+    )
+    terminal_count = terminal_jobs.count()
+    _, cascaded = terminal_jobs.delete()
+    cascaded_deliveries = cascaded.get("triggers.WebhookDelivery", 0)
+    legacy_deleted, _ = WebhookDelivery.objects.filter(
+        job__isnull=True,
         created_at__lt=cutoff,
     ).delete()
+    deleted_count = cascaded_deliveries + legacy_deleted
 
     logger.info(
         "Cleaned up %d webhook deliveries older than %d days",
         deleted_count,
         days,
     )
-    return {'deleted': deleted_count, 'cutoff_days': days}
+    return {
+        'deleted': deleted_count,
+        'deleted_jobs': terminal_count,
+        'cutoff_days': days,
+    }
 
 
 def redact_old_maven_enrollment_pii(days=30):

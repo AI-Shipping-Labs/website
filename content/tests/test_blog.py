@@ -234,6 +234,44 @@ class ArticleSaveRendersMarkdownTest(TestCase):
         )
         self.assertTrue(article.description.startswith('This is a long'))
 
+    def test_description_derives_prose_without_event_widget_directive(self):
+        article = Article.objects.create(
+            title='Widget article', slug='widget-auto-desc',
+            date=date(2025, 1, 1),
+            content_markdown=(
+                '# Widget article\n\nIntro **paragraph**.\n\n'
+                '```eventwidget\nslug: active-or-inactive\n```\n\n'
+                'Outro [paragraph](https://example.com).'
+            ),
+            published=True,
+        )
+
+        self.assertEqual(
+            article.description,
+            'Intro paragraph. Outro paragraph.',
+        )
+        self.assertNotIn('eventwidget', article.description)
+        self.assertNotIn('slug:', article.description)
+        self.assertNotIn('Loading', article.description)
+
+    def test_update_fields_persists_clean_auto_description(self):
+        article = Article.objects.create(
+            title='Widget update', slug='widget-update-desc',
+            date=date(2025, 1, 1), published=True,
+        )
+        article.content_markdown = (
+            'Readable intro.\n\n'
+            '```eventwidget\nslug: unknown-widget\n```\n\n'
+            'Readable outro.'
+        )
+        article.save(update_fields=['content_markdown'])
+        article.refresh_from_db()
+
+        self.assertEqual(
+            article.description,
+            'Readable intro. Readable outro.',
+        )
+
     def test_explicit_description_not_overridden(self):
         article = Article.objects.create(
             title='Test', slug='explicit-desc', date=date(2025, 1, 1),
@@ -570,6 +608,35 @@ class BlogDetailDisplayTest(TestCase):
         content = response.content.decode()
         self.assertIn('?tag=python', content)
         self.assertIn('?tag=tutorial', content)
+
+    def test_widget_directive_absent_from_header_metadata_and_excerpts(self):
+        article = Article.objects.create(
+            title='Widget metadata', slug='widget-metadata',
+            date=date(2025, 6, 15), published=True,
+            content_markdown=(
+                'Reader-facing intro.\n\n'
+                '```eventwidget\nslug: any-widget-state\n```\n\n'
+                'Reader-facing outro.'
+            ),
+        )
+
+        detail = self.client.get(article.get_absolute_url())
+        self.assertContains(
+            detail,
+            'data-testid="article-description">'
+            'Reader-facing intro. Reader-facing outro.</p>',
+        )
+        self.assertContains(detail, 'data-event-widget="any-widget-state"')
+        detail_html = detail.content.decode()
+        self.assertNotIn('```eventwidget', detail_html)
+        self.assertNotIn('slug: any-widget-state', detail_html)
+
+        listing = self.client.get('/blog')
+        self.assertContains(
+            listing,
+            'Reader-facing intro. Reader-facing outro.',
+        )
+        self.assertNotContains(listing, 'eventwidget')
 
     # Detail-page gating CTA test removed in #261: covered at the
     # detail layer by `BlogDetailAccessControlTest` and end-to-end by

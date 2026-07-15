@@ -419,6 +419,10 @@ class MavenConcurrentDeliveryTest(TransactionTestCase):
 
     def setUp(self):
         enable_maven()
+        Tier.objects.get_or_create(
+            slug="main",
+            defaults={"name": "Main", "level": 20},
+        )
 
     def test_simultaneous_identical_deliveries_run_side_effects_once(self):
         barrier = threading.Barrier(2)
@@ -451,8 +455,9 @@ class MavenConcurrentDeliveryTest(TransactionTestCase):
                 content_type="application/json",
                 HTTP_X_MAVEN_SECRET=SECRET,
             )
+            result = (response.status_code, response.json())
             close_old_connections()
-            return response.status_code, response.json()["status"]
+            return result
 
         with patch("integrations.services.maven._invite_to_slack", side_effect=count("slack")), patch(
             "integrations.services.maven._send_welcome",
@@ -461,7 +466,15 @@ class MavenConcurrentDeliveryTest(TransactionTestCase):
             with ThreadPoolExecutor(max_workers=2) as executor:
                 results = list(executor.map(lambda _: deliver(), range(2)))
 
-        self.assertEqual([status for status, _ in results], [200, 200])
+        self.assertEqual(
+            [status for status, _ in results],
+            [200, 200],
+            results,
+        )
+        self.assertCountEqual(
+            [body.get("status") for _, body in results],
+            ["onboarded", "already_processed"],
+        )
         self.assertEqual(User.objects.filter(email="concurrent@example.com").count(), 1)
         self.assertEqual(MavenEnrollmentEvent.objects.filter(lifecycle="active").count(), 1)
         self.assertEqual(TierOverride.objects.filter(source__startswith="maven:").count(), 1)

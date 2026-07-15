@@ -11,6 +11,7 @@ distinct from the inbound ``integrations.WebhookLog``.
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class EventEmission(models.Model):
@@ -31,6 +32,8 @@ class EventEmission(models.Model):
         unique=True,
         help_text="The 'evt_<uuid>' id put on the wire.",
     )
+    occurred_at = models.DateTimeField(default=timezone.now)
+    envelope = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -61,6 +64,13 @@ class WebhookDelivery(models.Model):
         on_delete=models.CASCADE,
         related_name="deliveries",
     )
+    job = models.ForeignKey(
+        "triggers.WebhookDeliveryJob",
+        on_delete=models.CASCADE,
+        related_name="attempts",
+        null=True,
+        blank=True,
+    )
     target_url = models.URLField(max_length=500)
     request_body = models.TextField(
         blank=True,
@@ -78,7 +88,69 @@ class WebhookDelivery(models.Model):
         ordering = ["-created_at"]
         verbose_name = "Webhook delivery"
         verbose_name_plural = "Webhook deliveries"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["job", "attempt"],
+                name="uniq_webhook_delivery_job_attempt",
+            ),
+        ]
 
     def __str__(self):
         status = "ok" if self.succeeded else "fail"
         return f"delivery #{self.pk} ({status})"
+
+
+class WebhookDeliveryJob(models.Model):
+    """Durable delivery state; django-q is only the wake-up mechanism."""
+
+    STATUS_PENDING = "pending"
+    STATUS_RUNNING = "running"
+    STATUS_PAUSED = "paused"
+    STATUS_SUCCEEDED = "succeeded"
+    STATUS_FAILED = "failed"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_RUNNING, "Running"),
+        (STATUS_PAUSED, "Paused"),
+        (STATUS_SUCCEEDED, "Succeeded"),
+        (STATUS_FAILED, "Failed"),
+    ]
+
+    emission = models.ForeignKey(
+        EventEmission,
+        on_delete=models.CASCADE,
+        related_name="delivery_jobs",
+    )
+    subscription = models.ForeignKey(
+        "triggers.TriggerSubscription",
+        on_delete=models.CASCADE,
+        related_name="delivery_jobs",
+    )
+    target_url = models.URLField(max_length=500)
+    encrypted_secret = models.TextField()
+    secret_version = models.PositiveIntegerField()
+    request_body = models.TextField()
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+    )
+    attempt_count = models.PositiveIntegerField(default=0)
+    max_attempts = models.PositiveIntegerField(default=4)
+    next_attempt_at = models.DateTimeField(default=timezone.now)
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["emission", "subscription"],
+                name="uniq_webhook_job_emission_subscription",
+            ),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"delivery job #{self.pk} ({self.status})"

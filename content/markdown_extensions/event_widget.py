@@ -44,8 +44,12 @@ from markdown.preprocessors import Preprocessor
 class EventWidgetPreprocessor(Preprocessor):
     """Replace ```` ```eventwidget ```` fences with a stashed placeholder div."""
 
+    def __init__(self, md=None, *, render_placeholder=True):
+        super().__init__(md)
+        self.render_placeholder = render_placeholder
+
     PATTERN = re.compile(
-        r"^```eventwidget\s*\n(.*?)\n^```\s*$",
+        r"^```eventwidget\s*\n(.*?)(?:\n^```\s*$|\Z)",
         re.DOTALL | re.MULTILINE,
     )
     SLUG_LINE = re.compile(r"^\s*slug\s*:\s*(?P<slug>.+?)\s*$", re.MULTILINE)
@@ -61,6 +65,11 @@ class EventWidgetPreprocessor(Preprocessor):
                 return "\n\n"
             slug = slugify(slug_match.group("slug"))
             if not slug:
+                return "\n\n"
+            if not self.render_placeholder:
+                # Plain-text derivatives (descriptions, excerpts, metadata)
+                # have no hydration runtime. Consume the directive as a
+                # semantic block instead of exposing its implementation text.
                 return "\n\n"
             # ``slugify`` guarantees ``slug`` is ``[a-z0-9-]`` only, so it is
             # safe to interpolate directly into the attribute. The inner
@@ -84,9 +93,21 @@ class EventWidgetExtension(Extension):
     and never reaches codehilite.
     """
 
+    def __init__(self, **kwargs):
+        self.config = {
+            "render_placeholder": [
+                True,
+                "Emit the browser hydration placeholder instead of dropping it.",
+            ],
+        }
+        super().__init__(**kwargs)
+
     def extendMarkdown(self, md):
         md.preprocessors.register(
-            EventWidgetPreprocessor(md),
+            EventWidgetPreprocessor(
+                md,
+                render_placeholder=self.getConfig("render_placeholder"),
+            ),
             "event_widget",
             31,
         )

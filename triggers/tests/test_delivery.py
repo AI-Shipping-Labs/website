@@ -59,14 +59,14 @@ class DeliverWebhookTest(TestCase):
         )
 
     def test_successful_delivery_records_row_and_signed_headers(self):
-        with patch("triggers.tasks.requests.post") as mock_post:
+        with patch("triggers.tasks.post_pinned_https") as mock_post:
             mock_post.return_value = _FakeResponse(200)
             deliver_webhook(self.emission.id, self.subscription.id)
 
         self.assertEqual(mock_post.call_count, 1)
         _args, kwargs = mock_post.call_args
         headers = kwargs["headers"]
-        sent_body = kwargs["data"].decode("utf-8")
+        sent_body = kwargs["body"].decode("utf-8")
 
         # Headers present and signature verifies over "<timestamp>.<body>".
         self.assertIn("X-AISL-Signature", headers)
@@ -93,22 +93,22 @@ class DeliverWebhookTest(TestCase):
         self.assertEqual(delivery.attempt, 1)
 
     def test_non_2xx_records_failed_row_and_raises(self):
-        with patch("triggers.tasks.requests.post") as mock_post:
+        with patch("triggers.tasks.post_pinned_https") as mock_post:
             mock_post.return_value = _FakeResponse(500, text="boom")
-            with self.assertRaises(RuntimeError):
-                deliver_webhook(self.emission.id, self.subscription.id)
+            deliver_webhook(self.emission.id, self.subscription.id)
 
         delivery = WebhookDelivery.objects.get()
         self.assertFalse(delivery.succeeded)
         self.assertEqual(delivery.response_status, 500)
 
-    def test_attempt_counter_increments_per_call(self):
-        with patch("triggers.tasks.requests.post") as mock_post:
+    def test_success_guard_makes_duplicate_job_call_a_noop(self):
+        with patch("triggers.tasks.post_pinned_https") as mock_post:
             mock_post.return_value = _FakeResponse(200)
             deliver_webhook(self.emission.id, self.subscription.id)
             deliver_webhook(self.emission.id, self.subscription.id)
 
-        attempts = sorted(
-            WebhookDelivery.objects.values_list("attempt", flat=True),
+        self.assertEqual(mock_post.call_count, 1)
+        self.assertEqual(
+            list(WebhookDelivery.objects.values_list("attempt", flat=True)),
+            [1],
         )
-        self.assertEqual(attempts, [1, 2])

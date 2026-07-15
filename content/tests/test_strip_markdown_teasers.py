@@ -74,6 +74,26 @@ class StripMarkdownFilterTest(TestCase):
         # plain text, not entity-encoded.
         self.assertEqual(strip_markdown('A & B < C'), 'A & B < C')
 
+    def test_event_widget_directive_is_semantically_dropped(self):
+        result = strip_markdown(
+            'Intro.\n\n```eventwidget\nslug: inactive-widget\n```\n\nOutro.'
+        )
+        self.assertEqual(result, 'Intro. Outro.')
+        self.assertNotIn('eventwidget', result)
+        self.assertNotIn('slug:', result)
+        self.assertNotIn('Loading', result)
+
+    def test_truncated_event_widget_directive_is_dropped(self):
+        # Legacy auto-descriptions may have sliced source markdown before the
+        # closing fence. The semantic directive still must not reach a header
+        # or excerpt.
+        result = strip_markdown(
+            'Intro.\n\n```eventwidget\nslug: inactive-widget'
+        )
+        self.assertEqual(result, 'Intro.')
+        self.assertNotIn('eventwidget', result)
+        self.assertNotIn('slug:', result)
+
     def test_truncation_chains_after_strip(self):
         long_md = '[Click here](https://x) ' + 'word ' * 50
         from django.template.defaultfilters import truncatechars

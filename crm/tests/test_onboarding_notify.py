@@ -14,11 +14,13 @@ site is verified end to end.
 
 import json
 from unittest.mock import patch
+from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from crm.models import CRMRecord
 from notifications.models import Notification
@@ -348,7 +350,7 @@ class OnboardingNotifyBestEffortTest(TestCase):
 
 
 class OnboardingChatFinalizeNotifiesStaffTest(TestCase):
-    """The AI-chat finalizer is the same single notification site (#882)."""
+    """The queued AI-chat delivery uses the shared notification site."""
 
     @classmethod
     def setUpTestData(cls):
@@ -359,7 +361,7 @@ class OnboardingChatFinalizeNotifiesStaffTest(TestCase):
             email='staff@test.com', password='pw', is_staff=True,
         )
 
-    def test_finalize_conversation_notifies_staff(self):
+    def test_finalized_conversation_notification_task_notifies_staff(self):
         from questionnaires.onboarding import (
             get_generic_onboarding_questionnaire,
         )
@@ -370,7 +372,10 @@ class OnboardingChatFinalizeNotifiesStaffTest(TestCase):
         response = Response.objects.create(
             questionnaire=generic, respondent=self.member, status='draft',
         )
-        from questionnaires.models import OnboardingConversation
+        from questionnaires.models import (
+            OnboardingConversation,
+            OnboardingTurnAttempt,
+        )
 
         conversation = OnboardingConversation.objects.create(
             response=response, transcript=[],
@@ -386,6 +391,25 @@ class OnboardingChatFinalizeNotifiesStaffTest(TestCase):
 
         response.refresh_from_db()
         self.assertEqual(response.status, 'submitted')
+        now = timezone.now()
+        attempt = OnboardingTurnAttempt.objects.create(
+            conversation=conversation,
+            request_id=uuid4(),
+            member_message_hash='0' * 64,
+            admitted_version=conversation.turn_version,
+            transport='stream',
+            status='succeeded',
+            outcome='final',
+            started_at=now,
+            completed_at=now,
+            lease_expires_at=now,
+            notification_status='pending',
+        )
+
+        from questionnaires.tasks import send_onboarding_staff_notification
+        result = send_onboarding_staff_notification(attempt.pk)
+
+        self.assertEqual(result['status'], 'succeeded')
         record = CRMRecord.objects.get(user=self.member)
         notifs = Notification.objects.filter(
             notification_type='onboarding_submitted', user=self.staff,

@@ -90,6 +90,9 @@ def mock_complete(
     temperature=None,
     tools=None,
     tool_choice=None,
+    timeout_seconds=None,
+    max_retries=None,
+    cancellation=None,
 ):
     """Stub ``complete`` returning a fixed, schema-valid structured result.
 

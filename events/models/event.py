@@ -351,6 +351,15 @@ class Event(
         default=0,
         help_text='Sequence number for .ics calendar invite updates.',
     )
+    calendar_uid = models.CharField(
+        max_length=400,
+        unique=True,
+        editable=False,
+        help_text=(
+            'Immutable iCalendar UID. Initialized from the creation-time slug '
+            'so later slug edits update the existing calendar entry.'
+        ),
+    )
     recap = models.JSONField(
         default=dict, blank=True,
         help_text='Structured recap landing page sections. See docs for schema.',
@@ -537,6 +546,15 @@ class Event(
         # last ``-`` boundary so the tail is a whole word.
         if self.slug:
             self.slug = _truncate_event_slug(self.slug)
+
+        # Issue #1073: slugs are operator-editable, but an iCalendar UID must
+        # remain stable for the lifetime of the event. Capture the initial
+        # slug once and never rewrite the UID on subsequent saves.
+        if not self.calendar_uid:
+            self.calendar_uid = f'event-{self.slug}@aishippinglabs.com'
+            if update_field_names is not None:
+                update_field_names.add('calendar_uid')
+                kwargs['update_fields'] = update_field_names
 
         # Sync published_at with published flag
         if self.published and not self.published_at:

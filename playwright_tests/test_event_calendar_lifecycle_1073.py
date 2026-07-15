@@ -119,6 +119,7 @@ class TestApiCalendarLifecycle:
         _reset_event_state()
         token = _create_api_token("api-reschedule-1073@test.com")
         event = _create_event("api-reschedule-1073")
+        original_uid = event.calendar_uid
         _register("attendee-api-reschedule-1073@test.com", event)
         new_start = event.start_datetime + timedelta(days=3)
         new_end = new_start + timedelta(hours=2)
@@ -131,6 +132,7 @@ class TestApiCalendarLifecycle:
             f"{django_server}/api/events/{event.slug}",
             headers={"Authorization": f"Token {token}"},
             data={
+                "slug": "api-reschedule-renamed-1073",
                 "start_datetime": new_start.isoformat(),
                 "end_datetime": new_end.isoformat(),
             },
@@ -141,6 +143,11 @@ class TestApiCalendarLifecycle:
             "events.tasks.notify_reschedule.send_reschedule_notice_fanout",
         )
         assert after - before == 1
+        from events.models import Event
+
+        event = Event.objects.get(pk=event.pk)
+        assert event.slug == "api-reschedule-renamed-1073"
+        assert event.calendar_uid == original_uid
 
     def test_api_patch_cancel_enqueues_calendar_cancel(self, django_server, page):
         _reset_event_state()

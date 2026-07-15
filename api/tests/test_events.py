@@ -345,6 +345,27 @@ class EventsApiCalendarLifecycleTest(EventsApiTestBase):
         mock_enqueue.assert_called_once()
         self.assertEqual(mock_enqueue.call_args.args[0], self.studio_event.pk)
 
+    @patch("events.tasks.notify_reschedule.enqueue_reschedule_notice")
+    def test_patch_slug_and_schedule_keep_original_calendar_uid(self, mock_enqueue):
+        original_uid = self.studio_event.calendar_uid
+        new_start = self.studio_event.start_datetime + timedelta(days=2)
+        new_end = new_start + timedelta(hours=1)
+
+        response = self._patch(
+            self.studio_event.slug,
+            {
+                "slug": "renamed-calendar-event",
+                "start_datetime": new_start.isoformat(),
+                "end_datetime": new_end.isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.studio_event.refresh_from_db()
+        self.assertEqual(self.studio_event.slug, "renamed-calendar-event")
+        self.assertEqual(self.studio_event.calendar_uid, original_uid)
+        mock_enqueue.assert_called_once()
+
     @patch("events.tasks.notify_cancellation.enqueue_cancellation_notice")
     def test_patch_cancelled_enqueues_calendar_cancellation(self, mock_enqueue):
         response = self._patch(self.studio_event.slug, {"status": "cancelled"})

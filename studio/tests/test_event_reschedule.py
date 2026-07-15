@@ -20,6 +20,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from events.models import Event, EventRegistration
+from events.services.calendar_invite import generate_ics
 from tests.fixtures import StaffUserMixin
 
 User = get_user_model()
@@ -146,6 +147,26 @@ class StudioEventRescheduleTriggerTest(StaffUserMixin, TestCase):
         )
         self.event.refresh_from_db()
         self.assertGreater(self.event.ics_sequence, before)
+
+    @patch('events.tasks.notify_reschedule.enqueue_reschedule_notice')
+    def test_slug_and_schedule_change_keep_original_calendar_uid(self, mock_enqueue):
+        """A renamed event must update, not duplicate, its calendar entry."""
+        original_uid = self.event.calendar_uid
+        new_start = self.event.start_datetime + timedelta(days=7)
+        user = User.objects.create_user(email='renamed-event-attendee@test.com')
+        EventRegistration.objects.create(event=self.event, user=user)
+
+        self._post_edit(
+            slug='renamed-live-qa',
+            event_date=new_start.strftime('%d/%m/%Y'),
+            event_time=new_start.strftime('%H:%M'),
+        )
+
+        mock_enqueue.assert_called_once()
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.slug, 'renamed-live-qa')
+        self.assertEqual(self.event.calendar_uid, original_uid)
+        self.assertIn(f'UID:{original_uid}', generate_ics(self.event).decode())
 
     @patch('events.tasks.notify_reschedule.enqueue_reschedule_notice')
     def test_sub_minute_drift_does_not_enqueue(self, mock_enqueue):

@@ -244,6 +244,7 @@ class SetupSchedulesCommandTest(TestCase):
             'cleanup-webhook-logs',
             'cleanup-webhook-deliveries',
             'purge-user-activity',
+            'purge-plan-sprints-raw-text',
             'event-reminders',
             'complete-finished-events',
             'expire-tier-overrides',

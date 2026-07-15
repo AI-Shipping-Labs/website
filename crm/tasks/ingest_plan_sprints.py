@@ -21,9 +21,11 @@ from datetime import datetime
 from datetime import timezone as dt_timezone
 
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 
+from accounts.services.email_resolution import resolve_user_by_email
 from community.services.slack import SlackAPIError, SlackCommunityService
 from community.slack_config import get_slack_plan_sprints_channel_id
 from crm.models import SlackChannelIngest, SlackMessage, SlackThread
@@ -40,6 +42,8 @@ User = get_user_model()
 # ingest). Overridable via the ``PLAN_SPRINTS_FIRST_RUN_LOOKBACK_DAYS``
 # IntegrationSetting (Studio-editable, no redeploy).
 FIRST_RUN_LOOKBACK_DAYS = 7
+THREAD_REFRESH_DAYS = 45
+INGEST_LEASE_MINUTES = 60
 
 
 def _first_run_lookback_days():
@@ -50,6 +54,14 @@ def _first_run_lookback_days():
     except (TypeError, ValueError):
         return FIRST_RUN_LOOKBACK_DAYS
     return days if days > 0 else FIRST_RUN_LOOKBACK_DAYS
+
+
+def _positive_int_config(key, default):
+    try:
+        value = int(get_config(key, default))
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
 
 
 def _ts_to_datetime(ts):
@@ -77,7 +89,7 @@ def _is_member_message(message):
     return True
 
 
-def _resolve_member_and_plan(slack_user_id):
+def _resolve_member_and_plan(service, slack_user_id):
     """Resolve a Slack user id to a local User and their active-sprint plan.
 
     Returns ``(member, plan)``. ``member`` is None when no user matches
@@ -88,6 +100,14 @@ def _resolve_member_and_plan(slack_user_id):
     if not slack_user_id:
         return None, None
     member = User.objects.filter(slack_user_id=slack_user_id).first()
+    if member is None:
+        profile_lookup = getattr(service, 'lookup_user_profile_by_id', None)
+        if profile_lookup is not None:
+            profile = profile_lookup(slack_user_id) or {}
+            member = resolve_user_by_email(profile.get('email', ''))
+            if member is not None and not member.slack_user_id:
+                member.slack_user_id = slack_user_id
+                member.save(update_fields=['slack_user_id'])
     if member is None:
         return None, None
     plan = (
@@ -103,10 +123,12 @@ def _resolve_member_and_plan(slack_user_id):
 def _refresh_thread_match(thread, member, plan):
     """Persist a newly-resolved member/plan on an existing raw thread."""
     update_fields = []
-    if member is not None and thread.member_id != member.pk:
+    member_id = member.pk if member is not None else None
+    plan_id = plan.pk if plan is not None else None
+    if thread.member_id != member_id:
         thread.member = member
         update_fields.append("member")
-    if plan is not None and thread.plan_id != plan.pk:
+    if thread.plan_id != plan_id:
         thread.plan = plan
         update_fields.append("plan")
     if update_fields:
@@ -118,7 +140,11 @@ def _last_successful_latest_ts(channel_id):
     """The ``latest_ts`` of the most recent successful run for this channel."""
     last = (
         SlackChannelIngest.objects
-        .filter(channel_id=channel_id, status='success')
+        .filter(
+            channel_id=channel_id,
+            status='success',
+            advances_watermark=True,
+        )
         .exclude(latest_ts='')
         .order_by('-started_at')
         .first()
@@ -136,7 +162,7 @@ def _upsert_thread(service, run, channel_id, root_message):
     """
     thread_ts = root_message.get("thread_ts") or root_message["ts"]
     slack_user_id = root_message.get("user", "")
-    member, plan = _resolve_member_and_plan(slack_user_id)
+    member, plan = _resolve_member_and_plan(service, slack_user_id)
 
     thread, created = SlackThread.objects.get_or_create(
         channel_id=channel_id,
@@ -157,13 +183,13 @@ def _upsert_thread(service, run, channel_id, root_message):
 
     # Fetch the full thread (root + every reply) so late-arriving replies
     # are picked up on later runs.
-    try:
-        thread_messages = service.fetch_conversation_replies(channel_id, thread_ts)
-    except SlackAPIError:
-        logger.warning(
-            "Failed to fetch replies for thread %s in %s", thread_ts, channel_id,
+    thread_messages = service.fetch_conversation_replies(channel_id, thread_ts)
+    if not thread_messages:
+        raise SlackAPIError(
+            f"Slack returned no messages for thread {thread_ts}",
+            method="conversations.replies",
+            error_code="empty_thread",
         )
-        thread_messages = [root_message]
 
     existing_ts = set(thread.messages.values_list("ts", flat=True))
     new_replies = 0
@@ -238,6 +264,69 @@ def _resolve_oldest(channel_id, *, oldest_ts=None, since=None):
     return f"{lookback.timestamp():.6f}"
 
 
+def _acquire_run(channel_id, oldest, *, advances_watermark=True):
+    """Acquire the per-channel ingest lease, expiring abandoned runs."""
+    now = timezone.now()
+    lease_minutes = _positive_int_config(
+        'PLAN_SPRINTS_INGEST_LEASE_MINUTES', INGEST_LEASE_MINUTES,
+    )
+    lease_expires_at = now + timezone.timedelta(minutes=lease_minutes)
+    stale_before = now - timezone.timedelta(minutes=lease_minutes)
+
+    with transaction.atomic():
+        stale = SlackChannelIngest.objects.select_for_update().filter(
+            channel_id=channel_id,
+            status='running',
+        ).filter(
+            Q(lease_expires_at__lte=now)
+            | Q(lease_expires_at__isnull=True, started_at__lte=stale_before)
+        )
+        stale.update(
+            status='error',
+            error='Ingest lease expired before the run completed',
+            finished_at=now,
+            lease_expires_at=None,
+        )
+        try:
+            with transaction.atomic():
+                return SlackChannelIngest.objects.create(
+                    channel_id=channel_id,
+                    oldest_ts=oldest,
+                    status='running',
+                    lease_expires_at=lease_expires_at,
+                    advances_watermark=advances_watermark,
+                )
+        except IntegrityError:
+            return None
+
+
+def _running_run(channel_id):
+    return (
+        SlackChannelIngest.objects
+        .filter(channel_id=channel_id, status='running')
+        .order_by('-started_at')
+        .first()
+    )
+
+
+def _fail_run(run, exc, *, messages_seen=0, threads_persisted=0,
+              replies_added=0, members_matched=0, known_threads_checked=0):
+    """Put an acquired run in a terminal error state without moving its watermark."""
+    run.status = 'error'
+    run.error = f'{exc.__class__.__name__}: {exc}'
+    run.finished_at = timezone.now()
+    run.latest_ts = run.oldest_ts
+    run.messages_seen = messages_seen
+    run.threads_persisted = threads_persisted
+    run.replies_added = replies_added
+    run.members_matched = members_matched
+    run.known_threads_checked = known_threads_checked
+    run.lease_expires_at = None
+    run.save()
+    logger.exception('plan-sprints ingest failed')
+    return run
+
+
 def ingest_plan_sprints(*, oldest_ts=None, since=None, dry_run=False):
     """`#plan-sprints` ingest entry point (registered in setup_schedules).
 
@@ -269,16 +358,29 @@ def ingest_plan_sprints(*, oldest_ts=None, since=None, dry_run=False):
     service = SlackCommunityService()
 
     oldest = _resolve_oldest(channel_id, oldest_ts=oldest_ts, since=since)
+    advances_watermark = oldest_ts is None and since is None
 
     if dry_run:
         with transaction.atomic():
-            run = _run_ingest(service, channel_id, oldest, dry_run=True)
+            run = _run_ingest(
+                service,
+                channel_id,
+                oldest,
+                dry_run=True,
+                advances_watermark=advances_watermark,
+            )
             # Roll back every row written this run; the in-memory ``run``
             # object keeps its counts so the caller can report them.
             transaction.set_rollback(True)
         return run
 
-    return _run_ingest(service, channel_id, oldest, dry_run=False)
+    return _run_ingest(
+        service,
+        channel_id,
+        oldest,
+        dry_run=False,
+        advances_watermark=advances_watermark,
+    )
 
 
 def _reread_thread_replies(service, run, thread):
@@ -288,16 +390,15 @@ def _reread_thread_replies(service, run, thread):
     written. Recomputes ``reply_count`` and bumps ``last_seen_ingest``.
     Returns the number of NEW reply :class:`SlackMessage` rows added.
     """
-    try:
-        thread_messages = service.fetch_conversation_replies(
-            thread.channel_id, thread.thread_ts,
+    thread_messages = service.fetch_conversation_replies(
+        thread.channel_id, thread.thread_ts,
+    )
+    if not thread_messages:
+        raise SlackAPIError(
+            f"Slack returned no messages for thread {thread.thread_ts}",
+            method="conversations.replies",
+            error_code="empty_thread",
         )
-    except SlackAPIError:
-        logger.warning(
-            "Failed to re-read replies for thread %s in %s",
-            thread.thread_ts, thread.channel_id,
-        )
-        return 0
 
     existing_ts = set(thread.messages.values_list("ts", flat=True))
     new_replies = 0
@@ -374,16 +475,18 @@ def reparse_plan_sprints(*, since, dry_run=False):
 
 def _run_reparse(service, channel_id, since_ts, *, dry_run):
     """Re-read replies + re-parse existing threads since ``since_ts``. Returns the run."""
-    run = SlackChannelIngest.objects.create(
-        channel_id=channel_id,
-        oldest_ts=since_ts,
-        status='running',
-    )
+    run = _acquire_run(channel_id, since_ts, advances_watermark=False)
+    if run is None:
+        return _running_run(channel_id)
 
     since_dt = _ts_to_datetime(since_ts)
     threads = list(
         SlackThread.objects
-        .filter(channel_id=channel_id, posted_at__gte=since_dt)
+        .filter(
+            channel_id=channel_id,
+            posted_at__gte=since_dt,
+            privacy_erased=False,
+        )
         .select_related('member', 'plan__sprint', 'interview_note')
         .order_by('posted_at')
     )
@@ -395,9 +498,15 @@ def _run_reparse(service, channel_id, since_ts, *, dry_run):
     touched_threads = {}
 
     try:
+        if getattr(service, 'reply_user_token', 'test-double') == '':
+            raise SlackAPIError(
+                'SLACK_PLAN_SPRINTS_USER_TOKEN is not configured',
+                method='conversations.replies',
+                error_code='missing_reply_user_token',
+            )
         for thread in threads:
             threads_seen += 1
-            member, plan = _resolve_member_and_plan(thread.slack_user_id)
+            member, plan = _resolve_member_and_plan(service, thread.slack_user_id)
             matched = _refresh_thread_match(thread, member, plan)
             if matched:
                 members_matched += 1
@@ -409,34 +518,31 @@ def _run_reparse(service, channel_id, since_ts, *, dry_run):
             # Always a re-parse candidate: the watermark guard in
             # apply_thread_progress makes it a no-op when nothing changed.
             touched_threads[thread.pk] = thread
-    except SlackAPIError as exc:
-        run.status = 'error'
-        run.error = str(exc)
-        run.finished_at = timezone.now()
-        run.messages_seen = threads_seen
-        run.threads_persisted = 0
-        run.replies_added = replies_added
-        run.members_matched = members_matched
-        run.latest_ts = latest_ts
-        run.save()
-        logger.exception("plan-sprints reparse failed mid-run")
-        return run
-
-    if touched_threads:
-        candidates = [
-            t for t in touched_threads.values()
-            if t.member_id is not None and t.plan_id is not None
-        ]
-        if candidates:
-            apply_progress_for_threads(candidates, ingest=run)
+        if touched_threads:
+            candidates = [
+                t for t in touched_threads.values()
+                if t.member_id is not None and t.plan_id is not None
+            ]
+            if candidates:
+                apply_progress_for_threads(candidates, ingest=run)
+    except Exception as exc:
+        return _fail_run(
+            run, exc,
+            messages_seen=threads_seen,
+            replies_added=replies_added,
+            members_matched=members_matched,
+            known_threads_checked=threads_seen,
+        )
 
     run.messages_seen = threads_seen
     run.threads_persisted = 0
     run.replies_added = replies_added
     run.members_matched = members_matched
     run.latest_ts = latest_ts
+    run.known_threads_checked = threads_seen
     run.status = 'success'
     run.finished_at = timezone.now()
+    run.lease_expires_at = None
     run.save()
     logger.info(
         "plan-sprints reparse complete%s: %s threads re-read, %s replies added, %s matched",
@@ -446,44 +552,60 @@ def _run_reparse(service, channel_id, since_ts, *, dry_run):
     return run
 
 
-def _run_ingest(service, channel_id, oldest, *, dry_run):
+def _run_ingest(
+    service,
+    channel_id,
+    oldest,
+    *,
+    dry_run,
+    advances_watermark,
+):
     """Capture + parse + apply over the ``oldest..now`` window. Returns the run.
 
     Shared by the live daily task and the dry-run backfill. The ``dry_run``
     flag is only carried onto the returned run for reporting — the caller
     wraps the dry-run call in a transaction it rolls back.
     """
-    run = SlackChannelIngest.objects.create(
-        channel_id=channel_id,
-        oldest_ts=oldest,
-        status='running',
+    run = _acquire_run(
+        channel_id,
+        oldest,
+        advances_watermark=advances_watermark,
     )
-
-    try:
-        messages = service.fetch_conversation_history(channel_id, oldest=oldest)
-    except SlackAPIError as exc:
-        run.status = 'error'
-        run.error = str(exc)
-        run.finished_at = timezone.now()
-        run.save(update_fields=['status', 'error', 'finished_at'])
-        logger.exception("plan-sprints ingest failed reading history")
-        return run
+    if run is None:
+        return _running_run(channel_id)
 
     messages_seen = 0
     threads_persisted = 0
     replies_added = 0
     members_matched = 0
     latest_ts = oldest
+    known_threads_checked = 0
     # Threads created or grown this run, deduped by pk — the candidates for
     # the Phase 2 parse + auto-apply step below.
     touched_threads = {}
 
     try:
+        if getattr(service, 'reply_user_token', 'test-double') == '':
+            raise SlackAPIError(
+                'SLACK_PLAN_SPRINTS_USER_TOKEN is not configured',
+                method='conversations.replies',
+                error_code='missing_reply_user_token',
+            )
+        messages = service.fetch_conversation_history(channel_id, oldest=oldest)
+        roots_seen = set()
         for message in messages:
             messages_seen += 1
             if message.get("ts", "") > latest_ts:
                 latest_ts = message["ts"]
             if not _is_member_message(message):
+                continue
+            root_ts = message.get('thread_ts') or message['ts']
+            roots_seen.add(root_ts)
+            if SlackThread.objects.filter(
+                channel_id=channel_id,
+                thread_ts=root_ts,
+                privacy_erased=True,
+            ).exists():
                 continue
             with transaction.atomic():
                 new_replies, created, matched, thread = _upsert_thread(
@@ -500,38 +622,66 @@ def _run_ingest(service, channel_id, oldest, *, dry_run):
                     members_matched += 1
             if created or new_replies:
                 touched_threads[thread.pk] = thread
-    except SlackAPIError as exc:
-        run.status = 'error'
-        run.error = str(exc)
-        run.finished_at = timezone.now()
-        run.messages_seen = messages_seen
-        run.threads_persisted = threads_persisted
-        run.replies_added = replies_added
-        run.members_matched = members_matched
-        run.latest_ts = latest_ts
-        run.save()
-        logger.exception("plan-sprints ingest failed mid-run")
-        return run
 
-    # Phase 2 (issue #890): parse + auto-apply progress for the threads
-    # touched this run. Gated on llm.is_enabled() inside the helper; when
-    # the LLM is off this is a no-op and the run stays a pure capture run.
-    # A per-thread LLM failure is logged and does not fail the run.
-    if touched_threads:
-        candidates = [
-            t for t in touched_threads.values()
-            if t.member_id is not None and t.plan_id is not None
-        ]
-        if candidates:
-            apply_progress_for_threads(candidates, ingest=run)
+        refresh_days = _positive_int_config(
+            'PLAN_SPRINTS_THREAD_REFRESH_DAYS', THREAD_REFRESH_DAYS,
+        )
+        refresh_since = timezone.now() - timezone.timedelta(days=refresh_days)
+        known_threads = (
+            SlackThread.objects
+            .filter(
+                channel_id=channel_id,
+                privacy_erased=False,
+            )
+            .filter(
+                Q(plan__sprint__status='active')
+                | Q(posted_at__gte=refresh_since)
+            )
+            .exclude(thread_ts__in=roots_seen)
+            .select_related('member', 'plan__sprint', 'interview_note')
+            .order_by('posted_at')
+        )
+        for thread in known_threads:
+            known_threads_checked += 1
+            member, plan = _resolve_member_and_plan(
+                service, thread.slack_user_id,
+            )
+            _refresh_thread_match(thread, member, plan)
+            with transaction.atomic():
+                new_replies = _reread_thread_replies(service, run, thread)
+            replies_added += new_replies
+            if new_replies:
+                touched_threads[thread.pk] = thread
+
+        # Phase 2 (issue #890): parse + auto-apply progress for the threads
+        # touched this run. The per-channel lease prevents overlapping daily,
+        # API, and manual-reparse workers from racing the idempotency watermark.
+        if touched_threads:
+            candidates = [
+                t for t in touched_threads.values()
+                if t.member_id is not None and t.plan_id is not None
+            ]
+            if candidates:
+                apply_progress_for_threads(candidates, ingest=run)
+    except Exception as exc:
+        return _fail_run(
+            run, exc,
+            messages_seen=messages_seen,
+            threads_persisted=threads_persisted,
+            replies_added=replies_added,
+            members_matched=members_matched,
+            known_threads_checked=known_threads_checked,
+        )
 
     run.messages_seen = messages_seen
     run.threads_persisted = threads_persisted
     run.replies_added = replies_added
     run.members_matched = members_matched
     run.latest_ts = latest_ts
+    run.known_threads_checked = known_threads_checked
     run.status = 'success'
     run.finished_at = timezone.now()
+    run.lease_expires_at = None
     run.save()
     logger.info(
         "plan-sprints ingest complete%s: %s seen, %s new threads, %s new replies, %s matched",

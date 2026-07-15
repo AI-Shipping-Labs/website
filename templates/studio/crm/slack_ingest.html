@@ -11,6 +11,14 @@
   </p>
 </div>
 
+{% if not reply_token_configured %}
+<div class="mb-6 max-w-4xl rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-200"
+     data-testid="slack-ingest-config-warning">
+  Full-thread ingestion is unavailable: configure the secret
+  <code>SLACK_PLAN_SPRINTS_USER_TOKEN</code> integration setting.
+</div>
+{% endif %}
+
 <!-- Recent ingest runs -->
 <section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl"
          data-testid="slack-ingest-runs-section">
@@ -24,6 +32,7 @@
         <th class="py-2 pr-4">Seen</th>
         <th class="py-2 pr-4">New threads</th>
         <th class="py-2 pr-4">New replies</th>
+        <th class="py-2 pr-4">Known checked</th>
         <th class="py-2 pr-4">Matched</th>
       </tr>
     </thead>
@@ -35,8 +44,14 @@
         <td class="py-2 pr-4">{{ run.messages_seen }}</td>
         <td class="py-2 pr-4">{{ run.threads_persisted }}</td>
         <td class="py-2 pr-4">{{ run.replies_added }}</td>
+        <td class="py-2 pr-4">{{ run.known_threads_checked }}</td>
         <td class="py-2 pr-4">{{ run.members_matched }}</td>
       </tr>
+      {% if run.error %}
+      <tr class="border-b border-border/50">
+        <td colspan="7" class="pb-2 text-xs text-red-300">{{ run.error }}</td>
+      </tr>
+      {% endif %}
       {% endfor %}
     </tbody>
   </table>

@@ -100,9 +100,9 @@ Where to find it:
 
 - Open the app, then "OAuth & Permissions" in the left sidebar.
 - Under "OAuth Tokens for Your Workspace", copy the "Bot User OAuth
-  Token" (the one prefixed `xoxb-`). The "User OAuth Token"
-  (`xoxp-...`) is a different credential and will not work — the
-  platform talks as the bot user, not as the installer.
+  Token" (the one prefixed `xoxb-`). The separate user token needed only
+  for channel-thread replies is documented under
+  `SLACK_PLAN_SPRINTS_USER_TOKEN`.
 
 Prereqs:
 - A Slack app installed to your workspace.
@@ -111,8 +111,7 @@ Prereqs:
   - `chat:write.public` — post to public channels without an explicit invite.
   - `channels:read` — list and resolve public channel IDs.
   - `channels:history` — read message history in PUBLIC channels. REQUIRED
-    for the `#plan-sprints` ingestion (issues #889/#890/#891), which calls
-    `conversations.history` and `conversations.replies`.
+    for the `#plan-sprints` history discovery call.
   - `groups:read` — list and resolve PRIVATE channel IDs.
   - `groups:history` — read message history in PRIVATE channels. REQUIRED
     instead of `channels:history` IF `#plan-sprints` is a private channel.
@@ -305,6 +304,8 @@ details" > copy the ID at the bottom (looks like `C01ABC234`).
 
 Prereqs:
 - `SLACK_ENABLED` must be true and `SLACK_BOT_TOKEN` set.
+- `SLACK_PLAN_SPRINTS_USER_TOKEN` must be set so public/private channel
+  threads can be read with `conversations.replies`.
 - The bot token must hold `channels:history` (public channel) or
   `groups:history` + `groups:read` (private channel). Without it the
   history calls fail with `missing_scope`.
@@ -318,6 +319,79 @@ to a new `#plan-sprints` channel.
 Test vs live: This key is the live (production) channel. Use
 `SLACK_DEV_PLAN_SPRINTS_CHANNEL_ID` for development and
 `SLACK_TEST_PLAN_SPRINTS_CHANNEL_ID` for test.
+
+## SLACK_PLAN_SPRINTS_USER_TOKEN
+
+Purpose: Secret User OAuth token (`xoxp-...`) used only for
+`conversations.replies` on public/private `#plan-sprints` threads. Slack's
+channel-thread API does not accept the bot token for this operation. History
+discovery, profile lookups, and all outbound calls continue to use
+`SLACK_BOT_TOKEN`.
+
+Without it: The API trigger returns `409 ingest_unavailable`; a scheduled run
+records a terminal error instead of silently persisting only roots.
+
+Where to find it: Slack app > OAuth & Permissions > OAuth Tokens for Your
+Workspace > User OAuth Token. Store it through Studio integration settings;
+never put it in source or logs.
+
+Prereqs: The installing user must be able to read `#plan-sprints`; the token
+needs `channels:history` for a public channel or `groups:history` for a private
+channel.
+
+Rotation: Rotate/reinstall in Slack, then replace this secret in Studio before
+the next daily run.
+
+Test vs live: Use a credential from the workspace selected by
+`SLACK_ENVIRONMENT`. Never reuse a production token in local tests.
+
+## PLAN_SPRINTS_THREAD_REFRESH_DAYS
+
+Purpose: Bounds how far back the daily ingest revisits unmatched/completed
+thread roots for late replies. Threads linked to an active sprint are always
+revisited. Defaults to 45 days for the bounded remainder.
+
+Without it: The 45-day default applies.
+
+Where to find it: Studio integration settings. Set a positive integer.
+
+Prereqs: `SLACK_PLAN_SPRINTS_USER_TOKEN` must be configured.
+
+Rotation: Safe to change; the next run uses the new window.
+
+Test vs live: Configure independently in each deployment.
+
+## PLAN_SPRINTS_INGEST_LEASE_MINUTES
+
+Purpose: Maximum duration of the per-channel ingest lease. Defaults to 60
+minutes; expired running rows are terminalized before a replacement starts.
+
+Without it: The 60-minute default applies.
+
+Where to find it: Studio integration settings. Set a positive integer.
+
+Prereqs: None.
+
+Rotation: Safe to change between runs.
+
+Test vs live: Configure independently in each deployment.
+
+## PLAN_SPRINTS_RAW_TEXT_RETENTION_DAYS
+
+Purpose: Maximum local retention for raw Slack message text. The daily 03:40
+UTC task blanks older text and rebuilds canonical CRM notes without it.
+Defaults to 365 days.
+
+Without it: The 365-day default applies.
+
+Where to find it: Studio integration settings. Set a positive integer.
+
+Prereqs: None.
+
+Rotation: Lowering the value takes effect on the next purge and is not
+reversible from local data.
+
+Test vs live: Configure independently in each deployment.
 
 ## SLACK_DEV_PLAN_SPRINTS_CHANNEL_ID
 

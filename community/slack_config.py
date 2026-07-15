@@ -91,6 +91,17 @@ def get_slack_plan_sprints_channel_id():
     return str(get_config(key, "")).strip()
 
 
+def get_slack_plan_sprints_user_token():
+    """Return the user OAuth token used to read public/private threads.
+
+    Slack does not allow bot tokens to call ``conversations.replies`` for
+    public or private channel threads.  Keep this credential deliberately
+    separate from ``SLACK_BOT_TOKEN`` so all existing bot-authenticated
+    posting, history, and profile calls retain their current identity.
+    """
+    return str(get_config("SLACK_PLAN_SPRINTS_USER_TOKEN", "")).strip()
+
+
 def slack_api_enabled():
     """Return true when Slack API calls may be attempted."""
     return is_enabled("SLACK_ENABLED") and bool(get_config("SLACK_BOT_TOKEN"))

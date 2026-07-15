@@ -27,6 +27,7 @@ from accounts.lifecycle import (
 )
 from accounts.models import TierOverride
 from community.models import STATUS_BOOKED, BookedCall
+from community.slack_config import get_slack_plan_sprints_user_token
 from crm.models import (
     STATUS_CHOICES,
     AppliedProgressChange,
@@ -376,6 +377,7 @@ def crm_slack_ingest_review(request):
     return render(request, 'studio/crm/slack_ingest.html', {
         'unmatched_threads': unmatched_threads(),
         'recent_runs': SlackChannelIngest.objects.all()[:10],
+        'reply_token_configured': bool(get_slack_plan_sprints_user_token()),
     })
 
 

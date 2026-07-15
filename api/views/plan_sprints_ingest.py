@@ -27,13 +27,17 @@ text — it surfaces only the per-run tallies + metadata the
 from datetime import date, datetime
 
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
-from community.slack_config import get_slack_plan_sprints_channel_id
+from community.slack_config import (
+    get_slack_plan_sprints_channel_id,
+    get_slack_plan_sprints_user_token,
+)
 from crm.models.slack_update import SlackChannelIngest
 from integrations.config import is_enabled
 from jobs.tasks import async_task
@@ -67,6 +71,11 @@ def _serialize_ingest_run(run):
         "threads_persisted": run.threads_persisted,
         "replies_added": run.replies_added,
         "members_matched": run.members_matched,
+        "known_threads_checked": run.known_threads_checked,
+        "advances_watermark": run.advances_watermark,
+        "lease_expires_at": (
+            run.lease_expires_at.isoformat() if run.lease_expires_at else None
+        ),
         "error": run.error,
     }
 
@@ -134,6 +143,9 @@ _INGEST_RUN_EXAMPLE = {
     "threads_persisted": 24,
     "replies_added": 9,
     "members_matched": 21,
+    "known_threads_checked": 12,
+    "advances_watermark": True,
+    "lease_expires_at": None,
     "error": "",
 }
 
@@ -146,7 +158,10 @@ _GET_LIST_OPENAPI = {
         "``started_at`` / ``finished_at``, the Slack ts window pulled "
         "(``oldest_ts`` / ``latest_ts``), and the count fields: "
         "``messages_seen``, ``threads_persisted``, ``replies_added``, "
-        "``members_matched`` (plus ``error`` text for failed runs). "
+                "``members_matched`` and ``known_threads_checked``. "
+                "``advances_watermark`` distinguishes ordinary daily runs "
+                "from reparse/backfill runs; ``lease_expires_at`` makes an "
+                "active worker lease visible (plus ``error`` for failures). "
         "Read-only — it never echoes Slack message content, only the "
         "per-run counts/metadata the model already stores. Token-gated "
         "(staff tokens only)."
@@ -313,6 +328,25 @@ def _trigger_ingest(request):
             "The #plan-sprints channel is not configured",
             "ingest_unavailable",
             status=409,
+        )
+    if not get_slack_plan_sprints_user_token():
+        return error_response(
+            "The #plan-sprints reply user token is not configured",
+            "ingest_unavailable",
+            status=409,
+        )
+
+    running = SlackChannelIngest.objects.filter(
+        channel_id=channel_id,
+        status="running",
+        lease_expires_at__gt=timezone.now(),
+    ).first()
+    if running is not None:
+        return error_response(
+            f"A #plan-sprints ingest is already running (run {running.pk})",
+            "ingest_in_progress",
+            status=409,
+            details={"run_id": running.pk},
         )
 
     task_id = async_task(

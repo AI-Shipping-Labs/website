@@ -47,7 +47,7 @@ def unmatched_threads():
     """Threads whose root author we could not match to a member, newest-first."""
     return (
         SlackThread.objects
-        .filter(member__isnull=True)
+        .filter(member__isnull=True, privacy_erased=False)
         .prefetch_related('messages')
         .order_by('-posted_at')
     )

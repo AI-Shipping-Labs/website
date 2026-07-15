@@ -54,6 +54,14 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: purge-user-activity (daily at 03:30 UTC)'))
 
+        # Redact expired raw #plan-sprints message text before daytime ingest.
+        schedule(
+            'crm.tasks.purge_plan_sprints_raw_text.purge_plan_sprints_raw_text',
+            cron='40 3 * * *',
+            name='purge-plan-sprints-raw-text',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: purge-plan-sprints-raw-text (daily at 03:40 UTC)'))
+
         # Event reminders every 15 min (issue #1001; restored from the
         # hourly '0 * * * *' set in #919). The reminder windows in
         # event_reminders.py are a 10-min-wide 20m window and a 30-min-wide

@@ -32,8 +32,10 @@ CHANNEL = "C_E2E_PLANSPRINTS"
 SLACK_SETTINGS = dict(
     SLACK_ENABLED=True,
     SLACK_BOT_TOKEN="xoxb-e2e",
+    SLACK_PLAN_SPRINTS_USER_TOKEN="xoxp-e2e",
     SLACK_ENVIRONMENT="test",
     SLACK_TEST_PLAN_SPRINTS_CHANNEL_ID=CHANNEL,
+    PLAN_SPRINTS_THREAD_REFRESH_DAYS=5000,
     LLM_API_KEY="",
 )
 
@@ -186,10 +188,13 @@ class TestNewReplyShowsAfterNextRun:
             r2 = _msg("1700001000.000300", "U_889E", "Added a second reply",
                       thread_ts="1700001000.000100")
             run2 = _run_ingest(_FakeSlackService(
-                history=[root],
+                # A real forward-watermarked history response does not emit
+                # yesterday's root merely because its thread gained a reply.
+                history=[],
                 replies={"1700001000.000100": [root, r1, r2]},
             ))
             assert run2.replies_added == 1
+            assert run2.known_threads_checked == 1
 
         context = auth_context(browser, "admin-889b@test.com")
         try:

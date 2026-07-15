@@ -97,12 +97,12 @@ class S3EnabledRegistryTest(TestCase):
     def test_total_group_count_unchanged(self):
         """No new group added — S3_ENABLED goes into the existing s3_content.
 
-        The absolute count grows as unrelated groups are added (e.g. the
-        ``triggers`` group in issue #1070); this assertion's intent is only
-        that S3_ENABLED did NOT introduce a group, so it tracks the current
-        total rather than a frozen number.
+        The absolute count grows as unrelated groups are added (for example,
+        ``triggers`` in #1070 and ``s3_downloads`` in #1264); this assertion's
+        intent is only that S3_ENABLED did NOT introduce a group, so it tracks
+        the current total rather than a frozen number.
         """
-        self.assertEqual(len(INTEGRATION_GROUPS), 16)
+        self.assertEqual(len(INTEGRATION_GROUPS), 17)
 
 
 class S3ContentUploadEnabledResolutionTest(TestCase):

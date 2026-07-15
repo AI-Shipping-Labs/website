@@ -34,6 +34,7 @@ from django.db.models import Exists, OuterRef, Prefetch
 from django.http import Http404, HttpResponsePermanentRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.utils.text import slugify
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
@@ -65,6 +66,12 @@ from content.templatetags.video_utils import (
 )
 from content.utils.teaser import truncate_to_words
 from content.views.pages import _filter_by_tags, _get_selected_tags
+from content.workshop_facets import (
+    FACET_EXCLUDED,
+    FACET_TECHNOLOGY,
+    FACET_TOPIC,
+    facet_for_tag,
+)
 from events.services.freestyle_evidence import build_freestyle_evidence
 
 # Approximate word budget for the locked-page teaser body. Mirrors the
@@ -374,8 +381,9 @@ def _build_catalog_topic_url(
     )
 
 
-def _build_topic_options(*, all_tags, selected_tags, selected_tools,
-                         selected_access, selected_skill_level):
+def _build_tag_filter_options(*, tags, selected_tags, selected_tools,
+                              selected_access, selected_skill_level,
+                              facet):
     selected = set(selected_tags)
     return [
         {
@@ -389,9 +397,46 @@ def _build_topic_options(*, all_tags, selected_tags, selected_tools,
                 selected_skill_level=selected_skill_level,
             ),
             'is_active': tag in selected,
+            'facet': facet,
+            'source': 'tag',
         }
-        for tag in all_tags
+        for tag in tags
     ]
+
+
+def _build_technology_options(*, technology_tags, all_tools, selected_tags,
+                              selected_tools, selected_access,
+                              selected_skill_level):
+    """Combine technology tags and authored tools, preferring tool labels."""
+    tool_keys = {_tool_key(tool) for tool in all_tools}
+    tag_options = _build_tag_filter_options(
+        tags=[
+            tag for tag in technology_tags
+            if _tool_key(tag) not in tool_keys
+        ],
+        selected_tags=selected_tags,
+        selected_tools=selected_tools,
+        selected_access=selected_access,
+        selected_skill_level=selected_skill_level,
+        facet=FACET_TECHNOLOGY,
+    )
+    tool_options = _build_tool_filter_options(
+        all_tools=all_tools,
+        selected_tools=selected_tools,
+        selected_tags=selected_tags,
+        selected_access=selected_access,
+        selected_skill_level=selected_skill_level,
+    )
+    for option in tool_options:
+        option.update({
+            'slug': slugify(option['label']),
+            'facet': FACET_TECHNOLOGY,
+            'source': 'tool',
+        })
+    return sorted(
+        [*tag_options, *tool_options],
+        key=lambda option: option['label'].casefold(),
+    )
 
 
 def _build_selected_topic_summary(selected_tags):
@@ -400,6 +445,25 @@ def _build_selected_topic_summary(selected_tags):
     if selected_tags:
         return 'Workshops matching selected topics'
     return ''
+
+
+def _build_selected_tag_filters(selected_tags, published_tags):
+    """Describe selected tags without mislabeling their public facet."""
+    published_tags = set(published_tags)
+    filters = []
+    for tag in selected_tags:
+        facet = facet_for_tag(tag) if tag in published_tags else None
+        if facet == FACET_TOPIC:
+            remove_label = f'Remove {tag} topic filter'
+        elif facet == FACET_TECHNOLOGY:
+            remove_label = f'Remove {tag} technology filter'
+        else:
+            remove_label = f'Remove {tag} filter'
+        filters.append({
+            'label': tag,
+            'remove_label': remove_label,
+        })
+    return filters
 
 
 def _build_workshops_catalog_context(
@@ -438,7 +502,14 @@ def _build_workshops_catalog_context(
     for workshop in workshops:
         if workshop.tags:
             all_tags.update(workshop.tags)
-    all_tags = sorted(all_tags)
+    all_tags = sorted(all_tags, key=str.casefold)
+    tags_by_facet = {
+        FACET_TOPIC: [],
+        FACET_TECHNOLOGY: [],
+        FACET_EXCLUDED: [],
+    }
+    for tag in all_tags:
+        tags_by_facet[facet_for_tag(tag)].append(tag)
 
     access_filtered_workshops = _filter_workshops_by_catalog_access(
         workshops, selected_access,
@@ -479,6 +550,10 @@ def _build_workshops_catalog_context(
         or selected_access != CATALOG_ACCESS_ALL
         or bool(selected_skill_level)
     )
+    selected_topic_tags = [
+        tag for tag in selected_tags
+        if tag in tags_by_facet[FACET_TOPIC]
+    ]
 
     workshops = _prepare_catalog_card_workshops(workshops, limit=limit)
 
@@ -497,21 +572,23 @@ def _build_workshops_catalog_context(
         }
         for slug, label in CATALOG_ACCESS_OPTIONS
     ]
-    tool_filter_options = _build_tool_filter_options(
-        all_tools=all_tools,
-        selected_tools=selected_tools,
-        selected_tags=selected_tags,
-        selected_access=selected_access,
-        selected_skill_level=selected_skill_level,
-    )
     selected_tool_filters = _build_selected_tool_filters(
         selected_tools=selected_tools,
         selected_tags=selected_tags,
         selected_access=selected_access,
         selected_skill_level=selected_skill_level,
     )
-    topic_options = _build_topic_options(
-        all_tags=all_tags,
+    topic_options = _build_tag_filter_options(
+        tags=tags_by_facet[FACET_TOPIC],
+        selected_tags=selected_tags,
+        selected_tools=selected_tools,
+        selected_access=selected_access,
+        selected_skill_level=selected_skill_level,
+        facet=FACET_TOPIC,
+    )
+    technology_options = _build_technology_options(
+        technology_tags=tags_by_facet[FACET_TECHNOLOGY],
+        all_tools=all_tools,
         selected_tags=selected_tags,
         selected_tools=selected_tools,
         selected_access=selected_access,
@@ -527,9 +604,19 @@ def _build_workshops_catalog_context(
         'workshops': workshops,
         'all_tags': all_tags,
         'topic_options': topic_options,
+        'technology_options': technology_options,
         'all_tools': all_tools,
         'selected_tags': selected_tags,
-        'selected_topic_summary': _build_selected_topic_summary(selected_tags),
+        'selected_tag_filters': _build_selected_tag_filters(
+            selected_tags,
+            all_tags,
+        ),
+        'selected_topic_summary': _build_selected_topic_summary(
+            selected_topic_tags,
+        ),
+        'selected_filter_summary': (
+            'Workshops matching selected filters' if has_active_filters else ''
+        ),
         'selected_tools': selected_tools,
         'selected_access': selected_access,
         'selected_access_label': dict(CATALOG_ACCESS_OPTIONS)[selected_access],
@@ -540,7 +627,6 @@ def _build_workshops_catalog_context(
         ),
         'has_published_workshops': has_published_workshops,
         'skill_filter_options': skill_filter_options,
-        'tool_filter_options': tool_filter_options,
         'selected_tool_filters': selected_tool_filters,
         'has_active_filters': has_active_filters,
         'catalog_extra_params': catalog_extra_params,

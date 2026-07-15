@@ -226,11 +226,19 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertEqual(response.context['all_tags'], expected_tags)
         self.assertEqual(
             [option['slug'] for option in response.context['topic_options']],
-            expected_tags,
+            ['agents', 'evaluation', 'rag'],
         )
-        self.assertContains(response, 'data-testid="workshop-topic-browser"')
-        self.assertContains(response, 'Browse by topic')
+        self.assertEqual(
+            [
+                option['slug']
+                for option in response.context['technology_options']
+            ],
+            ['python'],
+        )
+        self.assertContains(response, 'data-testid="workshop-facet-topic"')
+        self.assertContains(response, 'data-testid="workshop-facet-technology"')
         self.assertContains(response, 'Topics')
+        self.assertContains(response, 'Technologies')
         self.assertContains(response, 'data-testid="workshop-topic-option-agents"')
         self.assertContains(response, 'data-testid="workshop-topic-option-rag"')
         self.assertContains(response, 'data-testid="workshop-topic-option-rag"', count=1)
@@ -536,11 +544,12 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         response = self.client.get(f'{WORKSHOPS_CATALOG_URL}?tag=rust')
         self.assertNotContains(response, 'data-testid="workshops-landing"')
         self.assertContains(response, 'data-testid="workshop-catalog"')
-        self.assertContains(response, 'data-testid="workshop-topic-browser"')
+        self.assertContains(response, 'data-testid="workshop-facet-topic"')
         self.assertContains(response, 'data-testid="workshop-topic-summary"')
         self.assertContains(response, 'Workshops about rust')
         self.assertContains(response, 'data-testid="workshop-active-filters"')
-        self.assertContains(response, 'data-testid="workshop-selected-topic-summary"')
+        self.assertContains(response, 'data-testid="workshop-selected-filter-summary"')
+        self.assertContains(response, 'Workshops matching selected filters')
         self.assertContains(response, 'Filters')
         self.assertContains(response, 'rust')
         self.assertContains(response, 'data-testid="clear-workshop-filter"')
@@ -572,6 +581,7 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Visible Workshop')
         self.assertNotContains(response, 'RAG Only')
         self.assertContains(response, 'Workshops matching selected topics')
+        self.assertContains(response, 'Workshops matching selected filters')
         self.assertContains(response, 'data-testid="workshop-active-tag"', count=2)
         self.assertContains(response, 'href="/workshops/catalog?tag=rag"')
         self.assertContains(response, 'href="/workshops/catalog?tag=agents"')
@@ -625,14 +635,22 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'data-testid="workshops-landing"')
         self.assertContains(response, 'data-testid="workshop-catalog"')
         self.assertContains(response, 'data-testid="workshop-active-filters"')
-        self.assertContains(response, 'Workshops about does-not-exist')
-        self.assertContains(response, 'No workshops match these topics')
+        self.assertNotContains(response, 'data-testid="workshop-topic-summary"')
+        self.assertContains(response, 'Workshops matching selected filters')
+        self.assertContains(response, 'No workshops found')
         self.assertContains(response, 'data-testid="workshops-empty-state"')
         self.assertContains(response, 'data-testid="member-empty-state"')
         self.assertContains(response, 'data-empty-kind="filter"')
-        self.assertContains(response, 'No workshops match the selected topics.')
+        self.assertContains(response, 'No workshops match the selected filters.')
         self.assertContains(response, 'href="/workshops/catalog"')
         self.assertContains(response, 'View all workshops')
+        active_tag = _opening_anchor_for_testid(
+            response.content.decode(), 'workshop-active-tag',
+        )
+        self.assertIn(
+            'aria-label="Remove does-not-exist filter"',
+            active_tag,
+        )
 
     def test_catalog_route_ordering_does_not_treat_catalog_as_slug(self):
         response = self.client.get(WORKSHOPS_CATALOG_URL)
@@ -1153,7 +1171,7 @@ class WorkshopCatalogAccessFilterTest(TierSetupMixin, TestCase):
         )
 
         self.assertContains(response, 'data-testid="workshops-empty-state"')
-        self.assertContains(response, 'No workshops match the selected topics.')
+        self.assertContains(response, 'No workshops match the selected filters.')
         self.assertContains(response, 'href="/workshops/catalog"')
         self.assertContains(response, 'View all workshops')
 
@@ -1213,8 +1231,8 @@ class WorkshopCatalogToolFilterTest(TierSetupMixin, TestCase):
         response = self.client.get(WORKSHOPS_CATALOG_URL)
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="workshop-tool-filters"')
-        self.assertContains(response, 'Tools')
+        self.assertContains(response, 'data-testid="workshop-facet-technology"')
+        self.assertContains(response, 'Technologies')
         self.assertContains(response, 'Claude Code')
         self.assertContains(response, 'OpenAI API')
         self.assertContains(response, 'Django')
@@ -1241,7 +1259,7 @@ class WorkshopCatalogToolFilterTest(TierSetupMixin, TestCase):
         response = self.client.get(WORKSHOPS_CATALOG_URL)
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'data-testid="workshop-tool-filters"')
+        self.assertNotContains(response, 'data-testid="workshop-facet-technology"')
         self.assertNotContains(response, 'data-testid="workshop-card-tools"')
 
     def test_catalog_filters_by_single_tool(self):

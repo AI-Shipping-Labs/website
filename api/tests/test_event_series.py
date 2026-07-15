@@ -21,6 +21,7 @@ from django.utils import timezone
 
 from accounts.models import Token
 from events.models import Event, EventSeries
+from integrations.services.zoom import ZoomAPIError
 
 User = get_user_model()
 
@@ -1074,6 +1075,152 @@ class EventSeriesChronologicalNamingTest(EventSeriesApiTestBase):
                 occ["title"],
             )
 
+
+class EventSeriesIndirectZoomTitleSyncTest(EventSeriesApiTestBase):
+    """Auto-title mutations synchronize every affected Zoom occurrence."""
+
+    def setUp(self):
+        self.zoom_series = EventSeries.objects.create(
+            name="Zoom Series",
+            slug="zoom-series-indirect-sync",
+            cadence="weekly",
+            day_of_week=1,
+            start_time=time(17, 0),
+            timezone="UTC",
+        )
+        self.base = timezone.now().replace(microsecond=0) + timedelta(days=30)
+
+    def _occurrence(self, position, days, *, status="upcoming"):
+        return Event.objects.create(
+            title=f"Zoom Series — Session {position}",
+            slug=f"zoom-series-indirect-{position}-{days}",
+            start_datetime=self.base + timedelta(days=days),
+            end_datetime=self.base + timedelta(days=days, hours=1),
+            status=status,
+            origin="studio",
+            platform="zoom",
+            timezone="UTC",
+            event_series=self.zoom_series,
+            series_position=position,
+            title_is_auto=True,
+            zoom_meeting_id=f"zoom-indirect-{position}-{days}",
+            zoom_join_url=f"https://zoom.us/j/indirect-{position}-{days}",
+        )
+
+    @staticmethod
+    def _updated_ids(update_zoom):
+        return [call.args[0].pk for call in update_zoom.call_args_list]
+
+    def test_series_rename_patches_each_auto_titled_zoom_occurrence_once(self):
+        first = self._occurrence(1, 7)
+        second = self._occurrence(2, 14)
+
+        with patch("events.services.zoom_lifecycle.update_meeting") as update_zoom:
+            response = self._patch(
+                f"/api/event-series/{self.zoom_series.pk}",
+                {"name": "Renamed Zoom Series"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertCountEqual(self._updated_ids(update_zoom), [first.pk, second.pk])
+        self.assertEqual(update_zoom.call_count, 2)
+
+    def test_bulk_insert_patches_renumbered_existing_zoom_occurrences(self):
+        first = self._occurrence(1, 7)
+        second = self._occurrence(2, 14)
+        earlier = self.base
+
+        with patch("events.services.zoom_lifecycle.update_meeting") as update_zoom:
+            response = self._post(
+                f"/api/event-series/{self.zoom_series.pk}/occurrences/bulk",
+                {"occurrences": [{"start_datetime": earlier.isoformat()}]},
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertCountEqual(self._updated_ids(update_zoom), [first.pk, second.pk])
+        self.assertEqual(update_zoom.call_count, 2)
+
+    def test_reconcile_create_patches_renumbered_existing_zoom_occurrences(self):
+        first = self._occurrence(1, 7)
+        second = self._occurrence(2, 14)
+
+        with patch("events.services.zoom_lifecycle.update_meeting") as update_zoom:
+            response = self._put(
+                f"/api/event-series/{self.zoom_series.pk}/occurrences",
+                {
+                    "occurrences": [
+                        {"start_datetime": self.base.isoformat()},
+                        {"start_datetime": first.start_datetime.isoformat()},
+                        {"start_datetime": second.start_datetime.isoformat()},
+                    ],
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertCountEqual(self._updated_ids(update_zoom), [first.pk, second.pk])
+        self.assertEqual(update_zoom.call_count, 2)
+
+    def test_occurrence_reorder_patches_direct_row_and_retitled_siblings_once(self):
+        first = self._occurrence(1, 7)
+        second = self._occurrence(2, 14)
+        third = self._occurrence(3, 21)
+        new_start = self.base + timedelta(days=35)
+
+        with patch("events.services.zoom_lifecycle.update_meeting") as update_zoom:
+            response = self._patch(
+                (
+                    f"/api/event-series/{self.zoom_series.pk}"
+                    f"/occurrences/{first.pk}"
+                ),
+                {
+                    "start_datetime": new_start.isoformat(),
+                    "end_datetime": (new_start + timedelta(hours=1)).isoformat(),
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertCountEqual(
+            self._updated_ids(update_zoom),
+            [first.pk, second.pk, third.pk],
+        )
+        self.assertEqual(update_zoom.call_count, 3)
+
+    def test_series_rename_failure_is_visible_and_noop_replay_does_not_retry(self):
+        first = self._occurrence(1, 7)
+        second = self._occurrence(2, 14)
+
+        def fail_first(event):
+            if event.pk == first.pk:
+                raise ZoomAPIError("Zoom title PATCH failed", status_code=503)
+
+        with patch(
+            "events.services.zoom_lifecycle.update_meeting",
+            side_effect=fail_first,
+        ) as update_zoom:
+            response = self._patch(
+                f"/api/event-series/{self.zoom_series.pk}",
+                {"name": "Failure Visible Series"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(update_zoom.call_count, 2)
+        self.assertEqual(
+            response.json()["zoom_errors"],
+            [{"event_id": first.pk, "zoom_error": "Zoom title PATCH failed"}],
+        )
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertTrue(first.title.startswith("Failure Visible Series"))
+        self.assertEqual(first.zoom_meeting_id, "zoom-indirect-1-7")
+        self.assertEqual(second.zoom_meeting_id, "zoom-indirect-2-14")
+
+        with patch("events.services.zoom_lifecycle.update_meeting") as retry_zoom:
+            replay = self._patch(
+                f"/api/event-series/{self.zoom_series.pk}",
+                {"name": "Failure Visible Series"},
+            )
+        self.assertEqual(replay.status_code, 200)
+        retry_zoom.assert_not_called()
 
 class TitleIsAutoBackfillMigrationTest(TestCase):
     """Issue #876: the data migration classifies legacy titles correctly."""

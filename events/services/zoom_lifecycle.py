@@ -109,3 +109,31 @@ def sync_or_delete_zoom_meeting(event, old_event):
     if zoom_error is not None:
         return zoom_error
     return maybe_sync_zoom_meeting(event, old_event)
+
+
+def sync_changed_zoom_occurrences(changes, *, skip_event_ids=()):
+    """Synchronize indirectly retitled series occurrences after commit.
+
+    ``changes`` contains ``(saved_event, old_event)`` pairs captured while a
+    series transaction renumbered auto-titled occurrences. Provider calls must
+    happen after that transaction, matching the fail-soft standalone lifecycle
+    contract. Event ids are de-duplicated so a direct occurrence PATCH can sync
+    its own schedule/title once and ask this helper to handle only siblings.
+
+    Returns API-ready per-occurrence error rows. Successful/no-op rows are not
+    reported; local meeting identity is preserved by the lifecycle helper on
+    provider failure.
+    """
+    skipped = set(skip_event_ids)
+    unique_changes = {}
+    for event, old_event in changes:
+        if event.pk in skipped:
+            continue
+        unique_changes[event.pk] = (event, old_event)
+
+    errors = []
+    for event, old_event in unique_changes.values():
+        zoom_error = sync_or_delete_zoom_meeting(event, old_event)
+        if zoom_error is not None:
+            errors.append({'event_id': event.pk, 'zoom_error': zoom_error})
+    return errors

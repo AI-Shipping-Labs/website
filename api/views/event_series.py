@@ -48,6 +48,7 @@ Write verbs for the occurrence set:
   the same set is a no-op.
 """
 
+import copy
 import json as _json
 from datetime import time as time_cls
 
@@ -81,7 +82,10 @@ from events.models.event_series import EVENT_SERIES_CADENCE_CHOICES
 from events.services.series_registration import (
     enroll_series_registrants_in_event,
 )
-from events.services.zoom_lifecycle import sync_or_delete_zoom_meeting
+from events.services.zoom_lifecycle import (
+    sync_changed_zoom_occurrences,
+    sync_or_delete_zoom_meeting,
+)
 from events.tasks.create_series_zoom_meetings import (
     eligible_occurrence_count,
     enqueue_create_series_zoom_meetings,
@@ -635,6 +639,7 @@ def event_series_detail(request, series_id):
 
     name_changed = "name" in values and values["name"] != series.name
 
+    zoom_title_changes = []
     with transaction.atomic():
         _apply_series_values(series, values)
         save_error = _save_series_or_error(series)
@@ -644,8 +649,12 @@ def event_series_detail(request, series_id):
         # auto-named occurrence to the new series name (operator titles and
         # slugs are left untouched). Positions are unchanged by a rename.
         if name_changed:
-            renumber_series_occurrences(series)
-    return JsonResponse(serialize_event_series(series), status=200)
+            zoom_title_changes = renumber_series_occurrences(series)
+    body = serialize_event_series(series)
+    zoom_errors = sync_changed_zoom_occurrences(zoom_title_changes)
+    if zoom_errors:
+        body["zoom_errors"] = zoom_errors
+    return JsonResponse(body, status=200)
 
 
 def _dedup_key(start_datetime):
@@ -677,13 +686,16 @@ def renumber_series_occurrences(series):
     slugs are left untouched.
 
     Only rows whose ``series_position`` or ``title`` actually change are
-    saved, and only those two fields are written.
+    saved, and only those two fields are written. Returns ``(new, old)`` pairs
+    for title-changing rows so callers can synchronize Zoom after their
+    database transaction commits.
     """
     occurrences = list(
         Event.objects.filter(event_series=series).order_by(
             "start_datetime", "id",
         )
     )
+    zoom_title_changes = []
     for index, event in enumerate(occurrences, start=1):
         update_fields = []
         if event.series_position != index:
@@ -692,10 +704,13 @@ def renumber_series_occurrences(series):
         if event.title_is_auto:
             new_title = auto_occurrence_title(series.name, index)
             if event.title != new_title:
+                old_event = copy.copy(event)
                 event.title = new_title
                 update_fields.append("title")
+                zoom_title_changes.append((event, old_event))
         if update_fields:
             event.save(update_fields=update_fields)
+    return zoom_title_changes
 
 
 def _create_series_occurrence(series, row, *, slug_position, index):
@@ -1029,6 +1044,7 @@ def event_series_occurrences_bulk(request, series_id):
     occurrence_ids = []
     skipped_existing = 0
 
+    zoom_title_changes = []
     with transaction.atomic():
         next_slug_position = _next_slug_position(series)
 
@@ -1057,16 +1073,17 @@ def event_series_occurrences_bulk(request, series_id):
         # of payload order (issue #876, Decision 1). Runs once after all
         # rows are written; a no-op if nothing was created.
         if occurrence_ids:
-            renumber_series_occurrences(series)
+            zoom_title_changes = renumber_series_occurrences(series)
 
-    return JsonResponse(
-        {
-            "created": len(occurrence_ids),
-            "skipped_existing": skipped_existing,
-            "occurrence_ids": occurrence_ids,
-        },
-        status=201,
-    )
+    body = {
+        "created": len(occurrence_ids),
+        "skipped_existing": skipped_existing,
+        "occurrence_ids": occurrence_ids,
+    }
+    zoom_errors = sync_changed_zoom_occurrences(zoom_title_changes)
+    if zoom_errors:
+        body["zoom_errors"] = zoom_errors
+    return JsonResponse(body, status=201)
 
 
 def _parse_reconcile_rows(payload):
@@ -1308,6 +1325,7 @@ def event_series_occurrences_reconcile(request, series_id):
     cancelled = []
     reactivated = []
     cancelled_zoom_events = []
+    zoom_title_changes = []
 
     with transaction.atomic():
         # Index existing occurrences by minute-rounded key. A given minute
@@ -1376,13 +1394,14 @@ def event_series_occurrences_reconcile(request, series_id):
         # converged (issue #876). Cancelling does not change a date, but
         # creating/reactivating can, so only run when the set changed.
         if any_created_or_reactivated:
-            renumber_series_occurrences(series)
+            zoom_title_changes = renumber_series_occurrences(series)
 
     zoom_errors = []
     for event, old_event in cancelled_zoom_events:
         zoom_error = sync_or_delete_zoom_meeting(event, old_event)
         if zoom_error is not None:
             zoom_errors.append({"event_id": event.pk, "zoom_error": zoom_error})
+    zoom_errors.extend(sync_changed_zoom_occurrences(zoom_title_changes))
 
     body = {
         "created": created,
@@ -1561,6 +1580,7 @@ def event_series_occurrence_detail(request, series_id, occurrence_id):
         and values["start_datetime"] != event.start_datetime
     )
     old_event = Event.objects.get(pk=event.pk)
+    zoom_title_changes = []
 
     with transaction.atomic():
         if title_set:
@@ -1570,12 +1590,18 @@ def event_series_occurrence_detail(request, series_id, occurrence_id):
         if save_error is not None:
             return save_error
         if start_changed:
-            renumber_series_occurrences(series)
+            zoom_title_changes = renumber_series_occurrences(series)
             event.refresh_from_db()
     zoom_error = sync_or_delete_zoom_meeting(event, old_event)
     body = serialize_event(event)
     if zoom_error is not None:
         body["zoom_error"] = zoom_error
+    zoom_errors = sync_changed_zoom_occurrences(
+        zoom_title_changes,
+        skip_event_ids={event.pk},
+    )
+    if zoom_errors:
+        body["zoom_errors"] = zoom_errors
     return JsonResponse(body, status=200)
 
 

@@ -27,10 +27,12 @@ EMAIL_CHANGED_NOTICE_TEMPLATE = "account_email_changed_notice"
 
 GENERIC_EMAIL_UNUSABLE_ERROR = "That email cannot be used for this account."
 GENERIC_CONFIRM_ERROR = (
-    "This email change link is no longer valid. Go to Account to request a new link."
+    "This email change link is no longer valid. "
+    "Contact support if you still need help updating your login email."
 )
 EXPIRED_CONFIRM_ERROR = (
-    "This email change link expired. Go to Account to request a new link."
+    "This email change link has expired. "
+    "Contact support if you still need help updating your login email."
 )
 
 

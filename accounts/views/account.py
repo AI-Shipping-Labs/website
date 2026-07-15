@@ -558,10 +558,11 @@ def change_email_confirm_view(request):
         )
         status_code = 200
     else:
-        cta_url = "/account/" if request.user.is_authenticated else "/accounts/login/"
-        cta_label = (
-            "Go to Account" if request.user.is_authenticated else "Sign In"
+        cta_url = (
+            "mailto:contact@aishippinglabs.com"
+            "?subject=Login%20email%20help"
         )
+        cta_label = "Contact support"
         status_code = 400
 
     return render(

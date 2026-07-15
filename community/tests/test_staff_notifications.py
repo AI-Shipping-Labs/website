@@ -1869,6 +1869,26 @@ class PaidWelcomeSESDestinationTest(TestCase):
         self.assertNotIn("CcAddresses", destination)
         self.assertNotIn("BccAddresses", destination)
 
+    def test_malformed_staff_mailbox_is_omitted_without_losing_member_welcome(self):
+        malformed = "not-an-email\nBcc: leaked@test.com"
+        self._set("STAFF_SIGNUP_NOTIFY_EMAIL", malformed)
+
+        with self.assertLogs("integrations.config", level="ERROR") as logs:
+            calls = self._run_welcome()
+
+        welcome = self._welcome_call(calls)
+        self.assertEqual(welcome["Destination"]["ToAddresses"], [self.user.email])
+        self.assertNotIn("CcAddresses", welcome["Destination"])
+        self.assertNotIn("BccAddresses", welcome["Destination"])
+        self.assertFalse(any(
+            call["Destination"].get("ToAddresses") == [malformed]
+            for call in calls
+        ))
+        diagnostic = "\n".join(logs.output)
+        self.assertIn("STAFF_SIGNUP_NOTIFY_EMAIL", diagnostic)
+        self.assertNotIn("not-an-email", diagnostic)
+        self.assertNotIn("leaked@test.com", diagnostic)
+
     # -- Scenario 3: From + Reply-To resolve to welcome@ ---------------
     def test_welcome_from_and_reply_to_resolve_to_welcome(self):
         self._set("STAFF_SIGNUP_NOTIFY_EMAIL", self.STAFF_EMAIL)
@@ -1888,6 +1908,21 @@ class PaidWelcomeSESDestinationTest(TestCase):
 
         self.assertEqual(welcome["ReplyToAddresses"], [alternate])
         self.assert_member_visible_with_staff_bcc(welcome)
+
+    def test_malformed_reply_to_is_omitted_without_losing_member_welcome(self):
+        malformed = "bad-reply-to\nCc: leaked@test.com"
+        self._set("STAFF_SIGNUP_NOTIFY_EMAIL", self.STAFF_EMAIL)
+        self._set("SES_WELCOME_REPLY_TO_EMAIL", malformed, group="ses")
+
+        with self.assertLogs("integrations.config", level="ERROR") as logs:
+            welcome = self._welcome_call(self._run_welcome())
+
+        self.assert_member_visible_with_staff_bcc(welcome)
+        self.assertNotIn("ReplyToAddresses", welcome)
+        diagnostic = "\n".join(logs.output)
+        self.assertIn("SES_WELCOME_REPLY_TO_EMAIL", diagnostic)
+        self.assertNotIn("bad-reply-to", diagnostic)
+        self.assertNotIn("leaked@test.com", diagnostic)
 
     def test_welcome_from_stays_welcome_even_with_stray_legacy_from(self):
         # A stray legacy SES_FROM_EMAIL=noreply@ must NOT pull the welcome

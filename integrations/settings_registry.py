@@ -2,6 +2,7 @@
 
 Each group defines the integration service and its configurable keys.
 The 'multiline' flag indicates keys that need a textarea (e.g. PEM keys).
+The 'is_email' flag enables Studio and browser validation for email addresses.
 
 Each ``description`` is a short answer to: what does it do, where do I
 get it, what breaks without it. Kept to one sentence so the dashboard
@@ -161,6 +162,7 @@ INTEGRATION_GROUPS = [
             {
                 'key': 'SES_WELCOME_REPLY_TO_EMAIL',
                 'is_secret': False,
+                'is_email': True,
                 'optional': True,
                 'default': 'welcome@aishippinglabs.com',
                 'description': (
@@ -495,6 +497,7 @@ INTEGRATION_GROUPS = [
             {
                 'key': 'STAFF_SIGNUP_NOTIFY_EMAIL',
                 'is_secret': False,
+                'is_email': True,
                 'description': (
                     'Single staff mailbox used for paid signups: hidden BCC '
                     'on the member-facing paid welcome, the structured '

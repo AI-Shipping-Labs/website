@@ -26,7 +26,12 @@ from types import SimpleNamespace
 
 import requests
 
-from integrations.config import get_config, is_enabled, site_base_url
+from integrations.config import (
+    get_config,
+    is_enabled,
+    site_base_url,
+    validate_email_config_value,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +110,13 @@ def notify_paid_signup(
             A) is the ``welcome_back`` template instead of the tier welcome.
             Defaults ``False`` so any other caller keeps today's behaviour.
     """
-    staff_email = (get_config("STAFF_SIGNUP_NOTIFY_EMAIL", "") or "").strip()
+    # One malformed optional BCC makes SES reject the member's primary To
+    # address as well. This protects env/import/legacy values that did not
+    # pass through the Studio validation boundary.
+    staff_email = validate_email_config_value(
+        "STAFF_SIGNUP_NOTIFY_EMAIL",
+        get_config("STAFF_SIGNUP_NOTIFY_EMAIL", ""),
+    )
     slack_channel_id = (get_config("STAFF_SIGNUP_NOTIFY_CHANNEL_ID", "") or "").strip()
 
     # Build the shared context once so the three sends agree on the

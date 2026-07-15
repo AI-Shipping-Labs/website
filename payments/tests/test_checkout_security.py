@@ -658,6 +658,33 @@ class CheckoutConcurrencySecurityTest(TransactionTestCase):
             1,
         )
 
+    def test_concurrent_same_session_runs_paid_welcome_side_effect_once(self):
+        user = User.objects.create_user(email="concurrent@test.com")
+        _binding, reference = self._issue(user)
+        payload = self._session(
+            reference,
+            "cs_concurrent_welcome_once",
+            "sub_welcome_once",
+        )
+
+        with patch(
+            "community.services.staff_notifications.notify_paid_signup",
+        ) as mock_notify:
+            self._deliver_concurrently([payload, dict(payload)])
+
+        mock_notify.assert_called_once()
+        self.assertEqual(
+            mock_notify.call_args.kwargs["session_id"],
+            "cs_concurrent_welcome_once",
+        )
+        self.assertEqual(
+            CheckoutFulfillment.objects.filter(
+                stripe_session_id="cs_concurrent_welcome_once",
+                status=CheckoutFulfillment.STATUS_FULFILLED,
+            ).count(),
+            1,
+        )
+
     def test_concurrent_sessions_for_same_binding_grant_once(self):
         user = User.objects.create_user(email="concurrent@test.com")
         _binding, reference = self._issue(user)

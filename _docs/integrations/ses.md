@@ -272,6 +272,12 @@ Without it: Leaving this blank omits the `Reply-To` header entirely —
 welcome emails then reply to the From address. Only welcome types get a
 Reply-To; every other transactional / promotional email is unaffected.
 
+Invalid value: Studio rejects a malformed address before saving any setting in
+the SES group. Runtime delivery also validates environment, import, and legacy
+values; a malformed optional Reply-To is omitted so SES still delivers the
+welcome to the member. The operator log names the setting key without printing
+the rejected value.
+
 Where to find it: Any mailbox you control and that the inbound forwarder
 routes to a real person. Must NOT be a black-hole address.
 

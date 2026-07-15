@@ -114,12 +114,14 @@ class PrivacyExportTest(TierSetupMixin, TestCase):
         user.dashboard_dismissals = ["slack_join"]
         user.tier = self.main_tier
         user.stripe_customer_id = "cus_export"
+        user.slack_user_id = "U_EXPORT"
         user.save(
             update_fields=[
                 "email_preferences",
                 "dashboard_dismissals",
                 "tier",
                 "stripe_customer_id",
+                "slack_user_id",
             ]
         )
         EmailAlias.objects.create(user=user, email="alias-export@test.com")
@@ -146,6 +148,19 @@ class PrivacyExportTest(TierSetupMixin, TestCase):
             plan=plan,
             posted_at=timezone.now(),
         )
+        other_thread = SlackThread.objects.create(
+            channel_id="C123",
+            thread_ts="111.333",
+            slack_user_id="U_OTHER",
+            posted_at=timezone.now(),
+        )
+        SlackMessage.objects.create(
+            thread=other_thread,
+            ts="111.334",
+            slack_user_id="U_EXPORT",
+            text="reply authored in another thread",
+            posted_at=timezone.now(),
+        )
         EmailLog.objects.create(user=user, email_type="welcome")
         UserActivity.objects.create(
             user=user,
@@ -165,6 +180,10 @@ class PrivacyExportTest(TierSetupMixin, TestCase):
         )
         payload = json.loads(response.content)
         self.assertEqual(payload["manifest"]["primary_email"], "export@test.com")
+        self.assertEqual(
+            payload["events_community"]["slack_authored_messages"][0]["text"],
+            "reply authored in another thread",
+        )
         self.assertEqual(payload["membership_payment"]["current_tier"]["slug"], "main")
         self.assertEqual(
             payload["auth_security"]["member_api_keys"][0]["lookup_prefix"],
@@ -379,6 +398,8 @@ class PrivacyDeletionSuccessTest(TierSetupMixin, TestCase):
             password="TestPass123!",
             first_name="Delete",
         )
+        user.slack_user_id = "U_DELETE"
+        user.save(update_fields=["slack_user_id"])
         course = _course("delete-course")
         Enrollment.objects.create(user=user, course=course)
         event = _event("delete-event")
@@ -402,6 +423,28 @@ class PrivacyDeletionSuccessTest(TierSetupMixin, TestCase):
             text="private sprint update",
             posted_at=timezone.now(),
             is_root=True,
+        )
+        retained_thread = SlackThread.objects.create(
+            channel_id="CDEL",
+            thread_ts="333.444",
+            slack_user_id="U_OTHER",
+            posted_at=timezone.now(),
+            reply_count=1,
+        )
+        SlackMessage.objects.create(
+            thread=retained_thread,
+            ts="333.444",
+            slack_user_id="U_OTHER",
+            text="other member root",
+            posted_at=timezone.now(),
+            is_root=True,
+        )
+        SlackMessage.objects.create(
+            thread=retained_thread,
+            ts="333.445",
+            slack_user_id="U_DELETE",
+            text="delete my reply",
+            posted_at=timezone.now(),
         )
         Project.objects.create(
             title="Published member project",
@@ -451,7 +494,22 @@ class PrivacyDeletionSuccessTest(TierSetupMixin, TestCase):
         self.assertFalse(Notification.objects.exists())
         self.assertFalse(Comment.objects.exists())
         self.assertFalse(CRMRecord.objects.exists())
-        self.assertFalse(SlackThread.objects.exists())
+        self.assertEqual(SlackThread.objects.count(), 2)
+        erased_thread = SlackThread.objects.get(thread_ts="222.333")
+        self.assertTrue(erased_thread.privacy_erased)
+        self.assertIsNone(erased_thread.member_id)
+        self.assertIsNone(erased_thread.plan_id)
+        self.assertEqual(erased_thread.slack_user_id, "")
+        self.assertEqual(erased_thread.messages.get().text, "")
+        retained_thread.refresh_from_db()
+        self.assertEqual(retained_thread.reply_count, 1)
+        self.assertEqual(retained_thread.messages.count(), 2)
+        self.assertFalse(
+            SlackMessage.objects.filter(slack_user_id="U_DELETE").exists()
+        )
+        erased_reply = retained_thread.messages.get(ts="333.445")
+        self.assertEqual(erased_reply.text, "")
+        self.assertEqual(erased_reply.author_display, "")
         self.assertTrue(Project.objects.filter(slug="published-member-project").exists())
         published = Project.objects.get(slug="published-member-project")
         self.assertIsNone(published.submitter)

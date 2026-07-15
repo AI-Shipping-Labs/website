@@ -25,6 +25,7 @@ URL = "/api/integrations/slack/plan-sprints/ingest"
 SLACK_ON = dict(
     SLACK_ENABLED=True,
     SLACK_BOT_TOKEN="xoxb-test",
+    SLACK_PLAN_SPRINTS_USER_TOKEN="xoxp-test",
     SLACK_ENVIRONMENT="test",
     SLACK_TEST_PLAN_SPRINTS_CHANNEL_ID="C_TEST_PLANSPRINTS",
 )
@@ -149,6 +150,7 @@ class PlanSprintsIngestListApiTest(TestCase):
             oldest_ts="1748390400.000100",
             latest_ts="1749600000.000200",
             error="",
+            known_threads_checked=17,
         )
         SlackChannelIngest.objects.filter(pk=run.pk).update(finished_at=finished)
 
@@ -165,6 +167,9 @@ class PlanSprintsIngestListApiTest(TestCase):
         self.assertEqual(row["threads_persisted"], 24)
         self.assertEqual(row["replies_added"], 9)
         self.assertEqual(row["members_matched"], 21)
+        self.assertEqual(row["known_threads_checked"], 17)
+        self.assertTrue(row["advances_watermark"])
+        self.assertIsNone(row["lease_expires_at"])
         self.assertEqual(row["oldest_ts"], "1748390400.000100")
         self.assertEqual(row["latest_ts"], "1749600000.000200")
         self.assertEqual(row["error"], "")
@@ -253,4 +258,46 @@ class PlanSprintsIngestUnavailableTest(TestCase):
             response = self._post()
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["code"], "ingest_unavailable")
+        enqueue.assert_not_called()
+
+    @override_settings(
+        SLACK_ENABLED=True,
+        SLACK_BOT_TOKEN="xoxb-test",
+        SLACK_PLAN_SPRINTS_USER_TOKEN="",
+        SLACK_ENVIRONMENT="test",
+        SLACK_TEST_PLAN_SPRINTS_CHANNEL_ID="C_TEST_PLANSPRINTS",
+    )
+    def test_no_reply_user_token_returns_409_without_enqueue(self):
+        with mock.patch("api.views.plan_sprints_ingest.async_task") as enqueue:
+            response = self._post()
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "ingest_unavailable")
+        enqueue.assert_not_called()
+
+
+@override_settings(**SLACK_ON)
+class PlanSprintsIngestLeaseApiTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(
+            email="lease-admin@test.com", password="x", is_staff=True,
+        )
+        cls.token = Token.objects.create(user=cls.admin, name="test")
+
+    def test_active_run_returns_conflict_without_enqueue(self):
+        running = SlackChannelIngest.objects.create(
+            channel_id="C_TEST_PLANSPRINTS",
+            status="running",
+            lease_expires_at=timezone.now() + timezone.timedelta(minutes=10),
+        )
+        with mock.patch("api.views.plan_sprints_ingest.async_task") as enqueue:
+            response = self.client.post(
+                URL,
+                data="{}",
+                content_type="application/json",
+                HTTP_AUTHORIZATION=f"Token {self.token.key}",
+            )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "ingest_in_progress")
+        self.assertEqual(response.json()["details"]["run_id"], running.pk)
         enqueue.assert_not_called()

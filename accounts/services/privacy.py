@@ -583,6 +583,7 @@ def _events_community(user):
             ],
         ),
         "slack_threads": _slack_threads_export(user),
+        "slack_authored_messages": _slack_authored_messages_export(user),
     }
 
 
@@ -1025,6 +1026,27 @@ def _slack_threads_export(user):
     return result
 
 
+def _slack_authored_messages_export(user):
+    """Export this Slack identity's messages, including replies elsewhere."""
+    message_model = _model("crm", "SlackMessage")
+    if message_model is None or not user.slack_user_id:
+        return []
+    return _values(
+        message_model,
+        Q(slack_user_id=user.slack_user_id),
+        [
+            "id",
+            "thread_id",
+            "ts",
+            "slack_user_id",
+            "author_display",
+            "text",
+            "posted_at",
+            "is_root",
+        ],
+    )
+
+
 def _empty_summary():
     return {"erased": {}, "anonymized": {}, "retained": {}, "skipped": {}}
 
@@ -1049,11 +1071,65 @@ def _delete_user_sessions(user, summary):
 
 def _erase_local_slack_threads(user, summary):
     thread_model = _model("crm", "SlackThread")
-    if thread_model is None:
+    message_model = _model("crm", "SlackMessage")
+    if thread_model is None or message_model is None:
         return
-    count = thread_model.objects.filter(member=user).count()
-    thread_model.objects.filter(member=user).delete()
+    owned_filter = Q(member=user)
+    if user.slack_user_id:
+        owned_filter |= Q(slack_user_id=user.slack_user_id)
+    owned_threads = thread_model.objects.filter(owned_filter)
+    owned_ids = list(owned_threads.values_list("id", flat=True))
+    count = len(owned_ids)
+    # Retain only content-free unique-key tombstones. Otherwise the next
+    # upstream history pull would recreate data that this deletion erased.
+    message_model.objects.filter(thread_id__in=owned_ids).update(
+        slack_user_id="",
+        author_display="",
+        text="",
+    )
+    from crm.tasks.apply_plan_sprint_progress import reverse_event
+
+    for thread in owned_threads.select_related("interview_note"):
+        if thread.interview_note_id:
+            thread.interview_note.delete()
+        for event in thread.progress_events.all():
+            reverse_event(event)
+    owned_threads.update(
+        slack_user_id="",
+        member=None,
+        plan=None,
+        permalink="",
+        reply_count=0,
+        interview_note=None,
+        privacy_erased=True,
+    )
     _increment(summary, "erased", "local_slack_threads", count)
+
+    if not user.slack_user_id:
+        return
+    authored_replies = message_model.objects.filter(
+        slack_user_id=user.slack_user_id,
+    ).exclude(thread_id__in=owned_ids)
+    affected_thread_ids = list(
+        authored_replies.values_list("thread_id", flat=True).distinct()
+    )
+    reply_count = authored_replies.count()
+    # Preserve the per-thread message timestamp as an erased tombstone so a
+    # later `conversations.replies` response cannot restore the content.
+    authored_replies.update(slack_user_id="", author_display="", text="")
+    _increment(summary, "erased", "local_slack_authored_messages", reply_count)
+
+    # Remove the erased reply from copied canonical note bodies as well.
+    from crm.services.slack_note_sync import sync_thread_to_interview_note
+
+    for thread in (
+        thread_model.objects
+        .filter(pk__in=affected_thread_ids)
+        .select_related("member", "plan__sprint", "interview_note")
+        .prefetch_related("messages")
+    ):
+        if thread.member_id is not None:
+            sync_thread_to_interview_note(thread)
 
 
 def _anonymize_member_projects(user, summary):

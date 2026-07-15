@@ -24,7 +24,10 @@ from django.core.mail import send_mail
 
 from community.models import CommunityAuditLog
 from community.services.base import CommunityService
-from community.slack_config import get_slack_community_channel_ids
+from community.slack_config import (
+    get_slack_community_channel_ids,
+    get_slack_plan_sprints_user_token,
+)
 from integrations.config import get_config, is_enabled, site_base_url
 
 logger = logging.getLogger(__name__)
@@ -56,14 +59,19 @@ class SlackCommunityService(CommunityService):
     settings.SLACK_COMMUNITY_CHANNEL_IDS.
     """
 
-    def __init__(self, bot_token=None, channel_ids=None):
+    def __init__(self, bot_token=None, channel_ids=None, reply_user_token=None):
         self.bot_token = bot_token or get_config('SLACK_BOT_TOKEN')
+        self.reply_user_token = (
+            reply_user_token
+            if reply_user_token is not None
+            else get_slack_plan_sprints_user_token()
+        )
         if channel_ids is not None:
             self.channel_ids = channel_ids
         else:
             self.channel_ids = get_slack_community_channel_ids()
 
-    def _api_call(self, method, **kwargs):
+    def _api_call(self, method, *, auth_token=None, **kwargs):
         """Make a Slack Web API call.
 
         On a ``ratelimited`` response (HTTP 429 or ``ok=False`` with
@@ -89,7 +97,7 @@ class SlackCommunityService(CommunityService):
 
         url = f"{SLACK_API_BASE}{method}"
         headers = {
-            "Authorization": f"Bearer {self.bot_token}",
+            "Authorization": f"Bearer {auth_token or self.bot_token}",
             "Content-Type": "application/json; charset=utf-8",
         }
 
@@ -97,9 +105,16 @@ class SlackCommunityService(CommunityService):
         # try; on a ratelimited response we sleep Retry-After and loop
         # once more (``attempt == 1``), then surface the error.
         for attempt in range(2):
-            response = requests.post(
-                url, json=kwargs, headers=headers, timeout=10,
-            )
+            try:
+                response = requests.post(
+                    url, json=kwargs, headers=headers, timeout=10,
+                )
+            except requests.RequestException as exc:
+                raise SlackAPIError(
+                    f"Slack API network error: {method}",
+                    method=method,
+                    error_code="network_error",
+                ) from exc
 
             if response.status_code == 429:
                 if attempt == 0:
@@ -117,7 +132,14 @@ class SlackCommunityService(CommunityService):
                     method=method,
                 )
 
-            data = response.json()
+            try:
+                data = response.json()
+            except (ValueError, json.JSONDecodeError) as exc:
+                raise SlackAPIError(
+                    f"Slack API returned invalid JSON: {method}",
+                    method=method,
+                    error_code="invalid_json",
+                ) from exc
             if not data.get("ok"):
                 error = data.get("error", "unknown_error")
                 if error == "ratelimited" and attempt == 0:
@@ -207,18 +229,47 @@ class SlackCommunityService(CommunityService):
         Raises:
             SlackAPIError: If any API call fails.
         """
+        if not self.reply_user_token:
+            raise SlackAPIError(
+                "Slack user token is required to read #plan-sprints replies",
+                method="conversations.replies",
+                error_code="missing_reply_user_token",
+            )
+
         messages = []
         cursor = None
         while True:
             params = {"channel": channel_id, "ts": thread_ts, "limit": limit}
             if cursor:
                 params["cursor"] = cursor
-            data = self._api_call("conversations.replies", **params)
+            data = self._api_call(
+                "conversations.replies",
+                auth_token=self.reply_user_token,
+                **params,
+            )
             messages.extend(data.get("messages", []) or [])
             cursor = (data.get("response_metadata", {}) or {}).get("next_cursor", "")
             if not cursor:
                 break
         return messages
+
+    def lookup_user_profile_by_id(self, slack_user_id):
+        """Best-effort profile lookup used for canonical email matching."""
+        if not slack_user_id:
+            return None
+        data = self._api_call("users.info", user=slack_user_id)
+        user = data.get("user", {}) or {}
+        profile = user.get("profile", {}) or {}
+        return {
+            "id": user.get("id", "") or slack_user_id,
+            "email": profile.get("email", "") or "",
+            "display_name": (
+                profile.get("display_name")
+                or user.get("real_name")
+                or profile.get("real_name")
+                or ""
+            ),
+        }
 
     def lookup_user_display_name(self, slack_user_id):
         """Best-effort resolve a Slack user's display name via ``users.info``.

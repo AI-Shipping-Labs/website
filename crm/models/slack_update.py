@@ -13,6 +13,7 @@ read-only surfacing, staff-only like the rest of the CRM.
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 
 INGEST_STATUS_CHOICES = [
     ('running', 'Running'),
@@ -47,12 +48,22 @@ class SlackChannelIngest(models.Model):
         default='running',
     )
     error = models.TextField(blank=True, default='')
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
+    known_threads_checked = models.IntegerField(default=0)
+    advances_watermark = models.BooleanField(default=True)
 
     class Meta:
         ordering = ['-started_at']
         indexes = [
             models.Index(fields=['status']),
             models.Index(fields=['-started_at']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['channel_id'],
+                condition=Q(status='running'),
+                name='unique_running_slack_ingest_per_channel',
+            ),
         ]
 
     def __str__(self):
@@ -92,6 +103,7 @@ class SlackThread(models.Model):
     posted_at = models.DateTimeField()
     permalink = models.URLField(max_length=600, blank=True, default='')
     reply_count = models.IntegerField(default=0)
+    privacy_erased = models.BooleanField(default=False, db_index=True)
     ingest = models.ForeignKey(
         SlackChannelIngest,
         on_delete=models.SET_NULL,

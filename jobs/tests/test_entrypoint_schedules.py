@@ -53,6 +53,7 @@ class EntrypointRegistersSchedulesTest(TestCase):
             'redact-maven-enrollment-pii',
             'retry-maven-enrollment-steps',
             'purge-user-activity',
+            'purge-plan-sprints-raw-text',
             'event-reminders',
             'complete-finished-events',
             'expire-tier-overrides',

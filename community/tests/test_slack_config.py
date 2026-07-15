@@ -5,6 +5,7 @@ from community.slack_config import (
     get_slack_community_channel_ids,
     get_slack_environment,
     get_slack_plan_sprints_channel_id,
+    get_slack_plan_sprints_user_token,
     slack_api_enabled,
 )
 from integrations.config import clear_config_cache
@@ -81,6 +82,10 @@ class SlackConfigTest(SimpleTestCase):
     )
     def test_plan_sprints_channel_blank_when_unset(self):
         self.assertEqual(get_slack_plan_sprints_channel_id(), "")
+
+    @override_settings(SLACK_PLAN_SPRINTS_USER_TOKEN="xoxp-reader")
+    def test_plan_sprints_user_token(self):
+        self.assertEqual(get_slack_plan_sprints_user_token(), "xoxp-reader")
 
     @override_settings(SLACK_ENABLED=False, SLACK_BOT_TOKEN="xoxb-test")
     def test_slack_api_enabled_requires_kill_switch(self):

@@ -8,6 +8,7 @@ import pytest
 from django.utils import timezone
 from playwright.sync_api import expect
 
+from accounts.services.privacy import SCHEMA_VERSION
 from playwright_tests.conftest import (
     DEFAULT_PASSWORD,
     auth_context,
@@ -133,7 +134,7 @@ class TestAccountPrivacyExport1210:
             expect(page.get_by_test_id("privacy-data-section")).to_be_visible()
             payload = _download_export(page, email)
 
-            assert payload["manifest"]["schema_version"] == "2026-07-11.1"
+            assert payload["manifest"]["schema_version"] == SCHEMA_VERSION
             assert payload["account_profile"]["first_name"] == "Portable"
             assert payload["membership_payment"]["effective_tier"]["slug"] == "main"
             assert payload["learning_content"]["course_enrollments"]

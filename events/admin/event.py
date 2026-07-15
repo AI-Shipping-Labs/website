@@ -175,6 +175,7 @@ class EventAdmin(admin.ModelAdmin):
         ('Recording', {
             'fields': (
                 'recording_url', 'recording_s3_url', 'recording_embed_url',
+                'recording_upload_enqueued_at',
                 'transcript_url', 'transcript_text',
                 'timestamps', 'materials', 'core_tools',
                 'learning_objectives', 'outcome',
@@ -195,7 +196,9 @@ class EventAdmin(admin.ModelAdmin):
         }),
     )
 
-    readonly_fields = ['published_at', 'studio_link']
+    readonly_fields = [
+        'published_at', 'recording_upload_enqueued_at', 'studio_link',
+    ]
 
     @admin.display(description='Studio')
     def studio_link(self, obj):

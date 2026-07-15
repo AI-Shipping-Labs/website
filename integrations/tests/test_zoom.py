@@ -1181,6 +1181,8 @@ class ZoomRecordingCompletedTest(_ZoomSecretIsolationMixin, TestCase):
         self.assertEqual(self.event.recording_s3_url, '')
         self.assertEqual(self.event.published, self.initial_published)
         self.assertEqual(mock_q_async.call_count, 1)
+        self.event.refresh_from_db()
+        self.assertIsNotNone(self.event.recording_upload_enqueued_at)
         self.assertEqual(
             WebhookLog.objects.filter(
                 service='zoom',
@@ -1197,6 +1199,144 @@ class ZoomRecordingCompletedTest(_ZoomSecretIsolationMixin, TestCase):
             2,
         )
 
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_play_only_preferred_row_does_not_hide_downloadable_video(
+        self, mock_q_async,
+    ):
+        mock_q_async.return_value = 'upload-task-id'
+        payload = make_recording_completed_payload('12345678901')
+        payload['payload']['object']['recording_files'] = [
+            {
+                'recording_type': 'shared_screen_with_speaker_view',
+                'play_url': 'https://zoom.us/rec/play/play-only',
+                'download_url': '',
+            },
+            {
+                'recording_type': 'shared_screen',
+                'play_url': 'https://zoom.us/rec/play/downloadable',
+                'download_url': 'https://zoom.us/rec/download/downloadable',
+            },
+        ]
+
+        response = self._post_webhook(payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.event.refresh_from_db()
+        self.assertEqual(
+            self.event.recording_url,
+            'https://zoom.us/rec/play/downloadable',
+        )
+        self.assertEqual(
+            mock_q_async.call_args.args[2],
+            'https://zoom.us/rec/download/downloadable',
+        )
+        self.assertIsNotNone(self.event.recording_upload_enqueued_at)
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_video_selection_uses_product_priority_not_payload_order(
+        self, mock_q_async,
+    ):
+        mock_q_async.return_value = 'upload-task-id'
+        payload = make_recording_completed_payload('12345678901')
+        payload['payload']['object']['recording_files'] = [
+            {
+                'recording_type': 'active_speaker',
+                'play_url': 'https://zoom.us/rec/play/active',
+                'download_url': 'https://zoom.us/rec/download/active',
+            },
+            {
+                'recording_type': 'shared_screen_with_speaker_view',
+                'play_url': 'https://zoom.us/rec/play/shared-speaker',
+                'download_url': 'https://zoom.us/rec/download/shared-speaker',
+            },
+        ]
+
+        self._post_webhook(payload)
+
+        self.event.refresh_from_db()
+        self.assertEqual(
+            self.event.recording_url,
+            'https://zoom.us/rec/play/shared-speaker',
+        )
+        self.assertEqual(
+            mock_q_async.call_args.args[2],
+            'https://zoom.us/rec/download/shared-speaker',
+        )
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_later_downloadable_webhook_recovers_share_only_delivery_once(
+        self, mock_q_async,
+    ):
+        mock_q_async.return_value = 'upload-task-id'
+        share_only = {
+            'event': 'recording.completed',
+            'payload': {
+                'object': {
+                    'id': '12345678901',
+                    'share_url': 'https://zoom.us/rec/share/first',
+                    'recording_files': [],
+                },
+            },
+        }
+        downloadable = make_recording_completed_payload('12345678901')
+
+        first = self._post_webhook(share_only)
+        second = self._post_webhook(downloadable)
+        replay = self._post_webhook(downloadable)
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(replay.status_code, 200)
+        mock_q_async.assert_called_once()
+        self.event.refresh_from_db()
+        self.assertEqual(
+            self.event.recording_url,
+            'https://zoom.us/rec/share/first',
+        )
+        self.assertIsNotNone(self.event.recording_upload_enqueued_at)
+        self.assertEqual(
+            WebhookLog.objects.filter(
+                service='zoom',
+                event_type='recording.completed',
+                processed=True,
+            ).count(),
+            3,
+        )
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_enqueue_failure_rolls_back_state_and_signed_replay_recovers(
+        self, mock_q_async,
+    ):
+        payload = make_recording_completed_payload(
+            '12345678901', include_transcript=True,
+        )
+        mock_q_async.side_effect = RuntimeError('queue unavailable')
+
+        failed = self._post_webhook(payload)
+
+        self.assertEqual(failed.status_code, 200)
+        self.assertEqual(failed.json()['status'], 'error')
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.recording_url, '')
+        self.assertEqual(self.event.transcript_url, '')
+        self.assertIsNone(self.event.recording_upload_enqueued_at)
+        failed_log = WebhookLog.objects.get()
+        self.assertFalse(failed_log.processed)
+
+        mock_q_async.side_effect = None
+        mock_q_async.return_value = 'recovered-upload-task-id'
+        recovered = self._post_webhook(payload)
+
+        self.assertEqual(recovered.status_code, 200)
+        self.assertEqual(recovered.json()['status'], 'ok')
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.recording_url, 'https://zoom.us/rec/play/abc123')
+        self.assertIsNotNone(self.event.recording_upload_enqueued_at)
+        self.assertEqual(mock_q_async.call_count, 2)
+        self.assertEqual(
+            WebhookLog.objects.filter(processed=True).count(),
+            1,
+        )
     @patch('jobs.tasks.helpers.q_async_task')
     def test_replay_after_s3_upload_preserves_watchable_state(self, mock_q_async):
         published_at = timezone.now() - timedelta(minutes=10)

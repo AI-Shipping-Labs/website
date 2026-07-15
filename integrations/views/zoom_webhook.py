@@ -17,7 +17,9 @@ staff bookkeeping.
 import json
 import logging
 
+from django.db import transaction
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
@@ -29,6 +31,12 @@ from integrations.services.zoom import (
 )
 
 logger = logging.getLogger(__name__)
+
+PREFERRED_VIDEO_RECORDING_TYPES = (
+    'shared_screen_with_speaker_view',
+    'shared_screen',
+    'active_speaker',
+)
 
 
 @csrf_exempt
@@ -114,31 +122,10 @@ def _handle_recording_completed(payload, webhook_log):
         logger.warning('recording.completed webhook missing meeting ID')
         return
 
-    # Find the event with this zoom_meeting_id
-    try:
-        event = Event.objects.get(zoom_meeting_id=meeting_id)
-    except Event.DoesNotExist:
-        logger.warning(
-            'No event found for Zoom meeting ID %s', meeting_id,
-        )
-        return
-
     # Extract recording URLs from Zoom payload
     recording_files = object_data.get('recording_files', [])
-    video_url = ''
-    download_url = ''
+    video_url, download_url = _select_preferred_video(recording_files)
     transcript_url = ''
-    for rec_file in recording_files:
-        recording_type = rec_file.get('recording_type', '')
-        if recording_type in (
-            'shared_screen_with_speaker_view',
-            'shared_screen',
-            'active_speaker',
-        ):
-            video_url = rec_file.get('play_url', '') or rec_file.get('download_url', '')
-            download_url = rec_file.get('download_url', '')
-            if video_url:
-                break
     # Extract transcript URL (audio_transcript VTT file)
     for rec_file in recording_files:
         if rec_file.get('recording_type') == 'audio_transcript':
@@ -149,60 +136,65 @@ def _handle_recording_completed(payload, webhook_log):
     if not video_url:
         video_url = object_data.get('share_url', '')
 
-    had_recording_url = bool(event.recording_url)
-    had_recording_s3_url = bool(event.recording_s3_url)
+    # The Event state, queue row, durable enqueue marker, and processed flag
+    # commit together. A queue failure rolls all four back, so a later signed
+    # replay can recover instead of seeing a stored play URL and skipping the
+    # only usable download forever. ``select_for_update`` serializes concurrent
+    # duplicate deliveries for the same meeting.
+    with transaction.atomic():
+        try:
+            event = Event.objects.select_for_update().get(
+                zoom_meeting_id=meeting_id,
+            )
+        except Event.DoesNotExist:
+            logger.warning(
+                'No event found for Zoom meeting ID %s', meeting_id,
+            )
+            return
 
-    # Set Zoom-derived recording fields directly on the Event. Replays must not
-    # wipe S3/publishing state after the upload job has made the recording
-    # watchable, and they should not clear previously stored Zoom URLs when a
-    # retry payload omits optional files.
-    # Issue #713: do NOT flip ``status`` to ``completed`` here — the
-    # event becomes "past" automatically via the time-derived
-    # ``Event.is_past`` property once ``end_datetime`` passes, and the
-    # daily ``complete_finished_events`` cron later refreshes the
-    # stored field for staff bookkeeping. Writing the field on every
-    # webhook hit was redundant.
-    update_fields = []
-    if video_url and not event.recording_url:
-        event.recording_url = video_url
-        update_fields.append('recording_url')
-    if transcript_url and not event.transcript_url:
-        event.transcript_url = transcript_url
-        update_fields.append('transcript_url')
+        update_fields = []
+        if video_url and not event.recording_url:
+            event.recording_url = video_url
+            update_fields.append('recording_url')
+        if transcript_url and not event.transcript_url:
+            event.transcript_url = transcript_url
+            update_fields.append('transcript_url')
 
-    if update_fields:
-        update_fields.append('updated_at')
-        event.save(update_fields=update_fields)
+        should_enqueue_upload = (
+            bool(download_url)
+            and not event.recording_s3_url
+            and event.recording_upload_enqueued_at is None
+        )
 
-    # Mark webhook as processed
-    webhook_log.processed = True
-    webhook_log.save()
+        if should_enqueue_upload:
+            from jobs.tasks import async_task, build_task_name
+            async_task(
+                'jobs.tasks.recording_upload.upload_recording_to_s3',
+                event.id,
+                download_url,
+                max_retries=3,
+                task_name=build_task_name(
+                    'Upload Zoom recording',
+                    f'event #{event.id} {event.title}',
+                    'Zoom webhook',
+                ),
+            )
+            event.recording_upload_enqueued_at = timezone.now()
+            update_fields.append('recording_upload_enqueued_at')
+
+        if update_fields:
+            update_fields.append('updated_at')
+            event.save(update_fields=update_fields)
+
+        webhook_log.processed = True
+        webhook_log.save(update_fields=['processed'])
 
     logger.info(
         'Set recording fields on event "%s" (slug=%s) from Zoom meeting %s',
         event.title, event.slug, meeting_id,
     )
 
-    # Enqueue background job to download from Zoom and upload to S3
-    should_enqueue_upload = (
-        bool(download_url)
-        and not had_recording_url
-        and not had_recording_s3_url
-    )
-
     if should_enqueue_upload:
-        from jobs.tasks import async_task, build_task_name
-        async_task(
-            'jobs.tasks.recording_upload.upload_recording_to_s3',
-            event.id,
-            download_url,
-            max_retries=3,
-            task_name=build_task_name(
-                'Upload Zoom recording',
-                f'event #{event.id} {event.title}',
-                'Zoom webhook',
-            ),
-        )
         logger.info(
             'Enqueued S3 upload job for event "%s" (id=%s)',
             event.title, event.id,
@@ -217,3 +209,33 @@ def _handle_recording_completed(payload, webhook_log):
             'No download URL available for event "%s", skipping S3 upload',
             event.title,
         )
+
+
+def _select_preferred_video(recording_files):
+    """Return matching ``(play_or_download_url, download_url)``.
+
+    Prefer the canonical recording types in product order, but only select a
+    row for upload when it has a usable download URL. A play-only preferred row
+    must not hide a later downloadable row. When no download exists, retain the
+    best play URL for operator/source visibility without enqueuing an upload.
+    """
+    for recording_type in PREFERRED_VIDEO_RECORDING_TYPES:
+        for rec_file in recording_files:
+            if rec_file.get('recording_type') != recording_type:
+                continue
+            download_url = (rec_file.get('download_url') or '').strip()
+            if download_url:
+                video_url = (rec_file.get('play_url') or '').strip()
+                return video_url or download_url, download_url
+
+    for recording_type in PREFERRED_VIDEO_RECORDING_TYPES:
+        for rec_file in recording_files:
+            if rec_file.get('recording_type') != recording_type:
+                continue
+            video_url = (
+                rec_file.get('play_url') or rec_file.get('download_url') or ''
+            ).strip()
+            if video_url:
+                return video_url, ''
+
+    return '', ''

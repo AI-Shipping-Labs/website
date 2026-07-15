@@ -145,6 +145,10 @@ class CatalogTagPresentationTest(TestCase):
                     element for element in _elements_with_text(parser, text)
                     if element['tag'] == 'a'
                     and element['attrs'].get('href') == href
+                    and (
+                        path != '/downloads'
+                        or element['attrs'].get('class') == CLICKABLE_CHIP_CLASSES
+                    )
                 )
                 self.assertEqual(chip['attrs'].get('class'), CLICKABLE_CHIP_CLASSES)
                 self.assertNotIn('min-h-[44px]', chip['attrs'].get('class', ''))
@@ -159,6 +163,10 @@ class CatalogTagPresentationTest(TestCase):
                 chip = next(
                     element for element in _elements_with_text(parser, text)
                     if element['tag'] == 'a'
+                    and (
+                        not path.startswith('/downloads')
+                        or element['attrs'].get('class') == CLICKABLE_CHIP_CLASSES
+                    )
                 )
                 self.assertEqual(chip['attrs'].get('href'), expected_href)
 
@@ -206,7 +214,14 @@ class CatalogTagPresentationTest(TestCase):
                 self.assertEqual(overflow['tag'], 'span')
                 self.assertEqual(overflow['attrs'].get('class'), STATIC_CHIP_CLASSES)
                 self.assertEqual(overflow['text'].strip(), text)
-                self.assertNotIn(f'>{hidden_tag}<', response.content.decode())
+                # Downloads expose every available topic in the separate
+                # 44px filter row, so the hidden fourth *card* tag can still
+                # legitimately appear elsewhere on the page.
+                if path != '/downloads':
+                    self.assertNotIn(
+                        f'>{hidden_tag}<',
+                        response.content.decode(),
+                    )
 
     def test_tag_detail_has_distinct_card_and_related_tag_anchors(self):
         parser = _parse(self.client.get('/tags/agents-1228'))

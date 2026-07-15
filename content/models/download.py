@@ -1,3 +1,6 @@
+import uuid
+
+from django.conf import settings
 from django.db import models
 
 from content.access import VISIBILITY_CHOICES
@@ -16,6 +19,25 @@ FILE_TYPE_CHOICES = [
     ('other', 'Other'),
 ]
 
+SAFE_DOWNLOAD_FILE_TYPES = {'pdf', 'zip', 'slides', 'notebook', 'csv'}
+DOWNLOAD_MIME_TYPES = {
+    'pdf': 'application/pdf',
+    'zip': 'application/zip',
+    'slides': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'notebook': 'application/x-ipynb+json',
+    'csv': 'text/csv',
+}
+DOWNLOAD_EXTENSION_MIME_TYPES = {
+    'pdf': {'.pdf': 'application/pdf'},
+    'zip': {'.zip': 'application/zip'},
+    'slides': {
+        '.ppt': 'application/vnd.ms-powerpoint',
+        '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    },
+    'notebook': {'.ipynb': 'application/x-ipynb+json'},
+    'csv': {'.csv': 'text/csv'},
+}
+
 
 class Download(
     SyncedContentIdentityMixin,
@@ -30,6 +52,34 @@ class Download(
     file_url = models.URLField(
         max_length=500,
         help_text="URL to the downloadable file (S3, storage, etc.).",
+    )
+    storage_key = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        help_text=(
+            'Private S3 object key. Required for secure delivery; never '
+            'rendered on public surfaces.'
+        ),
+    )
+    asset_mime_type = models.CharField(
+        max_length=150,
+        blank=True,
+        default='',
+        help_text=(
+            'Validated MIME type for the private asset. Legacy `other` rows '
+            'remain stored but are not deliverable unless a future policy '
+            'adds an approved extension/MIME pair.'
+        ),
+    )
+    delivery_blocked_reason = models.CharField(
+        max_length=200,
+        blank=True,
+        default='',
+        help_text=(
+            'Operator-facing readiness marker set when source validation '
+            'fails. Never rendered on public surfaces.'
+        ),
     )
     file_type = models.CharField(
         max_length=20,
@@ -124,3 +174,80 @@ class Download(
         from django.db.models import F
         Download.objects.filter(pk=self.pk).update(download_count=F('download_count') + 1)
         self.refresh_from_db()
+
+    @property
+    def safe_filename(self):
+        """Return a conservative attachment filename derived from the slug."""
+        extension = {
+            'pdf': 'pdf',
+            'zip': 'zip',
+            'slides': self.storage_key.rsplit('.', 1)[-1].lower(),
+            'notebook': 'ipynb',
+            'csv': 'csv',
+        }.get(self.file_type, '')
+        base = (self.slug or 'download').replace('/', '-').replace('\\', '-')
+        return f'{base}.{extension}' if extension else base
+
+    @property
+    def resolved_mime_type(self):
+        if self.asset_mime_type:
+            return self.asset_mime_type
+        extension = (
+            '.' + self.storage_key.rsplit('.', 1)[-1].lower()
+            if '.' in self.storage_key else ''
+        )
+        return DOWNLOAD_EXTENSION_MIME_TYPES.get(self.file_type, {}).get(
+            extension,
+            DOWNLOAD_MIME_TYPES.get(self.file_type, ''),
+        )
+
+    @property
+    def delivery_ready(self):
+        """Whether the row can be handed off through private storage safely."""
+        if self.delivery_blocked_reason:
+            return False
+        try:
+            from content.services.download_validation import validate_download_metadata
+            validate_download_metadata(
+                storage_key=self.storage_key,
+                file_type=self.file_type,
+                file_size_bytes=self.file_size_bytes,
+                required_level=self.required_level,
+                asset_mime_type=self.asset_mime_type,
+            )
+        except ValueError:
+            return False
+        return True
+
+
+class DownloadDeliveryGrant(models.Model):
+    """One-time, mailbox-proven authorization to request one download."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='download_delivery_grants',
+    )
+    download = models.ForeignKey(
+        Download,
+        on_delete=models.CASCADE,
+        related_name='delivery_grants',
+    )
+    token_hash = models.CharField(max_length=64, unique=True, editable=False)
+    newsletter_opt_in = models.BooleanField(default=False)
+    surface = models.CharField(max_length=20, default='detail')
+    expires_at = models.DateTimeField(db_index=True)
+    redeemed_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=['download', 'expires_at'],
+                name='content_dlgrant_dl_exp_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.download_id}:{self.id}'

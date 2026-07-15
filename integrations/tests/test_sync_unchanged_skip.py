@@ -31,6 +31,7 @@ import tempfile
 import uuid
 from datetime import date, datetime
 from datetime import timezone as dt_timezone
+from unittest.mock import patch
 
 from django.test import TestCase
 
@@ -423,6 +424,11 @@ class SyncResourcesUnchangedTest(TestCase):
             repo_name='AI-Shipping-Labs/resources-225',
         )
         self.temp_dir = tempfile.mkdtemp()
+        object_patcher = patch(
+            'content.services.download_delivery.verify_download_object_exists',
+        )
+        self.object_exists = object_patcher.start()
+        self.addCleanup(object_patcher.stop)
 
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
@@ -450,7 +456,11 @@ class SyncResourcesUnchangedTest(TestCase):
                 'title': 'Cheatsheet',
                 'slug': 'cheatsheet',
                 'file_url': 'https://example.com/cheatsheet.pdf',
+                'storage_key': 'downloads/cheatsheet.pdf',
                 'file_type': 'pdf',
+                'asset_mime_type': 'application/pdf',
+                'file_size_bytes': 1024,
+                'required_level': 0,
                 'content_id': 'ffffffff-0000-0000-0000-000000000001',
             },
         )

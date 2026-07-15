@@ -40,6 +40,14 @@ EMAIL_PASSWORD_BACKEND = ModelBackend()
 INVALID_LOGIN_ERROR = "Invalid email or password"
 
 
+def _private_no_store(response):
+    """Keep verification tokens and continuations out of shared caches."""
+    response["Cache-Control"] = "private, no-store, max-age=0"
+    response["Pragma"] = "no-cache"
+    response["Referrer-Policy"] = "no-referrer"
+    return response
+
+
 def _log_login_timing(outcome, started_at):
     """Log only coarse slow-login diagnostics; never credentials or tokens."""
     elapsed_ms = (time.perf_counter() - started_at) * 1000
@@ -99,14 +107,14 @@ def password_reset_request_view(request):
     prefill_email = (request.GET.get("email") or "").strip()
     if request.user.is_authenticated and not prefill_email:
         return redirect("/account/")
-    return render(
+    return _private_no_store(render(
         request,
         "accounts/password_reset_request.html",
         {
             "prefill_email": prefill_email,
             "hide_footer_newsletter": True,
         },
-    )
+    ))
 
 
 def signup_redirect_view(request):
@@ -235,16 +243,18 @@ def _render_verify_email_result(request, *, success, message, status=200):
         cta_url = "/accounts/login/"
         cta_label = "Sign In"
 
-    return render(
-        request,
-        "email_app/verify_result.html",
-        {
-            "success": success,
-            "message": message,
-            "cta_url": cta_url,
-            "cta_label": cta_label,
-        },
-        status=status,
+    return _private_no_store(
+        render(
+            request,
+            "email_app/verify_result.html",
+            {
+                "success": success,
+                "message": message,
+                "cta_url": cta_url,
+                "cta_label": cta_label,
+            },
+            status=status,
+        )
     )
 
 
@@ -506,13 +516,13 @@ def verify_email_api(request):
         payload.get("return_path"), request=request, default=""
     )
     if return_path:
-        return redirect(return_path)
+        return _private_no_store(redirect(return_path))
 
     redirect_to = sanitize_verification_return_path(
         payload.get("redirect_to"), request=request, default=""
     )
     if redirect_to:
-        return redirect(redirect_to)
+        return _private_no_store(redirect(redirect_to))
 
     return _render_verify_email_result(
         request,

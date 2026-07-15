@@ -134,7 +134,10 @@ def test_visitor_filters_downloads_then_uses_primary_card_action(django_server, 
     expect(page.get_by_role('heading', name='Python Download 1228')).to_be_visible()
     expect(page.get_by_text('Rust Download 1228')).to_have_count(0)
     page.get_by_test_id('download-card-body-link').click()
-    expect(page).to_have_url(re.compile(r'.*/pricing$'))
+    expect(page).to_have_url(
+        re.compile(r'.*/downloads/python-download-1228\?surface=catalog$'),
+    )
+    expect(page.get_by_test_id('download-tier-gate')).to_be_visible()
 
 
 @pytest.mark.django_db(transaction=True)

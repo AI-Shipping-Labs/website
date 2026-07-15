@@ -159,12 +159,9 @@ class BlogListClickableCardTest(TestCase):
 
 
 class DownloadsListClickableCardTest(TestCase):
-    """Visitor clicks the empty area of a download card and reaches the
-    file/signup/pricing destination matching their access state."""
+    """Download catalog cards consistently hand off to detail pages."""
 
-    def test_lead_magnet_card_anonymous_uses_inline_form_not_signup_wrapper(self):
-        """Lead magnets on /downloads use the inline email form, not a
-        clickable signup wrapper around the card body."""
+    def test_lead_magnet_card_anonymous_wraps_to_detail(self):
         Download.objects.create(
             title='Free Cheatsheet',
             slug='free-cheatsheet',
@@ -179,21 +176,20 @@ class DownloadsListClickableCardTest(TestCase):
         scan = _scan_anchors(response.content.decode())
         wrapper_links = [
             a for a in scan.anchors
-            if a['href'] == '/accounts/signup?next=/api/downloads/free-cheatsheet/file'
+            if a['href'] == '/downloads/free-cheatsheet?surface=catalog'
             and _focus_classes_present(a['class'])
         ]
         self.assertEqual(
-            len(wrapper_links), 0,
-            'Anonymous lead-magnet card body should not wrap to signup. '
+            len(wrapper_links), 1,
+            'Anonymous lead-magnet card body should wrap to detail. '
             f'Got anchors: {scan.anchors}',
         )
         body = response.content.decode()
-        self.assertIn('data-testid="download-inline-subscribe-form"', body)
+        self.assertNotIn('data-testid="download-inline-subscribe-form"', body)
         self.assertEqual(body.count('Free Cheatsheet'), 1)
         self.assertEqual(body.count('Free for everyone.'), 1)
 
-    def test_gated_card_anonymous_wraps_to_pricing(self):
-        """Gated download (required_level>0) without access: body links to /pricing."""
+    def test_gated_card_anonymous_wraps_to_detail(self):
         Download.objects.create(
             title='Premium Slides',
             slug='premium-slides',
@@ -207,11 +203,12 @@ class DownloadsListClickableCardTest(TestCase):
         scan = _scan_anchors(response.content.decode())
         wrapper_links = [
             a for a in scan.anchors
-            if a['href'] == '/pricing' and _focus_classes_present(a['class'])
+            if a['href'] == '/downloads/premium-slides?surface=catalog'
+            and _focus_classes_present(a['class'])
         ]
         self.assertGreaterEqual(
             len(wrapper_links), 1,
-            'Gated download card body should wrap to /pricing for anonymous '
+            'Gated download card body should wrap to detail for anonymous '
             f'visitors. Got: {scan.anchors}',
         )
 
@@ -236,8 +233,7 @@ class DownloadsListClickableCardTest(TestCase):
             f'Downloads list contains nested anchors: {scan.nested_anchor_hrefs}',
         )
 
-    def test_lead_magnet_renders_inline_form_not_signup_anchors(self):
-        """Lead magnets keep the CTA interactive without emitting signup anchors."""
+    def test_lead_magnet_renders_detail_handoff_without_inline_form(self):
         Download.objects.create(
             title='Lead Magnet',
             slug='lead-magnet',
@@ -249,13 +245,11 @@ class DownloadsListClickableCardTest(TestCase):
         )
         response = self.client.get('/downloads')
         body = response.content.decode()
-        self.assertIn('Sign Up to Download', body)
-        self.assertIn('data-testid="download-inline-subscribe-form"', body)
-        self.assertIn('data-redirect-to="/api/downloads/lead-magnet/file"', body)
-        self.assertNotIn(
-            '/accounts/signup?next=/api/downloads/lead-magnet/file',
+        self.assertIn(
+            'href="/downloads/lead-magnet?surface=catalog"',
             body,
         )
+        self.assertNotIn('data-testid="download-inline-subscribe-form"', body)
 
     def test_download_card_caps_visible_tag_chips(self):
         Download.objects.create(

@@ -1,5 +1,7 @@
 """Tests for studio download management views."""
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from content.models import Download
@@ -24,9 +26,13 @@ class StudioDownloadListTest(StaffUserMixin, TestCase):
         Download.objects.create(
             title='Test Download', slug='test-dl',
             file_url='https://example.com/file.pdf',
+            file_size_bytes=2048,
+            required_level=10,
         )
         response = self.client.get('/studio/downloads/')
         self.assertContains(response, 'Test Download')
+        self.assertContains(response, 'Basic and above')
+        self.assertContains(response, '2.0 KB')
 
     def test_list_search(self):
         Download.objects.create(
@@ -69,12 +75,17 @@ class StudioDownloadEditTest(StaffUserMixin, TestCase):
     def test_edit_form_returns_200(self):
         response = self.client.get(f'/studio/downloads/{self.download.pk}/edit')
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Successful downloads: 0')
 
-    def test_edit_download_post(self):
+    @patch(
+        'content.services.download_delivery.verify_download_object_exists',
+    )
+    def test_edit_download_post(self, object_exists):
         self.client.post(f'/studio/downloads/{self.download.pk}/edit', {
             'title': 'Updated DL',
             'slug': 'edit-dl',
             'file_url': 'https://example.com/updated.pdf',
+            'storage_key': 'downloads/edit-dl.zip',
             'file_type': 'zip',
             'file_size_bytes': '2048',
             'published': 'on',
@@ -87,10 +98,89 @@ class StudioDownloadEditTest(StaffUserMixin, TestCase):
         self.assertEqual(self.download.file_size_bytes, 2048)
         self.assertEqual(self.download.required_level, 10)
         self.assertEqual(self.download.tags, ['pdf', 'resource', 'template'])
+        object_exists.assert_called_once_with('downloads/edit-dl.zip')
+
+    @patch(
+        'content.services.download_delivery.verify_download_object_exists',
+        side_effect=ValueError(
+            'Private download object is missing or inaccessible',
+        ),
+    )
+    def test_manual_row_cannot_remain_published_when_object_is_missing(
+        self,
+        object_exists,
+    ):
+        self.download.storage_key = 'downloads/edit-dl.pdf'
+        self.download.asset_mime_type = 'application/pdf'
+        self.download.file_size_bytes = 2048
+        self.download.published = True
+        self.download.save()
+
+        payload = {
+            'title': self.download.title,
+            'slug': self.download.slug,
+            'description': self.download.description,
+            'storage_key': self.download.storage_key,
+            'file_type': 'pdf',
+            'asset_mime_type': 'application/pdf',
+            'file_size_bytes': '2048',
+            'required_level': '0',
+            'published': 'on',
+            'tags': '',
+        }
+        response = self.client.post(
+            f'/studio/downloads/{self.download.pk}/edit',
+            payload,
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(
+            response,
+            'Private download object is missing or inaccessible',
+            status_code=400,
+        )
+        self.download.refresh_from_db()
+        self.assertFalse(self.download.published)
+        self.assertFalse(self.download.delivery_ready)
+        self.assertTrue(self.download.delivery_blocked_reason)
+
+        payload.pop('published')
+        draft_response = self.client.post(
+            f'/studio/downloads/{self.download.pk}/edit',
+            payload,
+        )
+        self.assertEqual(draft_response.status_code, 302)
+        self.download.refresh_from_db()
+        self.assertFalse(self.download.published)
+        self.assertFalse(self.download.delivery_ready)
+        object_exists.assert_called_once_with('downloads/edit-dl.pdf')
 
     def test_edit_nonexistent_returns_404(self):
         response = self.client.get('/studio/downloads/99999/edit')
         self.assertEqual(response.status_code, 404)
+
+    def test_unready_published_download_can_be_unpublished(self):
+        self.download.published = True
+        self.download.storage_key = ''
+        self.download.save(update_fields=['published', 'storage_key'])
+
+        response = self.client.post(
+            f'/studio/downloads/{self.download.pk}/edit',
+            {
+                'title': self.download.title,
+                'slug': self.download.slug,
+                'description': self.download.description,
+                'file_type': 'pdf',
+                'file_size_bytes': '0',
+                'required_level': '0',
+                'tags': '',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.download.refresh_from_db()
+        self.assertFalse(self.download.published)
+        self.assertFalse(self.download.delivery_ready)
 
     def test_synced_download_shows_origin_panel(self):
         download = Download.objects.create(
@@ -110,6 +200,8 @@ class StudioDownloadEditTest(StaffUserMixin, TestCase):
         self.assertContains(response, 'downloads/synced-download.yaml')
         self.assertContains(response, 'Edit on GitHub')
         self.assertContains(response, 'Re-sync source')
+        self.assertContains(response, 'Successful downloads: 0')
+        self.assertContains(response, 'disabled')
         self.assertNotContains(response, 'data-testid="synced-banner"')
 
     def test_manual_download_has_no_origin_panel(self):

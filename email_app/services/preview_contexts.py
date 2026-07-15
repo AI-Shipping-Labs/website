@@ -11,6 +11,17 @@ literal placeholder strings.
 """
 
 PREVIEW_CONTEXTS = {
+    'download_delivery': {
+        'resource_title': 'AI Shipping field guide',
+        'delivery_url': (
+            'https://aishippinglabs.com/api/downloads/ai-field-guide/file'
+            '?grant=preview-token'
+        ),
+        'verification_required': True,
+        'newsletter_opt_in': True,
+        'expires_hours': 24,
+        'site_url': 'https://aishippinglabs.com',
+    },
     'welcome': {
         'user_name': 'Ada',
         'tier_name': 'Main',

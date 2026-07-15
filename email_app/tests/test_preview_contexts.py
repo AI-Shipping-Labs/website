@@ -18,6 +18,38 @@ from email_app.services.preview_contexts import (
 )
 
 
+class DownloadDeliveryPreviewContextTest(TestCase):
+    def test_preview_populates_consent_and_delivery_fields(self):
+        from types import SimpleNamespace
+
+        from email_app.services.email_service import EmailService
+
+        ctx = get_preview_context('download_delivery')
+        for key in (
+            'resource_title',
+            'delivery_url',
+            'verification_required',
+            'newsletter_opt_in',
+            'expires_hours',
+        ):
+            self.assertIn(key, ctx)
+        user = SimpleNamespace(
+            email='member@example.com',
+            first_name='Ada',
+            last_name='',
+            email_verified=True,
+        )
+        subject, body_html = EmailService()._render_template(
+            'download_delivery',
+            user,
+            ctx,
+        )
+        self.assertIn(ctx['resource_title'], subject)
+        self.assertIn(f'href="{ctx["delivery_url"]}"', body_html)
+        self.assertIn('confirms that subscription', body_html)
+        self.assertIn('Confirm subscription and get the download', body_html)
+
+
 class EventRegistrationPreviewContextTest(TestCase):
     """The event_registration preview must populate every template var."""
 

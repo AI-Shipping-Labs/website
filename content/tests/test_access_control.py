@@ -957,9 +957,9 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
             required_level=LEVEL_OPEN,
             published=True,
         )
-        response = self.client.get('/downloads')
+        response = self.client.get('/downloads/free-download-gate')
         self.assert_verify_gate(response)
-        self.assertContains(response, 'Verify email to download')
+        self.assertContains(response, 'Verify your email')
         self.assertNotContains(response, 'href="/api/downloads/free-download-gate/file"')
         self.assertNotContains(response, 'Upgrade to Free')
         self.assertNotContains(response, 'Free required')

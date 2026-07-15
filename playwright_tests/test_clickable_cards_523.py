@@ -15,6 +15,7 @@ import os
 
 import pytest
 from django.utils import timezone
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -176,12 +177,12 @@ class TestBlogCardTagChipClick:
 
 # ---------------------------------------------------------------
 # Scenario: Visitor clicks the empty area of a download card and reaches
-# its primary destination (signup for lead-magnet anonymous)
+# the download detail page that owns signup/access decisions
 # ---------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
 class TestDownloadCardBodyClickLeadMagnet:
-    def test_anonymous_clicking_lead_magnet_card_body_stays_on_downloads(
+    def test_anonymous_clicking_lead_magnet_card_body_opens_detail(
         self, django_server, page,
     ):
         _clear_all()
@@ -196,18 +197,20 @@ class TestDownloadCardBodyClickLeadMagnet:
         page.locator('text="A free PDF for everyone."').first.click()
         page.wait_for_load_state('domcontentloaded')
 
-        assert page.url == f'{django_server}/downloads'
-        assert page.get_by_test_id('download-inline-subscribe-form').count() == 1
+        assert page.url == (
+            f'{django_server}/downloads/free-cheatsheet?surface=catalog'
+        )
+        assert page.get_by_test_id('download-request-form').count() == 1
 
 
 # ---------------------------------------------------------------
-# Scenario: Member clicks the in-card "Download" button without
-# triggering card-level navigation
+# Scenario: Member follows a catalog card and finds the direct download
+# action on the detail page
 # ---------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
 class TestDownloadCardInnerCtaClick:
-    def test_in_card_download_button_serves_file_not_card_navigation(
+    def test_member_card_opens_detail_with_direct_download_action(
         self, django_server, browser,
     ):
         _clear_all()
@@ -224,23 +227,26 @@ class TestDownloadCardInnerCtaClick:
         page.goto(f'{django_server}/downloads', wait_until='domcontentloaded')
 
         card = page.get_by_test_id('download-card').filter(has_text='Basic Cheatsheet')
+        card.get_by_test_id('download-card-body-link').click()
 
-        # Capture the request fired by clicking the green Download button.
-        with page.expect_request('**/api/downloads/basic-cheatsheet/file') as req_info:
-            card.get_by_test_id('download-card-file-cta').click()
-        request = req_info.value
-        # The request was made — that's the inner-CTA action.
-        assert '/api/downloads/basic-cheatsheet/file' in request.url
+        assert page.url == (
+            f'{django_server}/downloads/basic-cheatsheet?surface=catalog'
+        )
+        download_action = page.get_by_test_id('download-file-cta')
+        expect(download_action).to_be_visible()
+        expect(download_action).to_have_attribute(
+            'href', '/api/downloads/basic-cheatsheet/file?surface=catalog',
+        )
 
 
 # ---------------------------------------------------------------
-# Scenario: Anonymous visitor clicks "Sign Up to Download" inside a
-# lead-magnet card without triggering card-level navigation
+# Scenario: Anonymous visitor follows a lead-magnet card and submits the
+# request form on its detail page
 # ---------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
 class TestDownloadCardSignupCtaClick:
-    def test_signup_cta_submits_inline_form_without_page_navigation(
+    def test_detail_request_form_submits_without_page_navigation(
         self, django_server, page
     ):
         _clear_all()
@@ -255,15 +261,26 @@ class TestDownloadCardSignupCtaClick:
         card = page.locator('[data-testid="download-card"]').filter(
             has_text='Lead Magnet X'
         )
-        form = card.get_by_test_id('download-inline-subscribe-form')
+        assert card.locator('input[type="email"]').count() == 0
+        card.get_by_test_id('download-card-body-link').click()
+        form = page.get_by_test_id('download-request-form')
         form.locator('input[name="email"]').fill('clickable-cards@test.com')
-        with page.expect_response('**/api/subscribe') as response_info:
-            form.locator('button[type="submit"]').click()
-        assert response_info.value.status == 200
-        card.get_by_test_id('download-inline-subscribe-message').wait_for(
-            state='visible'
+        page.route(
+            '**/api/downloads/lead-magnet-x/request?surface=catalog',
+            lambda route: route.fulfill(
+                status=202,
+                content_type='application/json',
+                body='{"status":"accepted","message":"Check your email."}',
+            ),
         )
-        assert page.url == f'{django_server}/downloads'
+        with page.expect_request(
+            '**/api/downloads/lead-magnet-x/request?surface=catalog'
+        ):
+            form.locator('button[type="submit"]').click()
+        page.get_by_test_id('download-request-success').wait_for(state='visible')
+        assert page.url == (
+            f'{django_server}/downloads/lead-magnet-x?surface=catalog'
+        )
 
 
 # ---------------------------------------------------------------

@@ -422,7 +422,10 @@ class SettingsDashboardViewTest(TestCase):
         self.assertEqual(groups_by_section['payments'], ['stripe'])
         self.assertEqual(groups_by_section['content'], ['zoom', 'calendly', 'github'])
         self.assertEqual(groups_by_section['messaging'], ['ses', 'slack', 'maven', 'triggers'])
-        self.assertEqual(groups_by_section['storage'], ['s3_recordings', 's3_content'])
+        self.assertEqual(
+            groups_by_section['storage'],
+            ['s3_recordings', 's3_content', 's3_downloads'],
+        )
         self.assertEqual(groups_by_section['site'], ['site'])
         self.assertEqual(groups_by_section['analytics'], ['analytics'])
         self.assertEqual(groups_by_section['ai'], ['llm'])
@@ -494,10 +497,11 @@ class SettingsDashboardViewTest(TestCase):
         # bucket/CDN (issue #1068), S3 Recordings has the
         # RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD default ('true' since #1134, a
         # set boolean value) but its required bucket/region unset, and Site
+        # S3 Downloads has a default region but no private bucket, and Site
         # has the ONBOARDING_REMINDER_ENABLED default ('true', a set value)
         # but its other required keys (SITE_BASE_URL etc.) unset here
         # (issue #1133).
-        self.assertEqual(summary['partial_count'], 9)
+        self.assertEqual(summary['partial_count'], 10)
         self.assertEqual(
             summary['missing_count'],
             expected_total_items - summary['configured_count'] - summary['partial_count'],

@@ -2,7 +2,7 @@ from django.urls import path, re_path
 from django.views.generic import RedirectView
 
 from content.views.admin_api import reorder_modules, reorder_units
-from content.views.api import download_file, submit_project
+from content.views.api import download_file, request_download, submit_project
 from content.views.courses import (
     api_cohort_enroll,
     api_cohort_unenroll,
@@ -31,6 +31,7 @@ from content.views.pages import (
     blog_preview,
     collection_list,
     curated_link_go,
+    download_detail,
     downloads_list,
     project_detail,
     projects_list,
@@ -87,6 +88,7 @@ urlpatterns = [
     path('tutorials', tutorials_list, name='tutorials_list'),
     path('tutorials/<slug:slug>', tutorial_detail, name='tutorial_detail'),
     path('downloads', downloads_list, name='downloads_list'),
+    path('downloads/<slug:slug>', download_detail, name='download_detail'),
     # Interview questions
     path('interview', interview_hub, name='interview_hub'),
     path('interview/<slug:slug>', interview_detail, name='interview_detail'),
@@ -146,6 +148,7 @@ urlpatterns = [
     # API endpoints
     path('api/projects/submit', submit_project, name='submit_project'),
     path('api/downloads/<slug:slug>/file', download_file, name='download_file'),
+    path('api/downloads/<slug:slug>/request', request_download, name='request_download'),
     path('api/courses', api_courses_list, name='api_courses_list'),
     path('api/courses/<slug:slug>', api_course_detail, name='api_course_detail'),
     path('api/courses/<slug:slug>/units/<int:unit_id>', api_course_unit_detail, name='api_course_unit_detail'),

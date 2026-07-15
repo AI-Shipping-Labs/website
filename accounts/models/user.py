@@ -42,6 +42,7 @@ class BounceState(models.TextChoices):
 # point with an explicit non-``unknown`` value.
 SIGNUP_SOURCE_UNKNOWN = "unknown"
 SIGNUP_SOURCE_NEWSLETTER = "newsletter"
+SIGNUP_SOURCE_DOWNLOAD = "download"
 SIGNUP_SOURCE_SIGNUP = "signup"
 SIGNUP_SOURCE_OAUTH = "oauth"
 SIGNUP_SOURCE_IMPORTED = "imported"
@@ -50,6 +51,7 @@ SIGNUP_SOURCE_STAFF_CREATE = "staff_create"
 SIGNUP_SOURCE_CHOICES = [
     (SIGNUP_SOURCE_UNKNOWN, "Unknown (pre-existing row)"),
     (SIGNUP_SOURCE_NEWSLETTER, "Newsletter subscribe"),
+    (SIGNUP_SOURCE_DOWNLOAD, "Download request"),
     (SIGNUP_SOURCE_SIGNUP, "Email + password signup"),
     (SIGNUP_SOURCE_OAUTH, "OAuth signup"),
     (SIGNUP_SOURCE_IMPORTED, "Bulk import (Stripe / CSV / course DB)"),

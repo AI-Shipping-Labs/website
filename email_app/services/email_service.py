@@ -56,6 +56,7 @@ TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "email_templates"
 EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = {
     "email_verification_signup",
     "email_verification_subscribe",
+    "download_delivery",
     "account_email_change_confirm",
     "password_reset",
 }

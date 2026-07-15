@@ -15,8 +15,6 @@ import re
 from django import template
 from django.template.loader import render_to_string
 
-from content.access import can_access, get_required_tier_name
-
 register = template.Library()
 
 # Pattern matches {{download:some-slug}} with optional whitespace
@@ -45,21 +43,34 @@ def render_download_shortcodes(html_content, request):
         try:
             download = Download.objects.get(slug=slug, published=True)
         except Download.DoesNotExist:
-            # Leave the shortcode as-is if the download doesn't exist
-            return match.group(0)
+            # Public prose must not leak stale/typoed download slugs.
+            return ''
+
+        from content.access import (
+            can_access,
+            get_gated_reason,
+            get_required_tier_name,
+        )
 
         has_access = can_access(request.user, download)
-        is_lead_magnet = download.required_level == 0
-        is_anonymous = not request.user.is_authenticated
+        gated_reason = get_gated_reason(request.user, download)
+        if download.required_level == 0 and not request.user.is_authenticated:
+            cta_label = 'Get free download'
+        elif gated_reason == 'unverified_email':
+            cta_label = 'Verify email to download'
+        elif has_access:
+            cta_label = 'Download'
+        else:
+            cta_label = f'View {get_required_tier_name(download.required_level)} access'
 
         context = {
             'download': download,
             'has_access': has_access,
-            'show_email_form': is_lead_magnet and is_anonymous,
-            'cta_message': (
-                f'Upgrade to {get_required_tier_name(download.required_level)} to download'
-                if not has_access and not is_lead_magnet else ''
+            'gated_reason': gated_reason,
+            'required_tier_name': get_required_tier_name(
+                download.required_level,
             ),
+            'shortcode_cta_label': cta_label,
         }
         return render_to_string('includes/download_card.html', context)
 

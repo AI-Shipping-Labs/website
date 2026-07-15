@@ -1,11 +1,10 @@
-import json
 from datetime import timedelta
 from unittest.mock import patch
 
 from allauth.account.models import EmailAddress
 from allauth.socialaccount.models import SocialAccount
 from django.core.cache import cache
-from django.test import TestCase, override_settings, tag
+from django.test import Client, TestCase, override_settings, tag
 from django.utils import timezone
 
 from accounts.models import EmailAlias, EmailChangeRequest, MemberAPIKey, User
@@ -13,7 +12,6 @@ from accounts.models.user import SIGNUP_SOURCE_NEWSLETTER
 from accounts.services.email_change import (
     EMAIL_CHANGE_CONFIRM_TEMPLATE,
     EMAIL_CHANGED_NOTICE_TEMPLATE,
-    active_email_change_request_for_user,
     confirm_email_change,
     request_email_change,
 )
@@ -22,32 +20,44 @@ from email_app.models import EmailLog
 from payments.models import Tier
 
 
-def _post_json(client, url, payload):
-    return client.post(
-        url,
-        data=json.dumps(payload),
-        content_type="application/json",
-    )
-
-
 @tag("core")
 @override_settings(SES_ENABLED=False)
 class EmailChangeAccountPageTest(TestCase):
-    def test_login_email_card_visible_for_activated_member(self):
-        user = User.objects.create_user(
-            email="member@test.com",
+    def test_activated_member_tiers_and_staff_have_no_login_email_card(self):
+        for index, tier_slug in enumerate(["free", "basic", "main", "premium"]):
+            with self.subTest(tier=tier_slug):
+                user = User.objects.create_user(
+                    email=f"member-{index}@test.com",
+                    password="CorrectPass123!",
+                    account_activated=True,
+                    email_verified=True,
+                    tier=Tier.objects.get(slug=tier_slug),
+                )
+                self.client.force_login(user)
+
+                response = self.client.get("/account/")
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'id="membership-section"')
+                self.assertContains(response, 'id="email-preferences-section"')
+                self.assertNotContains(response, 'id="login-email-section"')
+                self.assertNotContains(response, 'data-testid="current-login-email"')
+                self.assertNotContains(response, 'data-testid="change-email-form"')
+                self.assertNotIn("pending_email_change", response.context)
+                self.assertNotIn("email_change_requires_password", response.context)
+
+        staff = User.objects.create_user(
+            email="staff@test.com",
             password="CorrectPass123!",
             account_activated=True,
             email_verified=True,
+            is_staff=True,
         )
-        self.client.force_login(user)
-
+        self.client.force_login(staff)
         response = self.client.get("/account/")
-
-        self.assertContains(response, 'id="login-email-section"')
-        self.assertContains(response, 'data-testid="current-login-email"')
-        self.assertContains(response, "member@test.com")
-        self.assertContains(response, 'data-testid="change-email-form"')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'id="login-email-section"')
+        self.assertNotContains(response, 'data-testid="change-email-form"')
 
     def test_newsletter_only_account_does_not_show_email_change_form(self):
         user = User.objects.create_user(
@@ -68,7 +78,7 @@ class EmailChangeAccountPageTest(TestCase):
 
 @tag("core")
 @override_settings(SES_ENABLED=False)
-class EmailChangeRequestEndpointTest(TestCase):
+class EmailChangeRequestRouteWithdrawalTest(TestCase):
     url = "/account/api/change-email/request"
 
     def setUp(self):
@@ -81,172 +91,46 @@ class EmailChangeRequestEndpointTest(TestCase):
         )
         self.client.force_login(self.user)
 
-    def test_anonymous_user_redirected_by_existing_login_protection(self):
-        self.client.logout()
+    def test_get_and_post_return_404_without_side_effects_for_all_callers(self):
+        payload = {
+            "new_email": "new-member@test.com",
+            "current_password": "CorrectPass123!",
+        }
+        for authenticated in (True, False):
+            if authenticated:
+                self.client.force_login(self.user)
+            else:
+                self.client.logout()
+            for method in ("get", "post"):
+                with self.subTest(authenticated=authenticated, method=method):
+                    response = getattr(self.client, method)(
+                        self.url,
+                        data=payload,
+                        content_type=(
+                            "application/json" if method == "post" else None
+                        ),
+                    )
+                    self.assertEqual(response.status_code, 404)
 
-        response = _post_json(
-            self.client,
-            self.url,
-            {"new_email": "new-member@test.com"},
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/accounts/login/", response.url)
-        self.assertFalse(EmailChangeRequest.objects.exists())
-
-    def test_password_required_for_password_bearing_accounts(self):
-        response = _post_json(
-            self.client,
-            self.url,
-            {"new_email": "new-member@test.com"},
-        )
-
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["code"], "invalid_password")
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "old-member@test.com")
         self.assertFalse(EmailChangeRequest.objects.exists())
-        self.assertFalse(
-            EmailLog.objects.filter(
-                email_type=EMAIL_CHANGE_CONFIRM_TEMPLATE,
-            ).exists()
-        )
+        self.assertFalse(EmailLog.objects.exists())
 
-    def test_wrong_password_does_not_send_or_change_email(self):
-        response = _post_json(
-            self.client,
+    def test_anonymous_post_without_csrf_cookie_still_returns_404(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        response = csrf_client.post(
             self.url,
-            {
-                "new_email": "new-member@test.com",
-                "current_password": "WrongPass123!",
-            },
+            data={"new_email": "new-member@test.com"},
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["code"], "invalid_password")
+        self.assertEqual(response.status_code, 404)
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "old-member@test.com")
         self.assertFalse(EmailChangeRequest.objects.exists())
-        self.assertFalse(
-            EmailLog.objects.filter(
-                email_type=EMAIL_CHANGE_CONFIRM_TEMPLATE,
-            ).exists()
-        )
-
-    def test_request_validates_and_normalizes_new_email(self):
-        response = _post_json(
-            self.client,
-            self.url,
-            {
-                "new_email": "  New-Member@TEST.com  ",
-                "current_password": "CorrectPass123!",
-            },
-        )
-
-        self.assertEqual(response.status_code, 200, response.content)
-        request_obj = EmailChangeRequest.objects.get()
-        self.assertEqual(request_obj.old_email, "old-member@test.com")
-        self.assertEqual(request_obj.new_email, "new-member@test.com")
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.email, "old-member@test.com")
-        log = EmailLog.objects.get(email_type=EMAIL_CHANGE_CONFIRM_TEMPLATE)
-        self.assertEqual(log.user_id, self.user.pk)
-        self.assertEqual(log.recipient_email, "new-member@test.com")
-
-    def test_request_rejects_invalid_same_primary_and_other_alias_collisions(self):
-        other = User.objects.create_user(email="taken@test.com")
-        alias_owner = User.objects.create_user(email="alias-owner@test.com")
-        EmailAlias.objects.create(user=alias_owner, email="relay@test.com")
-
-        cases = [
-            {"new_email": "not-an-email", "expected": "invalid_email"},
-            {"new_email": "old-member@test.com", "expected": "invalid_email"},
-            {"new_email": other.email, "expected": "invalid_email"},
-            {"new_email": "relay@test.com", "expected": "invalid_email"},
-        ]
-        for case in cases:
-            with self.subTest(case=case["new_email"]):
-                cache.clear()
-                response = _post_json(
-                    self.client,
-                    self.url,
-                    {
-                        "new_email": case["new_email"],
-                        "current_password": "CorrectPass123!",
-                    },
-                )
-                self.assertEqual(response.status_code, 400, response.content)
-                self.assertEqual(response.json()["code"], case["expected"])
-                self.assertIn(
-                    response.json()["error"],
-                    {
-                        "Enter a valid email address.",
-                        "Enter a different email from your current login email.",
-                        "That email cannot be used for this account.",
-                    },
-                )
-
-        self.assertFalse(EmailChangeRequest.objects.exists())
-
-    def test_request_replaces_existing_pending_request(self):
-        first, _first_token = request_email_change(
-            self.user,
-            "first-new@test.com",
-            current_password="CorrectPass123!",
-            send=False,
-        )
-        cache.clear()
-
-        response = _post_json(
-            self.client,
-            self.url,
-            {
-                "new_email": "second-new@test.com",
-                "current_password": "CorrectPass123!",
-            },
-        )
-
-        self.assertEqual(response.status_code, 200, response.content)
-        first.refresh_from_db()
-        self.assertIsNotNone(first.invalidated_at)
-        pending = active_email_change_request_for_user(self.user)
-        self.assertEqual(pending.new_email, "second-new@test.com")
-        self.assertEqual(
-            EmailChangeRequest.objects.filter(
-                confirmed_at__isnull=True,
-                invalidated_at__isnull=True,
-            ).count(),
-            1,
-        )
-
-    def test_request_throttles_repeated_same_target_email(self):
-        response = _post_json(
-            self.client,
-            self.url,
-            {
-                "new_email": "new-member@test.com",
-                "current_password": "CorrectPass123!",
-            },
-        )
-        self.assertEqual(response.status_code, 200, response.content)
-
-        second = _post_json(
-            self.client,
-            self.url,
-            {
-                "new_email": "new-member@test.com",
-                "current_password": "CorrectPass123!",
-            },
-        )
-
-        self.assertEqual(second.status_code, 429)
-        self.assertEqual(second.json()["code"], "throttled")
-        self.assertEqual(
-            EmailLog.objects.filter(
-                email_type=EMAIL_CHANGE_CONFIRM_TEMPLATE,
-            ).count(),
-            1,
-        )
+        self.assertFalse(EmailLog.objects.exists())
 
 
 @tag("core")

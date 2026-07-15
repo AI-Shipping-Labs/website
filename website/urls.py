@@ -50,5 +50,12 @@ if settings.DEBUG:
     urlpatterns += staticfiles_urlpatterns()
 
 urlpatterns += [
-    re_path(r'^(?P<path>.*)$', marketing_page_fallback, name='marketing_page_fallback'),
+    # Withdrawn API paths must resolve as genuine 404s rather than being
+    # treated as CMS slugs by the marketing-page fallback. This also keeps an
+    # anonymous POST from being intercepted by CSRF before the 404 response.
+    re_path(
+        r'^(?!account/api/change-email/request/?$)(?P<path>.*)$',
+        marketing_page_fallback,
+        name='marketing_page_fallback',
+    ),
 ]

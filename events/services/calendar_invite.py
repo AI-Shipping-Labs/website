@@ -76,7 +76,7 @@ def _event_urls(event):
 
 
 def build_vevent(event, audience=AUDIENCE_ATTENDEE, attendee_email=None,
-                 method='REQUEST'):
+                 method='REQUEST', dtstamp=None):
     """Build a single ``VEVENT`` component for ``event``.
 
     Shared between attendee invites, host invites, and the public feed.
@@ -150,7 +150,10 @@ def build_vevent(event, audience=AUDIENCE_ATTENDEE, attendee_email=None,
         )
     vevent.add('dtend', effective_end)
 
-    vevent.add('dtstamp', timezone.now())
+    # Feed callers pass the row's stable ``updated_at`` so byte-identical
+    # semantic content produces byte-identical feed output and validators.
+    # Invite callers keep the historical render-time stamp by omitting it.
+    vevent.add('dtstamp', dtstamp or timezone.now())
     vevent.add('sequence', event.ics_sequence)
     if method == 'CANCEL':
         vevent.add('status', 'CANCELLED')
@@ -358,6 +361,10 @@ def generate_feed_ics(events_qs):
     cal.add('x-published-ttl', 'PT1H')
 
     for event in events_qs:
-        cal.add_component(build_vevent(event, audience=AUDIENCE_PUBLIC_FEED))
+        cal.add_component(build_vevent(
+            event,
+            audience=AUDIENCE_PUBLIC_FEED,
+            dtstamp=event.updated_at,
+        ))
 
     return cal.to_ical()

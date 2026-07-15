@@ -21,6 +21,7 @@ Covers:
 import json
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -618,8 +619,8 @@ class EventsCalendarFeedViewTest(TestCase):
         )
         self.assertIn('ETag', response)
         self.assertIn('Last-Modified', response)
-        # Weak ETag.
-        self.assertTrue(response['ETag'].startswith('W/"'))
+        # Strong content hash over the final public-safe feed bytes.
+        self.assertTrue(response['ETag'].startswith('"feed-'))
 
     def test_inline_content_disposition(self):
         response = self.client.get('/events/calendar.ics')
@@ -904,6 +905,209 @@ class EventsCalendarFeedScheduleRefreshTest(StaffUserMixin, TestCase):
             new_end,
         )
         self.assertGreater(int(after.get('sequence')), before_sequence)
+
+
+@override_settings(SITE_BASE_URL='https://aishippinglabs.com')
+class EventsCalendarFeedMembershipValidatorTest(TestCase):
+    """Issue #1030: validators track feed inclusion and removal changes."""
+
+    def setUp(self):
+        Event.objects.all().delete()
+        self.now = timezone.now()
+        self.base = self.now - timedelta(seconds=10)
+
+    def _event(self, slug, *, start=None, **overrides):
+        start = start or self.now + timedelta(days=10)
+        values = {
+            'slug': slug,
+            'title': slug.replace('-', ' ').title(),
+            'start_datetime': start,
+            'end_datetime': start + timedelta(hours=1),
+            'status': 'upcoming',
+            'published': True,
+        }
+        values.update(overrides)
+        event = Event.objects.create(**values)
+        Event.objects.filter(pk=event.pk).update(updated_at=self.base)
+        event.refresh_from_db()
+        return event
+
+    def _feed(self, **headers):
+        return self.client.get('/events/calendar.ics', **headers)
+
+    def test_cancellation_changes_both_validators_and_removes_uid(self):
+        event = self._event('cancel-validator')
+        initial = self._feed()
+        old_etag = initial['ETag']
+        old_last_modified = initial['Last-Modified']
+
+        event.status = 'cancelled'
+        event.save(update_fields=['status'])
+        Event.objects.filter(pk=event.pk).update(
+            updated_at=self.base + timedelta(seconds=5),
+        )
+
+        by_etag = self._feed(HTTP_IF_NONE_MATCH=old_etag)
+        self.assertEqual(by_etag.status_code, 200)
+        self.assertNotEqual(by_etag['ETag'], old_etag)
+        self.assertNotIn(
+            b'event-cancel-validator@aishippinglabs.com',
+            by_etag.content,
+        )
+
+        by_date = self._feed(HTTP_IF_MODIFIED_SINCE=old_last_modified)
+        self.assertEqual(by_date.status_code, 200)
+        self.assertNotIn(
+            b'event-cancel-validator@aishippinglabs.com',
+            by_date.content,
+        )
+
+    def test_unpublish_changes_etag_and_removes_uid(self):
+        event = self._event('unpublish-validator')
+        initial = self._feed()
+
+        event.published = False
+        event.save(update_fields=['published'])
+
+        refreshed = self._feed(HTTP_IF_NONE_MATCH=initial['ETag'])
+        self.assertEqual(refreshed.status_code, 200)
+        self.assertNotEqual(refreshed['ETag'], initial['ETag'])
+        self.assertNotIn(
+            b'event-unpublish-validator@aishippinglabs.com',
+            refreshed.content,
+        )
+
+    def test_schedule_edit_beyond_window_changes_membership_and_validators(self):
+        event = self._event('window-validator')
+        initial = self._feed()
+
+        old_start = self.now - timedelta(days=31)
+        event.start_datetime = old_start
+        event.end_datetime = old_start + timedelta(hours=1)
+        event.save(update_fields=['start_datetime', 'end_datetime'])
+
+        refreshed = self._feed(
+            HTTP_IF_NONE_MATCH=initial['ETag'],
+            HTTP_IF_MODIFIED_SINCE=initial['Last-Modified'],
+        )
+        self.assertEqual(refreshed.status_code, 200)
+        self.assertNotEqual(refreshed['ETag'], initial['ETag'])
+        self.assertNotIn(
+            b'event-window-validator@aishippinglabs.com',
+            refreshed.content,
+        )
+
+    def test_passive_window_expiry_changes_etag_and_never_stale_304s(self):
+        event = self._event(
+            'passive-window-validator',
+            start=self.now - timedelta(days=29),
+        )
+        with patch('events.views.pages.timezone.now', return_value=self.now):
+            initial = self._feed()
+        self.assertIn(
+            b'event-passive-window-validator@aishippinglabs.com',
+            initial.content,
+        )
+
+        with patch(
+            'events.views.pages.timezone.now',
+            return_value=self.now + timedelta(days=2),
+        ):
+            refreshed = self._feed(
+                HTTP_IF_NONE_MATCH=initial['ETag'],
+                HTTP_IF_MODIFIED_SINCE=initial['Last-Modified'],
+            )
+
+        self.assertEqual(refreshed.status_code, 200)
+        self.assertNotEqual(refreshed['ETag'], initial['ETag'])
+        self.assertNotIn(
+            f'event-{event.slug}@aishippinglabs.com'.encode(),
+            refreshed.content,
+        )
+
+    def test_same_count_membership_replacement_has_distinct_content_etag(self):
+        removed = self._event('replacement-a')
+        added = self._event(
+            'replacement-b',
+            start=self.now - timedelta(days=31),
+        )
+        initial = self._feed()
+        self.assertIn(
+            b'event-replacement-a@aishippinglabs.com', initial.content,
+        )
+        self.assertNotIn(
+            b'event-replacement-b@aishippinglabs.com', initial.content,
+        )
+
+        removed.status = 'cancelled'
+        removed.save(update_fields=['status'])
+        added.start_datetime = self.now + timedelta(days=20)
+        added.end_datetime = added.start_datetime + timedelta(hours=1)
+        added.save(update_fields=['start_datetime', 'end_datetime'])
+
+        refreshed = self._feed(HTTP_IF_NONE_MATCH=initial['ETag'])
+        self.assertEqual(refreshed.status_code, 200)
+        self.assertNotEqual(refreshed['ETag'], initial['ETag'])
+        self.assertNotIn(
+            b'event-replacement-a@aishippinglabs.com', refreshed.content,
+        )
+        self.assertIn(
+            b'event-replacement-b@aishippinglabs.com', refreshed.content,
+        )
+
+    def test_unchanged_empty_feed_has_stable_bytes_and_validators(self):
+        first = self._feed()
+        second = self._feed()
+
+        self.assertEqual(first.content, second.content)
+        self.assertEqual(first['ETag'], second['ETag'])
+        self.assertEqual(first['Last-Modified'], second['Last-Modified'])
+        self.assertEqual(
+            self._feed(HTTP_IF_NONE_MATCH=first['ETag']).status_code,
+            304,
+        )
+        self.assertEqual(
+            self._feed(
+                HTTP_IF_MODIFIED_SINCE=first['Last-Modified'],
+            ).status_code,
+            200,
+        )
+
+    def test_nonmatching_if_none_match_suppresses_if_modified_since(self):
+        self._event('precedence-validator')
+        initial = self._feed()
+
+        response = self._feed(
+            HTTP_IF_NONE_MATCH='"different-content"',
+            HTTP_IF_MODIFIED_SINCE='Fri, 01 Jan 2100 00:00:00 GMT',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['ETag'], initial['ETag'])
+
+    def test_if_none_match_uses_weak_comparison_and_accepts_lists(self):
+        self._event('weak-validator')
+        initial = self._feed()
+        weak_current = f'W/{initial["ETag"]}'
+
+        response = self._feed(
+            HTTP_IF_NONE_MATCH=f'"other", {weak_current}',
+        )
+
+        self.assertEqual(response.status_code, 304)
+
+    def test_query_parameters_are_not_tokens_or_personalization(self):
+        self._event('anonymous-global-validator', required_level=20)
+        plain = self._feed()
+        with_query = self.client.get(
+            '/events/calendar.ics?token=member-secret&user=42',
+        )
+
+        self.assertEqual(with_query.status_code, 200)
+        self.assertEqual(with_query.content, plain.content)
+        self.assertEqual(with_query['ETag'], plain['ETag'])
+        self.assertNotIn(b'member-secret', with_query.content)
+        self.assertIn(b'[Members only]', with_query.content)
 
 
 @override_settings(SITE_BASE_URL='https://aishippinglabs.com')

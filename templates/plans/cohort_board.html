@@ -117,7 +117,8 @@
           </thead>
           <tbody class="divide-y divide-border">
             {% for row in progress_rows %}
-            <tr class="{% if row.is_self %}bg-accent/5{% elif row.kind == 'cohort' %}transition-colors hover:bg-secondary/40{% endif %}"
+            <tr class="{% if row.is_self %}bg-accent/10{% elif row.kind == 'cohort' %}transition-colors hover:bg-secondary/40{% endif %}"
+                {% if row.is_self %}aria-current="true"{% endif %}
                 data-testid="progress-row-{{ row.member.pk }}"
                 data-progress-row-kind="{{ row.kind }}">
               <td class="px-4 py-4 align-top sm:px-5">

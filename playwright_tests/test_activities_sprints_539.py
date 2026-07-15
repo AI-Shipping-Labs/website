@@ -83,6 +83,9 @@ def _create_sprint(
         duration_weeks=duration_weeks,
         status=status,
         min_tier_level=min_tier_level,
+        description="A focused cohort for shipping a useful AI product.",
+        outcomes="A shipped project\nA repeatable delivery habit",
+        audience="Builders who want structure\nTeams learning AI delivery",
     )
     connection.close()
     return sprint
@@ -255,8 +258,60 @@ class TestActivitiesAccessByTierLayout:
         assert tier_badge.get_attribute("data-required-level") == "20"
         assert tier_badge.locator("svg.lucide-lock").count() == 1
         assert "Main tier required" not in page.locator("body").inner_text()
+        landing = page.get_by_test_id("sprint-landing")
+        assert landing.is_visible()
+        assert page.get_by_test_id("sprint-landing-about").is_visible()
+        assert page.get_by_test_id("sprint-landing-includes").is_visible()
+        assert page.get_by_test_id("sprint-landing-schedule").is_visible()
+        assert page.get_by_test_id("sprint-landing-outcomes").is_visible()
+        assert page.get_by_test_id("sprint-landing-audience").is_visible()
+        assert _top(landing) < _top(page.get_by_test_id("sprint-primary-action"))
         assert page.get_by_test_id("sprint-cta-login").is_visible()
         _shot(page, "02-activities-anonymous-sprint-detail")
+
+    def test_activity_cards_are_one_keyboard_link_with_honest_context(
+        self, django_server, page, django_db_blocker
+    ):
+        with django_db_blocker.unblock():
+            _seed_base(active=True)
+
+        page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
+
+        expected_destinations = [
+            "/sprints", "/events", "/workshops", "/pricing", "/sprints",
+            "/blog", "/courses",
+        ]
+        cards = page.get_by_test_id("activity-card")
+        assert cards.count() == 7
+        contexts = []
+        for index, destination in enumerate(expected_destinations):
+            card = cards.nth(index)
+            links = card.locator("a")
+            assert links.count() == 1
+            link = links.first
+            assert link.get_attribute("href") == destination
+            box = link.bounding_box()
+            assert box is not None and box["height"] >= 44
+            context = card.get_by_test_id("activity-card-next-step").inner_text().strip()
+            assert context
+            contexts.append(context)
+        assert len(contexts) == len(set(contexts))
+        assert "Related surface:" not in page.locator("body").inner_text()
+        assert "Main and Premium" in contexts[3]
+        assert "not publicly browseable" in contexts[4]
+        assert "may require Basic" in contexts[5]
+        assert "require Premium" in contexts[6]
+
+        first_link = cards.first.get_by_test_id("activity-card-action")
+        first_link.focus()
+        assert first_link.evaluate("node => document.activeElement === node")
+        focus_style = first_link.evaluate(
+            "node => window.getComputedStyle(node).boxShadow"
+        )
+        assert focus_style != "none"
+        with page.expect_navigation(wait_until="domcontentloaded"):
+            page.keyboard.press("Enter")
+        assert page.url.rstrip("/").endswith("/sprints")
 
     def test_mobile_anonymous_sees_tier_benefits_first(
         self, django_server, browser, django_db_blocker

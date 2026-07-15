@@ -54,6 +54,10 @@ CURATED_ACTIVITIES = (
         'tiers': ('main', 'premium'),
         'action_label': 'Explore community sprints',
         'action_url': '/sprints',
+        'destination_context': (
+            'Browse current, upcoming, and past sprints. Each sprint page '
+            'explains the format and schedule before you decide to join.'
+        ),
     },
     {
         'slug': 'live-events',
@@ -66,6 +70,10 @@ CURATED_ACTIVITIES = (
         'tiers': ('main', 'premium'),
         'action_label': 'View live events',
         'action_url': '/events',
+        'destination_context': (
+            'Browse published schedules and event details. Registration and '
+            'access depend on the event and your membership.'
+        ),
     },
     {
         'slug': 'workshops',
@@ -78,6 +86,10 @@ CURATED_ACTIVITIES = (
         'tiers': ('main', 'premium'),
         'action_label': 'Browse workshops',
         'action_url': '/workshops',
+        'destination_context': (
+            'Browse workshop write-ups, recordings, tutorials, and materials. '
+            'Some individual materials require membership.'
+        ),
     },
     {
         'slug': 'slack-community',
@@ -90,6 +102,10 @@ CURATED_ACTIVITIES = (
         'tiers': ('main', 'premium'),
         'action_label': 'Compare community membership',
         'action_url': '/pricing',
+        'destination_context': (
+            'Private Slack access is included with Main and Premium '
+            'membership. Compare tiers to find the right fit.'
+        ),
     },
     {
         'slug': 'personal-plans',
@@ -102,6 +118,10 @@ CURATED_ACTIVITIES = (
         'tiers': ('main', 'premium'),
         'action_label': 'See how sprints work',
         'action_url': '/sprints',
+        'destination_context': (
+            'Learn how sprints turn goals into a private personal plan and '
+            'accountability check-ins. Member plans are not publicly browseable.'
+        ),
     },
     {
         'slug': 'exclusive-content',
@@ -114,6 +134,10 @@ CURATED_ACTIVITIES = (
         'tiers': ('basic', 'main', 'premium'),
         'action_label': 'Browse member articles',
         'action_url': '/blog',
+        'destination_context': (
+            'Browse the public article catalog. Individual member articles '
+            'may require Basic membership or above.'
+        ),
     },
     {
         'slug': 'courses',
@@ -123,6 +147,10 @@ CURATED_ACTIVITIES = (
         'tiers': ('premium',),
         'action_label': 'Browse courses',
         'action_url': '/courses',
+        'destination_context': (
+            'Browse the course catalog. Premium mini-courses require Premium '
+            'access.'
+        ),
     },
 )
 

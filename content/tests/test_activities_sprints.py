@@ -368,12 +368,63 @@ class ActivitiesCardActionTest(TestCase):
             content.find('</article>', title_index)
         ]
 
-    def test_activity_cards_render_visible_destination_actions(self):
+    def test_activity_cards_are_single_link_surfaces_with_unique_context(self):
         response = self.client.get('/activities#access-by-tier')
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="activity-card-action"', count=7)
+        self.assertContains(response, 'data-testid="activity-card-action-label"', count=7)
         self.assertContains(response, 'data-testid="activity-card-next-step"', count=7)
+        self.assertNotContains(response, 'Related surface:')
+
+        expected = {
+            'community-sprints': (
+                '/sprints',
+                'Explore community sprints',
+                'Each sprint page explains the format and schedule',
+            ),
+            'live-events': (
+                '/events',
+                'View live events',
+                'Registration and access depend on the event and your membership.',
+            ),
+            'workshops': (
+                '/workshops',
+                'Browse workshops',
+                'Some individual materials require membership.',
+            ),
+            'slack-community': (
+                '/pricing',
+                'Compare community membership',
+                'Private Slack access is included with Main and Premium membership.',
+            ),
+            'personal-plans': (
+                '/sprints',
+                'See how sprints work',
+                'Member plans are not publicly browseable.',
+            ),
+            'exclusive-content': (
+                '/blog',
+                'Browse member articles',
+                'Individual member articles may require Basic membership or above.',
+            ),
+            'courses': (
+                '/courses',
+                'Browse courses',
+                'Premium mini-courses require Premium access.',
+            ),
+        }
+        contexts = []
+        for slug, (destination, action_label, context) in expected.items():
+            card = self._card_markup(response, slug)
+            self.assertEqual(card.count('<a '), 1, slug)
+            self.assertEqual(card.count('</a>'), 1, slug)
+            self.assertIn(f'href="{destination}"', card)
+            self.assertIn(action_label, card)
+            self.assertIn(context, card)
+            self.assertIn('focus-visible:ring-2', card)
+            contexts.append(context)
+        self.assertEqual(len(contexts), len(set(contexts)))
 
         content_card = self._card_markup(response, 'exclusive-content')
         self.assertIn('Exclusive articles, tutorials with code examples', content_card)

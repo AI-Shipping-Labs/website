@@ -318,7 +318,7 @@ class TestEtagShortCircuit:
         assert status_a == 200
         etag = headers_a.get("ETag") or headers_a.get("etag")
         assert etag is not None
-        assert etag.startswith('W/"')
+        assert etag.startswith('"feed-')
 
         # Repeat with the same ETag — must return 304.
         status_b, headers_b, body_b = _http_get(

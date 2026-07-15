@@ -1,5 +1,7 @@
 import calendar as cal_module
-from datetime import date, timedelta
+import hashlib
+from datetime import date, datetime, timedelta
+from datetime import timezone as dt_timezone
 from urllib.parse import urlparse
 
 from django.contrib.auth.decorators import login_required
@@ -1207,41 +1209,33 @@ def _format_http_date(dt):
     return http_date(dt.timestamp())
 
 
-def _parse_http_date(value):
-    """Parse an HTTP-date string into a tz-aware UTC datetime, or None."""
-    import datetime
-    from email.utils import parsedate_to_datetime
-    try:
-        parsed = parsedate_to_datetime(value)
-    except (TypeError, ValueError):
+def _build_feed_etag(ics_bytes):
+    """Build a strong ETag from the final anonymous-authorized feed bytes."""
+    digest = hashlib.sha256(ics_bytes).hexdigest()
+    return f'"feed-{digest}"'
+
+
+def _etag_opaque_value(etag):
+    """Return the opaque tag for weak comparison, or ``None`` if invalid."""
+    candidate = etag.strip()
+    if candidate.startswith('W/'):
+        candidate = candidate[2:].strip()
+    if len(candidate) < 2 or not (
+        candidate.startswith('"') and candidate.endswith('"')
+    ):
         return None
-    if parsed is None:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
-    return parsed
+    return candidate[1:-1]
 
 
-def _build_feed_etag(last_modified, count):
-    """Build a weak ETag for the feed.
-
-    Weak (``W/"..."``) because the body is regenerated on each request
-    (timestamps in ``DTSTAMP`` change every call) — byte-for-byte
-    equality is not guaranteed even when no event row has changed. The
-    semantic equivalence the client cares about is captured by
-    ``(last_modified, event_count)``.
-
-    Microsecond precision keeps two edits within the same wall-clock
-    second from colliding on the same ETag, which would otherwise
-    silently 304 the second edit out of subscriber clients.
-    """
-    if last_modified is None:
-        marker = 'empty'
-    else:
-        # Microseconds since epoch — single integer, monotonic for
-        # any later save() and stable for a given (row, save) pair.
-        marker = str(int(last_modified.timestamp() * 1_000_000))
-    return f'W/"feed-{marker}-{count}"'
+def _if_none_match_matches(header_value, current_etag):
+    """Apply RFC weak comparison for an If-None-Match header."""
+    if header_value.strip() == '*':
+        return True
+    current = _etag_opaque_value(current_etag)
+    return any(
+        _etag_opaque_value(candidate) == current
+        for candidate in header_value.split(',')
+    )
 
 
 def events_calendar_feed(request):
@@ -1251,8 +1245,10 @@ def events_calendar_feed(request):
     events from the last 30 days through all future, at every tier
     level. Subscribers (Apple Calendar, Google Calendar, Outlook)
     refresh on their own polling cycle; we set short cache headers
-    and honor ``If-None-Match`` / ``If-Modified-Since`` so a CDN in
-    front can serve 304s when nothing has changed.
+    and honor content ``If-None-Match`` validators so a CDN in front can
+    serve exact 304s when nothing has changed. ``If-Modified-Since`` alone
+    is conservatively answered with 200 because timestamps cannot identify
+    membership removals without retaining private/excluded row history.
 
     No login required. Tier-gated events (``required_level > 0``)
     appear in the feed with a ``[Members only]`` ``SUMMARY`` prefix
@@ -1261,48 +1257,42 @@ def events_calendar_feed(request):
     bodies into the anonymous feed. A signed-token per-user feed
     for full gated descriptions is a deferred follow-up.
     """
-    events_qs = feed_events_queryset()
+    now = timezone.now()
+    events_qs = feed_events_queryset(now=now)
     events = list(events_qs)
-    count = len(events)
-
-    # ``Last-Modified`` is the latest ``updated_at`` across included
-    # events; falls back to "now" for an empty queryset so the header
-    # is always present and conditional requests still work.
-    if events:
-        last_modified = max(e.updated_at for e in events)
-    else:
-        last_modified = timezone.now()
-
-    etag = _build_feed_etag(last_modified, count)
+    # Render before conditional handling. This intentionally trades the old
+    # cheap 304 path for content-correct identity across membership removals
+    # and same-count replacements. Feed work remains linear in feed size and
+    # performs no subscriber fan-out or provider call.
+    ics_bytes = generate_feed_ics(events)
+    etag = _build_feed_etag(ics_bytes)
+    last_modified = (
+        max(event.updated_at for event in events)
+        if events
+        else datetime(1970, 1, 1, tzinfo=dt_timezone.utc)
+    )
 
     # Honor conditional requests. ``If-None-Match`` takes precedence
     # over ``If-Modified-Since`` per RFC 7232.
     if_none_match = request.META.get('HTTP_IF_NONE_MATCH', '').strip()
-    if if_none_match and if_none_match == etag:
-        not_modified = HttpResponse(status=304)
-        not_modified['ETag'] = etag
-        not_modified['Last-Modified'] = _format_http_date(last_modified)
-        not_modified['Cache-Control'] = 'public, max-age=300'
-        return not_modified
+    if if_none_match:
+        if _if_none_match_matches(if_none_match, etag):
+            not_modified = HttpResponse(status=304)
+            not_modified['ETag'] = etag
+            not_modified['Last-Modified'] = _format_http_date(last_modified)
+            not_modified['Cache-Control'] = 'public, max-age=300'
+            return not_modified
+        # RFC 7232: If-Modified-Since MUST be ignored whenever
+        # If-None-Match is present, even when its tag does not match.
 
-    if_modified_since = request.META.get('HTTP_IF_MODIFIED_SINCE', '').strip()
-    if if_modified_since:
-        client_dt = _parse_http_date(if_modified_since)
-        if client_dt is not None:
-            # HTTP-date has no sub-second component. Compare against
-            # the full server timestamp so an edit made inside the
-            # same visible HTTP-date second as the client's cached
-            # value is treated as modified instead of stale-304'd.
-            if client_dt >= last_modified:
-                not_modified = HttpResponse(status=304)
-                not_modified['ETag'] = etag
-                not_modified['Last-Modified'] = _format_http_date(
-                    last_modified,
-                )
-                not_modified['Cache-Control'] = 'public, max-age=300'
-                return not_modified
+    # Deliberately do not issue an IMS-only 304. A timestamp derived from
+    # currently included rows cannot distinguish cancellation, unpublish,
+    # same-count replacement, or passive window expiry without persistent
+    # revision history. Aggregating excluded rows would also expose private
+    # draft/edit timing through this anonymous endpoint. RFC 7232 permits a
+    # server to ignore If-Modified-Since and return the full 200 response;
+    # exact conditional caching remains available through the content ETag.
 
-    ics_bytes = generate_feed_ics(events)
     response = HttpResponse(
         ics_bytes, content_type='text/calendar; charset=utf-8',
     )

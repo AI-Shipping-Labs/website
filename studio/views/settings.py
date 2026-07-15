@@ -20,6 +20,8 @@ from datetime import datetime
 from django.conf import settings as django_settings
 from django.contrib import messages
 from django.contrib.sites.models import Site
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
@@ -227,6 +229,7 @@ def _build_group_context(group_def, db_settings):
             'is_secret': key_def.get('is_secret', False),
             'multiline': key_def.get('multiline', False),
             'is_boolean': key_def.get('is_boolean', False),
+            'is_email': key_def.get('is_email', False),
             'optional': key_def.get('optional', False),
             'current_value': current_value,
             'source': source,
@@ -405,6 +408,27 @@ def settings_save_group(request, group_name):
         messages.error(request, f'Unknown integration group: {group_name}')
         return redirect('studio_settings')
 
+    # Validate the whole group before writing any row so one typo cannot leave
+    # a partially updated provider configuration. Runtime delivery validates
+    # again because env/import/legacy rows can bypass this Studio boundary.
+    for key_def in group_def['keys']:
+        if not key_def.get('is_email'):
+            continue
+        key = key_def['key']
+        value = request.POST.get(key, '').strip()
+        if not value:
+            continue
+        try:
+            validate_email(value)
+        except ValidationError:
+            messages.error(
+                request,
+                f'{key} must be a valid email address. No settings were saved.',
+            )
+            return redirect(
+                f'/studio/settings/#{_section_id_for_group_name(group_name)}'
+            )
+
     saved_count = 0
     for key_def in group_def['keys']:
         key = key_def['key']
@@ -423,6 +447,8 @@ def settings_save_group(request, group_name):
             )
         else:
             value = request.POST.get(key, '')
+            if key_def.get('is_email'):
+                value = value.strip()
             if value == '':
                 # Empty value clears the DB override and falls back to env.
                 # ``key`` came from iterating the registry above, so we know

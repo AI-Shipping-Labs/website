@@ -32,7 +32,8 @@ import uuid
 
 from django.apps.registry import AppRegistryNotReady
 from django.core.cache.backends.base import InvalidCacheBackendError
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.core.validators import validate_email
 from django.db import DatabaseError
 from django.test.testcases import DatabaseOperationForbidden
 
@@ -96,6 +97,27 @@ def get_config(key, default='', *, use_settings=True):
     if env_val is not None:
         return env_val
     return default
+
+
+def validate_email_config_value(key, value):
+    """Return a stripped email setting, or ``''`` when it is malformed.
+
+    Log only the setting key, never its potentially sensitive or
+    attacker-controlled value.
+    """
+    value = str(value or '').strip()
+    if not value:
+        return ''
+    try:
+        validate_email(value)
+    except ValidationError:
+        logger.error(
+            'Invalid email address configured for %s; omitting it from '
+            'email delivery',
+            key,
+        )
+        return ''
+    return value
 
 
 def running_in_worker_process():

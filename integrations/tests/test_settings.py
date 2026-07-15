@@ -630,6 +630,63 @@ class SettingsSaveGroupViewTest(TestCase):
         self.assertTrue(setting.is_secret)
         self.assertIn('client ID', setting.description)
 
+    def test_invalid_staff_email_rejects_group_without_partial_writes(self):
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL',
+            value='https://before.test',
+            group='site',
+        )
+        self.client.login(email='admin@test.com', password='testpass')
+
+        response = self.client.post('/studio/settings/site/save/', {
+            'SITE_BASE_URL': 'https://after.test',
+            'STAFF_SIGNUP_NOTIFY_EMAIL': 'not-an-email',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            IntegrationSetting.objects.get(key='SITE_BASE_URL').value,
+            'https://before.test',
+        )
+        self.assertFalse(IntegrationSetting.objects.filter(
+            key='STAFF_SIGNUP_NOTIFY_EMAIL',
+        ).exists())
+        messages = [
+            str(message) for message in response.wsgi_request._messages
+        ]
+        self.assertTrue(any(
+            'No settings were saved' in message for message in messages
+        ))
+
+    def test_valid_email_setting_is_trimmed_before_save(self):
+        self.client.login(email='admin@test.com', password='testpass')
+
+        response = self.client.post('/studio/settings/site/save/', {
+            'STAFF_SIGNUP_NOTIFY_EMAIL': '  team@example.com  ',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            IntegrationSetting.objects.get(
+                key='STAFF_SIGNUP_NOTIFY_EMAIL',
+            ).value,
+            'team@example.com',
+        )
+
+    def test_registered_email_settings_render_email_inputs(self):
+        self.client.login(email='admin@test.com', password='testpass')
+
+        response = self.client.get('/studio/settings/')
+
+        self.assertContains(
+            response,
+            'type="email" id="field-STAFF_SIGNUP_NOTIFY_EMAIL"',
+        )
+        self.assertContains(
+            response,
+            'type="email" id="field-SES_WELCOME_REPLY_TO_EMAIL"',
+        )
+
 
 class SettingsDashboardAutofillSuppressionTest(TestCase):
     """Regression net for autofill-suppression attributes on settings forms."""

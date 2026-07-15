@@ -34,7 +34,11 @@ from email_app.services.email_classification import (
     classify_email_type,
     get_sender_for_email_type,
 )
-from integrations.config import get_config, site_base_url
+from integrations.config import (
+    get_config,
+    site_base_url,
+    validate_email_config_value,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -549,13 +553,17 @@ class EmailService:
         }
 
         # Issue #950: route replies to welcome emails to a monitored inbox.
-        # Only welcome types get a Reply-To; an empty configured value omits
-        # the header so an operator can disable it without touching code.
+        # Only welcome types get a Reply-To; an empty or malformed configured
+        # value omits the optional header so it cannot make SES reject the
+        # member's primary delivery.
         if email_type in WELCOME_EMAIL_TYPES:
-            reply_to = get_config(
+            reply_to = validate_email_config_value(
                 WELCOME_REPLY_TO_KEY,
-                DEFAULT_WELCOME_REPLY_TO_EMAIL,
-            ).strip()
+                get_config(
+                    WELCOME_REPLY_TO_KEY,
+                    DEFAULT_WELCOME_REPLY_TO_EMAIL,
+                ),
+            )
             if reply_to:
                 send_kwargs["ReplyToAddresses"] = [reply_to]
 

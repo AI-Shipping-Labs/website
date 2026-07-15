@@ -197,6 +197,12 @@ user without any staff CC/BCC, and the structured staff heads-up
 email is skipped. The Slack post still fires if
 `STAFF_SIGNUP_NOTIFY_CHANNEL_ID` is set.
 
+Invalid value: Studio rejects a malformed email address before saving any
+setting in the Site group. Runtime delivery also validates values supplied by
+the environment, imports, or legacy rows; an invalid value is omitted from the
+BCC and structured heads-up so SES can still deliver the member welcome. The
+operator log names the setting key but never prints the rejected value.
+
 Reply rule: Do not use this setting as Reply-To and do not visible-CC
 staff on paid welcomes. Member replies go only to
 `SES_WELCOME_REPLY_TO_EMAIL` so there is one monitored conversation

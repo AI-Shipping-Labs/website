@@ -102,7 +102,7 @@ Context:
                 class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-200 transition-colors px-2 py-1">Show</button>
             </div>
           {% else %}
-            <input type="text" id="field-{{ field.key }}" name="{{ field.key }}" value="{{ field.current_value }}"
+            <input type="{% if field.is_email %}email{% else %}text{% endif %}" id="field-{{ field.key }}" name="{{ field.key }}" value="{{ field.current_value }}"
               autocomplete="off"
               data-1p-ignore="true"
               data-bwignore="true"

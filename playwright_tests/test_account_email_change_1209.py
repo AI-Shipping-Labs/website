@@ -1,4 +1,4 @@
-"""Playwright coverage for withdrawn requests and legacy confirmations (#1260)."""
+"""Playwright coverage for withdrawn requests and legacy confirmations (#1260/#1263)."""
 
 import os
 from datetime import timedelta
@@ -17,6 +17,18 @@ from playwright_tests.conftest import (
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 pytestmark = pytest.mark.local_only
+
+GENERIC_CONFIRM_ERROR = (
+    "This email change link is no longer valid. "
+    "Contact support if you still need help updating your login email."
+)
+EXPIRED_CONFIRM_ERROR = (
+    "This email change link has expired. "
+    "Contact support if you still need help updating your login email."
+)
+SUPPORT_HREF = (
+    "mailto:contact@aishippinglabs.com?subject=Login%20email%20help"
+)
 
 
 def _login_with_password(page, base_url, email, password=DEFAULT_PASSWORD):
@@ -216,14 +228,25 @@ class TestMemberConfirmsEmailChange:
             connection.close()
 
         page = browser.new_page()
-        page.goto(
+        response = page.goto(
             f"{django_server}/account/change-email/confirm?token={token}",
             wait_until="domcontentloaded",
         )
+        assert response is not None and response.status == 200
         expect(page.locator("[data-testid='email-change-result']")).to_be_visible()
+        expect(page.get_by_role("heading", name="Email changed")).to_be_visible()
         expect(page.locator("[data-testid='email-change-result-message']")).to_contain_text(
-            "account email was changed successfully"
+            "Your account email was changed successfully."
         )
+        expect(page.locator("[data-testid='email-change-result-cta']")).to_contain_text(
+            "Sign In"
+        )
+        expect(page.locator("[data-testid='email-change-result-cta']")).to_have_attribute(
+            "href", "/accounts/login/"
+        )
+        expect(
+            page.locator("[data-testid='email-change-result-cta'] [data-lucide='arrow-right']")
+        ).to_be_visible()
 
         _login_with_password(page, django_server, "confirm-new-1209@test.com")
         page.wait_for_url(f"{django_server}/")
@@ -298,22 +321,51 @@ class TestMemberConfirmsEmailChange:
             connection.close()
 
         page = browser.new_page()
-        page.goto(
+        response = page.goto(
             f"{django_server}/account/change-email/confirm?token={expired_token}",
             wait_until="domcontentloaded",
         )
-        expect(page.locator("[data-testid='email-change-result-message']")).to_contain_text(
-            "link expired"
+        assert response is not None and response.status == 400
+        expect(page.locator("[data-testid='email-change-result-message']")).to_have_text(
+            EXPIRED_CONFIRM_ERROR
         )
-        expect(page.locator("[data-testid='email-change-result-cta']")).to_be_visible()
+        expect(page.locator("[data-testid='email-change-result-cta']")).to_contain_text(
+            "Contact support"
+        )
+        expect(page.locator("[data-testid='email-change-result-cta']")).to_have_attribute(
+            "href", SUPPORT_HREF
+        )
+        expect(
+            page.locator("[data-testid='email-change-result-cta'] [data-lucide='mail']")
+        ).to_be_visible()
+        expect(page.get_by_text("request a new link", exact=False)).to_have_count(0)
 
-        page.goto(
-            f"{django_server}/account/change-email/confirm?token={first_token}",
-            wait_until="domcontentloaded",
-        )
-        expect(page.locator("[data-testid='email-change-result-message']")).to_contain_text(
-            "no longer valid"
-        )
+        context = auth_context(browser, "superseded-link-1209@test.com")
+        try:
+            authenticated_page = context.new_page()
+            response = authenticated_page.goto(
+                f"{django_server}/account/change-email/confirm?token={first_token}",
+                wait_until="domcontentloaded",
+            )
+            assert response is not None and response.status == 400
+            expect(
+                authenticated_page.locator(
+                    "[data-testid='email-change-result-message']"
+                )
+            ).to_have_text(GENERIC_CONFIRM_ERROR)
+            expect(
+                authenticated_page.locator("[data-testid='email-change-result-cta']")
+            ).to_contain_text("Contact support")
+            expect(
+                authenticated_page.locator("[data-testid='email-change-result-cta']")
+            ).to_have_attribute("href", SUPPORT_HREF)
+            expect(
+                authenticated_page.locator(
+                    "[data-testid='email-change-result-cta'] [data-lucide='mail']"
+                )
+            ).to_be_visible()
+        finally:
+            context.close()
 
         with django_db_blocker.unblock():
             from accounts.models import User
@@ -321,6 +373,45 @@ class TestMemberConfirmsEmailChange:
             assert User.objects.get(email="expired-link-1209@test.com")
             assert User.objects.get(email="superseded-link-1209@test.com")
             assert not User.objects.filter(email="first-1209@test.com").exists()
+
+    def test_malformed_link_uses_generic_support_without_side_effects(
+        self, django_server, django_db_blocker, browser
+    ):
+        page = browser.new_page()
+
+        response = page.goto(
+            f"{django_server}/account/change-email/confirm?token=unknown-1263",
+            wait_until="domcontentloaded",
+        )
+
+        assert response is not None and response.status == 400
+        expect(page.get_by_role("heading", name="Email change link unavailable")).to_be_visible()
+        expect(page.locator("[data-testid='email-change-result-message']")).to_have_text(
+            GENERIC_CONFIRM_ERROR
+        )
+        expect(page.locator("[data-testid='email-change-result-cta']")).to_contain_text(
+            "Contact support"
+        )
+        expect(page.locator("[data-testid='email-change-result-cta']")).to_have_attribute(
+            "href", SUPPORT_HREF
+        )
+        expect(
+            page.locator("[data-testid='email-change-result-cta'] [data-lucide='mail']")
+        ).to_be_visible()
+        expect(page.get_by_text("request a new link", exact=False)).to_have_count(0)
+
+        with django_db_blocker.unblock():
+            from accounts.models import EmailAlias, EmailChangeRequest
+            from email_app.models import EmailLog
+
+            assert not EmailChangeRequest.objects.exists()
+            assert not EmailAlias.objects.exists()
+            assert not EmailLog.objects.filter(
+                email_type__in=[
+                    "account_email_change_confirm",
+                    "account_email_changed_notice",
+                ]
+            ).exists()
 
     def test_same_user_alias_promotion_preserves_billing_fields(
         self, django_server, django_db_blocker, browser

@@ -12,6 +12,8 @@ from accounts.models.user import SIGNUP_SOURCE_NEWSLETTER
 from accounts.services.email_change import (
     EMAIL_CHANGE_CONFIRM_TEMPLATE,
     EMAIL_CHANGED_NOTICE_TEMPLATE,
+    EXPIRED_CONFIRM_ERROR,
+    GENERIC_CONFIRM_ERROR,
     confirm_email_change,
     request_email_change,
 )
@@ -131,6 +133,123 @@ class EmailChangeRequestRouteWithdrawalTest(TestCase):
         self.assertEqual(self.user.email, "old-member@test.com")
         self.assertFalse(EmailChangeRequest.objects.exists())
         self.assertFalse(EmailLog.objects.exists())
+
+
+@tag("core")
+@override_settings(SES_ENABLED=False)
+class EmailChangeConfirmationViewTest(TestCase):
+    confirm_url = "/account/change-email/confirm"
+    support_href = (
+        "mailto:contact@aishippinglabs.com?subject=Login%20email%20help"
+    )
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            email="view-old@test.com",
+            password="CorrectPass123!",
+            account_activated=True,
+            email_verified=True,
+        )
+
+    def assert_support_recovery(self, response, message):
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, message, status_code=400)
+        self.assertContains(response, "Contact support", status_code=400)
+        self.assertContains(response, 'data-lucide="mail"', status_code=400)
+        self.assertNotContains(response, 'data-lucide="rotate-ccw"', status_code=400)
+        self.assertContains(
+            response,
+            f'href="{self.support_href}"',
+            status_code=400,
+        )
+        self.assertNotContains(response, "request a new link", status_code=400)
+        self.assertEqual(response.context["cta_url"], self.support_href)
+        self.assertEqual(response.context["cta_label"], "Contact support")
+
+    def test_unavailable_links_use_support_for_anonymous_and_authenticated_users(self):
+        malformed = self.client.get(
+            self.confirm_url,
+            {"token": "not-a-real-token"},
+        )
+        self.assert_support_recovery(malformed, GENERIC_CONFIRM_ERROR)
+
+        expired_request, expired_token = request_email_change(
+            self.user,
+            "view-expired@test.com",
+            current_password="CorrectPass123!",
+            send=False,
+        )
+        EmailChangeRequest.objects.filter(pk=expired_request.pk).update(
+            expires_at=timezone.now() - timedelta(minutes=1)
+        )
+        self.client.force_login(self.user)
+
+        expired = self.client.get(
+            self.confirm_url,
+            {"token": expired_token},
+        )
+
+        self.assert_support_recovery(expired, EXPIRED_CONFIRM_ERROR)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, "view-old@test.com")
+
+    def test_success_preserves_context_aware_account_and_sign_in_actions(self):
+        _anonymous_request, anonymous_token = request_email_change(
+            self.user,
+            "view-new@test.com",
+            current_password="CorrectPass123!",
+            send=False,
+        )
+
+        anonymous = self.client.get(
+            self.confirm_url,
+            {"token": anonymous_token},
+        )
+
+        self.assertEqual(anonymous.status_code, 200)
+        self.assertContains(anonymous, "Email changed")
+        self.assertContains(
+            anonymous,
+            "Your account email was changed successfully.",
+        )
+        self.assertContains(anonymous, 'href="/accounts/login/"')
+        self.assertContains(anonymous, "Sign In")
+        self.assertContains(anonymous, 'data-lucide="arrow-right"')
+        self.assertEqual(anonymous.context["cta_url"], "/accounts/login/")
+        self.assertEqual(anonymous.context["cta_label"], "Sign In")
+
+        authenticated_user = User.objects.create_user(
+            email="view-auth-old@test.com",
+            password="CorrectPass123!",
+            account_activated=True,
+            email_verified=True,
+        )
+        cache.clear()
+        _authenticated_request, authenticated_token = request_email_change(
+            authenticated_user,
+            "view-auth-new@test.com",
+            current_password="CorrectPass123!",
+            send=False,
+        )
+        self.client.force_login(authenticated_user)
+
+        authenticated = self.client.get(
+            self.confirm_url,
+            {"token": authenticated_token},
+        )
+
+        self.assertEqual(authenticated.status_code, 200)
+        self.assertContains(authenticated, "Email changed")
+        self.assertContains(
+            authenticated,
+            "Your account email was changed successfully.",
+        )
+        self.assertContains(authenticated, 'href="/account/"')
+        self.assertContains(authenticated, "Continue to Account")
+        self.assertContains(authenticated, 'data-lucide="arrow-right"')
+        self.assertEqual(authenticated.context["cta_url"], "/account/")
+        self.assertEqual(authenticated.context["cta_label"], "Continue to Account")
 
 
 @tag("core")
@@ -320,12 +439,14 @@ class EmailChangeConfirmServiceTest(TestCase):
 
         self.assertFalse(expired.success)
         self.assertEqual(expired.status, "expired")
+        self.assertEqual(expired.message, EXPIRED_CONFIRM_ERROR)
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "old-member@test.com")
 
         malformed = confirm_email_change("not-a-real-token")
         self.assertFalse(malformed.success)
         self.assertEqual(malformed.status, "malformed")
+        self.assertEqual(malformed.message, GENERIC_CONFIRM_ERROR)
 
         cache.clear()
         first, first_token = request_email_change(
@@ -347,6 +468,7 @@ class EmailChangeConfirmServiceTest(TestCase):
         superseded = confirm_email_change(first_token)
         self.assertFalse(superseded.success)
         self.assertEqual(superseded.status, "superseded")
+        self.assertEqual(superseded.message, GENERIC_CONFIRM_ERROR)
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "old-member@test.com")
 
@@ -355,6 +477,7 @@ class EmailChangeConfirmServiceTest(TestCase):
         reused = confirm_email_change(second_token)
         self.assertFalse(reused.success)
         self.assertEqual(reused.status, "reused")
+        self.assertEqual(reused.message, GENERIC_CONFIRM_ERROR)
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "second@test.com")
 
@@ -371,6 +494,7 @@ class EmailChangeConfirmServiceTest(TestCase):
 
         self.assertFalse(result.success)
         self.assertEqual(result.status, "collision")
+        self.assertEqual(result.message, GENERIC_CONFIRM_ERROR)
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "old-member@test.com")
         self.assertFalse(EmailAlias.objects.filter(email="old-member@test.com").exists())

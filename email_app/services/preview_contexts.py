@@ -189,6 +189,11 @@ PREVIEW_CONTEXTS = {
             'cancel-registration?token=preview-token'
         ),
     },
+    'event_cancelled': {
+        'user_name': 'Ada',
+        'event_title': 'AI Shipping Workshop',
+        'event_datetime': 'Saturday, March 28, 2026, 18:00 Europe/Berlin',
+    },
     'plan_shared': {
         # Issue #732: in-product share notification for sprint plans.
         # ``plan_url`` deep-links to the member-owned workspace

@@ -1128,6 +1128,22 @@ def _resolve_cancel_state(slug, token):
             'message': "You're not registered for this event. No action needed.",
         }
 
+    # The current host registration is operational lifecycle state. Letting
+    # its attendee cancellation token delete it would silently disable all
+    # later reschedule/cancellation delivery while host_email still claims
+    # the user is responsible. Reassignment in Studio/API is the explicit
+    # revocation path; ordinary/former hosts remain free to cancel.
+    from events.services.host_registration import is_host_registration
+    if is_host_registration(registration):
+        return 'invalid', {
+            'event': event,
+            'event_url': event_url,
+            'message': (
+                'The current host registration cannot be cancelled. '
+                'Ask an operator to reassign the event host first.'
+            ),
+        }
+
     # Issue #713: gate on the time-derived ``is_upcoming`` so a stale
     # ``status='upcoming'`` row whose end has passed lands on the
     # "already started or finished" branch even before the daily cron.

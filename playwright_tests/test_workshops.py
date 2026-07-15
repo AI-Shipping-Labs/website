@@ -364,10 +364,10 @@ class TestVisitorBrowsesCatalog:
 
         assert page.locator('[data-testid="workshops-landing"]').count() == 0
         assert page.locator('[data-testid="workshop-catalog"]').is_visible()
-        topics = page.locator('[data-testid="workshop-topic-browser"]')
+        topics = page.locator('[data-testid="workshop-facet-topic"]')
         assert topics.is_visible()
         topic_text = topics.inner_text()
-        assert 'Browse by topic' in topic_text
+        assert 'Topics' in topic_text
         assert 'agents' in topic_text
         assert 'rag' in topic_text
         assert 'evaluation' in topic_text
@@ -764,7 +764,7 @@ class TestVisitorBrowsesCatalog:
         assert no_tools_card.locator('[data-testid="workshop-card-tools"]').count() == 0
 
         page.locator(
-            '[data-testid="workshop-tool-filter"][data-tool="Claude Code"]',
+            '[data-testid="workshop-technology-option-claude-code"]',
         ).click()
         page.wait_for_load_state('domcontentloaded')
 

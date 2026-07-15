@@ -333,6 +333,41 @@ INTEGRATION_GROUPS = [
         ],
     },
     {
+        'name': 's3_downloads',
+        'label': 'S3 Downloads',
+        'keys': [
+            {
+                'key': 'AWS_S3_DOWNLOADS_BUCKET',
+                'is_secret': False,
+                'description': 'Private S3 bucket containing gated downloadable resources.',
+                'docs_url': '_docs/integrations/s3_downloads.md#aws_s3_downloads_bucket',
+            },
+            {
+                'key': 'AWS_S3_DOWNLOADS_REGION',
+                'is_secret': False,
+                'default': 'eu-central-1',
+                'description': 'AWS region of the private downloads bucket.',
+                'docs_url': '_docs/integrations/s3_downloads.md#aws_s3_downloads_region',
+            },
+            {
+                'key': 'DOWNLOAD_PRESIGNED_URL_TTL_SECONDS',
+                'is_secret': False,
+                'optional': True,
+                'default': '300',
+                'description': 'Lifetime of an authorized S3 download redirect in seconds.',
+                'docs_url': '_docs/integrations/s3_downloads.md#download_presigned_url_ttl_seconds',
+            },
+            {
+                'key': 'DOWNLOAD_DELIVERY_TOKEN_TTL_HOURS',
+                'is_secret': False,
+                'optional': True,
+                'default': '24',
+                'description': 'Lifetime of a requested, slug-scoped email delivery link.',
+                'docs_url': '_docs/integrations/s3_downloads.md#download_delivery_token_ttl_hours',
+            },
+        ],
+    },
+    {
         'name': 'calendly',
         'label': 'Calendly',
         'keys': [

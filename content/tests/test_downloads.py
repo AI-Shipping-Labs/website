@@ -14,6 +14,8 @@ Covers:
 - {{download:slug}} shortcode renders inline card
 """
 
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 
@@ -22,6 +24,25 @@ from content.models import Download
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
+
+
+def _enable_private_delivery():
+    """Upgrade legacy fixtures to the secure-delivery contract."""
+    for download in Download.objects.all():
+        extension = 'pptx' if download.file_type == 'slides' else download.file_type
+        if extension not in {'pdf', 'zip', 'pptx', 'ipynb', 'csv'}:
+            extension = 'pdf'
+        Download.objects.filter(pk=download.pk).update(
+            storage_key=f'downloads/{download.slug}.{extension}',
+            asset_mime_type={
+                'pdf': 'application/pdf',
+                'zip': 'application/zip',
+                'slides': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                'notebook': 'application/x-ipynb+json',
+                'csv': 'text/csv',
+            }.get(download.file_type, 'application/pdf'),
+            file_size_bytes=max(download.file_size_bytes, 1),
+        )
 
 
 # --- Model tests ---
@@ -290,7 +311,7 @@ class DownloadsListTagFilterTest(TestCase):
         self.assertContains(response, 'data-testid="member-empty-state"')
         self.assertContains(response, 'data-empty-kind="filter"')
         self.assertContains(response, 'No downloads found')
-        self.assertContains(response, 'No downloads found with the selected tags.')
+        self.assertContains(response, 'No downloads match the selected topics.')
         self.assertContains(response, 'href="/downloads"')
         self.assertContains(response, 'View all downloads')
 
@@ -351,18 +372,17 @@ class DownloadsListAccessControlTest(TierSetupMixin, TestCase):
         )
 
     def test_anonymous_sees_signup_and_upgrade_ctas(self):
-        """Anonymous users see the inline lead-magnet form and
-        'Upgrade to Basic to download' for gated items.
-
-        Per-tier matrix and lock-icon rendering covered by
-        `DownloadsGatingTest` and `DownloadsFileEndpointTest` below
-        (added in #262 as the Django authoritative coverage after
-        playwright_tests/test_downloadable_resources.py was deleted).
-        """
+        """Catalog cards remain clean and hand off to detail pages."""
         response = self.client.get('/downloads')
-        self.assertContains(response, 'Sign Up to Download')
-        self.assertContains(response, 'data-testid="download-inline-subscribe-form"')
-        self.assertContains(response, 'Upgrade to Basic to download')
+        self.assertContains(
+            response,
+            'href="/downloads/free-resource?surface=catalog"',
+        )
+        self.assertContains(
+            response,
+            'href="/downloads/basic-resource?surface=catalog"',
+        )
+        self.assertNotContains(response, 'download-inline-subscribe-form')
 
     def test_basic_user_sees_download_for_basic_resource(self):
         User.objects.create_user(
@@ -371,10 +391,9 @@ class DownloadsListAccessControlTest(TierSetupMixin, TestCase):
         )
         self.client.login(email='basic@test.com', password='testpass')
         response = self.client.get('/downloads')
-        # Should be able to download the basic resource (URL points at the
-        # download API endpoint, not at the public file URL)
+        # Catalog still hands off to the single detail/access surface.
         content = response.content.decode()
-        self.assertIn('/api/downloads/basic-resource/file', content)
+        self.assertIn('/downloads/basic-resource?surface=catalog', content)
 
 
 # --- File download endpoint tests ---
@@ -410,6 +429,20 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
             required_level=LEVEL_PREMIUM,
             published=True,
         )
+
+    def setUp(self):
+        _enable_private_delivery()
+        patcher = patch(
+            'content.services.download_delivery.build_download_presigned_url',
+            side_effect=lambda download: download.file_url,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        object_patcher = patch(
+            'content.services.download_delivery.verify_download_object_exists',
+        )
+        object_patcher.start()
+        self.addCleanup(object_patcher.stop)
 
     def test_authenticated_user_can_download_free_resource(self):
         User.objects.create_user(
@@ -679,7 +712,11 @@ class DownloadShortcodeTest(TierSetupMixin, TestCase):
 
     def test_shortcode_anonymous_shows_signup_for_free(self):
         html = self._render_shortcode('{{download:shortcode-pdf}}')
-        self.assertIn('Sign Up to Download', html)
+        self.assertIn(
+            'href="/downloads/shortcode-pdf?surface=shortcode"',
+            html,
+        )
+        self.assertIn('Get free download', html)
 
     def test_shortcode_authenticated_shows_download_button(self):
         user = User.objects.create_user(
@@ -687,7 +724,11 @@ class DownloadShortcodeTest(TierSetupMixin, TestCase):
             email_verified=True,
         )
         html = self._render_shortcode('{{download:shortcode-pdf}}', user=user)
-        self.assertIn('/api/downloads/shortcode-pdf/file', html)
+        self.assertIn(
+            'href="/downloads/shortcode-pdf?surface=shortcode"',
+            html,
+        )
+        self.assertIn('Download', html)
 
     def test_shortcode_gated_shows_upgrade_cta(self):
         user = User.objects.create_user(
@@ -695,7 +736,11 @@ class DownloadShortcodeTest(TierSetupMixin, TestCase):
             tier=self.free_tier,
         )
         html = self._render_shortcode('{{download:gated-shortcode}}', user=user)
-        self.assertIn('Upgrade to Basic to download', html)
+        self.assertIn(
+            'href="/downloads/gated-shortcode?surface=shortcode"',
+            html,
+        )
+        self.assertIn('View Basic access', html)
 
     def test_shortcode_authorized_user_for_gated(self):
         user = User.objects.create_user(
@@ -703,11 +748,15 @@ class DownloadShortcodeTest(TierSetupMixin, TestCase):
             tier=self.basic_tier,
         )
         html = self._render_shortcode('{{download:gated-shortcode}}', user=user)
-        self.assertIn('/api/downloads/gated-shortcode/file', html)
+        self.assertIn(
+            'href="/downloads/gated-shortcode?surface=shortcode"',
+            html,
+        )
+        self.assertIn('Download', html)
 
-    def test_shortcode_nonexistent_slug_left_as_is(self):
+    def test_shortcode_nonexistent_slug_is_removed(self):
         result = self._render_shortcode('{{download:does-not-exist}}')
-        self.assertEqual(result, '{{download:does-not-exist}}')
+        self.assertEqual(result, '')
 
     def test_shortcode_with_whitespace(self):
         html = self._render_shortcode('{{ download : shortcode-pdf }}')
@@ -875,33 +924,24 @@ class DownloadsGatingTest(TierSetupMixin, TestCase):
         response = self.client.get('/downloads')
         self.assertEqual(response.status_code, 200)
 
-        # Card is present and the CTA is now an inline email form that
-        # posts to the existing subscribe flow before sending the
-        # visitor to the gated file endpoint.
+        # Card is present and links to the detail page; no repeated form.
         self.assertContains(response, 'Free PDF Guide')
         self.assertContains(
             response,
-            'data-testid="download-inline-subscribe-form"',
+            'href="/downloads/free-pdf-guide?surface=catalog"',
         )
-        self.assertContains(
-            response,
-            'data-redirect-to="/api/downloads/free-pdf-guide/file"',
-        )
-        self.assertContains(response, 'Sign Up to Download')
-        self.assertContains(response, "fetch('/api/subscribe'")
-        self.assertNotContains(
-            response,
-            'href="/accounts/signup?next=/api/downloads/free-pdf-guide/file"',
-        )
+        self.assertNotContains(response, 'download-inline-subscribe-form')
 
     def test_anonymous_sees_upgrade_cta_for_gated(self):
         # Replaces playwright_tests/test_downloadable_resources.py::TestScenario3AnonymousGatedDownloadUpgradeCTA::test_anonymous_sees_upgrade_cta_for_gated_download
         response = self.client.get('/downloads')
         self.assertEqual(response.status_code, 200)
 
-        # Upgrade CTA is shown with a /pricing link.
-        self.assertContains(response, 'Upgrade to Basic to download')
-        self.assertContains(response, 'href="/pricing"')
+        # The card links to the detail page where the paid gate is rendered.
+        self.assertContains(
+            response,
+            'href="/downloads/basic-toolkit?surface=catalog"',
+        )
 
         # The gated file endpoint must not be exposed as a download link.
         body = response.content.decode()
@@ -938,6 +978,20 @@ class DownloadsFileEndpointTest(TierSetupMixin, TestCase):
             published=True,
         )
 
+    def setUp(self):
+        _enable_private_delivery()
+        patcher = patch(
+            'content.services.download_delivery.build_download_presigned_url',
+            side_effect=lambda download: download.file_url,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        object_patcher = patch(
+            'content.services.download_delivery.verify_download_object_exists',
+        )
+        object_patcher.start()
+        self.addCleanup(object_patcher.stop)
+
     def test_basic_member_gets_file_and_count_increments(self):
         # Replaces playwright_tests/test_downloadable_resources.py::TestScenario4AuthorizedMemberDownloads::test_basic_member_downloads_file_and_count_increments
         User.objects.create_user(
@@ -946,11 +1000,11 @@ class DownloadsFileEndpointTest(TierSetupMixin, TestCase):
         )
         self.client.login(email='basic_dl@test.com', password='testpass')
 
-        # Listing exposes the direct download link (no upgrade CTA).
+        # Listing hands off to the detail page.
         listing = self.client.get('/downloads')
         self.assertContains(
             listing,
-            'href="/api/downloads/member-resource/file"',
+            'href="/downloads/member-resource?surface=catalog"',
         )
 
         # Capture before/after to verify the side effect, not just ">0".
@@ -973,10 +1027,12 @@ class DownloadsFileEndpointTest(TierSetupMixin, TestCase):
         )
         self.client.login(email='basic_p@test.com', password='testpass')
 
-        # Listing shows the upgrade CTA, never the file URL.
+        # Listing shows the detail handoff, never the file URL.
         listing = self.client.get('/downloads')
-        self.assertContains(listing, 'Upgrade to Premium to download')
-        self.assertContains(listing, 'href="/pricing"')
+        self.assertContains(
+            listing,
+            'href="/downloads/premium-report?surface=catalog"',
+        )
         body = listing.content.decode()
         self.assertNotIn('https://example.com/secret.pdf', body)
         self.assertNotIn(
@@ -1047,7 +1103,7 @@ class DownloadsListFilteringTest(TestCase):
 
         # Empty-state copy + recovery link to /downloads (no <article>
         # cards are rendered when the queryset is empty).
-        self.assertContains(response, 'No downloads found with the selected tags.')
+        self.assertContains(response, 'No downloads match the selected topics.')
         self.assertContains(response, 'href="/downloads"')
         self.assertContains(response, 'View all downloads')
         # No download cards in the response (cards use <article>).
@@ -1126,13 +1182,12 @@ class DownloadShortcodeRenderingTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Get it here')
         self.assertContains(response, 'PDF')
 
-        # Lead-magnet signup button with `next` pointing at the file
-        # endpoint — this is the only allowed CTA for anonymous users.
+        # Shortcodes use the same detail-page handoff as the catalog.
         self.assertContains(
             response,
-            'href="/accounts/signup?next=/api/downloads/inline-pdf/file"',
+            'href="/downloads/inline-pdf?surface=shortcode"',
         )
-        self.assertContains(response, 'Sign Up to Download Free')
+        self.assertContains(response, 'Get free download')
 
         # The direct download link must NOT be exposed to anonymous.
         body = response.content.decode()
@@ -1160,12 +1215,11 @@ class DownloadShortcodeRenderingTest(TierSetupMixin, TestCase):
         response = self.client.get('/blog/article-with-download')
         self.assertEqual(response.status_code, 200)
 
-        # Direct download link is exposed to the logged-in reader.
         self.assertContains(
             response,
-            'href="/api/downloads/inline-pdf/file"',
+            'href="/downloads/inline-pdf?surface=shortcode"',
         )
-        self.assertContains(response, 'Download PDF')
+        self.assertContains(response, 'Download')
 
         # The lead-magnet signup CTA is gone for authenticated users.
         self.assertNotContains(response, 'Sign Up to Download Free')
@@ -1188,11 +1242,12 @@ class DownloadShortcodeRenderingTest(TierSetupMixin, TestCase):
         response = self.client.get('/blog/article-gated-download')
         self.assertEqual(response.status_code, 200)
 
-        # The card shows the upgrade CTA and a /pricing link, never the
-        # file endpoint.
+        # The card uses the single detail-page access decision.
         self.assertContains(response, 'Gated Slides')
-        self.assertContains(response, 'Upgrade to Basic to download')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(
+            response,
+            'href="/downloads/gated-slides?surface=shortcode"',
+        )
 
         body = response.content.decode()
         self.assertNotIn(

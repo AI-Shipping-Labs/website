@@ -46,6 +46,7 @@ TEMPLATE_DISPLAY_ORDER = [
     'password_reset',
     'community_invite',
     'lead_magnet_delivery',
+    'download_delivery',
     'event_registration',
     'event_reminder',
     'cancellation',

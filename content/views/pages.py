@@ -538,13 +538,13 @@ def downloads_list(request):
     # Filter by tags if provided (AND logic)
     downloads = _filter_by_tags(downloads, selected_tags)
 
-    # Annotate each download with access info for the template
+    # Annotate each download with one clean catalog destination. Email
+    # capture lives on the detail page, never inside repeated cards.
     annotated_downloads = []
     verify_downloads_email = False
     for download in downloads:
         has_access = can_access(request.user, download)
         is_lead_magnet = download.required_level == 0
-        is_anonymous = not request.user.is_authenticated
         gated_reason = get_gated_reason(request.user, download)
         requires_email_verification = gated_reason == 'unverified_email'
         if gated_reason == 'unverified_email':
@@ -555,7 +555,7 @@ def downloads_list(request):
             'download': download,
             'has_access': has_access,
             'is_lead_magnet': is_lead_magnet,
-            'show_email_form': is_lead_magnet and is_anonymous,
+            'show_email_form': False,
             'requires_email_verification': requires_email_verification,
             'cta_message': (
                 f'Upgrade to {get_required_tier_name(download.required_level)} to download'
@@ -579,3 +579,52 @@ def downloads_list(request):
         from content.access import build_verify_email_context
         context.update(build_verify_email_context(request.user))
     return render(request, 'content/downloads_list.html', context)
+
+
+@ensure_csrf_cookie
+def download_detail(request, slug):
+    """Public download landing page and its single access decision."""
+    download = get_object_or_404(Download, slug=slug, published=True)
+    from content.services.download_delivery import normalize_download_surface
+    download_surface = normalize_download_surface(request.GET.get('surface'))
+    is_anonymous = not request.user.is_authenticated
+    is_free = download.required_level == 0
+    gated_reason = get_gated_reason(request.user, download)
+    has_access = can_access(request.user, download)
+    if is_free and is_anonymous:
+        has_access = False
+
+    context = {
+        'download': download,
+        'download_surface': download_surface,
+        'has_access': has_access,
+        'show_request_form': is_free and is_anonymous,
+        'requires_email_verification': gated_reason == 'unverified_email',
+        'required_tier_name': get_required_tier_name(download.required_level),
+        'is_paid_gate': download.required_level > 0 and not has_access,
+        'hide_footer_newsletter': is_free and is_anonymous,
+        'gated_card_testid': 'download-tier-gate',
+        'gated_icon': 'lock',
+        'gated_heading': 'This download is for members',
+        'gated_description': (
+            f'{get_required_tier_name(download.required_level)} access is '
+            'required to download this resource.'
+        ),
+        'gated_cta_url': '/pricing',
+        'gated_cta_label': 'View pricing',
+        'gated_cta_testid': 'download-pricing-cta',
+        'signin_cta_url': (
+            f'/accounts/login/?next={download.get_absolute_url()}'
+            if is_anonymous else ''
+        ),
+        'signin_cta_label': 'Already a member? Sign in',
+        'delivery_access_required': (
+            request.GET.get('delivery') == 'access-required'
+            and download.required_level > 0
+            and not has_access
+        ),
+    }
+    if gated_reason == 'unverified_email':
+        from content.access import build_verify_email_context
+        context.update(build_verify_email_context(request.user))
+    return render(request, 'content/download_detail.html', context)

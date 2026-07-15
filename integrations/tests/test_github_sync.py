@@ -2143,13 +2143,15 @@ class SyncResourcesTest(TestCase):
         self.assertEqual(CuratedLink.objects.count(), 0)
         self.assertGreater(len(sync_log.errors), 0)
 
-    def test_sync_downloads(self):
+    @patch('content.services.download_delivery.verify_download_object_exists')
+    def test_sync_downloads(self, object_exists):
         dl_dir = os.path.join(self.temp_dir, 'downloads')
         os.makedirs(dl_dir)
         with open(os.path.join(dl_dir, 'cheatsheet.yaml'), 'w') as f:
             f.write('title: "Cheat Sheet"\n')
             f.write('slug: "cheatsheet"\n')
             f.write('file_url: "https://example.com/file.pdf"\n')
+            f.write('storage_key: "downloads/cheatsheet.pdf"\n')
             f.write('file_type: "pdf"\n')
             f.write('file_size_bytes: 1024\n')
             f.write('content_id: "55555555-5555-5555-5555-555555555555"\n')
@@ -2159,6 +2161,70 @@ class SyncResourcesTest(TestCase):
         dl = Download.objects.get(slug='cheatsheet')
         self.assertEqual(dl.title, 'Cheat Sheet')
         self.assertEqual(dl.source_repo, 'AI-Shipping-Labs/resources')
+        object_exists.assert_called_once_with('downloads/cheatsheet.pdf')
+
+    @patch(
+        'content.services.download_delivery.verify_download_object_exists',
+        side_effect=ValueError('Private download object is missing or inaccessible'),
+    )
+    def test_sync_download_missing_private_object_is_actionable(self, _object_exists):
+        dl_dir = os.path.join(self.temp_dir, 'downloads')
+        os.makedirs(dl_dir)
+        with open(os.path.join(dl_dir, 'missing.yaml'), 'w') as f:
+            f.write('title: "Missing asset"\n')
+            f.write('slug: "missing-asset"\n')
+            f.write('storage_key: "downloads/missing.pdf"\n')
+            f.write('file_type: "pdf"\n')
+            f.write('file_size_bytes: 1024\n')
+            f.write('content_id: "66666666-6666-6666-6666-666666666666"\n')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertFalse(Download.objects.filter(slug='missing-asset').exists())
+        self.assertIn(
+            'Private download object is missing or inaccessible',
+            str(sync_log.errors),
+        )
+
+    def test_sync_download_valid_invalid_valid_transition_fails_closed(self):
+        dl_dir = os.path.join(self.temp_dir, 'downloads')
+        os.makedirs(dl_dir)
+        path = os.path.join(dl_dir, 'recoverable.yaml')
+        with open(path, 'w') as f:
+            f.write('title: "Recoverable asset"\n')
+            f.write('slug: "recoverable-asset"\n')
+            f.write('storage_key: "downloads/recoverable.pdf"\n')
+            f.write('file_type: "pdf"\n')
+            f.write('file_size_bytes: 1024\n')
+            f.write('content_id: "77777777-7777-7777-7777-777777777777"\n')
+
+        with patch(
+            'content.services.download_delivery.verify_download_object_exists',
+        ):
+            sync_content_source(self.source, repo_dir=self.temp_dir)
+        download = Download.objects.get(slug='recoverable-asset')
+        self.assertTrue(download.published)
+        self.assertTrue(download.delivery_ready)
+
+        with patch(
+            'content.services.download_delivery.verify_download_object_exists',
+            side_effect=ValueError('Private download object is missing'),
+        ):
+            sync_content_source(self.source, repo_dir=self.temp_dir)
+        download.refresh_from_db()
+        self.assertFalse(download.published)
+        self.assertFalse(download.delivery_ready)
+        self.assertTrue(download.storage_key)
+        self.assertTrue(download.delivery_blocked_reason)
+
+        with patch(
+            'content.services.download_delivery.verify_download_object_exists',
+        ):
+            sync_content_source(self.source, repo_dir=self.temp_dir)
+        download.refresh_from_db()
+        self.assertTrue(download.published)
+        self.assertTrue(download.delivery_ready)
+        self.assertEqual(download.delivery_blocked_reason, '')
 
     def test_sync_soft_deletes_stale_recordings(self):
         # Recordings are synced as events. Issue #310: one source per

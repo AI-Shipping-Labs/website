@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
 {% load member_empty_state %}
+{% load member_badges %}
 {% load tag_filters %}
 {% load teaser_tags %}
 
 {% block title %}Downloads | AI Shipping Labs{% endblock %}
-{% block meta_description %}Downloadable resources: PDFs, slides, notebooks, and more for building AI agents and practical systems.{% endblock %}
+{% block meta_description %}Downloadable resources for building AI agents and practical systems.{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}
@@ -14,163 +15,49 @@
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="mb-12">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Downloads</p>
-        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
-          Downloadable Resources
-        </h1>
-        <p class="mt-4 text-lg text-muted-foreground">
-          PDFs, slides, notebooks, and other resources to help you build AI agents and practical systems.
-        </p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">Downloadable resources</h1>
+        <p class="mt-4 text-lg leading-relaxed text-muted-foreground">PDFs, slides, notebooks, and practical resources to help you ship.</p>
       </div>
 
-      {% if verify_downloads_email %}
-      <div id="verify-downloads-email" class="mb-8">
-        {% include "content/_verify_email_required.html" %}
+      {% if all_tags %}
+      <div class="mb-8 flex flex-wrap gap-2" aria-label="Filter downloads by topic">
+        <a href="/downloads" class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if not selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}" {% if not selected_tags %}aria-current="page"{% endif %}>All</a>
+        {% for tag in all_tags %}
+        <a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if tag in selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}" {% if tag in selected_tags %}aria-current="page"{% endif %}>{{ tag }}</a>
+        {% endfor %}
       </div>
       {% endif %}
 
       {% if downloads %}
       <div class="grid gap-6 sm:grid-cols-2">
         {% for item in downloads %}
-        {% if item.show_email_form %}
-        <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="download-card">
-          {% if item.download.cover_image_url %}
-          <div class="aspect-video w-full overflow-hidden bg-muted">
-            <img src="{{ item.download.cover_image_url }}" alt="{{ item.download.title }}" class="h-full w-full object-cover">
-          </div>
-          {% endif %}
-          <div class="p-4 pb-3 sm:p-5 sm:pb-3">
-            <div class="mb-3 flex flex-wrap items-center gap-2">
-              <span class="rounded-full px-2.5 py-0.5 text-xs font-medium {{ item.download.file_type_color }}">
-                {{ item.download.file_type_label }}
-              </span>
-              {% if item.download.human_file_size %}
-              <span class="text-xs text-muted-foreground">{{ item.download.human_file_size }}</span>
-              {% endif %}
+        <article class="group rounded-lg border border-border bg-card transition-colors hover:border-accent/50" data-testid="download-card">
+          <a href="{{ item.download.get_absolute_url }}?surface=catalog" class="{% include 'content/_clickable_card_classes.html' %} p-4 sm:p-5" data-testid="download-card-body-link">
+            <div class="flex flex-wrap items-center gap-2">
+              {% member_label_badge item.download.file_type_label %}
+              {% if item.download.human_file_size %}<span class="text-xs text-muted-foreground">{{ item.download.human_file_size }}</span>{% endif %}
+              {% member_tier_badge item.download.required_level %}
+              {% if item.download.required_level > 0 %}<i data-lucide="lock" class="h-4 w-4 text-muted-foreground"></i>{% endif %}
             </div>
-
-            <h2 class="line-clamp-3 break-words text-lg font-semibold leading-snug text-foreground">
-              {{ item.download.title }}
-            </h2>
-
-            {% if item.download.description %}
-            <p class="mt-2 text-sm text-muted-foreground line-clamp-2">{{ item.download.description|strip_markdown }}</p>
-            {% endif %}
-          </div>
-        {% elif item.requires_email_verification %}
-        <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="download-card">
-          <a href="#verify-downloads-email" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="download-card-body-link">
-        {% elif item.has_access %}
-        <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="download-card">
-          <a href="/api/downloads/{{ item.download.slug }}/file" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="download-card-body-link">
-        {% else %}
-        <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="download-card">
-          <a href="/pricing" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="download-card-body-link">
-        {% endif %}
-          {% if not item.show_email_form %}
-            {% if item.download.cover_image_url %}
-            <div class="aspect-video w-full overflow-hidden bg-muted">
-              <img src="{{ item.download.cover_image_url }}" alt="{{ item.download.title }}" class="h-full w-full object-cover transition-transform group-hover:scale-105">
-            </div>
-            {% endif %}
-            <div class="p-4 pb-3 sm:p-5 sm:pb-3">
-              <div class="mb-3 flex flex-wrap items-center gap-2">
-                <span class="rounded-full px-2.5 py-0.5 text-xs font-medium {{ item.download.file_type_color }}">
-                  {{ item.download.file_type_label }}
-                </span>
-                {% if item.download.human_file_size %}
-                <span class="text-xs text-muted-foreground">{{ item.download.human_file_size }}</span>
-                {% endif %}
-                {% if item.download.required_level > 0 %}
-                <i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground"></i>
-                {% endif %}
-              </div>
-
-              <h2 class="line-clamp-3 break-words text-lg font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">
-                {{ item.download.title }}
-              </h2>
-
-              {% if item.download.description %}
-              <p class="mt-2 text-sm text-muted-foreground line-clamp-2">{{ item.download.description|strip_markdown }}</p>
-              {% endif %}
-            </div>
+            <h2 class="mt-3 line-clamp-3 break-words text-lg font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">{{ item.download.title }}</h2>
+            {% if item.download.description %}<p class="mt-2 line-clamp-2 text-sm text-muted-foreground">{{ item.download.description|strip_markdown }}</p>{% endif %}
+            <span class="mt-5 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent">
+              View download <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </span>
           </a>
-          {% endif %}
-
-          {% comment %}
-          Tag chips and CTA block live OUTSIDE the wrapping <a> so they stay
-          interactive as their own anchors and are siblings, not children.
-          {% endcomment %}
-          <div class="px-4 pb-4 sm:px-5 sm:pb-5">
-            {% if item.download.tags %}
-            <div class="flex flex-wrap gap-1.5" data-testid="download-card-tags">
-              {% for tag in item.download.tags|slice:":3" %}
-              <a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ tag }}</a>
-              {% endfor %}
-              {% if item.download.tags|length > 3 %}
-              <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ item.download.tags|length|add:'-3' }} more download tags">+{{ item.download.tags|length|add:"-3" }}</span>
-              {% endif %}
-            </div>
-            {% endif %}
-
-            <div class="mt-4">
-              {% if item.show_email_form %}
-                <div class="rounded-lg border border-accent/30 bg-accent/5 p-4" data-testid="download-inline-subscribe-container" data-redirect-to="/api/downloads/{{ item.download.slug }}/file">
-                  <p class="mb-3 text-sm text-muted-foreground">Enter your email to download for free</p>
-                  <form class="download-inline-subscribe-form flex flex-col gap-3 sm:flex-row" data-testid="download-inline-subscribe-form" onsubmit="return handleDownloadInlineSubscribe(event, this)">
-                    <label class="sr-only" for="download-inline-email-{{ item.download.slug }}">Email address</label>
-                    <input id="download-inline-email-{{ item.download.slug }}"
-                           type="email"
-                           name="email"
-                           required
-                           autocomplete="email"
-                           placeholder="you@example.com"
-                           class="min-h-[44px] w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent sm:flex-1">
-                    <button type="submit"
-                            class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-                      <i data-lucide="mail" class="h-4 w-4"></i>
-                      Sign Up to Download
-                    </button>
-                  </form>
-                  <p class="download-inline-subscribe-message mt-3 hidden text-sm text-green-400" data-testid="download-inline-subscribe-message"></p>
-                  <p class="download-inline-subscribe-error mt-3 hidden text-sm text-red-400"></p>
-                </div>
-              {% elif item.requires_email_verification %}
-                <div class="text-sm">
-                  <p class="mb-2 text-muted-foreground">This download is included with your Free account.</p>
-                  <a href="#verify-downloads-email"
-                     class="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-amber-500/40 px-4 py-2 font-medium text-amber-700 transition-colors hover:bg-amber-500/10 dark:text-amber-200">
-                    <i data-lucide="mail-warning" class="h-4 w-4"></i>
-                    Verify email to download
-                  </a>
-                </div>
-              {% elif item.has_access %}
-                <!-- Authorized: show download button -->
-                <a href="/api/downloads/{{ item.download.slug }}/file"
-                   data-testid="download-card-file-cta"
-                   class="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-                  <i data-lucide="download" class="h-4 w-4"></i>
-                  Download
-                </a>
-              {% else %}
-                <!-- Unauthorized: show upgrade CTA -->
-                <div class="rounded-lg border border-border bg-muted/30 p-4 text-center">
-                  <p class="text-sm text-muted-foreground mb-2">{{ item.cta_message }}</p>
-                  <a href="/pricing"
-                     class="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-accent/50 px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10">
-                    <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
-                    View Pricing
-                  </a>
-                </div>
-              {% endif %}
-            </div>
+          {% if item.download.tags %}
+          <div class="flex flex-wrap gap-1.5 px-4 pb-4 sm:px-5 sm:pb-5" data-testid="download-card-tags">
+            {% for tag in item.download.tags|slice:":3" %}<a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ tag }}</a>{% endfor %}
+            {% if item.download.tags|length > 3 %}<span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ item.download.tags|length|add:'-3' }} more download tags">+{{ item.download.tags|length|add:"-3" }}</span>{% endif %}
           </div>
+          {% endif %}
         </article>
         {% endfor %}
       </div>
       {% else %}
         {% if selected_tags %}
           {% button_classes 'secondary' as downloads_empty_cta_classes %}
-          {% member_empty_state title='No downloads found' body='No downloads found with the selected tags.' icon='download' kind='filter' primary_cta_label='View all downloads' primary_cta_url='/downloads' primary_cta_icon='arrow-right' primary_cta_class=downloads_empty_cta_classes %}
+          {% member_empty_state title='No downloads found' body='No downloads match the selected topics.' icon='download' kind='filter' primary_cta_label='View all downloads' primary_cta_url='/downloads' primary_cta_icon='arrow-right' primary_cta_class=downloads_empty_cta_classes %}
         {% else %}
           {% member_empty_state title='No downloads yet' body='No downloadable resources yet. Check back soon.' icon='download' kind='fresh' %}
         {% endif %}
@@ -179,88 +66,4 @@
   </section>
 </main>
 {% include "includes/footer.html" %}
-{% endblock %}
-
-{% block extra_scripts %}
-{{ block.super }}
-<script>
-function handleDownloadInlineSubscribe(event, form) {
-  event.preventDefault();
-  var container = form.closest('[data-testid="download-inline-subscribe-container"]');
-  var emailInput = form.querySelector('input[name="email"]');
-  var submitBtn = form.querySelector('button[type="submit"]');
-  var messageEl = container.querySelector('.download-inline-subscribe-message');
-  var errorEl = container.querySelector('.download-inline-subscribe-error');
-  var redirectTo = container.dataset.redirectTo || '';
-
-  messageEl.classList.add('hidden');
-  errorEl.classList.add('hidden');
-
-  if (!emailInput.value.trim()) {
-    errorEl.textContent = 'Please enter your email address.';
-    errorEl.classList.remove('hidden');
-    emailInput.focus();
-    return false;
-  }
-  if (!emailInput.validity.valid) {
-    errorEl.textContent = 'Please enter a valid email address.';
-    errorEl.classList.remove('hidden');
-    emailInput.focus();
-    return false;
-  }
-
-  submitBtn.disabled = true;
-  var originalButtonHtml = submitBtn.innerHTML;
-  submitBtn.textContent = 'Submitting...';
-
-  var csrfToken = '';
-  var cookies = document.cookie.split(';');
-  for (var i = 0; i < cookies.length; i++) {
-    var cookie = cookies[i].trim();
-    if (cookie.startsWith('csrftoken=')) {
-      csrfToken = cookie.substring('csrftoken='.length);
-      break;
-    }
-  }
-
-  fetch('/api/subscribe', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': csrfToken,
-    },
-    body: JSON.stringify({
-      email: emailInput.value,
-      redirect_to: redirectTo,
-    }),
-  })
-  .then(function(resp) { return resp.json(); })
-  .then(function(data) {
-    if (data.status === 'ok') {
-      form.classList.add('hidden');
-      messageEl.textContent = data.message;
-      messageEl.classList.remove('hidden');
-      if (typeof gtag === 'function') {
-        gtag('event', 'sign_up', { method: 'newsletter' });
-      }
-      return;
-    }
-
-    errorEl.textContent = data.error || 'Something went wrong. Please try again.';
-    errorEl.classList.remove('hidden');
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = originalButtonHtml;
-    if (typeof lucide !== 'undefined') { lucide.createIcons(); }
-  })
-  .catch(function() {
-    errorEl.textContent = 'An error occurred. Please try again.';
-    errorEl.classList.remove('hidden');
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = originalButtonHtml;
-    if (typeof lucide !== 'undefined') { lucide.createIcons(); }
-  });
-
-  return false;
-}
-</script>
 {% endblock %}

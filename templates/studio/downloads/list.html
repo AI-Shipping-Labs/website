@@ -17,19 +17,22 @@
 {% if downloads or search %}
 <!-- Download List -->
 <div class="{% studio_list_class 'wrapper' %}">
-  <table class="w-full">
-    <thead class="bg-secondary">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
       <tr>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Downloads</th>
-        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+        <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="{% studio_list_class 'th' %}">Type</th>
+        <th class="{% studio_list_class 'th' %}">Tier</th>
+        <th class="{% studio_list_class 'th' %}">Size</th>
+        <th class="{% studio_list_class 'th' %}">Status</th>
+        <th class="{% studio_list_class 'th' %}">Delivery</th>
+        <th class="{% studio_list_class 'th' %}">Downloads</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-border">
+    <tbody class="{% studio_list_class 'tbody' %}">
       {% for download in downloads %}
-      <tr class="hover:bg-secondary/50 transition-colors">
+      <tr class="{% studio_list_class 'row' %}">
         <td class="px-6 py-4">
           <a href="{% url 'studio_download_edit' download_id=download.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ download.title }}</a>
           {% studio_origin_badge download show_path=False %}
@@ -37,12 +40,17 @@
         <td class="px-6 py-4">
           <span class="text-xs px-2 py-1 rounded-full {{ download.file_type_color }}">{{ download.file_type_label }}</span>
         </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ download.get_required_level_display }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ download.human_file_size|default:"—" }}</td>
         <td class="px-6 py-4">
           {% if download.published %}
             {% studio_status_badge 'published' 'Published' %}
           {% else %}
             {% studio_status_badge 'draft' 'Draft' %}
           {% endif %}
+        </td>
+        <td class="px-6 py-4">
+          {% if download.delivery_ready %}{% studio_status_badge 'published' 'Secure' %}{% else %}{% studio_status_badge 'draft' 'Needs migration' %}{% endif %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ download.download_count }}</td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
@@ -59,7 +67,7 @@
       </tr>
       {% empty %}
         {% url 'studio_download_list' as downloads_clear_url %}
-        {% studio_empty_state 'filter' entity_label='download' entity_label_plural='downloads' clear_url=downloads_clear_url colspan=5 %}
+        {% studio_empty_state 'filter' entity_label='download' entity_label_plural='downloads' clear_url=downloads_clear_url colspan=8 %}
       {% endfor %}
     </tbody>
   </table>

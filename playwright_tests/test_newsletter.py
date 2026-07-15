@@ -697,19 +697,18 @@ class TestScenario6ExpiredTokenError:
 
 @pytest.mark.django_db(transaction=True)
 class TestScenario7LeadMagnetSubscribeFlow:
-    """Anonymous visitor downloads a lead magnet by subscribing
-    with their email."""
+    """Anonymous visitor requests a lead magnet from its detail page."""
 
-    def test_anonymous_submits_inline_email_form_on_lead_magnet(
+    def test_anonymous_submits_detail_email_form_on_lead_magnet(
         self, django_server
     , page):
         """Given a published download with required_level=0 (lead magnet)
         and an anonymous visitor.
         1. Navigate to /downloads
-        2. Find the lead magnet download card
-        Then: The card shows an inline email form.
-        3. Submit the inline form
-        Then: The subscribe API succeeds and the page stays on /downloads."""
+        2. Follow the lead magnet download card to its detail page
+        Then: The detail page shows the privacy-safe request form.
+        3. Submit the request form
+        Then: The generic success state is shown on the detail page."""
         _ensure_tiers()
         _clear_downloads()
         _create_download(
@@ -735,32 +734,44 @@ class TestScenario7LeadMagnetSubscribeFlow:
         card = page.locator('[data-testid="download-card"]').filter(
             has_text="Free AI Cheat Sheet"
         )
-        form = card.get_by_test_id("download-inline-subscribe-form")
-        assert form.count() == 1
-        assert card.get_by_test_id(
-            "download-inline-subscribe-container"
-        ).get_attribute("data-redirect-to") == (
-            "/api/downloads/free-ai-cheat-sheet/file"
+        assert card.locator('input[type="email"]').count() == 0
+        card.get_by_test_id("download-card-body-link").click()
+        assert page.url == (
+            f"{django_server}/downloads/free-ai-cheat-sheet?surface=catalog"
         )
+        form = page.get_by_test_id("download-request-form")
+        assert form.count() == 1
+        assert form.get_attribute("data-endpoint") == (
+            "/api/downloads/free-ai-cheat-sheet/request?surface=catalog"
+        )
+        assert not form.locator('input[name="newsletter_opt_in"]').is_checked()
         assert page.locator('a[href*="/accounts/signup"]').count() == 0
 
-        # Step 3: Submit the inline form
+        # Step 3: Submit the detail request form. Backend delivery and its
+        # enumeration-safe response contract are covered by focused Django
+        # tests; this journey verifies the browser handoff and success UI.
+        page.route(
+            "**/api/downloads/free-ai-cheat-sheet/request?surface=catalog",
+            lambda route: route.fulfill(
+                status=202,
+                content_type="application/json",
+                body='{"status":"accepted","message":"Check your email."}',
+            ),
+        )
         form.locator('input[name="email"]').fill("lead-magnet-flow@test.com")
-        with page.expect_response("**/api/subscribe") as response_info:
+        with page.expect_request(
+            "**/api/downloads/free-ai-cheat-sheet/request?surface=catalog"
+        ) as request_info:
             form.locator('button[type="submit"]').click()
-        response = response_info.value
-        assert response.status == 200
-        payload = response.json()
-        assert payload["status"] == "ok"
-
-        message = card.get_by_test_id("download-inline-subscribe-message")
-        message.wait_for(state="visible")
-        assert "verification link" in message.inner_text().lower()
-        assert page.url == f"{django_server}/downloads"
-
-        from accounts.models import User
-
-        assert User.objects.filter(email="lead-magnet-flow@test.com").exists()
+        assert request_info.value.post_data_json["email"] == (
+            "lead-magnet-flow@test.com"
+        )
+        success = page.get_by_test_id("download-request-success")
+        success.wait_for(state="visible")
+        assert "check your email" in success.inner_text().lower()
+        assert page.url == (
+            f"{django_server}/downloads/free-ai-cheat-sheet?surface=catalog"
+        )
 
     def test_lead_magnet_verification_redirects_to_download(
         self, django_server
@@ -784,10 +795,18 @@ class TestScenario7LeadMagnetSubscribeFlow:
             email_verified=False,
         )
 
-        # Generate a verification token with redirect_to
-        token = _make_verification_token(
+        # Download delivery uses the account action token's safe return_path
+        # so mailbox proof continues to the one-time grant redemption URL.
+        from accounts.utils.tokens import generate_user_action_token
+
+        return_path = (
+            "/api/downloads/lead-magnet-resource/file?grant=opaque-test-grant"
+        )
+        token = generate_user_action_token(
             user.pk,
-            redirect_to="/api/downloads/lead-magnet-resource/file",
+            "verify_email",
+            expiry_hours=24,
+            return_path=return_path,
         )
 
         # Intercept the redirect to avoid following to
@@ -817,7 +836,7 @@ class TestScenario7LeadMagnetSubscribeFlow:
 
         # Then: Redirect to the download file URL
         assert redirect_location is not None
-        assert "/api/downloads/lead-magnet-resource/file" in redirect_location
+        assert return_path in redirect_location
 
         # Then: User is now verified
         user.refresh_from_db()
@@ -836,10 +855,10 @@ class TestScenario8AuthenticatedLeadMagnetDownload:
     , browser):
         """Given a user logged in as free@test.com (Free tier, verified).
         1. Navigate to /downloads
-        2. Find a download with required_level=0 (lead magnet)
-        Then: The download card shows a direct 'Download' button.
-        3. Click the download button
-        Then: The file downloads successfully."""
+        2. Follow a required_level=0 card to its detail page
+        Then: The detail page shows a direct 'Download' action.
+        3. Click the download action
+        Then: The secure file endpoint is requested."""
         _ensure_tiers()
         _clear_downloads()
         _create_user("free@test.com", tier_slug="free")
@@ -864,11 +883,14 @@ class TestScenario8AuthenticatedLeadMagnetDownload:
         # Step 2: Find the lead magnet
         assert "Free Guide" in body
 
-        # Then: Direct download link is present (no signup CTA)
-        download_link = page.locator(
-            'a[href="/api/downloads/free-guide/file"]'
-        )
-        assert download_link.count() >= 1
+        card = page.get_by_test_id("download-card").filter(has_text="Free Guide")
+        assert card.locator('a[href="/api/downloads/free-guide/file"]').count() == 0
+        card.get_by_test_id("download-card-body-link").click()
+        assert page.url == f"{django_server}/downloads/free-guide?surface=catalog"
+
+        # Then: Direct download action is present on detail (no signup CTA)
+        download_link = page.get_by_test_id("download-file-cta")
+        assert download_link.count() == 1
 
         # No "Sign Up to Download" button for authenticated user
         signup_btn = page.locator(
@@ -876,33 +898,19 @@ class TestScenario8AuthenticatedLeadMagnetDownload:
         )
         assert signup_btn.count() == 0
 
-        # Step 3: Click the download button and intercept
-        redirect_status = None
-        redirect_location = None
-
-        def handle_route(route):
-            nonlocal redirect_status, redirect_location
-            resp = route.fetch(max_redirects=0)
-            redirect_status = resp.status
-            redirect_location = resp.headers.get(
-                "location", ""
-            )
-            route.fulfill(
-                status=200,
-                body="intercepted",
-            )
-
+        # Step 3: Click the download action and intercept the secure endpoint.
         page.route(
-            "**/api/downloads/free-guide/file",
-            handle_route,
+            "**/api/downloads/free-guide/file?surface=catalog",
+            lambda route: route.fulfill(status=200, body="intercepted"),
         )
 
-        download_link.first.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: File download triggered (302 redirect to file)
-        assert redirect_status == 302
-        assert "example.com/guide.pdf" in redirect_location
+        with page.expect_request(
+            "**/api/downloads/free-guide/file?surface=catalog"
+        ) as request_info:
+            download_link.click()
+        assert request_info.value.url.endswith(
+            "/api/downloads/free-guide/file?surface=catalog"
+        )
 # ---------------------------------------------------------------
 # Scenario 9: Subscriber unsubscribes via the link in an email
 # ---------------------------------------------------------------

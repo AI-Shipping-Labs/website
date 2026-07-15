@@ -33,7 +33,7 @@ unpublish_downloads.short_description = 'Unpublish selected downloads'
 class DownloadAdmin(admin.ModelAdmin):
     list_display = [
         'title', 'slug', 'file_type', 'file_size_bytes',
-        'required_level', 'download_count', 'published', 'created_at',
+        'required_level', 'delivery_ready', 'download_count', 'published', 'created_at',
         'studio_link',
     ]
     list_filter = ['published', 'required_level', 'file_type']
@@ -53,7 +53,7 @@ class DownloadAdmin(admin.ModelAdmin):
         }),
         ('File', {
             'fields': (
-                'file_url', 'file_type', 'file_size_bytes',
+                'file_url', 'storage_key', 'asset_mime_type', 'file_type', 'file_size_bytes',
             ),
         }),
         ('Tags & Visibility', {

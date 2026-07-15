@@ -23,7 +23,7 @@ from integrations.config import get_config, is_enabled, site_base_url
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = "2026-07-14.1"
+SCHEMA_VERSION = "2026-07-15.1"
 REDACTED = "[privacy-redacted]"
 SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 SENSITIVE_METADATA_KEY_PARTS = (
@@ -475,6 +475,19 @@ def _redact_secret_url_query_values(value):
 
 def _learning_content(user):
     return {
+        "download_delivery_grants": _values(
+            _model("content", "DownloadDeliveryGrant"),
+            Q(user=user),
+            [
+                "id",
+                "download_id",
+                "newsletter_opt_in",
+                "surface",
+                "expires_at",
+                "redeemed_at",
+                "created_at",
+            ],
+        ),
         "course_enrollments": _values(
             _model("content", "Enrollment"),
             Q(user=user),

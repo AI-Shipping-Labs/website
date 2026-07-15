@@ -44,12 +44,64 @@ def download_edit(request, download_id):
         download.title = request.POST.get('title', '').strip()
         download.slug = request.POST.get('slug', '').strip() or slugify(download.title)
         download.description = request.POST.get('description', '')
-        download.file_url = request.POST.get('file_url', '')
-        download.file_type = request.POST.get('file_type', 'pdf')
-        download.file_size_bytes = int(request.POST.get('file_size_bytes', 0) or 0)
+        from content.services.download_validation import (
+            DownloadMetadataError,
+            validate_download_metadata,
+        )
+        replacement_url = request.POST.get('file_url', '').strip()
+        replacement_key = request.POST.get('storage_key', '').strip()
+        publish_requested = request.POST.get('published') == 'on'
+        try:
+            secure_metadata = validate_download_metadata(
+                storage_key=replacement_key or download.storage_key,
+                file_type=request.POST.get('file_type', 'pdf'),
+                file_size_bytes=request.POST.get('file_size_bytes', 0),
+                required_level=request.POST.get('required_level', 0),
+                asset_mime_type=request.POST.get('asset_mime_type', ''),
+            )
+        except DownloadMetadataError as exc:
+            if publish_requested:
+                return render(request, 'studio/downloads/form.html', {
+                    'download': download,
+                    'form_action': 'edit',
+                    'is_synced': synced,
+                    'form_error': str(exc),
+                    'github_edit_url': get_github_edit_url(download),
+                }, status=400)
+            secure_metadata = None
+        if publish_requested and secure_metadata is not None:
+            from content.services.download_delivery import (
+                verify_download_object_exists,
+            )
+            try:
+                verify_download_object_exists(secure_metadata['storage_key'])
+            except ValueError as exc:
+                blocked_reason = (
+                    'Private object validation failed; correct the asset '
+                    'and try publishing again.'
+                )
+                Download.objects.filter(pk=download.pk).update(
+                    published=False,
+                    delivery_blocked_reason=blocked_reason,
+                )
+                download.published = False
+                download.delivery_blocked_reason = blocked_reason
+                return render(request, 'studio/downloads/form.html', {
+                    'download': download,
+                    'form_action': 'edit',
+                    'is_synced': synced,
+                    'form_error': str(exc),
+                    'github_edit_url': get_github_edit_url(download),
+                }, status=400)
+        if replacement_url:
+            download.file_url = replacement_url
+        if secure_metadata is not None:
+            for field, value in secure_metadata.items():
+                setattr(download, field, value)
+            if publish_requested:
+                download.delivery_blocked_reason = ''
         download.cover_image_url = request.POST.get('cover_image_url', '')
-        download.published = request.POST.get('published') == 'on'
-        download.required_level = int(request.POST.get('required_level', 0))
+        download.published = publish_requested
         download.tags = parse_comma_separated_tags(request.POST.get('tags', ''))
         download.save()
         return redirect('studio_download_edit', download_id=download.pk)

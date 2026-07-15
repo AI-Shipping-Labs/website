@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+{% load member_badges %}
+{% load teaser_tags %}
+
+{% block title %}{{ download.title }} | Downloads | AI Shipping Labs{% endblock %}
+{% block meta_description %}{{ download.description|strip_markdown|truncatechars:160 }}{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <section class="py-8 sm:py-16 lg:py-24">
+    <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+      <a href="/downloads" class="inline-flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i> All downloads
+      </a>
+
+      <div class="mt-6 max-w-3xl">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Download</p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">{{ download.title }}</h1>
+        {% if download.description %}<p class="mt-4 text-lg leading-relaxed text-muted-foreground">{{ download.description|strip_markdown }}</p>{% endif %}
+        <div class="mt-6 flex flex-wrap items-center gap-3">
+          {% member_label_badge download.file_type_label %}
+          {% if download.human_file_size %}<span class="text-sm text-muted-foreground">{{ download.human_file_size }}</span>{% endif %}
+          {% member_tier_badge download.required_level %}
+        </div>
+      </div>
+
+      {% if delivery_access_required %}
+      <div class="mt-10 max-w-3xl rounded-lg border border-border bg-secondary p-4 text-sm text-foreground" role="status" data-testid="download-access-required-notice">
+        This secure link could not authorize the download. Sign in with an eligible membership or view pricing below.
+      </div>
+      {% endif %}
+      <div class="{% if delivery_access_required %}mt-4{% else %}mt-10{% endif %} max-w-3xl rounded-lg border border-border bg-card p-5 sm:p-8" data-testid="download-access-card">
+        {% if show_request_form %}
+          <div id="download-request-intro">
+            <h2 class="text-2xl font-semibold tracking-tight text-foreground">Get the free download</h2>
+            <p class="mt-2 text-sm text-muted-foreground">Enter your email so we can verify the address and send a secure, short-lived link. This creates a passwordless Free account.</p>
+            <form id="download-request-form" class="mt-6 space-y-4" data-endpoint="/api/downloads/{{ download.slug }}/request?surface={{ download_surface }}" data-testid="download-request-form">
+              <div>
+                <label for="download-email" class="mb-1 block text-sm font-medium text-foreground">Email address</label>
+                <input id="download-email" name="email" type="email" autocomplete="email" required class="min-h-[44px] w-full rounded-lg border border-input bg-background px-4 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-accent" placeholder="you@example.com">
+              </div>
+              <label class="flex min-h-[44px] items-start gap-3 text-sm text-muted-foreground">
+                <input name="newsletter_opt_in" type="checkbox" class="mt-1 rounded border-input text-accent focus:ring-accent">
+                <span>Also send me the AI Shipping Labs newsletter. This is optional and requires confirmation.</span>
+              </label>
+              {% button_classes 'primary' size='lg' extra='w-full sm:w-auto' as request_button_classes %}
+              <button type="submit" class="{{ request_button_classes }}" data-testid="download-request-submit">
+                <i data-lucide="mail" class="h-4 w-4"></i> Email me the download
+              </button>
+              <p class="text-xs text-muted-foreground">By continuing, you agree to the <a href="/terms" class="underline hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Terms of Service</a> and acknowledge the <a href="/privacy" class="underline hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Privacy Policy</a>.</p>
+            </form>
+            <p id="download-request-error" class="invisible mt-4 min-h-[1.25rem] text-sm text-destructive" role="alert" tabindex="-1"></p>
+          </div>
+          <div id="download-request-success" class="hidden" data-testid="download-request-success" tabindex="-1">
+            <i data-lucide="mail-check" class="h-8 w-8 text-accent"></i>
+            <h2 class="mt-4 text-2xl font-semibold tracking-tight text-foreground">Check your email</h2>
+            <p class="mt-2 text-sm text-muted-foreground">If this address can receive the resource, we sent a secure link. Please check your email.</p>
+          </div>
+        {% elif requires_email_verification %}
+          {% include "content/_verify_email_required.html" %}
+        {% elif has_access %}
+          <h2 class="text-2xl font-semibold tracking-tight text-foreground">Your download is ready</h2>
+          <p class="mt-2 text-sm text-muted-foreground">The secure link is generated when you choose Download and expires shortly afterward.</p>
+          {% button_classes 'primary' size='lg' extra='mt-6 w-full sm:w-auto' as download_button_classes %}
+          <a href="/api/downloads/{{ download.slug }}/file?surface={{ download_surface }}" class="{{ download_button_classes }}" data-testid="download-file-cta">
+            <i data-lucide="download" class="h-4 w-4"></i> Download
+          </a>
+        {% else %}
+          {% include "content/_gated_access_card.html" %}
+        {% endif %}
+      </div>
+    </div>
+  </section>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+{% if show_request_form %}
+<script>
+(function () {
+  var form = document.getElementById('download-request-form');
+  if (!form) return;
+  var error = document.getElementById('download-request-error');
+  var success = document.getElementById('download-request-success');
+  var accessCard = form.closest('[data-testid="download-access-card"]');
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    error.classList.add('invisible');
+    error.textContent = '';
+    accessCard.style.minHeight = accessCard.offsetHeight + 'px';
+    var button = form.querySelector('button[type="submit"]');
+    var buttonHtml = button.innerHTML;
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.textContent = 'Sending…';
+    fetch(form.dataset.endpoint, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ''},
+      body: JSON.stringify({
+        email: form.elements.email.value,
+        newsletter_opt_in: form.elements.newsletter_opt_in.checked
+      })
+    }).then(function (response) {
+      return response.json().then(function (data) { return {ok: response.ok, data: data}; });
+    }).then(function (result) {
+      if (!result.ok) throw new Error(result.data.error || 'Please try again.');
+      form.classList.add('hidden');
+      document.querySelector('#download-request-intro > h2').classList.add('hidden');
+      document.querySelector('#download-request-intro > p').classList.add('hidden');
+      success.classList.remove('hidden');
+      success.focus();
+      if (typeof gtag === 'function') gtag('event', 'download_request_submitted', {download_slug: '{{ download.slug|escapejs }}', surface: '{{ download_surface|escapejs }}', required_level: {{ download.required_level }}});
+    }).catch(function (failure) {
+      error.textContent = failure.message;
+      error.classList.remove('invisible');
+      error.focus();
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      button.innerHTML = buttonHtml;
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    });
+  });
+}());
+</script>
+{% endif %}
+{% endblock %}

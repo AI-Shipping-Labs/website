@@ -1,18 +1,18 @@
 {% extends "studio/base.html" %}
 {% load studio_filters %}
 
-{% block studio_title %}{% if is_synced %}View Download{% elif download %}Edit Download{% else %}New Download{% endif %}{% endblock %}
+{% block studio_title %}{% if is_synced %}View download{% elif download %}Edit download{% else %}New download{% endif %}{% endblock %}
 
 {% block studio_content %}
 <div class="mb-8">
   <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
     <a href="{% url 'studio_download_list' %}" class="hover:text-foreground">Downloads</a>
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
-    <span class="text-foreground">{% if download %}{{ download.title }}{% else %}New Download{% endif %}</span>
+    <span class="text-foreground">{% if download %}{{ download.title }}{% else %}New download{% endif %}</span>
   </div>
   <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
     <div class="min-w-0">
-      <h1 class="text-2xl font-semibold text-foreground">{% if is_synced %}View Download{% elif download %}Edit Download{% else %}New Download{% endif %}</h1>
+      <h1 class="text-2xl font-semibold text-foreground">{% if is_synced %}View download{% elif download %}Edit download{% else %}New download{% endif %}</h1>
     </div>
     <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
       {% if download %}
@@ -34,6 +34,8 @@
 <form method="post" class="space-y-6 max-w-3xl">
   {% csrf_token %}
 
+  {% if form_error %}<div class="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" role="alert">{{ form_error }}</div>{% endif %}
+
   <div class="bg-card border border-border rounded-lg p-6 space-y-4">
     {% include "studio/includes/forms/title.html" with value=download.title disabled=is_synced %}
 
@@ -42,30 +44,45 @@
     {% include "studio/includes/forms/textarea.html" with label="Description" name="description" rows=4 value=download.description disabled=is_synced %}
 
     <div>
-      <label class="block text-sm font-medium text-foreground mb-1">File URL</label>
-      <input type="url" name="file_url" value="{{ download.file_url|default:'' }}" required
+      <label class="block text-sm font-medium text-foreground mb-1">Legacy file URL replacement</label>
+      <input type="url" name="file_url" value="" placeholder="Leave blank to preserve the current legacy value"
              {% if is_synced %}disabled{% endif %}
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
     </div>
 
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Private storage key replacement</label>
+      <input type="text" name="storage_key" value="" placeholder="downloads/resource-name.pdf"
+             {% if is_synced %}disabled{% endif %}
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
+      <p class="mt-1 text-xs text-muted-foreground">{% if download.delivery_ready %}Secure asset configured.{% else %}Not ready for secure delivery.{% if download.delivery_blocked_reason %} {{ download.delivery_blocked_reason }}{% endif %}{% endif %} Existing keys and URLs are never rendered.</p>
+      <p class="mt-1 text-xs text-muted-foreground" data-testid="download-count">Successful downloads: {{ download.download_count }}</p>
+    </div>
+
     <div class="grid grid-cols-2 gap-4">
       <div>
-        <label class="block text-sm font-medium text-foreground mb-1">File Type</label>
+        <label class="block text-sm font-medium text-foreground mb-1">File type</label>
         <select name="file_type" {% if is_synced %}disabled{% endif %} class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
           <option value="pdf" {% if download.file_type == 'pdf' %}selected{% endif %}>PDF</option>
           <option value="zip" {% if download.file_type == 'zip' %}selected{% endif %}>ZIP</option>
           <option value="slides" {% if download.file_type == 'slides' %}selected{% endif %}>Slides</option>
           <option value="notebook" {% if download.file_type == 'notebook' %}selected{% endif %}>Notebook</option>
           <option value="csv" {% if download.file_type == 'csv' %}selected{% endif %}>CSV</option>
-          <option value="other" {% if download.file_type == 'other' %}selected{% endif %}>Other</option>
         </select>
       </div>
       <div>
-        <label class="block text-sm font-medium text-foreground mb-1">File Size (bytes)</label>
+        <label class="block text-sm font-medium text-foreground mb-1">File size (bytes)</label>
         <input type="number" name="file_size_bytes" value="{{ download.file_size_bytes|default:0 }}"
                {% if is_synced %}disabled{% endif %}
                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
       </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Asset MIME type</label>
+      <input type="text" name="asset_mime_type" value="{{ download.asset_mime_type|default:'' }}"
+             {% if is_synced %}disabled{% endif %}
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
     </div>
 
     {% include "studio/includes/forms/cover_image_url.html" with value=download.cover_image_url disabled=is_synced %}

@@ -784,7 +784,7 @@ class TestScenario1160VerifyEmailReturnToContent:
             "/courses/sweep-course",
             "/courses/sweep-course/intro/lesson",
             f"/resources/{curated.pk}/go",
-            "/downloads",
+            download.get_absolute_url(),
             workshop.get_absolute_url(),
             workshop_page.get_absolute_url(),
             f"{workshop.get_absolute_url()}/video",
@@ -1665,22 +1665,33 @@ class TestScenario11FreeMemberGatedDownloads:
         assert "Free Lead Magnet" in body
         assert "Main Gated Resource" in body
 
-        # Lead magnet has an in-card download option (for authenticated user)
+        # Catalog cards hand off to detail pages; access decisions are not
+        # embedded in the listing.
         lead_magnet_card = page.get_by_test_id("download-card").filter(
             has_text="Free Lead Magnet"
         )
-        download_btn = lead_magnet_card.get_by_test_id("download-card-file-cta")
+        lead_magnet_card.get_by_test_id("download-card-body-link").click()
+        assert page.url == (
+            f"{django_server}/downloads/free-lead-magnet?surface=catalog"
+        )
+        download_btn = page.get_by_test_id("download-file-cta")
         assert download_btn.is_visible()
         assert "/api/downloads/free-lead-magnet/file" in download_btn.get_attribute(
             "href"
         )
 
-        # Main-gated download has upgrade CTA
-        assert "Upgrade to Main to download" in body
+        page.goto(f"{django_server}/downloads", wait_until="domcontentloaded")
+        gated_card = page.get_by_test_id("download-card").filter(
+            has_text="Main Gated Resource"
+        )
+        gated_card.get_by_test_id("download-card-body-link").click()
 
-        # View Pricing link on gated download
-        pricing_link = page.locator('a:has-text("View Pricing")')
-        assert pricing_link.count() >= 1
+        # Main-gated detail has the shared tier gate and pricing path.
+        gate = page.get_by_test_id("download-tier-gate")
+        assert gate.is_visible()
+        assert "Main or above required" in gate.inner_text()
+        pricing_link = page.get_by_test_id("download-pricing-cta")
+        assert pricing_link.is_visible()
 
         # Click View Pricing
         pricing_link.first.click()

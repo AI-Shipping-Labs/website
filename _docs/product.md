@@ -120,8 +120,10 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
-| Downloads listing | `/downloads` | Grid of downloadable resources (PDFs, slides, notebooks) with file type badges, sizes, cover images, tags | Everyone (listing visible) | Shipped |
-| Download file | `/api/downloads/<slug>/file` | Serves the file; lead magnet downloads (level 0) require authentication but not a paid tier; gated downloads require the appropriate tier | Lead magnets: authenticated users; gated: tier-dependent | Shipped |
+| Downloads listing | `/downloads` | Clean grid of downloadable resources with file type, size, tags, and required-tier cues; cards deliberately do not render cover media or embedded forms | Everyone (listing visible) | Shipped |
+| Download detail | `/downloads/<slug>` | Stable access/request surface. Free anonymous visitors request delivery by email here; signed-in eligible members receive a direct handoff; locked members see the required tier | Everyone (published resources) | Shipped |
+| Download request | `POST /api/downloads/<slug>/request` | Enumeration-safe transactional delivery request with optional, separate newsletter consent and per-IP/email/resource throttles | Everyone (published resources) | Shipped |
+| Download file | `GET /api/downloads/<slug>/file` | Re-checks publication, tier, validated metadata, and private-object existence before issuing a short-lived attachment URL; one-time grants and successful counts are consumed only after these checks | Verified mailbox or eligible signed-in member | Shipped |
 
 ### Content -- Courses
 
@@ -195,7 +197,7 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 | Recording management | `/studio/recordings/`, `/studio/recordings/new`, `/studio/recordings/<id>/edit` | List, create, edit event recordings | Staff only | Shipped |
 | Course management | `/studio/courses/`, `/studio/courses/new`, `/studio/courses/<id>/edit` | List, create, edit courses with modules and units; reorder modules/units | Staff only | Shipped |
 | Event management | `/studio/events/`, `/studio/events/new`, `/studio/events/<id>/edit` | List, create, edit events | Staff only | Shipped |
-| Download management | `/studio/downloads/`, `/studio/downloads/new`, `/studio/downloads/<id>/edit` | List, create, edit downloadable resources | Staff only | Shipped |
+| Download management | `/studio/downloads/`, `/studio/downloads/<id>/edit` | List tier, size, readiness and counts; inspect/edit manual rows; synced rows are read-only and link to their canonical GitHub source. Creation is source-sync only. | Staff only | Shipped |
 | Project review | `/studio/projects/`, `/studio/projects/<id>/review` | List submitted projects; approve/reject | Staff only | Shipped |
 | Campaign management | `/studio/campaigns/`, `/studio/campaigns/new`, `/studio/campaigns/<id>/` | List, create, view email campaigns | Staff only | Shipped |
 | Subscriber management | `/studio/users/?filter=subscribers`, `/studio/users/export?filter=subscribers` | List subscribers; export to CSV | Staff only | Shipped |

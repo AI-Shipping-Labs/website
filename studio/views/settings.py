@@ -80,8 +80,8 @@ SETTINGS_SECTIONS = [
     {
         'id': 'storage',
         'label': 'Storage',
-        'description': 'Buckets and public storage locations for generated assets.',
-        'group_names': {'s3_recordings', 's3_content'},
+        'description': 'Buckets and storage locations for generated and gated assets.',
+        'group_names': {'s3_recordings', 's3_content', 's3_downloads'},
     },
     {
         'id': 'site',
@@ -123,7 +123,7 @@ OTHER_SECTION = {
 }
 
 HIGH_RISK_GROUP_NAMES = {
-    'stripe', 'ses', 'github', 's3_recordings', 's3_content',
+    'stripe', 'ses', 'github', 's3_recordings', 's3_content', 's3_downloads',
     'banner_generator', 'llm',
 }
 HIGH_RISK_AUTH_PROVIDERS = {'google', 'github', 'slack'}

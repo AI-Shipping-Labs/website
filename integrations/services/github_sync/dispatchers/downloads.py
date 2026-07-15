@@ -57,6 +57,17 @@ def _dispatch_downloads(source, repo_dir, file_list, commit_sha, stats,
             # Edge Case 7: Frontmatter validation
             _validate_frontmatter(data, 'download', rel_path)
 
+            from content.services.download_validation import validate_download_metadata
+            secure_metadata = validate_download_metadata(
+                storage_key=data.get('storage_key', ''),
+                file_type=data.get('file_type', 'other'),
+                file_size_bytes=data.get('file_size_bytes', 0),
+                required_level=data.get('required_level', 0),
+                asset_mime_type=data.get('asset_mime_type', ''),
+            )
+            from content.services.download_delivery import verify_download_object_exists
+            verify_download_object_exists(secure_metadata['storage_key'])
+
             # Require content_id in frontmatter
             download_content_id = data.get('content_id')
             if not download_content_id:
@@ -83,16 +94,15 @@ def _dispatch_downloads(source, repo_dir, file_list, commit_sha, stats,
                 'title': data.get('title', slug),
                 'description': data.get('description', ''),
                 'file_url': data.get('file_url', ''),
-                'file_type': data.get('file_type', 'other'),
-                'file_size_bytes': data.get('file_size_bytes', 0),
+                **secure_metadata,
                 'cover_image_url': rewrite_cover_image_url(
                     data.get('cover_image', '') or data.get('cover_image_url', ''),
                     source, rel_path,
                     known_images=known_images, errors=stats['errors'],
                 ),
                 'tags': data.get('tags', []),
-                'required_level': data.get('required_level', 0),
                 'published': True,
+                'delivery_blocked_reason': '',
                 'source_repo': source.repo_name,
                 'source_path': rel_path,
                 'source_commit': commit_sha,
@@ -150,6 +160,18 @@ def _dispatch_downloads(source, repo_dir, file_list, commit_sha, stats,
                 failed_slug = fallback_slug
             failed_slugs.add(failed_slug)
             stats['errors'].append({'file': rel_path, 'error': str(e)})
+            # A previously valid row must fail closed when its source becomes
+            # invalid or its private object disappears. Preserve metadata for
+            # operator diagnosis and permit a later valid sync to recover it.
+            Download.objects.filter(
+                slug=failed_slug,
+                source_repo=source.repo_name,
+            ).update(
+                published=False,
+                delivery_blocked_reason=(
+                    'Source validation failed; correct the source and re-sync.'
+                ),
+            )
 
     # Soft-delete stale downloads, excluding failed slugs
     stale = Download.objects.filter(
@@ -167,4 +189,3 @@ def _dispatch_downloads(source, repo_dir, file_list, commit_sha, stats,
     stale.update(published=False)
     stats['deleted'] += deleted_count
     refresh_published_downloads_nav_cache()
-

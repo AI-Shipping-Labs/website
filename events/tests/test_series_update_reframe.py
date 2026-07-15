@@ -193,6 +193,54 @@ class RenderSeriesUpdateBodyTest(TierSetupMixin, TestCase):
         )
         self.assertIn(f'{expected_weekday}, ', cancel_html)
 
+    def test_series_lifecycle_copy_matches_calendar_invitation_envelope(self):
+        rendered = {
+            'registration': _render_series_email(
+                'series_registration', self.user, self.series,
+                [self.changed, self.other], 'series_registration',
+            )[1],
+            'update': _render_series_email(
+                'series_update', self.user, self.series,
+                [self.changed, self.other], 'series_update',
+                changed_event=self.changed, old_start=self.old_start,
+            )[1],
+            'cancellation': _render_series_email(
+                'series_cancellation', self.user, self.series,
+                [self.changed], 'series_cancellation',
+            )[1],
+        }
+
+        self.assertIn(
+            'This email includes a calendar invitation',
+            rendered['registration'],
+        )
+        self.assertIn('if prompted', rendered['registration'])
+        self.assertIn(
+            'this email includes an updated calendar invitation',
+            rendered['update'],
+        )
+        self.assertIn('same calendar identity', rendered['update'])
+        self.assertIn('supported calendar apps can apply', rendered['update'])
+        self.assertIn('If prompted', rendered['update'])
+        self.assertIn(
+            'This email includes a calendar cancellation update',
+            rendered['cancellation'],
+        )
+        self.assertIn('Supported calendar apps can use it', rendered['cancellation'])
+        self.assertIn('If prompted', rendered['cancellation'])
+        self.assertIn('The rest of the series is unaffected', rendered['cancellation'])
+
+        forbidden_claims = (
+            'attached to this email',
+            'download',
+            'automatically',
+            'rather than create duplicates',
+            'will update the existing',
+        )
+        for lifecycle, body in rendered.items():
+            for claim in forbidden_claims:
+                self.assertNotIn(claim, body.lower(), lifecycle)
+
     def test_changed_occurrence_framing(self):
         subject, html = _render_series_email(
             'series_update', self.user, self.series,

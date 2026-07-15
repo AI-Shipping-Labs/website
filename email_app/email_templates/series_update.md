@@ -4,11 +4,11 @@ subject: "{% if changed_occurrence %}Updated time for {{ event_title }} ({{ seri
 
 Hi {{ user_name }},
 
-{% if changed_occurrence %}The time for **{{ event_title }}** in the **{{ series_name }}** series has changed, so we've refreshed your calendar invite for the whole series. Your upcoming session{{ registered_count_plural }}:{% else %}There's been a change to the **{{ series_name }}** series, so we've refreshed your calendar invite. Your upcoming session{{ registered_count_plural }}:{% endif %}
+{% if changed_occurrence %}The time for **{{ event_title }}** in the **{{ series_name }}** series has changed, so this email includes an updated calendar invitation for the whole series. Your upcoming session{{ registered_count_plural }}:{% else %}There's been a change to the **{{ series_name }}** series, so this email includes an updated calendar invitation. Your upcoming session{{ registered_count_plural }}:{% endif %}
 
 {{ occurrences_list }}
 
-An updated calendar invite is attached to this email. Open it to apply the change — your calendar will update the existing entries rather than create duplicates.
+The update uses the same calendar identity for each session, so supported calendar apps can apply the new details to the existing occurrence. If prompted, review or accept the update using the invitation controls in this email or your calendar app.
 
 Manage the series any time on the series page: {{ series_url }}
 

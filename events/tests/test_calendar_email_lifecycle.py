@@ -1,7 +1,7 @@
 """Raw MIME regression tests for event calendar lifecycle emails (#1073)."""
 
 import email as email_lib
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -10,7 +10,12 @@ from django.utils import timezone
 from icalendar import Calendar
 
 from email_app.models import EmailLog
-from events.models import Event, EventRegistration
+from events.models import (
+    Event,
+    EventRegistration,
+    EventSeries,
+    SeriesRegistration,
+)
 from events.services.registration_email import send_registration_confirmation
 from events.tasks.notify_cancellation import send_cancellation_notice_one
 from events.tasks.notify_reschedule import send_reschedule_notice_one
@@ -204,4 +209,83 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
                 user=self.user,
                 email_type='event_cancelled',
             ).exists(),
+        )
+
+
+@tag('core')
+class CancellationSeriesSubscriberDedupTest(TestCase):
+    """A cancellation has one canonical email path per recipient (#869)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.series = EventSeries.objects.create(
+            name='Cancellation de-dup series',
+            slug='cancellation-dedup-series',
+            start_time=time(16, 0),
+            timezone='UTC',
+        )
+        cls.event = Event.objects.create(
+            title='Cancelled series occurrence',
+            slug='cancelled-series-occurrence',
+            start_datetime=datetime(2026, 7, 20, 16, 0, tzinfo=UTC),
+            end_datetime=datetime(2026, 7, 20, 17, 0, tzinfo=UTC),
+            status='cancelled',
+            event_series=cls.series,
+            ics_sequence=1,
+        )
+        cls.series_subscriber = User.objects.create_user(
+            email='series-cancel@test.com',
+            preferred_timezone='UTC',
+        )
+        cls.one_off_registrant = User.objects.create_user(
+            email='one-off-cancel@test.com',
+            preferred_timezone='UTC',
+        )
+        SeriesRegistration.objects.create(
+            series=cls.series,
+            user=cls.series_subscriber,
+        )
+        EventRegistration.objects.create(
+            event=cls.event,
+            user=cls.series_subscriber,
+        )
+        EventRegistration.objects.create(
+            event=cls.event,
+            user=cls.one_off_registrant,
+        )
+
+    @patch(
+        'events.tasks.notify_cancellation._send_raw_email',
+        return_value='ses-one-off-cancel',
+    )
+    def test_series_subscriber_skips_standalone_send_but_one_off_receives_it(
+        self, mock_send,
+    ):
+        subscriber_result = send_cancellation_notice_one(
+            self.event.pk,
+            self.series_subscriber.pk,
+        )
+        one_off_result = send_cancellation_notice_one(
+            self.event.pk,
+            self.one_off_registrant.pk,
+        )
+
+        self.assertEqual(subscriber_result['status'], 'skipped')
+        self.assertEqual(subscriber_result['reason'], 'series_subscriber')
+        self.assertEqual(one_off_result['status'], 'sent')
+        mock_send.assert_called_once()
+        self.assertEqual(
+            mock_send.call_args.kwargs['to_email'],
+            self.one_off_registrant.email,
+        )
+
+        cancellation_logs = EmailLog.objects.filter(
+            email_type='event_cancelled',
+        )
+        self.assertEqual(cancellation_logs.count(), 1)
+        cancellation_log = cancellation_logs.get()
+        self.assertEqual(cancellation_log.user, self.one_off_registrant)
+        self.assertEqual(cancellation_log.ses_message_id, 'ses-one-off-cancel')
+        self.assertFalse(
+            cancellation_logs.filter(user=self.series_subscriber).exists(),
         )

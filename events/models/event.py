@@ -255,6 +255,15 @@ class Event(
         max_length=500, blank=True, default='',
         help_text='S3 raw recording file URL.',
     )
+    recording_upload_enqueued_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+        help_text=(
+            'When the Zoom-to-S3 upload job was durably enqueued. Used to '
+            'deduplicate webhook delivery while preserving failed-enqueue recovery.'
+        ),
+    )
     recording_embed_url = models.URLField(
         max_length=500, blank=True, default='',
         help_text='Legacy Google Drive embed URL.',

@@ -26,12 +26,7 @@ from django.views.decorators.http import require_GET, require_POST
 from accounts.gating import is_newsletter_only_user
 from accounts.models import MemberAPIKey, PrivacyRequestLog
 from accounts.return_context import sanitize_verification_return_path
-from accounts.services.email_change import (
-    EmailChangeError,
-    active_email_change_request_for_user,
-    confirm_email_change,
-    request_email_change,
-)
+from accounts.services.email_change import confirm_email_change
 from accounts.services.privacy import (
     build_user_data_export,
     delete_account_for_privacy,
@@ -428,8 +423,6 @@ def _render_account_page(
             "https://github.com/AI-Shipping-Labs/website/tree/main/"
             "skills/ai-shipping-labs-plans-api"
         ),
-        "pending_email_change": active_email_change_request_for_user(user),
-        "email_change_requires_password": user.has_usable_password(),
         "privacy_requires_password": user.has_usable_password(),
         "privacy_delete_error": privacy_delete_error,
         "privacy_blocker_reason": privacy_blocker_reason,
@@ -551,44 +544,6 @@ def delete_account_view(request):
 def account_deleted_view(request):
     """Public confirmation page after a member deletes their account."""
     return render(request, "accounts/account_deleted.html")
-
-
-@login_required
-@require_POST
-def change_email_request_view(request):
-    """Start a member-owned login email change request."""
-    try:
-        data = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-    try:
-        request_obj, _token = request_email_change(
-            request.user,
-            data.get("new_email", ""),
-            current_password=data.get("current_password", ""),
-        )
-    except EmailChangeError as exc:
-        return JsonResponse(
-            {"error": exc.message, "code": exc.code},
-            status=exc.status,
-        )
-    except Exception:
-        logger.exception(
-            "Email change request failed for user_id=%s",
-            request.user.pk,
-        )
-        return JsonResponse(
-            {"error": "We couldn't send that verification link. Please try again."},
-            status=500,
-        )
-
-    return JsonResponse({
-        "status": "ok",
-        "message": f"Verification link sent to {request_obj.new_email}.",
-        "pending_new_email": request_obj.new_email,
-        "current_email": request_obj.old_email,
-    })
 
 
 def change_email_confirm_view(request):

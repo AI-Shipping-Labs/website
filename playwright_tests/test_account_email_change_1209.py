@@ -1,7 +1,8 @@
-"""Playwright coverage for member login email changes (#1209)."""
+"""Playwright coverage for withdrawn requests and legacy confirmations (#1260)."""
 
 import os
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 from django.utils import timezone
@@ -37,9 +38,9 @@ def _seed_member(email, *, tier_slug="basic"):
 
 
 @pytest.mark.django_db(transaction=True)
-class TestMemberRequestsEmailChange:
+class TestRemovedMemberEmailChangeSurface:
     @pytest.mark.core
-    def test_member_requests_change_without_losing_old_login(
+    def test_desktop_settings_omits_card_and_preferences_still_work(
         self, django_server, django_db_blocker, browser
     ):
         with django_db_blocker.unblock():
@@ -49,113 +50,149 @@ class TestMemberRequestsEmailChange:
         try:
             page = context.new_page()
             page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
+            expect(page.locator("#membership-section")).to_be_visible()
+            expect(page.locator("#email-preferences-section")).to_be_visible()
+            expect(page.locator("#login-email-section")).to_have_count(0)
+            expect(page.locator("#change-email-form")).to_have_count(0)
+            expect(page.get_by_text("Current login email", exact=True)).to_have_count(0)
+            expect(page.get_by_text("New login email", exact=True)).to_have_count(0)
+            expect(page.get_by_text("Send verification link", exact=True)).to_have_count(0)
+            assert page.evaluate(
+                """() => Boolean(
+                    document.querySelector('#membership-section')
+                      .compareDocumentPosition(
+                        document.querySelector('#email-preferences-section')
+                      ) & Node.DOCUMENT_POSITION_FOLLOWING
+                )"""
+            )
 
-            expect(page.locator("#login-email-section")).to_be_visible()
-            expect(page.locator("#current-login-email")).to_have_text(
-                "old-member-1209@test.com"
+            page.click("#newsletter-toggle")
+            expect(page.locator("#newsletter-status")).to_contain_text(
+                "Newsletter updates turned"
             )
-            page.fill("#change-email-new-email", "new-member-1209@test.com")
-            page.fill("#change-email-current-password", DEFAULT_PASSWORD)
-            page.click("#change-email-submit")
-
-            expect(page.locator("#change-email-success")).to_contain_text(
-                "Verification link sent to new-member-1209@test.com"
-            )
-            expect(page.locator("#current-login-email")).to_have_text(
-                "old-member-1209@test.com"
-            )
-            expect(page.locator("[data-testid='pending-login-email']")).to_contain_text(
-                "new-member-1209@test.com"
-            )
+            artifacts = Path(".tmp/issue-1260")
+            artifacts.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=artifacts / "account-desktop.png", full_page=True)
         finally:
             context.close()
 
-        old_login = browser.new_context()
-        try:
-            page = old_login.new_page()
-            _login_with_password(
-                page,
-                django_server,
-                "old-member-1209@test.com",
-            )
-            page.wait_for_url(f"{django_server}/")
-        finally:
-            old_login.close()
-
-        new_login = browser.new_context()
-        try:
-            page = new_login.new_page()
-            _login_with_password(
-                page,
-                django_server,
-                "new-member-1209@test.com",
-            )
-            expect(page.locator("#login-error")).to_be_visible()
-        finally:
-            new_login.close()
-
-    def test_wrong_password_shows_error_and_sends_no_email(
+    def test_mobile_settings_has_no_gap_or_overflow(
         self, django_server, django_db_blocker, browser
     ):
         with django_db_blocker.unblock():
-            _seed_member("wrong-password-1209@test.com")
+            _seed_member("mobile-member-1209@test.com", tier_slug="main")
 
-        context = auth_context(browser, "wrong-password-1209@test.com")
+        context = auth_context(browser, "mobile-member-1209@test.com")
+        try:
+            page = context.new_page()
+            page.set_viewport_size({"width": 390, "height": 844})
+            page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
+            expect(page.locator("#membership-section")).to_be_visible()
+            expect(page.locator("#email-preferences-section")).to_be_visible()
+            expect(page.locator("#login-email-section")).to_have_count(0)
+            expect(page.locator("#change-password-section")).to_be_attached()
+            expect(page.locator("#profile-section")).to_be_attached()
+            expect(page.locator("#privacy-data-section")).to_be_attached()
+            assert page.evaluate(
+                "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
+            )
+            page.locator("#privacy-data-section").scroll_into_view_if_needed()
+            expect(page.locator("#privacy-data-section")).to_be_visible()
+            artifacts = Path(".tmp/issue-1260")
+            artifacts.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=artifacts / "account-mobile.png", full_page=True)
+        finally:
+            context.close()
+
+    def test_request_route_returns_404_without_side_effects(
+        self, django_server, django_db_blocker, browser
+    ):
+        with django_db_blocker.unblock():
+            _seed_member("withdrawn-route-1209@test.com")
+
+        context = auth_context(browser, "withdrawn-route-1209@test.com")
         try:
             page = context.new_page()
             page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
-            page.fill("#change-email-new-email", "new-wrong-1209@test.com")
-            page.fill("#change-email-current-password", "WrongPassword123!")
-            page.click("#change-email-submit")
-
-            expect(page.locator("#change-email-error")).to_be_visible()
-            expect(page.locator("#change-email-success")).to_be_hidden()
+            for method in ("GET", "POST"):
+                status = page.evaluate(
+                    """async ({method}) => {
+                        const csrf = document.cookie
+                          .split('; ')
+                          .find((row) => row.startsWith('csrftoken='))
+                          ?.split('=')[1] || '';
+                        const response = await fetch(
+                          '/account/api/change-email/request',
+                          {
+                            method,
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'X-CSRFToken': csrf,
+                            },
+                            body: method === 'POST'
+                              ? JSON.stringify({
+                                  new_email: 'new-withdrawn-1209@test.com',
+                                  current_password: 'TestPassword123!',
+                                })
+                              : undefined,
+                          }
+                        );
+                        return response.status;
+                    }""",
+                    {"method": method},
+                )
+                assert status == 404
         finally:
             context.close()
+
+        anonymous = browser.new_context()
+        try:
+            page = anonymous.new_page()
+            page.goto(
+                f"{django_server}/accounts/login/",
+                wait_until="domcontentloaded",
+            )
+            for method in ("GET", "POST"):
+                status = page.evaluate(
+                    """async ({method}) => {
+                        const csrf = document.cookie
+                          .split('; ')
+                          .find((row) => row.startsWith('csrftoken='))
+                          ?.split('=')[1] || '';
+                        const response = await fetch(
+                          '/account/api/change-email/request',
+                          {
+                            method,
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'X-CSRFToken': csrf,
+                            },
+                            body: method === 'POST'
+                              ? JSON.stringify({
+                                  new_email: 'anonymous-new-1209@test.com',
+                                })
+                              : undefined,
+                          }
+                        );
+                        return response.status;
+                    }""",
+                    {"method": method},
+                )
+                assert status == 404
+        finally:
+            anonymous.close()
 
         with django_db_blocker.unblock():
             from accounts.models import EmailChangeRequest, User
             from email_app.models import EmailLog
 
-            user = User.objects.get(email="wrong-password-1209@test.com")
-            assert user.email == "wrong-password-1209@test.com"
+            user = User.objects.get(email="withdrawn-route-1209@test.com")
+            assert user.email == "withdrawn-route-1209@test.com"
             assert not EmailChangeRequest.objects.filter(user=user).exists()
             assert not EmailLog.objects.filter(
                 email_type="account_email_change_confirm",
                 user=user,
             ).exists()
-
-    def test_member_cannot_request_other_primary_or_alias(
-        self, django_server, django_db_blocker, browser
-    ):
-        with django_db_blocker.unblock():
-            _seed_member("collision-1209@test.com")
-            _seed_member("taken-1209@test.com")
-            alias_owner = _seed_member("alias-owner-1209@test.com")
-            from django.db import connection
-
-            from accounts.models import EmailAlias
-
-            EmailAlias.objects.create(
-                user=alias_owner,
-                email="relay-1209@test.com",
-            )
-            connection.close()
-
-        context = auth_context(browser, "collision-1209@test.com")
-        try:
-            page = context.new_page()
-            page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
-
-            for email in ["taken-1209@test.com", "relay-1209@test.com"]:
-                page.fill("#change-email-new-email", email)
-                page.fill("#change-email-current-password", DEFAULT_PASSWORD)
-                page.click("#change-email-submit")
-                expect(page.locator("#change-email-error")).to_have_text(
-                    "That email cannot be used for this account."
-                )
-        finally:
-            context.close()
 
 
 @pytest.mark.django_db(transaction=True)
@@ -198,9 +235,10 @@ class TestMemberConfirmsEmailChange:
                 f"{django_server}/account/",
                 wait_until="domcontentloaded",
             )
-            expect(account_page.locator("#current-login-email")).to_have_text(
-                "confirm-new-1209@test.com"
-            )
+            expect(account_page.locator("#membership-section")).to_be_visible()
+            expect(account_page.locator("#email-preferences-section")).to_be_visible()
+            expect(account_page.locator("#login-email-section")).to_have_count(0)
+            expect(account_page.locator("#change-email-form")).to_have_count(0)
         finally:
             context.close()
 
@@ -415,13 +453,18 @@ class TestNewsletterOnlyEmailChangeGating:
             )
             connection.close()
 
-        context = auth_context(browser, "newsletter-only-1209@test.com")
-        try:
-            page = context.new_page()
-            page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
-            expect(page.locator("#newsletter-only-cta")).to_be_visible()
-            expect(page.locator("#email-preferences-section")).to_be_visible()
-            expect(page.locator("#login-email-section")).to_have_count(0)
-            expect(page.locator("#change-email-form")).to_have_count(0)
-        finally:
-            context.close()
+        for width in (1280, 390):
+            context = auth_context(browser, "newsletter-only-1209@test.com")
+            try:
+                page = context.new_page()
+                page.set_viewport_size({"width": width, "height": 844})
+                page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
+                expect(page.locator("#newsletter-only-cta")).to_be_visible()
+                expect(page.locator("#email-preferences-section")).to_be_visible()
+                expect(page.locator("#login-email-section")).to_have_count(0)
+                expect(page.locator("#change-email-form")).to_have_count(0)
+                assert page.evaluate(
+                    "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
+                )
+            finally:
+                context.close()

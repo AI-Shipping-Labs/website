@@ -243,6 +243,12 @@ def _event_form_context(event, default_tz):
             context['resolved_end_local'] = _render_in_tz(
                 event.end_datetime, tz_name,
             ).strftime('%d/%m/%Y %H:%M')
+    if event:
+        context['host_invite_deliveries'] = (
+            event.host_invite_deliveries.select_related('user').order_by(
+                '-last_attempt_at',
+            )
+        )
     return context
 
 

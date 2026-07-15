@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+
+{% block title %}Host controls — {{ event.title }} | AI Shipping Labs{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <div class="mx-auto max-w-4xl space-y-8 px-6 py-12">
+    <header>
+      <p class="text-sm text-muted-foreground">Host controls</p>
+      <h1 class="text-3xl font-semibold tracking-tight">{{ event.title }}</h1>
+      <p class="mt-2 text-sm text-muted-foreground">This access is limited to this event and your designated host account.</p>
+    </header>
+
+    {% if messages %}{% for message in messages %}
+      <div class="rounded-lg border border-border bg-card p-4">{{ message }}</div>
+    {% endfor %}{% endif %}
+
+    <section id="edit" class="rounded-2xl border border-border bg-card p-6">
+      <h2 class="mb-4 text-xl font-semibold">Edit event details</h2>
+      <form method="post" action="{% url 'event_host_update' event_id=event.pk %}" class="space-y-4">
+        {% csrf_token %}<input type="hidden" name="token" value="{{ token }}">
+        {{ form.as_p }}
+        <button type="submit" class="{% button_classes 'primary' size='md' %}">Save changes</button>
+      </form>
+    </section>
+
+    <section id="zoom" class="rounded-2xl border border-border bg-card p-6">
+      <h2 class="mb-3 text-xl font-semibold">Zoom</h2>
+      {% if event.zoom_join_url %}<p class="mb-4"><a class="text-accent underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" href="{{ event.zoom_join_url }}">Join as host</a></p>{% endif %}
+      <form method="post" action="{% url 'event_host_create_zoom' event_id=event.pk %}">
+        {% csrf_token %}<input type="hidden" name="token" value="{{ token }}">
+        <button type="submit" class="{% button_classes 'secondary' size='md' %}">Create Zoom meeting</button>
+      </form>
+    </section>
+
+    <section id="registrations" class="rounded-2xl border border-border bg-card p-6">
+      <h2 class="mb-3 text-xl font-semibold">Registrations ({{ registrations|length }})</h2>
+      <ul class="mb-5 space-y-1 text-sm">{% for registration in registrations %}
+        <li>{{ registration.user.get_full_name|default:registration.user.email }} — {{ registration.user.email }}</li>
+      {% empty %}<li class="text-muted-foreground">No registrations yet.</li>{% endfor %}</ul>
+      <form method="post" action="{% url 'event_host_notify' event_id=event.pk %}">
+        {% csrf_token %}<input type="hidden" name="token" value="{{ token }}">
+        <button type="submit" class="{% button_classes 'secondary' size='md' %}">Notify eligible members in app</button>
+      </form>
+    </section>
+  </div>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

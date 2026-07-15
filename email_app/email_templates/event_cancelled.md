@@ -8,6 +8,6 @@ Hi {{ user_name }},
 
 Original time: {{ event_datetime }}
 
-A calendar cancellation is attached to this email so calendar clients can remove the event from your calendar.
+This email includes a calendar cancellation update. Supported calendar apps can use it to remove or mark the event as cancelled. If prompted, apply the update using the invitation controls in this email or your calendar app.
 
 The AI Shipping Labs Team

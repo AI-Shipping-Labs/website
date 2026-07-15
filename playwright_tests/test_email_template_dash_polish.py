@@ -110,15 +110,13 @@ class TestEventRegistrationPreviewHasNoDoubleDash:
             "expected an em-dash or rewritten sentence."
         )
 
-        # The calendar-invite copy still mentions the .ics attachment.
-        # After issue #588 the wording is split across the "Add to your
-        # calendar" block and a line referencing the ".ics" attachment.
-        # Either reading is fine as long as both clauses are present and
-        # ASCII ` -- ` is gone.
-        assert ".ics" in srcdoc, (
-            "event_registration preview no longer mentions the .ics "
-            "calendar attachment; copy may have drifted further."
-        )
+        # Issue #1088 delivers the calendar as an inline alternative, not a
+        # downloadable attachment. Keep the preview aligned with that
+        # recipient contract and avoid promising client behavior.
+        assert "includes a calendar invitation for this event" in srcdoc
+        assert "if prompted" in srcdoc
+        assert "attached" not in srcdoc.lower()
+        assert ".ics file" not in srcdoc.lower()
 
         # No HTML-entity em-dash either: these are markdown bodies and
         # the entity won't decode in plain-text mail.

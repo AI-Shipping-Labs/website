@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+
+{% block title %}Host controls unavailable | AI Shipping Labs{% endblock %}
+
+{% block body %}
+<header class="fixed left-0 right-0 top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
+  <nav class="mx-auto flex max-w-7xl items-center px-6 py-4 lg:px-8">
+    <a href="/" class="flex items-center gap-2">
+      <img src="/static/rocket-upscale-no-bg-small.png" alt="AI Shipping Labs" class="h-8 w-8">
+      <span class="text-lg font-semibold tracking-tight">AI Shipping Labs</span>
+    </a>
+  </nav>
+</header>
+<main class="flex min-h-screen items-center pt-24">
+  <div class="mx-auto w-full max-w-2xl px-6 py-16">
+    <section class="rounded-2xl border border-border bg-card p-8 text-center shadow-sm" data-testid="host-access-recovery">
+      <p class="text-sm font-medium text-accent">Host controls</p>
+      {% if reason == "wrong_account" %}
+        <h1 class="mt-2 text-3xl font-semibold tracking-tight">Sign in with the designated host account</h1>
+        <p class="mx-auto mt-4 max-w-xl text-muted-foreground">
+          This link belongs to the account currently designated to host {{ event.title }}. Sign out, then open the link again and sign in with that host account.
+        </p>
+        <a class="{% button_classes 'primary' size='md' extra='mt-7' %}" href="{% url 'account_logout' %}">Switch account</a>
+      {% elif reason == "expired" %}
+        <h1 class="mt-2 text-3xl font-semibold tracking-tight">This host link has expired</h1>
+        <p class="mx-auto mt-4 max-w-xl text-muted-foreground">
+          This access is no longer current. Contact the event operator for a new host-controls link.
+        </p>
+      {% else %}
+        <h1 class="mt-2 text-3xl font-semibold tracking-tight">This host link is no longer current</h1>
+        <p class="mx-auto mt-4 max-w-xl text-muted-foreground">
+          The event may have been reassigned or this link may have been revoked. Contact the event operator for a current host-controls link.
+        </p>
+      {% endif %}
+      <div class="mt-5">
+        <a class="{% button_classes 'secondary' size='md' %}" href="{% url 'events_list' %}">Back to Events</a>
+      </div>
+    </section>
+  </div>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

@@ -1479,7 +1479,11 @@ class EventsHostAutoRegistrationTest(EventsApiTestBase):
         mock_send.assert_called_once()
         self.assertEqual(mock_send.call_args.kwargs["to_email"], host.email)
         self.assertIn(
-            f"/studio/events/{event.pk}/edit",
+            f"/events/{event.pk}/host/manage?token=",
+            mock_send.call_args.kwargs["html_body"],
+        )
+        self.assertNotIn(
+            f"/studio/events/{event.pk}/create-zoom",
             mock_send.call_args.kwargs["html_body"],
         )
         self.assertEqual(self._registration_logs(host).count(), 1)

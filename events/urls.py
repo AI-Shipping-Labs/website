@@ -6,6 +6,12 @@ from events.views.api import (
     series_registration,
     unregister_from_event,
 )
+from events.views.host_management import (
+    host_event_create_zoom,
+    host_event_manage,
+    host_event_notify,
+    host_event_update,
+)
 from events.views.pages import (
     cancel_registration_page,
     event_calendar_ics,
@@ -23,6 +29,26 @@ from events.views.recording import event_recording_stream
 
 urlpatterns = [
     path('events', events_list, name='events_list'),
+    path(
+        'events/<int:event_id>/host/manage',
+        host_event_manage,
+        name='event_host_manage',
+    ),
+    path(
+        'events/<int:event_id>/host/update',
+        host_event_update,
+        name='event_host_update',
+    ),
+    path(
+        'events/<int:event_id>/host/create-zoom',
+        host_event_create_zoom,
+        name='event_host_create_zoom',
+    ),
+    path(
+        'events/<int:event_id>/host/notify',
+        host_event_notify,
+        name='event_host_notify',
+    ),
     # Issue #578: ``events/calendar.ics`` is registered BEFORE the
     # ``events/<slug>`` join/calendar.ics/cancel routes below so the
     # literal ``calendar.ics`` isn't swallowed by the slug converter.

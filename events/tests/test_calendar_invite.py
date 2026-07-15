@@ -422,6 +422,62 @@ class SendRegistrationConfirmationTest(TestCase):
         self.assertEqual(result.user, self.user)
         self.assertEqual(result.ses_message_id, 'test-msg-123')
 
+    @patch('events.services.registration_email._send_raw_email')
+    def test_repeat_processing_same_registration_is_idempotent(self, mock_send):
+        mock_send.return_value = 'same-registration-message'
+        registration = EventRegistration.objects.create(
+            event=self.event, user=self.user,
+        )
+
+        first_log = send_registration_confirmation(registration)
+        second_log = send_registration_confirmation(registration)
+
+        self.assertEqual(mock_send.call_count, 1)
+        self.assertEqual(second_log, first_log)
+        self.assertEqual(
+            first_log.dedupe_key,
+            f'event-registration:{self.event.pk}:{self.user.pk}:'
+            f'{registration.pk}',
+        )
+
+    @patch('events.services.registration_email._send_raw_email')
+    def test_reregister_after_cancellation_sends_fresh_invitation(
+        self, mock_send,
+    ):
+        mock_send.side_effect = [
+            'first-registration-message',
+            'second-registration-message',
+        ]
+        first_registration = EventRegistration.objects.create(
+            event=self.event, user=self.user,
+        )
+
+        first_log = send_registration_confirmation(first_registration)
+        first_registration_pk = first_registration.pk
+        first_registration.delete()
+        second_registration = EventRegistration.objects.create(
+            event=self.event, user=self.user,
+        )
+        second_log = send_registration_confirmation(second_registration)
+
+        self.assertEqual(mock_send.call_count, 2)
+        self.assertNotEqual(second_registration.pk, first_registration_pk)
+        self.assertNotEqual(second_log, first_log)
+        self.assertNotEqual(second_log.dedupe_key, first_log.dedupe_key)
+        self.assertEqual(
+            first_log.dedupe_key,
+            f'event-registration:{self.event.pk}:{self.user.pk}:'
+            f'{first_registration_pk}',
+        )
+        self.assertEqual(
+            second_log.dedupe_key,
+            f'event-registration:{self.event.pk}:{self.user.pk}:'
+            f'{second_registration.pk}',
+        )
+        for call in mock_send.call_args_list:
+            calendar = Calendar.from_ical(call.kwargs['ics_content'])
+            self.assertEqual(str(calendar.get('method')), 'REQUEST')
+
     def _parse_raw_email(self, raw_data):
         """Parse raw MIME email string into an email.message.Message."""
         return email.message_from_string(raw_data)
@@ -655,8 +711,10 @@ class SendRegistrationConfirmationTest(TestCase):
         )
 
     @patch('events.services.registration_email.boto3')
-    def test_send_email_html_body_mentions_ics_fallback(self, mock_boto3):
-        """The .ics paragraph should now position itself as a fallback."""
+    def test_send_email_html_body_describes_inline_calendar_invitation(
+        self, mock_boto3,
+    ):
+        """Visible copy must match the inline calendar alternative."""
         mock_client = MagicMock()
         mock_client.send_email.return_value = {'MessageId': 'msg-ics-copy'}
         mock_boto3.client.return_value = mock_client
@@ -672,8 +730,10 @@ class SendRegistrationConfirmationTest(TestCase):
         parts = self._get_parts(msg)
         html = parts['text/html']
 
-        self.assertIn('.ics', html)
-        self.assertIn('Apple Calendar', html)
+        self.assertIn('includes a calendar invitation for this event', html)
+        self.assertIn('if prompted', html)
+        self.assertNotIn('attached', html.lower())
+        self.assertNotIn('.ics file', html.lower())
 
     @patch('events.services.registration_email.boto3')
     def test_send_email_default_end_time_in_google_url(self, mock_boto3):

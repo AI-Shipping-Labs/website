@@ -149,7 +149,7 @@ class HostAutoRegistrationServiceTest(TestCase):
 
         self.assertEqual(registration.pk, existing.pk)
         self.assertEqual(EventRegistration.objects.filter(event=event).count(), 1)
-        self.assertFalse(
+        self.assertTrue(
             EmailLog.objects.filter(
                 user=self.host,
                 email_type='event_registration',
@@ -236,8 +236,8 @@ class HostAutoRegistrationServiceTest(TestCase):
         mock_send.assert_called_once()
         self.assertEqual(mock_send.call_args.kwargs['to_email'], self.host.email)
         html = mock_send.call_args.kwargs['html_body']
-        self.assertIn(f'/studio/events/{event.pk}/edit', html)
-        self.assertIn(f'/studio/events/{event.pk}/create-zoom', html)
+        self.assertIn(f'/events/{event.pk}/host/manage?token=', html)
+        self.assertNotIn(f'/studio/events/{event.pk}/create-zoom', html)
         self.assertIn('Host management links', html)
         ics = mock_send.call_args.kwargs['ics_content'].decode()
         self.assertIn('VCALENDAR', ics)
@@ -262,20 +262,19 @@ class HostAutoRegistrationServiceTest(TestCase):
             1,
         )
 
-    def test_existing_host_registration_does_not_resend_confirmation(self):
+    def test_existing_attendee_gets_one_host_management_confirmation(self):
         event = _make_event()
-        EventRegistration.objects.create(event=event, user=self.host)
+        existing = EventRegistration.objects.create(event=event, user=self.host)
 
         with patch(
             'events.services.registration_email.send_registration_confirmation',
         ) as mock_confirmation:
             maybe_register_host_as_attendee(event)
+            mock_confirmation.assert_called_once_with(existing)
 
-        mock_confirmation.assert_not_called()
-        self.assertEqual(
-            EmailLog.objects.filter(email_type='event_registration').count(),
-            0,
-        )
+            # The durable delivery row prevents a later save from repeating it.
+            maybe_register_host_as_attendee(event)
+            mock_confirmation.assert_called_once()
 
     def test_non_host_registration_email_has_no_host_links(self):
         attendee = User.objects.create_user(

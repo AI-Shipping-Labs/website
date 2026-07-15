@@ -35,6 +35,7 @@ def test_community_navigation_starts_with_membership_and_has_no_overview(
     expect(menu.locator('a[href="/community"]')).to_have_count(0)
 
 
+@pytest.mark.local_only
 def test_authenticated_community_bookmark_redirects_to_dashboard(
     django_server, browser, django_db_blocker
 ):

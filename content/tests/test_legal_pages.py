@@ -68,7 +68,7 @@ class TermsContentTests(TestCase):
 
     def test_contains_last_updated_stamp(self):
         self.assertIn('Last updated', self.body)
-        self.assertIn('April 27, 2026', self.body)
+        self.assertIn('July 15, 2026', self.body)
 
     def test_no_draft_or_pending_review_banner(self):
         for forbidden in ('draft', 'Draft', 'pending review', 'Pending review'):
@@ -106,7 +106,7 @@ class PrivacyContentTests(TestCase):
             self.assertIn(processor, self.body)
 
     def test_mentions_self_service_export_delete_and_slack_ingest(self):
-        self.assertIn('July 11, 2026', self.body)
+        self.assertIn('July 15, 2026', self.body)
         self.assertIn('Privacy &amp; data section', self.body)
         self.assertIn('download a portable copy', self.body)
         self.assertIn('local account deletion', self.body)
@@ -119,6 +119,7 @@ class PrivacyContentTests(TestCase):
 
     def test_contains_last_updated_stamp(self):
         self.assertIn('Last updated', self.body)
+        self.assertIn('July 15, 2026', self.body)
 
 
 class ImpressumContentTests(TestCase):

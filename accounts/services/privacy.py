@@ -582,9 +582,28 @@ def _events_community(user):
                 "updated_at",
             ],
         ),
+        "calendly_webhook_deliveries": _calendly_webhook_export(user),
         "slack_threads": _slack_threads_export(user),
         "slack_authored_messages": _slack_authored_messages_export(user),
     }
+
+
+def _calendly_webhook_export(user):
+    model = _model('integrations', 'WebhookLog')
+    if model is None:
+        return []
+    identifiers = {user.email, *user.email_aliases.values_list('email', flat=True)}
+    rows = []
+    for row in model.objects.filter(service='calendly').order_by('-received_at'):
+        text = json.dumps(row.payload, default=str).lower()
+        if not any(value and value.lower() in text for value in identifiers):
+            continue
+        rows.append({
+            'id': row.pk, 'event_type': row.event_type,
+            'payload': _plain(row.payload), 'received_at': _plain(row.received_at),
+            'processed': row.processed,
+        })
+    return rows
 
 
 def _sprints_plans(user):
@@ -1197,7 +1216,7 @@ def _detach_payment_diagnostics(user, summary, email):
 
 
 def _known_member_identifiers(user):
-    return {
+    identifiers = {
         value
         for value in [
             user.email,
@@ -1206,22 +1225,42 @@ def _known_member_identifiers(user):
         ]
         if value
     }
+    identifiers.update(user.email_aliases.values_list('email', flat=True))
+    identifiers.update(
+        value for value in user.booked_calls.values_list('invitee_name', flat=True)
+        if value
+    )
+    return identifiers
 
 
 def _scrub_matching_webhook_payloads(identifiers, summary):
     webhook_model = _model("payments", "WebhookEvent")
-    if webhook_model is None or not identifiers:
+    if not identifiers:
         return
     scrubbed = 0
-    for row in webhook_model.objects.exclude(payload={}):
-        payload_text = json.dumps(row.payload, default=str)
-        if not any(identifier in payload_text for identifier in identifiers):
-            continue
-        row.payload = _scrub_payload(row.payload, identifiers)
-        row.error_message = _scrub_text(row.error_message, identifiers)
-        row.save(update_fields=["payload", "error_message"])
-        scrubbed += 1
+    if webhook_model is not None:
+        for row in webhook_model.objects.exclude(payload={}):
+            payload_text = json.dumps(row.payload, default=str)
+            if not any(identifier in payload_text for identifier in identifiers):
+                continue
+            row.payload = _scrub_payload(row.payload, identifiers)
+            row.error_message = _scrub_text(row.error_message, identifiers)
+            row.save(update_fields=["payload", "error_message"])
+            scrubbed += 1
     _increment(summary, "retained", "scrubbed_webhook_events", scrubbed)
+
+    inbound_model = _model('integrations', 'WebhookLog')
+    inbound_scrubbed = 0
+    if inbound_model is not None:
+        for row in inbound_model.objects.filter(service='calendly').exclude(payload={}):
+            payload_text = json.dumps(row.payload, default=str)
+            if not any(identifier in payload_text for identifier in identifiers):
+                continue
+            row.payload = _scrub_payload(row.payload, identifiers)
+            row.error_message = _scrub_text(row.error_message, identifiers)
+            row.save(update_fields=['payload', 'error_message'])
+            inbound_scrubbed += 1
+    _increment(summary, 'retained', 'scrubbed_calendly_webhook_logs', inbound_scrubbed)
 
 
 def _scrub_payload(value, identifiers):

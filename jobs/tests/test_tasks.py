@@ -7,8 +7,9 @@ from datetime import timedelta
 from django.test import TestCase, tag
 from django.utils import timezone
 
-from integrations.models import WebhookLog
-from jobs.tasks.cleanup import cleanup_old_webhook_logs
+from integrations.config import clear_config_cache
+from integrations.models import IntegrationSetting, WebhookLog
+from jobs.tasks.cleanup import cleanup_calendly_webhook_logs, cleanup_old_webhook_logs
 from jobs.tasks.healthcheck import health_check
 
 
@@ -115,3 +116,20 @@ class CleanupOldWebhookLogsTaskTest(TestCase):
         result = cleanup_old_webhook_logs(days=30)
         self.assertEqual(result['deleted'], 5)
         self.assertEqual(WebhookLog.objects.count(), 3)
+
+    def test_calendly_uses_configured_retention_and_keeps_failures(self):
+        IntegrationSetting.objects.create(
+            key='CALENDLY_WEBHOOK_RETENTION_DAYS', value='7', group='calendly',
+        )
+        clear_config_cache()
+        old = timezone.now() - timedelta(days=8)
+        processed = WebhookLog.objects.create(service='calendly', processed=True)
+        failed = WebhookLog.objects.create(service='calendly', processed=False)
+        WebhookLog.objects.filter(pk__in=[processed.pk, failed.pk]).update(
+            received_at=old,
+        )
+        result = cleanup_calendly_webhook_logs()
+        self.assertEqual(result, {'deleted': 1, 'cutoff_days': 7})
+        self.assertFalse(WebhookLog.objects.filter(pk=processed.pk).exists())
+        self.assertTrue(WebhookLog.objects.filter(pk=failed.pk).exists())
+        clear_config_cache()

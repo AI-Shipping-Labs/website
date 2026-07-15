@@ -156,6 +156,11 @@ Context:
            class="inline-flex items-center bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
           Connect Calendly
         </a>
+        <button type="submit" formaction="{% url 'studio_calendly_sync' %}"
+                formmethod="post" data-testid="calendly-sync-button"
+                class="inline-flex items-center bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors">
+          Verify subscription
+        </button>
       {% endif %}
       <button type="submit"
         class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">

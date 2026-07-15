@@ -31,6 +31,20 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: cleanup-webhook-logs (daily at 3 AM)'))
 
+        schedule(
+            'jobs.tasks.cleanup.cleanup_calendly_webhook_logs',
+            cron='5 3 * * *',
+            name='cleanup-calendly-webhook-logs',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: cleanup-calendly-webhook-logs (daily at 03:05 UTC)'))
+
+        schedule(
+            'jobs.tasks.calendly.retry_calendly_webhooks',
+            cron='*/5 * * * *',
+            name='retry-calendly-webhooks',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: retry-calendly-webhooks (every 5 min)'))
+
         # Prune old outbound webhook-delivery rows daily at 03:10 UTC
         # (issue #1070). Reuses the cleanup-webhook-logs wiring/cadence
         # rather than a new bespoke cron; 10 minutes after the inbound log

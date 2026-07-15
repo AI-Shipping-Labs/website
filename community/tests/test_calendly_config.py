@@ -8,7 +8,7 @@ and every key must be registered so it appears in Studio settings.
 from django.test import TestCase, tag
 
 from community.calendly_config import (
-    calendly_webhook_validation_enabled,
+    calendly_webhook_tolerance_seconds,
     get_calendly_access_token,
     get_calendly_webhook_signing_key,
 )
@@ -40,16 +40,9 @@ class CalendlyConfigTest(TestCase):
         clear_config_cache()
         self.assertEqual(get_calendly_webhook_signing_key(), 'sk-1')
 
-    def test_validation_flag_defaults_false(self):
+    def test_signature_tolerance_defaults_to_five_minutes(self):
         clear_config_cache()
-        self.assertFalse(calendly_webhook_validation_enabled())
-
-    def test_validation_flag_reads_db_override(self):
-        IntegrationSetting.objects.create(
-            key='CALENDLY_WEBHOOK_VALIDATION_ENABLED', value='true', group='calendly',
-        )
-        clear_config_cache()
-        self.assertTrue(calendly_webhook_validation_enabled())
+        self.assertEqual(calendly_webhook_tolerance_seconds(), 300)
 
 
 @tag('core')
@@ -65,7 +58,13 @@ class CalendlyRegistryTest(TestCase):
                 'CALENDLY_WEBHOOK_SIGNING_KEY',
                 'CALENDLY_OAUTH_CLIENT_ID',
                 'CALENDLY_OAUTH_CLIENT_SECRET',
-                'CALENDLY_WEBHOOK_VALIDATION_ENABLED',
+                'CALENDLY_REFRESH_TOKEN',
+                'CALENDLY_ACCESS_TOKEN_EXPIRES_AT',
+                'CALENDLY_CONNECTED_USER_URI',
+                'CALENDLY_ORGANIZATION_URI',
+                'CALENDLY_WEBHOOK_SUBSCRIPTION_URI',
+                'CALENDLY_WEBHOOK_TOLERANCE_SECONDS',
+                'CALENDLY_WEBHOOK_RETENTION_DAYS',
             },
         )
 

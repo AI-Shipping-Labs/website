@@ -8,10 +8,13 @@ accurate without manual staff edits.
 import hashlib
 import hmac
 import json
+import time
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 
+from accounts.models import EmailAlias
 from community.models import STATUS_BOOKED, STATUS_CANCELED, BookedCall, CallHost
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting, WebhookLog
@@ -45,7 +48,8 @@ def _payload(event, *, email, host_url=HOST_URL, event_uri=None, invitee_uri=Non
     }
 
 
-def _signature_header(body_bytes, *, key=SIGNING_KEY, timestamp='1700000000'):
+def _signature_header(body_bytes, *, key=SIGNING_KEY, timestamp=None):
+    timestamp = timestamp or str(int(time.time()))
     signed = f'{timestamp}.{body_bytes.decode("utf-8")}'
     digest = hmac.new(key.encode(), signed.encode(), hashlib.sha256).hexdigest()
     return f't={timestamp},v1={digest}'
@@ -61,12 +65,24 @@ class CalendlyWebhookCaptureTest(TestCase):
             is_active=True, capacity=2, current_load=0,
         )
 
+    def setUp(self):
+        IntegrationSetting.objects.update_or_create(
+            key='CALENDLY_WEBHOOK_SIGNING_KEY',
+            defaults={'value': SIGNING_KEY, 'group': 'calendly'},
+        )
+        clear_config_cache()
+
+    def tearDown(self):
+        clear_config_cache()
+
     def _post(self, payload):
-        """POST a payload with validation disabled (default registry state)."""
+        """POST a provider-authenticated payload."""
+        body = json.dumps(payload).encode()
         return self.client.post(
             WEBHOOK_URL,
-            data=json.dumps(payload),
+            data=body,
             content_type='application/json',
+            HTTP_CALENDLY_WEBHOOK_SIGNATURE=_signature_header(body),
         )
 
     def test_invitee_created_records_booked_call_for_member(self):
@@ -116,6 +132,71 @@ class CalendlyWebhookCaptureTest(TestCase):
         self.assertIsNone(call.member)
         self.assertEqual(call.invitee_email, 'stranger@example.com')
 
+    def test_unmatched_host_is_durable_without_capacity_change(self):
+        self._post(_payload(
+            'invitee.created', email='alice@test.com',
+            host_url='https://calendly.com/unknown/event?month=2099-01',
+        ))
+        call = BookedCall.objects.get(calendly_event_uri__endswith='EVT123')
+        self.assertIsNone(call.host)
+        self.host.refresh_from_db()
+        self.assertEqual(self.host.current_load, 0)
+
+    def test_host_url_query_and_trailing_slash_are_normalized(self):
+        self._post(_payload(
+            'invitee.created', email='alice@test.com',
+            host_url=f'{HOST_URL}/?month=2099-01',
+        ))
+        self.assertEqual(BookedCall.objects.get().host, self.host)
+
+    def test_alias_email_links_canonical_active_member(self):
+        EmailAlias.objects.create(user=self.member, email='relay@test.com')
+        self._post(_payload('invitee.created', email='relay@test.com'))
+        self.assertEqual(BookedCall.objects.get().member, self.member)
+
+    def test_cancel_before_create_leaves_terminal_tombstone(self):
+        payload = _payload('invitee.canceled', email='alice@test.com')
+        self._post(payload)
+        self._post(_payload('invitee.created', email='alice@test.com'))
+        call = BookedCall.objects.get()
+        self.assertEqual(call.status, STATUS_CANCELED)
+        self.host.refresh_from_db()
+        self.assertEqual(self.host.current_load, 0)
+
+    def test_processing_error_returns_500_and_delivery_can_retry(self):
+        payload = _payload('invitee.created', email='alice@test.com')
+        body = json.dumps(payload).encode()
+        header = _signature_header(body)
+        with patch(
+            'integrations.services.calendly_delivery.process_webhook',
+            side_effect=RuntimeError('temporary'),
+        ):
+            failed = self.client.post(
+                WEBHOOK_URL, data=body, content_type='application/json',
+                HTTP_CALENDLY_WEBHOOK_SIGNATURE=header,
+            )
+        self.assertEqual(failed.status_code, 500)
+        log = WebhookLog.objects.get(service='calendly')
+        self.assertFalse(log.processed)
+        self.assertEqual(
+            log.error_message,
+            'Delivery processing failed (processing_error). Retry is safe.',
+        )
+        retried = self.client.post(
+            WEBHOOK_URL, data=body, content_type='application/json',
+            HTTP_CALENDLY_WEBHOOK_SIGNATURE=header,
+        )
+        self.assertEqual(retried.status_code, 200)
+        log.refresh_from_db()
+        self.assertTrue(log.processed)
+        self.assertEqual(log.attempts, 2)
+
+    def test_identical_signed_replay_does_not_process_twice(self):
+        payload = _payload('invitee.created', email='alice@test.com')
+        self._post(payload)
+        self._post(payload)
+        self.assertEqual(WebhookLog.objects.filter(service='calendly').count(), 1)
+
     def test_webhook_is_logged(self):
         self._post(_payload('invitee.created', email='alice@test.com'))
         log = WebhookLog.objects.get(service='calendly')
@@ -128,8 +209,10 @@ class CalendlyWebhookCaptureTest(TestCase):
         self.assertFalse(BookedCall.objects.exists())
 
     def test_malformed_json_returns_400(self):
+        body = b'not-json'
         resp = self.client.post(
-            WEBHOOK_URL, data='not-json', content_type='application/json',
+            WEBHOOK_URL, data=body, content_type='application/json',
+            HTTP_CALENDLY_WEBHOOK_SIGNATURE=_signature_header(body),
         )
         self.assertEqual(resp.status_code, 400)
 
@@ -147,9 +230,6 @@ class CalendlyWebhookSignatureTest(TestCase):
         clear_config_cache()
 
     def _enable_validation(self):
-        IntegrationSetting.objects.create(
-            key='CALENDLY_WEBHOOK_VALIDATION_ENABLED', value='true', group='calendly',
-        )
         IntegrationSetting.objects.create(
             key='CALENDLY_WEBHOOK_SIGNING_KEY', value=SIGNING_KEY, group='calendly',
         )
@@ -181,15 +261,26 @@ class CalendlyWebhookSignatureTest(TestCase):
         body = json.dumps(payload).encode()
         resp = self.client.post(
             WEBHOOK_URL, data=body, content_type='application/json',
-            HTTP_CALENDLY_WEBHOOK_SIGNATURE='t=1700000000,v1=deadbeef',
+            HTTP_CALENDLY_WEBHOOK_SIGNATURE=f't={int(time.time())},v1=deadbeef',
         )
         self.assertEqual(resp.status_code, 400)
 
-    def test_validation_disabled_allows_unsigned(self):
-        """With validation off (default), unsigned replay works locally."""
+    def test_unset_key_rejects_unsigned_fail_closed(self):
         clear_config_cache()
         payload = _payload('invitee.created', email='alice@test.com')
         resp = self.client.post(
             WEBHOOK_URL, data=json.dumps(payload), content_type='application/json',
         )
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 400)
+
+    def test_stale_valid_signature_is_rejected(self):
+        self._enable_validation()
+        payload = _payload('invitee.created', email='alice@test.com')
+        body = json.dumps(payload).encode()
+        resp = self.client.post(
+            WEBHOOK_URL, data=body, content_type='application/json',
+            HTTP_CALENDLY_WEBHOOK_SIGNATURE=_signature_header(
+                body, timestamp=str(int(time.time()) - 301),
+            ),
+        )
+        self.assertEqual(resp.status_code, 400)

@@ -13,8 +13,11 @@ Usage:
     uv run pytest playwright_tests/test_calendly_booked_calls_884.py -v
 """
 
+import hashlib
+import hmac
 import json
 import os
+import time
 
 import pytest
 
@@ -30,6 +33,7 @@ pytestmark = pytest.mark.local_only
 
 ALEXEY_URL = "https://calendly.com/alexey-884/intro"
 EVENT_URI = "https://api.calendly.com/scheduled_events/EVT884"
+SIGNING_KEY = "playwright-calendly-signing-key"
 
 
 def _set_host(slug, **fields):
@@ -39,6 +43,19 @@ def _set_host(slug, **fields):
 
     defaults = {"name": "Alexey Grigorev", **fields}
     CallHost.objects.update_or_create(slug=slug, defaults=defaults)
+    connection.close()
+
+
+def _configure_calendly_signature():
+    from django.db import connection
+
+    from integrations.config import clear_config_cache
+    from integrations.models import IntegrationSetting
+    IntegrationSetting.objects.update_or_create(
+        key='CALENDLY_WEBHOOK_SIGNING_KEY',
+        defaults={'value': SIGNING_KEY, 'group': 'calendly', 'is_secret': True},
+    )
+    clear_config_cache()
     connection.close()
 
 
@@ -90,10 +107,18 @@ def _webhook_payload(event, email, host_url):
 
 
 def _post_webhook(context, django_server, event, email, host_url):
+    body = json.dumps(_webhook_payload(event, email, host_url))
+    timestamp = str(int(time.time()))
+    digest = hmac.new(
+        SIGNING_KEY.encode(), f'{timestamp}.{body}'.encode(), hashlib.sha256,
+    ).hexdigest()
     response = context.request.post(
         f"{django_server}/api/webhooks/calendly",
-        data=json.dumps(_webhook_payload(event, email, host_url)),
-        headers={"Content-Type": "application/json"},
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Calendly-Webhook-Signature": f"t={timestamp},v1={digest}",
+        },
     )
     assert response.status == 200, response.text()
 
@@ -111,6 +136,7 @@ class TestBookedCallShowsOnCrmRecord:
                 "alexey", is_active=True, capacity=2, current_load=0,
                 booking_url=ALEXEY_URL,
             )
+            _configure_calendly_signature()
             crm_id = _track_in_crm("alice-884@test.com")
 
         context = auth_context(browser, "admin-884@test.com")
@@ -149,6 +175,7 @@ class TestBookingConsumesCapacity:
                 "alexey", is_active=True, capacity=1, current_load=0,
                 booking_url=ALEXEY_URL,
             )
+            _configure_calendly_signature()
 
         staff_ctx = auth_context(browser, "admin-884b@test.com")
         member_ctx = auth_context(browser, "alice-884b@test.com")
@@ -186,3 +213,43 @@ class TestBookingConsumesCapacity:
         finally:
             staff_ctx.close()
             member_ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestCalendlyOperatorControls:
+    @pytest.mark.core
+    def test_verify_subscription_has_visible_keyboard_focus(
+        self, django_server, django_db_blocker, browser,
+    ):
+        with django_db_blocker.unblock():
+            create_staff_user("admin-884-focus@test.com")
+
+        context = auth_context(browser, "admin-884-focus@test.com")
+        try:
+            page = context.new_page()
+            page.goto(
+                f"{django_server}/studio/settings#integration-calendly",
+                wait_until="domcontentloaded",
+            )
+            button = page.locator('[data-testid="calendly-sync-button"]')
+            button.wait_for(state="visible")
+            for _ in range(100):
+                page.keyboard.press("Tab")
+                if page.evaluate(
+                    "document.activeElement?.dataset?.testid === "
+                    "'calendly-sync-button'",
+                ):
+                    break
+            assert button.evaluate("element => element === document.activeElement")
+            styles = button.evaluate(
+                "element => ({"
+                "boxShadow: getComputedStyle(element).boxShadow, "
+                "outlineStyle: getComputedStyle(element).outlineStyle"
+                "})",
+            )
+            assert styles["boxShadow"] != "none" or styles["outlineStyle"] != "none"
+            if screenshot_path := os.environ.get("QA_FOCUS_SCREENSHOT"):
+                button.scroll_into_view_if_needed()
+                page.screenshot(path=screenshot_path, full_page=False)
+        finally:
+            context.close()

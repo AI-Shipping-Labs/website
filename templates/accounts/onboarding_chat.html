@@ -50,18 +50,24 @@
             class="mt-4 flex items-end gap-2"
             data-testid="onboarding-chat-form"
             data-stream-url="{% url 'onboarding_chat_stream' %}"
+            data-deadline-ms="{{ browser_deadline_ms }}"
             {% if streaming_enabled %}data-streaming="1"{% endif %}>
         {% csrf_token %}
+        <input type="hidden" name="request_id" value="{{ turn_request_id }}"
+               data-testid="onboarding-chat-request-id">
         <textarea name="message" rows="2" required
                   class="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
                   placeholder="Type your reply..."
-                  data-testid="onboarding-chat-input"></textarea>
+                  data-testid="onboarding-chat-input">{{ draft_message }}</textarea>
         <button type="submit"
                 class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
                 data-testid="onboarding-chat-send">
           Send
         </button>
       </form>
+
+      <div class="mt-3 hidden rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-400"
+           role="alert" data-testid="onboarding-chat-live-error"></div>
 
       <p class="mt-4 text-xs text-muted-foreground">
         Prefer a form?
@@ -94,6 +100,28 @@
     '[data-testid="onboarding-chat-transcript"]');
   var streamUrl = form.getAttribute('data-stream-url');
   var sendBtn = form.querySelector('[data-testid="onboarding-chat-send"]');
+  var requestIdInput = form.querySelector('[name=request_id]');
+  var liveError = document.querySelector(
+    '[data-testid="onboarding-chat-live-error"]');
+  var inFlight = false;
+  var activeController = null;
+  var unloading = false;
+
+  function nextRequestId() {
+    if (window.crypto && window.crypto.randomUUID) {
+      return window.crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,
+      function (c) {
+        var r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 3 | 8)).toString(16);
+      });
+  }
+
+  window.addEventListener('pagehide', function () {
+    unloading = true;
+    if (activeController) { activeController.abort(); }
+  });
 
   function bubble(role) {
     var wrap = document.createElement('div');
@@ -110,61 +138,111 @@
     return inner;
   }
 
-  function fallbackSubmit() {
+  function fallbackSubmit(assistantWrap) {
     // Re-issue the SAME message through the v1 non-streaming POST. The
     // server persisted nothing on a stream failure, so this is the first
     // and only write -> no duplicate turn.
     form.setAttribute('data-streaming', '0');
+    if (assistantWrap) { assistantWrap.remove(); }
     form.submit();
+  }
+
+  function recover(message, assistantWrap, memberWrap) {
+    if (assistantWrap) { assistantWrap.remove(); }
+    if (memberWrap) { memberWrap.remove(); }
+    input.value = message;
+    if (sendBtn) { sendBtn.disabled = false; }
+    inFlight = false;
+  }
+
+  function showError(reason) {
+    if (!liveError) { return; }
+    var text = reason === 'busy'
+      ? 'Another reply is still processing. Please wait a moment and retry.'
+      : 'That reply did not finish. You can retry it or switch to the questions.';
+    liveError.textContent = text;
+    liveError.classList.remove('hidden');
   }
 
   form.addEventListener('submit', function (e) {
     e.preventDefault();
+    if (inFlight) { return; }
     var message = (input.value || '').trim();
     if (!message) { return; }
+    inFlight = true;
+    if (liveError) {
+      liveError.textContent = '';
+      liveError.classList.add('hidden');
+    }
     if (sendBtn) { sendBtn.disabled = true; }
 
-    bubble('member').textContent = message;
+    var memberEl = bubble('member');
+    memberEl.textContent = message;
+    var memberWrap = memberEl.parentElement;
     var assistantEl = bubble('assistant');
+    var assistantWrap = assistantEl.parentElement;
 
     var body = new URLSearchParams();
     body.append('message', message);
+    body.append('request_id', requestIdInput.value);
     body.append('csrfmiddlewaretoken',
       form.querySelector('[name=csrfmiddlewaretoken]').value);
+
+    activeController = new AbortController();
+    var deadlineMs = parseInt(form.getAttribute('data-deadline-ms'), 10) || 28000;
+    var deadlineTimer = window.setTimeout(function () {
+      activeController.abort();
+    }, deadlineMs);
 
     fetch(streamUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
       credentials: 'same-origin',
+      signal: activeController.signal,
     }).then(function (resp) {
-      if (!resp.ok || !resp.body) { fallbackSubmit(); return; }
+      if (!resp.ok || !resp.body) { fallbackSubmit(assistantWrap); return; }
       var reader = resp.body.getReader();
       var decoder = new TextDecoder();
       var buffer = '';
-      var gotDelta = false;
 
       function handleEvent(name, data) {
         var payload = {};
         try { payload = JSON.parse(data); } catch (err) { payload = {}; }
         if (name === 'delta') {
-          gotDelta = true;
           assistantEl.textContent += (payload.text || '');
         } else if (name === 'done') {
           if (payload.redirect) {
             window.location.assign(payload.redirect);
+            return;
           }
+          if (payload.replayed || payload.reload) {
+            window.location.reload();
+            return;
+          }
+          requestIdInput.value = nextRequestId();
+          input.value = '';
+          if (sendBtn) { sendBtn.disabled = false; }
+          inFlight = false;
         } else if (name === 'fallback') {
           // Stream could not produce the reply -> use the v1 path.
-          fallbackSubmit();
+          fallbackSubmit(assistantWrap);
+        } else if (name === 'error') {
+          if (payload.reason === 'attempts_exhausted') {
+            requestIdInput.value = payload.new_request_id || nextRequestId();
+          }
+          recover(message, assistantWrap, memberWrap);
+          showError(payload.reason || 'failed');
         }
       }
 
       function pump() {
         return reader.read().then(function (res) {
           if (res.done) {
-            if (sendBtn) { sendBtn.disabled = false; }
-            input.value = '';
+            if (inFlight) {
+              recover(message, assistantWrap, memberWrap);
+              showError('incomplete');
+            }
             return;
           }
           buffer += decoder.decode(res.value, { stream: true });
@@ -186,10 +264,19 @@
         });
       }
       return pump();
-    }).catch(function () {
+    }).catch(function (err) {
       // Network error / connection dropped mid-stream: fall back so the
       // member still gets the complete reply via the v1 path.
-      fallbackSubmit();
+      if (!unloading && err && err.name === 'AbortError') {
+        recover(message, assistantWrap, memberWrap);
+        showError('timeout');
+      } else if (!unloading) {
+        recover(message, assistantWrap, memberWrap);
+        showError('connection');
+      }
+    }).finally(function () {
+      window.clearTimeout(deadlineTimer);
+      activeController = null;
     });
   });
 })();

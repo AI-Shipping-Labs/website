@@ -45,6 +45,9 @@ def complete(
     temperature=None,
     tools=None,
     tool_choice=None,
+    timeout_seconds=None,
+    max_retries=None,
+    cancellation=None,
 ):
     """Run a single completion against the configured provider.
 
@@ -81,6 +84,9 @@ def complete(
         temperature=temperature,
         tools=tools,
         tool_choice=tool_choice,
+        timeout_seconds=timeout_seconds,
+        max_retries=max_retries,
+        cancellation=cancellation,
     )
 
 
@@ -92,6 +98,9 @@ def stream(
     max_tokens=DEFAULT_MAX_TOKENS,
     temperature=None,
     tools=None,
+    timeout_seconds=None,
+    max_retries=None,
+    cancellation=None,
 ):
     """Stream a completion, yielding provider-neutral ``StreamEvent``s.
 
@@ -138,6 +147,9 @@ def stream(
         max_tokens=max_tokens,
         temperature=temperature,
         tools=tools,
+        timeout_seconds=timeout_seconds,
+        max_retries=max_retries,
+        cancellation=cancellation,
     )
 
 

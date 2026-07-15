@@ -26,7 +26,7 @@ from django.test import TestCase, override_settings
 from integrations.config import clear_config_cache, get_config
 from integrations.models import IntegrationSetting
 from integrations.services import llm
-from integrations.services.llm import LLMError, LLMResult
+from integrations.services.llm import CancellationToken, LLMError, LLMResult
 
 FAKE_KEY = 'sk-test-fake-secret123'
 
@@ -55,6 +55,7 @@ def _text_response(text='hello world'):
     block.text = text
     response = MagicMock()
     response.content = [block]
+    response.usage = None
     return response
 
 
@@ -155,6 +156,17 @@ class ConfigResolutionTest(_LLMCacheCleanupMixin, TestCase):
 )
 class CompleteTextTest(_LLMCacheCleanupMixin, TestCase):
 
+    def test_cancellation_token_closes_provider_client(self):
+        token = CancellationToken()
+        with patch(ANTHROPIC_PATCH) as mock_cls:
+            client = mock_cls.return_value
+            client.messages.create.return_value = _text_response('done')
+            llm.complete(
+                [{'role': 'user', 'content': 'hi'}], cancellation=token,
+            )
+            token.cancel()
+        client.close.assert_called_once_with()
+
     def test_returns_text_result(self):
         with patch(ANTHROPIC_PATCH) as mock_cls:
             mock_client = mock_cls.return_value
@@ -163,6 +175,23 @@ class CompleteTextTest(_LLMCacheCleanupMixin, TestCase):
         self.assertIsInstance(result, LLMResult)
         self.assertEqual(result.text, 'hi there')
         self.assertIsNone(result.tool_input)
+
+    def test_returns_available_provider_usage(self):
+        response = _text_response('hi')
+        response.usage = MagicMock(
+            input_tokens=101,
+            output_tokens=23,
+            cache_read_input_tokens=17,
+            cache_creation_input_tokens=5,
+        )
+        with patch(ANTHROPIC_PATCH) as mock_cls:
+            mock_cls.return_value.messages.create.return_value = response
+            result = llm.complete([{'role': 'user', 'content': 'hi'}])
+        self.assertEqual(
+            (result.input_tokens, result.output_tokens,
+             result.cache_read_tokens, result.cache_write_tokens),
+            (101, 23, 17, 5),
+        )
 
     def test_uses_configured_model_by_default(self):
         with patch(ANTHROPIC_PATCH) as mock_cls:

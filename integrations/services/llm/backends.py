@@ -18,6 +18,7 @@ and structured output via SDK tools + ``tool_choice``.
 
 import logging
 import random
+import threading
 import time
 
 from integrations.config import get_config
@@ -46,6 +47,46 @@ class LLMError(Exception):
     """
 
 
+class LLMTimeoutError(LLMError):
+    """Raised when the provider-specific request deadline expires."""
+
+
+class CancellationToken:
+    """Thread-safe cooperative cancellation for an in-flight provider call."""
+
+    def __init__(self):
+        self._cancelled = threading.Event()
+        self._lock = threading.Lock()
+        self._callbacks = []
+
+    @property
+    def cancelled(self):
+        return self._cancelled.is_set()
+
+    def wait(self, timeout=None):
+        return self._cancelled.wait(timeout)
+
+    def register(self, callback):
+        with self._lock:
+            if not self._cancelled.is_set():
+                self._callbacks.append(callback)
+                return
+        callback()
+
+    def cancel(self):
+        with self._lock:
+            if self._cancelled.is_set():
+                return
+            self._cancelled.set()
+            callbacks = list(reversed(self._callbacks))
+            self._callbacks.clear()
+        for callback in callbacks:
+            try:
+                callback()
+            except Exception:  # noqa: BLE001 - continue all cleanup callbacks
+                logger.exception('LLM provider cleanup failed during cancellation')
+
+
 class LLMResult:
     """Provider-neutral result of a single completion.
 
@@ -56,10 +97,24 @@ class LLMResult:
     without re-parsing the vendor SDK's response shape.
     """
 
-    def __init__(self, *, text='', tool_input=None, tool_name=None):
+    def __init__(
+        self,
+        *,
+        text='',
+        tool_input=None,
+        tool_name=None,
+        input_tokens=None,
+        output_tokens=None,
+        cache_read_tokens=None,
+        cache_write_tokens=None,
+    ):
         self.text = text
         self.tool_input = tool_input
         self.tool_name = tool_name
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+        self.cache_read_tokens = cache_read_tokens
+        self.cache_write_tokens = cache_write_tokens
 
     def __repr__(self):
         return (
@@ -148,6 +203,9 @@ class AnthropicBackend:
         temperature=None,
         tools=None,
         tool_choice=None,
+        timeout_seconds=None,
+        max_retries=None,
+        cancellation=None,
     ):
         # Imported lazily so the module imports even in environments where
         # the optional ``anthropic`` SDK is absent; only the Anthropic
@@ -166,13 +224,21 @@ class AnthropicBackend:
 
         base_url = (get_config('LLM_BASE_URL', '') or '').strip() or None
         resolved_model = model or get_config('LLM_MODEL', 'claude-sonnet-4-5')
-        max_retries = _resolve_max_retries()
+        max_retries = (
+            _resolve_max_retries() if max_retries is None
+            else max(0, int(max_retries))
+        )
 
-        client = Anthropic(
+        client_kwargs = dict(
             api_key=api_key,
             base_url=base_url,
             max_retries=max_retries,
         )
+        if timeout_seconds is not None:
+            client_kwargs['timeout'] = float(timeout_seconds)
+        client = Anthropic(**client_kwargs)
+        if cancellation is not None:
+            cancellation.register(client.close)
 
         request_kwargs = {
             'model': resolved_model,
@@ -232,7 +298,13 @@ class AnthropicBackend:
                     )
                 ) from None
 
-        raise LLMError(
+        error_class = (
+            LLMTimeoutError
+            if last_exc is not None
+            and type(last_exc).__name__ == 'APITimeoutError'
+            else LLMError
+        )
+        raise error_class(
             'LLM request failed after retries: '
             + _safe_error_message(
                 type(last_exc).__name__ if last_exc else 'unknown', api_key,
@@ -248,6 +320,9 @@ class AnthropicBackend:
         max_tokens=DEFAULT_MAX_TOKENS,
         temperature=None,
         tools=None,
+        timeout_seconds=None,
+        max_retries=None,
+        cancellation=None,
     ):
         """Stream a completion, yielding :class:`StreamEvent` objects.
 
@@ -293,13 +368,21 @@ class AnthropicBackend:
 
         base_url = (get_config('LLM_BASE_URL', '') or '').strip() or None
         resolved_model = model or get_config('LLM_MODEL', 'claude-sonnet-4-5')
-        max_retries = _resolve_max_retries()
+        max_retries = (
+            _resolve_max_retries() if max_retries is None
+            else max(0, int(max_retries))
+        )
 
-        client = Anthropic(
+        client_kwargs = dict(
             api_key=api_key,
             base_url=base_url,
             max_retries=max_retries,
         )
+        if timeout_seconds is not None:
+            client_kwargs['timeout'] = float(timeout_seconds)
+        client = Anthropic(**client_kwargs)
+        if cancellation is not None:
+            cancellation.register(client.close)
 
         request_kwargs = {
             'model': resolved_model,
@@ -328,12 +411,22 @@ class AnthropicBackend:
             stream_cm = client.messages.stream(**request_kwargs)
             manager = stream_cm.__enter__()
         except open_errors as exc:
-            raise LLMError(
+            error_class = (
+                LLMTimeoutError
+                if type(exc).__name__ == 'APITimeoutError'
+                else LLMError
+            )
+            raise error_class(
                 'LLM stream failed to open: '
                 + _safe_error_message(type(exc).__name__, api_key)
             ) from None
         except Exception as exc:
-            raise LLMError(
+            error_class = (
+                LLMTimeoutError
+                if type(exc).__name__ == 'APITimeoutError'
+                else LLMError
+            )
+            raise error_class(
                 'LLM stream failed to open: '
                 + _safe_error_message(
                     f'{type(exc).__name__}: {exc}', api_key,
@@ -360,7 +453,12 @@ class AnthropicBackend:
         except Exception as exc:
             # Mid-stream failure: never retried (would replay tokens).
             # Surface to the caller so the transport falls back.
-            raise LLMError(
+            error_class = (
+                LLMTimeoutError
+                if type(exc).__name__ == 'APITimeoutError'
+                else LLMError
+            )
+            raise error_class(
                 'LLM stream failed mid-response: '
                 + _safe_error_message(
                     f'{type(exc).__name__}: {exc}', api_key,
@@ -403,7 +501,16 @@ def _parse_response(response, api_key):
     if not text and tool_input is None:
         raise LLMError('LLM returned an empty or blocked response')
 
-    return LLMResult(text=text, tool_input=tool_input, tool_name=tool_name)
+    usage = getattr(response, 'usage', None)
+    return LLMResult(
+        text=text,
+        tool_input=tool_input,
+        tool_name=tool_name,
+        input_tokens=getattr(usage, 'input_tokens', None),
+        output_tokens=getattr(usage, 'output_tokens', None),
+        cache_read_tokens=getattr(usage, 'cache_read_input_tokens', None),
+        cache_write_tokens=getattr(usage, 'cache_creation_input_tokens', None),
+    )
 
 
 def _resolve_max_retries():

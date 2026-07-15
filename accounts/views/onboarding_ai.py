@@ -16,6 +16,7 @@ persona names are never surfaced.
 """
 
 import json
+import uuid
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -24,18 +25,22 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from integrations.services.llm import LLMError
+from integrations.services.llm import LLMError, LLMTimeoutError
 from questionnaires.onboarding import (
     ai_onboarding_available,
     ai_onboarding_streaming_enabled,
     can_access_onboarding,
     get_onboarding_response,
+    onboarding_ai_deadline_seconds,
+    onboarding_ai_max_attempts,
 )
 from questionnaires.services import build_response_questions
 from questionnaires.services_onboarding_ai import (
+    TurnRequestError,
     get_or_create_ai_onboarding_response,
+    run_logical_member_turn,
     run_member_turn,
-    stream_member_turn,
+    stream_logical_member_turn,
 )
 
 
@@ -45,6 +50,19 @@ def _conversation_messages(conversation):
     if not isinstance(transcript, list):
         return []
     return transcript
+
+
+def _chat_context(conversation, response, **extra):
+    return {
+        'conversation': conversation,
+        'response': response,
+        'chat_messages': _conversation_messages(conversation),
+        'streaming_enabled': ai_onboarding_streaming_enabled(),
+        'turn_request_id': uuid.uuid4(),
+        'browser_deadline_ms': (onboarding_ai_deadline_seconds() + 3) * 1000,
+        'draft_message': '',
+        **extra,
+    }
 
 
 @login_required
@@ -80,12 +98,10 @@ def onboarding_chat(request):
     if not _conversation_messages(conversation):
         run_member_turn(conversation, None)
 
-    return render(request, 'accounts/onboarding_chat.html', {
-        'conversation': conversation,
-        'response': response,
-        'chat_messages': _conversation_messages(conversation),
-        'streaming_enabled': ai_onboarding_streaming_enabled(),
-    })
+    return render(
+        request, 'accounts/onboarding_chat.html',
+        _chat_context(conversation, response),
+    )
 
 
 def _sse(event, data):
@@ -116,8 +132,9 @@ def onboarding_chat_stream(request):
       destination.
     - ``fallback``: ``{"reason": "..."}`` — the stream could not start /
       failed; the client must re-issue the SAME message via the v1
-      non-streaming endpoint (``onboarding_chat_message``). No data was
-      persisted, so the retry is the first and only write.
+      non-streaming endpoint (``onboarding_chat_message``). The durable
+      attempt record is retained, but no transcript or answers are written;
+      the retry resumes the same logical turn without duplicating it.
 
     If streaming is disabled, the LLM is unavailable, or the member is
     ineligible, the client should never call this endpoint; we still guard
@@ -157,10 +174,36 @@ def onboarding_chat_stream(request):
             iter([_sse('fallback', {'reason': 'empty-message'})]),
         )
 
+    request_id = request.POST.get('request_id')
+    if not request_id:
+        return _stream_response(iter([
+            _sse('error', {
+                'reason': 'invalid_request_id', 'retryable': True,
+            }),
+        ]))
+
+    try:
+        # Admission runs eagerly so a second tab receives ``busy`` before
+        # the streaming response starts. Provider iteration remains lazy.
+        gen = stream_logical_member_turn(
+            conversation, request_id, member_message,
+        )
+    except TurnRequestError as exc:
+        return _stream_response(iter([
+            _sse('error', {
+                'reason': exc.code,
+                'retryable': exc.code in {'busy', 'attempts_exhausted'},
+                'new_request_id': (
+                    str(uuid.uuid4())
+                    if exc.code == 'attempts_exhausted'
+                    else None
+                ),
+            }),
+        ]))
+
     def event_stream():
+        result = None
         try:
-            gen = stream_member_turn(conversation, member_message)
-            result = None
             for item in gen:
                 # The generator yields str deltas then a final
                 # OnboardingTurnResult (the only non-str item).
@@ -168,13 +211,57 @@ def onboarding_chat_stream(request):
                     yield _sse('delta', {'text': item})
                 else:
                     result = item
+        except TurnRequestError as exc:
+            yield _sse('error', {
+                'reason': exc.code,
+                'retryable': exc.code not in {'altered_message'},
+                'new_request_id': (
+                    str(uuid.uuid4())
+                    if exc.code == 'attempts_exhausted'
+                    else None
+                ),
+            })
+            return
+        except LLMTimeoutError:
+            yield _sse('error', {
+                'reason': 'timeout',
+                'retryable': True,
+            })
+            return
         except LLMError:
             # Open/mid-stream failure: nothing persisted. Tell the client
             # to retry the SAME message via the v1 non-streaming endpoint
             # (which routes to the #802 form fallback on a hard LLMError).
-            yield _sse('fallback', {'reason': 'stream-error'})
+            attempt = conversation.turn_attempts.filter(
+                request_id=request_id,
+            ).first()
+            if (
+                attempt is not None
+                and attempt.provider_call_count < onboarding_ai_max_attempts()
+            ):
+                yield _sse('fallback', {'reason': 'stream-error'})
+            else:
+                yield _sse('error', {
+                    'reason': 'attempts_exhausted',
+                    'retryable': True,
+                    'new_request_id': str(uuid.uuid4()),
+                })
             return
-        if result is not None and result.is_complete:
+        finally:
+            close = getattr(gen, 'close', None)
+            if close is not None:
+                close()
+        if result is not None and result.replayed:
+            conversation.response.refresh_from_db(fields=['status'])
+            complete = conversation.response.status == 'submitted'
+            yield _sse('done', {
+                'complete': complete,
+                'replayed': True,
+                'reload': True,
+                'redirect': reverse('onboarding_start') if complete else None,
+            })
+            return
+        if result is not None and result.result.is_complete:
             # The redirect target is the end-of-onboarding completion screen
             # (#951) with the founder booking CTAs. The flash message cannot
             # be set here (the streaming response headers are already sent),
@@ -232,15 +319,52 @@ def onboarding_chat_message(request):
 
     member_message = (request.POST.get('message') or '').strip()
     if not member_message:
-        return render(request, 'accounts/onboarding_chat.html', {
-            'conversation': conversation,
-            'response': response,
-            'chat_messages': _conversation_messages(conversation),
-            'error': 'Please type a message.',
-        }, status=400)
+        return render(
+            request, 'accounts/onboarding_chat.html',
+            _chat_context(
+                conversation, response, error='Please type a message.',
+            ),
+            status=400,
+        )
+
+    request_id = request.POST.get('request_id')
+    if not request_id:
+        return render(
+            request, 'accounts/onboarding_chat.html',
+            _chat_context(
+                conversation,
+                response,
+                error='Please retry your message.',
+            ),
+            status=400,
+        )
 
     try:
-        result = run_member_turn(conversation, member_message)
+        outcome = run_logical_member_turn(
+            conversation, request_id, member_message,
+        )
+    except TurnRequestError as exc:
+        if exc.code == 'busy':
+            error = 'Another reply is still processing. Please wait and retry.'
+        elif exc.code == 'altered_message':
+            error = 'That retry no longer matches the original message.'
+        else:
+            error = 'That reply could not be retried. Please try again.'
+        return render(
+            request, 'accounts/onboarding_chat.html',
+            _chat_context(
+                conversation,
+                response,
+                error=error,
+                turn_request_id=(
+                    uuid.uuid4()
+                    if exc.code == 'attempts_exhausted'
+                    else request_id
+                ),
+                draft_message=member_message,
+            ),
+            status=409,
+        )
     except LLMError:
         # Graceful fallback: keep the draft response, switch to the #802
         # form for the same response, never a 500.
@@ -252,7 +376,12 @@ def onboarding_chat_message(request):
         )
         return redirect('onboarding_questions')
 
-    if result.is_complete:
+    if outcome.replayed:
+        response.refresh_from_db(fields=['status'])
+        conversation.refresh_from_db(fields=['transcript'])
+        if response.status == 'submitted':
+            return redirect('onboarding_start')
+    elif outcome.result.is_complete:
         messages.success(
             request,
             "Thanks -- we'll use this to prepare your plan.",
@@ -262,11 +391,11 @@ def onboarding_chat_message(request):
         # submitted response.
         return redirect('onboarding_start')
 
-    return render(request, 'accounts/onboarding_chat.html', {
-        'conversation': conversation,
-        'response': response,
-        'chat_messages': _conversation_messages(conversation),
-    })
+    conversation.refresh_from_db(fields=['transcript'])
+    return render(
+        request, 'accounts/onboarding_chat.html',
+        _chat_context(conversation, response),
+    )
 
 
 __all__ = [

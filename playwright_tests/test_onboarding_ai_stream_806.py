@@ -19,9 +19,11 @@ Screenshots are written to ``.tmp/aisl-issue-806-screenshots``.
 import os
 from contextlib import contextmanager
 from pathlib import Path
+from threading import Event
 from unittest.mock import patch
 
 import pytest
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     SETTLE_TIMEOUT_MS,
@@ -219,12 +221,29 @@ class TestTokenByToken:
                 state="visible",
             )
             reply = "Thanks! What blocks your consistency the most?"
+
+            release = Event()
+
+            def paused_stream(messages, **kwargs):
+                from integrations.services.llm import (
+                    STREAM_DONE,
+                    STREAM_TEXT_DELTA,
+                    LLMResult,
+                    StreamEvent,
+                )
+                yield StreamEvent(kind=STREAM_TEXT_DELTA, text="Thanks! ")
+                release.wait(timeout=10)
+                yield StreamEvent(
+                    kind=STREAM_TEXT_DELTA,
+                    text="What blocks your consistency the most?",
+                )
+                yield StreamEvent(
+                    kind=STREAM_DONE, result=LLMResult(text=reply),
+                )
+
             with patch(
                 "questionnaires.onboarding_ai.llm.stream",
-                side_effect=_stream(
-                    ["Thanks! ", "What blocks ", "your consistency the most?"],
-                    reply,
-                ),
+                side_effect=paused_stream,
             ), patch(
                 "questionnaires.onboarding_ai.llm.complete",
                 return_value=_reply(text=reply),
@@ -237,6 +256,15 @@ class TestTokenByToken:
                 page.locator(
                     '[data-testid="onboarding-chat-assistant"]'
                 ).last.wait_for(state="visible")
+                try:
+                    page.get_by_text("Thanks!", exact=True).wait_for(
+                        state="visible", timeout=5000,
+                    )
+                    assert reply not in page.locator(
+                        '[data-testid="onboarding-chat-transcript"]'
+                    ).inner_text()
+                finally:
+                    release.set()
                 page.wait_for_function(
                     "() => document.querySelector("
                     "'[data-testid=\\'onboarding-chat-transcript\\']')"
@@ -365,6 +393,17 @@ class TestMidStreamDrop:
             assert transcript.count("my next message") == 1
             _shot(page, "mid_stream_drop_fallback")
 
+        from questionnaires.models import OnboardingTurnAttempt
+
+        attempt = OnboardingTurnAttempt.objects.get(
+            conversation__response__respondent__email="dropper@test.com",
+        )
+        assert attempt.provider_call_count == 2
+        assert attempt.retry_count == 1
+        assert attempt.fallback_used is True
+        assert attempt.status == "succeeded"
+        connection.close()
+
 
 @pytest.mark.django_db(transaction=True)
 class TestStreamFailureToForm:
@@ -402,6 +441,13 @@ class TestStreamFailureToForm:
                 page.locator(
                     '[data-testid="questionnaire-response-form"]'
                 ).wait_for(state="visible")
+                recovery_notice = page.locator('[data-testid="messages-region"]')
+                recovery_notice.wait_for(state="visible")
+                assert (
+                    "Our assistant is unavailable right now"
+                    in recovery_notice.inner_text()
+                )
+                assert "switch to a quick form instead" in recovery_notice.inner_text()
             _shot(page, "stream_failure_form")
             page.locator('[data-testid="questionnaire-submit-button"]').click()
             page.wait_for_load_state("domcontentloaded")
@@ -448,6 +494,219 @@ class TestStreamingOff:
             ).inner_text()
             assert "What is your main blocker?" in transcript
             _shot(page, "streaming_off")
+
+        from questionnaires.models import OnboardingTurnAttempt
+
+        attempt = OnboardingTurnAttempt.objects.get(
+            conversation__response__respondent__email="nostream@test.com",
+        )
+        assert attempt.transport == "non_stream"
+        assert attempt.provider_call_count == 1
+        assert attempt.status == "succeeded"
+        connection.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestReplayRecovery:
+    @pytest.mark.core
+    def test_lost_done_replay_reloads_persisted_turn_without_duplicate(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _reset()
+        _create_user("replay@test.com", tier_slug="main", email_verified=True)
+        context = _auth_context(browser, "replay@test.com")
+        page = context.new_page()
+        message = "persist this once"
+        reply = "Durable assistant reply"
+
+        with _llm_enabled(), patch(
+            "questionnaires.onboarding_ai.llm.stream",
+            side_effect=_stream([reply], reply),
+        ) as provider:
+            page.goto(
+                f"{django_server}/onboarding/chat",
+                wait_until="domcontentloaded",
+            )
+            request_id = page.locator(
+                '[data-testid="onboarding-chat-request-id"]'
+            ).input_value()
+            page.locator('[data-testid="onboarding-chat-input"]').fill(message)
+            page.locator('[data-testid="onboarding-chat-send"]').click()
+            page.get_by_text(reply, exact=True).wait_for(state="visible")
+            send_button = page.locator('[data-testid="onboarding-chat-send"]')
+            expect(send_button).to_be_enabled()
+
+            # The enabled button is the durable post-`done` UI state. Now
+            # simulate losing the first `done`: resend the original UUID and
+            # message so replay reloads the durable transcript.
+            page.locator('[data-testid="onboarding-chat-request-id"]').evaluate(
+                "(node, value) => { node.value = value; }", request_id,
+            )
+            page.locator('[data-testid="onboarding-chat-input"]').fill(message)
+            with page.expect_navigation(wait_until="domcontentloaded"):
+                send_button.click()
+
+            transcript = page.locator(
+                '[data-testid="onboarding-chat-transcript"]'
+            ).inner_text()
+            assert transcript.count(message) == 1
+            assert transcript.count(reply) == 1
+            assert provider.call_count == 1
+
+        connection.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestBrowserDeadlineRecovery:
+    @pytest.mark.core
+    def test_abort_restores_same_uuid_and_message_without_blocking_post_race(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _reset()
+        _create_user("deadline@test.com", tier_slug="main", email_verified=True)
+        context = _auth_context(browser, "deadline@test.com")
+        page = context.new_page()
+        started = Event()
+        release = Event()
+
+        def blocked_stream(messages, **kwargs):
+            from integrations.services.llm import STREAM_DONE, LLMResult, StreamEvent
+
+            started.set()
+            release.wait(timeout=10)
+            yield StreamEvent(
+                kind=STREAM_DONE,
+                result=LLMResult(text="should not reach the aborted browser"),
+            )
+
+        with _llm_enabled(), patch(
+            "questionnaires.onboarding_ai.llm.stream",
+            side_effect=blocked_stream,
+        ):
+            try:
+                page.goto(
+                    f"{django_server}/onboarding/chat",
+                    wait_until="domcontentloaded",
+                )
+                form = page.locator('[data-testid="onboarding-chat-form"]')
+                form.evaluate(
+                    "node => node.setAttribute('data-deadline-ms', '100')"
+                )
+                request_id = page.locator(
+                    '[data-testid="onboarding-chat-request-id"]'
+                ).input_value()
+                message = "restore this exact answer"
+                page.locator('[data-testid="onboarding-chat-input"]').fill(message)
+                page.locator('[data-testid="onboarding-chat-send"]').click()
+                assert started.wait(timeout=2)
+                error = page.locator(
+                    '[data-testid="onboarding-chat-live-error"]'
+                )
+                error.wait_for(state="visible", timeout=5000)
+                assert page.locator(
+                    '[data-testid="onboarding-chat-input"]'
+                ).input_value() == message
+                assert page.locator(
+                    '[data-testid="onboarding-chat-request-id"]'
+                ).input_value() == request_id
+                assert page.locator(
+                    '[data-testid="onboarding-chat-send"]'
+                ).is_enabled()
+                transcript = page.locator(
+                    '[data-testid="onboarding-chat-transcript"]'
+                ).inner_text()
+                assert message not in transcript
+                assert page.url == f"{django_server}/onboarding/chat"
+            finally:
+                release.set()
+
+        connection.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestTwoTabAdmission:
+    @pytest.mark.core
+    def test_second_tab_gets_busy_without_second_provider_call(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _reset()
+        _create_user("twotab@test.com", tier_slug="main", email_verified=True)
+
+        context = _auth_context(browser, "twotab@test.com")
+        first_page = context.new_page()
+        second_page = context.new_page()
+        release = Event()
+
+        def blocked_stream(messages, **kwargs):
+            from integrations.services.llm import (
+                STREAM_DONE,
+                STREAM_TEXT_DELTA,
+                LLMResult,
+                StreamEvent,
+            )
+            yield StreamEvent(kind=STREAM_TEXT_DELTA, text="Working")
+            release.wait(timeout=10)
+            yield StreamEvent(
+                kind=STREAM_DONE, result=LLMResult(text="Working"),
+            )
+
+        with _llm_enabled(), patch(
+            "questionnaires.onboarding_ai.llm.stream",
+            side_effect=blocked_stream,
+        ) as provider:
+            try:
+                for page in (first_page, second_page):
+                    page.goto(
+                        f"{django_server}/onboarding/chat",
+                        wait_until="domcontentloaded",
+                    )
+                first_page.locator(
+                    '[data-testid="onboarding-chat-input"]'
+                ).fill("first tab answer")
+                first_page.locator(
+                    '[data-testid="onboarding-chat-send"]'
+                ).click()
+                first_page.get_by_text("Working", exact=True).wait_for(
+                    state="visible", timeout=5000,
+                )
+
+                second_page.locator(
+                    '[data-testid="onboarding-chat-input"]'
+                ).fill("second tab answer")
+                second_page.locator(
+                    '[data-testid="onboarding-chat-send"]'
+                ).click()
+                second_page.locator(
+                    '[data-testid="onboarding-chat-live-error"]'
+                ).wait_for(state="visible", timeout=5000)
+                assert "still processing" in second_page.locator(
+                    '[data-testid="onboarding-chat-live-error"]'
+                ).inner_text()
+                assert provider.call_count == 1
+            finally:
+                release.set()
+
+            first_page.wait_for_function(
+                "() => !document.querySelector("
+                "'[data-testid=\"onboarding-chat-send\"]'"
+                ").disabled",
+                timeout=5000,
+            )
+
+        from questionnaires.models import OnboardingConversation
+
+        conversation = OnboardingConversation.objects.get(
+            response__respondent__email="twotab@test.com",
+        )
+        user_messages = [
+            turn["content"] for turn in conversation.transcript
+            if turn["role"] == "user"
+        ]
+        assert user_messages == ["first tab answer"]
+        connection.close()
 
 
 @pytest.mark.django_db(transaction=True)

@@ -106,6 +106,26 @@ ONBOARDING_AI_FLAG = 'ONBOARDING_AI_ENABLED'
 # non-streaming transport and never opens an SSE connection. Switchable
 # without a redeploy via Studio.
 ONBOARDING_AI_STREAMING_FLAG = 'ONBOARDING_AI_STREAMING'
+ONBOARDING_AI_DEADLINE_FLAG = 'ONBOARDING_AI_DEADLINE_SECONDS'
+ONBOARDING_AI_MAX_ATTEMPTS_FLAG = 'ONBOARDING_AI_MAX_ATTEMPTS'
+
+
+def _clamped_int_config(key, default, minimum, maximum):
+    try:
+        value = int(get_config(key, default))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
+def onboarding_ai_deadline_seconds():
+    """Per-provider-call deadline, clamped below the 30s web-worker limit."""
+    return _clamped_int_config(ONBOARDING_AI_DEADLINE_FLAG, 25, 5, 28)
+
+
+def onboarding_ai_max_attempts():
+    """Total outbound provider calls allowed for one logical browser turn."""
+    return _clamped_int_config(ONBOARDING_AI_MAX_ATTEMPTS_FLAG, 2, 1, 3)
 
 # Opaque self-ID values for the two persona-agnostic options. They are
 # not persona ids, so they never collide with a ``Persona.pk`` value.

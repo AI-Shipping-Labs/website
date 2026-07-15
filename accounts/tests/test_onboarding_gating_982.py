@@ -286,7 +286,7 @@ class AiChatGatingTest(TestCase):
 
     def test_chat_stream_emits_fallback_and_runs_no_turn(self):
         with patch(
-            'accounts.views.onboarding_ai.stream_member_turn',
+            'accounts.views.onboarding_ai.stream_logical_member_turn',
         ) as stream_turn:
             resp = self.client.post(
                 '/onboarding/chat/stream', {'message': 'hi'},

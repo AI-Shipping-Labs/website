@@ -552,6 +552,8 @@ def run_onboarding_turn(
     member_message,
     persona_catalog,
     trace=None,
+    timeout_seconds=None,
+    cancellation=None,
 ):
     """Run one turn of the AI onboarding interview.
 
@@ -608,6 +610,9 @@ def run_onboarding_turn(
             messages,
             system=system,
             tools=[tool],
+            timeout_seconds=timeout_seconds,
+            max_retries=0,
+            cancellation=cancellation,
         )
     except LLMError as error:
         sink.on_error(error=error)
@@ -673,6 +678,8 @@ def stream_onboarding_turn(
     member_message,
     persona_catalog,
     trace=None,
+    timeout_seconds=None,
+    cancellation=None,
 ):
     """Stream one onboarding turn: yield text deltas, then the result.
 
@@ -747,7 +754,14 @@ def stream_onboarding_turn(
     llm_result = None
     started = time.monotonic()
     try:
-        for event in llm.stream(messages, system=system, tools=[tool]):
+        for event in llm.stream(
+            messages,
+            system=system,
+            tools=[tool],
+            timeout_seconds=timeout_seconds,
+            max_retries=0,
+            cancellation=cancellation,
+        ):
             if event.is_done:
                 llm_result = event.result
                 break

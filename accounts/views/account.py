@@ -2,13 +2,16 @@
 
 import json
 import logging
+import uuid
+from datetime import timedelta
 from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
-from django.core.cache import cache
+from django.db.models import Q
+from django.db.models.functions import Now
 from django.http import (
     HttpResponse,
     HttpResponseForbidden,
@@ -37,9 +40,8 @@ from accounts.services.privacy import (
     write_privacy_export_log,
 )
 
-# Issue #448: per-user resend throttle for the account verification banner.
+# Issue #448/#449: per-user resend throttle for every verification CTA.
 RESEND_VERIFICATION_THROTTLE_SECONDS = 60
-RESEND_VERIFICATION_CACHE_KEY_TEMPLATE = "verify-email-resend:{user_id}"
 
 # Matches AbstractUser.first_name / last_name max_length so an over-long
 # value is rejected before Django's model-level validator complains. Keeping
@@ -48,6 +50,46 @@ RESEND_VERIFICATION_CACHE_KEY_TEMPLATE = "verify-email-resend:{user_id}"
 _NAME_MAX_LENGTH = 150
 
 logger = logging.getLogger(__name__)
+
+
+def _claim_verification_resend(user_id):
+    """Atomically claim one cross-worker resend window.
+
+    Uses a single conditional UPDATE and the database clock, so concurrent
+    Gunicorn workers cannot both win and host clock skew cannot shorten the
+    60-second window. Returns the opaque claim token, or ``None`` when the
+    user is verified/missing or the existing claim is still fresh.
+    """
+    from accounts.models import User
+
+    token = uuid.uuid4()
+    cutoff = Now() - timedelta(seconds=RESEND_VERIFICATION_THROTTLE_SECONDS)
+    claimed = (
+        User.objects
+        .filter(pk=user_id, email_verified=False)
+        .filter(
+            Q(verification_resend_claimed_at__isnull=True)
+            | Q(verification_resend_claimed_at__lte=cutoff)
+        )
+        .update(
+            verification_resend_claimed_at=Now(),
+            verification_resend_claim_token=token,
+        )
+    )
+    return token if claimed == 1 else None
+
+
+def _release_verification_resend(user_id, token):
+    """Release only ``token``'s failed-send claim, never a newer claim."""
+    from accounts.models import User
+
+    User.objects.filter(
+        pk=user_id,
+        verification_resend_claim_token=token,
+    ).update(
+        verification_resend_claimed_at=None,
+        verification_resend_claim_token=None,
+    )
 
 from accounts.services.timezones import (
     build_timezone_options,
@@ -959,8 +1001,12 @@ def resend_verification_view(request):
         messages.info(request, "Your email is already verified.")
         return redirect(next_url)
 
-    cache_key = RESEND_VERIFICATION_CACHE_KEY_TEMPLATE.format(user_id=user.id)
-    if not cache.add(cache_key, "1", RESEND_VERIFICATION_THROTTLE_SECONDS):
+    claim_token = _claim_verification_resend(user.id)
+    if claim_token is None:
+        user.refresh_from_db(fields=["email_verified"])
+        if user.email_verified:
+            messages.info(request, "Your email is already verified.")
+            return redirect(next_url)
         messages.warning(
             request,
             "We just sent a verification email -- check your inbox. "
@@ -976,7 +1022,7 @@ def resend_verification_view(request):
         else:
             email_log = _send_verification_email(user)
     except Exception:
-        cache.delete(cache_key)
+        _release_verification_resend(user.id, claim_token)
         logger.exception(
             "Verification email resend failed for user_id=%s", user.id
         )
@@ -987,7 +1033,7 @@ def resend_verification_view(request):
         return redirect(next_url)
 
     if email_log is None:
-        cache.delete(cache_key)
+        _release_verification_resend(user.id, claim_token)
         messages.error(
             request,
             "We couldn't send the verification email. Please try again.",

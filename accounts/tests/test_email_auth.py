@@ -13,14 +13,17 @@ Tests cover:
 
 import datetime
 import json
+import threading
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 import jwt
 from allauth.socialaccount.models import SocialApp
 from django.conf import settings
 from django.contrib.sites.models import Site
-from django.db import connection
-from django.test import TestCase, override_settings, tag
+from django.db import close_old_connections, connection
+from django.test import Client, TestCase, TransactionTestCase, override_settings, tag
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -1661,10 +1664,6 @@ class ResendVerificationApiTest(TestCase):
 
     URL = "/account/api/resend-verification"
 
-    def setUp(self):
-        from django.core.cache import cache as _cache
-        _cache.clear()
-
     def _make_unverified_user(self, email="resend-unverified@example.com"):
         return User.objects.create_user(email=email, password="test1234")
 
@@ -1703,8 +1702,6 @@ class ResendVerificationApiTest(TestCase):
             self.assertContains(response, 'data-message-tag="warning"')
 
     def test_failed_send_shows_error_and_does_not_throttle(self):
-        from django.core.cache import cache as _cache
-
         with patch(
             "accounts.views.auth._send_verification_email",
             return_value=None,
@@ -1718,11 +1715,14 @@ class ResendVerificationApiTest(TestCase):
             patched_send.assert_called_once_with(user)
             self.assertContains(response, "verification email")
             self.assertContains(response, 'data-message-tag="error"')
-            self.assertIsNone(_cache.get(f"verify-email-resend:{user.id}"))
+            user.refresh_from_db()
+            self.assertIsNone(user.verification_resend_claimed_at)
+            self.assertIsNone(user.verification_resend_claim_token)
+
+            self.client.post(self.URL)
+            self.assertEqual(patched_send.call_count, 2)
 
     def test_raised_send_exception_shows_error_logs_and_does_not_throttle(self):
-        from django.core.cache import cache as _cache
-
         with patch(
             "accounts.views.auth._send_verification_email",
             side_effect=RuntimeError("mail backend unavailable"),
@@ -1737,15 +1737,15 @@ class ResendVerificationApiTest(TestCase):
             patched_send.assert_called_once_with(user)
             self.assertContains(response, "verification email")
             self.assertContains(response, 'data-message-tag="error"')
-            self.assertIsNone(_cache.get(f"verify-email-resend:{user.id}"))
+            user.refresh_from_db()
+            self.assertIsNone(user.verification_resend_claimed_at)
+            self.assertIsNone(user.verification_resend_claim_token)
             self.assertIn(
                 f"Verification email resend failed for user_id={user.id}",
                 "\n".join(logs.output),
             )
 
-    def test_clearing_throttle_key_allows_resend(self):
-        from django.core.cache import cache as _cache
-
+    def test_expired_throttle_window_allows_resend(self):
         with patch("accounts.views.auth._send_verification_email") as patched_send:
             user = self._make_unverified_user("reset@example.com")
             self.client.force_login(user)
@@ -1754,10 +1754,61 @@ class ResendVerificationApiTest(TestCase):
             self.client.post(self.URL)
             self.assertEqual(patched_send.call_count, 1)
 
-            _cache.delete(f"verify-email-resend:{user.id}")
+            User.objects.filter(pk=user.pk).update(
+                verification_resend_claimed_at=(
+                    timezone.now() - datetime.timedelta(seconds=61)
+                ),
+                verification_resend_claim_token=uuid.uuid4(),
+            )
 
             self.client.post(self.URL)
             self.assertEqual(patched_send.call_count, 2)
+
+    def test_59_second_old_claim_remains_throttled(self):
+        with patch("accounts.views.auth._send_verification_email") as patched_send:
+            user = self._make_unverified_user("boundary@example.com")
+            User.objects.filter(pk=user.pk).update(
+                verification_resend_claimed_at=(
+                    timezone.now() - datetime.timedelta(seconds=59)
+                ),
+                verification_resend_claim_token=uuid.uuid4(),
+            )
+            self.client.force_login(user)
+
+            response = self.client.post(self.URL, follow=True)
+
+            patched_send.assert_not_called()
+            self.assertContains(response, "minute")
+
+    def test_host_clock_patch_cannot_shorten_database_clock_window(self):
+        from accounts.views.account import _claim_verification_resend
+
+        user = self._make_unverified_user("db-clock@example.com")
+        first_token = _claim_verification_resend(user.pk)
+        self.assertIsNotNone(first_token)
+
+        with patch(
+            "accounts.views.account.timezone.now",
+            return_value=timezone.now() + datetime.timedelta(days=1),
+        ):
+            self.assertIsNone(_claim_verification_resend(user.pk))
+
+    def test_failed_old_claim_cannot_clear_newer_claim(self):
+        from accounts.views.account import _release_verification_resend
+
+        user = self._make_unverified_user("compare-clear@example.com")
+        old_token = uuid.uuid4()
+        new_token = uuid.uuid4()
+        User.objects.filter(pk=user.pk).update(
+            verification_resend_claimed_at=timezone.now(),
+            verification_resend_claim_token=new_token,
+        )
+
+        _release_verification_resend(user.pk, old_token)
+
+        user.refresh_from_db()
+        self.assertEqual(user.verification_resend_claim_token, new_token)
+        self.assertIsNotNone(user.verification_resend_claimed_at)
 
     def test_verified_user_post_does_not_send(self):
         with patch("accounts.views.auth._send_verification_email") as patched_send:
@@ -1772,15 +1823,12 @@ class ResendVerificationApiTest(TestCase):
             self.assertContains(response, 'data-message-tag="info"')
 
     def test_anonymous_post_redirects_to_login_and_does_not_send(self):
-        from django.core.cache import cache as _cache
-
         with patch("accounts.views.auth._send_verification_email") as patched_send:
             response = self.client.post(self.URL)
 
             self.assertEqual(response.status_code, 302)
             self.assertIn("/accounts/login/", response.url)
             patched_send.assert_not_called()
-            self.assertIsNone(_cache.get("verify-email-resend:1"))
 
     def test_get_returns_405(self):
         user = self._make_unverified_user("get405@example.com")
@@ -1810,3 +1858,49 @@ class ResendVerificationApiTest(TestCase):
                 send_emails,
                 ["a-throttle@example.com", "b-throttle@example.com"],
             )
+
+
+@override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
+class ResendVerificationConcurrencyTest(TransactionTestCase):
+    """A real multi-connection race permits exactly one email send."""
+
+    URL = "/account/api/resend-verification"
+
+    def test_concurrent_workers_send_exactly_once(self):
+        user = User.objects.create_user(
+            email="cross-worker-throttle@example.com",
+            password="test1234",
+        )
+        clients = [Client(), Client()]
+        for client in clients:
+            client.force_login(user)
+
+        barrier = threading.Barrier(2)
+        sent_user_ids = []
+        sent_lock = threading.Lock()
+
+        def fake_send(sent_user, **kwargs):
+            with sent_lock:
+                sent_user_ids.append(sent_user.pk)
+            return object()
+
+        def post(client):
+            close_old_connections()
+            try:
+                barrier.wait(timeout=5)
+                return client.post(self.URL).status_code
+            finally:
+                close_old_connections()
+
+        with patch(
+            "accounts.views.auth._send_verification_email",
+            side_effect=fake_send,
+        ):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                statuses = list(pool.map(post, clients))
+
+        self.assertEqual(statuses, [302, 302])
+        self.assertEqual(sent_user_ids, [user.pk])
+        user.refresh_from_db()
+        self.assertIsNotNone(user.verification_resend_claimed_at)
+        self.assertIsNotNone(user.verification_resend_claim_token)

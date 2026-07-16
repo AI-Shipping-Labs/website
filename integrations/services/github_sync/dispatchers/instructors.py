@@ -1,28 +1,14 @@
 """Instructor sync dispatcher and attachment helpers."""
 
-# ruff: noqa
-
 import os
-import re
-import uuid
 
-from django.utils import timezone
-
-from integrations.services.github_sync.common import INSTRUCTOR_ID_RE, GitHubSyncError, logger
-from integrations.services.github_sync.media import rewrite_cover_image_url, rewrite_image_urls, _check_broken_image_refs
+from integrations.services.github_sync.common import INSTRUCTOR_ID_RE, logger
 from integrations.services.github_sync.parsing import (
-    _check_slug_collision,
-    _compute_content_hash,
     _defaults_differ,
-    _derive_readme_content_id,
-    _derive_workshop_page_content_id,
-    _extract_readme_title,
-    _parse_markdown_file,
     _parse_yaml_file,
-    _render_event_recap_file,
     _validate_frontmatter,
 )
-from integrations.services.github_sync.repo import derive_slug, extract_sort_order, _matches_ignore_patterns
+
 
 def _dispatch_instructors(source, repo_dir, file_list, commit_sha, stats):
     """Walker dispatch handler: process instructor YAML files.

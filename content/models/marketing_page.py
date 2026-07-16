@@ -110,7 +110,6 @@ def is_reserved_marketing_page_path(path):
     except Resolver404:
         return False
     return match.url_name != MARKETING_PAGE_FALLBACK_URL_NAME
-    return False
 
 
 class MarketingPage(

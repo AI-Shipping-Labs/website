@@ -1,39 +1,31 @@
 """Event sync helpers and dispatcher."""
 
-# ruff: noqa
-
 import os
 import re
-import uuid
 
 import requests
 from django.conf import settings
 from django.utils import timezone
 
-from integrations.services.github_sync.common import INSTRUCTOR_ID_RE, GitHubSyncError, logger
+from events.services.timestamps import normalize_event_timestamps_for_sync
+from integrations.services.github_sync.common import logger
+from integrations.services.github_sync.dispatchers.hosts import _attach_hosts_to_event, _resolve_hosts_for_event_yaml
+from integrations.services.github_sync.dispatchers.instructors import (
+    _attach_instructors_to_event,
+    _resolve_instructors_for_yaml,
+)
 from integrations.services.github_sync.lifecycle import (
     cleanup_stale_synced_objects,
     find_synced_object,
     upsert_synced_object,
 )
-from integrations.services.github_sync.media import rewrite_cover_image_url, rewrite_image_urls, _check_broken_image_refs
+from integrations.services.github_sync.media import rewrite_cover_image_url
 from integrations.services.github_sync.parsing import (
     _check_slug_collision,
-    _compute_content_hash,
-    _defaults_differ,
-    _derive_readme_content_id,
-    _derive_workshop_page_content_id,
-    _extract_readme_title,
     _parse_markdown_file,
     _parse_yaml_file,
     _render_event_recap_file,
-    _validate_frontmatter,
 )
-from integrations.services.github_sync.repo import derive_slug, extract_sort_order, _matches_ignore_patterns
-
-from events.services.timestamps import normalize_event_timestamps_for_sync
-from integrations.services.github_sync.dispatchers.instructors import _attach_instructors_to_event, _resolve_instructors_for_yaml
-from integrations.services.github_sync.dispatchers.hosts import _attach_hosts_to_event, _resolve_hosts_for_event_yaml
 
 _UNSET = object()
 
@@ -275,6 +267,7 @@ def _resolve_heuristic_studio_event(title, start_datetime):
     import datetime as dt
 
     from django.db.models.functions import TruncDate
+
     from events.models import Event
 
     target_title = _normalize_title_for_match(title)
@@ -329,6 +322,7 @@ def _ambiguous_studio_candidate_ids(title, start_datetime):
     import datetime as dt
 
     from django.db.models.functions import TruncDate
+
     from events.models import Event
 
     target_title = _normalize_title_for_match(title)

@@ -472,7 +472,9 @@ class TestScenario2AdminTriggersSyncAll:
 
         # Then: All 4 sources show updated timestamps
         body = page.content()
-        cards = page.locator(".bg-card").all()
+        # Scope to direct source-card children so the global consent card is
+        # not mistaken for a content source.
+        cards = page.locator(".space-y-4 > .bg-card").all()
         synced_count = 0
         for card in cards:
             card_text = card.inner_text()

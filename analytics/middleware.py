@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 from django.conf import settings
 
 from analytics.bots import is_bot
+from analytics.consent import analytics_consent_granted
 from analytics.referrer_source import normalize_referrer
 from analytics.request_context import (
     clear_current_request,
@@ -41,6 +42,11 @@ SESSION_LAST_TOUCH = 'aslab_lt'
 # Organic referrer attribution (no UTM). See #772.
 FIRST_TOUCH_REFERRER_COOKIE = 'aslab_ft_ref'
 SESSION_LAST_TOUCH_REFERRER = 'aslab_lt_ref'
+ANALYTICS_COOKIES = (
+    ANON_ID_COOKIE,
+    FIRST_TOUCH_COOKIE,
+    FIRST_TOUCH_REFERRER_COOKIE,
+)
 
 # Path prefixes whose referrer we deliberately ignore. The user often
 # arrives at signup via the login page; treating that as a referrer would
@@ -94,6 +100,17 @@ def _cookie_domain():
         or getattr(settings, 'SESSION_COOKIE_DOMAIN', None)
     )
     return domain or None
+
+
+def delete_analytics_cookies(response, *, cookie_names=ANALYTICS_COOKIES):
+    """Expire optional analytics cookies using their configured scope."""
+    for cookie_name in cookie_names:
+        response.delete_cookie(
+            cookie_name,
+            path='/',
+            domain=_cookie_domain(),
+            samesite=COOKIE_SAMESITE,
+        )
 
 
 # --- Helpers -------------------------------------------------------------
@@ -213,6 +230,23 @@ class CampaignTrackingMiddleware:
             clear_current_request()
 
     def _dispatch(self, request):
+        # Optional analytics fail closed. Before an affirmative choice we do
+        # not create a visitor identity, persist attribution, or enqueue a
+        # visit. Expiring legacy cookies also handles visitors who arrived
+        # before the consent gate shipped or who later withdrew consent.
+        if not analytics_consent_granted(request):
+            # Loading a database-backed session on every anonymous request
+            # adds avoidable work to unrelated paths such as failed login.
+            # Legacy attribution sessions were paired with at least one of
+            # these cookies, while explicit withdrawal clears the session in
+            # the consent endpoint itself.
+            if any(request.COOKIES.get(name) for name in ANALYTICS_COOKIES):
+                request.session.pop(SESSION_LAST_TOUCH, None)
+                request.session.pop(SESSION_LAST_TOUCH_REFERRER, None)
+            response = self.get_response(request)
+            delete_analytics_cookies(response)
+            return response
+
         # Fast-path skip: bots, non-GET, system paths.
         if _should_skip(request):
             return self.get_response(request)

@@ -38,7 +38,9 @@ SYNC_Q_CLUSTER = {'sync': True, 'orm': 'default', 'name': 'test', 'workers': 1}
 
 
 def make_browser_client():
-    return Client(HTTP_USER_AGENT=BROWSER_UA)
+    client = Client(HTTP_USER_AGENT=BROWSER_UA)
+    client.cookies['aslab_analytics_consent'] = 'granted'
+    return client
 
 
 def set_first_touch_cookie(client, source='newsletter', medium='email',

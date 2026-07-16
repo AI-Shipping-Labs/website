@@ -435,9 +435,11 @@ class TestCreationFlowStillWorks:
         from payments.models import Tier
         main_id = Tier.objects.get(slug='main').pk
         connection.close()
-        page.locator(
+        tier_option = page.locator(
             f'input[name="tier_id"][value="{main_id}"]',
-        ).check(force=True)
+        )
+        tier_option.locator('..').click()
+        assert tier_option.is_checked()
         page.locator(
             'button[type="submit"][value="1 month"]',
         ).click()

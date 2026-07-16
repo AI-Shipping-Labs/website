@@ -72,6 +72,13 @@ def _configure_oauth(*providers):
 def _add_public_cookies(context, anon_id):
     context.add_cookies([
         {
+            'name': 'aslab_analytics_consent',
+            'value': 'granted',
+            'domain': '127.0.0.1',
+            'path': '/',
+            'httpOnly': True,
+        },
+        {
             'name': 'aslab_aid',
             'value': anon_id,
             'domain': '127.0.0.1',

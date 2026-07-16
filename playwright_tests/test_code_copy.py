@@ -114,9 +114,9 @@ class TestCodeCopyButton:
 
         btn = page.locator('[data-testid="code-copy-btn"]').first
         btn.wait_for(state="attached", timeout=2000)
-        # Force-click: hover-revealed buttons are not "visible" without hover
-        # in headless mode, but the click handler still fires.
-        btn.click(force=True)
+        # Exercise the real hover-reveal interaction before clicking.
+        btn.hover()
+        btn.click()
 
         # Button text flips to "Copied!" within the 1.5s window.
         page.locator(
@@ -156,7 +156,8 @@ class TestCodeCopyButton:
 
         btn = page.locator('[data-testid="code-copy-btn"]').first
         btn.wait_for(state="attached", timeout=2000)
-        btn.click(force=True)
+        btn.hover()
+        btn.click()
 
         # Confirm we hit the "Copied!" state first.
         page.locator(

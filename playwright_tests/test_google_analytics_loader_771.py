@@ -52,6 +52,16 @@ def _set_analytics_setting(value):
     connection.close()
 
 
+def _grant_analytics(context):
+    context.add_cookies([{
+        'name': 'aslab_analytics_consent',
+        'value': 'granted',
+        'domain': '127.0.0.1',
+        'path': '/',
+        'httpOnly': True,
+    }])
+
+
 @pytest.mark.django_db(transaction=True)
 class TestGoogleAnalyticsLoader:
     def test_anonymous_visit_emits_no_ga_when_unset(self, django_server, browser):
@@ -103,6 +113,7 @@ class TestGoogleAnalyticsLoader:
 
         # Anonymous visitor sees the loader on /.
         anon_ctx = browser.new_context()
+        _grant_analytics(anon_ctx)
         anon_page = anon_ctx.new_page()
         anon_page.goto(f"{django_server}/", wait_until="domcontentloaded")
         html_home = anon_page.content()

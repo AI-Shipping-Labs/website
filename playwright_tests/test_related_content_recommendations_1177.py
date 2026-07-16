@@ -377,7 +377,9 @@ class TestRelatedContentRecommendations:
 
         rail = page.get_by_test_id("related-content-rail")
         assert rail.is_visible()
-        assert page.locator("[role='dialog']").count() == 0
+        assert page.locator(
+            "[role='dialog']:not([data-testid='analytics-consent-panel'])"
+        ).count() == 0
         article_card = page.get_by_test_id("related-content-card").filter(
             has_text="Evaluation Article"
         )

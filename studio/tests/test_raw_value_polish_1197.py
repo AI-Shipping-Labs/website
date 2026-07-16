@@ -7,12 +7,18 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.template.defaultfilters import timesince_filter, timeuntil_filter
 from django.test import TestCase
 from django.utils import timezone
 from django_q.models import OrmQ
 from django_q.signing import SignedPackage
+from freezegun import freeze_time
 
-from accounts.templatetags.date_formatting import operator_datetime
+from accounts.templatetags.date_formatting import (
+    operator_datetime,
+    operator_datetime_seconds,
+    operator_datetime_tz,
+)
 from analytics.models import UserAttribution
 from email_app.models import EmailTemplateOverride
 from notifications.models import Notification
@@ -50,30 +56,54 @@ class StudioRawValuePolishTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='pw')
 
-    def test_worker_pending_locks_use_compact_units_in_page_and_fragment(self):
+    @freeze_time('2026-07-16T12:00:00Z')
+    def test_worker_pending_locks_show_exact_natural_values_on_page_and_fragment(self):
         now = timezone.now()
-        _make_ormq(lock=now + timedelta(minutes=3), name='future-lock')
-        _make_ormq(lock=now - timedelta(days=15), name='expired-lock')
+        future_lock = now + timedelta(minutes=3)
+        expired_lock = now - timedelta(days=15)
+        _make_ormq(lock=future_lock, name='future-lock')
+        _make_ormq(lock=expired_lock, name='expired-lock')
         _make_ormq(lock=None, name='unlocked-task')
 
-        with (
-            patch('studio.views.worker.timezone.now', return_value=now),
-            patch('studio.worker_health.Stat.get_all', return_value=[]),
-        ):
+        with patch('studio.worker_health.Stat.get_all', return_value=[]):
             page = self.client.get('/studio/worker/')
             fragment = self.client.get('/studio/worker/?fragment=pending')
 
         for response in (page, fragment):
             body = response.content.decode()
             self.assertIn('future-lock', body)
-            self.assertIn('in 3m', body)
+            self.assertIn(
+                f'{operator_datetime_seconds(future_lock)} '
+                f'(in {timeuntil_filter(future_lock)})',
+                body,
+            )
+            self.assertIn(
+                f'title="{operator_datetime_tz(future_lock)}"',
+                body,
+            )
             self.assertIn('expired-lock', body)
-            self.assertIn('expired 15d ago', body)
+            self.assertIn(
+                f'{operator_datetime_seconds(expired_lock)} '
+                f'(expired {timesince_filter(expired_lock)} ago)',
+                body,
+            )
+            self.assertIn(
+                f'title="{operator_datetime_tz(expired_lock)}"',
+                body,
+            )
             self.assertIn('unlocked-task', body)
+            self.assertIsNotNone(
+                re.search(
+                    r'unlocked-task.*?data-label="Lock expires">\s*—\s*</td>',
+                    body,
+                    re.DOTALL,
+                ),
+            )
             self.assertFalse(
                 re.search(r'\b\d{4,}s\b', body),
                 'Raw multi-digit seconds leaked into lock display',
             )
+            self.assertNotIn('expired 15d ago', body)
 
     def test_plan_list_strips_markdown_without_changing_detail_title(self):
         sprint = Sprint.objects.create(

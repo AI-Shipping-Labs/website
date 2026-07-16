@@ -4,6 +4,7 @@ import os
 import re
 import uuid
 from datetime import timedelta
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -18,11 +19,19 @@ from playwright_tests.conftest import (
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
+from django.template.defaultfilters import timesince_filter, timeuntil_filter  # noqa: E402
 from django.utils import timezone  # noqa: E402
+from freezegun import freeze_time  # noqa: E402
+
+from accounts.templatetags.date_formatting import (  # noqa: E402
+    operator_datetime_seconds,
+    operator_datetime_tz,
+)
 
 pytestmark = pytest.mark.local_only
 
 _NO_CLUSTERS = "studio.worker_health.Stat.get_all"
+SCREENSHOT_DIR = Path(".tmp/screenshots/issue-1276")
 
 
 def _reset_state():
@@ -163,34 +172,89 @@ class TestStudioRawValuePolish1197:
         _reset_state()
 
     @pytest.mark.core
+    @freeze_time("2026-07-16T12:00:00Z")
     def test_worker_pending_lock_text_is_humanized_on_page_and_fragment(
         self, django_server, browser,
     ):
         now = timezone.now()
-        _make_ormq(lock=now + timedelta(seconds=45), name="future-lock")
-        _make_ormq(lock=now - timedelta(days=15), name="expired-lock")
+        future_lock = now + timedelta(minutes=3)
+        expired_lock = now - timedelta(days=15)
+        _make_ormq(lock=future_lock, name="future-lock")
+        _make_ormq(lock=expired_lock, name="expired-lock")
         _make_ormq(lock=None, name="unlocked-task")
         connection.close()
 
         context = _auth_context(browser, "staff-1197@test.com")
         page = context.new_page()
-        with (
-            mock.patch("studio.views.worker.timezone.now", return_value=now),
-            mock.patch(_NO_CLUSTERS, return_value=[]),
-        ):
+        page.set_viewport_size({"width": 1280, "height": 900})
+        expected_future = (
+            f"{operator_datetime_seconds(future_lock)} "
+            f"(in {timeuntil_filter(future_lock)})"
+        )
+        expected_expired = (
+            f"{operator_datetime_seconds(expired_lock)} "
+            f"(expired {timesince_filter(expired_lock)} ago)"
+        )
+
+        with mock.patch(_NO_CLUSTERS, return_value=[]):
             page.goto(f"{django_server}/studio/worker/", wait_until="domcontentloaded")
-            expect(page.get_by_text("in 45s")).to_be_visible()
-            expect(page.get_by_text("expired 15d ago")).to_be_visible()
-            assert not re.search(r"\b\d{4,}s\b", page.locator("body").inner_text())
+            consent_button = page.get_by_role("button", name="Keep analytics off")
+            if consent_button.is_visible():
+                consent_button.click()
+                page.wait_for_load_state("domcontentloaded")
+            self._assert_pending_lock_display(
+                page,
+                expected_future=expected_future,
+                expected_future_title=operator_datetime_tz(future_lock),
+                expected_expired=expected_expired,
+                expected_expired_title=operator_datetime_tz(expired_lock),
+            )
+            SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+            page.screenshot(
+                path=SCREENSHOT_DIR / "worker-lock-expiry.png",
+                full_page=True,
+            )
 
             page.goto(
                 f"{django_server}/studio/worker/?fragment=pending",
                 wait_until="domcontentloaded",
             )
-            expect(page.get_by_text("in 45s")).to_be_visible()
-            expect(page.get_by_text("expired 15d ago")).to_be_visible()
-            assert not re.search(r"\b\d{4,}s\b", page.locator("body").inner_text())
+            self._assert_pending_lock_display(
+                page,
+                expected_future=expected_future,
+                expected_future_title=operator_datetime_tz(future_lock),
+                expected_expired=expected_expired,
+                expected_expired_title=operator_datetime_tz(expired_lock),
+            )
         context.close()
+
+    @staticmethod
+    def _assert_pending_lock_display(
+        page,
+        *,
+        expected_future,
+        expected_future_title,
+        expected_expired,
+        expected_expired_title,
+    ):
+        future_cell = page.locator(
+            'tr:has-text("future-lock") [data-label="Lock expires"]'
+        )
+        expired_cell = page.locator(
+            'tr:has-text("expired-lock") [data-label="Lock expires"]'
+        )
+        unlocked_cell = page.locator(
+            'tr:has-text("unlocked-task") [data-label="Lock expires"]'
+        )
+        expect(future_cell).to_have_text(expected_future)
+        expect(future_cell).to_have_attribute("title", expected_future_title)
+        expect(expired_cell).to_have_text(expected_expired)
+        expect(expired_cell).to_have_attribute("title", expected_expired_title)
+        expect(unlocked_cell).to_have_text("—")
+        expect(unlocked_cell).not_to_have_attribute("title", re.compile(".+"))
+        body = page.locator("body").inner_text()
+        assert not re.search(r"\b\d{4,}s\b", body)
+        assert "expired 15d ago" not in body
 
     def test_plan_list_strips_markdown_but_detail_preserves_title(
         self, django_server, browser,

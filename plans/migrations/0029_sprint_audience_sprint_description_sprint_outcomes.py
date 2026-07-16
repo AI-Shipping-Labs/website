@@ -13,16 +13,16 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='sprint',
             name='audience',
-            field=models.TextField(blank=True, default=''),
+            field=models.TextField(blank=True, db_default='', default=''),
         ),
         migrations.AddField(
             model_name='sprint',
             name='description',
-            field=models.TextField(blank=True, default=''),
+            field=models.TextField(blank=True, db_default='', default=''),
         ),
         migrations.AddField(
             model_name='sprint',
             name='outcomes',
-            field=models.TextField(blank=True, default=''),
+            field=models.TextField(blank=True, db_default='', default=''),
         ),
     ]

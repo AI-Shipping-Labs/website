@@ -57,6 +57,7 @@ class Download(
         max_length=500,
         blank=True,
         default='',
+        db_default='',
         help_text=(
             'Private S3 object key. Required for secure delivery; never '
             'rendered on public surfaces.'
@@ -66,6 +67,7 @@ class Download(
         max_length=150,
         blank=True,
         default='',
+        db_default='',
         help_text=(
             'Validated MIME type for the private asset. Legacy `other` rows '
             'remain stored but are not deliverable unless a future policy '
@@ -76,6 +78,7 @@ class Download(
         max_length=200,
         blank=True,
         default='',
+        db_default='',
         help_text=(
             'Operator-facing readiness marker set when source validation '
             'fails. Never rendered on public surfaces.'

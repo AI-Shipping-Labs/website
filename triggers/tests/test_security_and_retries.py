@@ -105,6 +105,7 @@ class DestinationSecurityTest(TestCase):
 
 
 @tag("core")
+@patch("website.release_phase.R2_BACKGROUND_WORK_ENABLED", True)
 class DurableDeliveryTest(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -132,11 +133,32 @@ class DurableDeliveryTest(TestCase):
 
     def test_secret_is_encrypted_at_rest_and_rotation_is_versioned(self):
         self.assertNotIn("first-secret", self.subscription.encrypted_secret)
+        self.assertEqual(self.subscription.legacy_secret, "first-secret")
         self.assertEqual(self.subscription.secret, "first-secret")
         self.subscription.secret = "second-secret"
         self.subscription.save()
         self.assertEqual(self.subscription.secret_version, 2)
+        self.assertEqual(self.subscription.legacy_secret, "second-secret")
         self.assertEqual(self.subscription.secret_candidates()[1], (1, "first-secret"))
+
+    def test_r1_reconciles_a_secret_changed_by_the_production_image(self):
+        from triggers.management.commands.reconcile_r1_expand import (
+            reconcile_r1_expand,
+        )
+
+        TriggerSubscription.objects.filter(pk=self.subscription.pk).update(
+            legacy_secret="production-overlap-secret",
+        )
+        counts = reconcile_r1_expand()
+        self.subscription.refresh_from_db()
+
+        self.assertEqual(counts["subscriptions"], 1)
+        self.assertEqual(self.subscription.secret, "production-overlap-secret")
+        self.assertEqual(
+            self.subscription.legacy_secret,
+            "production-overlap-secret",
+        )
+        self.assertEqual(reconcile_r1_expand()["subscriptions"], 0)
 
     @patch("triggers.tasks.post_pinned_https")
     def test_snapshot_is_immutable_across_subscription_rotation(self, post):

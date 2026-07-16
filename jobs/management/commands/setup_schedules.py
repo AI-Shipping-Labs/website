@@ -8,6 +8,17 @@ Usage:
 from django.core.management.base import BaseCommand
 
 from jobs.tasks import schedule
+from website.release_phase import background_work_enabled
+
+R2_ONLY_SCHEDULE_NAMES = (
+    'cleanup-calendly-webhook-logs',
+    'retry-calendly-webhooks',
+    'resume-webhook-deliveries',
+    'redact-maven-enrollment-pii',
+    'retry-maven-enrollment-steps',
+    'purge-plan-sprints-raw-text',
+    'onboarding-staff-notification-recovery',
+)
 
 
 class Command(BaseCommand):
@@ -31,19 +42,20 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: cleanup-webhook-logs (daily at 3 AM)'))
 
-        schedule(
-            'jobs.tasks.cleanup.cleanup_calendly_webhook_logs',
-            cron='5 3 * * *',
-            name='cleanup-calendly-webhook-logs',
-        )
-        self.stdout.write(self.style.SUCCESS('Registered: cleanup-calendly-webhook-logs (daily at 03:05 UTC)'))
+        if background_work_enabled():
+            schedule(
+                'jobs.tasks.cleanup.cleanup_calendly_webhook_logs',
+                cron='5 3 * * *',
+                name='cleanup-calendly-webhook-logs',
+            )
+            self.stdout.write(self.style.SUCCESS('Registered: cleanup-calendly-webhook-logs (daily at 03:05 UTC)'))
 
-        schedule(
-            'jobs.tasks.calendly.retry_calendly_webhooks',
-            cron='*/5 * * * *',
-            name='retry-calendly-webhooks',
-        )
-        self.stdout.write(self.style.SUCCESS('Registered: retry-calendly-webhooks (every 5 min)'))
+            schedule(
+                'jobs.tasks.calendly.retry_calendly_webhooks',
+                cron='*/5 * * * *',
+                name='retry-calendly-webhooks',
+            )
+            self.stdout.write(self.style.SUCCESS('Registered: retry-calendly-webhooks (every 5 min)'))
 
         # Prune old outbound webhook-delivery rows daily at 03:10 UTC
         # (issue #1070). Reuses the cleanup-webhook-logs wiring/cadence
@@ -59,27 +71,28 @@ class Command(BaseCommand):
 
         # Durable trigger jobs own retry count/backoff in the database. This
         # minute-level wake-up also recovers a worker that died after leasing.
-        schedule(
-            'triggers.tasks.resume_due_webhook_deliveries',
-            cron='* * * * *',
-            name='resume-webhook-deliveries',
-        )
-        self.stdout.write(self.style.SUCCESS('Registered: resume-webhook-deliveries (every minute)'))
+        if background_work_enabled():
+            schedule(
+                'triggers.tasks.resume_due_webhook_deliveries',
+                cron='* * * * *',
+                name='resume-webhook-deliveries',
+            )
+            self.stdout.write(self.style.SUCCESS('Registered: resume-webhook-deliveries (every minute)'))
 
-        schedule(
-            'jobs.tasks.cleanup.redact_old_maven_enrollment_pii',
-            cron='20 3 * * *',
-            name='redact-maven-enrollment-pii',
-            days=30,
-        )
-        self.stdout.write(self.style.SUCCESS('Registered: redact-maven-enrollment-pii (daily at 03:20 UTC)'))
+            schedule(
+                'jobs.tasks.cleanup.redact_old_maven_enrollment_pii',
+                cron='20 3 * * *',
+                name='redact-maven-enrollment-pii',
+                days=30,
+            )
+            self.stdout.write(self.style.SUCCESS('Registered: redact-maven-enrollment-pii (daily at 03:20 UTC)'))
 
-        schedule(
-            'jobs.tasks.cleanup.retry_maven_enrollment_steps',
-            cron='*/5 * * * *',
-            name='retry-maven-enrollment-steps',
-        )
-        self.stdout.write(self.style.SUCCESS('Registered: retry-maven-enrollment-steps (five-minute cadence)'))
+            schedule(
+                'jobs.tasks.cleanup.retry_maven_enrollment_steps',
+                cron='*/5 * * * *',
+                name='retry-maven-enrollment-steps',
+            )
+            self.stdout.write(self.style.SUCCESS('Registered: retry-maven-enrollment-steps (five-minute cadence)'))
 
         # Purge old per-user CRM activity timeline rows daily at 03:30 UTC
         # (issue #853). Off-peak, after the webhook-log cleanup. The
@@ -93,12 +106,13 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('Registered: purge-user-activity (daily at 03:30 UTC)'))
 
         # Redact expired raw #plan-sprints message text before daytime ingest.
-        schedule(
-            'crm.tasks.purge_plan_sprints_raw_text.purge_plan_sprints_raw_text',
-            cron='40 3 * * *',
-            name='purge-plan-sprints-raw-text',
-        )
-        self.stdout.write(self.style.SUCCESS('Registered: purge-plan-sprints-raw-text (daily at 03:40 UTC)'))
+        if background_work_enabled():
+            schedule(
+                'crm.tasks.purge_plan_sprints_raw_text.purge_plan_sprints_raw_text',
+                cron='40 3 * * *',
+                name='purge-plan-sprints-raw-text',
+            )
+            self.stdout.write(self.style.SUCCESS('Registered: purge-plan-sprints-raw-text (daily at 03:40 UTC)'))
 
         # Event reminders every 15 min (issue #1001; restored from the
         # hourly '0 * * * *' set in #919). The reminder windows in
@@ -231,14 +245,15 @@ class Command(BaseCommand):
         # Durable outbox recovery for onboarding completion notifications.
         # Pending enqueue failures and expired worker claims are safe to retry
         # because the final logical attempt is the idempotency key.
-        schedule(
-            'questionnaires.tasks.reconcile_onboarding_staff_notifications',
-            cron='*/5 * * * *',
-            name='onboarding-staff-notification-recovery',
-        )
-        self.stdout.write(self.style.SUCCESS(
-            'Registered: onboarding-staff-notification-recovery '
-            '(five-minute cadence)'
-        ))
+        if background_work_enabled():
+            schedule(
+                'questionnaires.tasks.reconcile_onboarding_staff_notifications',
+                cron='*/5 * * * *',
+                name='onboarding-staff-notification-recovery',
+            )
+            self.stdout.write(self.style.SUCCESS(
+                'Registered: onboarding-staff-notification-recovery '
+                '(five-minute cadence)'
+            ))
 
         self.stdout.write(self.style.SUCCESS('All default schedules registered.'))

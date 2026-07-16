@@ -15,6 +15,7 @@ SCRATCH_ROOT = REPO_ROOT / ".tmp" / "test-deploy-dev-grace-poll"
 OLD_TASK_DEF = "arn:aws:ecs:eu-west-1:123:task-definition/ai-shipping-labs:1"
 NEW_TASK_DEF = "arn:aws:ecs:eu-west-1:123:task-definition/ai-shipping-labs:2"
 RUNNING_TASK = "arn:aws:ecs:eu-west-1:123:task/ready"
+WORKER_RUNNING_TASK = "arn:aws:ecs:eu-west-1:123:task/worker-ready"
 
 
 FAKE_AWS = rf'''#!__PYTHON__
@@ -34,14 +35,29 @@ def query():
     return ""
 
 
+def role():
+    return "WORKER" if "worker" in " ".join(args) else "WEB"
+
+
 svc = args[0] if args else ""
 sub = args[1] if len(args) > 1 else ""
 q = query()
 
 if svc == "ecs" and sub == "describe-services":
-    if "deployments" in q:
+    if "networkConfiguration" in q:
+        print('{{"awsvpcConfiguration": {{"subnets": ["subnet-1"], '
+              '"securityGroups": ["sg-1"], "assignPublicIp": "DISABLED"}}}}')
+    elif "capacityProviderStrategy" in q:
+        print("null")
+    elif "launchType" in q:
+        print("FARGATE")
+    elif "deployments" in q:
+        service_role = role()
         print(
-            os.environ.get("FAKE_PRIMARY_TASK_DEF", "{NEW_TASK_DEF}"),
+            os.environ.get(
+                f"FAKE_{{service_role}}_PRIMARY_TASK_DEF",
+                os.environ.get("FAKE_PRIMARY_TASK_DEF", "{NEW_TASK_DEF}"),
+            ),
             os.environ.get("FAKE_DESIRED_COUNT", "1"),
             os.environ.get("FAKE_RUNNING_COUNT", "1"),
             sep="\t",
@@ -76,26 +92,41 @@ if svc == "ecs" and sub == "register-task-definition":
     print("{NEW_TASK_DEF}")
     sys.exit(0)
 
+if svc == "ecs" and sub == "run-task":
+    print("arn:aws:ecs:eu-west-1:123:task/predeploy-ready")
+    sys.exit(0)
+
 if svc == "ecs" and sub == "update-service":
     print("{{}}")
     sys.exit(0)
 
 if svc == "ecs" and sub == "wait":
     if len(args) > 2 and args[2] == "services-stable":
-        sys.exit(int(os.environ.get("FAKE_SERVICES_STABLE_EXIT", "0")))
+        service = args[args.index("--services") + 1]
+        role = "WORKER" if "worker" in service else "WEB"
+        sys.exit(int(os.environ.get(
+            f"FAKE_{{role}}_SERVICES_STABLE_EXIT",
+            os.environ.get("FAKE_SERVICES_STABLE_EXIT", "0"),
+        )))
     sys.exit(0)
 
 if svc == "ecs" and sub == "list-tasks":
     if "--desired-status" in args and args[args.index("--desired-status") + 1] == "RUNNING":
-        print("{RUNNING_TASK}")
+        print("{WORKER_RUNNING_TASK}" if role() == "WORKER" else "{RUNNING_TASK}")
     else:
         print("")
     sys.exit(0)
 
 if svc == "ecs" and sub == "describe-tasks":
-    if "taskDefinitionArn,lastStatus" in q:
+    if "exitCode" in q and "|" in q:
+        print("0")
+    elif "taskDefinitionArn,lastStatus" in q:
+        task_role = role()
         print(
-            os.environ.get("FAKE_RUNNING_TASK_DEF", "{NEW_TASK_DEF}"),
+            os.environ.get(
+                f"FAKE_{{task_role}}_RUNNING_TASK_DEF",
+                os.environ.get("FAKE_RUNNING_TASK_DEF", "{NEW_TASK_DEF}"),
+            ),
             os.environ.get("FAKE_TASK_LAST_STATUS", "RUNNING"),
             sep="\t",
         )
@@ -212,6 +243,13 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
         task_last_status="RUNNING",
         web_status="RUNNING",
         worker_status="RUNNING",
+        web_services_stable_exit=None,
+        worker_services_stable_exit=None,
+        web_primary_task_def=None,
+        worker_primary_task_def=None,
+        web_running_task_def=None,
+        worker_running_task_def=None,
+        predeploy_enabled=False,
     ):
         tmpdir = Path(tmpdir)
         bindir = tmpdir / "bin"
@@ -255,12 +293,26 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
             "DEPLOY_GRACE_ATTEMPTS": str(max_attempts),
             "DEPLOY_GRACE_REQUIRED_MATCHES": str(required_matches),
         })
+        if web_services_stable_exit is not None:
+            env["FAKE_WEB_SERVICES_STABLE_EXIT"] = str(web_services_stable_exit)
+        if worker_services_stable_exit is not None:
+            env["FAKE_WORKER_SERVICES_STABLE_EXIT"] = str(worker_services_stable_exit)
+        if web_primary_task_def is not None:
+            env["FAKE_WEB_PRIMARY_TASK_DEF"] = web_primary_task_def
+        if worker_primary_task_def is not None:
+            env["FAKE_WORKER_PRIMARY_TASK_DEF"] = worker_primary_task_def
+        if web_running_task_def is not None:
+            env["FAKE_WEB_RUNNING_TASK_DEF"] = web_running_task_def
+        if worker_running_task_def is not None:
+            env["FAKE_WORKER_RUNNING_TASK_DEF"] = worker_running_task_def
         for name in (
             "PREDEPLOY_MIGRATE_CHECK_ENABLED",
             "DEPLOY_GRACE_MAX_ATTEMPTS",
             "DEPLOY_GRACE_SLEEP_SECONDS",
         ):
             env.pop(name, None)
+        if predeploy_enabled:
+            env["PREDEPLOY_MIGRATE_CHECK_ENABLED"] = "true"
 
         result = subprocess.run(
             ["bash", str(DEPLOY_SCRIPT_PATH), tag, deploy_env],
@@ -364,6 +416,185 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
         self.assertIn("task_last_status=RUNNING", result.stdout)
         self.assertIn("consecutive=3/3", result.stdout)
         self.assertNotIn("--- Recent ECS service events ---", result.stdout)
+
+    def test_prod_rolls_verified_web_before_worker(self):
+        SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
+        tag = "20260716-120000-r1safe"
+        with TemporaryDirectory(dir=SCRATCH_ROOT) as tmpdir:
+            run = self._run_deploy(
+                tmpdir,
+                tag=tag,
+                deploy_env="prod",
+                services_stable_exit="0",
+                responses=[tag, tag, tag],
+            )
+
+        self.assertEqual(
+            run["result"].returncode,
+            0,
+            msg=f"stdout={run['result'].stdout}\nstderr={run['result'].stderr}",
+        )
+        updates = [
+            line for line in run["aws_calls"].splitlines()
+            if line.startswith("ecs update-service")
+        ]
+        self.assertEqual(len(updates), 2)
+        self.assertIn("--service ai-shipping-labs-prod ", updates[0])
+        self.assertIn("--service ai-shipping-labs-worker-prod ", updates[1])
+        self.assertIn("Verifying https://aishippinglabs.com/ping", run["result"].stdout)
+
+    def test_prod_predeploy_gate_still_rolls_verified_web_before_worker(self):
+        SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
+        tag = "20260716-120000-r1safe"
+        with TemporaryDirectory(dir=SCRATCH_ROOT) as tmpdir:
+            run = self._run_deploy(
+                tmpdir,
+                tag=tag,
+                deploy_env="prod",
+                services_stable_exit="0",
+                responses=[tag, tag, tag],
+                predeploy_enabled=True,
+            )
+
+        self.assertEqual(
+            run["result"].returncode,
+            0,
+            msg=f"stdout={run['result'].stdout}\nstderr={run['result'].stderr}",
+        )
+        calls = run["aws_calls"].splitlines()
+        self.assertEqual(sum(line.startswith("ecs run-task") for line in calls), 1)
+        updates = [line for line in calls if line.startswith("ecs update-service")]
+        self.assertEqual(len(updates), 2)
+        self.assertIn("--service ai-shipping-labs-prod ", updates[0])
+        self.assertIn("--service ai-shipping-labs-worker-prod ", updates[1])
+        self.assertEqual(run["curl_attempts"], 3)
+
+    def test_prod_predeploy_stale_ping_never_updates_worker(self):
+        SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(dir=SCRATCH_ROOT) as tmpdir:
+            run = self._run_deploy(
+                tmpdir,
+                deploy_env="prod",
+                services_stable_exit="0",
+                responses=["stale-tag"],
+                max_attempts=1,
+                predeploy_enabled=True,
+            )
+
+        self.assertNotEqual(run["result"].returncode, 0)
+        updates = [
+            line for line in run["aws_calls"].splitlines()
+            if line.startswith("ecs update-service")
+        ]
+        self.assertEqual(len(updates), 1)
+        self.assertIn("--service ai-shipping-labs-prod ", updates[0])
+        self.assertNotIn("--service ai-shipping-labs-worker-prod ", updates[0])
+
+    def test_prod_web_failure_never_updates_worker_and_prints_exact_recovery(self):
+        SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(dir=SCRATCH_ROOT) as tmpdir:
+            run = self._run_deploy(
+                tmpdir,
+                deploy_env="prod",
+                web_services_stable_exit="1",
+                worker_services_stable_exit="0",
+                responses=["old-tag"],
+                max_attempts=1,
+            )
+
+        self.assertNotEqual(run["result"].returncode, 0)
+        updates = [
+            line for line in run["aws_calls"].splitlines()
+            if line.startswith("ecs update-service")
+        ]
+        self.assertEqual(len(updates), 1)
+        self.assertIn("--service ai-shipping-labs-prod ", updates[0])
+        self.assertNotIn("--service ai-shipping-labs-worker-prod ", updates[0])
+        self.assertIn("RECOVERY COMMAND: aws ecs update-service", run["result"].stdout)
+        self.assertIn(OLD_TASK_DEF, run["result"].stdout)
+
+    def test_prod_stale_ping_after_web_waiter_never_updates_worker(self):
+        SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(dir=SCRATCH_ROOT) as tmpdir:
+            run = self._run_deploy(
+                tmpdir,
+                deploy_env="prod",
+                web_services_stable_exit="0",
+                worker_services_stable_exit="0",
+                responses=["permanently-stale-tag"],
+                max_attempts=2,
+            )
+
+        self.assertNotEqual(run["result"].returncode, 0)
+        updates = [
+            line for line in run["aws_calls"].splitlines()
+            if line.startswith("ecs update-service")
+        ]
+        self.assertEqual(len(updates), 1)
+        self.assertIn("--service ai-shipping-labs-prod ", updates[0])
+        self.assertNotIn("--service ai-shipping-labs-worker-prod ", updates[0])
+        self.assertEqual(run["curl_attempts"], 2)
+        self.assertIn(
+            "web reached ECS steady state but did not serve exact tag",
+            run["result"].stdout,
+        )
+        self.assertIn("RECOVERY: the worker was not rolled.", run["result"].stdout)
+
+    def test_prod_worker_failure_happens_only_after_verified_web(self):
+        SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
+        tag = "20260716-120000-r1safe"
+        with TemporaryDirectory(dir=SCRATCH_ROOT) as tmpdir:
+            run = self._run_deploy(
+                tmpdir,
+                tag=tag,
+                deploy_env="prod",
+                web_services_stable_exit="0",
+                worker_services_stable_exit="1",
+                responses=[tag, tag, tag],
+            )
+
+        self.assertNotEqual(run["result"].returncode, 0)
+        updates = [
+            line for line in run["aws_calls"].splitlines()
+            if line.startswith("ecs update-service")
+        ]
+        self.assertEqual(len(updates), 2)
+        self.assertIn("--service ai-shipping-labs-prod ", updates[0])
+        self.assertIn("--service ai-shipping-labs-worker-prod ", updates[1])
+        self.assertIn("RECOVERY COMMAND: aws ecs update-service", run["result"].stdout)
+
+    def test_prod_worker_waiter_success_with_old_revision_fails_closed(self):
+        SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
+        tag = "20260716-120000-r1safe"
+        with TemporaryDirectory(dir=SCRATCH_ROOT) as tmpdir:
+            run = self._run_deploy(
+                tmpdir,
+                tag=tag,
+                deploy_env="prod",
+                web_services_stable_exit="0",
+                worker_services_stable_exit="0",
+                responses=[tag, tag, tag],
+                web_primary_task_def=NEW_TASK_DEF,
+                web_running_task_def=NEW_TASK_DEF,
+                worker_primary_task_def=OLD_TASK_DEF,
+                worker_running_task_def=OLD_TASK_DEF,
+            )
+
+        self.assertNotEqual(run["result"].returncode, 0)
+        updates = [
+            line for line in run["aws_calls"].splitlines()
+            if line.startswith("ecs update-service")
+        ]
+        self.assertEqual(len(updates), 2)
+        self.assertIn("--service ai-shipping-labs-prod ", updates[0])
+        self.assertIn("--service ai-shipping-labs-worker-prod ", updates[1])
+        self.assertEqual(run["curl_attempts"], 3)
+        self.assertIn(
+            "worker waiter returned without the new revision running",
+            run["result"].stdout,
+        )
+        self.assertIn(f"primary={OLD_TASK_DEF}", run["result"].stdout)
+        self.assertIn("RECOVERY COMMAND: aws ecs update-service", run["result"].stdout)
 
     def test_transient_exact_responses_do_not_turn_deploy_green(self):
         tag = "20260708-011950-8dc969b"
@@ -580,13 +811,15 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
 
         result = run["result"]
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(run["curl_attempts"], 0)
+        # The three calls are the mandatory web-tag proof completed before
+        # the worker update. The worker failure itself adds no ping shortcut.
+        self.assertEqual(run["curl_attempts"], 3)
         self.assertIn(
             "ERROR: ai-shipping-labs-worker-prod did not reach steady state.",
             result.stdout,
         )
         self.assertIn("--- Recent ECS service events ---", result.stdout)
-        self.assertNotIn("/ping", run["curl_calls"])
+        self.assertEqual(run["curl_calls"].count("/ping"), 3)
 
     def test_wake_action_executes_transient_then_stable_exact_match(self):
         tag_value = "release-tag"

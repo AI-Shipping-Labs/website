@@ -54,6 +54,7 @@ class TierOverride(models.Model):
         max_length=80,
         blank=True,
         default="",
+        db_default="",
         db_index=True,
         help_text=(
             "Stable grant source. Maven uses maven:<occurrence identity> so its "

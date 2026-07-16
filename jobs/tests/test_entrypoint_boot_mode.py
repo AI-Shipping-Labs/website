@@ -45,6 +45,9 @@ class BootModeDispatchTestBase(SimpleTestCase):
             mock.patch.object(entry, "_start_gunicorn"),
             mock.patch.object(entry, "_start_qcluster"),
             mock.patch.object(entry, "_register_schedules"),
+            mock.patch.object(entry, "_suppress_r1_incompatible_schedules"),
+            mock.patch.object(entry, "_wait_for_serving_schema_ready"),
+            mock.patch.object(entry, "_publish_serving_schema_ready"),
             mock.patch.object(entry, "persist_boot_timing"),
             mock.patch("django.core.management.call_command"),
         ):
@@ -55,6 +58,9 @@ class BootModeDispatchTestBase(SimpleTestCase):
         self.start_gunicorn = entry._start_gunicorn
         self.start_qcluster = entry._start_qcluster
         self.register_schedules = entry._register_schedules
+        self.suppress_schedules = entry._suppress_r1_incompatible_schedules
+        self.wait_for_schema = entry._wait_for_serving_schema_ready
+        self.publish_schema = entry._publish_serving_schema_ready
         self.persist = entry.persist_boot_timing
         # The migrate/check helpers import call_command lazily from this path.
         import django.core.management as mgmt
@@ -203,6 +209,51 @@ class NoInfraServingBootTest(BootModeDispatchTestBase):
         self.start_gunicorn.assert_not_called()
         self.assertEqual(self.persist.call_args.args[0], "worker")
 
+    def test_combined_worker_waits_for_web_schema_before_qcluster(self):
+        self._run_main_with_env({
+            "R1_SCHEMA_BARRIER_ROLE": "worker",
+            "VERSION": "r1-test-tag",
+        })
+
+        self.wait_for_schema.assert_called_once()
+        self.start_qcluster.assert_called_once()
+
+    def test_schema_barrier_timeout_prevents_worker_start(self):
+        self.wait_for_schema.side_effect = RuntimeError("schema barrier timeout")
+
+        with self.assertRaisesMessage(RuntimeError, "schema barrier timeout"):
+            self._run_main_with_env({
+                "R1_SCHEMA_BARRIER_ROLE": "worker",
+                "VERSION": "r1-test-tag",
+            })
+
+        self.start_qcluster.assert_not_called()
+        self.register_schedules.assert_not_called()
+        self.suppress_schedules.assert_not_called()
+
+    def test_combined_web_publishes_only_after_migrate_reconcile_and_suppression(self):
+        order = []
+
+        def command(*args, **kwargs):
+            if args:
+                order.append(args[0])
+
+        self.call_command.side_effect = command
+        self.suppress_schedules.side_effect = lambda: order.append("suppress")
+        self.publish_schema.side_effect = lambda: order.append("publish")
+        self.start_gunicorn.side_effect = lambda *_: order.append("gunicorn")
+
+        self._run_main_with_env({
+            "RUN_MIGRATIONS": "true",
+            "R1_SCHEMA_BARRIER_ROLE": "web",
+            "VERSION": "r1-test-tag",
+        })
+
+        self.assertLess(order.index("migrate"), order.index("reconcile_r1_expand"))
+        self.assertLess(order.index("reconcile_r1_expand"), order.index("suppress"))
+        self.assertLess(order.index("suppress"), order.index("publish"))
+        self.assertLess(order.index("publish"), order.index("gunicorn"))
+
     def test_serving_boot_check_can_be_enabled_and_runs_after_migrate(self):
         self._run_main_with_env({
             "RUN_MIGRATIONS": "true",
@@ -211,6 +262,57 @@ class NoInfraServingBootTest(BootModeDispatchTestBase):
         names = _command_names(self.call_command)
         self.assertIn("check", names)
         self.assertLess(names.index("migrate"), names.index("check"))
+
+
+class CombinedTaskSchemaBarrierTest(SimpleTestCase):
+    def test_old_schema_cache_error_is_retried_until_web_publishes_marker(self):
+        cache = mock.Mock()
+        cache.get.side_effect = [
+            RuntimeError("django_q_cache does not exist"),
+            "r1-test-tag",
+        ]
+
+        with (
+            mock.patch.dict(
+                os.environ,
+                {
+                    "VERSION": "r1-test-tag",
+                    "R1_SCHEMA_BARRIER_TIMEOUT_SECONDS": "5",
+                },
+                clear=True,
+            ),
+            mock.patch("django.core.cache.caches", {"django_q": cache}),
+            mock.patch.object(entry.time, "monotonic", side_effect=[0, 0, 1]),
+            mock.patch.object(entry.time, "sleep") as sleep,
+        ):
+            entry._wait_for_serving_schema_ready()
+
+        self.assertEqual(cache.get.call_count, 2)
+        cache.get.assert_called_with("r1_serving_schema_ready:r1-test-tag")
+        sleep.assert_called_once_with(1)
+
+    def test_old_schema_cache_error_times_out_fail_closed(self):
+        cache = mock.Mock()
+        cache.get.side_effect = RuntimeError("django_q_cache does not exist")
+
+        with (
+            mock.patch.dict(
+                os.environ,
+                {
+                    "VERSION": "r1-test-tag",
+                    "R1_SCHEMA_BARRIER_TIMEOUT_SECONDS": "1",
+                },
+                clear=True,
+            ),
+            mock.patch("django.core.cache.caches", {"django_q": cache}),
+            mock.patch.object(entry.time, "monotonic", side_effect=[0, 0, 2]),
+            mock.patch.object(entry.time, "sleep"),
+            self.assertRaisesMessage(
+                RuntimeError,
+                "qcluster was not started",
+            ),
+        ):
+            entry._wait_for_serving_schema_ready()
 
 
 class GunicornWorkerCountTest(SimpleTestCase):

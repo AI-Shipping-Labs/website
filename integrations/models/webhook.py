@@ -12,8 +12,8 @@ class WebhookLog(models.Model):
         max_length=128, blank=True, null=True, unique=True,
         help_text='Provider delivery fingerprint; NULL for legacy logs.',
     )
-    attempts = models.PositiveIntegerField(default=0)
-    error_message = models.TextField(blank=True, default='')
+    attempts = models.PositiveIntegerField(default=0, db_default=0)
+    error_message = models.TextField(blank=True, default='', db_default='')
     processed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:

@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddField(
             model_name='webhooklog', name='attempts',
-            field=models.PositiveIntegerField(default=0),
+            field=models.PositiveIntegerField(db_default=0, default=0),
         ),
         migrations.AddField(
             model_name='webhooklog', name='deduplication_key',
@@ -23,7 +23,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name='webhooklog', name='error_message',
-            field=models.TextField(blank=True, default=''),
+            field=models.TextField(blank=True, db_default='', default=''),
         ),
         migrations.AddField(
             model_name='webhooklog', name='processed_at',

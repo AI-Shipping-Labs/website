@@ -11,6 +11,7 @@ distinct from the inbound ``integrations.WebhookLog``.
 
 from django.conf import settings
 from django.db import models
+from django.db.models.functions import Now
 from django.utils import timezone
 
 
@@ -32,8 +33,8 @@ class EventEmission(models.Model):
         unique=True,
         help_text="The 'evt_<uuid>' id put on the wire.",
     )
-    occurred_at = models.DateTimeField(default=timezone.now)
-    envelope = models.JSONField(default=dict, blank=True)
+    occurred_at = models.DateTimeField(default=timezone.now, db_default=Now())
+    envelope = models.JSONField(default=dict, blank=True, db_default={})
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

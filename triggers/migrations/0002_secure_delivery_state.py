@@ -1,6 +1,7 @@
 import django.db.models.deletion
 import django.utils.timezone
 from django.db import migrations, models
+from django.db.models.functions import Now
 
 import triggers.destinations
 
@@ -46,18 +47,17 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="triggersubscription",
             name="encrypted_secret",
-            field=models.TextField(blank=True, default=""),
-            preserve_default=False,
+            field=models.TextField(blank=True, db_default="", default=""),
         ),
         migrations.AddField(
             model_name="triggersubscription",
             name="previous_encrypted_secret",
-            field=models.TextField(blank=True, default=""),
+            field=models.TextField(blank=True, db_default="", default=""),
         ),
         migrations.AddField(
             model_name="triggersubscription",
             name="secret_version",
-            field=models.PositiveIntegerField(default=1),
+            field=models.PositiveIntegerField(db_default=1, default=1),
         ),
         migrations.AddField(
             model_name="triggersubscription",
@@ -65,11 +65,30 @@ class Migration(migrations.Migration):
             field=models.DateTimeField(blank=True, null=True),
         ),
         migrations.RunPython(encrypt_existing_secrets, migrations.RunPython.noop),
-        migrations.RemoveField(model_name="triggersubscription", name="secret"),
         migrations.AlterField(
             model_name="triggersubscription",
             name="encrypted_secret",
-            field=models.TextField(help_text="Encrypted HMAC signing secret. Never render this value."),
+            field=models.TextField(blank=True, db_default="", default="", help_text="Encrypted HMAC signing secret. Never render this value."),
+        ),
+        migrations.AlterField(
+            model_name="triggersubscription",
+            name="secret",
+            field=models.CharField(blank=True, help_text="R1 rollback-only plaintext compatibility shadow.", max_length=255, null=True),
+        ),
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.RenameField(
+                    model_name="triggersubscription",
+                    old_name="secret",
+                    new_name="legacy_secret",
+                ),
+                migrations.AlterField(
+                    model_name="triggersubscription",
+                    name="legacy_secret",
+                    field=models.CharField(blank=True, db_column="secret", editable=False, help_text="R1 rollback-only plaintext compatibility shadow.", max_length=255, null=True),
+                ),
+            ],
+            database_operations=[],
         ),
         migrations.AlterField(
             model_name="triggersubscription",
@@ -79,12 +98,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="eventemission",
             name="occurred_at",
-            field=models.DateTimeField(default=django.utils.timezone.now),
+            field=models.DateTimeField(db_default=Now(), default=django.utils.timezone.now),
         ),
         migrations.AddField(
             model_name="eventemission",
             name="envelope",
-            field=models.JSONField(blank=True, default=dict),
+            field=models.JSONField(blank=True, db_default={}, default=dict),
         ),
         migrations.RunPython(backfill_emission_envelopes, migrations.RunPython.noop),
         migrations.CreateModel(

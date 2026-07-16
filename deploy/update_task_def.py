@@ -219,6 +219,16 @@ def update_task_definition(
                 "RUN_MIGRATIONS",
                 _run_migrations_for_container(container_def.get("name")),
             )
+            if role == "combined":
+                _set_env_var(
+                    environment,
+                    "R1_SCHEMA_BARRIER_ROLE",
+                    "worker"
+                    if container_def.get("name", "").endswith("-worker")
+                    else "web",
+                )
+            else:
+                _remove_env_var(environment, "R1_SCHEMA_BARRIER_ROLE")
             if predeploy_enabled:
                 _set_env_var(
                     environment,

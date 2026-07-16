@@ -43,6 +43,7 @@ class SecureTriggerMigrationTest(TransactionTestCase):
             subscription = NewSubscription.objects.get()
             self.assertNotIn("legacy-plaintext-secret", subscription.encrypted_secret)
             self.assertEqual(decrypt_secret(subscription.encrypted_secret), "legacy-plaintext-secret")
+            self.assertEqual(subscription.legacy_secret, "legacy-plaintext-secret")
             migrated = NewEmission.objects.get(envelope_id="evt_legacy")
             self.assertEqual(migrated.occurred_at, original_created_at)
             self.assertEqual(migrated.envelope["occurred_at"], original_created_at.isoformat())

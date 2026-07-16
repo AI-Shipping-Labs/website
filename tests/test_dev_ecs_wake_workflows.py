@@ -120,6 +120,25 @@ class ScheduledPlaywrightDevWakeWorkflowTest(SimpleTestCase):
 
 @tag("core")
 class DeployDevWakeWorkflowTest(SimpleTestCase):
+    def test_deploy_requires_non_skipping_postgresql_migration_gate(self):
+        workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)
+        postgres_job = workflow["jobs"]["r1-postgres-migration"]
+        deploy_job = workflow["jobs"]["deploy"]
+
+        self.assertNotIn("if", postgres_job)
+        self.assertFalse(postgres_job.get("continue-on-error", False))
+        self.assertIn("r1-postgres-migration", deploy_job["needs"])
+        self.assertEqual(postgres_job["services"]["postgres"]["image"], "postgres:16")
+        migration_step = next(
+            step
+            for step in postgres_job["steps"]
+            if step.get("name") == "Run serial production-baseline migration matrix"
+        )
+        self.assertEqual(
+            migration_step["run"],
+            "uv run python manage.py test tests.test_r1_migration_compatibility --verbosity 2",
+        )
+
     def test_deploy_verification_uses_shared_action_with_exact_version_match(self):
         workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)
         deploy_job = workflow["jobs"]["deploy"]

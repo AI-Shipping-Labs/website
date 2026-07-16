@@ -34,7 +34,13 @@ from community.calendly_config import (
     calendly_webhook_tolerance_seconds,
     get_calendly_webhook_signing_key,
 )
-from community.models import STATUS_BOOKED, STATUS_CANCELED, BookedCall, CallHost
+from community.models import (
+    STATUS_BOOKED,
+    STATUS_CANCELED,
+    BookedCall,
+    CallHost,
+    UnmatchedBookedCall,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +160,74 @@ def _event_time(payload, resource, *, canceled=False):
     return parse_datetime(raw) if raw else timezone.now()
 
 
+def _stage_unmatched_call(payload, *, status, event_at):
+    """Persist an unmatched call outside the table read by the R1 rollback image."""
+    resource = payload.get('payload') or {}
+    event_uri, scheduled_at = _extract_event(resource)
+    email, name, invitee_uri = _extract_invitee(resource)
+    staged = (
+        UnmatchedBookedCall.objects.select_for_update()
+        .filter(calendly_event_uri=event_uri)
+        .first()
+    )
+    if staged is None:
+        staged = UnmatchedBookedCall(calendly_event_uri=event_uri)
+    terminal = staged.pk is not None and staged.status == STATUS_CANCELED
+    staged.member = resolve_user_by_email(email) or staged.member
+    staged.invitee_email = email or staged.invitee_email
+    staged.invitee_name = name or staged.invitee_name
+    staged.scheduled_at = scheduled_at or staged.scheduled_at
+    staged.calendly_invitee_uri = invitee_uri or staged.calendly_invitee_uri
+    staged.scheduling_url = (resource.get('scheduling_url') or '')[:500]
+    staged.reschedule_url = (resource.get('reschedule_url') or '')[:500]
+    staged.cancel_url = (resource.get('cancel_url') or '')[:500]
+    staged.last_event_at = max(filter(None, [staged.last_event_at, event_at]))
+    if status == STATUS_CANCELED or terminal:
+        staged.status = STATUS_CANCELED
+        staged.canceled_at = staged.canceled_at or event_at
+    else:
+        staged.status = STATUS_BOOKED
+        staged.canceled_at = None
+    if staged.pk is None:
+        try:
+            with transaction.atomic():
+                staged.save()
+        except IntegrityError:
+            return _stage_unmatched_call(
+                payload,
+                status=status,
+                event_at=event_at,
+            )
+    else:
+        staged.save()
+    return staged
+
+
+def _promote_staged_call(staged, host):
+    """Attach a staged call to a real host without losing terminal state."""
+    booked, created = BookedCall.objects.get_or_create(
+        calendly_event_uri=staged.calendly_event_uri,
+        defaults={
+            'host': host,
+            'member': staged.member,
+            'invitee_email': staged.invitee_email,
+            'invitee_name': staged.invitee_name,
+            'scheduled_at': staged.scheduled_at,
+            'status': staged.status,
+            'calendly_invitee_uri': staged.calendly_invitee_uri,
+            'reschedule_url': staged.reschedule_url,
+            'cancel_url': staged.cancel_url,
+            'canceled_at': staged.canceled_at,
+            'last_event_at': staged.last_event_at,
+        },
+    )
+    if created and booked.is_active:
+        _increment_load(host)
+    if created or booked.host_id == host.pk:
+        staged.delete()
+    return booked
+
+
 @transaction.atomic
 def handle_invitee_created(payload):
     """Record a booked call and consume one slot of host capacity.
@@ -173,6 +247,25 @@ def handle_invitee_created(payload):
     member = resolve_user_by_email(email)
     event_at = _event_time(payload, resource)
 
+    staged = (
+        UnmatchedBookedCall.objects.select_for_update()
+        .filter(calendly_event_uri=event_uri)
+        .first()
+    )
+    if host is None:
+        return _stage_unmatched_call(
+            payload,
+            status=STATUS_BOOKED,
+            event_at=event_at,
+        )
+    if staged is not None:
+        staged = _stage_unmatched_call(
+            payload,
+            status=STATUS_BOOKED,
+            event_at=event_at,
+        )
+        return _promote_staged_call(staged, host)
+
     # Lock the row (if any) to make the create-or-update idempotent under
     # concurrent re-deliveries.
     existing = (
@@ -186,7 +279,6 @@ def handle_invitee_created(payload):
         # Re-delivery (or a previously canceled booking re-created). Only
         # bump capacity when transitioning back into the booked state.
         was_active = existing.is_active
-        host_was_missing = existing.host_id is None
         existing.invitee_email = email or existing.invitee_email
         existing.invitee_name = name or existing.invitee_name
         existing.scheduled_at = scheduled_at or existing.scheduled_at
@@ -197,13 +289,9 @@ def handle_invitee_created(payload):
         if existing.status != STATUS_CANCELED:
             existing.status = STATUS_BOOKED
             existing.canceled_at = None
-        existing.host = existing.host or host
         existing.last_event_at = max(filter(None, [existing.last_event_at, event_at]))
         existing.save()
-        if (
-            host is not None and existing.is_active
-            and (not was_active or host_was_missing)
-        ):
+        if existing.is_active and not was_active:
             _increment_load(host)
         return existing
 
@@ -222,8 +310,7 @@ def handle_invitee_created(payload):
         # A concurrent first delivery won the unique event-URI insert. Re-run
         # under a row lock without incrementing capacity twice.
         return handle_invitee_created(payload)
-    if host is not None:
-        _increment_load(host)
+    _increment_load(host)
     return booked
 
 
@@ -247,13 +334,37 @@ def handle_invitee_canceled(payload):
         booked = qs.filter(calendly_invitee_uri=invitee_uri).first()
     event_at = _event_time(payload, resource, canceled=True)
     if booked is None:
+        staged_qs = UnmatchedBookedCall.objects.select_for_update()
+        staged = None
+        if event_uri:
+            staged = staged_qs.filter(calendly_event_uri=event_uri).first()
+        if staged is None and invitee_uri:
+            staged = staged_qs.filter(calendly_invitee_uri=invitee_uri).first()
+        if staged is not None:
+            staged.status = STATUS_CANCELED
+            staged.canceled_at = staged.canceled_at or event_at
+            staged.last_event_at = max(filter(None, [staged.last_event_at, event_at]))
+            staged.save(update_fields=[
+                'status', 'canceled_at', 'last_event_at', 'updated_at',
+            ])
+            host = _match_host(resource)
+            if host is not None:
+                return _promote_staged_call(staged, host)
+            return staged
         if not event_uri:
             logger.info('Calendly invitee.canceled without event URI; ignoring')
             return None
         email, name, invitee_uri = _extract_invitee(resource)
+        host = _match_host(resource)
+        if host is None:
+            return _stage_unmatched_call(
+                payload,
+                status=STATUS_CANCELED,
+                event_at=event_at,
+            )
         # Persist a terminal tombstone so a delayed create cannot resurrect it.
         return BookedCall.objects.create(
-            host=_match_host(resource), member=resolve_user_by_email(email),
+            host=host, member=resolve_user_by_email(email),
             invitee_email=email, invitee_name=name, status=STATUS_CANCELED,
             calendly_event_uri=event_uri, calendly_invitee_uri=invitee_uri,
             canceled_at=event_at, last_event_at=event_at,
@@ -266,8 +377,7 @@ def handle_invitee_canceled(payload):
     booked.canceled_at = event_at
     booked.last_event_at = event_at
     booked.save(update_fields=['status', 'canceled_at', 'last_event_at', 'updated_at'])
-    if booked.host_id is not None:
-        _decrement_load(booked.host)
+    _decrement_load(booked.host)
     return booked
 
 

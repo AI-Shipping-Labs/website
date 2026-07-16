@@ -595,6 +595,27 @@ def _events_community(user):
                 "updated_at",
             ],
         ),
+        "unmatched_booked_calls": _values(
+            _model("community", "UnmatchedBookedCall"),
+            Q(member=user),
+            [
+                "id",
+                "source_booked_call_id",
+                "invitee_email",
+                "invitee_name",
+                "scheduled_at",
+                "status",
+                "calendly_event_uri",
+                "calendly_invitee_uri",
+                "scheduling_url",
+                "reschedule_url",
+                "cancel_url",
+                "canceled_at",
+                "last_event_at",
+                "created_at",
+                "updated_at",
+            ],
+        ),
         "calendly_webhook_deliveries": _calendly_webhook_export(user),
         "slack_threads": _slack_threads_export(user),
         "slack_authored_messages": _slack_authored_messages_export(user),
@@ -1284,6 +1305,15 @@ def _known_member_identifiers(user):
     identifiers.update(user.email_aliases.values_list('email', flat=True))
     identifiers.update(
         value for value in user.booked_calls.values_list('invitee_name', flat=True)
+        if value
+    )
+    identifiers.update(
+        value
+        for pair in user.unmatched_booked_calls.values_list(
+            'invitee_email',
+            'invitee_name',
+        )
+        for value in pair
         if value
     )
     return identifiers

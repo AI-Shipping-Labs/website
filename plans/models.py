@@ -175,9 +175,9 @@ class Sprint(TimestampedModelMixin, models.Model):
 
     name = models.CharField(max_length=120)
     slug = models.SlugField(max_length=140, unique=True)
-    description = models.TextField(blank=True, default='')
-    outcomes = models.TextField(blank=True, default='')
-    audience = models.TextField(blank=True, default='')
+    description = models.TextField(blank=True, default='', db_default='')
+    outcomes = models.TextField(blank=True, default='', db_default='')
+    audience = models.TextField(blank=True, default='', db_default='')
     start_date = models.DateField()
     duration_weeks = models.PositiveSmallIntegerField(
         default=6,

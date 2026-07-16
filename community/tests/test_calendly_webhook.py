@@ -15,7 +15,13 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 
 from accounts.models import EmailAlias
-from community.models import STATUS_BOOKED, STATUS_CANCELED, BookedCall, CallHost
+from community.models import (
+    STATUS_BOOKED,
+    STATUS_CANCELED,
+    BookedCall,
+    CallHost,
+    UnmatchedBookedCall,
+)
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting, WebhookLog
 
@@ -133,12 +139,95 @@ class CalendlyWebhookCaptureTest(TestCase):
         self.assertEqual(call.invitee_email, 'stranger@example.com')
 
     def test_unmatched_host_is_durable_without_capacity_change(self):
-        self._post(_payload(
+        payload = _payload(
             'invitee.created', email='alice@test.com',
             host_url='https://calendly.com/unknown/event?month=2099-01',
+        )
+        self._post(payload)
+        self.assertFalse(BookedCall.objects.exists())
+        staged = UnmatchedBookedCall.objects.get(
+            calendly_event_uri__endswith='EVT123',
+        )
+        self.assertEqual(staged.member, self.member)
+        self.assertEqual(
+            staged.scheduling_url,
+            'https://calendly.com/unknown/event?month=2099-01',
+        )
+        self.host.refresh_from_db()
+        self.assertEqual(self.host.current_load, 0)
+
+    def test_duplicate_unmatched_create_is_idempotent(self):
+        payload = _payload(
+            'invitee.created', email='alice@test.com',
+            host_url='https://calendly.com/unknown/event',
+        )
+        self._post(payload)
+        self._post(payload)
+        self.assertEqual(UnmatchedBookedCall.objects.count(), 1)
+        self.assertFalse(BookedCall.objects.exists())
+
+    def test_member_privacy_deletion_removes_staged_call_pii(self):
+        self._post(_payload(
+            'invitee.created', email='alice@test.com',
+            host_url='https://calendly.com/unknown/event',
         ))
-        call = BookedCall.objects.get(calendly_event_uri__endswith='EVT123')
-        self.assertIsNone(call.host)
+        self.assertTrue(UnmatchedBookedCall.objects.filter(member=self.member).exists())
+        self.member.delete()
+        self.assertFalse(UnmatchedBookedCall.objects.exists())
+
+    def test_unmatched_create_then_cancel_updates_same_staged_row(self):
+        unknown = 'https://calendly.com/unknown/event'
+        self._post(_payload(
+            'invitee.created', email='alice@test.com', host_url=unknown,
+        ))
+        self._post(_payload(
+            'invitee.canceled', email='alice@test.com', host_url=unknown,
+        ))
+        staged = UnmatchedBookedCall.objects.get()
+        self.assertEqual(staged.status, STATUS_CANCELED)
+        self.assertIsNotNone(staged.canceled_at)
+        self.assertFalse(BookedCall.objects.exists())
+        self.host.refresh_from_db()
+        self.assertEqual(self.host.current_load, 0)
+
+    def test_unmatched_cancel_before_create_remains_terminal(self):
+        unknown = 'https://calendly.com/unknown/event'
+        self._post(_payload(
+            'invitee.canceled', email='alice@test.com', host_url=unknown,
+        ))
+        self._post(_payload(
+            'invitee.created', email='alice@test.com', host_url=unknown,
+        ))
+        self.assertEqual(UnmatchedBookedCall.objects.get().status, STATUS_CANCELED)
+        self.assertFalse(BookedCall.objects.exists())
+
+    def test_later_host_match_promotes_staged_call_once(self):
+        self._post(_payload(
+            'invitee.created', email='alice@test.com',
+            host_url='https://calendly.com/unknown/event',
+        ))
+        self._post(_payload('invitee.created', email='alice@test.com'))
+        self.assertFalse(UnmatchedBookedCall.objects.exists())
+        call = BookedCall.objects.get()
+        self.assertEqual(call.host, self.host)
+        self.assertEqual(call.status, STATUS_BOOKED)
+        self.host.refresh_from_db()
+        self.assertEqual(self.host.current_load, 1)
+
+        self._post(_payload('invitee.created', email='alice@test.com'))
+        self.host.refresh_from_db()
+        self.assertEqual(BookedCall.objects.count(), 1)
+        self.assertEqual(self.host.current_load, 1)
+
+    def test_canceled_staged_call_promotes_without_capacity(self):
+        unknown = 'https://calendly.com/unknown/event'
+        self._post(_payload(
+            'invitee.canceled', email='alice@test.com', host_url=unknown,
+        ))
+        self._post(_payload('invitee.created', email='alice@test.com'))
+        call = BookedCall.objects.get()
+        self.assertEqual(call.status, STATUS_CANCELED)
+        self.assertFalse(UnmatchedBookedCall.objects.exists())
         self.host.refresh_from_db()
         self.assertEqual(self.host.current_load, 0)
 
@@ -207,6 +296,7 @@ class CalendlyWebhookCaptureTest(TestCase):
         resp = self._post(_payload('routing_form_submission.created', email='alice@test.com'))
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(BookedCall.objects.exists())
+        self.assertFalse(UnmatchedBookedCall.objects.exists())
 
     def test_malformed_json_returns_400(self):
         body = b'not-json'

@@ -5,7 +5,10 @@ the widget embed shortcode display, activate/deactivate (no delete), and
 the read-only emission/delivery logs.
 """
 
+from io import StringIO
+
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import TestCase, tag
 
 from triggers.models import (
@@ -16,6 +19,7 @@ from triggers.models import (
 )
 
 User = get_user_model()
+SECRET_CANARY = "r1-plaintext-canary-7e641f2d"
 
 
 @tag("core")
@@ -23,7 +27,7 @@ class StudioTriggersTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(
-            email="staff@test.com", password="pw", is_staff=True,
+            email="staff@test.com", password="pw", is_staff=True, is_superuser=True,
         )
         cls.member = User.objects.create_user(
             email="member@test.com", password="pw",
@@ -32,7 +36,7 @@ class StudioTriggersTest(TestCase):
             event_type="custom",
             property_filter={"name": "v0_workshop"},
             target_url="https://handler.example.com/hook",
-            secret="topsecret",
+            secret=SECRET_CANARY,
         )
         cls.widget = EventWidget.objects.create(
             slug="v0-claim", event_name="v0_workshop",
@@ -47,8 +51,34 @@ class StudioTriggersTest(TestCase):
         self.client.force_login(self.staff)
         resp = self.client.get("/studio/triggers/subscriptions/")
         self.assertEqual(resp.status_code, 200)
-        self.assertNotContains(resp, "topsecret")
+        self.assertNotContains(resp, SECRET_CANARY)
         self.assertContains(resp, 'data-testid="subscription-secret-masked"')
+
+    def test_r1_plaintext_canary_never_reaches_operator_surfaces_or_command_output(self):
+        self.client.force_login(self.staff)
+        responses = (
+            self.client.get(
+                f"/studio/triggers/subscriptions/{self.subscription.id}/edit/",
+            ),
+            self.client.get(
+                f"/admin/triggers/triggersubscription/{self.subscription.id}/change/",
+            ),
+        )
+        for response in responses:
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, SECRET_CANARY)
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with self.assertNoLogs(level="DEBUG"):
+            call_command(
+                "reconcile_r1_expand",
+                stdout=stdout,
+                stderr=stderr,
+                verbosity=0,
+            )
+        self.assertNotIn(SECRET_CANARY, stdout.getvalue())
+        self.assertNotIn(SECRET_CANARY, stderr.getvalue())
 
     def test_create_subscription(self):
         self.client.force_login(self.staff)
@@ -83,7 +113,7 @@ class StudioTriggersTest(TestCase):
         )
         self.assertEqual(resp.status_code, 302)
         self.subscription.refresh_from_db()
-        self.assertEqual(self.subscription.secret, "topsecret")
+        self.assertEqual(self.subscription.secret, SECRET_CANARY)
         self.assertEqual(self.subscription.description, "updated")
 
     def test_toggle_deactivates_without_deleting(self):

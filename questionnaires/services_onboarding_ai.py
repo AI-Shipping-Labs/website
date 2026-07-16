@@ -358,6 +358,23 @@ def finalize_conversation(conversation, turn_result):
 
 def _enqueue_staff_notification(attempt_id):
     """Enqueue only after the member-state transaction commits."""
+    from website.release_phase import background_work_enabled  # noqa: PLC0415
+
+    if not background_work_enabled():
+        # Preserve the synchronous notification behavior understood by the
+        # production image. R2 replaces this with the durable async outbox.
+        from crm.services.onboarding_notify import (  # noqa: PLC0415
+            notify_staff_onboarding_submitted,
+        )
+        from questionnaires.models import OnboardingTurnAttempt  # noqa: PLC0415
+
+        attempt = OnboardingTurnAttempt.objects.select_related(
+            'conversation__response__respondent',
+        ).get(pk=attempt_id)
+        notify_staff_onboarding_submitted(
+            attempt.conversation.response.respondent,
+        )
+        return
     try:
         from jobs.tasks import async_task, build_task_name  # noqa: PLC0415
         async_task(

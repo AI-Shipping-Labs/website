@@ -68,10 +68,11 @@ class SubscriptionApiTest(TriggersApiTestBase):
         self.assertEqual(resp.status_code, 401)
 
     def test_create_does_not_echo_secret(self):
+        canary = "r1-api-plaintext-canary-29fd0c31"
         payload = {
             "property_filter": {"name": "v0_workshop"},
             "target_url": "https://handler.example.com/hook",
-            "secret": "topsecret",
+            "secret": canary,
         }
         resp = self.client.post(
             "/api/triggers/subscriptions",
@@ -82,11 +83,22 @@ class SubscriptionApiTest(TriggersApiTestBase):
         self.assertEqual(resp.status_code, 201)
         body = resp.json()
         self.assertNotIn("secret", body)
+        self.assertNotIn(canary, resp.content.decode())
         self.assertTrue(body["has_secret"])
         # The secret is stored even though it isn't returned.
         sub = TriggerSubscription.objects.get(pk=body["id"])
-        self.assertEqual(sub.secret, "topsecret")
-        self.assertNotIn("topsecret", sub.encrypted_secret)
+        self.assertEqual(sub.secret, canary)
+        self.assertNotIn(canary, sub.encrypted_secret)
+
+        detail = self.client.get(
+            f"/api/triggers/subscriptions/{sub.id}", **self._auth(),
+        )
+        collection = self.client.get(
+            "/api/triggers/subscriptions", **self._auth(),
+        )
+        for response in (detail, collection):
+            self.assertEqual(response.status_code, 200)
+            self.assertNotIn(canary, response.content.decode())
 
     def test_create_requires_secret_and_target(self):
         resp = self.client.post(

@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='onboardingconversation',
             name='turn_version',
-            field=models.PositiveBigIntegerField(default=0),
+            field=models.PositiveBigIntegerField(db_default=0, default=0),
         ),
         migrations.CreateModel(
             name='OnboardingTurnAttempt',

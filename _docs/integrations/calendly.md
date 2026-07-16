@@ -18,8 +18,10 @@ the plain Google appointment link because that scheduler has no equivalent API.
    the canonical active member, and increments matched host capacity.
    `invitee.canceled` decrements capacity. Cancel-before-create produces a
    terminal tombstone so late delivery cannot resurrect a canceled event.
-5. Matched calls appear on the CRM record. An unmatched scheduling URL still
-   creates a nullable-host record for diagnosis, but changes no host capacity.
+5. Matched calls appear on the CRM record. An unmatched scheduling URL is
+   preserved in `UnmatchedBookedCall`, outside the legacy-visible `BookedCall`
+   table, and changes no host capacity. A later delivery that matches a real
+   host promotes the staged row exactly once.
 
 Processing failures return 500 for provider retry and remain visible/replayable;
 they are never acknowledged and silently dropped. Automatic replay runs every

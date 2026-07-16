@@ -19,7 +19,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='event',
             name='host_access_version',
-            field=models.UUIDField(default=uuid.uuid4, editable=False, help_text='Rotated whenever host_email changes so previously issued host-management links are revoked.'),
+            field=models.UUIDField(blank=True, default=uuid.uuid4, editable=False, help_text='Rotated whenever host_email changes so previously issued host-management links are revoked.', null=True),
         ),
         migrations.CreateModel(
             name='HostInviteDelivery',

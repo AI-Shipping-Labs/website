@@ -1,5 +1,4 @@
 from django.db import migrations, models
-from django.db.models import Q
 from django.utils import timezone
 
 
@@ -54,12 +53,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='slackchannelingest',
             name='advances_watermark',
-            field=models.BooleanField(default=True),
+            field=models.BooleanField(db_default=True, default=True),
         ),
         migrations.AddField(
             model_name='slackchannelingest',
             name='known_threads_checked',
-            field=models.IntegerField(default=0),
+            field=models.IntegerField(db_default=0, default=0),
         ),
         migrations.AddField(
             model_name='slackchannelingest',
@@ -69,18 +68,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='slackthread',
             name='privacy_erased',
-            field=models.BooleanField(db_index=True, default=False),
-        ),
-        migrations.RunPython(
-            terminalize_duplicate_running_ingests,
-            preserve_terminalized_ingests,
-        ),
-        migrations.AddConstraint(
-            model_name='slackchannelingest',
-            constraint=models.UniqueConstraint(
-                condition=Q(status='running'),
-                fields=('channel_id',),
-                name='unique_running_slack_ingest_per_channel',
-            ),
+            field=models.BooleanField(db_default=False, db_index=True, default=False),
         ),
     ]

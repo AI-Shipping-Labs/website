@@ -30,11 +30,11 @@ dispatch, and whether this boot runs ``migrate``.
   fails and the deploy aborts without rolling the service. It is the
   SINGLE migrator (#336) and it runs the #529 misconfig gate against the
   real serving env.
-* ``BOOT_MODE=web`` -> ``django.setup`` -> register schedules -> gunicorn
-  bind. SKIPS migrate and check (they ran in the pre-deploy task), so the
-  serving container binds fast.
-* ``BOOT_MODE=worker`` -> ``django.setup`` -> register schedules ->
-  qcluster. SKIPS migrate and check.
+* ``BOOT_MODE=web`` -> ``django.setup`` -> R1 reconcile/suppression ->
+  register schedules -> gunicorn bind. SKIPS migrate and check (they ran in
+  the pre-deploy task), so the serving container binds fast.
+* ``BOOT_MODE=worker`` -> ``django.setup`` -> R1 reconcile/suppression ->
+  register schedules -> qcluster. SKIPS migrate and check.
 * ``BOOT_MODE`` ABSENT -> no-infra serving path, keyed off
   ``RUN_MIGRATIONS`` as before: web (``RUN_MIGRATIONS=true``) migrates ->
   schedules -> gunicorn; worker schedules -> qcluster. The expensive
@@ -66,9 +66,11 @@ moment either tier may be the one whose boot lands first. The command is
 idempotent (uses ``update_or_create`` via ``jobs.tasks.schedule``), so
 running it twice produces exactly one row per schedule.
 
-Failures here MUST NOT crash the container: a regression in
-``setup_schedules`` (e.g. a bad task path) cannot be allowed to take the
-web tier down. We log and continue.
+Ordinary registration failures MUST NOT crash the container: a regression in
+``setup_schedules`` (e.g. a bad task path) cannot be allowed to take the web
+tier down. We log and continue. R1-incompatible schedule suppression is a
+separate fail-closed phase: a stale schedule could let an overlapping worker
+claim incompatible work, so service startup must stop if deletion fails.
 """
 
 import logging
@@ -81,6 +83,7 @@ import django
 logger = logging.getLogger(__name__)
 
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+_SCHEMA_BARRIER_CACHE_PREFIX = "r1_serving_schema_ready"
 
 
 def _truthy_env(name, *, default=False):
@@ -187,6 +190,81 @@ def _register_schedules():
         # that one cron does not fire until the next deploy, which is
         # still better than a crash loop.
         logger.exception("setup_schedules failed during entrypoint boot")
+
+
+def _suppress_r1_incompatible_schedules():
+    """Delete stale R2 work vocabulary and propagate any failure.
+
+    Unlike ordinary schedule registration, this is release safety-critical:
+    continuing after a failed delete could let an overlapping old worker claim
+    work it does not understand.
+    """
+    from django.core.management import call_command
+
+    print("Suppress R1-incompatible recurring schedules", flush=True)
+    call_command("suppress_r1_incompatible_schedules", verbosity=0)
+
+
+def _schema_barrier_key():
+    version = os.environ.get("VERSION") or "unknown"
+    return f"{_SCHEMA_BARRIER_CACHE_PREFIX}:{version}"
+
+
+def _schema_barrier_timeout_seconds():
+    raw = os.environ.get("R1_SCHEMA_BARRIER_TIMEOUT_SECONDS", "900")
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = 0
+    if value <= 0:
+        raise RuntimeError(
+            "R1_SCHEMA_BARRIER_TIMEOUT_SECONDS must be a positive integer",
+        )
+    return value
+
+
+def _publish_serving_schema_ready():
+    """Publish a version-scoped marker after web migrate/reconciliation."""
+    from django.core.cache import caches
+
+    key = _schema_barrier_key()
+    caches["django_q"].set(key, os.environ.get("VERSION") or "unknown", timeout=3600)
+    print(f"Published serving schema readiness marker {key}", flush=True)
+
+
+def _wait_for_serving_schema_ready():
+    """Block a combined-task worker until its web sibling finishes R1 setup."""
+    from django.core.cache import caches
+
+    key = _schema_barrier_key()
+    expected = os.environ.get("VERSION") or "unknown"
+    deadline = time.monotonic() + _schema_barrier_timeout_seconds()
+    last_error = None
+    while time.monotonic() < deadline:
+        try:
+            if caches["django_q"].get(key) == expected:
+                print(f"Serving schema readiness marker observed: {key}", flush=True)
+                return
+            last_error = None
+        except Exception as exc:
+            # An old dev schema may not have django_q_cache yet. The web
+            # migrator creates it; retry without allowing qcluster to start.
+            last_error = exc
+        time.sleep(1)
+    detail = f" Last cache error: {last_error!r}." if last_error else ""
+    raise RuntimeError(
+        "Timed out waiting for the combined-task web container to migrate and "
+        f"reconcile schema marker {key}; qcluster was not started.{detail}",
+    )
+
+
+def _reconcile_r1_expand():
+    """Repair compatibility writes before web serves or a worker consumes."""
+
+    from django.core.management import call_command
+
+    print("Reconcile R1 expanded-schema compatibility writes", flush=True)
+    call_command("reconcile_r1_expand", verbosity=0)
 
 
 def _gunicorn_worker_count():
@@ -361,6 +439,33 @@ def _finalize_serving(role, phases, boot_start):
     and the legacy fallback. ``migrate`` and ``check`` are NOT run here under
     ``BOOT_MODE`` -- they were decoupled into the pre-deploy task.
     """
+    barrier_role = os.environ.get("R1_SCHEMA_BARRIER_ROLE", "")
+    if barrier_role == "worker":
+        _timed(
+            "wait_for_serving_schema",
+            _wait_for_serving_schema_ready,
+            record=phases,
+        )
+
+    # R1 web runs this after migrate and before serving. The worker rolls only
+    # after web is verified, then reconciles any writes made by the overlapping
+    # production web before it can consume queue work.
+    _timed("reconcile_r1_expand", _reconcile_r1_expand, record=phases)
+
+    # Safety-critical and intentionally outside best-effort registration.
+    _timed(
+        "suppress_r1_schedules",
+        _suppress_r1_incompatible_schedules,
+        record=phases,
+    )
+
+    if barrier_role == "web":
+        _timed(
+            "publish_serving_schema",
+            _publish_serving_schema_ready,
+            record=phases,
+        )
+
     # Issue #708: register the django-q schedules on every boot for both web
     # and worker. Idempotent; failures are logged and swallowed so a bad
     # schedule cannot crash the container.

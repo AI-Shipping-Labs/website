@@ -30,12 +30,14 @@ class Migration(migrations.Migration):
             model_name='event',
             name='calendar_uid',
             field=models.CharField(
+                blank=True,
                 editable=False,
                 help_text=(
                     'Immutable iCalendar UID. Initialized from the creation-time '
                     'slug so later slug edits update the existing calendar entry.'
                 ),
                 max_length=400,
+                null=True,
                 unique=True,
             ),
         ),

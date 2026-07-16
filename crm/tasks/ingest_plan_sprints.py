@@ -16,12 +16,15 @@ The task is safe to run when Slack is disabled or the channel id is
 unset — it logs and returns without creating any rows.
 """
 
+import hashlib
 import logging
+import threading
+from contextlib import contextmanager
 from datetime import datetime
 from datetime import timezone as dt_timezone
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -44,6 +47,42 @@ User = get_user_model()
 FIRST_RUN_LOOKBACK_DAYS = 7
 THREAD_REFRESH_DAYS = 45
 INGEST_LEASE_MINUTES = 60
+
+_sqlite_lease_locks = {}
+_sqlite_lease_locks_guard = threading.Lock()
+
+
+@contextmanager
+def _local_lease_lock(channel_id):
+    """Serialize SQLite lease acquisition inside this application process.
+
+    PostgreSQL uses a transaction-scoped advisory lock below, which works
+    across processes and hosts. SQLite has no equivalent row/advisory lock for
+    an absent lease row, so its supported test/local semantics use a keyed
+    process lock before opening the write transaction.
+    """
+    if connection.vendor == 'postgresql':
+        yield
+        return
+
+    with _sqlite_lease_locks_guard:
+        lock = _sqlite_lease_locks.setdefault(channel_id, threading.Lock())
+    with lock:
+        yield
+
+
+def _lock_postgres_lease_channel(channel_id):
+    """Take a stable cross-process PostgreSQL lock for one Slack channel."""
+    if connection.vendor != 'postgresql':
+        return
+
+    digest = hashlib.blake2b(
+        f'ai-shipping-labs:slack-ingest:{channel_id}'.encode(),
+        digest_size=8,
+    ).digest()
+    lock_id = int.from_bytes(digest, byteorder='big', signed=True)
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT pg_advisory_xact_lock(%s)', [lock_id])
 
 
 def _first_run_lookback_days():
@@ -265,7 +304,7 @@ def _resolve_oldest(channel_id, *, oldest_ts=None, since=None):
 
 
 def _acquire_run(channel_id, oldest, *, advances_watermark=True):
-    """Acquire the per-channel ingest lease, expiring abandoned runs."""
+    """Acquire one per-channel lease without requiring an R1 DB constraint."""
     now = timezone.now()
     lease_minutes = _positive_int_config(
         'PLAN_SPRINTS_INGEST_LEASE_MINUTES', INGEST_LEASE_MINUTES,
@@ -273,31 +312,46 @@ def _acquire_run(channel_id, oldest, *, advances_watermark=True):
     lease_expires_at = now + timezone.timedelta(minutes=lease_minutes)
     stale_before = now - timezone.timedelta(minutes=lease_minutes)
 
-    with transaction.atomic():
-        stale = SlackChannelIngest.objects.select_for_update().filter(
-            channel_id=channel_id,
-            status='running',
-        ).filter(
-            Q(lease_expires_at__lte=now)
-            | Q(lease_expires_at__isnull=True, started_at__lte=stale_before)
-        )
-        stale.update(
-            status='error',
-            error='Ingest lease expired before the run completed',
-            finished_at=now,
-            lease_expires_at=None,
-        )
-        try:
-            with transaction.atomic():
-                return SlackChannelIngest.objects.create(
-                    channel_id=channel_id,
-                    oldest_ts=oldest,
-                    status='running',
-                    lease_expires_at=lease_expires_at,
-                    advances_watermark=advances_watermark,
+    with _local_lease_lock(channel_id):
+        with transaction.atomic():
+            # R1 cannot add the partial unique constraint while the historical
+            # production image overlaps this schema. PostgreSQL advisory locks
+            # serialize the empty-row case across tasks/hosts; SQLite uses the
+            # keyed process lock above for deterministic local/test semantics.
+            _lock_postgres_lease_channel(channel_id)
+
+            running = SlackChannelIngest.objects.select_for_update().filter(
+                channel_id=channel_id,
+                status='running',
+            )
+            running.filter(
+                Q(lease_expires_at__lte=now)
+                | Q(
+                    lease_expires_at__isnull=True,
+                    started_at__lte=stale_before,
                 )
-        except IntegrityError:
-            return None
+            ).update(
+                status='error',
+                error='Ingest lease expired before the run completed',
+                finished_at=now,
+                lease_expires_at=None,
+            )
+            if running.exists():
+                return None
+
+            # Retain compatibility with already-applied development schemas
+            # that still carry the original constraint from pre-R1 crm.0008.
+            try:
+                with transaction.atomic():
+                    return SlackChannelIngest.objects.create(
+                        channel_id=channel_id,
+                        oldest_ts=oldest,
+                        status='running',
+                        lease_expires_at=lease_expires_at,
+                        advances_watermark=advances_watermark,
+                    )
+            except IntegrityError:
+                return None
 
 
 def _running_run(channel_id):

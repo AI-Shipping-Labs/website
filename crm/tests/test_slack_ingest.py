@@ -7,10 +7,13 @@ payloads exactly as it would off real ``conversations.history`` /
 """
 
 import datetime
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 import requests
 from django.contrib.auth import get_user_model
+from django.db import close_old_connections
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
@@ -588,6 +591,33 @@ class IngestLeaseTests(TransactionTestCase):
         self.assertEqual(service.history_calls, 0)
         self.assertEqual(
             SlackChannelIngest.objects.filter(status='running').count(), 1,
+        )
+
+    def test_concurrent_acquisition_creates_exactly_one_active_lease(self):
+        from crm.tasks.ingest_plan_sprints import _acquire_run
+
+        barrier = threading.Barrier(2)
+
+        def acquire():
+            close_old_connections()
+            try:
+                barrier.wait(timeout=5)
+                run = _acquire_run(CHANNEL, '1.0')
+                return run.pk if run is not None else None
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: acquire(), range(2)))
+
+        acquired = [pk for pk in results if pk is not None]
+        self.assertEqual(len(acquired), 1, results)
+        self.assertEqual(
+            list(SlackChannelIngest.objects.filter(
+                channel_id=CHANNEL,
+                status='running',
+            ).values_list('pk', flat=True)),
+            acquired,
         )
 
     def test_expired_lease_is_terminalized_before_replacement(self):

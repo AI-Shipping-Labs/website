@@ -109,7 +109,7 @@ class BuildSuiteShardingTests(unittest.TestCase):
         # regardless of the parallel mode.
         return sorted(test.id() for test in iter_test_cases(suite))
 
-    def _build(self, *, parallel, shard=None):
+    def _build(self, *, parallel, shard=None, labels=None, exclude_tags=None):
         env = {}
         if shard is not None:
             index, count = shard
@@ -119,10 +119,14 @@ class BuildSuiteShardingTests(unittest.TestCase):
                 # Make sure no ambient shard env leaks in for the baseline.
                 os.environ.pop("TEST_SHARD_COUNT", None)
                 os.environ.pop("TEST_SHARD_INDEX", None)
-            runner = PicklableTracebackRunner(parallel=parallel, verbosity=0)
+            runner = PicklableTracebackRunner(
+                parallel=parallel,
+                verbosity=0,
+                exclude_tags=exclude_tags,
+            )
             # build_suite may emit a "Found N test(s)" log to stderr; silence it.
             with contextlib.redirect_stderr(io.StringIO()):
-                return runner.build_suite([self.LABEL])
+                return runner.build_suite(labels or [self.LABEL])
 
     def test_unsharded_parallel_baseline(self):
         # Sanity: the discovery target has enough tests that --parallel 4
@@ -182,6 +186,39 @@ class BuildSuiteShardingTests(unittest.TestCase):
                 parallel,
                 f"shard {index}/4 selected different tests under parallel vs serial",
             )
+
+    def test_standard_shards_exclude_serial_postgres_migration_matrix(self):
+        for index in range(1, 5):
+            ids = self._ids_for_suite(self._build(
+                parallel=4,
+                shard=(index, 4),
+                exclude_tags={"postgres_migration"},
+            ))
+            self.assertFalse(
+                any(
+                    test_id.startswith(
+                        "tests.test_r1_migration_compatibility."
+                        "R1ProductionMigrationCompatibilityTest."
+                    )
+                    for test_id in ids
+                ),
+                f"standard shard {index}/4 collected the serial migration matrix",
+            )
+
+    def test_dedicated_serial_label_includes_complete_migration_matrix(self):
+        ids = self._ids_for_suite(self._build(
+            parallel=1,
+            labels=["tests.test_r1_migration_compatibility"],
+        ))
+        matrix_ids = [
+            test_id
+            for test_id in ids
+            if test_id.startswith(
+                "tests.test_r1_migration_compatibility."
+                "R1ProductionMigrationCompatibilityTest."
+            )
+        ]
+        self.assertEqual(len(matrix_ids), 3, matrix_ids)
 
 
 class ReadShardEnvTests(unittest.TestCase):

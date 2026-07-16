@@ -32,8 +32,8 @@ poller swaps in place every ~3s.
             <tr class="border-b border-border last:border-0 hover:bg-secondary/50" data-queued-task-id="{{ q.id }}">
               <td class="px-4 py-3 text-foreground">{{ q.display_name|default:"—" }}</td>
               <td class="px-4 py-3 text-muted-foreground font-mono text-xs" data-label="Func">{{ q.func|default:"—"|truncatechars:60 }}</td>
-              <td class="px-4 py-3 text-muted-foreground whitespace-nowrap" data-label="Lock expires">
-                {% if q.lock_state == 'future' %}in {{ q.lock_seconds|compact_duration }}{% elif q.lock_state == 'expired' %}expired {{ q.lock_seconds|compact_duration }} ago{% else %}—{% endif %}
+              <td class="px-4 py-3 text-muted-foreground whitespace-nowrap" data-label="Lock expires"{% if q.lock %} title="{{ q.lock|operator_datetime_tz }}"{% endif %}>
+                {% if q.lock_state == 'future' %}{{ q.lock|operator_datetime_seconds }} (in {{ q.lock|timeuntil }}){% elif q.lock_state == 'expired' %}{{ q.lock|operator_datetime_seconds }} (expired {{ q.lock|timesince }} ago){% else %}—{% endif %}
               </td>
               <td class="px-4 py-3 {% studio_list_class 'action_cell' %}" data-label="Actions">
                 <div class="{% studio_list_class 'action_group' %}">

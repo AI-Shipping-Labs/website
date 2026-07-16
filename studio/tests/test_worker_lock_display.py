@@ -6,11 +6,11 @@ per-worker claim-expiry timestamp (set to ``now + retry_after`` whenever a
 worker tries to claim the row), NOT a queued-at timestamp. As a result, a
 freshly-claimed task showed an "age" of ``-60s``.
 
-These tests pin the new behaviour:
+These tests pin the display behaviour:
 
 * ``lock IS NULL``     -> ``—``
-* ``lock > now``       -> ``in Ns``           (worker holds an active claim)
-* ``lock <= now``      -> ``expired Ns ago``  (claim expired, awaiting reclaim)
+* ``lock > now``       -> exact timestamp + natural ``in …`` context
+* ``lock <= now``      -> exact timestamp + natural ``expired … ago`` context
 
 No negative numbers should ever appear.
 """
@@ -18,14 +18,22 @@ No negative numbers should ever appear.
 import re
 import uuid
 from datetime import timedelta
+from pathlib import Path
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.template.defaultfilters import timesince_filter, timeuntil_filter
 from django.test import TestCase
 from django.utils import timezone
 from django_q.models import OrmQ
 from django_q.signing import SignedPackage
+from freezegun import freeze_time
 
+from accounts.templatetags.date_formatting import (
+    operator_datetime_seconds,
+    operator_datetime_tz,
+)
 from studio.views.worker import _ormq_summary
 
 User = get_user_model()
@@ -96,6 +104,17 @@ class PendingTasksTableLockColumnTest(TestCase):
         with patch('studio.worker_health.Stat.get_all', return_value=[]):
             return self.client.get('/studio/worker/')
 
+    def test_pending_partial_uses_exact_and_natural_lock_filters(self):
+        source = Path(
+            settings.BASE_DIR,
+            'templates/studio/_worker_pending_tasks.html',
+        ).read_text()
+        self.assertIn('q.lock|operator_datetime_seconds', source)
+        self.assertIn('q.lock|operator_datetime_tz', source)
+        self.assertIn('q.lock|timeuntil', source)
+        self.assertIn('q.lock|timesince', source)
+        self.assertNotIn('q.lock_seconds|compact_duration', source)
+
     def test_header_renamed_from_age_to_lock_expires(self):
         _make_ormq(lock=None, name='just-queued')
         response = self._get_dashboard()
@@ -115,17 +134,25 @@ class PendingTasksTableLockColumnTest(TestCase):
         self.assertContains(response, 'just-queued')
         self.assertContains(response, '—')
 
-    def test_future_lock_renders_in_ns_never_negative(self):
+    @freeze_time('2026-07-16T12:00:00Z')
+    def test_future_lock_renders_exact_datetime_natural_context_and_title(self):
         now = timezone.now()
+        lock = now + timedelta(minutes=3)
         _make_ormq(
-            lock=now + timedelta(seconds=30),
+            lock=lock,
             name='locked-task',
         )
-        with patch('studio.views.worker.timezone.now', return_value=now):
-            response = self._get_dashboard()
+        response = self._get_dashboard()
         body = response.content.decode()
         self.assertIn('locked-task', body)
-        self.assertIn('in 30s', body)
+        self.assertIn(
+            f'title="{operator_datetime_tz(lock)}"',
+            body,
+        )
+        self.assertIn(
+            f'{operator_datetime_seconds(lock)} (in {timeuntil_filter(lock)})',
+            body,
+        )
         # Nothing in the rendered page should display a negative seconds value
         # for the Lock-expires column.
         self.assertFalse(
@@ -133,16 +160,25 @@ class PendingTasksTableLockColumnTest(TestCase):
             'Found negative seconds value in worker dashboard output',
         )
 
-    def test_expired_lock_renders_expired_n_ago(self):
+    @freeze_time('2026-07-16T12:00:00Z')
+    def test_expired_lock_renders_exact_datetime_natural_context_and_title(self):
         now = timezone.now()
+        lock = now - timedelta(days=15)
         _make_ormq(
-            lock=now - timedelta(seconds=20),
+            lock=lock,
             name='expired-task',
         )
-        with patch('studio.views.worker.timezone.now', return_value=now):
-            response = self._get_dashboard()
+        response = self._get_dashboard()
         self.assertContains(response, 'expired-task')
-        self.assertContains(response, 'expired 20s ago')
+        self.assertContains(
+            response,
+            f'title="{operator_datetime_tz(lock)}"',
+        )
+        self.assertContains(
+            response,
+            f'{operator_datetime_seconds(lock)} '
+            f'(expired {timesince_filter(lock)} ago)',
+        )
 
 
 class InspectViewLockColumnTest(TestCase):

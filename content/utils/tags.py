@@ -7,6 +7,26 @@ normalization: lowercase, replace spaces with hyphens, strip special characters.
 import re
 
 
+def collect_tag_names(content_configs):
+    """Return tag occurrences using one tags-only query per configuration.
+
+    ``content_configs`` contains ``(model, filters)`` pairs.  Callers own the
+    content-type and publication policy; this helper owns only the projected
+    data access so the public tags page and tag sitemap cannot drift back to
+    loading complete content rows.
+    """
+    tag_names = []
+    for model_class, filters in content_configs:
+        tag_lists = (
+            model_class.objects
+            .filter(**filters)
+            .values_list('tags', flat=True)
+        )
+        for tags in tag_lists:
+            tag_names.extend(tags or [])
+    return tag_names
+
+
 def normalize_tag(tag):
     """Normalize a single tag string.
 

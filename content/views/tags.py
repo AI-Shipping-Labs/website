@@ -9,6 +9,7 @@ from collections import Counter
 from django.shortcuts import render
 
 from content.models import Article, Course, Download, Project
+from content.utils.tags import collect_tag_names
 from events.models import Event
 
 # Content type configuration: (model_class, published_filter, date_field, type_label, url_func)
@@ -17,6 +18,7 @@ CONTENT_TYPES = [
         'model': Article,
         'filter': {'published': True},
         'date_field': 'date',
+        'only_fields': ('id', 'tags', 'title', 'description', 'slug', 'date'),
         'type_label': 'Article',
         'type_color': 'bg-blue-500/20 text-blue-400',
         'url_func': lambda obj: f'/blog/{obj.slug}',
@@ -25,6 +27,7 @@ CONTENT_TYPES = [
         'model': Project,
         'filter': {'published': True},
         'date_field': 'date',
+        'only_fields': ('id', 'tags', 'title', 'description', 'slug', 'date'),
         'type_label': 'Project',
         'type_color': 'bg-green-500/20 text-green-400',
         'url_func': lambda obj: f'/projects/{obj.slug}',
@@ -33,6 +36,9 @@ CONTENT_TYPES = [
         'model': Course,
         'filter': {'status': 'published'},
         'date_field': 'created_at',
+        'only_fields': (
+            'id', 'tags', 'title', 'description', 'slug', 'created_at',
+        ),
         'type_label': 'Course',
         'type_color': 'bg-orange-500/20 text-orange-400',
         'url_func': lambda obj: f'/courses/{obj.slug}',
@@ -41,6 +47,9 @@ CONTENT_TYPES = [
         'model': Download,
         'filter': {'published': True},
         'date_field': 'created_at',
+        'only_fields': (
+            'id', 'tags', 'title', 'description', 'slug', 'created_at',
+        ),
         'type_label': 'Download',
         'type_color': 'bg-red-500/20 text-red-400',
         'url_func': lambda obj: f'/downloads/{obj.slug}',
@@ -49,6 +58,9 @@ CONTENT_TYPES = [
         'model': Event,
         'filter': {},  # Events have status field, show upcoming/completed
         'date_field': 'start_datetime',
+        'only_fields': (
+            'id', 'tags', 'title', 'description', 'slug', 'start_datetime',
+        ),
         'type_label': 'Event',
         'type_color': 'bg-yellow-500/20 text-yellow-400',
         # Issue #673: route the tag-results event link through
@@ -65,13 +77,9 @@ def _collect_all_tags():
 
     Returns a list of (tag, count) tuples sorted by count descending.
     """
-    tag_counter = Counter()
-    for ct in CONTENT_TYPES:
-        queryset = ct['model'].objects.filter(**ct['filter'])
-        for obj in queryset:
-            if obj.tags:
-                for tag in obj.tags:
-                    tag_counter[tag] += 1
+    tag_counter = Counter(collect_tag_names(
+        (ct['model'], ct['filter']) for ct in CONTENT_TYPES
+    ))
     return tag_counter.most_common()
 
 
@@ -91,7 +99,11 @@ def tags_detail(request, tag):
     # Collect all items with this tag
     results = []
     for ct in CONTENT_TYPES:
-        queryset = ct['model'].objects.filter(**ct['filter'])
+        queryset = (
+            ct['model'].objects
+            .filter(**ct['filter'])
+            .only(*ct['only_fields'])
+        )
         for obj in queryset:
             if obj.tags and tag in obj.tags:
                 date_val = getattr(obj, ct['date_field'])

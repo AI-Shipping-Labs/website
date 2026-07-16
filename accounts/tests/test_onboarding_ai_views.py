@@ -93,6 +93,21 @@ class RoutingGatingTest(TestCase):
         resp = self.client.get('/onboarding/chat')
         self.assertContains(resp, 'data-testid="onboarding-switch-to-form"')
 
+    def test_switch_to_form_anchor_has_exact_text_and_external_period(self):
+        resp = self.client.get('/onboarding/chat')
+        body = resp.content.decode()
+        marker_at = body.index('data-testid="onboarding-switch-to-form"')
+        anchor_start = body.rfind('<a', 0, marker_at)
+        text_start = body.index('>', marker_at) + 1
+        anchor_end = body.index('</a>', text_start)
+
+        self.assertEqual(body[text_start:anchor_end], 'Switch to the questions')
+        self.assertEqual(body[anchor_end:anchor_end + 5], '</a>.')
+        self.assertIn(
+            f'href="{reverse("onboarding_questions")}"',
+            body[anchor_start:text_start],
+        )
+
     def test_chat_renders_logical_request_and_browser_deadline_controls(self):
         resp = self.client.get('/onboarding/chat')
         self.assertContains(resp, 'data-testid="onboarding-chat-request-id"')

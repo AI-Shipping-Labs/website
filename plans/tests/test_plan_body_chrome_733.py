@@ -29,7 +29,7 @@ import datetime
 import re
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
 
 from plans.models import (
@@ -227,6 +227,19 @@ class PlanBodyOwnerDeClutterTest(TestCase):
         self.assertNotIn('bg-card', opening)
         self.assertNotIn('border-border', opening)
         self.assertNotIn('rounded-lg', opening)
+
+    @tag('visual_regression')
+    def test_weekly_work_uses_canonical_section_heading_without_timeline(self):
+        _, body = self._get_body()
+        section = _section_html(body, 'plan-weeks')
+        self.assertIn(
+            '<h2 class="text-2xl font-semibold tracking-tight '
+            'text-foreground">Weekly work</h2>',
+            section,
+        )
+        self.assertNotIn('Timeline', section)
+        self.assertNotIn('mt-1 text-2xl', section)
+        self.assertNotIn('sm:text-3xl', section)
 
     # ------------------------------------------------------------------
     # Flatten the triple-nested chrome inside each Week.
@@ -481,6 +494,19 @@ class PlanBodyTeammateDeClutterTest(TestCase):
         opening = section[:section.find('>') + 1]
         self.assertNotIn('bg-card', opening)
         self.assertNotIn('border-border', opening)
+
+    @tag('visual_regression')
+    def test_teammate_weekly_work_uses_same_canonical_heading(self):
+        _, body = self._get_body()
+        section = _section_html(body, 'plan-weeks')
+        self.assertIn(
+            '<h2 class="text-2xl font-semibold tracking-tight '
+            'text-foreground">Weekly work</h2>',
+            section,
+        )
+        self.assertNotIn('Timeline', section)
+        self.assertNotIn('mt-1 text-2xl', section)
+        self.assertNotIn('sm:text-3xl', section)
 
     def test_teammate_focus_section_has_no_card_shell(self):
         _, body = self._get_body()

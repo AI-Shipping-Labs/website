@@ -10,7 +10,7 @@ the no-plan row.
 import datetime
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -206,6 +206,77 @@ class CohortBoardProgressRowsContextShapeTest(TestCase):
         self.assertContains(
             response,
             f'data-testid="progress-row-link-{self.viewer.pk}"',
+        )
+
+    def test_only_self_row_is_current_across_all_row_kinds(self):
+        def opening_row_tag(response, member):
+            body = response.content.decode()
+            marker_at = body.index(f'data-testid="progress-row-{member.pk}"')
+            start = body.rfind('<tr', 0, marker_at)
+            return body[start:body.index('>', marker_at) + 1]
+
+        for visibility, expected_kind in (
+            ('cohort', 'cohort'),
+            ('private', 'private'),
+        ):
+            with self.subTest(row_kind=expected_kind):
+                self.viewer_plan.visibility = visibility
+                self.viewer_plan.save(update_fields=['visibility'])
+                response, rows = self._get_rows()
+                self_row = next(
+                    row for row in rows if row['member'].pk == self.viewer.pk
+                )
+                self.assertEqual(self_row['kind'], expected_kind)
+                self.assertIn(
+                    'class="bg-accent/10"',
+                    opening_row_tag(response, self.viewer),
+                )
+                self.assertIn(
+                    'aria-current="true"',
+                    opening_row_tag(response, self.viewer),
+                )
+                self.assertEqual(
+                    response.content.decode().count('aria-current="true"'),
+                    1,
+                )
+                self.assertNotIn(
+                    'aria-current',
+                    opening_row_tag(response, self.cohort_member),
+                )
+
+        self.viewer_plan.delete()
+        response, rows = self._get_rows()
+        self_row = next(
+            row for row in rows if row['member'].pk == self.viewer.pk
+        )
+        self.assertEqual(self_row['kind'], 'no_plan')
+        self.assertIn(
+            'class="bg-accent/10"',
+            opening_row_tag(response, self.viewer),
+        )
+        self.assertIn(
+            'aria-current="true"',
+            opening_row_tag(response, self.viewer),
+        )
+        self.assertEqual(
+            response.content.decode().count('aria-current="true"'),
+            1,
+        )
+
+    @tag('visual_regression')
+    def test_self_and_other_rows_keep_distinct_visual_treatments(self):
+        response, _ = self._get_rows()
+        body = response.content.decode()
+
+        def opening_row_tag(member):
+            marker_at = body.index(f'data-testid="progress-row-{member.pk}"')
+            start = body.rfind('<tr', 0, marker_at)
+            return body[start:body.index('>', marker_at) + 1]
+
+        self.assertIn('class="bg-accent/10"', opening_row_tag(self.viewer))
+        self.assertIn(
+            'hover:bg-secondary/40',
+            opening_row_tag(self.cohort_member),
         )
 
     def test_member_column_is_not_plan_link_target(self):

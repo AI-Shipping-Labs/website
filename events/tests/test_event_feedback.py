@@ -159,7 +159,9 @@ class EventFeedbackSubmitViewTest(TestCase):
         self.client.login(email='attendee@test.com', password='pw')
         response = self.client.post(self._feedback_url(event), {'rating': '4'})
         self.assertEqual(response.status_code, 403)
-        self.assertIn(b'Only registered attendees', response.content)
+        self.assertContains(
+            response, 'Only registered attendees', status_code=403,
+        )
         self.assertFalse(EventFeedback.objects.exists())
 
     def test_registered_before_end_403(self):
@@ -168,7 +170,9 @@ class EventFeedbackSubmitViewTest(TestCase):
         self.client.login(email='attendee@test.com', password='pw')
         response = self.client.post(self._feedback_url(event), {'rating': '4'})
         self.assertEqual(response.status_code, 403)
-        self.assertIn(b'Feedback opens after the event ends', response.content)
+        self.assertContains(
+            response, 'Feedback opens after the event ends', status_code=403,
+        )
         self.assertFalse(EventFeedback.objects.exists())
 
     def test_registered_without_end_datetime_403(self):

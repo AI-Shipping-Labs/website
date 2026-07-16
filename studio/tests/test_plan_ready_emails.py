@@ -75,7 +75,9 @@ class StudioPlanReadyEmailTest(TestCase):
         self.assertNotContains(response, 'data-testid="plan-ready-email-button" disabled')
         self.assertContains(response, 'Not emailed')
         self.assertContains(response, 'Emailed')
-        self.assertIn(str(eligible.pk), response.content.decode())
+        self.assertContains(
+            response, f'href="/studio/users/{eligible.member.pk}/"',
+        )
 
     def test_disabled_when_all_ready_emails_already_sent(self):
         plan = Plan.objects.create(member=self.member, sprint=self.sprint)

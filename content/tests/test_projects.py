@@ -184,9 +184,9 @@ class ProjectStatusSyncTest(TestCase):
 class ProjectsListFilteringTest(TestCase):
     """Test difficulty and tag filtering on /projects."""
 
-    def setUp(self):
-        self.client = Client()
-        self.beginner_project = Project.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.beginner_project = Project.objects.create(
             title='Beginner Project',
             slug='beginner-project',
             description='Easy project',
@@ -195,7 +195,7 @@ class ProjectsListFilteringTest(TestCase):
             tags=['python', 'tutorial'],
             published=True,
         )
-        self.advanced_project = Project.objects.create(
+        cls.advanced_project = Project.objects.create(
             title='Advanced Project',
             slug='advanced-project',
             description='Hard project',
@@ -204,7 +204,7 @@ class ProjectsListFilteringTest(TestCase):
             tags=['ai', 'agents'],
             published=True,
         )
-        self.intermediate_project = Project.objects.create(
+        cls.intermediate_project = Project.objects.create(
             title='Intermediate Project',
             slug='intermediate-project',
             description='Medium project',

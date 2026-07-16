@@ -11,11 +11,14 @@ from django.urls import reverse
 
 from crm.models import CRMRecord
 from questionnaires.models import (
+    Answer,
+    AnswerOptionText,
     Persona,
     Question,
     Questionnaire,
     Response,
     ResponseQuestion,
+    ResponseQuestionOption,
 )
 from questionnaires.onboarding import GENERIC_ONBOARDING_SLUG
 from questionnaires.services import build_response_questions
@@ -100,14 +103,78 @@ class ResponseQuestionCustomizationTest(TestCase):
             {
                 'question_type': 'single_choice',
                 'prompt': 'Pick one custom',
-                'options': 'Red\nGreen\nBlue',
+                'options': 'Red\nGreen [free text]\nBlue',
                 'order': '50',
             },
         )
         rq = self.response.response_questions.get(prompt='Pick one custom')
+        self.assertEqual(list(rq.options.values_list(
+            'label', 'allows_free_text', 'order',
+        )), [
+            ('Red', False, 0),
+            ('Green', True, 1),
+            ('Blue', False, 2),
+        ])
         self.assertEqual(
-            [o.label for o in rq.options.all()], ['Red', 'Green', 'Blue'],
+            set(rq.options.values_list('response_question_id', flat=True)),
+            {rq.pk},
         )
+
+    def test_edit_choice_question_preserves_answered_option_identity(self):
+        rq = ResponseQuestion.objects.create(
+            response=self.response,
+            question_type='multiple_choice',
+            prompt='Tools?',
+            order=50,
+        )
+        retained = ResponseQuestionOption.objects.create(
+            response_question=rq,
+            label='Other',
+            allows_free_text=True,
+            order=0,
+        )
+        removed = ResponseQuestionOption.objects.create(
+            response_question=rq,
+            label='Old',
+            order=1,
+        )
+        answer = Answer.objects.create(response=self.response, question=rq)
+        answer.selected_options.add(retained)
+        option_text = AnswerOptionText.objects.create(
+            answer=answer,
+            selected_option=retained,
+            text_value='My existing answer',
+        )
+
+        self.client.post(
+            reverse('studio_response_question_edit', kwargs={
+                'questionnaire_id': self.questionnaire.pk,
+                'response_id': self.response.pk,
+                'rq_id': rq.pk,
+            }),
+            {
+                'question_type': 'multiple_choice',
+                'prompt': 'Tools?',
+                'order': '50',
+                'options': 'New\nOther [free text]',
+            },
+        )
+
+        retained.refresh_from_db()
+        option_text.refresh_from_db()
+        self.assertEqual(retained.order, 1)
+        self.assertTrue(retained.allows_free_text)
+        self.assertEqual(option_text.selected_option_id, retained.pk)
+        self.assertEqual(option_text.text_value, 'My existing answer')
+        self.assertEqual(
+            list(answer.selected_options.values_list('pk', flat=True)),
+            [retained.pk],
+        )
+        self.assertFalse(ResponseQuestionOption.objects.filter(pk=removed.pk).exists())
+        self.assertEqual(list(rq.options.values_list('label', 'order')), [
+            ('New', 0),
+            ('Other', 1),
+        ])
 
     def test_edit_question_does_not_mutate_base_or_other_member(self):
         rq = self.response.response_questions.filter(

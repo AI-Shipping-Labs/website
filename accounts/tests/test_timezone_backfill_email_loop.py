@@ -33,8 +33,9 @@ class TimezoneBackfillEmailLoopTest(TestCase):
         "event_url": "https://zoom.us/j/123",
     }
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             email="loop@example.com", preferred_timezone=""
         )
 

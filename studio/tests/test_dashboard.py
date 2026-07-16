@@ -9,7 +9,9 @@ Verifies that:
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import Client, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -112,6 +114,83 @@ class StudioDashboardTest(TestCase):
         stats = response.context['stats']
         self.assertEqual(stats['upcoming_events'], 1)
         self.assertEqual(stats['total_events'], 2)
+
+    def test_dashboard_summary_aggregates_preserve_populated_values(self):
+        Course.objects.create(title='Published', slug='published', status='published')
+        Course.objects.create(title='Draft', slug='draft', status='draft')
+        Article.objects.create(
+            title='Published', slug='published', date=timezone.now().date(),
+            published=True,
+        )
+        Article.objects.create(
+            title='Draft', slug='draft', date=timezone.now().date(),
+            published=False,
+        )
+        User.objects.create_user(email='active@test.com', unsubscribed=False)
+        User.objects.create_user(email='unsubscribed@test.com', unsubscribed=True)
+        self._create_event(
+            slug='upcoming-recording',
+            recording_url='https://example.com/recording',
+            zoom_join_url='https://zoom.us/j/upcoming',
+        )
+        self._create_event(
+            slug='finished', status='completed',
+            start_datetime=timezone.now() - timezone.timedelta(days=1),
+        )
+
+        response = self.client.get('/studio/')
+
+        expected_stats = {
+            'total_courses': 2,
+            'published_courses': 1,
+            'total_articles': 2,
+            'published_articles': 1,
+            'active_subscribers': 1,
+            'total_subscribers': 3,
+            'upcoming_events': 1,
+            'total_events': 2,
+            'total_recordings': 1,
+        }
+        for key, expected in expected_stats.items():
+            self.assertEqual(response.context['stats'][key], expected)
+        draft_item = self._attention_item(response, 'Draft content')
+        self.assertIsNotNone(draft_item)
+        self.assertEqual(draft_item['count'], 2)
+
+    def test_dashboard_summary_aggregates_preserve_empty_values(self):
+        response = self.client.get('/studio/')
+
+        stats = response.context['stats']
+        self.assertEqual(stats['total_courses'], 0)
+        self.assertEqual(stats['published_courses'], 0)
+        self.assertEqual(stats['total_articles'], 0)
+        self.assertEqual(stats['published_articles'], 0)
+        self.assertEqual(stats['active_subscribers'], 0)
+        self.assertEqual(stats['total_subscribers'], 1)
+        self.assertEqual(stats['upcoming_events'], 0)
+        self.assertEqual(stats['total_events'], 0)
+        self.assertEqual(stats['total_recordings'], 0)
+        self.assertIsNone(self._attention_item(response, 'Draft content'))
+
+    def test_dashboard_uses_one_summary_aggregate_per_model(self):
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get('/studio/')
+
+        self.assertEqual(response.status_code, 200)
+        sqls = [query['sql'].lower() for query in queries.captured_queries]
+        for table in (
+            'content_course', 'content_article', 'accounts_user', 'events_event',
+        ):
+            aggregate_queries = [
+                sql for sql in sqls
+                if f'"{table}"' in sql
+                and 'count(' in sql
+                and ' as "total"' in sql
+            ]
+            self.assertEqual(
+                len(aggregate_queries), 1,
+                f'Expected one aggregate query for {table}: {aggregate_queries}',
+            )
 
     def test_dashboard_counts_pending_projects(self):
         Project.objects.create(

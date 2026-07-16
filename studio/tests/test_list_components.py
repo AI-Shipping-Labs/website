@@ -58,6 +58,7 @@ class StudioListComponentTemplateTest(TestCase):
 
     def test_shared_table_wrapper_opts_into_mobile_cards(self):
         from studio.templatetags.studio_filters import (
+            ACTION_KIND_CLASSES,
             studio_action_class,
             studio_list_class,
         )
@@ -69,6 +70,17 @@ class StudioListComponentTemplateTest(TestCase):
         self.assertIn('border-accent', studio_action_class('primary'))
         self.assertIn('border-red-500/40', studio_action_class('destructive'))
         self.assertIn('border-blue-500/40', studio_action_class('async'))
+        focus_visible = (
+            'focus-visible:outline-none focus-visible:ring-2 '
+            'focus-visible:ring-accent focus-visible:ring-offset-2 '
+            'focus-visible:ring-offset-background'
+        )
+        for kind in ACTION_KIND_CLASSES:
+            with self.subTest(kind=kind):
+                classes = studio_action_class(kind)
+                self.assertIn(focus_visible, classes)
+                self.assertNotIn('focus:outline-none', classes)
+                self.assertNotIn('focus:ring-accent/50', classes)
 
     def test_target_lists_use_shared_badges_and_actions(self):
         for path in self.template_paths[:3]:

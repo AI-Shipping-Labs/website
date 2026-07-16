@@ -740,6 +740,14 @@ double-rendering. See issue #347.
 </div>
 
 <script>
+document.addEventListener('click', function(event) {
+  document.querySelectorAll('details[data-studio-overflow][open]').forEach(function(menu) {
+    if (!menu.contains(event.target)) {
+      menu.removeAttribute('open');
+    }
+  });
+});
+
 (function() {
   var sidebar = document.getElementById('studio-sidebar');
   var backdrop = document.getElementById('studio-backdrop');

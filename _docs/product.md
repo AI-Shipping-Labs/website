@@ -216,7 +216,7 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
 | About page | `/about` | Community introduction, founders (Alexey Grigorev and Valeriia Kuka) with bios and LinkedIn links, "Why AI Shipping Labs?" CTA | Everyone | Shipped |
-| Activities page | `/activities#access-by-tier` | Membership benefits and participation modes organized by tier, with filter buttons (Basic/Main/Premium), quick comparison, and links to pricing, sprints, events, and workshops | Everyone | Shipped |
+| Activities page | `/activities#access-by-tier` | Curated seven-item, no-filter membership-benefits comparison with Basic/Main/Premium inclusion badges, a derived 1/6/7 quick comparison, and links to pricing, sprints, events, and workshops | Everyone | Shipped |
 | Community sprints index | `/sprints` | Public discovery page for current, future, and past community sprint cohorts with tier requirements and next-step CTAs | Everyone (joining requires authentication/tier access) | Shipped |
 | Sitemap | `/sitemap.xml` | XML sitemap for search engines | Everyone | Shipped |
 | Django admin | `/admin/` | Full Django admin with custom admin views for all models, including email campaign change form with timestamp editor widget | Superusers/staff | Shipped |

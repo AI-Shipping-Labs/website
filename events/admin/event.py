@@ -12,6 +12,7 @@ from events.models import (
     EventRegistration,
     Host,
 )
+from notifications.services import notify_safely
 from studio.admin_links import studio_link
 
 
@@ -20,11 +21,7 @@ def make_upcoming(modeladmin, request, queryset):
     draft_events = list(queryset.filter(status='draft'))
     queryset.filter(status='draft').update(status='upcoming')
     for event in draft_events:
-        try:
-            from notifications.services import NotificationService
-            NotificationService.notify('event', event.pk)
-        except Exception:
-            pass
+        notify_safely('event', event.pk)
 
 
 make_upcoming.short_description = 'Set status to Upcoming'
@@ -50,11 +47,7 @@ def publish_recordings(modeladmin, request, queryset):
     """Publish selected events as recordings and send notifications."""
     queryset.update(published=True, published_at=timezone.now())
     for event in queryset:
-        try:
-            from notifications.services import NotificationService
-            NotificationService.notify('recording', event.pk)
-        except Exception:
-            pass
+        notify_safely('recording', event.pk)
 
 
 publish_recordings.short_description = 'Publish selected as recordings'

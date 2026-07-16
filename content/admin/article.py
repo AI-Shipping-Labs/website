@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils import timezone
 
 from content.models import Article
+from notifications.services import notify_safely
 from studio.admin_links import studio_link
 
 
@@ -13,11 +14,7 @@ def publish_articles(modeladmin, request, queryset):
         published_at=timezone.now(),
     )
     for article in queryset:
-        try:
-            from notifications.services import NotificationService
-            NotificationService.notify('article', article.pk)
-        except Exception:
-            pass
+        notify_safely('article', article.pk)
 
 
 publish_articles.short_description = 'Publish selected articles'

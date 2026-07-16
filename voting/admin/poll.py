@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from notifications.services import notify_safely
 from voting.models import Poll, PollOption, PollVote
 
 
@@ -23,11 +24,7 @@ def reopen_polls(modeladmin, request, queryset):
     """Reopen selected polls and send notifications."""
     queryset.update(status='open')
     for poll in queryset:
-        try:
-            from notifications.services import NotificationService
-            NotificationService.notify('poll', poll.pk)
-        except Exception:
-            pass
+        notify_safely('poll', poll.pk)
 
 
 reopen_polls.short_description = 'Reopen selected polls'
@@ -64,11 +61,7 @@ class PollAdmin(admin.ModelAdmin):
         is_new = not change
         super().save_model(request, obj, form, change)
         if is_new and obj.status == 'open':
-            try:
-                from notifications.services import NotificationService
-                NotificationService.notify('poll', obj.pk)
-            except Exception:
-                pass
+            notify_safely('poll', obj.pk)
 
 
 @admin.register(PollOption)

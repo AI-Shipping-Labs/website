@@ -11,6 +11,7 @@ from content.models import (
     Unit,
     UserCourseProgress,
 )
+from notifications.services import notify_safely
 from studio.admin_links import studio_link
 
 # ---------------------------------------------------------------------------
@@ -87,11 +88,7 @@ def publish_courses(modeladmin, request, queryset):
     """Publish selected courses and send notifications."""
     queryset.update(status='published')
     for course in queryset:
-        try:
-            from notifications.services import NotificationService
-            NotificationService.notify('course', course.pk)
-        except Exception:
-            pass
+        notify_safely('course', course.pk)
 
 
 publish_courses.short_description = 'Publish selected courses'

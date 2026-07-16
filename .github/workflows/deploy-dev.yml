@@ -317,8 +317,8 @@ jobs:
           echo "CI_TIMING phase=job_total shard=${{ matrix.shard }}/${{ strategy.job-total }} seconds=$((now - CI_JOB_START)) source=runner_clock_excludes_post_job_steps"
           echo "CI_TIMING phase=post_job_overhead seconds=unavailable source=github_actions_native_step_timings note=cache_save_and_action_post_steps_run_after_final_step"
 
-  r1-postgres-migration:
-    name: R1 PostgreSQL Migration Compatibility
+  postgres-verification:
+    name: PostgreSQL 16 Verification
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -337,7 +337,7 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/aisl_r1_test
-      SECRET_KEY: ci-r1-postgres-migration-only
+      SECRET_KEY: ci-postgres-verification-only
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -355,6 +355,9 @@ jobs:
 
       - name: Run serial production-baseline migration matrix
         run: uv run python manage.py test tests.test_r1_migration_compatibility --verbosity 2
+
+      - name: Prove verification resend exactly once
+        run: uv run python manage.py test accounts.tests.test_email_auth.ResendVerificationConcurrencyTest --verbosity 2
 
   playwright-core:
     name: Playwright Core E2E
@@ -392,7 +395,7 @@ jobs:
     # the Playwright core set. A `needs` array entry only succeeds when ALL of a
     # matrix job's shards succeed, so listing `test` here means deploy runs only
     # when all 4 shards are green.
-    needs: [checks, test, playwright-core, r1-postgres-migration]
+    needs: [checks, test, playwright-core, postgres-verification]
     if: github.ref == 'refs/heads/main'
 
     permissions:

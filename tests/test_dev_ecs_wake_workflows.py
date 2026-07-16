@@ -7,8 +7,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 ACTION_PATH = REPO_ROOT / ".github" / "actions" / "wake-dev-ecs" / "action.yml"
 SCHEDULED_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "scheduled-playwright-dev.yml"
 DEPLOY_DEV_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "deploy-dev.yml"
+CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 DEPLOY_PROD_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "deploy-prod.yml"
 DEPLOY_SCRIPT_PATH = REPO_ROOT / "deploy" / "deploy_dev.sh"
+RESEND_CONCURRENCY_TEST = (
+    "uv run python manage.py test "
+    "accounts.tests.test_email_auth.ResendVerificationConcurrencyTest --verbosity 2"
+)
 
 
 def _load_yaml(path):
@@ -120,14 +125,15 @@ class ScheduledPlaywrightDevWakeWorkflowTest(SimpleTestCase):
 
 @tag("core")
 class DeployDevWakeWorkflowTest(SimpleTestCase):
-    def test_deploy_requires_non_skipping_postgresql_migration_gate(self):
+    def test_deploy_requires_non_skipping_postgresql_verification_gate(self):
         workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)
-        postgres_job = workflow["jobs"]["r1-postgres-migration"]
+        postgres_job = workflow["jobs"]["postgres-verification"]
         deploy_job = workflow["jobs"]["deploy"]
 
         self.assertNotIn("if", postgres_job)
         self.assertFalse(postgres_job.get("continue-on-error", False))
-        self.assertIn("r1-postgres-migration", deploy_job["needs"])
+        self.assertEqual(postgres_job["name"], "PostgreSQL 16 Verification")
+        self.assertIn("postgres-verification", deploy_job["needs"])
         self.assertEqual(postgres_job["services"]["postgres"]["image"], "postgres:16")
         migration_step = next(
             step
@@ -151,6 +157,27 @@ class DeployDevWakeWorkflowTest(SimpleTestCase):
             "--exclude-tag=postgres_migration",
             migration_step["run"],
         )
+        race_step = next(
+            step
+            for step in postgres_job["steps"]
+            if step.get("name") == "Prove verification resend exactly once"
+        )
+        self.assertEqual(race_step["run"], RESEND_CONCURRENCY_TEST)
+
+    def test_pull_request_requires_non_skipping_postgresql_race(self):
+        workflow = _load_yaml(CI_WORKFLOW_PATH)
+        postgres_job = workflow["jobs"]["postgres-verification"]
+
+        self.assertNotIn("if", postgres_job)
+        self.assertFalse(postgres_job.get("continue-on-error", False))
+        self.assertEqual(postgres_job["name"], "PostgreSQL 16 Verification")
+        self.assertEqual(postgres_job["services"]["postgres"]["image"], "postgres:16")
+        race_step = next(
+            step
+            for step in postgres_job["steps"]
+            if step.get("name") == "Prove verification resend exactly once"
+        )
+        self.assertEqual(race_step["run"], RESEND_CONCURRENCY_TEST)
 
     def test_deploy_verification_uses_shared_action_with_exact_version_match(self):
         workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)

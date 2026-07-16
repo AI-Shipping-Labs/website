@@ -1861,12 +1861,25 @@ class ResendVerificationApiTest(TestCase):
 
 
 @override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
+@tag("core", "postgresql")
 class ResendVerificationConcurrencyTest(TransactionTestCase):
-    """A real multi-connection race permits exactly one email send."""
+    """A real PostgreSQL multi-connection race permits exactly one email send.
+
+    SQLite's shared-cache test databases raise ``SQLITE_LOCKED`` immediately
+    when these two threads write the same table. That backend limitation is
+    not equivalent to PostgreSQL's same-row update serialization, which is
+    the production behavior this race proves.
+    """
 
     URL = "/account/api/resend-verification"
 
     def test_concurrent_workers_send_exactly_once(self):
+        if connection.vendor != "postgresql":
+            self.skipTest(
+                "verification resend concurrency requires PostgreSQL row-update "
+                "serialization; SQLite shared-cache table locks are not equivalent"
+            )
+
         user = User.objects.create_user(
             email="cross-worker-throttle@example.com",
             password="test1234",
@@ -1890,7 +1903,10 @@ class ResendVerificationConcurrencyTest(TransactionTestCase):
                 barrier.wait(timeout=5)
                 return client.post(self.URL).status_code
             finally:
-                close_old_connections()
+                # Each worker owns its thread-local connection. Close it
+                # explicitly so PostgreSQL can tear down the transactional
+                # test database after the real multi-connection race.
+                connection.close()
 
         with patch(
             "accounts.views.auth._send_verification_email",

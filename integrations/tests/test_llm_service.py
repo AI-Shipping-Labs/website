@@ -140,6 +140,21 @@ class ConfigResolutionTest(_LLMCacheCleanupMixin, TestCase):
         _set_setting('LLM_API_KEY', 'sk-test-fake-db-value', is_secret=True)
         self.assertEqual(get_config('LLM_API_KEY'), 'sk-test-fake-db-value')
 
+    def test_db_retry_override_reaches_next_client(self):
+        _set_setting('LLM_MAX_RETRIES', '2')
+        with patch(ANTHROPIC_PATCH) as mock_cls:
+            mock_cls.return_value.messages.create.return_value = _text_response()
+            llm.complete([{'role': 'user', 'content': 'hi'}])
+        self.assertEqual(mock_cls.call_args.kwargs['max_retries'], 2)
+
+    def test_invalid_and_negative_retry_overrides_remain_safe(self):
+        from integrations.services.llm.backends import _resolve_max_retries
+
+        _set_setting('LLM_MAX_RETRIES', 'not-a-number')
+        self.assertEqual(_resolve_max_retries(), 6)
+        _set_setting('LLM_MAX_RETRIES', '-4')
+        self.assertEqual(_resolve_max_retries(), 0)
+
     @override_settings(LLM_BASE_URL='https://api.anthropic.com')
     def test_base_url_default_when_no_db_row(self):
         self.assertEqual(

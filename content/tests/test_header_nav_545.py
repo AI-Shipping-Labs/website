@@ -9,7 +9,10 @@ from django.urls import resolve, reverse
 from django.utils import timezone
 
 from content.models import Download
-from content.nav_availability import refresh_published_downloads_nav_cache
+from content.nav_availability import (
+    refresh_marketing_pages_nav_cache,
+    refresh_published_downloads_nav_cache,
+)
 from plans.models import Plan, Sprint
 
 User = get_user_model()
@@ -52,6 +55,7 @@ class HeaderTextNavigationIssue580Test(TestCase):
 
     def setUp(self):
         refresh_published_downloads_nav_cache()
+        refresh_marketing_pages_nav_cache()
 
     def _header_html(self, user=None):
         if user is not None:

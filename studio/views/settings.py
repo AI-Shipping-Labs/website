@@ -205,6 +205,14 @@ def _build_group_context(group_def, db_settings):
         elif env_value:
             current_value = env_value
             source = 'env'
+        elif (
+            key_def.get('django_settings_fallback')
+            and hasattr(django_settings, key)
+        ):
+            current_value = getattr(django_settings, key)
+            if isinstance(current_value, (dict, list)):
+                current_value = json.dumps(current_value, indent=2)
+            source = 'django_settings'
         elif default_value:
             current_value = default_value
             source = 'default'
@@ -234,6 +242,9 @@ def _build_group_context(group_def, db_settings):
             'current_value': current_value,
             'source': source,
             'env_value': env_value,
+            'django_settings_fallback': key_def.get(
+                'django_settings_fallback', False,
+            ),
             # Studio-routed URL for the (?) help-icon link (issue #641).
             # Built from the optional registry ``docs_url`` which encodes
             # ``_docs/integrations/<group>.md#<anchor>``. Empty string

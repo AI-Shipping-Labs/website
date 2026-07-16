@@ -417,6 +417,24 @@ and Playwright tests do not need it set — the test suite mocks the
 webhook directly and does not depend on the secret being either
 present or absent.
 
+## EMAIL_BATCH_SIZE
+
+Purpose: Positive number of campaign recipients assigned to each background
+send task. Smaller batches isolate retries and reduce per-task runtime; larger
+batches create fewer queue rows. The default is 200 recipients.
+
+Without it: Campaign fan-out uses 200. Invalid, zero, and negative overrides
+also safely use 200 rather than breaking the chunk operation.
+
+Where to find it: This is an operator tuning value, not an AWS credential.
+Set it under Studio > Settings > Email (SES), or through the authenticated
+integration-settings API. Tune it together with the campaign batch interval
+and the account's SES quota.
+
+Test vs live: Leave the default in tests and local development. In production,
+reduce it if tasks approach their timeout; increase it only after confirming
+worker runtime and SES rate limits have enough headroom.
+
 ## CAMPAIGN_BATCH_INTERVAL_SECONDS
 
 Purpose: Staggers campaign send batches apart so the fan-out does not

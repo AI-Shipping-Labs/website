@@ -155,6 +155,35 @@ you also change the signing secret. The platform's `STRIPE_SECRET_KEY`
 mode (`sk_test_` vs `sk_live_`) and `STRIPE_WEBHOOK_SECRET`'s associated
 endpoint must match — otherwise events are dropped silently.
 
+## STRIPE_PAYMENT_LINKS
+
+Purpose: Complete JSON matrix of the public Stripe Payment Links used by
+the anonymous homepage and `/pricing`. A Studio or API override takes
+effect on the next request without a deploy.
+
+The value must be valid JSON with exactly these tiers and billing periods;
+replace every example URL with its matching live or test Payment Link:
+
+```json
+{
+  "basic": {"monthly": "https://buy.stripe.com/...", "annual": "https://buy.stripe.com/..."},
+  "main": {"monthly": "https://buy.stripe.com/...", "annual": "https://buy.stripe.com/..."},
+  "premium": {"monthly": "https://buy.stripe.com/...", "annual": "https://buy.stripe.com/..."}
+}
+```
+
+Without it: The links bundled in Django settings remain active. Invalid,
+incomplete, or extra JSON fields are rejected as a whole and also fall back
+to that complete matrix, so checkout never mixes old and new links.
+
+Where to find it: Stripe Dashboard > More > Payment links. Copy the link
+for each tier/period combination. Test and live modes have separate links;
+do not mix them in one matrix.
+
+Rotation: Create or activate all six replacement links first, save the full
+matrix in one Studio/API update, verify both public surfaces, then deactivate
+the old links. Clearing the override restores the Django-settings fallback.
+
 ## STRIPE_CUSTOMER_PORTAL_URL
 
 Purpose: Public URL of the Stripe-hosted Customer Portal where members

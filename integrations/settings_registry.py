@@ -42,6 +42,20 @@ INTEGRATION_GROUPS = [
                 'docs_url': '_docs/integrations/stripe.md#stripe_webhook_secret',
             },
             {
+                'key': 'STRIPE_PAYMENT_LINKS',
+                'is_secret': False,
+                'multiline': True,
+                'optional': True,
+                'django_settings_fallback': True,
+                'description': (
+                    'Complete JSON matrix of Stripe Payment Links for Basic, '
+                    'Main, and Premium monthly/annual checkout. All six '
+                    'non-blank links are required; invalid overrides fall '
+                    'back to the links bundled in Django settings.'
+                ),
+                'docs_url': '_docs/integrations/stripe.md#stripe_payment_links',
+            },
+            {
                 'key': 'STRIPE_CUSTOMER_PORTAL_URL',
                 'is_secret': False,
                 'description': 'Stripe-hosted page where members manage their subscription. Get from Stripe Dashboard > Settings > Billing > Customer portal.',
@@ -202,6 +216,18 @@ INTEGRATION_GROUPS = [
                     'Leave blank locally to allow runserver replay.'
                 ),
                 'docs_url': '_docs/integrations/ses.md#ses_webhook_shared_secret',
+            },
+            {
+                'key': 'EMAIL_BATCH_SIZE',
+                'is_secret': False,
+                'optional': True,
+                'default': '200',
+                'description': (
+                    'Positive number of recipients placed in each campaign '
+                    'send task. Default 200; invalid, zero, or negative '
+                    'overrides safely fall back to 200.'
+                ),
+                'docs_url': '_docs/integrations/ses.md#email_batch_size',
             },
             {
                 'key': 'CAMPAIGN_BATCH_INTERVAL_SECONDS',
@@ -853,6 +879,18 @@ INTEGRATION_GROUPS = [
                     'changing the assistant model under test.'
                 ),
                 'docs_url': '_docs/integrations/llm.md#llm_judge_model',
+            },
+            {
+                'key': 'LLM_MAX_RETRIES',
+                'is_secret': False,
+                'optional': True,
+                'default': '6',
+                'description': (
+                    'Maximum retry attempts for the Anthropic-compatible SDK '
+                    'client. Default 6; invalid input falls back to 6 and '
+                    'negative input disables retries by resolving to 0.'
+                ),
+                'docs_url': '_docs/integrations/llm.md#llm_max_retries',
             },
             {
                 'key': 'ONBOARDING_AI_ENABLED',

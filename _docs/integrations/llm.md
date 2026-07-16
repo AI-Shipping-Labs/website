@@ -113,6 +113,22 @@ gateway. Callers can still override per call by passing `model=...` to
 Test vs live: Pin a cheaper/faster model in dev if desired; the
 production value is whatever quality/cost trade-off the feature needs.
 
+## LLM_MAX_RETRIES
+
+Purpose: Maximum retry attempts passed to the Anthropic-compatible SDK client.
+It also bounds the wrapper's retry behavior. The default is 6.
+
+Without it: The client uses 6 retries. A negative value resolves to 0, which
+disables retries; an invalid non-integer falls back to 6.
+
+Where to find it: This is an operator reliability/cost choice rather than a
+provider-issued value. Set it in Studio > Settings > LLM Provider or through
+the authenticated integration-settings API. A Studio override applies to the
+next client created without a redeploy.
+
+Test vs live: Keep retries low in deterministic tests. In production, balance
+transient-provider resilience against latency and duplicate request cost.
+
 ## ONBOARDING_AI_ENABLED
 
 Purpose: Toggles the conversational AI onboarding flow (issue #804) at

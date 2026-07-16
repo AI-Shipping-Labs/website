@@ -1,0 +1,25 @@
+<details class="relative" data-studio-overflow data-testid="studio-header-overflow">
+  <summary class="flex h-[38px] w-[38px] cursor-pointer list-none items-center justify-center rounded-lg border border-border bg-secondary text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background [&::-webkit-details-marker]:hidden"
+           aria-label="More actions">
+    <i data-lucide="ellipsis-vertical" class="h-4 w-4" aria-hidden="true"></i>
+  </summary>
+  <div class="absolute left-0 z-20 mt-2 w-64 overflow-hidden rounded-lg border border-border bg-card shadow-lg">
+    <!-- Canonical link item:
+    <a href="..." class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+      <i data-lucide="..." class="h-4 w-4"></i><span>Label</span>
+    </a>
+    -->
+    <!-- Canonical POST item (place the CSRF token inside the form):
+    <form method="post" class="w-full">
+      [CSRF token]
+      <button type="submit" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-left text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Label</button>
+    </form>
+    -->
+    <!-- Canonical destructive item (render last and preserve any confirm() guard):
+    <div class="border-t border-border">
+      <form method="post" class="w-full"><button type="submit" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Delete</button></form>
+    </div>
+    -->
+    {{ items }}
+  </div>
+</details>

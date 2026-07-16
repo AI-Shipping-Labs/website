@@ -211,7 +211,8 @@ The documented owner is mandatory for every instance of its named role, subject 
 | `templates/includes/_accordion.html` | Every section-header accordion. | `{% include "includes/_accordion.html" with summary="Show details" body=details_html %}` or `{% include "includes/_accordion.html" with summary="Show transcript" body_template="events/_recording_transcript_body.html" %}` |
 | `templates/includes/testimonial_cards.html` | Every testimonial card collection, with `testimonials` in context. | `{% include "includes/testimonial_cards.html" %}` |
 | `templates/includes/_icon_github.html` | Every GitHub brand mark. | `{% include 'includes/_icon_github.html' with css='h-4 w-4' %}` |
-| `templates/studio/_partials/header_actions.html` | Every Studio entity-detail header/action row. The include is valid only when no local action body is needed; forms or pages that must supply local actions retain the documented inline-markup path. | `{% include "studio/_partials/header_actions.html" with title=object.title subtitle="Entity details" %}` |
+| `{% studio_header_actions %}` backed by `templates/studio/_partials/header_actions.html` | Every Studio list, detail, and form page header. Callers supply local actions as the block body. | `{% load studio_filters %}` then `{% studio_header_actions title=object.title subtitle="Entity details" %}...{% endstudio_header_actions %}` |
+| `{% studio_overflow_menu %}` backed by `templates/studio/_partials/overflow_menu.html` | Every Studio page-header overflow menu. Callers supply local link and POST items as the block body. | `{% studio_overflow_menu %}...{% endstudio_overflow_menu %}` |
 | `templates/content/reader/_mobile_progress_bar.html` | Every eligible ungated mobile course/workshop reader progress control, after its documented context is supplied. Never include it on a gated reader. | `{% include "content/reader/_mobile_progress_bar.html" %}` |
 
 ### Deprecated
@@ -308,36 +309,47 @@ border border-red-500/30 bg-transparent text-red-400 hover:bg-red-500/10
 
 Per-row cohort table actions in `cohort_board.html` use `size='sm'` deliberately because they are compact row actions, not page-level CTAs. The three-size contract is site-wide for non-Studio CTAs.
 
-### Studio header + action row
+### Studio page header (stacked)
 
-Studio entity-detail pages use one consistent header pattern: breadcrumb or back link first, then a header with the H1/subtitle on the left and entity-level actions on the right. On mobile, use `flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between` so actions wrap below the title.
+Every Studio page—list, detail, and form—uses one stacked header block. The title never shares a row with controls; pinning actions to the right of the H1 is an anti-pattern and must not be reintroduced.
 
-Primary entity actions belong in the header action row, not inline with the H1, not in a far-down action card, and not duplicated in a sidebar panel. `View on site` is always a secondary bordered button in this row when the entity has a public URL. Form-edit pages keep the sticky Save/Cancel bar, but header actions such as `View on site`, `Edit on GitHub`, and `Re-sync source` should not be duplicated there. Section-level actions still live in their section, and list pages keep their existing list-header plus per-row Actions-cell pattern.
+Structure, top to bottom, is identical at all viewport widths:
 
-Use `templates/studio/_partials/header_actions.html` for detail headers that need no local action body. Django `{% include %}` cannot override the partial's `{% block actions %}`. Copy the same markup inline when a form or page must supply local actions. The partial accepts `eyebrow`, `title`, optional `subtitle`, optional `back_url` / `back_label`, and optional `testid` / `actions_testid` values. The action wrapper defaults to `data-testid="studio-header-actions"`.
+1. Optional back link or breadcrumb (`&larr; Back to <parent>`, `text-sm text-muted-foreground hover:text-foreground`).
+2. Title block: optional eyebrow, `<h1 class="text-2xl font-semibold text-foreground break-all">`, and optional `text-sm text-muted-foreground` subtitle. Status pills and other entity metadata live in a `mt-2 flex flex-wrap items-center gap-2` meta row under the H1—never in the action row.
+3. Optional action row: `flex flex-wrap items-center gap-2`, left-aligned and full-width.
 
-Canonical Studio header button classes:
+The header wrapper is `mb-8 space-y-4`. Page headers must not use `justify-between`, `sm:flex-row`, `sm:justify-end`, `shrink-0`, or `space-x-*`. A header with no actions omits the action row entirely.
 
-- Primary: `bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity`.
-- Secondary: `bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors`.
-- Destructive secondary: `border border-red-500/40 bg-red-500/10 text-red-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500/20 transition-colors`.
+New headers render through the shared `{% studio_header_actions %}` block tag from `studio_filters`, backed by `templates/studio/_partials/header_actions.html`. The tag preserves the context names `eyebrow`, `title`, `subtitle`, `back_url`, `back_label`, `testid`, and `actions_testid`; callers supply only those values and the local action body. This block-tag API works from pages that already extend `studio/base.html`, unlike partial inheritance or a plain include with no caller-defined body.
 
-Current Studio detail surfaces using the pattern include users, CRM, sprints, plans, workshops, project review, recordings, articles, courses, events, downloads, event series, campaigns, UTM campaigns, and import batches.
+Action-row composition:
 
-#### Studio list-page header row
+- At most one primary (`bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity`), always first.
+- Up to two visible secondaries (`bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors`).
+- Everything else goes into the overflow menu, rendered last.
+- Header buttons and menu items append `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background`.
+- List-page CTAs use a leading Lucide `h-4 w-4` icon and button-level `gap-2` (no `mr-2`). Vocabulary: `plus` create, `upload` import, `download` export, and `refresh-cw` re-sync. Labels are sentence case: `New <noun>`, `Import <noun>`, `Export CSV`, and `Re-sync <noun>`.
+- List pages keep per-entity actions in the table's Actions cell, never in the page header.
+- Form-edit pages keep the sticky Save/Cancel bar. Header actions are not duplicated there, in sidebars, or in bottom action cards.
+- `View on site` stays visible when the public page is the entity's main artifact (workshops, articles, courses, marketing pages); otherwise it goes in overflow.
 
-Studio list pages (`templates/studio/*/list.html`) follow one canonical header pattern so every list surface reads the same way on desktop and mobile (issue #752):
+#### Studio overflow menu
 
-- Outer container: `flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8`. On mobile the title stacks above the action row; on `sm+` the row aligns horizontally with the actions pinned right.
-- Inner action container (when the header has more than one button): `flex items-center gap-2`. Add `shrink-0` when the header subtitle is long enough to need wrapping room. Do not use `space-x-*` or `gap-3` — list-page header rows use `gap-2` uniformly.
-- Header bottom margin is `mb-8` everywhere. Do not introduce `mb-4 md:mb-8` or `mb-6` on list pages.
-- Every primary or secondary CTA in the header carries a Lucide `h-4 w-4` leading icon. Use `inline-flex items-center gap-2` on the button itself and a bare `<i data-lucide="..." class="h-4 w-4"></i>` icon (no `mr-2` — the button-level `gap-2` already separates the icon from the label).
-- Icon vocabulary: `plus` for create, `upload` for import, `download` for export, `refresh-cw` for re-sync.
-- Primary CTA label convention: `New <noun>` in sentence case for creation actions (`New event`, `New campaign`, `New token`). Singular noun. Do not use `Add` or `Create` verbs and do not TitleCase the noun.
-- Transformation CTA label convention: `Import <noun>` / `Export <noun>` / `Re-sync <noun>` in sentence case. Domain initialisms such as `CSV` keep their casing (`Export CSV`).
-- Exception for sync-managed entities (workshops, content_sources): the `New <noun>` CTA is omitted because the entities are populated by GitHub sync. The header primary may instead be `Re-sync <noun>` (workshops use this pattern).
-- The `/studio/users/` header has no `New user` CTA because users join via signup. Both `Import contacts` and `Export CSV` stay as bordered-secondary buttons; they get matching `upload` / `download` lead icons.
-- The `/studio/crm/` and `/studio/email-templates/` list pages do not match this pattern: CRM uses a wider filter bar and email templates has no header CTA. Both are documented exceptions.
+Secondary and rare entity actions (`Open in Django admin`, exports, carry-over and duplication tools, archive/unarchive, delete) live in a kebab menu at the end of the action row. Use the shared `{% studio_overflow_menu %}` block tag backed by `templates/studio/_partials/overflow_menu.html`.
+
+The partial renders `<details data-studio-overflow>` with an `ellipsis-vertical` Lucide summary trigger. The trigger is 38px square with secondary-button chrome and `aria-label="More actions"`. Its panel is anchored `left-0` and uses `w-64 bg-card border border-border rounded-lg shadow-lg`; items have `min-h-[44px]`.
+
+- Link items are full-width flex anchors with icon, label, hover state, and the canonical focus-visible ring.
+- POST items are full-width `<form method="post">` elements with CSRF and a full-width, left-aligned submit button using the same item geometry.
+- Destructive items render last, after a `border-t border-border` divider, using `text-red-400 hover:bg-red-500/10`.
+- Existing `confirm()` guards remain on destructive or otherwise guarded forms.
+- File uploads never go into overflow; they get a section in the page body.
+- If the current Lucide CDN build cannot resolve `ellipsis-vertical`, use the legacy alias `more-vertical`.
+
+Section headers inside cards follow the same rule: the section title gets its own row and any section-level button row sits below it, left-aligned.
+
+Documented exceptions: `/studio/crm/` keeps its filter-chip/search control row because it is controls versus controls, with no title in the row. Pager rows and in-table control rows may retain `justify-between`.
 
 Status badge palette (`STATUS_BADGE_CLASSES` in `studio/templatetags/studio_filters.py`):
 

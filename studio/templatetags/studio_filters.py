@@ -6,7 +6,9 @@ from urllib.parse import urlsplit, urlunsplit
 from django import template
 from django.conf import settings
 from django.template.defaultfilters import stringfilter
+from django.template.loader import render_to_string
 from django.utils.html import strip_tags
+from django.utils.safestring import mark_safe
 from django.utils.text import Truncator
 from django_q.models import OrmQ
 
@@ -45,7 +47,8 @@ ACTION_FORM_CLASS = 'inline-flex'
 ACTION_BASE_CLASS = (
     'studio-action inline-flex items-center justify-center whitespace-nowrap rounded-md '
     'border px-2.5 py-1 text-xs font-medium transition-colors '
-    'focus:outline-none focus:ring-2 focus:ring-accent/50'
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent '
+    'focus-visible:ring-offset-2 focus-visible:ring-offset-background'
 )
 ACTION_KIND_CLASSES = {
     'primary': 'border-accent bg-accent text-accent-foreground hover:opacity-90',
@@ -307,6 +310,45 @@ def studio_list_class(part='wrapper', align='left'):
 def studio_action_class(kind='secondary'):
     """Return shared class names for Studio row actions."""
     return f"{ACTION_BASE_CLASS} {ACTION_KIND_CLASSES.get(kind, ACTION_KIND_CLASSES['secondary'])}"
+
+
+@register.simple_block_tag(takes_context=True)
+def studio_header_actions(
+    context,
+    content,
+    title,
+    eyebrow=None,
+    subtitle=None,
+    back_url=None,
+    back_label=None,
+    testid='studio-header',
+    actions_testid='studio-header-actions',
+):
+    """Render the shared stacked Studio header around local action markup."""
+    actions = mark_safe(content.strip())
+    return render_to_string(
+        'studio/_partials/header_actions.html',
+        {
+            **context.flatten(),
+            'eyebrow': eyebrow,
+            'title': title,
+            'subtitle': subtitle,
+            'back_url': back_url,
+            'back_label': back_label,
+            'testid': testid,
+            'actions_testid': actions_testid,
+            'actions': actions,
+        },
+    )
+
+
+@register.simple_block_tag(takes_context=True)
+def studio_overflow_menu(context, content):
+    """Render the shared Studio overflow shell around local menu items."""
+    return render_to_string(
+        'studio/_partials/overflow_menu.html',
+        {**context.flatten(), 'items': mark_safe(content.strip())},
+    )
 
 
 @register.simple_tag

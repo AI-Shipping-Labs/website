@@ -369,6 +369,14 @@ register_task_def() {
     fi
 
     REGISTERED_TASK_DEF_ARN="${NEW_TASK_DEF_ARN}"
+    REGISTERED_PREVIOUS_TASK_DEF_ARN="${CURRENT_TASK_DEF_ARN}"
+}
+
+print_r1_web_recovery() {
+    echo "RECOVERY: keep the expanded schema; do not reverse migrations."
+    if [ -n "${PREVIOUS_WEB_TASK_DEF_ARN:-}" ]; then
+        echo "RECOVERY COMMAND: aws ecs" "update-service --cluster ${CLUSTER} --service ai-shipping-labs-prod --task-definition ${PREVIOUS_WEB_TASK_DEF_ARN}"
+    fi
 }
 
 # Issue #1141 Phase 2A — pre-deploy gate. Disabled by default until
@@ -550,7 +558,60 @@ roll_service() {
         fi
 
         diagnose_service_failure "${SERVICE}" "${ROLE}"
+        if [ "${ENV}" = "prod" ]; then
+            if [ "${ROLE}" = "worker" ]; then
+                print_r1_web_recovery
+            else
+                echo "RECOVERY: the worker was not rolled."
+                print_r1_web_recovery
+            fi
+        fi
         exit 1
+    fi
+
+    # In the R1 default production path, the worker must not roll merely
+    # because ECS considers web stable. Prove the load balancer is serving the
+    # exact immutable tag first; this also proves migration/startup completed.
+    if [ "${ENV}" = "prod" ] && [ "${ROLE}" = "web" ]; then
+        local VERIFY_TIMEOUT_SECONDS
+        local VERIFY_POLL_SECONDS
+        local VERIFY_ATTEMPTS
+        local VERIFY_REQUIRED_MATCHES
+        VERIFY_TIMEOUT_SECONDS=$(configured_deploy_grace_timeout_seconds)
+        VERIFY_POLL_SECONDS=$(configured_deploy_grace_poll_seconds)
+        VERIFY_ATTEMPTS=$(configured_deploy_grace_attempts)
+        VERIFY_REQUIRED_MATCHES=$(configured_deploy_grace_required_matches)
+        RECOVERY_SERVICE=${SERVICE}
+        RECOVERY_TASK_DEF_ARN=${NEW_TASK_DEF_ARN}
+        RECOVERY_ECS_SUMMARY="not checked"
+        echo "Verifying ${DEPLOY_HOST}/ping serves exact tag ${TAG} before worker rollout..."
+        if ! readiness_poll_until_stable \
+                "${DEPLOY_HOST}/ping" "${TAG}" \
+                "${VERIFY_TIMEOUT_SECONDS}" "${VERIFY_POLL_SECONDS}" \
+                "${VERIFY_ATTEMPTS}" "${VERIFY_REQUIRED_MATCHES}" \
+                verify_recovery_ecs_state; then
+            echo "ERROR: web reached ECS steady state but did not serve exact tag ${TAG}."
+            echo "RECOVERY: the worker was not rolled."
+            print_r1_web_recovery
+            diagnose_service_failure "${SERVICE}" "${ROLE}"
+            exit 1
+        fi
+    fi
+
+    # The waiter can return after ECS rolls back to the prior revision. A
+    # worker has no /ping endpoint, so explicitly prove the PRIMARY revision
+    # and an all-running task use the newly registered task definition.
+    if [ "${ENV}" = "prod" ] && [ "${ROLE}" = "worker" ]; then
+        local VERIFY_DEADLINE
+        VERIFY_DEADLINE=$(($(readiness_monotonic_seconds) + $(configured_deploy_grace_timeout_seconds)))
+        RECOVERY_SERVICE=${SERVICE}
+        RECOVERY_TASK_DEF_ARN=${NEW_TASK_DEF_ARN}
+        RECOVERY_ECS_SUMMARY="not checked"
+        if ! verify_recovery_ecs_state "${VERIFY_DEADLINE}"; then
+            echo "ERROR: worker waiter returned without the new revision running."
+            print_r1_web_recovery
+            exit 1
+        fi
     fi
 }
 
@@ -579,27 +640,44 @@ deploy_service() {
 # The pre-deploy migrate+check task must run EXACTLY ONCE (against the web
 # task-def) and complete exit 0 BEFORE either service is rolled — this keeps
 # the single-migrator invariant (#336) and migrate-before-serve for both
-# services. Worker is rolled first so its replacement is already running
-# before the web rollout drops the old sidecar.
+# services.
 if [ "${ENV}" = "prod" ] && predeploy_migrate_check_enabled; then
     WEB_SERVICE="ai-shipping-labs-${ENV}"
     WORKER_SERVICE="ai-shipping-labs-worker-${ENV}"
 
     register_task_def "${WORKER_SERVICE}" "worker"
     WORKER_TASK_DEF_ARN="${REGISTERED_TASK_DEF_ARN}"
+    PREVIOUS_WORKER_TASK_DEF_ARN="${REGISTERED_PREVIOUS_TASK_DEF_ARN}"
 
     register_task_def "${WEB_SERVICE}" "web"
     WEB_TASK_DEF_ARN="${REGISTERED_TASK_DEF_ARN}"
+    PREVIOUS_WEB_TASK_DEF_ARN="${REGISTERED_PREVIOUS_TASK_DEF_ARN}"
 
     # Single pre-deploy migrate+check, using the web task-def, before EITHER
     # service is rolled. Aborts the whole deploy (nothing rolled) on failure.
     run_predeploy_migrate_check "${WEB_SERVICE}" "${WEB_TASK_DEF_ARN}"
 
-    roll_service "${WORKER_SERVICE}" "worker" "${WORKER_TASK_DEF_ARN}"
     roll_service "${WEB_SERVICE}" "web" "${WEB_TASK_DEF_ARN}"
+    roll_service "${WORKER_SERVICE}" "worker" "${WORKER_TASK_DEF_ARN}"
 elif [ "${ENV}" = "prod" ]; then
-    deploy_service "ai-shipping-labs-worker-${ENV}" "worker"
-    deploy_service "ai-shipping-labs-${ENV}" "web"
+    WEB_SERVICE="ai-shipping-labs-${ENV}"
+    WORKER_SERVICE="ai-shipping-labs-worker-${ENV}"
+
+    # Register both revisions before changing either service. The web task is
+    # the single legacy-path migrator, so it must become healthy and serve the
+    # expected tag before a target worker can touch the expanded schema.
+    register_task_def "${WORKER_SERVICE}" "worker"
+    WORKER_TASK_DEF_ARN="${REGISTERED_TASK_DEF_ARN}"
+    PREVIOUS_WORKER_TASK_DEF_ARN="${REGISTERED_PREVIOUS_TASK_DEF_ARN}"
+    register_task_def "${WEB_SERVICE}" "web"
+    WEB_TASK_DEF_ARN="${REGISTERED_TASK_DEF_ARN}"
+    PREVIOUS_WEB_TASK_DEF_ARN="${REGISTERED_PREVIOUS_TASK_DEF_ARN}"
+
+    echo ""
+    echo "=== Pre-deploy migrate + check gate disabled ==="
+    echo "PREDEPLOY_MIGRATE_CHECK_ENABLED is not true; using legacy RUN_MIGRATIONS serving-container path."
+    roll_service "${WEB_SERVICE}" "web" "${WEB_TASK_DEF_ARN}"
+    roll_service "${WORKER_SERVICE}" "worker" "${WORKER_TASK_DEF_ARN}"
 else
     deploy_service "ai-shipping-labs-${ENV}" "combined"
 fi

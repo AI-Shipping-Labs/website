@@ -50,11 +50,22 @@ class TriggerSubscription(models.Model):
         help_text="The external handler (e.g. a Lambda Function URL).",
     )
     encrypted_secret = models.TextField(
+        blank=True,
+        default="",
+        db_default="",
         help_text="Encrypted HMAC signing secret. Never render this value.",
     )
-    previous_encrypted_secret = models.TextField(blank=True, default="")
-    secret_version = models.PositiveIntegerField(default=1)
+    previous_encrypted_secret = models.TextField(blank=True, default="", db_default="")
+    secret_version = models.PositiveIntegerField(default=1, db_default=1)
     previous_secret_valid_until = models.DateTimeField(null=True, blank=True)
+    legacy_secret = models.CharField(
+        max_length=255,
+        db_column="secret",
+        null=True,
+        blank=True,
+        editable=False,
+        help_text="R1 rollback-only plaintext compatibility shadow.",
+    )
     is_active = models.BooleanField(default=True)
     description = models.CharField(
         max_length=255,
@@ -76,6 +87,7 @@ class TriggerSubscription(models.Model):
     def __init__(self, *args, **kwargs):
         plaintext_secret = kwargs.pop("secret", None)
         super().__init__(*args, **kwargs)
+        self._secret_was_set = False
         self._loaded_target_url = self.__dict__.get("target_url")
         if plaintext_secret is not None:
             self.set_secret(plaintext_secret)
@@ -102,6 +114,8 @@ class TriggerSubscription(models.Model):
         else:
             self.secret_version = max(self.secret_version or 0, 1)
         self.encrypted_secret = encrypt_secret(value)
+        self.legacy_secret = value
+        self._secret_was_set = True
 
     def secret_candidates(self):
         """Return current and still-valid previous secrets with their versions."""
@@ -128,12 +142,22 @@ class TriggerSubscription(models.Model):
         # Emergency pause writes must remain possible while handler DNS is down.
         excludes = []
         update_fields = kwargs.get("update_fields")
+        if self._secret_was_set and update_fields is not None:
+            update_fields = set(update_fields) | {
+                "encrypted_secret",
+                "legacy_secret",
+                "previous_encrypted_secret",
+                "previous_secret_valid_until",
+                "secret_version",
+            }
+            kwargs["update_fields"] = update_fields
         if self.pk and self.target_url == self._loaded_target_url:
             excludes.append("target_url")
         if update_fields is not None and "target_url" not in update_fields:
             excludes.append("target_url")
         self.full_clean(exclude=set(excludes))
         result = super().save(*args, **kwargs)
+        self._secret_was_set = False
         self._loaded_target_url = self.target_url
         return result
 

@@ -317,6 +317,45 @@ jobs:
           echo "CI_TIMING phase=job_total shard=${{ matrix.shard }}/${{ strategy.job-total }} seconds=$((now - CI_JOB_START)) source=runner_clock_excludes_post_job_steps"
           echo "CI_TIMING phase=post_job_overhead seconds=unavailable source=github_actions_native_step_timings note=cache_save_and_action_post_steps_run_after_final_step"
 
+  r1-postgres-migration:
+    name: R1 PostgreSQL Migration Compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aisl_r1_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aisl_r1_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/aisl_r1_test
+      SECRET_KEY: ci-r1-postgres-migration-only
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run serial production-baseline migration matrix
+        run: uv run python manage.py test tests.test_r1_migration_compatibility --verbosity 2
+
   playwright-core:
     name: Playwright Core E2E
     runs-on: ubuntu-latest
@@ -353,7 +392,7 @@ jobs:
     # the Playwright core set. A `needs` array entry only succeeds when ALL of a
     # matrix job's shards succeed, so listing `test` here means deploy runs only
     # when all 4 shards are green.
-    needs: [checks, test, playwright-core]
+    needs: [checks, test, playwright-core, r1-postgres-migration]
     if: github.ref == 'refs/heads/main'
 
     permissions:

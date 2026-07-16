@@ -17,9 +17,14 @@ import os
 from unittest import mock
 
 from django.test import TestCase
+from django.utils import timezone
 from django_q.models import Schedule
 
-from scripts.entrypoint_init import _register_schedules
+from jobs.management.commands.setup_schedules import R2_ONLY_SCHEDULE_NAMES
+from scripts.entrypoint_init import (
+    _register_schedules,
+    _suppress_r1_incompatible_schedules,
+)
 
 
 class EntrypointRegistersSchedulesTest(TestCase):
@@ -49,14 +54,8 @@ class EntrypointRegistersSchedulesTest(TestCase):
         expected = {
             'health-check',
             'cleanup-webhook-logs',
-            'cleanup-calendly-webhook-logs',
-            'retry-calendly-webhooks',
             'cleanup-webhook-deliveries',
-            'resume-webhook-deliveries',
-            'redact-maven-enrollment-pii',
-            'retry-maven-enrollment-steps',
             'purge-user-activity',
-            'purge-plan-sprints-raw-text',
             'event-reminders',
             'complete-finished-events',
             'expire-tier-overrides',
@@ -69,9 +68,24 @@ class EntrypointRegistersSchedulesTest(TestCase):
             'sprint-cadence-notifications',
             'sprint-end-recaps',
             'onboarding-reminders',
-            'onboarding-staff-notification-recovery',
         }
         self.assertEqual(names, expected)
+
+    def test_r1_deletes_previously_registered_r2_only_schedules(self):
+        for name in R2_ONLY_SCHEDULE_NAMES:
+            Schedule.objects.create(
+                name=name,
+                func='legacy.stale.task',
+                schedule_type=Schedule.ONCE,
+                next_run=timezone.now(),
+            )
+
+        _suppress_r1_incompatible_schedules()
+        _register_schedules()
+
+        self.assertFalse(
+            Schedule.objects.filter(name__in=R2_ONLY_SCHEDULE_NAMES).exists(),
+        )
 
     def test_idempotent_across_two_boots(self):
         """Running entrypoint twice produces exactly one row per schedule."""
@@ -179,3 +193,13 @@ class EntrypointScheduleFailureIsSwallowedTest(TestCase):
         # in CloudWatch / structured logs can find these events.
         logger = logging.getLogger('scripts.entrypoint_init')
         self.assertEqual(logger.name, 'scripts.entrypoint_init')
+
+
+class EntrypointR1ScheduleSuppressionFailClosedTest(TestCase):
+    def test_suppression_failure_propagates(self):
+        with mock.patch(
+            'django.core.management.call_command',
+            side_effect=RuntimeError('database unavailable'),
+        ):
+            with self.assertRaisesMessage(RuntimeError, 'database unavailable'):
+                _suppress_r1_incompatible_schedules()

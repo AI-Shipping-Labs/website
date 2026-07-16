@@ -452,7 +452,7 @@ class OnboardingConversation(TimestampedModelMixin, models.Model):
     )
     transcript = models.JSONField(default=list, blank=True)
     persona_signal = models.CharField(max_length=20, blank=True, default='')
-    turn_version = models.PositiveBigIntegerField(default=0)
+    turn_version = models.PositiveBigIntegerField(default=0, db_default=0)
 
     def __str__(self):
         return f'AI onboarding conversation for response {self.response_id}'

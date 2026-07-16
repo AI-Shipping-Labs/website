@@ -21,6 +21,7 @@ from content.access import get_user_level
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
 from integrations.services.maven import _run_step, _welcome_context
 from payments.models import Tier
+from website.release_phase import R1_EXPAND_COMPATIBILITY
 
 User = get_user_model()
 SECRET = "correction-secret"
@@ -193,9 +194,30 @@ class MavenCorrectionsTest(TestCase):
         self.assertNotIn("member@example.com", event.dedupe_key)
         self.assertEqual(len(event.dedupe_key), 64)
 
-    def test_one_active_occurrence_database_constraint(self, email_service):
+    def test_one_active_occurrence_database_constraint_is_phase_aware(
+        self,
+        email_service,
+    ):
         self.post("user_cohort.enrolled")
         event = MavenEnrollmentEvent.objects.get()
+        if R1_EXPAND_COMPATIBILITY:
+            # R1 overlaps the original production writer, whose rows do not
+            # populate identity_hash. The conditional uniqueness constraint
+            # is deliberately deferred to R2 after reconciliation/backfill.
+            MavenEnrollmentEvent.objects.create(
+                dedupe_key="different",
+                identity_hash=event.identity_hash,
+                lifecycle=MavenEnrollmentEvent.LIFECYCLE_ACTIVE,
+            )
+            self.assertEqual(
+                MavenEnrollmentEvent.objects.filter(
+                    identity_hash=event.identity_hash,
+                    lifecycle=MavenEnrollmentEvent.LIFECYCLE_ACTIVE,
+                ).count(),
+                2,
+            )
+            return
+
         with self.assertRaises(IntegrityError), transaction.atomic():
             MavenEnrollmentEvent.objects.create(
                 dedupe_key="different", identity_hash=event.identity_hash,

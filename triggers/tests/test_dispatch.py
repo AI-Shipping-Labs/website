@@ -170,13 +170,37 @@ class EmitEventTest(TestCase):
             target_url="https://handler.example.com/all",
             secret="s",
         )
-        with patch("triggers.dispatch.async_task", side_effect=RuntimeError("queue down")):
+        with patch(
+            "website.release_phase.R2_BACKGROUND_WORK_ENABLED", True,
+        ), patch("triggers.dispatch.async_task", side_effect=RuntimeError("queue down")):
             emission, created = emit_event("v0_workshop", self.user, {"name": "anything"})
         self.assertTrue(created)
         self.assertEqual(
             WebhookDeliveryJob.objects.get(emission=emission).status,
             WebhookDeliveryJob.STATUS_PENDING,
         )
+
+    def test_r1_publishes_legacy_task_without_durable_job(self):
+        from triggers.models import WebhookDeliveryJob
+
+        subscription = TriggerSubscription.objects.create(
+            event_type="custom",
+            property_filter={},
+            target_url="https://handler.example.com/r1",
+            secret="s",
+        )
+        with patch("triggers.dispatch.async_task") as enqueue:
+            emission, created = emit_event(
+                "v0_workshop", self.user, {"name": "anything"},
+            )
+
+        self.assertTrue(created)
+        enqueue.assert_called_once()
+        self.assertEqual(enqueue.call_args.args[:3], (
+            "triggers.tasks.deliver_webhook", emission.pk, subscription.pk,
+        ))
+        self.assertEqual(enqueue.call_args.kwargs["max_retries"], 3)
+        self.assertFalse(WebhookDeliveryJob.objects.filter(emission=emission).exists())
 
     def test_inactive_subscription_does_not_fire(self):
         inactive = TriggerSubscription.objects.create(

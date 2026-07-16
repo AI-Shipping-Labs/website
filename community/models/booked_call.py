@@ -35,9 +35,7 @@ class BookedCall(models.Model):
 
     host = models.ForeignKey(
         'community.CallHost',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.CASCADE,
         related_name='booked_calls',
     )
     member = models.ForeignKey(
@@ -96,8 +94,7 @@ class BookedCall(models.Model):
 
     def __str__(self):
         who = self.member.email if self.member_id else self.invitee_email
-        host = self.host.name if self.host_id else 'unmatched host'
-        return f'BookedCall({who} with {host}, {self.status})'
+        return f'BookedCall({who} with {self.host.name}, {self.status})'
 
     @property
     def is_active(self):

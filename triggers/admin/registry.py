@@ -23,6 +23,7 @@ class TriggerSubscriptionAdmin(admin.ModelAdmin):
     # Never expose the signing secret in the admin changelist/detail.
     exclude = (
         "encrypted_secret",
+        "legacy_secret",
         "previous_encrypted_secret",
         "previous_secret_valid_until",
     )

@@ -21,6 +21,7 @@ from accounts.services.privacy import (
 )
 from analytics.models import UserActivity
 from comments.models import Comment
+from community.models import UnmatchedBookedCall
 from content.models import Course, Enrollment, Project, UserContentCompletion
 from crm.models import CRMRecord, SlackMessage, SlackThread
 from email_app.models import EmailLog
@@ -636,12 +637,28 @@ class CalendlyPrivacyLifecycleTest(TestCase):
                 'payload': {'email': 'call-alias@test.com', 'name': 'Private Name'},
             },
         )
+        self.staged = UnmatchedBookedCall.objects.create(
+            member=self.user,
+            invitee_email='call-alias@test.com',
+            invitee_name='Private Name',
+            calendly_event_uri='https://api.calendly.com/events/privacy-stage',
+            calendly_invitee_uri='https://api.calendly.com/invitees/privacy-stage',
+            scheduling_url='https://calendly.com/unmatched/privacy-stage',
+        )
 
     def test_export_includes_matching_calendly_delivery(self):
         exported = build_user_data_export(self.user)
         rows = exported['events_community']['calendly_webhook_deliveries']
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['payload']['payload']['email'], 'call-alias@test.com')
+        staged = exported['events_community']['unmatched_booked_calls']
+        self.assertEqual(len(staged), 1)
+        self.assertEqual(staged[0]['invitee_email'], 'call-alias@test.com')
+        self.assertEqual(staged[0]['invitee_name'], 'Private Name')
+        self.assertEqual(
+            staged[0]['scheduling_url'],
+            'https://calendly.com/unmatched/privacy-stage',
+        )
 
     @patch('accounts.services.privacy.notify_privacy_staff')
     def test_delete_scrubs_primary_and_alias_from_durable_delivery(self, _notify):
@@ -649,3 +666,5 @@ class CalendlyPrivacyLifecycleTest(TestCase):
         self.assertTrue(result.success)
         self.log.refresh_from_db()
         self.assertEqual(self.log.payload['payload']['email'], REDACTED)
+        self.assertEqual(self.log.payload['payload']['name'], REDACTED)
+        self.assertFalse(UnmatchedBookedCall.objects.filter(pk=self.staged.pk).exists())

@@ -14,6 +14,7 @@ class Migration(migrations.Migration):
             name='asset_mime_type',
             field=models.CharField(
                 blank=True,
+                db_default='',
                 default='',
                 help_text='Validated MIME type for the private asset. Legacy `other` rows remain stored but are not deliverable unless a future policy adds an approved extension/MIME pair.',
                 max_length=150,
@@ -24,6 +25,7 @@ class Migration(migrations.Migration):
             name='storage_key',
             field=models.CharField(
                 blank=True,
+                db_default='',
                 default='',
                 help_text='Private S3 object key. Required for secure delivery; never rendered on public surfaces.',
                 max_length=500,
@@ -34,6 +36,7 @@ class Migration(migrations.Migration):
             name='delivery_blocked_reason',
             field=models.CharField(
                 blank=True,
+                db_default='',
                 default='',
                 help_text='Operator-facing readiness marker set when source validation fails. Never rendered on public surfaces.',
                 max_length=200,

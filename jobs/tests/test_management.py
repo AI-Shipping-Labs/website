@@ -4,6 +4,7 @@ Tests for the setup_schedules management command.
 
 import ast
 from io import StringIO
+from unittest import mock
 
 from django.core.management import call_command
 from django.test import TestCase
@@ -27,6 +28,17 @@ def _decode_schedule_kwargs(raw):
 
 class SetupSchedulesCommandTest(TestCase):
     """Tests for the setup_schedules management command."""
+
+    def setUp(self):
+        # This legacy command suite validates the complete R2 schedule
+        # vocabulary. R1 gating/deletion is covered separately by the
+        # entrypoint release-safety tests.
+        patcher = mock.patch(
+            'jobs.management.commands.setup_schedules.background_work_enabled',
+            return_value=True,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_creates_health_check_schedule(self):
         """Command creates health-check schedule."""

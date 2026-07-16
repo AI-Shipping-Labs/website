@@ -34,6 +34,7 @@ from triggers.models import (
     TriggerSubscription,
     WebhookDeliveryJob,
 )
+from website.release_phase import background_work_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +146,29 @@ def emit_event(name, user, properties=None, *, min_level=None):
 
 def _dispatch_to_subscriptions(emission, name, properties):
     """Enqueue a signed delivery for every matching active subscription."""
+    if not background_work_enabled():
+        # R1 preserves the exact queue vocabulary understood by 524153b6.
+        # Durable job creation/recovery is activated only in R2, but webhook
+        # delivery itself must not be dropped during the compatibility soak.
+        subscriptions = TriggerSubscription.objects.filter(
+            is_active=True,
+            event_type=EVENT_TYPE_CUSTOM,
+        )
+        for subscription in subscriptions:
+            if not subscription.matches(properties):
+                continue
+            async_task(
+                "triggers.tasks.deliver_webhook",
+                emission.id,
+                subscription.id,
+                max_retries=DELIVERY_MAX_RETRIES,
+                task_name=build_task_name(
+                    "Deliver webhook",
+                    name,
+                    f"subscription {subscription.id}",
+                ),
+            )
+        return
     subscriptions = TriggerSubscription.objects.filter(
         is_active=True,
         event_type=EVENT_TYPE_CUSTOM,

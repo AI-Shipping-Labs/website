@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='tieroverride',
             name='source',
-            field=models.CharField(blank=True, db_index=True, default='', help_text='Stable grant source. Maven uses maven:<occurrence identity> so its entitlement can coexist with staff and billing grants.', max_length=80),
+            field=models.CharField(blank=True, db_default='', db_index=True, default='', help_text='Stable grant source. Maven uses maven:<occurrence identity> so its entitlement can coexist with staff and billing grants.', max_length=80),
         ),
     ]

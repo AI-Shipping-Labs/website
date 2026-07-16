@@ -184,6 +184,28 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
             env_by_container["ai-shipping-labs-worker"]["RUN_MIGRATIONS"], "false"
         )
 
+    def test_combined_dev_assigns_versioned_schema_barrier_roles(self):
+        env_by_container = self._env_by_container("dev")
+
+        self.assertEqual(
+            env_by_container["ai-shipping-labs"]["R1_SCHEMA_BARRIER_ROLE"],
+            "web",
+        )
+        self.assertEqual(
+            env_by_container["ai-shipping-labs-worker"]["R1_SCHEMA_BARRIER_ROLE"],
+            "worker",
+        )
+
+    def test_separate_prod_services_do_not_wait_on_combined_task_barrier(self):
+        web_env = self._env_by_container("prod", "web")
+        worker_env = self._env_by_container("prod", "worker")
+
+        self.assertNotIn("R1_SCHEMA_BARRIER_ROLE", web_env["ai-shipping-labs"])
+        self.assertNotIn(
+            "R1_SCHEMA_BARRIER_ROLE",
+            worker_env["ai-shipping-labs-worker"],
+        )
+
     def test_gunicorn_workers_two_for_dev(self):
         # Issue #1141 Phase 2C: dev runs 2 workers to ease 512 MB pressure.
         env_by_container = self._env_by_container("dev")

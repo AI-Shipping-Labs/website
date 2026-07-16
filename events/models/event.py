@@ -364,6 +364,8 @@ class Event(
     calendar_uid = models.CharField(
         max_length=400,
         unique=True,
+        null=True,
+        blank=True,
         editable=False,
         help_text=(
             'Immutable iCalendar UID. Initialized from the creation-time slug '
@@ -431,6 +433,8 @@ class Event(
     )
     host_access_version = models.UUIDField(
         default=uuid.uuid4,
+        null=True,
+        blank=True,
         editable=False,
         help_text=(
             'Rotated whenever host_email changes so previously issued '

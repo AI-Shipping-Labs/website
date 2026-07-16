@@ -2,7 +2,7 @@
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Q
+from django.db.models.functions import Now
 
 
 class MavenEnrollmentEvent(models.Model):
@@ -48,7 +48,9 @@ class MavenEnrollmentEvent(models.Model):
         unique=True,
         help_text="Normalized email + cohort + event type. Unique per processed event.",
     )
-    identity_hash = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    identity_hash = models.CharField(
+        max_length=64, blank=True, default="", db_default="", db_index=True,
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -59,8 +61,8 @@ class MavenEnrollmentEvent(models.Model):
     email = models.EmailField(blank=True, default="")
     course = models.CharField(max_length=255, blank=True, default="")
     cohort = models.CharField(max_length=255, blank=True, default="")
-    course_key = models.CharField(max_length=255, blank=True, default="")
-    cohort_key = models.CharField(max_length=255, blank=True, default="")
+    course_key = models.CharField(max_length=255, blank=True, default="", db_default="")
+    cohort_key = models.CharField(max_length=255, blank=True, default="", db_default="")
     event_type = models.CharField(max_length=100, blank=True, default="")
     outcome = models.CharField(
         max_length=32,
@@ -75,44 +77,46 @@ class MavenEnrollmentEvent(models.Model):
         max_length=16,
         choices=LIFECYCLE_CHOICES,
         default=LIFECYCLE_ACTIVE,
+        db_default=LIFECYCLE_LEGACY,
         db_index=True,
     )
-    welcome_eligible = models.BooleanField(default=False)
-    override_status = models.CharField(max_length=16, choices=STEP_CHOICES, default=STEP_PENDING)
-    override_attempts = models.PositiveSmallIntegerField(default=0)
+    welcome_eligible = models.BooleanField(default=False, db_default=False)
+    override_status = models.CharField(
+        max_length=16, choices=STEP_CHOICES, default=STEP_PENDING, db_default=STEP_PENDING,
+    )
+    override_attempts = models.PositiveSmallIntegerField(default=0, db_default=0)
     override_attempted_at = models.DateTimeField(null=True, blank=True)
     override_completed_at = models.DateTimeField(null=True, blank=True)
-    override_error = models.CharField(max_length=255, blank=True, default="")
-    slack_status = models.CharField(max_length=16, choices=STEP_CHOICES, default=STEP_PENDING)
-    slack_attempts = models.PositiveSmallIntegerField(default=0)
+    override_error = models.CharField(max_length=255, blank=True, default="", db_default="")
+    slack_status = models.CharField(
+        max_length=16, choices=STEP_CHOICES, default=STEP_PENDING, db_default=STEP_PENDING,
+    )
+    slack_attempts = models.PositiveSmallIntegerField(default=0, db_default=0)
     slack_attempted_at = models.DateTimeField(null=True, blank=True)
     slack_completed_at = models.DateTimeField(null=True, blank=True)
-    slack_error = models.CharField(max_length=255, blank=True, default="")
-    welcome_status = models.CharField(max_length=16, choices=STEP_CHOICES, default=STEP_PENDING)
-    welcome_attempts = models.PositiveSmallIntegerField(default=0)
+    slack_error = models.CharField(max_length=255, blank=True, default="", db_default="")
+    welcome_status = models.CharField(
+        max_length=16, choices=STEP_CHOICES, default=STEP_PENDING, db_default=STEP_PENDING,
+    )
+    welcome_attempts = models.PositiveSmallIntegerField(default=0, db_default=0)
     welcome_attempted_at = models.DateTimeField(null=True, blank=True)
     welcome_completed_at = models.DateTimeField(null=True, blank=True)
-    welcome_error = models.CharField(max_length=255, blank=True, default="")
-    removal_status = models.CharField(max_length=16, choices=STEP_CHOICES, default=STEP_SKIPPED)
-    removal_attempts = models.PositiveSmallIntegerField(default=0)
+    welcome_error = models.CharField(max_length=255, blank=True, default="", db_default="")
+    removal_status = models.CharField(
+        max_length=16, choices=STEP_CHOICES, default=STEP_SKIPPED, db_default=STEP_SKIPPED,
+    )
+    removal_attempts = models.PositiveSmallIntegerField(default=0, db_default=0)
     removal_attempted_at = models.DateTimeField(null=True, blank=True)
     removal_completed_at = models.DateTimeField(null=True, blank=True)
-    removal_error = models.CharField(max_length=255, blank=True, default="")
+    removal_error = models.CharField(max_length=255, blank=True, default="", db_default="")
     removed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    updated_at = models.DateTimeField(auto_now=True, db_default=Now())
 
     class Meta:
         ordering = ["-created_at"]
         verbose_name = "Maven Enrollment Event"
         verbose_name_plural = "Maven Enrollment Events"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["identity_hash"],
-                condition=Q(lifecycle="active"),
-                name="uniq_active_maven_occurrence",
-            ),
-        ]
 
     def __str__(self):
         return f"{self.event_type} {self.email} ({self.outcome})"

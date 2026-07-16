@@ -18,6 +18,8 @@ from django.utils import timezone
 from accounts.models import TierOverride
 from email_app.models import EmailCampaign, EmailLog
 from email_app.tests.test_email_service import assert_no_internal_footer_text
+from integrations.config import clear_config_cache
+from integrations.models import IntegrationSetting
 from jobs.tasks import build_task_name
 from tests.fixtures import TierSetupMixin
 
@@ -765,6 +767,35 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
 
         # 2 eligible users, batch_size=1 => 2 batches
         self.assertEqual(result['batch_count'], 2)
+
+    def test_send_campaign_uses_db_batch_size_without_redeploy(self):
+        IntegrationSetting.objects.create(
+            key='EMAIL_BATCH_SIZE', value='1', group='ses',
+        )
+        clear_config_cache()
+        self.addCleanup(clear_config_cache)
+
+        from email_app.tasks.send_campaign import send_campaign
+        result = send_campaign(self.campaign.pk)
+
+        self.assertEqual(result['batch_count'], 2)
+
+    def test_invalid_runtime_batch_sizes_fall_back_to_200(self):
+        from email_app.tasks.send_campaign import _get_batch_size
+
+        for value in ('0', '-2', 'not-a-number'):
+            with self.subTest(value=value):
+                IntegrationSetting.objects.update_or_create(
+                    key='EMAIL_BATCH_SIZE', defaults={
+                        'value': value, 'group': 'ses',
+                    },
+                )
+                clear_config_cache()
+                with self.assertLogs(
+                    'email_app.tasks.send_campaign', 'WARNING',
+                ):
+                    self.assertEqual(_get_batch_size(), 200)
+        self.addCleanup(clear_config_cache)
 
 
 @tag('core')

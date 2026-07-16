@@ -23,7 +23,6 @@ import logging
 import time
 from datetime import timedelta
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.template.loader import render_to_string
@@ -39,7 +38,7 @@ logger = logging.getLogger(__name__)
 # Delay between emails in seconds to respect SES sending rate limits.
 DEFAULT_SEND_DELAY = 0.05  # 50ms
 
-# Default chunk size if EMAIL_BATCH_SIZE is not configured in settings.
+# Default chunk size if EMAIL_BATCH_SIZE is not configured at runtime.
 DEFAULT_BATCH_SIZE = 200
 
 # Default spacing between fan-out batches in seconds. Batches are
@@ -50,8 +49,18 @@ DEFAULT_BATCH_INTERVAL_SECONDS = 60
 
 
 def _get_batch_size():
-    """Return the configured EMAIL_BATCH_SIZE, falling back to default."""
-    return int(getattr(settings, 'EMAIL_BATCH_SIZE', DEFAULT_BATCH_SIZE))
+    """Return a positive runtime batch size, falling back safely."""
+    raw = get_config('EMAIL_BATCH_SIZE', DEFAULT_BATCH_SIZE)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = 0
+    if value <= 0:
+        logger.warning(
+            'Invalid EMAIL_BATCH_SIZE; using default %s', DEFAULT_BATCH_SIZE,
+        )
+        return DEFAULT_BATCH_SIZE
+    return value
 
 
 def _get_batch_interval_seconds():
@@ -86,14 +95,14 @@ def send_campaign(campaign_id, batch_size=None):
 
     Validates the campaign is in 'draft' status, transitions it to
     'sending', resolves the eligible recipient list to user IDs, splits
-    into chunks of ``batch_size`` (default ``settings.EMAIL_BATCH_SIZE``),
+    into chunks of ``batch_size`` (default runtime ``EMAIL_BATCH_SIZE``),
     and enqueues one ``send_campaign_batch`` task per chunk. Returns
     immediately after enqueuing.
 
     Args:
         campaign_id: Primary key of the EmailCampaign to send.
         batch_size: Override for chunk size. Defaults to
-            ``settings.EMAIL_BATCH_SIZE`` (or 200).
+            runtime ``EMAIL_BATCH_SIZE`` (or 200).
 
     Returns:
         dict with campaign_id, total recipients, batch_count, and status.

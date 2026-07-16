@@ -1,6 +1,5 @@
 from datetime import timedelta
 
-from django.conf import settings
 from django.contrib import messages
 from django.db.models import Count, Q
 from django.shortcuts import redirect, render
@@ -38,6 +37,7 @@ from events.services.time_windows import (
     upcoming_events_queryset,
 )
 from integrations.config import get_config
+from payments.stripe_links import get_stripe_payment_links
 from plans.dashboard import (
     build_active_sprint_opportunities_context,
     build_sprint_plan_card_context,
@@ -258,7 +258,7 @@ def _public_home(request):
     curated_links = CuratedLink.objects.filter(published=True)[:6]
 
     # Add payment links to tiers
-    stripe_links = settings.STRIPE_PAYMENT_LINKS
+    stripe_links = get_stripe_payment_links()
     tiers_with_links = []
     for tier in get_tiers_with_features():
         if tier.get('stripe_key') == 'free':

@@ -462,8 +462,7 @@ CONTENT_CDN_BASE = os.environ.get('CONTENT_CDN_BASE', '/static/content-images')
 # integrations.services.llm wrapper, never a specific vendor. The key is
 # supplied by the operator via .env or Studio; the DB override wins per
 # get_config() resolution order. LLM_MAX_RETRIES tunes the Anthropic SDK
-# max_retries and the wrapper's bounded backoff; it is intentionally not
-# surfaced in the Studio settings GUI.
+# max_retries and the wrapper's bounded backoff.
 LLM_PROVIDER = os.environ.get('LLM_PROVIDER', 'anthropic')
 LLM_API_KEY = os.environ.get('LLM_API_KEY', '')
 LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'https://api.anthropic.com')

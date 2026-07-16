@@ -67,6 +67,9 @@ Context:
           {% elif field.source == 'default' %}
             <span data-source-badge="default"
                   class="px-2 py-0.5 text-xs rounded-full bg-gray-500/20 text-gray-400 whitespace-nowrap">Source: default</span>
+          {% elif field.source == 'django_settings' %}
+            <span data-source-badge="django_settings"
+                  class="px-2 py-0.5 text-xs rounded-full bg-gray-500/20 text-gray-400 whitespace-nowrap">Source: Django settings</span>
           {% else %}
             <span data-source-badge="none"
                   class="px-2 py-0.5 text-xs rounded-full bg-gray-500/20 text-gray-400 whitespace-nowrap">Source: not set</span>
@@ -119,7 +122,7 @@ Context:
             <button type="button"
                     onclick="clearOverride(this, '{{ field.key }}')"
                     data-clear-override="{{ field.key }}"
-                    title="Remove this DB override and use the env value"
+                    title="Remove this DB override and use the fallback value"
                     aria-label="Clear override for {{ field.key }}"
                     class="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-md border border-border text-xs text-gray-400 hover:text-gray-200 hover:bg-muted/60 transition-colors">
               &times;
@@ -131,6 +134,10 @@ Context:
           {% if field.env_value %}
             <p class="mt-1 text-xs text-gray-500" data-env-hint="present">
               Env value: <span class="font-mono">{% if field.is_secret %}************{% else %}{{ field.env_value }}{% endif %}</span> (would apply if override cleared)
+            </p>
+          {% elif field.django_settings_fallback %}
+            <p class="mt-1 text-xs text-gray-500" data-env-hint="django-settings">
+              Clearing this override restores the Django settings fallback.
             </p>
           {% else %}
             <p class="mt-1 text-xs text-gray-500" data-env-hint="absent">

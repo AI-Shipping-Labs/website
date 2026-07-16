@@ -1,7 +1,6 @@
 from datetime import timedelta
 from urllib.parse import urlencode
 
-from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -13,6 +12,7 @@ from accounts.oauth_context import get_oauth_provider_context
 from content.access import get_active_override
 from integrations.config import get_config
 from payments.models import CheckoutAccountBinding, Tier
+from payments.stripe_links import get_stripe_payment_links
 from payments.tier_state import build_tier_state
 
 
@@ -21,7 +21,7 @@ def pricing(request):
     """Pricing page showing all membership tiers in a comparison grid."""
     tiers = Tier.objects.all()
 
-    stripe_links = settings.STRIPE_PAYMENT_LINKS
+    stripe_links = get_stripe_payment_links()
 
     user = request.user
     # Pricing account actions are subscription/base-tier aware by design:
@@ -132,7 +132,7 @@ def create_checkout_binding(request, tier_slug, billing_period):
 
     tier = get_object_or_404(Tier, slug=tier_slug, level__gt=0)
     payment_link = (
-        settings.STRIPE_PAYMENT_LINKS
+        get_stripe_payment_links()
         .get(tier.slug, {})
         .get(billing_period, "")
     )

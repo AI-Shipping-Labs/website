@@ -138,6 +138,19 @@ class DeployDevWakeWorkflowTest(SimpleTestCase):
             migration_step["run"],
             "uv run python manage.py test tests.test_r1_migration_compatibility --verbosity 2",
         )
+        standard_test_step = next(
+            step
+            for step in workflow["jobs"]["test"]["steps"]
+            if step.get("name") == "Run unit and integration tests"
+        )
+        self.assertIn(
+            "--exclude-tag=postgres_migration",
+            standard_test_step["run"],
+        )
+        self.assertNotIn(
+            "--exclude-tag=postgres_migration",
+            migration_step["run"],
+        )
 
     def test_deploy_verification_uses_shared_action_with_exact_version_match(self):
         workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)

@@ -1,8 +1,6 @@
-"""Migration probes for the per-channel Slack ingest lease."""
+"""R1 migration probes for the per-channel Slack ingest lease."""
 
-import datetime
-
-from django.db import IntegrityError, connection
+from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
@@ -11,7 +9,7 @@ class SlackIngestLeaseMigrationTest(TransactionTestCase):
     migrate_from = [('crm', '0007_slackthread_interview_note')]
     migrate_to = [('crm', '0008_slack_ingest_lease_and_refresh_count')]
 
-    def test_duplicate_running_rows_survive_forward_reverse_forward(self):
+    def test_duplicate_legacy_running_rows_survive_r1_expand(self):
         executor = MigrationExecutor(connection)
         latest_targets = executor.loader.graph.leaf_nodes()
 
@@ -43,42 +41,30 @@ class SlackIngestLeaseMigrationTest(TransactionTestCase):
                 error='Historical success metadata',
             )
 
-            older_started_at = datetime.datetime(
-                2026, 7, 14, 10, 0, tzinfo=datetime.UTC,
-            )
-            winning_started_at = datetime.datetime(
-                2026, 7, 14, 11, 0, tzinfo=datetime.UTC,
-            )
-            OldIngest.objects.filter(pk=oldest.pk).update(
-                started_at=older_started_at,
-            )
-            OldIngest.objects.filter(
-                pk__in=[tied_lower_pk.pk, tied_winner.pk],
-            ).update(started_at=winning_started_at)
-
             executor = MigrationExecutor(connection)
             executor.migrate(self.migrate_to)
             new_apps = executor.loader.project_state(self.migrate_to).apps
             NewIngest = new_apps.get_model('crm', 'SlackChannelIngest')
 
-            running_ids = list(
+            running_ids = set(
                 NewIngest.objects.filter(
                     channel_id='C_MIGRATION_PROBE', status='running',
                 ).values_list('pk', flat=True)
             )
-            self.assertEqual(running_ids, [tied_winner.pk])
+            self.assertEqual(
+                running_ids,
+                {oldest.pk, tied_lower_pk.pk, tied_winner.pk},
+            )
+            for legacy_id in running_ids:
+                legacy = NewIngest.objects.get(pk=legacy_id)
+                self.assertIsNone(legacy.finished_at)
+                self.assertIsNone(legacy.lease_expires_at)
+                self.assertTrue(legacy.advances_watermark)
+                self.assertEqual(legacy.known_threads_checked, 0)
 
-            for loser_id in [oldest.pk, tied_lower_pk.pk]:
-                loser = NewIngest.objects.get(pk=loser_id)
-                self.assertEqual(loser.status, 'error')
-                self.assertIsNotNone(loser.finished_at)
-                self.assertIsNone(loser.lease_expires_at)
-                self.assertIn(
-                    f'kept ingest #{tied_winner.pk} active', loser.error,
-                )
-            self.assertIn(
-                'Prior diagnostic retained',
+            self.assertEqual(
                 NewIngest.objects.get(pk=oldest.pk).error,
+                'Prior diagnostic retained',
             )
             self.assertEqual(
                 NewIngest.objects.get(pk=other_channel.pk).status,
@@ -87,57 +73,6 @@ class SlackIngestLeaseMigrationTest(TransactionTestCase):
             self.assertEqual(
                 NewIngest.objects.get(pk=completed.pk).error,
                 'Historical success metadata',
-            )
-            oldest_error = NewIngest.objects.get(pk=oldest.pk).error
-            oldest_finished_at = NewIngest.objects.get(
-                pk=oldest.pk,
-            ).finished_at
-
-            with self.assertRaises(IntegrityError):
-                NewIngest.objects.create(
-                    channel_id='C_MIGRATION_PROBE', status='running',
-                )
-
-            executor = MigrationExecutor(connection)
-            executor.migrate(self.migrate_from)
-            reversed_apps = executor.loader.project_state(
-                self.migrate_from,
-            ).apps
-            ReversedIngest = reversed_apps.get_model(
-                'crm', 'SlackChannelIngest',
-            )
-            self.assertEqual(
-                list(ReversedIngest.objects.filter(
-                    channel_id='C_MIGRATION_PROBE', status='running',
-                ).values_list('pk', flat=True)),
-                [tied_winner.pk],
-            )
-
-            executor = MigrationExecutor(connection)
-            executor.migrate(self.migrate_to)
-            remigrated_apps = executor.loader.project_state(
-                self.migrate_to,
-            ).apps
-            RemigratedIngest = remigrated_apps.get_model(
-                'crm', 'SlackChannelIngest',
-            )
-            self.assertEqual(
-                list(RemigratedIngest.objects.filter(
-                    channel_id='C_MIGRATION_PROBE', status='running',
-                ).values_list('pk', flat=True)),
-                [tied_winner.pk],
-            )
-            self.assertIn(
-                'Prior diagnostic retained',
-                RemigratedIngest.objects.get(pk=oldest.pk).error,
-            )
-            self.assertEqual(
-                RemigratedIngest.objects.get(pk=oldest.pk).error,
-                oldest_error,
-            )
-            self.assertEqual(
-                RemigratedIngest.objects.get(pk=oldest.pk).finished_at,
-                oldest_finished_at,
             )
         finally:
             executor = MigrationExecutor(connection)

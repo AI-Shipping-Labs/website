@@ -1,10 +1,8 @@
 """Central email kind classification and sender resolution."""
 
-import os
-
 from django.conf import settings
 
-from integrations.config import get_config
+from integrations.config import get_config, resolve_source
 
 EMAIL_KIND_TRANSACTIONAL = "transactional"
 EMAIL_KIND_PROMOTIONAL = "promotional"
@@ -149,22 +147,14 @@ def classify_email_type(email_type):
     )
 
 
-def _integration_setting_has_value(key):
-    try:
-        from integrations.models import IntegrationSetting
-
-        return IntegrationSetting.objects.filter(key=key).exclude(value="").exists()
-    except Exception:
-        return False
-
-
 def _has_runtime_value(key, default=""):
-    if os.environ.get(key):
-        return True
-    settings_value = getattr(settings, key, "")
-    if settings_value and settings_value != default:
-        return True
-    return _integration_setting_has_value(key)
+    source = resolve_source(key)
+    if source is None:
+        return False
+    if source == 'django_settings':
+        settings_value = getattr(settings, key, '')
+        return bool(settings_value) and settings_value != default
+    return True
 
 
 def get_sender_for_kind(email_kind):

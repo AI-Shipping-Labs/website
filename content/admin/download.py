@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from content.models import Download
 from content.nav_availability import refresh_published_downloads_nav_cache
+from notifications.services import notify_safely
 from studio.admin_links import studio_link
 
 
@@ -10,11 +11,7 @@ def publish_downloads(modeladmin, request, queryset):
     queryset.update(published=True)
     refresh_published_downloads_nav_cache()
     for download in queryset:
-        try:
-            from notifications.services import NotificationService
-            NotificationService.notify('download', download.pk)
-        except Exception:
-            pass
+        notify_safely('download', download.pk)
 
 
 publish_downloads.short_description = 'Publish selected downloads'

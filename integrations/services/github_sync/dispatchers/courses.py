@@ -1,37 +1,31 @@
 """Course sync dispatcher."""
 
-# ruff: noqa
-
 import os
-import re
-import uuid
 
-from django.utils import timezone
-
-from integrations.services.github_sync.common import INSTRUCTOR_ID_RE, GitHubSyncError, logger
+from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
+from integrations.services.github_sync.common import GitHubSyncError, logger
+from integrations.services.github_sync.dispatchers.instructors import (
+    _attach_instructors_to_course,
+    _resolve_instructors_for_yaml,
+)
 from integrations.services.github_sync.lifecycle import (
     cleanup_stale_synced_objects,
     find_synced_object,
     upsert_synced_object,
 )
-from integrations.services.github_sync.media import rewrite_cover_image_url, rewrite_image_urls, _check_broken_image_refs
+from integrations.services.github_sync.media import (
+    _check_broken_image_refs,
+    rewrite_cover_image_url,
+    rewrite_image_urls,
+)
 from integrations.services.github_sync.parsing import (
-    _check_slug_collision,
     _compute_content_hash,
     _defaults_differ,
-    _derive_readme_content_id,
-    _derive_workshop_page_content_id,
-    _extract_readme_title,
     _parse_markdown_file,
     _parse_yaml_file,
-    _render_event_recap_file,
     _validate_frontmatter,
 )
-from integrations.services.github_sync.repo import derive_slug, extract_sort_order, _matches_ignore_patterns
-
-from integrations.services.github_sync.dispatchers.instructors import _attach_instructors_to_course, _resolve_instructors_for_yaml
-
-from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
+from integrations.services.github_sync.repo import _matches_ignore_patterns, derive_slug, extract_sort_order
 
 # Issue #465: maps the operator-facing string keys in YAML (the verb-aligned
 # ``access:`` / ``default_unit_access:`` vocabulary) to the integer levels
@@ -112,7 +106,6 @@ def _dispatch_courses(source, repo_dir, course_dirs, commit_sha, stats,
     - Otherwise the row is soft-deleted to ``status='draft'`` so any
       historical FKs are preserved (legacy behavior, unchanged).
     """
-    from content.models import Course
 
     seen_course_slugs = set()
     failed_course_slugs = set()

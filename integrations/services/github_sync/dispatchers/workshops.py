@@ -1,44 +1,45 @@
 """Workshop sync dispatcher."""
 
-# ruff: noqa
-
 import os
 import re
 import uuid
 
-from django.utils import timezone
-
-from integrations.services.github_sync.common import INSTRUCTOR_ID_RE, GitHubSyncError, logger
-from integrations.services.github_sync.lifecycle import (
-    cleanup_stale_synced_objects,
-    find_synced_object,
-    upsert_synced_object,
+from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
+from integrations.services.github_sync.common import logger
+from integrations.services.github_sync.dispatchers.courses import (
+    _build_workshop_page_lookup,
+    _parse_access_value,
+    _resolve_workshop_landing_copy,
 )
-from integrations.services.github_sync.media import rewrite_cover_image_url, rewrite_image_urls, _check_broken_image_refs
-from integrations.services.github_sync.parsing import (
-    _check_slug_collision,
-    _compute_content_hash,
-    _defaults_differ,
-    _derive_readme_content_id,
-    _derive_workshop_page_content_id,
-    _extract_readme_title,
-    _parse_markdown_file,
-    _parse_yaml_file,
-    _render_event_recap_file,
-    _validate_frontmatter,
-)
-from integrations.services.github_sync.repo import derive_slug, extract_sort_order, _matches_ignore_patterns
-
-from integrations.services.github_sync.dispatchers.instructors import _attach_instructors_to_workshop, _resolve_instructors_for_yaml
-from integrations.services.github_sync.dispatchers.hosts import _attach_hosts_to_event, _resolve_hosts_for_event_yaml
 from integrations.services.github_sync.dispatchers.events import (
     _build_synced_event_content_defaults,
     _normalize_title_for_match,
     _upsert_synced_event_content,
 )
-from integrations.services.github_sync.dispatchers.courses import _build_workshop_page_lookup, _parse_access_value, _resolve_workshop_landing_copy
+from integrations.services.github_sync.dispatchers.hosts import _attach_hosts_to_event, _resolve_hosts_for_event_yaml
+from integrations.services.github_sync.dispatchers.instructors import (
+    _attach_instructors_to_workshop,
+    _resolve_instructors_for_yaml,
+)
+from integrations.services.github_sync.lifecycle import (
+    cleanup_stale_synced_objects,
+    find_synced_object,
+    upsert_synced_object,
+)
+from integrations.services.github_sync.media import (
+    _check_broken_image_refs,
+    rewrite_cover_image_url,
+    rewrite_image_urls,
+)
+from integrations.services.github_sync.parsing import (
+    _check_slug_collision,
+    _derive_workshop_page_content_id,
+    _parse_markdown_file,
+    _parse_yaml_file,
+    _validate_frontmatter,
+)
+from integrations.services.github_sync.repo import derive_slug, extract_sort_order
 
-from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
 
 def _coerce_workshop_date(value):
     """Parse a workshop ``date:`` frontmatter value into a ``datetime.date``.
@@ -601,6 +602,7 @@ def _resolve_heuristic_workshop_event(workshop, workshop_date):
     import datetime as dt
 
     from django.db.models.functions import TruncDate
+
     from events.models import Event
 
     target_title = _normalize_title_for_match(workshop.title)
@@ -938,8 +940,8 @@ def _sync_workshop_pages(
     # this file). parse_video_timestamp is imported here so the diff
     # against #301 stays localised to this function.
     from content.models import WorkshopPage
-    from content.utils.includes import expand_content_includes
     from content.templatetags.video_utils import parse_video_timestamp
+    from content.utils.includes import expand_content_includes
     from content.utils.md_links import (
         rewrite_cross_workshop_md_links,
         rewrite_workshop_md_links,

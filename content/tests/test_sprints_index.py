@@ -2,7 +2,9 @@ import datetime
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -49,6 +51,15 @@ def _section_markup(response, section_key):
 
 
 class SprintsIndexTest(TestCase):
+    @staticmethod
+    def _membership_queries(queries):
+        return [
+            query['sql']
+            for query in queries
+            if '"plans_plan"' in query['sql']
+            or '"plans_sprintenrollment"' in query['sql']
+        ]
+
     def test_route_returns_200_for_anonymous_users(self):
         response = self.client.get('/sprints')
 
@@ -373,3 +384,87 @@ class SprintsIndexTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'plans/sprint_detail.html')
         self.assertContains(response, 'data-testid="sprint-detail-name"')
+
+    def test_member_membership_queries_are_constant_across_all_sections(self):
+        today = timezone.localdate()
+        current = _create_sprint(
+            'Query Current', 'query-current',
+            start_date=today - datetime.timedelta(days=7),
+        )
+        future = _create_sprint(
+            'Query Future', 'query-future',
+            start_date=today + datetime.timedelta(days=7),
+        )
+        _create_sprint(
+            'Query Past', 'query-past',
+            start_date=today - datetime.timedelta(days=42),
+            status='completed',
+        )
+        member = User.objects.create_user(
+            email='query-main@example.com', password='pw',
+        )
+        member.tier = Tier.objects.get(slug='main')
+        member.save(update_fields=['tier'])
+        plan = Plan.objects.create(
+            member=member, sprint=current, visibility='cohort',
+        )
+        SprintEnrollment.objects.create(sprint=future, user=member)
+        self.client.force_login(member)
+
+        with CaptureQueriesContext(connection) as first_queries:
+            response = self.client.get('/sprints')
+
+        membership_queries = self._membership_queries(first_queries)
+        self.assertEqual(len(membership_queries), 2, membership_queries)
+        self.assertEqual(
+            sum('FROM "plans_plan"' in sql for sql in membership_queries), 1,
+        )
+        self.assertEqual(
+            sum(
+                'FROM "plans_sprintenrollment"' in sql
+                for sql in membership_queries
+            ),
+            1,
+        )
+        self.assertContains(response, 'Open my plan')
+        self.assertContains(response, 'Open cohort board')
+        self.assertContains(response, str(plan.pk))
+
+        for index in range(5):
+            _create_sprint(
+                f'Extra Past {index}', f'extra-past-{index}',
+                start_date=today - datetime.timedelta(days=70 + index * 7),
+                status='completed',
+            )
+        with CaptureQueriesContext(connection) as expanded_queries:
+            expanded_response = self.client.get('/sprints')
+
+        self.assertEqual(expanded_response.status_code, 200)
+        self.assertEqual(
+            len(self._membership_queries(expanded_queries)),
+            2,
+            self._membership_queries(expanded_queries),
+        )
+
+    def test_anonymous_viewer_issues_no_membership_queries(self):
+        _create_sprint('Anonymous Current', 'anonymous-current')
+
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get('/sprints')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._membership_queries(queries), [])
+        self.assertContains(response, 'Log in to join')
+
+    def test_authenticated_empty_index_issues_no_membership_queries(self):
+        member = User.objects.create_user(
+            email='empty-sprints@example.com', password='pw',
+        )
+        self.client.force_login(member)
+
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get('/sprints')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._membership_queries(queries), [])
+        self.assertContains(response, 'data-testid="sprints-empty"')

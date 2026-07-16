@@ -24,6 +24,7 @@ from content.models import (
     Workshop,
     WorkshopPage,
 )
+from content.utils.tags import collect_tag_names
 from events.models import Event
 
 
@@ -194,26 +195,22 @@ class StaticViewSitemap(Sitemap):
         return reverse(item)
 
 
+TAG_CONTENT_CONFIGS = (
+    (Article, {'published': True}),
+    (Project, {'published': True}),
+    (Tutorial, {'published': True}),
+    (Course, {'status': 'published'}),
+    (Download, {'published': True}),
+    (Event, {}),
+)
+
+
 def _collect_all_tags():
     """Collect all unique tags from all published content types.
 
     Returns a sorted list of unique tag strings.
     """
-    tag_set = set()
-    # Content types with their published filters
-    content_configs = [
-        (Article, {'published': True}),
-        (Project, {'published': True}),
-        (Tutorial, {'published': True}),
-        (Course, {'status': 'published'}),
-        (Download, {'published': True}),
-        (Event, {}),
-    ]
-    for model_class, filters in content_configs:
-        for obj in model_class.objects.filter(**filters):
-            if obj.tags:
-                tag_set.update(obj.tags)
-    return sorted(tag_set)
+    return sorted(set(collect_tag_names(TAG_CONTENT_CONFIGS)))
 
 
 class TagSitemap(Sitemap):

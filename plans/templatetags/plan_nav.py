@@ -57,7 +57,13 @@ def _enrolled_timestamp(enrollment):
     return value.timestamp() if value is not None else 0
 
 
-def resolve_header_sprint_shortcut(user, *, today=None):
+def resolve_header_sprint_shortcut(
+    user,
+    *,
+    today=None,
+    plans=None,
+    enrollments=None,
+):
     """Return the current/next sprint shortcut for ``user`` or ``None``.
 
     The global header is a member-facing surface, so it points only to the
@@ -72,14 +78,20 @@ def resolve_header_sprint_shortcut(user, *, today=None):
     if today is None:
         today = timezone.localdate()
 
-    plans = list(
-        Plan.objects
-        .filter(
-            member=user,
-            sprint__status__in=VISIBLE_MEMBER_SPRINT_STATUSES,
+    if plans is None:
+        plans = list(
+            Plan.objects
+            .filter(
+                member=user,
+                sprint__status__in=VISIBLE_MEMBER_SPRINT_STATUSES,
+            )
+            .select_related('sprint')
         )
-        .select_related('sprint')
-    )
+    else:
+        plans = [
+            plan for plan in plans
+            if plan.sprint.status in VISIBLE_MEMBER_SPRINT_STATUSES
+        ]
 
     current_plans = [
         plan for plan in plans if _is_current(plan.sprint, today)
@@ -109,14 +121,20 @@ def resolve_header_sprint_shortcut(user, *, today=None):
         )
         return HeaderSprintShortcut(label='Plan', href=_plan_url(plan))
 
-    enrollments = list(
-        SprintEnrollment.objects
-        .filter(
-            user=user,
-            sprint__status__in=VISIBLE_MEMBER_SPRINT_STATUSES,
+    if enrollments is None:
+        enrollments = list(
+            SprintEnrollment.objects
+            .filter(
+                user=user,
+                sprint__status__in=VISIBLE_MEMBER_SPRINT_STATUSES,
+            )
+            .select_related('sprint')
         )
-        .select_related('sprint')
-    )
+    else:
+        enrollments = [
+            enrollment for enrollment in enrollments
+            if enrollment.sprint.status in VISIBLE_MEMBER_SPRINT_STATUSES
+        ]
 
     current_enrollments = [
         enrollment
@@ -166,4 +184,12 @@ def current_user_sprint_shortcut(context):
     if request is None:
         return None
     user = getattr(request, 'user', None)
+    preloaded = getattr(request, '_header_sprint_membership', None)
+    if preloaded is not None:
+        plans, enrollments = preloaded
+        return resolve_header_sprint_shortcut(
+            user,
+            plans=plans,
+            enrollments=enrollments,
+        )
     return resolve_header_sprint_shortcut(user)

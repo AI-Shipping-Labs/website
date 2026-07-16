@@ -10,10 +10,13 @@ Covers:
 - TagRule component injection on content detail pages
 """
 
+import re
 from datetime import date
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import Client, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from content.models import (
@@ -341,6 +344,132 @@ class TagsDetailViewTest(TestCase):
         )
         response = self.client.get('/tags/python')
         self.assertNotContains(response, 'Draft Python')
+
+
+class PublicTagQueryPerformanceTest(TestCase):
+    """Keep public tag collection bounded to the fields it renders."""
+
+    @classmethod
+    def setUpTestData(cls):
+        common_tag = ['performance', 'shared']
+        Article.objects.create(
+            title='Projected article', slug='projected-article',
+            date=date(2026, 7, 1), tags=common_tag, published=True,
+            description='Article description',
+            content_markdown='Large article body that must not be selected.',
+        )
+        Project.objects.create(
+            title='Projected project', slug='projected-project',
+            date=date(2026, 7, 2), tags=common_tag, published=True,
+            description='Project description',
+            content_markdown='Large project body that must not be selected.',
+        )
+        Course.objects.create(
+            title='Projected course', slug='projected-course',
+            tags=common_tag, status='published',
+            description='Course description',
+        )
+        Download.objects.create(
+            title='Projected download', slug='projected-download',
+            tags=common_tag, published=True,
+            description='Download description',
+            file_url='https://example.com/projected.pdf',
+        )
+        Event.objects.create(
+            title='Projected event', slug='projected-event',
+            tags=common_tag, published=True,
+            description='Event description',
+            start_datetime=timezone.now(),
+        )
+        Tutorial.objects.create(
+            title='Projected tutorial', slug='projected-tutorial',
+            tags=['tutorial-only', 'shared'], published=True,
+            date=date(2026, 7, 3),
+        )
+        for index in range(3):
+            Article.objects.create(
+                title=f'Extra article {index}', slug=f'extra-article-{index}',
+                date=date(2026, 6, index + 1), tags=['volume'],
+                published=True,
+            )
+
+    @staticmethod
+    def _selected_columns(sql):
+        select_clause = re.split(r'\s+FROM\s+', sql, maxsplit=1, flags=re.I)[0]
+        return {
+            column
+            for _table, column in re.findall(
+                r'"([^"]+)"\."([^"]+)"', select_clause,
+            )
+        }
+
+    def test_tags_index_uses_five_tags_only_queries_at_any_row_count(self):
+        from content.views.tags import _collect_all_tags
+
+        with CaptureQueriesContext(connection) as queries:
+            tag_counts = dict(_collect_all_tags())
+
+        self.assertEqual(len(queries), 5)
+        self.assertEqual(tag_counts['performance'], 5)
+        self.assertEqual(tag_counts['volume'], 3)
+        self.assertNotIn('tutorial-only', tag_counts)
+        for query in queries:
+            self.assertEqual(self._selected_columns(query['sql']), {'tags'})
+
+    def test_sitemap_uses_six_tags_only_queries_and_sorted_unique_names(self):
+        from content.sitemaps import _collect_all_tags
+
+        with CaptureQueriesContext(connection) as queries:
+            tags = _collect_all_tags()
+
+        self.assertEqual(len(queries), 6)
+        self.assertEqual(tags, sorted(set(tags)))
+        self.assertIn('tutorial-only', tags)
+        self.assertEqual(tags.count('shared'), 1)
+        for query in queries:
+            self.assertEqual(self._selected_columns(query['sql']), {'tags'})
+
+    def test_tag_detail_projects_exact_rendered_fields_without_followups(self):
+        expected_columns = {
+            'content_article': {
+                'id', 'tags', 'title', 'description', 'slug', 'date',
+            },
+            'content_project': {
+                'id', 'tags', 'title', 'description', 'slug', 'date',
+            },
+            'content_course': {
+                'id', 'tags', 'title', 'description', 'slug', 'created_at',
+            },
+            'content_download': {
+                'id', 'tags', 'title', 'description', 'slug', 'created_at',
+            },
+            'events_event': {
+                'id', 'tags', 'title', 'description', 'slug', 'start_datetime',
+            },
+        }
+
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get('/tags/performance')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['result_count'], 5)
+        self.assertEqual(len(queries), 5)
+        queries_by_table = {}
+        for query in queries:
+            sql = query['sql']
+            table = next(
+                table_name
+                for table_name in expected_columns
+                if f'FROM "{table_name}"' in sql
+            )
+            queries_by_table[table] = self._selected_columns(sql)
+        self.assertEqual(queries_by_table, expected_columns)
+        self.assertContains(response, 'Projected article')
+        self.assertContains(response, 'Projected project')
+        self.assertContains(response, 'Projected course')
+        self.assertContains(response, 'Projected download')
+        self.assertContains(response, 'Projected event')
+        self.assertContains(response, '/events/')
 
 
 # --- Multi-Tag Filtering Tests ---

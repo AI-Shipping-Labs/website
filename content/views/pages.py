@@ -93,8 +93,49 @@ def _get_tag_rules_for_tags(tags):
     return result
 
 
-def _build_sprint_summaries(sprints, user):
+def _load_sprint_membership(sprints, user):
+    """Load one viewer's Plan and enrollment state for a sprint batch."""
+    if not user.is_authenticated or not sprints:
+        return {}, set(), []
+
+    sprints_by_id = {sprint.pk: sprint for sprint in sprints}
+    sprint_ids = [sprint.pk for sprint in sprints]
+    plans = list(
+        Plan.objects.filter(
+            member=user,
+            sprint_id__in=sprint_ids,
+        )
+    )
+    enrollments = list(
+        SprintEnrollment.objects.filter(
+            user=user,
+            sprint_id__in=sprint_ids,
+        ).only('id', 'sprint_id', 'enrolled_at')
+    )
+    for plan in plans:
+        plan.sprint = sprints_by_id[plan.sprint_id]
+    for enrollment in enrollments:
+        enrollment.sprint = sprints_by_id[enrollment.sprint_id]
+    plans_by_sprint = {plan.sprint_id: plan for plan in plans}
+    enrolled_sprint_ids = {
+        enrollment.sprint_id for enrollment in enrollments
+    }
+    return plans_by_sprint, enrolled_sprint_ids, enrollments
+
+
+def _build_sprint_summaries(
+    sprints,
+    user,
+    *,
+    plans_by_sprint=None,
+    enrolled_sprint_ids=None,
+):
     """Return card presentation summaries for ``sprints`` and ``user``."""
+    sprints = list(sprints)
+    if plans_by_sprint is None or enrolled_sprint_ids is None:
+        plans_by_sprint, enrolled_sprint_ids, _enrollments = (
+            _load_sprint_membership(sprints, user)
+        )
     user_level = get_user_level(user) if user.is_authenticated else 0
 
     summaries = []
@@ -113,10 +154,8 @@ def _build_sprint_summaries(sprints, user):
             cta_url = f'{reverse("account_login")}?next={detail_url}'
             cta_label = 'Log in to join'
         else:
-            viewer_plan = Plan.objects.filter(sprint=sprint, member=user).first()
-            enrolled = SprintEnrollment.objects.filter(
-                sprint=sprint, user=user,
-            ).exists()
+            viewer_plan = plans_by_sprint.get(sprint.pk)
+            enrolled = sprint.pk in enrolled_sprint_ids
             eligible = user_level >= sprint.min_tier_level
 
             if enrolled and viewer_plan:
@@ -213,15 +252,25 @@ def _build_sprints_index_sections(user):
         ('future', 'Future', 'No future sprints are scheduled yet.', future),
         ('past', 'Past', 'No past sprints yet.', past),
     ]
-    return [
+    plans_by_sprint, enrolled_sprint_ids, enrollments = _load_sprint_membership(
+        current + future + past,
+        user,
+    )
+    sections = [
         {
             'key': key,
             'title': _sprint_section_title(label, len(section_sprints)),
             'empty_message': empty_message,
-            'items': _build_sprint_summaries(section_sprints, user),
+            'items': _build_sprint_summaries(
+                section_sprints,
+                user,
+                plans_by_sprint=plans_by_sprint,
+                enrolled_sprint_ids=enrolled_sprint_ids,
+            ),
         }
         for key, label, empty_message, section_sprints in section_defs
     ]
+    return sections, list(plans_by_sprint.values()), enrollments
 
 
 def about(request):
@@ -265,7 +314,10 @@ def activities(request):
 
 def sprints_index(request):
     """Public community sprints discovery page."""
-    sprint_sections = _build_sprints_index_sections(request.user)
+    sprint_sections, plans, enrollments = _build_sprints_index_sections(
+        request.user,
+    )
+    request._header_sprint_membership = (plans, enrollments)
     context = {
         'sprint_sections': sprint_sections,
         'has_visible_sprints': any(

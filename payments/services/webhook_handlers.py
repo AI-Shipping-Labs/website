@@ -68,60 +68,10 @@ def _legacy_numeric_reference_allowed():
     return django_timezone.now() < cutoff
 
 
-def handle_checkout_completed(session_data):
-    """Process a checkout.session.completed event.
-
-    If metadata contains ``course_id``, creates a CourseAccess record
-    for an individual course purchase (one-time payment). Otherwise,
-    sets the user's tier, stripe_customer_id, subscription_id, and
-    billing_period_end based on the completed checkout session.
-    """
+def _resolve_checkout_user(session_data, fulfillment):
+    """Resolve the entitled user, or quarantine and return ``None``."""
     customer_email = session_data.get("customer_details", {}).get("email", "")
-    customer_id = session_data.get("customer", "")
-    subscription_id = session_data.get("subscription", "")
     client_reference_id = session_data.get("client_reference_id")
-    metadata = session_data.get("metadata", {})
-    tier_slug = metadata.get("tier_slug", "")
-    session_id = session_data.get("id", "")
-
-    # Check if this is an individual course purchase
-    course_id = metadata.get("course_id")
-    if course_id:
-        _handle_course_purchase(session_data, course_id)
-        return
-
-    if not session_id:
-        raise WebhookPermanentError(
-            "checkout.session.completed: membership checkout missing session id"
-        )
-
-    try:
-        fulfillment, _created = CheckoutFulfillment.objects.get_or_create(
-            stripe_session_id=session_id,
-            defaults={
-                "stripe_customer_id": customer_id,
-                "stripe_subscription_id": subscription_id,
-                "status": CheckoutFulfillment.STATUS_PROCESSING,
-            },
-        )
-    except IntegrityError:
-        fulfillment = CheckoutFulfillment.objects.get(stripe_session_id=session_id)
-    if fulfillment.status in {
-        CheckoutFulfillment.STATUS_FULFILLED,
-        CheckoutFulfillment.STATUS_QUARANTINED,
-    }:
-        return
-
-    rejection = _checkout_session_rejection(session_data)
-    if rejection is not None:
-        reason, details = rejection
-        _quarantine_checkout(
-            fulfillment=fulfillment,
-            session_data=session_data,
-            reason=reason,
-            extra_details=details,
-        )
-        return
 
     # Resolve identity. Opaque bindings are account authority; legacy numeric
     # references are accepted only when Stripe's email already resolves to the
@@ -140,7 +90,7 @@ def handle_checkout_completed(session_data):
                 session_data=session_data,
                 reason=PaymentAccountMismatch.REASON_INVALID_BINDING,
             )
-            return
+            return None
         if (
             binding.source != CheckoutAccountBinding.SOURCE_AUTHENTICATED_PRICING
             or binding.purpose
@@ -156,7 +106,7 @@ def handle_checkout_completed(session_data):
                     "binding_purpose": binding.purpose,
                 },
             )
-            return
+            return None
         existing_binding_fulfillment = CheckoutFulfillment.objects.filter(
             binding=binding,
         ).exclude(pk=fulfillment.pk).first()
@@ -167,7 +117,7 @@ def handle_checkout_completed(session_data):
                 reason=PaymentAccountMismatch.REASON_BINDING_REUSED,
                 extra_details={"binding_id": binding.pk},
             )
-            return
+            return None
         if binding.revoked_at or binding.expires_at <= django_timezone.now():
             _quarantine_checkout(
                 fulfillment=fulfillment,
@@ -175,7 +125,7 @@ def handle_checkout_completed(session_data):
                 session_data=session_data,
                 reason=PaymentAccountMismatch.REASON_EXPIRED_BINDING,
             )
-            return
+            return None
         if binding.user is None or not binding.user.is_active:
             _quarantine_checkout(
                 fulfillment=fulfillment,
@@ -183,7 +133,7 @@ def handle_checkout_completed(session_data):
                 session_data=session_data,
                 reason=PaymentAccountMismatch.REASON_BINDING_USER_UNAVAILABLE,
             )
-            return
+            return None
         user = binding.user
         user_resolved_by_client_reference = True
     elif client_reference_id and str(client_reference_id).isdigit():
@@ -194,7 +144,7 @@ def handle_checkout_completed(session_data):
                 reason=PaymentAccountMismatch.REASON_LEGACY_REFERENCE_MISMATCH,
                 extra_details={"legacy_reference_disabled": True},
             )
-            return
+            return None
         user = User.objects.filter(
             pk=client_reference_id,
             is_active=True,
@@ -208,7 +158,7 @@ def handle_checkout_completed(session_data):
                 candidate_user=email_owner,
                 reason=PaymentAccountMismatch.REASON_LEGACY_REFERENCE_MISMATCH,
             )
-            return
+            return None
         user_resolved_by_client_reference = True
     elif client_reference_id:
         _quarantine_checkout(
@@ -216,7 +166,7 @@ def handle_checkout_completed(session_data):
             session_data=session_data,
             reason=PaymentAccountMismatch.REASON_INVALID_BINDING,
         )
-        return
+        return None
     if user is None and customer_email:
         user = User.objects.filter(email=customer_email).first()
     if user is None and customer_email:
@@ -266,7 +216,16 @@ def handle_checkout_completed(session_data):
             session_data=session_data,
             reason=PaymentAccountMismatch.REASON_UNKNOWN_REFERENCE,
         )
-        return
+        return None
+
+    return user, was_new_user, user_resolved_by_client_reference, binding
+
+
+def _resolve_checkout_tier(session_data, fulfillment, user, binding):
+    """Resolve the purchased tier, or quarantine and return ``None``."""
+    subscription_id = session_data.get("subscription", "")
+    tier_slug = session_data.get("metadata", {}).get("tier_slug", "")
+    session_id = session_data.get("id", "")
 
     # Look up the purchased tier. Session-metadata ``tier_slug`` keeps
     # precedence (today's behaviour); the resolver below is a fallback
@@ -312,7 +271,7 @@ def handle_checkout_completed(session_data):
             paid_user=user,
             reason=PaymentAccountMismatch.REASON_TIER_MISMATCH,
         )
-        return
+        return None
 
     if binding is not None:
         expected_price_id = (
@@ -334,7 +293,7 @@ def handle_checkout_completed(session_data):
                     "expected_price_id": expected_price_id,
                 },
             )
-            return
+            return None
         if (
             tier.pk != binding.tier_id
             or not expected_price_id
@@ -353,7 +312,75 @@ def handle_checkout_completed(session_data):
                     "reported_price_id": actual_price_id,
                 },
             )
-            return
+            return None
+
+    return tier, resolved_subscription
+
+
+def handle_checkout_completed(session_data):
+    """Process a checkout.session.completed event.
+
+    If metadata contains ``course_id``, creates a CourseAccess record
+    for an individual course purchase (one-time payment). Otherwise,
+    sets the user's tier, stripe_customer_id, subscription_id, and
+    billing_period_end based on the completed checkout session.
+    """
+    customer_email = session_data.get("customer_details", {}).get("email", "")
+    customer_id = session_data.get("customer", "")
+    subscription_id = session_data.get("subscription", "")
+    metadata = session_data.get("metadata", {})
+    session_id = session_data.get("id", "")
+
+    # Check if this is an individual course purchase
+    course_id = metadata.get("course_id")
+    if course_id:
+        _handle_course_purchase(session_data, course_id)
+        return
+
+    if not session_id:
+        raise WebhookPermanentError(
+            "checkout.session.completed: membership checkout missing session id"
+        )
+
+    try:
+        fulfillment, _created = CheckoutFulfillment.objects.get_or_create(
+            stripe_session_id=session_id,
+            defaults={
+                "stripe_customer_id": customer_id,
+                "stripe_subscription_id": subscription_id,
+                "status": CheckoutFulfillment.STATUS_PROCESSING,
+            },
+        )
+    except IntegrityError:
+        fulfillment = CheckoutFulfillment.objects.get(stripe_session_id=session_id)
+    if fulfillment.status in {
+        CheckoutFulfillment.STATUS_FULFILLED,
+        CheckoutFulfillment.STATUS_QUARANTINED,
+    }:
+        return
+
+    rejection = _checkout_session_rejection(session_data)
+    if rejection is not None:
+        reason, details = rejection
+        _quarantine_checkout(
+            fulfillment=fulfillment,
+            session_data=session_data,
+            reason=reason,
+            extra_details=details,
+        )
+        return
+
+    user_resolution = _resolve_checkout_user(session_data, fulfillment)
+    if user_resolution is None:
+        return
+    user, was_new_user, user_resolved_by_client_reference, binding = user_resolution
+
+    tier_resolution = _resolve_checkout_tier(
+        session_data, fulfillment, user, binding
+    )
+    if tier_resolution is None:
+        return
+    tier, resolved_subscription = tier_resolution
 
     # Remember the previous tier so we can tell upgrade-vs-new-paid-user
     # apart when building the operator notification email below.

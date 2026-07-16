@@ -641,6 +641,87 @@ def event_create(request):
     return render(request, 'studio/events/form.html', context)
 
 
+def _event_edit_panels_context(event) -> dict:
+    """Build the read-only operational panel context for an event edit."""
+    context = {}
+    # Issue #680: manual "Send follow-up now" button. The button is
+    # enabled only when the event is completed AND has a recording URL
+    # (gated in the template). The view itself accepts only completed
+    # events with a recording — see ``event_send_followup`` below.
+    context['send_followup_url'] = reverse(
+        'studio_event_send_followup', kwargs={'event_id': event.pk},
+    )
+    # Issue #1076: deep-link to the pre-filled "recording available" campaign
+    # draft (editable broadcast to registrants — distinct from the
+    # transactional follow-up above). Opens a draft for review; never sends.
+    context['recording_campaign_url'] = (
+        f"{reverse('studio_campaign_create')}"
+        f"?event={event.pk}&template=recording_available"
+    )
+    _apply_workshop_ready_context(context, event)
+    # Issue #701: surface registered attendees on the edit page so
+    # operators can see and export the roster without dropping into
+    # Django admin. ``-registered_at`` matches the model's default
+    # ordering and the spec.
+    registrations = (
+        EventRegistration.objects
+        .filter(event=event)
+        .select_related('user', 'user__tier')
+        .order_by('-registered_at')
+    )
+    context['registrations'] = registrations
+    context['registration_count'] = registrations.count()
+    # Issue #936: per-event attendance rollup. ``joined_count`` is the
+    # number of registrations whose ``joined_at`` is set (first
+    # live-window join click). Rendered as ``joined_count /
+    # registration_count`` in the State panel.
+    context['joined_count'] = registrations.filter(
+        joined_at__isnull=False,
+    ).count()
+    context['registrations_csv_url'] = reverse(
+        'studio_event_registrations_csv', kwargs={'event_id': event.pk},
+    )
+    # Issue #679: per-event Feedback panel on the Studio edit page.
+    # Mirrors the shape of the Registered attendees panel. The aggregate
+    # excludes rating-null rows; the comment count counts non-empty
+    # comments only.
+    feedback_entries = (
+        EventFeedback.objects
+        .filter(event=event)
+        .select_related('user')
+        .order_by('-created_at')
+    )
+    feedback_avg = feedback_entries.aggregate(avg=Avg('rating'))['avg']
+    if feedback_avg is not None:
+        feedback_avg = round(feedback_avg, 1)
+    context['feedback_entries'] = feedback_entries
+    context['feedback_count'] = (
+        feedback_entries.filter(rating__isnull=False).count()
+    )
+    context['feedback_avg'] = feedback_avg
+    context['feedback_comment_count'] = (
+        feedback_entries.exclude(comment='').count()
+    )
+
+    # Issues #895/#931: banner / social-image panel (parity with
+    # articles/etc). Only meaningful on the edit flow, where ``event`` exists.
+    context.update(banner_panel_context(
+        content_type='event',
+        record=event,
+        regenerate_url_name='studio_event_regenerate_banner',
+        upload_url_name='studio_event_upload_banner',
+        remove_url_name='studio_event_remove_banner',
+        url_kwarg='event_id',
+    ))
+    # Issue #995: JSON status endpoint that the in-place banner loader polls.
+    # Only events expose it today, so the shared partial progressively
+    # enhances only when ``banner_status_url`` is present in context.
+    context['banner_status_url'] = reverse(
+        'studio_event_banner_status', kwargs={'event_id': event.pk},
+    )
+    return context
+
+
 @staff_required
 def event_edit(request, event_id):
     """Edit an existing event (read-only for synced content fields)."""
@@ -865,21 +946,6 @@ def event_edit(request, event_id):
     context['github_edit_url'] = get_github_edit_url(event)
     context['notify_url'] = reverse('studio_event_notify', kwargs={'event_id': event.pk})
     context['announce_url'] = reverse('studio_event_announce_slack', kwargs={'event_id': event.pk})
-    # Issue #680: manual "Send follow-up now" button. The button is
-    # enabled only when the event is completed AND has a recording URL
-    # (gated in the template). The view itself accepts only completed
-    # events with a recording — see ``event_send_followup`` below.
-    context['send_followup_url'] = reverse(
-        'studio_event_send_followup', kwargs={'event_id': event.pk},
-    )
-    # Issue #1076: deep-link to the pre-filled "recording available" campaign
-    # draft (editable broadcast to registrants — distinct from the
-    # transactional follow-up above). Opens a draft for review; never sends.
-    context['recording_campaign_url'] = (
-        f"{reverse('studio_campaign_create')}"
-        f"?event={event.pk}&template=recording_available"
-    )
-    _apply_workshop_ready_context(context, event)
     # ``form_values`` and ``errors`` are only meaningful on the create flow
     # (issue #574). Provide empty defaults here so the shared template's
     # ``form_values.foo`` lookups resolve cleanly when rendering edit.
@@ -892,66 +958,7 @@ def event_edit(request, event_id):
     context['timezone_options'] = build_timezone_options()
     context['tz_settings_link'] = _should_autodetect_tz(request.user)
     _apply_host_context(context)
-    # Issue #701: surface registered attendees on the edit page so
-    # operators can see and export the roster without dropping into
-    # Django admin. ``-registered_at`` matches the model's default
-    # ordering and the spec.
-    registrations = (
-        EventRegistration.objects
-        .filter(event=event)
-        .select_related('user', 'user__tier')
-        .order_by('-registered_at')
-    )
-    context['registrations'] = registrations
-    context['registration_count'] = registrations.count()
-    # Issue #936: per-event attendance rollup. ``joined_count`` is the
-    # number of registrations whose ``joined_at`` is set (first
-    # live-window join click). Rendered as ``joined_count /
-    # registration_count`` in the State panel.
-    context['joined_count'] = registrations.filter(
-        joined_at__isnull=False,
-    ).count()
-    context['registrations_csv_url'] = reverse(
-        'studio_event_registrations_csv', kwargs={'event_id': event.pk},
-    )
-    # Issue #679: per-event Feedback panel on the Studio edit page.
-    # Mirrors the shape of the Registered attendees panel. The aggregate
-    # excludes rating-null rows; the comment count counts non-empty
-    # comments only.
-    feedback_entries = (
-        EventFeedback.objects
-        .filter(event=event)
-        .select_related('user')
-        .order_by('-created_at')
-    )
-    feedback_avg = feedback_entries.aggregate(avg=Avg('rating'))['avg']
-    if feedback_avg is not None:
-        feedback_avg = round(feedback_avg, 1)
-    context['feedback_entries'] = feedback_entries
-    context['feedback_count'] = (
-        feedback_entries.filter(rating__isnull=False).count()
-    )
-    context['feedback_avg'] = feedback_avg
-    context['feedback_comment_count'] = (
-        feedback_entries.exclude(comment='').count()
-    )
-
-    # Issues #895/#931: banner / social-image panel (parity with
-    # articles/etc). Only meaningful on the edit flow, where ``event`` exists.
-    context.update(banner_panel_context(
-        content_type='event',
-        record=event,
-        regenerate_url_name='studio_event_regenerate_banner',
-        upload_url_name='studio_event_upload_banner',
-        remove_url_name='studio_event_remove_banner',
-        url_kwarg='event_id',
-    ))
-    # Issue #995: JSON status endpoint that the in-place banner loader polls.
-    # Only events expose it today, so the shared partial progressively
-    # enhances only when ``banner_status_url`` is present in context.
-    context['banner_status_url'] = reverse(
-        'studio_event_banner_status', kwargs={'event_id': event.pk},
-    )
+    context.update(_event_edit_panels_context(event))
     return render(request, 'studio/events/form.html', context)
 
 

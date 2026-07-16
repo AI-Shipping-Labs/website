@@ -416,6 +416,11 @@ jobs:
       DEV_DEPLOY_GRACE_POLL_SECONDS: "10"
       DEV_DEPLOY_GRACE_ATTEMPTS: "150"
       DEV_DEPLOY_GRACE_REQUIRED_MATCHES: "3"
+      # Fail-closed combined-task evidence (#1293). CloudWatch delivery is
+      # eventually consistent, so give exact-stream marker reads a short,
+      # bounded window after /ping proves the web revision is serving.
+      DEV_COMBINED_READINESS_TIMEOUT_SECONDS: "180"
+      DEV_COMBINED_READINESS_POLL_SECONDS: "5"
 
     steps:
       - name: Checkout code
@@ -474,3 +479,14 @@ jobs:
           poll-seconds: ${{ env.DEV_DEPLOY_GRACE_POLL_SECONDS }}
           max-attempts: ${{ env.DEV_DEPLOY_GRACE_ATTEMPTS }}
           required-consecutive: ${{ env.DEV_DEPLOY_GRACE_REQUIRED_MATCHES }}
+
+      - name: Verify combined web and worker readiness
+        run: |
+          python deploy/verify_combined_task_readiness.py \
+            --region "${AWS_REGION}" \
+            --cluster ai-shipping-labs \
+            --service ai-shipping-labs-dev \
+            --repository-uri "${REPO_URI}" \
+            --tag "${TAG}" \
+            --timeout-seconds "${DEV_COMBINED_READINESS_TIMEOUT_SECONDS}" \
+            --poll-seconds "${DEV_COMBINED_READINESS_POLL_SECONDS}"

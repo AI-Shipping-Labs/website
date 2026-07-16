@@ -129,6 +129,7 @@ def _drag_chip(page, source_chip, target_chip, drop="before"):
     if drop not in ("before", "after"):
         raise ValueError(f"unknown drop position: {drop!r}")
 
+    target_chip.scroll_into_view_if_needed()
     source_chip.scroll_into_view_if_needed()
     handle = source_chip.locator('.plan-editor-drag-handle')
     sb = handle.bounding_box()

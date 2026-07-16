@@ -14,6 +14,10 @@ double-rendering. See issue #347.
 {% block body %}
 <style>
 @media (max-width: 767px) {
+  #studio-sidebar {
+    height: calc(100dvh - var(--analytics-consent-clearance, 0px));
+  }
+
   .studio-responsive-table {
     background: transparent;
     border: 0;

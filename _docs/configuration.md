@@ -365,7 +365,7 @@ Run this checklist after configuring everything. Each item is one click, end to 
 
 ## 11.1. Signup attribution and the anonymous_id join key
 
-UTM and organic-referrer attribution are captured by `analytics.middleware.CampaignTrackingMiddleware`, snapshotted onto `UserAttribution` at signup. The middleware also assigns a stable UUID4 cookie `aslab_aid` (the anonymous_id) to every non-bot visitor, copied onto `UserAttribution.anonymous_id` at signup time. This `anonymous_id` is the cross-system join key: future GA/S3 stitching binds `GA user_id = aslab_aid` on the client and joins on this column. This issue does NOT implement GA binding; it only records the design — operators should not yet expect to see `anonymous_id` in GA. Organic referrers (LinkedIn, YouTube, ChatGPT, Google, …) are bucketed by `analytics.referrer_source.normalize_referrer` and stored on `UserAttribution.{first,last}_touch_referrer_source`; see issue #772.
+After affirmative analytics consent, UTM and organic-referrer attribution are captured by `analytics.middleware.CampaignTrackingMiddleware` and snapshotted onto `UserAttribution` at signup. The middleware assigns the stable UUID4 cookie `aslab_aid` (the anonymous_id), copies it onto `UserAttribution.anonymous_id`, and supplies it to configured GA as the pseudonymous join key. Before consent, or after withdrawal, the GA loader and these optional first-party analytics cookies remain off. Organic referrers (LinkedIn, YouTube, ChatGPT, Google, …) are bucketed by `analytics.referrer_source.normalize_referrer` and stored on `UserAttribution.{first,last}_touch_referrer_source`; see issue #772.
 
 ## 12. Where to look when something is wrong
 

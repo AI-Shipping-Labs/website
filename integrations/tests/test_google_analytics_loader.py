@@ -9,12 +9,46 @@ the setting is populated, the page must inline the configured ID in
 both the loader URL and the ``gtag('config', ...)`` call.
 """
 
+import subprocess
+from pathlib import Path
+
 from django.test import RequestFactory, TestCase, override_settings
 
+from analytics.consent import (
+    ANALYTICS_CONSENT_COOKIE,
+    ANALYTICS_CONSENT_GRANTED,
+)
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from integrations.settings_registry import get_group_by_name
 from website.context_processors import site_context
+
+
+def _grant_consent(target):
+    target.COOKIES[ANALYTICS_CONSENT_COOKIE] = ANALYTICS_CONSENT_GRANTED
+
+
+def _tracked_text_occurrences(repo_root, needle, paths=None):
+    """Return tracked text files containing needle; binary files are ignored."""
+    if paths is None:
+        result = subprocess.run(
+            ['git', '-C', str(repo_root), 'ls-files', '-z'],
+            check=True,
+            capture_output=True,
+        )
+        paths = [Path(item.decode()) for item in result.stdout.split(b'\0') if item]
+
+    needle_bytes = needle.encode()
+    matches = []
+    for relative_path in paths:
+        path = repo_root / relative_path
+        if not path.is_file():
+            continue
+        data = path.read_bytes()
+        if b'\0' in data:
+            continue
+        matches.extend([str(relative_path)] * data.count(needle_bytes))
+    return matches
 
 
 class GoogleAnalyticsRegistryTest(TestCase):
@@ -50,6 +84,7 @@ class GoogleAnalyticsContextProcessorTest(TestCase):
 
     def test_default_is_empty_string(self):
         request = RequestFactory().get('/')
+        _grant_consent(request)
         context = site_context(request)
         self.assertEqual(context['google_analytics_id'], '')
 
@@ -61,12 +96,14 @@ class GoogleAnalyticsContextProcessorTest(TestCase):
         )
         clear_config_cache()
         request = RequestFactory().get('/')
+        _grant_consent(request)
         context = site_context(request)
         self.assertEqual(context['google_analytics_id'], 'G-DBVALUE')
 
     @override_settings(GOOGLE_ANALYTICS_ID='G-FROMSETTINGS')
     def test_django_setting_is_used_when_db_empty(self):
         request = RequestFactory().get('/')
+        _grant_consent(request)
         context = site_context(request)
         self.assertEqual(context['google_analytics_id'], 'G-FROMSETTINGS')
 
@@ -98,6 +135,7 @@ class GoogleAnalyticsLoaderRenderingTest(TestCase):
             group='analytics',
         )
         clear_config_cache()
+        self.client.cookies[ANALYTICS_CONSENT_COOKIE] = ANALYTICS_CONSENT_GRANTED
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
         # The ID appears twice: once in the loader URL, once in
@@ -128,6 +166,7 @@ class GoogleAnalyticsLoaderRenderingTest(TestCase):
             group='analytics',
         )
         clear_config_cache()
+        self.client.cookies[ANALYTICS_CONSENT_COOKIE] = ANALYTICS_CONSENT_GRANTED
         response = self.client.get('/pricing')
         if response.status_code in (301, 302):
             response = self.client.get(response.url)
@@ -135,20 +174,55 @@ class GoogleAnalyticsLoaderRenderingTest(TestCase):
 
 
 class GoogleAnalyticsHardcodedReferenceTest(TestCase):
-    """Regression: the literal production measurement ID must not appear
-    in templates anymore. The setting is now the single source of truth
-    and must be configured via Studio.
-    """
+    """The documented production ID may not leak into repository code."""
 
-    def test_base_template_has_no_hardcoded_id(self):
+    def test_production_id_only_appears_in_operator_documentation(self):
+        import re
+
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        runbook = repo_root / '_docs' / 'integrations' / 'analytics.md'
+        match = re.search(
+            r'production GA4 property has measurement ID `(G-[A-Z0-9]+)`',
+            runbook.read_text(),
+        )
+        self.assertIsNotNone(match, 'Analytics runbook must identify the live property.')
+        production_id = match.group(1)
+
+        matches = _tracked_text_occurrences(repo_root, production_id)
+        self.assertEqual(
+            matches,
+            ['_docs/integrations/analytics.md'],
+            'The live measurement ID must appear exactly once, in the operator runbook.',
+        )
+
+    def test_guard_scans_common_config_fixture_and_workflow_text(self):
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as directory:
+            repo_root = Path(directory)
+            paths = [
+                Path('fixture.json'), Path('fixture.yaml'), Path('fixture.yml'),
+                Path('pyproject.toml'), Path('.env.example'), Path('settings.conf'),
+                Path('script.sh'), Path('.github/workflows/check.yml'),
+                Path('Dockerfile'),
+            ]
+            for path in paths:
+                (repo_root / path).parent.mkdir(parents=True, exist_ok=True)
+                (repo_root / path).write_text('measurement=G-SYNTHETIC987\n')
+            self.assertCountEqual(
+                _tracked_text_occurrences(repo_root, 'G-SYNTHETIC987', paths),
+                [str(path) for path in paths],
+            )
+
+    def test_base_template_uses_configured_loader_url(self):
         from pathlib import Path
 
         base_html = Path(
             __file__
         ).resolve().parent.parent.parent / 'templates' / 'base.html'
         content = base_html.read_text()
-        self.assertNotIn('G-HXSHF376NY', content)
-        self.assertNotIn(
-            'googletagmanager.com/gtag/js?id=G-',
+        self.assertNotIn('googletagmanager.com/gtag/js?id=G-', content)
+        self.assertIn(
+            'googletagmanager.com/gtag/js?id={{ google_analytics_id }}',
             content,
         )

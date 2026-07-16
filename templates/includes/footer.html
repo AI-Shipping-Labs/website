@@ -88,6 +88,12 @@
               <a href="/privacy/" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Privacy Policy</a>
             </li>
             <li>
+              <button type="button"
+                      class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:min-h-0 sm:py-0.5"
+                      data-testid="analytics-preferences-open"
+                      onclick="window.analyticsConsentPreferences && window.analyticsConsentPreferences.open()">Analytics preferences</button>
+            </li>
+            <li>
               <a href="/impressum/" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Impressum</a>
             </li>
           </ul>

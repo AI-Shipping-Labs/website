@@ -1,6 +1,7 @@
 """Studio dashboard view."""
 
 from django.contrib.auth import get_user_model
+from django.db.models import Count, Q
 from django.db.models.functions import Trim
 from django.shortcuts import render
 from django.urls import reverse
@@ -11,7 +12,8 @@ from accounts.models import ImportBatch
 from content.models import Article, Course, Download, Project
 from email_app.models import EmailCampaign
 from events.models import Event
-from events.services.time_windows import upcoming_events_queryset
+from events.models.event import HIDDEN_FROM_PUBLIC_STATUSES
+from events.services.time_windows import upcoming_events_queryset, upcoming_window_q
 from integrations.models import ContentSource
 from plans.models import Plan, Sprint
 from studio.decorators import staff_required
@@ -66,18 +68,45 @@ def _missing_zoom_join_url_count(now):
 def dashboard(request):
     """Studio dashboard focused on daily operational work."""
     now = timezone.now()
+    course_counts = Course.objects.aggregate(
+        total=Count('pk'),
+        published_count=Count('pk', filter=Q(status='published')),
+        draft_count=Count('pk', filter=Q(status='draft')),
+    )
+    article_counts = Article.objects.aggregate(
+        total=Count('pk'),
+        published_count=Count('pk', filter=Q(published=True)),
+        draft_count=Count('pk', filter=Q(published=False)),
+    )
+    user_counts = User.objects.aggregate(
+        total=Count('pk'),
+        active=Count('pk', filter=Q(unsubscribed=False)),
+    )
+    event_counts = Event.objects.aggregate(
+        total=Count('pk'),
+        upcoming=Count(
+            'pk',
+            filter=(
+                Q(status='upcoming')
+                & upcoming_window_q(now)
+                & ~Q(status__in=HIDDEN_FROM_PUBLIC_STATUSES)
+            ),
+        ),
+        recordings=Count(
+            'pk',
+            filter=Q(recording_url__isnull=False) & ~Q(recording_url=''),
+        ),
+    )
     stats = {
-        'total_courses': Course.objects.count(),
-        'published_courses': Course.objects.filter(status='published').count(),
-        'total_articles': Article.objects.count(),
-        'published_articles': Article.objects.filter(published=True).count(),
-        'active_subscribers': User.objects.filter(unsubscribed=False).count(),
-        'total_subscribers': User.objects.count(),
-        'upcoming_events': _upcoming_event_queryset(now).count(),
-        'total_events': Event.objects.count(),
-        'total_recordings': Event.objects.filter(
-            recording_url__isnull=False,
-        ).exclude(recording_url='').count(),
+        'total_courses': course_counts['total'],
+        'published_courses': course_counts['published_count'],
+        'total_articles': article_counts['total'],
+        'published_articles': article_counts['published_count'],
+        'active_subscribers': user_counts['active'],
+        'total_subscribers': user_counts['total'],
+        'upcoming_events': event_counts['upcoming'],
+        'total_events': event_counts['total'],
+        'total_recordings': event_counts['recordings'],
         'total_downloads': Download.objects.count(),
         'pending_projects': Project.objects.filter(status='pending_review').count(),
         'total_campaigns': EmailCampaign.objects.count(),
@@ -100,8 +129,7 @@ def dashboard(request):
         status=ImportBatch.STATUS_FAILED,
     ).count()
     draft_content_count = (
-        Course.objects.filter(status='draft').count()
-        + Article.objects.filter(published=False).count()
+        course_counts['draft_count'] + article_counts['draft_count']
     )
     missing_zoom_join_url_count = _missing_zoom_join_url_count(now)
 

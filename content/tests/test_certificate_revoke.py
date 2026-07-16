@@ -27,11 +27,13 @@ def _make_course(slug='c'):
 
 
 class CertificateIsRevokedPropertyTest(TierSetupMixin, TestCase):
-    def setUp(self):
-        self.member = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.member = User.objects.create_user(
             email='member@example.com', password='pw',
         )
-        self.course = _make_course(slug='prop')
+        cls.course = _make_course(slug='prop')
 
     def test_is_revoked_false_by_default(self):
         cert = CourseCertificate.objects.create(

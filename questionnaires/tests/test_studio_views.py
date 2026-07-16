@@ -153,13 +153,26 @@ class QuestionCrudTest(StaffUserMixin, TestCase):
                 'question_type': 'multiple_choice',
                 'prompt': 'Which areas?',
                 'order': '0',
-                'options': 'RAG\nAgents\nDeployment\nEvaluation',
+                'options': 'RAG\nAgents [free text]\nDeployment\nEvaluation',
             },
         )
         self.assertRedirects(response, f'/studio/questionnaires/{self.questionnaire.pk}/')
         question = self.questionnaire.questions.get()
-        labels = list(question.options.values_list('label', flat=True))
-        self.assertEqual(labels, ['RAG', 'Agents', 'Deployment', 'Evaluation'])
+        self.assertEqual(
+            list(question.options.values_list(
+                'label', 'allows_free_text', 'order',
+            )),
+            [
+                ('RAG', False, 0),
+                ('Agents', True, 1),
+                ('Deployment', False, 2),
+                ('Evaluation', False, 3),
+            ],
+        )
+        self.assertEqual(
+            set(question.options.values_list('question_id', flat=True)),
+            {question.pk},
+        )
 
     def test_choice_question_without_options_returns_400(self):
         response = self.client.post(
@@ -192,6 +205,16 @@ class QuestionCrudTest(StaffUserMixin, TestCase):
         labels = list(question.options.values_list('label', flat=True))
         self.assertEqual(labels, ['RAG', 'Agents'])
         self.assertNotIn('Deployment', labels)
+
+        self.client.post(
+            f'/studio/questionnaires/{self.questionnaire.pk}/questions/{question.pk}/edit', {
+                'question_type': 'text',
+                'prompt': 'Which?',
+                'order': '0',
+                'options': 'Ignored',
+            },
+        )
+        self.assertEqual(question.options.count(), 0)
 
     def test_delete_question_post_only(self):
         question = Question.objects.create(

@@ -474,13 +474,15 @@ def question_create(request, questionnaire_id):
     options = parsed.pop('options')
     question = Question.objects.create(questionnaire=questionnaire, **parsed)
     if question.is_choice_type:
-        for index, option in enumerate(options):
-            QuestionOption.objects.create(
+        QuestionOption.objects.bulk_create([
+            QuestionOption(
                 question=question,
                 label=option['label'],
                 allows_free_text=option['allows_free_text'],
                 order=index,
             )
+            for index, option in enumerate(options)
+        ])
     messages.success(request, 'Question added.')
     return redirect('studio_questionnaire_detail', questionnaire_id=questionnaire.pk)
 
@@ -519,13 +521,15 @@ def question_edit(request, questionnaire_id, question_id):
     # truth). Non-choice questions end up with zero options.
     question.options.all().delete()
     if question.is_choice_type:
-        for index, option in enumerate(options):
-            QuestionOption.objects.create(
+        QuestionOption.objects.bulk_create([
+            QuestionOption(
                 question=question,
                 label=option['label'],
                 allows_free_text=option['allows_free_text'],
                 order=index,
             )
+            for index, option in enumerate(options)
+        ])
 
     messages.success(request, 'Question updated.')
     return redirect('studio_questionnaire_detail', questionnaire_id=questionnaire.pk)
@@ -750,22 +754,25 @@ def _sync_response_question_options(rq, options):
     """Update snapshot options while preserving same-label answer text."""
     existing_by_label = {opt.label: opt for opt in rq.options.all()}
     keep_ids = []
+    missing_options = []
     for index, option in enumerate(options):
         existing = existing_by_label.get(option['label'])
         if existing is None:
-            existing = ResponseQuestionOption.objects.create(
+            missing_options.append(ResponseQuestionOption(
                 response_question=rq,
                 label=option['label'],
                 allows_free_text=option['allows_free_text'],
                 order=index,
-            )
+            ))
         else:
             existing.allows_free_text = option['allows_free_text']
             existing.order = index
             existing.save(update_fields=[
                 'allows_free_text', 'order', 'updated_at',
             ])
-        keep_ids.append(existing.pk)
+            keep_ids.append(existing.pk)
+    created_options = ResponseQuestionOption.objects.bulk_create(missing_options)
+    keep_ids.extend(option.pk for option in created_options)
     rq.options.exclude(pk__in=keep_ids).delete()
 
 
@@ -814,13 +821,15 @@ def response_question_create(request, questionnaire_id, response_id):
         response=response, source_question=None, **parsed,
     )
     if rq.is_choice_type:
-        for index, option in enumerate(options):
-            ResponseQuestionOption.objects.create(
+        ResponseQuestionOption.objects.bulk_create([
+            ResponseQuestionOption(
                 response_question=rq,
                 label=option['label'],
                 allows_free_text=option['allows_free_text'],
                 order=index,
             )
+            for index, option in enumerate(options)
+        ])
     messages.success(request, 'Custom question added for this member.')
     return redirect(
         'studio_questionnaire_response_detail',

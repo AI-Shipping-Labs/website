@@ -178,6 +178,22 @@ class StatusPaletteContractTest(SimpleTestCase):
         self.assertIn('href="{{ item.url }}"', tags_template)
 
     def test_direct_badge_consumers_use_shared_owner_and_preserve_hooks(self):
+        def loaded_libraries(source):
+            return {
+                library
+                for load_body in re.findall(
+                    r'{%\s*load\s+([^%]+?)\s*%}', source,
+                )
+                for library in load_body.split()
+            }
+
+        for load_tag in (
+            '{% load accounts_extras member_badges %}',
+            '{% load member_badges accounts_extras %}',
+        ):
+            with self.subTest(load_tag=load_tag):
+                self.assertIn('member_badges', loaded_libraries(load_tag))
+
         checks = {
             'templates/content/course_detail.html': (
                 '{% member_badge "Free"',
@@ -201,7 +217,11 @@ class StatusPaletteContractTest(SimpleTestCase):
         }
         for path, fragments in checks.items():
             source = _source(path)
-            self.assertIn('{% load member_badges %}', source)
+            self.assertIn(
+                'member_badges',
+                loaded_libraries(source),
+                f'{path} must load the shared member_badges owner',
+            )
             for fragment in fragments:
                 with self.subTest(path=path, fragment=fragment):
                     self.assertIn(fragment, source)

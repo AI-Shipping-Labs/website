@@ -102,8 +102,7 @@
 
   <section id="activities" class="scroll-mt-24 border-t border-border bg-card py-12 sm:py-20 lg:py-28" data-testid="home-activities-section" aria-labelledby="home-activities-heading">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div class="max-w-3xl">
+      <div class="max-w-3xl">
           <p class="text-sm font-medium uppercase tracking-widest text-accent">What members do</p>
           <h2 id="home-activities-heading" class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl" style="text-wrap: balance;">
             Build momentum with people who ship
@@ -111,10 +110,9 @@
           <p class="mt-4 max-w-2xl text-lg leading-8 text-muted-foreground">
             AI Shipping Labs turns project ideas into a shared practice: focused work, useful feedback, and a cadence that keeps the next step visible.
           </p>
-        </div>
-        <a href="/activities#access-by-tier" class="{% button_classes 'secondary' size='md' %}" data-testid="home-activities-tier-link">
+        <a href="/activities#access-by-tier" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="home-activities-tier-link">
           Compare activities by tier
-          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
         </a>
       </div>
 
@@ -142,8 +140,7 @@
 
   <section id="sprint-story" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28" data-testid="home-sprint-story-section">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div class="max-w-3xl">
+      <div class="max-w-3xl">
           <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
             <i data-lucide="route" class="h-4 w-4"></i>
             Main-tier workflow
@@ -155,10 +152,9 @@
             Community sprints turn good intentions into shipping windows. Members set a concrete goal,
             work inside a shared sprint cadence, and leave with a project milestone they can show.
           </p>
-        </div>
-        <a href="/sprints" class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10 hover:text-accent/80" data-testid="home-sprints-index-link">
+        <a href="/sprints" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="home-sprints-index-link">
           Explore sprints
-          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
         </a>
       </div>
 
@@ -229,8 +225,7 @@
   {% if upcoming_events %}
   <section id="upcoming-events" class="scroll-mt-24 border-t border-border bg-card py-12 sm:py-20 lg:py-28" data-testid="home-upcoming-events-section">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div class="max-w-3xl">
+      <div class="max-w-3xl">
           <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
             <i data-lucide="calendar-heart" class="h-4 w-4"></i>
             Live sessions on the calendar
@@ -241,10 +236,9 @@
           <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
             Follow the current schedule of building sessions, office hours, and community conversations. Each event shows the membership level it requires.
           </p>
-        </div>
-        <a href="/events?filter=upcoming" class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10 hover:text-accent/80" data-testid="home-upcoming-events-link">
+        <a href="/events?filter=upcoming" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="home-upcoming-events-link">
           View all upcoming events
-          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
         </a>
       </div>
 
@@ -439,8 +433,7 @@
   <!-- Blog Section -->
   <section id="blog" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div>
+      <div>
           <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
             <i data-lucide="pen-line" class="h-4 w-4"></i>
             From the blog
@@ -451,10 +444,9 @@
           <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
             Long-form notes, walkthroughs, and experiments. Stay close to how we build and reason.
           </p>
-        </div>
-        <a href="/blog" class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10 hover:text-accent/80">
+        <a href="/blog" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
           View all posts
-          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
         </a>
       </div>
 
@@ -510,8 +502,7 @@
   <!-- Projects Section -->
   <section id="projects" class="border-t border-border bg-card py-12 sm:py-20 lg:py-28">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div>
+      <div>
           <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
             <i data-lucide="rocket" class="h-4 w-4"></i>
             Project Ideas
@@ -522,10 +513,9 @@
           <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
             Project ideas and real projects from people who've taken courses. End-to-end AI applications and agentic workflows you can learn from and build on.
           </p>
-        </div>
-        <a href="/projects" class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10 hover:text-accent/80">
+        <a href="/projects" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
           View all project ideas
-          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
         </a>
       </div>
 
@@ -546,8 +536,7 @@
   <!-- Collection / Curated Links Section -->
   <section id="collection" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div>
+      <div>
           <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
             <i data-lucide="folder-open" class="h-4 w-4"></i>
             Curated Links
@@ -559,10 +548,9 @@
             Curated GitHub repos, model hubs, and learning resources.
             Dev tools, local LLMs, and courses to level up.
           </p>
-        </div>
-        <a href="/resources" class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10 hover:text-accent/80">
+        <a href="/resources" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
           View all curated links
-          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
         </a>
       </div>
 

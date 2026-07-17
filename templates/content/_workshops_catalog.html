@@ -5,7 +5,7 @@
 
 <section id="{{ catalog_section_id|default:"workshop-catalog" }}" class="scroll-mt-24 py-10 sm:py-14 lg:py-16" data-testid="{{ catalog_testid|default:"workshop-catalog" }}">
   <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-    <div class="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div class="mb-8">
       <div class="max-w-2xl">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">{{ catalog_eyebrow }}</p>
         <h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
@@ -16,7 +16,7 @@
         </p>
       </div>
       {% if show_catalog_filters %}
-      <div class="flex flex-col items-start gap-3 sm:items-end">
+      <div class="mt-4 flex flex-col items-start gap-3">
         <div class="inline-flex flex-wrap items-center gap-2" aria-label="Workshop access filters" data-testid="workshop-access-filters">
           {% for option in access_filter_options %}
           <a
@@ -50,7 +50,7 @@
         {% endif %}
       </div>
       {% else %}
-      <a href="{{ catalog_all_url }}" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="view-all-workshops-preview-cta">
+      <a href="{{ catalog_all_url }}" class="mt-4 inline-flex min-h-[44px] items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="view-all-workshops-preview-cta">
         View all workshops
         <i data-lucide="arrow-right" class="ml-2 h-4 w-4"></i>
       </a>
@@ -59,7 +59,7 @@
 
     {% if show_catalog_filters and topic_options %}
     <div class="mb-6 rounded-lg border border-border bg-secondary/20 px-4 py-4 sm:px-5" data-testid="workshop-facet-topic">
-      <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+      <div class="mb-3 flex flex-col gap-1">
         <h3 class="text-sm font-semibold text-foreground">Topics</h3>
         {% if selected_topic_summary %}
         <p class="text-sm text-muted-foreground" data-testid="workshop-topic-summary">{{ selected_topic_summary }}</p>

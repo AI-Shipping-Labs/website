@@ -6,6 +6,7 @@
     <div class="{% if compact %}flex flex-col gap-2{% else %}flex items-center space-x-4{% endif %}">
       <button type="button" id="notify-subscribers-btn"
               onclick="notifySubscribers()"
+              aria-label="{% if notify_status_mode == 'in_app_eligible_members' %}Notify eligible members in app ({{ notify_audience_count }} eligible members){% else %}Notify subscribers ({{ notify_audience_count }} eligible members){% endif %}"
               class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity{% if compact %} w-full{% endif %}">
         {{ notify_button_label|default:"Notify subscribers" }}
       </button>
@@ -26,6 +27,9 @@ function notifySubscribers() {
   var status = document.getElementById('notify-status');
   var notifyButtonLabel = '{{ notify_button_label|default:"Notify subscribers"|escapejs }}';
   var notifySendingLabel = '{{ notify_sending_label|default:"Sending..."|escapejs }}';
+  if (!window.confirm('{{ notify_confirmation|escapejs }}')) {
+    return;
+  }
   btn.disabled = true;
   btn.textContent = notifySendingLabel;
   status.style.display = 'none';
@@ -73,6 +77,9 @@ function notifySubscribers() {
 function postToSlack() {
   var btn = document.getElementById('post-to-slack-btn');
   var status = document.getElementById('slack-status');
+  if (!window.confirm('{{ slack_confirmation|escapejs }}')) {
+    return;
+  }
   btn.disabled = true;
   btn.textContent = 'Posting...';
   status.style.display = 'none';

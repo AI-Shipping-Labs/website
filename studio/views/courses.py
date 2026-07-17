@@ -19,6 +19,7 @@ from studio.views.form_helpers import (
     parse_comma_separated_tags,
     reject_synced_content_post,
 )
+from studio.views.notifications import notification_action_context
 
 User = get_user_model()
 
@@ -105,6 +106,7 @@ def course_edit(request, course_id):
         'announce_url': reverse('studio_course_announce_slack', kwargs={'course_id': course.pk}),
         'access_count': access_count,
         'active_enrollment_count': active_enrollment_count,
+        **notification_action_context('course', course),
         # Issues #788/#931: banner / social-image panel.
         **banner_panel_context(
             content_type='course',

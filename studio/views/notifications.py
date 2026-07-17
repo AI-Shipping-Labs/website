@@ -12,7 +12,12 @@ from django.views.decorators.http import require_POST
 from content.models import Article, Course, Download, Workshop
 from events.models import Event
 from notifications.models import Notification
-from notifications.services import NotificationService, post_slack_announcement
+from notifications.services import (
+    NotificationService,
+    get_email_eligible_users,
+    get_notification_eligible_user_count,
+    post_slack_announcement,
+)
 from notifications.services.notification_service import (
     CONTENT_TYPE_CONFIG,
 )
@@ -30,6 +35,41 @@ CONTENT_TYPE_MAP = {
     'course': (Course, 'course_id'),
     'workshop': (Workshop, 'workshop_id'),
 }
+
+
+def notification_action_context(content_type, content, *, includes_slack=True):
+    """Build operator-facing audience counts and irreversible-action copy."""
+    in_app_count = get_notification_eligible_user_count(content_type, content)
+    button_label = f'Notify {in_app_count} eligible members'
+    if content_type == 'workshop':
+        email_count = get_email_eligible_users(content_type, content).count()
+        confirmation = (
+            f'Notify {in_app_count} eligible members in app, email '
+            f'{email_count} eligible workshop subscribers, and post to '
+            '#announcements? This cannot be undone.'
+        )
+    elif includes_slack:
+        email_count = 0
+        confirmation = (
+            f'Notify {in_app_count} eligible members in app and post to '
+            '#announcements? This cannot be undone.'
+        )
+    else:
+        email_count = 0
+        confirmation = (
+            f'Notify {in_app_count} eligible members in app? '
+            'This cannot be undone.'
+        )
+    return {
+        'notify_audience_count': in_app_count,
+        'notify_email_audience_count': email_count,
+        'notify_button_label': button_label,
+        'notify_confirmation': confirmation,
+        'slack_confirmation': (
+            'Post this announcement to the configured #announcements '
+            'channel? This cannot be undone.'
+        ),
+    }
 
 
 def _was_recently_notified(content_type, content):

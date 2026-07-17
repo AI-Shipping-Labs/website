@@ -32,6 +32,7 @@ from integrations.models import ContentSource
 from studio.decorators import staff_required
 from studio.services.banner_panel import banner_panel_context
 from studio.utils import get_github_edit_url, studio_pagination_context
+from studio.views.notifications import notification_action_context
 from studio.views.sync import _mark_source_queued, _worker_warning_suffix
 
 logger = logging.getLogger(__name__)
@@ -266,6 +267,7 @@ def workshop_edit(request, workshop_id):
             'studio_workshop_announce_slack',
             kwargs={'workshop_id': workshop.pk},
         ),
+        **notification_action_context('workshop', workshop),
         # Issues #788/#931: banner / social-image panel.
         **banner_panel_context(
             content_type='workshop',

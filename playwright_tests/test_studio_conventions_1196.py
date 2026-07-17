@@ -153,6 +153,7 @@ def test_event_edit_actions_use_canonical_styles_and_keep_fetch_paths(
     page.locator("#zoom-status").wait_for(state="visible", timeout=10000)
     assert "Zoom meeting created" in page.locator("#zoom-status").inner_text()
 
+    page.once("dialog", lambda dialog: dialog.accept())
     page.locator("#post-to-slack-btn").click()
     page.locator("#slack-status").wait_for(state="visible", timeout=10000)
     assert "Slack announcement posted successfully" in page.locator("#slack-status").inner_text()

@@ -138,6 +138,7 @@ class TestScenarioSlackOneClick:
             "studio.views.event_series.post_series_slack_announcement",
             return_value=True,
         ):
+            page.once("dialog", lambda dialog: dialog.accept())
             page.locator('[data-testid="event-series-announce-slack"]').click()
             status = page.locator('[data-testid="series-slack-status"]')
             status.wait_for(state="visible", timeout=10000)
@@ -170,6 +171,7 @@ class TestScenarioNotifySubscribers:
             f"{django_server}/studio/event-series/{series.pk}/",
             wait_until="domcontentloaded",
         )
+        staff_page.once("dialog", lambda dialog: dialog.accept())
         staff_page.locator('[data-testid="event-series-notify"]').click()
         status = staff_page.locator('[data-testid="series-notify-status"]')
         status.wait_for(state="visible", timeout=10000)
@@ -226,6 +228,7 @@ class TestScenarioReNotifyGuard:
             wait_until="domcontentloaded",
         )
         notify_btn = page.locator('[data-testid="event-series-notify"]')
+        page.once("dialog", lambda dialog: dialog.accept())
         notify_btn.click()
         status = page.locator('[data-testid="series-notify-status"]')
         status.wait_for(state="visible", timeout=10000)
@@ -237,6 +240,7 @@ class TestScenarioReNotifyGuard:
             timeout=10000,
         )
 
+        page.once("dialog", lambda dialog: dialog.accept())
         notify_btn.click()
         page.wait_for_function(
             """() => {
@@ -270,6 +274,7 @@ class TestScenarioEmptySeries:
             f"{django_server}/studio/event-series/{series.pk}/",
             wait_until="domcontentloaded",
         )
+        page.once("dialog", lambda dialog: dialog.accept())
         page.locator('[data-testid="event-series-announce-slack"]').click()
         status = page.locator('[data-testid="series-slack-status"]')
         status.wait_for(state="visible", timeout=10000)
@@ -306,6 +311,7 @@ class TestScenarioTierGatedMember:
             f"{django_server}/studio/event-series/{series.pk}/",
             wait_until="domcontentloaded",
         )
+        page.once("dialog", lambda dialog: dialog.accept())
         page.locator('[data-testid="event-series-notify"]').click()
         status = page.locator('[data-testid="series-notify-status"]')
         status.wait_for(state="visible", timeout=10000)

@@ -13,6 +13,7 @@ from studio.views.form_helpers import (
     parse_comma_separated_tags,
     reject_synced_content_post,
 )
+from studio.views.notifications import notification_action_context
 
 
 @staff_required
@@ -83,6 +84,7 @@ def article_edit(request, article_id):
         'notify_url': reverse('studio_article_notify', kwargs={'article_id': article.pk}),
         'announce_url': reverse('studio_article_announce_slack', kwargs={'article_id': article.pk}),
         'preview_url': request.build_absolute_uri(article.get_preview_url()),
+        **notification_action_context('article', article),
         'preview_regenerate_url': reverse(
             'studio_article_regenerate_preview_token',
             kwargs={'article_id': article.pk},

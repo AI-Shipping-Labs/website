@@ -123,6 +123,7 @@ class TestStudioWorkshopNotifyFlow:
         assert notify_btn.count() == 1
         assert slack_btn.count() == 1
 
+        staff_page.on('dialog', lambda dialog: dialog.accept())
         notify_btn.click()
 
         # Wait for the status line to appear with the success message.
@@ -201,6 +202,7 @@ class TestStudioWorkshopNotifyDoubleGuard:
         )
 
         notify_btn = page.locator('#notify-subscribers-btn')
+        page.on('dialog', lambda dialog: dialog.accept())
         notify_btn.click()
 
         # First click should land a success message.

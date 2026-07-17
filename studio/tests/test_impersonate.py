@@ -1,7 +1,7 @@
 """Tests for studio user impersonation."""
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, tag
+from django.test import Client, TestCase, tag
 
 User = get_user_model()
 
@@ -40,6 +40,15 @@ class ImpersonateUserTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn('/accounts/login/', response.url)
 
+    def test_impersonate_preserves_csrf_enforcement(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.staff)
+
+        response = csrf_client.post(f'/studio/impersonate/{self.target.pk}/')
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(csrf_client.get('/').wsgi_request.user, self.staff)
+
     def test_impersonate_logs_in_as_target(self):
         """After impersonation, the session user is the target."""
         self.client.login(email='admin@test.com', password='testpass')
@@ -62,6 +71,49 @@ class ImpersonateUserTest(TestCase):
         self.client.login(email='admin@test.com', password='testpass')
         response = self.client.post('/studio/impersonate/99999/')
         self.assertEqual(response.status_code, 404)
+
+    def test_superuser_target_is_refused_before_session_mutation(self):
+        superuser = User.objects.create_superuser(
+            email='root-target@test.com', password='secret-value',
+        )
+        self.client.login(email='admin@test.com', password='testpass')
+        original_session_key = self.client.session.session_key
+
+        with self.assertLogs('studio.views.impersonate', level='WARNING') as logs:
+            response = self.client.post(
+                f'/studio/impersonate/{superuser.pk}/', follow=True,
+            )
+
+        self.assertRedirects(
+            response,
+            f'/studio/users/{superuser.pk}/',
+        )
+        self.assertContains(response, 'Cannot log in as a superuser.')
+        self.assertEqual(self.client.session.session_key, original_session_key)
+        self.assertNotIn('_impersonator_id', self.client.session)
+        self.assertEqual(
+            self.client.get('/').wsgi_request.user,
+            self.staff,
+        )
+        record = logs.records[0].getMessage()
+        self.assertIn('studio_impersonation_refused_superuser', record)
+        self.assertIn(f'actor_id={self.staff.pk}', record)
+        self.assertIn(self.staff.email, record)
+        self.assertIn(f'target_id={superuser.pk}', record)
+        self.assertIn(superuser.email, record)
+        self.assertNotIn('secret-value', record)
+
+    def test_success_is_logged_with_bounded_actor_and_target_identity(self):
+        self.client.login(email='admin@test.com', password='testpass')
+        with self.assertLogs('studio.views.impersonate', level='INFO') as logs:
+            self.client.post(f'/studio/impersonate/{self.target.pk}/')
+
+        record = logs.records[0].getMessage()
+        self.assertIn('studio_impersonation_started', record)
+        self.assertIn(f'actor_id={self.staff.pk}', record)
+        self.assertIn(self.staff.email, record)
+        self.assertIn(f'target_id={self.target.pk}', record)
+        self.assertIn(self.target.email, record)
 
 
 @tag('core')

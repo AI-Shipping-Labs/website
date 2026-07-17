@@ -190,6 +190,7 @@ class TestStudioNotifyBanner:
 
         notify_btn = staff_page.locator('#notify-subscribers-btn')
         assert notify_btn.count() == 1
+        staff_page.on('dialog', lambda dialog: dialog.accept())
         notify_btn.click()
 
         status = staff_page.locator('#notify-status')

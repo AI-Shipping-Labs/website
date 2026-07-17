@@ -50,7 +50,16 @@
 {% endif %}
 
 <form id="event-edit-form" method="post" class="space-y-6"
-      data-has-zoom-meeting="{% if event.zoom_meeting_id %}true{% else %}false{% endif %}">
+      data-has-zoom-meeting="{% if event.zoom_meeting_id %}true{% else %}false{% endif %}"
+      {% if reschedule_guard_enabled %}
+      data-reschedule-guard="true"
+      data-reschedule-initial-start-ms="{{ reschedule_initial_start_ms }}"
+      data-reschedule-initial-end-ms="{{ reschedule_initial_end_ms }}"
+      data-reschedule-initial-date="{{ event_date }}"
+      data-reschedule-initial-time="{{ event_time }}"
+      data-reschedule-initial-duration="{{ duration_hours }}"
+      data-reschedule-registration-count="{{ registration_count }}"
+      {% endif %}>
   {% csrf_token %}
 
   <div class="bg-card border border-border rounded-lg p-6 space-y-4">
@@ -582,7 +591,7 @@
   </div>
 
   {% if event.status != 'draft' %}
-  {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url compact=True notify_button_label="Notify eligible members in app" notify_sending_label="Creating..." notify_status_mode="in_app_eligible_members" %}
+  {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url compact=True notify_sending_label="Creating..." notify_status_mode="in_app_eligible_members" %}
   {% endif %}
 
   <div class="bg-card border border-border rounded-lg p-4" id="workshop-ready-panel" data-testid="workshop-ready-panel">
@@ -788,6 +797,92 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     form.addEventListener('submit', function(event) {
+      if (form.getAttribute('data-reschedule-guard') === 'true') {
+        var dateInput = form.querySelector('[name="event_date"]');
+        var timeInput = form.querySelector('[name="event_time"]');
+        var durationInput = form.querySelector('[name="duration_hours"]');
+        var timezoneInput = form.querySelector('[name="timezone"]');
+        var registrationCount = Number(
+          form.getAttribute('data-reschedule-registration-count') || '0'
+        );
+        var scheduleFieldChanged = !!(
+          dateInput && timeInput && durationInput && (
+            dateInput.value !== form.getAttribute('data-reschedule-initial-date') ||
+            timeInput.value !== form.getAttribute('data-reschedule-initial-time') ||
+            Number(durationInput.value) !== Number(
+              form.getAttribute('data-reschedule-initial-duration')
+            )
+          )
+        );
+
+        function wallTimeEpoch(dateValue, timeValue, timezoneValue) {
+          var dateParts = (dateValue || '').split('/').map(Number);
+          var timeParts = (timeValue || '').split(':').map(Number);
+          if (dateParts.length !== 3 || timeParts.length !== 2 ||
+              dateParts.some(isNaN) || timeParts.some(isNaN)) {
+            return NaN;
+          }
+          var desired = Date.UTC(
+            dateParts[2], dateParts[1] - 1, dateParts[0],
+            timeParts[0], timeParts[1]
+          );
+          var guess = desired;
+          try {
+            var formatter = new Intl.DateTimeFormat('en-GB', {
+              timeZone: timezoneValue || 'UTC',
+              year: 'numeric', month: '2-digit', day: '2-digit',
+              hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+            });
+            for (var i = 0; i < 3; i += 1) {
+              var values = {};
+              formatter.formatToParts(new Date(guess)).forEach(function(part) {
+                if (part.type !== 'literal') { values[part.type] = Number(part.value); }
+              });
+              var displayed = Date.UTC(
+                values.year, values.month - 1, values.day,
+                values.hour, values.minute
+              );
+              guess += desired - displayed;
+            }
+            return guess;
+          } catch (error) {
+            return NaN;
+          }
+        }
+
+        if (scheduleFieldChanged && registrationCount > 0) {
+          var initialStart = Number(
+            form.getAttribute('data-reschedule-initial-start-ms')
+          );
+          var initialEnd = Number(
+            form.getAttribute('data-reschedule-initial-end-ms')
+          );
+          var submittedStart = wallTimeEpoch(
+            dateInput.value,
+            timeInput.value,
+            timezoneInput ? timezoneInput.value : 'UTC'
+          );
+          var submittedEnd = submittedStart + Number(durationInput.value) * 3600000;
+          var now = Date.now();
+          var meaningfulChange = (
+            Math.abs(submittedStart - initialStart) >= 60000 ||
+            Math.abs(submittedEnd - initialEnd) >= 60000
+          );
+          if (initialStart > now && submittedStart > now && meaningfulChange) {
+            var attendeeLabel = registrationCount === 1
+              ? '1 registered attendee'
+              : registrationCount + ' registered attendees';
+            var rescheduleOk = window.confirm(
+              'Saving will email ' + attendeeLabel +
+              ' a rescheduling notice. This cannot be undone. Continue?'
+            );
+            if (!rescheduleOk) {
+              event.preventDefault();
+              return;
+            }
+          }
+        }
+      }
       if (eventHasMeetingLink()) {
         return;
       }

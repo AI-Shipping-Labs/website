@@ -215,6 +215,9 @@ def _email_log_disposition(log):
     today; ``opened`` (or stronger) implies delivery, so the ladder
     collapses to whichever of the recorded fields is non-null.
     """
+    annotated = getattr(log, "disposition", None)
+    if annotated:
+        return annotated
     if log.complained_at is not None:
         return _DISPOSITION_COMPLAINED
     if log.bounced_at is not None:
@@ -230,7 +233,13 @@ def serialize_email_log(log):
     """Serialize one ``EmailLog`` row for the API."""
     return {
         "id": log.id,
+        "recipient_email": log.recipient_email or (
+            log.user.email if log.user_id else ""
+        ),
+        "user_id": log.user_id,
+        "user_email": log.user.email if log.user_id else None,
         "email_type": log.email_type,
+        "subject": log.subject or "",
         "sent_at": _isoformat_or_none(log.sent_at),
         "ses_message_id": log.ses_message_id or "",
         "opened_at": _isoformat_or_none(log.opened_at),
@@ -242,5 +251,8 @@ def serialize_email_log(log):
         "bounce_subtype": log.bounce_subtype or "",
         "complained_at": _isoformat_or_none(log.complained_at),
         "campaign_id": log.campaign_id,
+        "campaign_subject": (
+            log.campaign.subject if log.campaign_id else None
+        ),
         "disposition": _email_log_disposition(log),
     }

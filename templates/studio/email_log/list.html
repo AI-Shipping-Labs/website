@@ -1,0 +1,90 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Email log{% endblock %}
+
+{% block studio_content %}
+{% studio_header_actions title="Email log" subtitle="Rows appear after Amazon SES accepts a send. If no row exists, check Worker for a failed, skipped, or suppressed attempt." %}{% endstudio_header_actions %}
+
+<form method="get" class="mb-6 grid gap-3 rounded-lg border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-5"
+      autocomplete="off" data-testid="email-log-filters">
+  <label class="flex flex-col gap-1 text-xs text-muted-foreground sm:col-span-2 lg:col-span-1">
+    <span>Recipient</span>
+    <input type="text" name="q" value="{{ search }}" placeholder="Search email address"
+           class="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+  </label>
+  <label class="flex flex-col gap-1 text-xs text-muted-foreground">
+    <span>Type</span>
+    <select name="kind" class="studio-select w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <option value="">Any type</option>
+      {% for value, label in kind_choices %}<option value="{{ value }}" {% if kind == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="flex flex-col gap-1 text-xs text-muted-foreground">
+    <span>Status</span>
+    <select name="status" class="studio-select w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <option value="">Any status</option>
+      {% for value in dispositions %}<option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ value|capfirst }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="flex flex-col gap-1 text-xs text-muted-foreground">
+    <span>Since (UTC)</span>
+    <input type="date" name="since" value="{{ since }}"
+           class="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+  </label>
+  <label class="flex flex-col gap-1 text-xs text-muted-foreground">
+    <span>Until (UTC)</span>
+    <input type="date" name="until" value="{{ until }}"
+           class="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+  </label>
+  <div class="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-5">
+    <button type="submit" class="rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Apply filters</button>
+    {% if filters_active %}<a href="{% url 'studio_email_log_list' %}" class="text-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="email-log-clear-filters">Clear filters</a>{% endif %}
+  </div>
+</form>
+
+{% if has_any_log or filters_active %}
+<div class="{% studio_list_class 'wrapper' %}" data-testid="studio-email-log-list">
+  {% if show_pager %}{% include "studio/includes/list_pager.html" with pager_testid_prefix="email-log-pager" %}{% endif %}
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
+      <tr>
+        <th class="{% studio_list_class 'th' %}">Sent</th>
+        <th class="{% studio_list_class 'th' %}">Recipient</th>
+        <th class="{% studio_list_class 'th' %}">Type / campaign</th>
+        <th class="{% studio_list_class 'th' %}">Status</th>
+        <th class="{% studio_list_class 'th' %}">Subject</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="{% studio_list_class 'tbody' %}">
+      {% for row in rows %}
+      <tr class="{% studio_list_class 'row' %}" data-testid="email-log-row-{{ row.log.pk }}">
+        <td class="px-4 py-3 text-sm text-foreground whitespace-nowrap" data-label="Sent">
+          <span title="{{ row.log.sent_at|operator_datetime_seconds }} UTC">{{ row.log.sent_at|operator_datetime }} UTC</span>
+        </td>
+        <td class="px-4 py-3 text-sm font-mono break-all" data-label="Recipient">
+          {% if row.recipient_user %}<a href="{% url 'studio_user_detail' row.recipient_user.pk %}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="email-log-recipient-link">{{ row.recipient|default:"—" }}</a>{% else %}<span class="text-foreground">{{ row.recipient|default:"—" }}</span>{% endif %}
+        </td>
+        <td class="px-4 py-3 text-sm" data-label="Type / campaign">
+          <span class="text-foreground" data-email-kind="{{ row.log.email_type }}">{{ row.type_label }}</span>
+          {% if row.log.campaign_id %}<a href="{% url 'studio_campaign_detail' row.log.campaign_id %}" class="mt-1 block text-xs text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ row.log.campaign.subject }}</a>{% endif %}
+        </td>
+        <td class="px-4 py-3" data-label="Status"><span data-testid="email-log-disposition">{% studio_status_badge row.log.disposition row.log.disposition|capfirst %}</span></td>
+        <td class="px-4 py-3 text-sm text-foreground" data-label="Subject">{% if row.log.subject %}{{ row.log.subject }}{% else %}<span class="text-muted-foreground">Not recorded</span>{% endif %}</td>
+        <td class="px-4 py-3 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %}"><a href="{{ row.ses_events_url }}" class="{% studio_action_class 'secondary' %}" data-testid="email-log-ses-events-link">SES events</a></div>
+        </td>
+      </tr>
+      {% empty %}
+        {% url 'studio_email_log_list' as clear_url %}
+        {% studio_empty_state 'filter' entity_label='email' entity_label_plural='emails' clear_url=clear_url colspan=6 empty_message='No emails match these filters.' %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if show_pager %}{% include "studio/includes/list_pager.html" with pager_testid_prefix="email-log-pager" %}{% endif %}
+</div>
+{% else %}
+  {% studio_empty_state 'fresh' entity_label='outbound email' entity_label_plural='outbound emails' create_url=None testid_suffix='email-log' empty_message='No outbound emails have been logged yet.' %}
+{% endif %}
+{% endblock %}

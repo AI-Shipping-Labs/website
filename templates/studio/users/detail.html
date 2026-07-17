@@ -18,8 +18,8 @@
   rhythm.
 {% endcomment %}
 <header class="mb-4 max-w-4xl" data-testid="user-detail-header">
-  <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Member</p>
-  <h1 class="text-2xl font-semibold text-foreground mt-1 break-all" data-testid="user-detail-email">{{ detail_user.email }}</h1>
+  <p class="text-xs font-medium uppercase tracking-widest text-muted-foreground">Member</p>
+  <h1 class="text-2xl font-semibold tracking-tight text-foreground mt-1 break-all" data-testid="user-detail-email">{{ detail_user.email }}</h1>
   {% if detail_user.first_name or detail_user.last_name %}
   <p class="text-sm text-muted-foreground mt-1" data-testid="user-detail-name">{{ detail_user.first_name }} {{ detail_user.last_name }}</p>
   {% endif %}
@@ -548,7 +548,38 @@
 
   <div class="mt-5 flex flex-wrap gap-3 text-xs">
     <a href="{{ ses_events_url }}" class="text-accent hover:underline" data-testid="user-deliverability-ses-shortcut">SES events</a>
-    <a href="{{ email_log_url }}" class="text-accent hover:underline" data-testid="user-deliverability-email-log-shortcut">Email log API</a>
+  </div>
+</section>
+
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-email-history-section">
+  <h2 class="text-lg font-semibold text-foreground">Email history</h2>
+  {% if email_history %}
+  <div class="mt-4 overflow-x-auto rounded-lg border border-border">
+    <table class="min-w-full divide-y divide-border text-sm">
+      <thead class="bg-secondary/60 text-left text-xs text-muted-foreground">
+        <tr><th class="px-4 py-3 font-medium">Sent</th><th class="px-4 py-3 font-medium">Type / campaign</th><th class="px-4 py-3 font-medium">Status</th><th class="px-4 py-3 font-medium">Subject</th></tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for log in email_history %}
+        <tr data-testid="user-email-history-row">
+          <td class="px-4 py-3 whitespace-nowrap text-foreground">{{ log.sent_at|operator_datetime }} UTC</td>
+          <td class="px-4 py-3 text-foreground">
+            {{ log.email_type|email_kind_label }}
+            {% if log.campaign_id %}<a href="{% url 'studio_campaign_detail' log.campaign_id %}" class="block text-xs text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ log.campaign.subject }}</a>{% endif %}
+          </td>
+          <td class="px-4 py-3"><span data-testid="user-email-history-status">{% studio_status_badge log.disposition log.disposition|capfirst %}</span></td>
+          <td class="px-4 py-3 text-foreground">{% if log.subject %}{{ log.subject }}{% else %}<span class="text-muted-foreground">Not recorded</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="mt-4 text-sm text-muted-foreground" data-testid="user-email-history-empty">No outbound emails have been logged for this user.</p>
+  {% endif %}
+  <div class="mt-4 flex flex-wrap gap-3 text-sm">
+    <a href="{{ email_history_url }}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="user-email-history-view-all">View all</a>
+    <a href="{{ ses_events_url }}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="user-email-history-ses-events">SES events</a>
   </div>
 </section>
 

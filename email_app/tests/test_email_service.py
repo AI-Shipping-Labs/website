@@ -66,6 +66,8 @@ class EmailServiceSendTest(TestCase):
         self.assertIsNotNone(log)
         self.assertEqual(log.user, self.user)
         self.assertEqual(log.email_type, 'welcome')
+        self.assertEqual(log.recipient_email, 'alice@example.com')
+        self.assertEqual(log.subject, 'Welcome to Main!')
         self.assertEqual(log.ses_message_id, 'ses-msg-001')
         self.assertEqual(EmailLog.objects.count(), 1)
 

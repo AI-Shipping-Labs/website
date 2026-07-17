@@ -63,6 +63,11 @@ STATUS_BADGE_CLASSES = {
     'upcoming': 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
     'sending': 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
     'sent': 'bg-green-500/20 text-green-700 dark:text-green-300',
+    'delivered': 'bg-green-500/20 text-green-700 dark:text-green-300',
+    'opened': 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
+    'clicked': 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
+    'bounced': 'bg-red-500/20 text-red-700 dark:text-red-300',
+    'complained': 'bg-red-500/20 text-red-700 dark:text-red-300',
     # ``active`` reads as the "currently happening" / "in-progress" state
     # across surfaces (content publishing, sprints, etc.) — same green as
     # ``published`` so the two read consistently. ``completed`` is the
@@ -523,6 +528,12 @@ def model_name(obj):
     return getattr(meta, 'model_name', '') or ''
 
 
+@register.filter
+def email_kind_label(value):
+    """Humanize an open stored EmailLog.email_type value for operators."""
+    return str(value or '').replace('_', ' ').strip().capitalize()
+
+
 def _sync_status_label(status, error_count=0):
     """Return the human-readable label for a sync status.
 
@@ -650,6 +661,7 @@ def studio_sidebar_state(path):
         '/sync' in p
         or '/worker' in p
         or '/ses-events' in p
+        or '/email-log' in p
         or 'redirects' in p
         or '/settings' in p
         or '/api-tokens' in p

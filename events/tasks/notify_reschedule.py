@@ -272,7 +272,9 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
     email_log = EmailLog.objects.create(
         user=user,
         event=event,
+        recipient_email=user.email,
         email_type='event_rescheduled',
+        subject=subject,
         ses_message_id=ses_message_id,
         dedupe_key=dedupe_key,
     )

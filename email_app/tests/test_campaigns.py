@@ -862,6 +862,8 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
             self.assertEqual(log.email_type, 'campaign')
             self.assertEqual(log.ses_message_id, 'ses-123')
             self.assertEqual(log.campaign, self.campaign)
+            self.assertEqual(log.recipient_email, log.user.email)
+            self.assertEqual(log.subject, self.campaign.subject)
 
     @patch('email_app.tasks.send_campaign.EmailService')
     def test_batch_calls_ses_per_recipient(self, MockService):

@@ -140,18 +140,22 @@ class StudioListHeaderRowConsistencyTest(SimpleTestCase):
         )
 
     def test_every_non_exempt_header_uses_canonical_container_class(self):
-        """Header ``<div>`` must carry the canonical responsive class string."""
+        """Headers use the legacy canonical row or the shared header tag."""
         offenders = []
         for template in _non_exempt_list_templates():
             source = template.read_text()
             head = '\n'.join(source.splitlines()[:20])
-            if CANONICAL_HEADER_CLASSES not in head:
+            if (
+                CANONICAL_HEADER_CLASSES not in head
+                and 'studio_header_actions' not in head
+            ):
                 offenders.append(_relative(template))
         self.assertEqual(
             offenders,
             [],
             f'these list templates lack the canonical header container '
-            f'class string ({CANONICAL_HEADER_CLASSES!r}) in their first '
+            f'class string ({CANONICAL_HEADER_CLASSES!r}) or shared '
+            f'``studio_header_actions`` tag in their first '
             f'20 lines: {offenders}',
         )
 

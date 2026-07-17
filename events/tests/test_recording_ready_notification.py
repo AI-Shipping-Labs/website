@@ -121,6 +121,7 @@ class RecordingReadyNotificationSendTest(TestCase):
         self.assertIsNone(log.user)
         self.assertEqual(log.recipient_email, 'external-host@example.com')
         self.assertEqual(log.email_type, EMAIL_TYPE)
+        self.assertEqual(log.subject, mock_send.call_args.args[1])
         self.assertEqual(log.ses_message_id, 'ses-ready-1')
 
         call = mock_send.call_args
@@ -141,7 +142,7 @@ class RecordingReadyNotificationSendTest(TestCase):
         )
 
     @patch('events.services.recording_ready_notification.EmailService._send_ses')
-    def test_registered_host_logs_user_not_recipient_email(self, mock_send):
+    def test_registered_host_logs_user_and_recipient_snapshot(self, mock_send):
         mock_send.return_value = 'ses-user-host'
         user = get_user_model().objects.create_user(
             email='host-user@example.com',
@@ -154,7 +155,7 @@ class RecordingReadyNotificationSendTest(TestCase):
         self.assertEqual(result['status'], 'sent')
         log = EmailLog.objects.get()
         self.assertEqual(log.user, user)
-        self.assertEqual(log.recipient_email, '')
+        self.assertEqual(log.recipient_email, user.email)
 
     @patch('events.services.recording_ready_notification.EmailService._send_ses')
     def test_replay_skips_existing_event_recipient_log(self, mock_send):

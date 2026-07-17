@@ -14,6 +14,8 @@ class EmailLogAdmin(admin.ModelAdmin):
     list_display = [
         "email_type",
         "user",
+        "recipient_email",
+        "subject",
         "sent_at",
         "ses_message_id",
         "bounced_at",
@@ -21,11 +23,16 @@ class EmailLogAdmin(admin.ModelAdmin):
         "complained_at",
     ]
     list_filter = ["email_type", "bounce_type", "sent_at", "bounced_at"]
-    search_fields = ["user__email", "ses_message_id", "bounce_diagnostic"]
+    search_fields = [
+        "user__email", "recipient_email", "subject", "ses_message_id",
+        "bounce_diagnostic",
+    ]
     readonly_fields = [
         "campaign",
         "user",
+        "recipient_email",
         "email_type",
+        "subject",
         "sent_at",
         "ses_message_id",
         "opened_at",

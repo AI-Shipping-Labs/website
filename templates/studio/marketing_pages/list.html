@@ -61,9 +61,9 @@
           {% url 'studio_marketing_page_edit' page_id=page_obj.pk as edit_url %}
           <div class="{% studio_list_class 'action_group' %}">
             {% if page_obj.source_repo %}
-            {% studio_list_action edit_url 'View' 'primary' %}
+            {% studio_list_action edit_url 'View' 'secondary' %}
             {% else %}
-            {% studio_list_action edit_url 'Edit' 'primary' %}
+            {% studio_list_action edit_url 'Edit' 'secondary' %}
             {% endif %}
             {% if page_obj.status == 'published' %}
             {% studio_list_action page_obj.get_absolute_url 'View on site' 'secondary' True %}

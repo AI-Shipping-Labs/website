@@ -63,7 +63,7 @@
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.created_at|operator_date }}</td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %}">
-            <a href="{% url 'studio_utm_campaign_detail' campaign_id=campaign.pk %}" class="{% studio_action_class 'primary' %}">View</a>
+            <a href="{% url 'studio_utm_campaign_detail' campaign_id=campaign.pk %}" class="{% studio_action_class 'secondary' %}">View</a>
           </div>
         </td>
       </tr>

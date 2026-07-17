@@ -46,9 +46,9 @@
           {% url 'studio_course_edit' course_id=course.pk as course_edit_url %}
           <div class="{% studio_list_class 'action_group' %}">
             {% if course.source_repo %}
-            {% studio_list_action course_edit_url 'View' 'primary' %}
+            {% studio_list_action course_edit_url 'View' 'secondary' %}
             {% else %}
-            {% studio_list_action course_edit_url 'Edit' 'primary' %}
+            {% studio_list_action course_edit_url 'Edit' 'secondary' %}
             {% endif %}
             {% studio_list_action course.get_absolute_url 'View on site' 'secondary' True %}
           </div>

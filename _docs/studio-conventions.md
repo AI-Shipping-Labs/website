@@ -78,11 +78,14 @@ Default baseline:
   a clear-filters URL. Truly empty fresh states render
   `{% studio_empty_state 'fresh' %}` and keep a create/navigation CTA where
   that page has one.
-- Source-managed content rows where Studio is mostly review/publish use
-  `View` or `Review` as the primary row action. Studio-native editable
-  operational rows use `Edit` or the main management task as the primary row
-  action. Sensitive actions, including impersonation/Login as, stay secondary
-  or form-only actions and are never promoted as the primary list action.
+- Row navigation and non-mutating disclosure actions, including `View`,
+  `Edit`, `Review`, `Manage`, `Details`, and `Inspect`, use the bordered
+  secondary variant. Accent-filled primary styling is reserved for a
+  state-changing row action, with at most one accent-filled action in a
+  rendered row. This is a permission, not a requirement: existing secondary,
+  destructive, async, and special-purpose mutations keep their established
+  variants. Sensitive actions, including impersonation/Login as, stay
+  secondary or form-only actions.
 - Date/time cells use the operator vocabulary (`operator_date`,
   `operator_datetime`, or `operator_datetime_seconds`) and apply
   `whitespace-nowrap` where a date, time, or age token must stay readable.

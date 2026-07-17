@@ -38,7 +38,7 @@ poller swaps in place every ~3s.
               <td class="px-4 py-3 {% studio_list_class 'action_cell' %}" data-label="Actions">
                 <div class="{% studio_list_class 'action_group' %}">
                 <a href="{% url 'studio_worker_inspect_task' q.id %}{% if q.task_id %}?task_id={{ q.task_id }}{% endif %}"
-                   class="{% studio_action_class 'primary' %}"
+                   class="{% studio_action_class 'secondary' %}"
                    data-action="inspect">Inspect</a>
                 <form method="post" action="{% url 'studio_worker_delete_queued' q.id %}" class="{% studio_list_class 'action_form' %}"
                       onsubmit="return confirm('Delete queued task {{ q.display_name|default:q.id|escapejs }}? This cannot be undone.');">

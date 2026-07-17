@@ -39,7 +39,7 @@
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_call_host_edit' host_id=host.pk as host_edit_url %}
-            {% studio_list_action host_edit_url 'Edit' 'primary' %}
+            {% studio_list_action host_edit_url 'Edit' 'secondary' %}
           </div>
         </td>
       </tr>

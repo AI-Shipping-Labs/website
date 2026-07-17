@@ -227,11 +227,15 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
         assert "Intro to ML" in body
         assert "by Jane Doe" in body
 
-        # Green "Free" badge
+        # Shared green "Free" badge uses the light/dark semantic split.
         free_badge = page.locator(
-            'span.text-green-400:has-text("Free")'
+            'span[data-component="member-badge"]:has-text("Free")'
         )
         assert free_badge.count() >= 1
+        free_classes = set((free_badge.first.get_attribute('class') or '').split())
+        assert {
+            'bg-green-500/15', 'text-green-800', 'dark:text-green-400',
+        }.issubset(free_classes)
 
         # "python" and "ai" tag badges
         assert "python" in body

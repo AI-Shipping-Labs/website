@@ -382,7 +382,7 @@
               <p class="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" data-testid="account-sprint-plan-meta">
                 <span data-testid="account-sprint-plan-dates">{% sprint_date_range plan.sprint %}</span>
                 <span aria-hidden="true">&middot;</span>
-                {% member_status_badge plan.sprint.sprint_badge_current.label size="xs" extra_class=plan.sprint.sprint_badge_current.css_class testid="account-sprint-plan-status" %}
+                {% member_status_badge plan.sprint.sprint_badge_current.label status=plan.sprint.sprint_badge_current.state size="xs" testid="account-sprint-plan-status" %}
               </p>
               {% if plan_has_ended %}
               <div class="mt-4 rounded-md border border-accent/30 bg-accent/10 p-3" data-testid="account-sprint-plan-recap">

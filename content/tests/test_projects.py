@@ -44,7 +44,10 @@ class ProjectNewFieldsTest(TestCase):
 
     def test_difficulty_color_maps_known_levels(self):
         project = Project(difficulty='advanced')
-        self.assertEqual(project.difficulty_color(), 'bg-red-500/20 text-red-400')
+        self.assertEqual(
+            project.difficulty_color(),
+            'bg-red-500/15 text-red-800 dark:text-red-400',
+        )
 
 
 # --- Markdown rendering tests ---

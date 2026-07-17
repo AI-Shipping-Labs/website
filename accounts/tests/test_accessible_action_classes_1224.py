@@ -106,11 +106,11 @@ class AccessibleActionClassContractTest(SimpleTestCase):
     def test_non_interactive_series_status_is_not_promoted_to_a_control(self):
         source = (TEMPLATES / 'events/event_series.html').read_text()
         match = re.search(
-            r'<span\b[^>]*data-testid="series-registered-state"[^>]*>',
+            r'{%\s*member_status_badge\b[^\n]*'
+            r'testid="series-registered-state"[^\n]*%}',
             source,
-            flags=re.DOTALL,
         )
         self.assertIsNotNone(match)
-        classes = _classes(match.group(0))
-        self.assertTrue(FOCUS_CLASSES.isdisjoint(classes))
-        self.assertNotIn('min-h-[44px]', classes)
+        invocation = match.group(0)
+        self.assertTrue(all(css_class not in invocation for css_class in FOCUS_CLASSES))
+        self.assertNotIn('min-h-[44px]', invocation)

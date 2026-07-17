@@ -94,16 +94,21 @@ class MemberBadgeRendererTest(SimpleTestCase):
         self.assertNotIn('bg-green-', html)
         self.assertNotIn('text-green-', html)
 
-    def test_other_status_tones_are_unchanged(self):
+    def test_status_tones_use_theme_safe_semantic_palette(self):
         expected_classes = {
-            'active': 'bg-green-500/20 text-green-400',
-            'closed': 'bg-red-500/20 text-red-400',
-            'enrolled': 'bg-green-500/15 text-green-400',
-            'upcoming': 'bg-blue-500/20 text-blue-400',
-            'registered': 'bg-green-500/20 text-green-400',
-            'open': 'bg-green-500/20 text-green-400',
-            'proposals_open': 'bg-green-500/20 text-green-400',
-            'cancelled': 'bg-secondary text-muted-foreground',
+            'active': 'bg-green-500/15 text-green-800 dark:text-green-400',
+            'closed': 'bg-red-500/15 text-red-800 dark:text-red-400',
+            'enrolled': 'bg-green-500/15 text-green-800 dark:text-green-400',
+            'upcoming': 'bg-blue-500/15 text-blue-800 dark:text-blue-400',
+            'registered': 'bg-green-500/15 text-green-800 dark:text-green-400',
+            'open': 'bg-green-500/15 text-green-800 dark:text-green-400',
+            'proposals_open': 'bg-green-500/15 text-green-800 dark:text-green-400',
+            'cancelled': 'bg-red-500/15 text-red-800 dark:text-red-400',
+            'submitted': 'bg-yellow-500/15 text-yellow-800 dark:text-yellow-400',
+            'in_review': 'bg-blue-500/15 text-blue-800 dark:text-blue-400',
+            'review_complete': 'bg-green-500/15 text-green-800 dark:text-green-400',
+            'certified': 'bg-purple-500/15 text-purple-800 dark:text-purple-400',
+            'pending': 'bg-yellow-500/15 text-yellow-800 dark:text-yellow-400',
         }
 
         for status, classes in expected_classes.items():

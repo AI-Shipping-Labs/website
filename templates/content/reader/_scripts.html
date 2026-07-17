@@ -80,10 +80,10 @@
     function renderButton(btn, completed) {
       if (completed) {
         btn.classList.remove('border-border', 'bg-card', 'text-foreground', 'hover:bg-muted');
-        btn.classList.add('border-green-500/30', 'bg-green-500/10', 'text-green-400', 'hover:bg-green-500/20');
+        btn.classList.add('border-green-500/30', 'bg-green-500/10', 'text-green-800', 'dark:text-green-400', 'hover:bg-green-500/20');
         btn.innerHTML = '<i data-lucide="check-circle-2" class="h-4 w-4"></i> Completed';
       } else {
-        btn.classList.remove('border-green-500/30', 'bg-green-500/10', 'text-green-400', 'hover:bg-green-500/20');
+        btn.classList.remove('border-green-500/30', 'bg-green-500/10', 'text-green-800', 'dark:text-green-400', 'hover:bg-green-500/20');
         btn.classList.add('border-border', 'bg-card', 'text-foreground', 'hover:bg-muted');
         btn.innerHTML = '<i data-lucide="circle" class="h-4 w-4"></i> Mark as completed';
       }

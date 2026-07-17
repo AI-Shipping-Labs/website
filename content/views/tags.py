@@ -20,7 +20,7 @@ CONTENT_TYPES = [
         'date_field': 'date',
         'only_fields': ('id', 'tags', 'title', 'description', 'slug', 'date'),
         'type_label': 'Article',
-        'type_color': 'bg-blue-500/20 text-blue-400',
+        'type_color': 'bg-blue-500/15 text-blue-800 dark:text-blue-400',
         'url_func': lambda obj: f'/blog/{obj.slug}',
     },
     {
@@ -29,7 +29,7 @@ CONTENT_TYPES = [
         'date_field': 'date',
         'only_fields': ('id', 'tags', 'title', 'description', 'slug', 'date'),
         'type_label': 'Project',
-        'type_color': 'bg-green-500/20 text-green-400',
+        'type_color': 'bg-green-500/15 text-green-800 dark:text-green-400',
         'url_func': lambda obj: f'/projects/{obj.slug}',
     },
     {
@@ -40,7 +40,7 @@ CONTENT_TYPES = [
             'id', 'tags', 'title', 'description', 'slug', 'created_at',
         ),
         'type_label': 'Course',
-        'type_color': 'bg-orange-500/20 text-orange-400',
+        'type_color': 'bg-orange-500/15 text-orange-800 dark:text-orange-400',
         'url_func': lambda obj: f'/courses/{obj.slug}',
     },
     {
@@ -51,7 +51,7 @@ CONTENT_TYPES = [
             'id', 'tags', 'title', 'description', 'slug', 'created_at',
         ),
         'type_label': 'Download',
-        'type_color': 'bg-red-500/20 text-red-400',
+        'type_color': 'bg-red-500/15 text-red-800 dark:text-red-400',
         'url_func': lambda obj: f'/downloads/{obj.slug}',
     },
     {
@@ -62,7 +62,7 @@ CONTENT_TYPES = [
             'id', 'tags', 'title', 'description', 'slug', 'start_datetime',
         ),
         'type_label': 'Event',
-        'type_color': 'bg-yellow-500/20 text-yellow-400',
+        'type_color': 'bg-yellow-500/15 text-yellow-800 dark:text-yellow-400',
         # Issue #673: route the tag-results event link through
         # ``Event.get_absolute_url`` so it follows the canonical
         # ``/events/<id>/<slug>`` shape, the same single source of

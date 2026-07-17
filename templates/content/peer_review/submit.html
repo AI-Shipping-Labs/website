@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load member_badges %}
 
 {% block title %}Submit Project - {{ course.title }} | {{ site_name }}{% endblock %}
 
@@ -44,14 +45,7 @@
     {% endif %}
     <div>
       <label class="block text-sm font-medium text-muted-foreground mb-1">Status</label>
-      <span class="inline-block px-2 py-1 text-xs rounded
-        {% if submission.status == 'submitted' %}bg-yellow-500/20 text-yellow-400
-        {% elif submission.status == 'in_review' %}bg-blue-500/20 text-blue-400
-        {% elif submission.status == 'review_complete' %}bg-green-500/20 text-green-400
-        {% elif submission.status == 'certified' %}bg-purple-500/20 text-purple-400
-        {% endif %}">
-        {{ submission.get_status_display }}
-      </span>
+      {% member_status_badge submission.get_status_display status=submission.status extra_class="rounded px-2 py-1" testid="peer-submission-status" %}
     </div>
     <div class="pt-2">
       <a href="{% url 'peer_review_dashboard' slug=course.slug %}" class="text-accent hover:underline text-sm">Go to Review Dashboard &rarr;</a>

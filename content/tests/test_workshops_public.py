@@ -913,7 +913,10 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'https://cdn.example/workshop-card.png')
         self.assertContains(response, 'alt="Cover image for Visible Workshop"')
         self.assertContains(response, 'loading="lazy"')
-        self.assertNotContains(response, 'data-testid="workshop-card-preview-fallback"')
+        self.assertContains(
+            response,
+            'data-testid="workshop-card-preview-fallback" hidden',
+        )
         self.assertIn('https://cdn.example/workshop-card.png', card)
         self.assertNotIn('https://cdn.example/custom/workshop-card.png', card)
         self.assertNotIn('https://cdn.example/generated/workshop-card.png', card)
@@ -932,7 +935,7 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertIn('data-testid="workshop-card-preview-image"', card)
         self.assertIn(custom_url, card)
         self.assertNotIn(auto_url, card)
-        self.assertNotIn('data-testid="workshop-card-preview-fallback"', card)
+        self.assertIn('data-testid="workshop-card-preview-fallback" hidden', card)
 
     def test_filtered_catalog_keeps_auto_banner_only_card_text_first(self):
         Workshop.objects.all().delete()

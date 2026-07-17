@@ -114,7 +114,7 @@
         larger padding. Free / Basic / Premium are compact peers — narrower, top 3
         features only. Desktop layout (lg:grid-cols-4) is unchanged.
       {% endcomment %}
-      <div class="mx-auto mt-6 grid max-w-7xl items-start gap-8 sm:gap-6 sm:mt-16 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:pt-6 max-lg:[scrollbar-width:none] sm:grid-cols-2 lg:grid-cols-4"
+      <div class="mx-auto mt-6 grid max-w-7xl items-start gap-8 sm:gap-6 sm:mt-16 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:pt-6 max-lg:[scrollbar-width:none] sm:grid-cols-2 lg:grid-cols-4 lg:items-stretch"
            data-tier-carousel
            data-testid="pricing-tier-carousel">
         {% for item in tiers_data %}
@@ -216,13 +216,13 @@
                   data-link-annual="{{ item.payment_link_annual }}">
               {% csrf_token %}
               <button type="submit"
-                      class="{% if item.tier.slug == 'main' %}{% button_classes 'primary' size='lg' extra='w-full' %}{% else %}{% button_classes 'secondary' size='lg' extra='w-full' %}{% endif %}">
+                      class="{% if item.tier.slug == 'main' %}{% button_classes 'primary' size='lg' extra='w-full border border-transparent' %}{% else %}{% button_classes 'secondary' size='lg' extra='w-full' %}{% endif %}">
                 {{ item.state.action_label }}
               </button>
             </form>
             {% else %}
             <a href="{{ item.payment_link_annual }}"
-               class="tier-cta-link {% if item.tier.slug == 'main' %}{% button_classes 'primary' size='lg' extra='w-full' %}{% else %}{% button_classes 'secondary' size='lg' extra='w-full' %}{% endif %}"
+               class="tier-cta-link {% if item.tier.slug == 'main' %}{% button_classes 'primary' size='lg' extra='w-full border border-transparent' %}{% else %}{% button_classes 'secondary' size='lg' extra='w-full' %}{% endif %}"
                data-link-monthly="{{ item.payment_link_monthly }}"
                data-link-annual="{{ item.payment_link_annual }}">
               {{ item.state.action_label }}

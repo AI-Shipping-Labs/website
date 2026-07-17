@@ -114,7 +114,12 @@ class SharedProjectPreviewRenderingTest(TestCase):
         self.assertContains(
             response,
             'data-testid="project-card-preview-fallback"',
-            count=1,
+            count=4,
+        )
+        self.assertContains(
+            response,
+            'data-testid="project-card-preview-fallback" hidden',
+            count=3,
         )
         self.assertContains(response, "https://cdn.example.com/1231-cover.png")
         self.assertNotContains(

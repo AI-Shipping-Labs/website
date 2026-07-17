@@ -493,7 +493,10 @@ class CoursesListViewTest(TestCase):
         self.assertContains(response, 'alt="Cover image for Published Course"')
         self.assertContains(response, 'loading="lazy"')
         self.assertContains(response, 'data-testid="course-card-preview-image"')
-        self.assertNotContains(response, 'data-testid="course-card-preview-fallback"')
+        self.assertContains(
+            response,
+            'data-testid="course-card-preview-fallback" hidden',
+        )
 
     def test_missing_cover_uses_decorative_fallback_preview(self):
         response = self.client.get('/courses')

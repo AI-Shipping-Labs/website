@@ -59,6 +59,7 @@ Inter uses weights 300 through 700. Headings always use `font-semibold`, never `
 |---|---|
 | Homepage hero h1 | `text-4xl font-semibold tracking-tight sm:text-5xl lg:text-6xl` |
 | Page h1 | `text-3xl font-semibold tracking-tight sm:text-4xl` |
+| Detail hero h1 | `text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl` |
 | Compact page h1 | `text-2xl font-semibold tracking-tight sm:text-3xl` |
 | Section h2 | `text-3xl font-semibold tracking-tight sm:text-4xl` |
 | Smaller section h2 | `text-2xl font-semibold tracking-tight sm:text-3xl` |

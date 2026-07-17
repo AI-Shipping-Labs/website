@@ -88,37 +88,18 @@ class StudioListCtaConsistencyTest(SimpleTestCase):
                     offenders.append(f'{template.relative_to(REPO_ROOT)}: {class_value}')
         self.assertEqual(offenders, [], offenders)
 
-    def test_events_list_new_buttons_use_canonical_shape(self):
-        """The event create buttons keep icon+label alignment."""
+    def test_events_list_visible_new_event_button_uses_canonical_shape(self):
+        """The routine create action keeps canonical visible-primary chrome."""
         source = (REPO_ROOT / 'templates' / 'studio' / 'events' / 'list.html').read_text()
-        for testid in ('event-new-button', 'event-series-new-button'):
-            with self.subTest(testid=testid):
-                # Extract the class attribute on the element with this testid.
-                element_match = re.search(
-                    rf'<a[^>]*\bdata-testid="{testid}"[^>]*>'
-                    rf'|<a[^>]*\bclass="([^"]+)"[^>]*\bdata-testid="{testid}"',
-                    source,
-                )
-                self.assertIsNotNone(element_match, f'missing {testid}')
-                # Pull the class string for this anchor.
-                anchor_match = re.search(
-                    rf'<a\b[^>]*\bdata-testid="{testid}"[^>]*>', source, re.DOTALL,
-                )
-                self.assertIsNotNone(anchor_match)
-                anchor = anchor_match.group(0)
-                class_match = re.search(r'class="([^"]+)"', anchor)
-                self.assertIsNotNone(class_match, anchor)
-                class_value = class_match.group(1)
-                self.assertIn('inline-flex', class_value)
-                self.assertIn('items-center', class_value)
-                self.assertIn('justify-center', class_value)
-                self.assertIn('rounded-lg', class_value)
-                self.assertTrue(
-                    'transition-opacity' in class_value
-                    or 'transition-colors' in class_value,
-                    class_value,
-                )
-                self.assertNotIn('rounded-md', class_value)
+        anchor_match = re.search(
+            r'<a\b[^>]*\bdata-testid="event-new-button"[^>]*>', source, re.DOTALL,
+        )
+        self.assertIsNotNone(anchor_match)
+        class_value = re.search(r'class="([^"]+)"', anchor_match.group(0)).group(1)
+        for token in ('inline-flex', 'items-center', 'justify-center', 'rounded-lg'):
+            self.assertIn(token, class_value)
+        self.assertIn('transition-opacity', class_value)
+        self.assertNotIn('rounded-md', class_value)
 
     def test_events_list_has_one_primary_create_cta(self):
         source = (REPO_ROOT / 'templates' / 'studio' / 'events' / 'list.html').read_text()
@@ -141,11 +122,14 @@ class StudioListCtaConsistencyTest(SimpleTestCase):
         self.assertIn('text-accent-foreground', new_event_class)
         self.assertNotIn('border-border', new_event_class)
 
-        self.assertIn('border', new_series_class)
-        self.assertIn('border-border', new_series_class)
+        self.assertIn('min-h-[44px]', new_series_class)
+        self.assertIn('w-full', new_series_class)
         self.assertIn('text-foreground', new_series_class)
         self.assertNotIn('bg-accent', new_series_class)
         self.assertIn('data-testid="event-series-new-button"', new_series.group(0))
+
+        self.assertEqual(source.count('bg-accent px-4 py-2'), 1)
+        self.assertIn('{% studio_overflow_menu %}', source)
 
     def test_event_series_list_new_button_uses_canonical_shape(self):
         """``event_series/list.html`` line 13 — icon+label CTA."""

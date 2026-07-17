@@ -323,6 +323,7 @@ def studio_header_actions(
     back_label=None,
     testid='studio-header',
     actions_testid='studio-header-actions',
+    title_meta=None,
 ):
     """Render the shared stacked Studio header around local action markup."""
     actions = mark_safe(content.strip())
@@ -337,9 +338,16 @@ def studio_header_actions(
             'back_label': back_label,
             'testid': testid,
             'actions_testid': actions_testid,
+            'title_meta': title_meta,
             'actions': actions,
         },
     )
+
+
+@register.simple_block_tag
+def studio_header_title_meta(content):
+    """Capture trusted, template-authored Studio header metadata."""
+    return mark_safe(content.strip())
 
 
 @register.simple_block_tag(takes_context=True)

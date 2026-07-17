@@ -45,6 +45,7 @@ class HeaderActionsBlockTagTest(SimpleTestCase):
 
         self.assertIn('data-testid="studio-header"', html)
         self.assertIn('data-testid="studio-header-actions"', html)
+        self.assertIn('class="relative flex flex-wrap items-center gap-2"', html)
 
     def test_empty_and_whitespace_only_blocks_omit_action_row(self):
         for content in ('', '   \n  '):
@@ -57,6 +58,40 @@ class HeaderActionsBlockTagTest(SimpleTestCase):
                 self.assertIn('data-testid="studio-header"', html)
                 self.assertNotIn('studio-header-actions', html)
                 self.assertNotIn('flex flex-wrap items-center gap-2', html)
+
+    def test_template_authored_title_meta_renders_once_and_omits_empty_wrapper(self):
+        html = self.render(
+            """
+            {% studio_header_title_meta as title_meta %}
+              <span data-testid="pending-meta">3 pending review</span>
+            {% endstudio_header_title_meta %}
+            {% studio_header_actions title='Projects' title_meta=title_meta %}
+            {% endstudio_header_actions %}
+            """
+        )
+
+        self.assertEqual(html.count('data-testid="pending-meta"'), 1)
+        self.assertIn('data-testid="studio-header-meta"', html)
+        self.assertNotIn('&lt;span', html)
+
+        empty_html = self.render(
+            """
+            {% studio_header_title_meta as title_meta %}   {% endstudio_header_title_meta %}
+            {% studio_header_actions title='Projects' title_meta=title_meta %}
+            {% endstudio_header_actions %}
+            """
+        )
+        self.assertNotIn('studio-header-meta', empty_html)
+
+        escaped_html = self.render(
+            """
+            {% studio_header_title_meta as title_meta %}<span>{{ untrusted }}</span>{% endstudio_header_title_meta %}
+            {% studio_header_actions title='Safe metadata' title_meta=title_meta %}{% endstudio_header_actions %}
+            """,
+            {'untrusted': '<script>alert(1)</script>'},
+        )
+        self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt;', escaped_html)
+        self.assertNotIn('<script>alert(1)</script>', escaped_html)
 
     def test_partial_uses_stacked_contract_without_forbidden_classes(self):
         html = self.render(

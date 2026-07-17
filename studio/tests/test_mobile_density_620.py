@@ -309,12 +309,11 @@ class StudioWorkshopsListWorkerStatusTest(TestCase):
             password="testpass",
         )
 
-    def test_header_uses_responsive_flex_direction(self):
+    def test_header_uses_shared_stacked_contract(self):
         response = self.client.get("/studio/workshops/")
-        # Old: ``flex items-center justify-between`` forced a single row at
-        # every viewport, leaving no room for the worker-status indicator.
-        # New: ``flex-col sm:flex-row`` stacks at mobile and aligns at sm+.
-        self.assertContains(response, "flex flex-col sm:flex-row")
+        self.assertContains(response, '<header class="mb-8 space-y-4"')
+        self.assertContains(response, 'data-testid="studio-header-meta"')
+        self.assertNotContains(response, "flex flex-col sm:flex-row")
 
     def test_worker_status_inline_wraps_at_mobile(self):
         # Inline worker status sits inside the H1 block; it must wrap so
@@ -444,13 +443,7 @@ class StudioEnvMismatchBannerHiddenOnMobileTest(TestCase):
 
 
 class StudioListHeaderDescriptionsHiddenOnMobileTest(TestCase):
-    """Page-header descriptions on dense list pages hide below md.
-
-    The Articles page already hides its description below md (issue
-    #620, first round). The same rule now applies to Events, Courses,
-    Users, and Email templates so each page reclaims ~24 px and the
-    Pixel 7 row-density targets land.
-    """
+    """Migrated list descriptions render through the shared header owner."""
 
     @classmethod
     def setUpTestData(cls):
@@ -468,37 +461,23 @@ class StudioListHeaderDescriptionsHiddenOnMobileTest(TestCase):
 
     def test_articles_description_hidden_on_mobile(self):
         response = self.client.get("/studio/articles/")
-        self.assertContains(
-            response,
-            'mt-1 hidden md:block">Manage blog articles and posts.',
-        )
+        self.assertContains(response, 'data-testid="studio-header"')
+        self.assertContains(response, 'text-sm text-muted-foreground mt-1">Manage blog articles and posts.')
 
     def test_events_description_hidden_on_mobile(self):
         response = self.client.get("/studio/events/")
-        self.assertContains(
-            response,
-            (
-                'mt-1 hidden md:block">'
-                "Manage upcoming event lifecycle and platform."
-            ),
-        )
+        self.assertContains(response, 'data-testid="studio-header"')
+        self.assertContains(response, 'text-sm text-muted-foreground mt-1">Manage upcoming event lifecycle and platform.')
 
     def test_courses_description_hidden_on_mobile(self):
         response = self.client.get("/studio/courses/")
-        self.assertContains(
-            response,
-            'mt-1 hidden md:block">Manage your courses and curriculum.',
-        )
+        self.assertContains(response, 'data-testid="studio-header"')
+        self.assertContains(response, 'text-sm text-muted-foreground mt-1">Manage your courses and curriculum.')
 
     def test_users_description_hidden_on_mobile(self):
         response = self.client.get("/studio/users/")
-        self.assertContains(
-            response,
-            (
-                'mt-1 hidden md:block">'
-                "All platform users."
-            ),
-        )
+        self.assertContains(response, 'data-testid="studio-header"')
+        self.assertContains(response, 'text-sm text-muted-foreground mt-1">All platform users.')
 
     def test_email_templates_description_hidden_on_mobile(self):
         response = self.client.get("/studio/email-templates/")

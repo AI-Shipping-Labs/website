@@ -4,17 +4,14 @@
 {% block studio_title %}Projects{% endblock %}
 
 {% block studio_content %}
-<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
-  <div>
-    <h1 class="text-2xl font-semibold text-foreground">Projects</h1>
-    <p class="text-muted-foreground mt-1">Moderate community project submissions.</p>
-  </div>
+{% studio_header_title_meta as projects_header_meta %}
   {% if pending_count %}
-  <span class="bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full text-sm">
+  <span class="bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 px-3 py-1 rounded-full text-sm" data-testid="projects-pending-meta">
     {{ pending_count }} pending review
   </span>
   {% endif %}
-</div>
+{% endstudio_header_title_meta %}
+{% studio_header_actions title="Projects" subtitle="Moderate community project submissions." title_meta=projects_header_meta %}{% endstudio_header_actions %}
 
 {% studio_list_filter search status_filter "Search projects..." "project" %}
 

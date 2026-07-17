@@ -4,13 +4,10 @@
 {% block studio_title %}Notifications{% endblock %}
 
 {% block studio_content %}
-<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
-  <div>
-    <h1 class="text-2xl font-semibold text-foreground">Notification Log</h1>
-    <p class="text-muted-foreground mt-1">Deduplicated history of subscriber notifications.</p>
+{% studio_header_title_meta as notification_header_meta %}
     {% worker_status_inline %}
-  </div>
-</div>
+{% endstudio_header_title_meta %}
+{% studio_header_actions title="Notification Log" subtitle="Deduplicated history of subscriber notifications." title_meta=notification_header_meta %}{% endstudio_header_actions %}
 
 {% if page_obj.paginator.count %}
 <!-- Notification Log -->

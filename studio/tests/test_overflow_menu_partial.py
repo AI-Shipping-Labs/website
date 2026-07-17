@@ -32,8 +32,10 @@ class OverflowMenuBlockTagTest(SimpleTestCase):
         self.assertIn('name="csrfmiddlewaretoken"', html)
         self.assertIn('aria-label="More actions"', html)
         self.assertIn('h-[38px] w-[38px]', html)
-        self.assertIn('absolute left-0', html)
-        self.assertIn('w-64', html)
+        self.assertIn('static sm:relative', html)
+        self.assertIn('absolute inset-x-0 top-full', html)
+        self.assertIn('w-auto', html)
+        self.assertIn('sm:left-0 sm:right-auto sm:top-auto sm:w-64', html)
         self.assertIn('focus-visible:ring-offset-background', html)
 
     def test_partial_keeps_canonical_item_shape_comments(self):

@@ -107,11 +107,13 @@ class TestContentSourcesDownloadAndUpload:
             wait_until="domcontentloaded",
         )
 
-        # The Download anchor sits in the header alongside Sync All.
+        # Download is a rare action in the shared header overflow.
         download_link = page.locator('[data-testid="content-sources-download"]')
         sync_all_btn = page.locator("#sync-all-btn")
         assert download_link.count() == 1
         assert sync_all_btn.count() == 1
+        page.get_by_label("More actions").click()
+        assert download_link.is_visible()
         assert "Download content sources" in download_link.inner_text()
 
         # Click Download → JSON file with the seeded values.

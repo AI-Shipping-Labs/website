@@ -4,10 +4,7 @@
 {% block studio_title %}Content Sync{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-  <div>
-    <h1 class="text-2xl font-semibold text-foreground inline-flex items-center gap-2">
-      <span>Content Sync</span>
+{% studio_header_title_meta as sync_header_meta %}
       {% comment %}
       Live indicator (issue #243). Hidden by default; the poller flips
       ``data-polling="true"`` on this element when it starts polling and
@@ -20,45 +17,45 @@
         <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
         <span>Live</span>
       </span>
-    </h1>
-    <p class="text-muted-foreground mt-1">Sync content from GitHub repositories.</p>
-    {% worker_status_inline %}
-  </div>
-  <div class="flex flex-col items-stretch sm:items-end gap-3 shrink-0">
-    {# Primary actions: routine sync management. #}
-    <div class="flex flex-wrap items-center gap-3 sm:justify-end">
-      <a href="{% url 'studio_content_source_create' %}"
-         class="{% studio_action_class 'secondary' %}">
-        Add content source
-      </a>
-      <a href="{% url 'studio_sync_history' %}"
-         class="{% studio_action_class 'secondary' %}">
-        History
-      </a>
+      {% worker_status_inline %}
+{% endstudio_header_title_meta %}
+{% studio_header_actions title="Content Sync" subtitle="Sync content from GitHub repositories." title_meta=sync_header_meta %}
       <form method="post" action="{% url 'studio_sync_all' %}" id="sync-all-form">
         {% csrf_token %}
         <button type="submit" id="sync-all-btn"
-                class="{% studio_action_class 'async' %}">
+                class="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+          <i data-lucide="refresh-cw" class="h-4 w-4" aria-hidden="true"></i>
           <span>Sync All</span>
         </button>
       </form>
-    </div>
-    {# Import/export tools — separate row so the action bar doesn't get crowded. #}
-    <div class="flex flex-col items-stretch sm:items-end gap-1">
-      <div class="flex flex-wrap items-center gap-3 sm:justify-end">
+      <a href="{% url 'studio_content_source_create' %}"
+         class="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+        Add content source
+      </a>
+      <a href="{% url 'studio_sync_history' %}"
+         class="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+        History
+      </a>
+      {% studio_overflow_menu %}
         <a href="{% url 'studio_content_sources_export' %}"
-           class="{% studio_action_class 'secondary' %}"
+           class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
            data-testid="content-sources-download"
            title="Includes webhook secrets — treat the file as sensitive.">
-          Download content sources
+          <i data-lucide="download" class="h-4 w-4" aria-hidden="true"></i><span>Download content sources</span>
         </a>
-        <form method="post"
+      {% endstudio_overflow_menu %}
+{% endstudio_header_actions %}
+
+<section class="mb-8 rounded-lg border border-border bg-card p-4 sm:p-5" data-testid="content-sources-import-card">
+  <h2 class="text-lg font-semibold text-foreground">Import content sources</h2>
+  <p class="mt-1 text-sm text-muted-foreground">Restore content source configuration from an exported JSON file.</p>
+  <form method="post"
               action="{% url 'studio_content_sources_import' %}"
               enctype="multipart/form-data"
-              class="flex flex-wrap items-center gap-2"
+              class="mt-4 flex min-w-0 flex-wrap items-center gap-2"
               id="content-sources-import-form">
           {% csrf_token %}
-          <label class="{% studio_action_class 'secondary' %} cursor-pointer">
+          <label class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-2 focus-within:ring-offset-background">
             <span>Choose file</span>
             <input type="file"
                    name="content_sources_file"
@@ -67,23 +64,20 @@
                    required
                    onchange="this.form.querySelector('[data-content-sources-upload-filename]').textContent = this.files[0] ? this.files[0].name : 'No file chosen'; this.form.querySelector('[data-content-sources-upload-submit]').disabled = !this.files[0];">
           </label>
-          <span class="text-xs text-muted-foreground" data-content-sources-upload-filename>No file chosen</span>
+          <span class="min-w-0 break-all text-xs text-muted-foreground" data-content-sources-upload-filename>No file chosen</span>
           <button type="submit"
                   disabled
                   data-content-sources-upload-submit
                   data-testid="content-sources-upload"
-                  class="{% studio_action_class 'secondary' %} disabled:opacity-50 disabled:cursor-not-allowed">
+                  class="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed">
             Upload content sources
           </button>
-        </form>
-      </div>
-      <p class="text-xs text-muted-foreground"
+  </form>
+  <p class="mt-2 text-xs text-muted-foreground"
          data-testid="content-sources-sensitivity-caption">
         Includes webhook secrets — treat the file as sensitive.
-      </p>
-    </div>
-  </div>
-</div>
+  </p>
+</section>
 
 {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
 

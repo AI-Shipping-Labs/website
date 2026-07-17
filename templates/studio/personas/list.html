@@ -4,17 +4,13 @@
 {% block studio_title %}Personas{% endblock %}
 
 {% block studio_content %}
-<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8" data-testid="personas-header">
-  <div>
-    <h1 class="text-2xl font-semibold text-foreground">Personas</h1>
-    <p class="text-muted-foreground mt-1">Internal-only member archetypes. Never shown to members.</p>
-  </div>
+{% studio_header_actions title="Personas" subtitle="Internal-only member archetypes. Never shown to members." testid="personas-header" %}
   <a href="{% url 'studio_persona_create' %}"
-     class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2">
+     class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
     <i data-lucide="plus" class="h-4 w-4"></i>
     <span>New persona</span>
   </a>
-</div>
+{% endstudio_header_actions %}
 
 {% studio_list_filter search "" "Search personas..." None False %}
 

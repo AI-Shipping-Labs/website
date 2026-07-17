@@ -228,7 +228,8 @@ def test_events_list_has_single_primary_create_cta(django_server, browser):
     assert "bg-accent" in new_event_classes
     assert "text-accent-foreground" in new_event_classes
     assert "bg-accent" not in new_series_classes
-    assert "border-border" in new_series_classes
+    assert "min-h-[44px]" in new_series_classes
+    assert "w-full" in new_series_classes
     assert page.locator('[data-testid="event-series-new-button"]').get_attribute("href").endswith(
         "/studio/event-series/new"
     )

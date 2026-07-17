@@ -4,18 +4,14 @@
 {% block studio_title %}Marketing Pages{% endblock %}
 
 {% block studio_content %}
-<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
-  <div>
-    <h1 class="text-2xl font-semibold text-foreground">Marketing Pages</h1>
-    <p class="text-muted-foreground mt-1 hidden md:block">Manage standalone public landing and orientation pages.</p>
-  </div>
+{% studio_header_actions title="Marketing Pages" subtitle="Manage standalone public landing and orientation pages." %}
   <a href="{% url 'studio_marketing_page_new' %}"
-     class="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:w-auto"
+     class="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:w-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
      data-testid="new-marketing-page">
     <i data-lucide="plus" class="h-4 w-4"></i>
     New marketing page
   </a>
-</div>
+{% endstudio_header_actions %}
 
 {% studio_list_filter search status_filter "Search marketing pages..." %}
 

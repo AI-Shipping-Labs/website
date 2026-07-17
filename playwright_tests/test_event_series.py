@@ -66,9 +66,11 @@ class TestScenario1CreateSeries:
         page = ctx.new_page()
 
         page.goto(f"{django_server}/studio/events/", wait_until="domcontentloaded")
-        # The list page shows the New event series button.
-        assert page.locator('[data-testid="event-series-new-button"]').is_visible()
-        page.locator('[data-testid="event-series-new-button"]').click()
+        # Series creation is a rare action in the shared header overflow.
+        page.get_by_label("More actions").click()
+        new_series = page.locator('[data-testid="event-series-new-button"]')
+        assert new_series.is_visible()
+        new_series.click()
         page.wait_for_url(re.compile(r".*/studio/event-series/new$"))
 
         start = _next_weekday(2)  # Wednesday

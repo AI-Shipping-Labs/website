@@ -2,12 +2,7 @@
 {% load studio_filters %}
 {% block studio_title %}Maven occurrences{% endblock %}
 {% block studio_content %}
-<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
-  <div>
-    <h1 class="text-2xl font-semibold text-foreground">Maven enrollment occurrences</h1>
-    <p class="text-muted-foreground mt-1 hidden md:block">Inspect lifecycle and retryable delivery state without exposing webhook payloads.</p>
-  </div>
-</div>
+{% studio_header_actions title="Maven enrollment occurrences" subtitle="Inspect lifecycle and retryable delivery state without exposing webhook payloads." %}{% endstudio_header_actions %}
 {% if events %}
 <div class="{% studio_list_class 'wrapper' %}" data-testid="maven-occurrence-list">
   <table class="{% studio_list_class 'table' %}">

@@ -67,8 +67,10 @@ class TestScenario1CreateOneOff:
         page.goto(
             f"{django_server}/studio/events/", wait_until="domcontentloaded",
         )
-        # Both create buttons are visible in the header.
+        # The one-off create action stays visible; series creation lives in
+        # the shared overflow menu so the header keeps one clear primary CTA.
         assert page.locator('[data-testid="event-new-button"]').is_visible()
+        page.get_by_label("More actions").click()
         assert page.locator(
             '[data-testid="event-series-new-button"]'
         ).is_visible()

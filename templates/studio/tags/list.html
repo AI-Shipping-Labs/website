@@ -4,17 +4,13 @@
 {% block studio_title %}Tags{% endblock %}
 
 {% block studio_content %}
-<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
-  <div>
-    <h1 class="text-2xl font-semibold text-foreground">Tags</h1>
-    <p class="text-muted-foreground mt-1">Manage normalized contact tags across Studio users.</p>
-  </div>
+{% studio_header_actions title="Tags" subtitle="Manage normalized contact tags across Studio users." %}
   <a href="{% url 'studio_user_list' %}"
-     class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2">
+     class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
     <i data-lucide="users" class="h-4 w-4"></i>
     <span>Users</span>
   </a>
-</div>
+{% endstudio_header_actions %}
 
 {% if tags %}
 <div class="{% studio_list_class 'wrapper' %}" data-testid="studio-tags-list">

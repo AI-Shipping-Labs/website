@@ -4,47 +4,41 @@
 {% block studio_title %}Events{% endblock %}
 
 {% block studio_content %}
-<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
-  <div>
-    <h1 class="text-2xl font-semibold text-foreground">{% if is_past_view %}Past events{% else %}Events{% endif %}</h1>
-    <p class="text-muted-foreground mt-1 hidden md:block">{% if is_past_view %}Browse finished and cancelled events.{% else %}Manage upcoming event lifecycle and platform.{% endif %}</p>
-  </div>
-  <div class="flex items-center gap-2">
+{% studio_header_actions title=is_past_view|yesno:"Past events,Events" subtitle=is_past_view|yesno:"Browse finished and cancelled events.,Manage upcoming event lifecycle and platform." %}
+    <a href="{% url 'studio_event_new' %}"
+       class="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+       data-testid="event-new-button">
+      <i data-lucide="plus" class="h-4 w-4"></i>
+      <span>New event</span>
+    </a>
     {% if is_past_view %}
     <a href="{% url 'studio_event_list' %}"
-       class="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+       class="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
        data-testid="event-upcoming-link">
       <i data-lucide="calendar" class="h-4 w-4"></i>
       <span>Upcoming events</span>
     </a>
     {% else %}
     <a href="{% url 'studio_event_list_past' %}"
-       class="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+       class="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
        data-testid="event-past-link">
       <i data-lucide="history" class="h-4 w-4"></i>
       <span>Past events{% if past_count %} ({{ past_count }}){% endif %}</span>
     </a>
     {% endif %}
-    <a href="{% url 'studio_event_duplicates' %}"
-       class="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-       data-testid="event-duplicates-button">
-      <i data-lucide="copy" class="h-4 w-4"></i>
-      <span>Duplicates</span>
-    </a>
-    <a href="{% url 'studio_event_new' %}"
-       class="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
-       data-testid="event-new-button">
-      <i data-lucide="plus" class="h-4 w-4"></i>
-      <span>New event</span>
-    </a>
-    <a href="{% url 'studio_event_series_new' %}"
-       class="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-       data-testid="event-series-new-button">
-      <i data-lucide="plus" class="h-4 w-4"></i>
-      <span>New event series</span>
-    </a>
-  </div>
-</div>
+    {% studio_overflow_menu %}
+      <a href="{% url 'studio_event_series_new' %}"
+         class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+         data-testid="event-series-new-button">
+        <i data-lucide="plus" class="h-4 w-4"></i><span>New event series</span>
+      </a>
+      <a href="{% url 'studio_event_duplicates' %}"
+         class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+         data-testid="event-duplicates-button">
+        <i data-lucide="copy" class="h-4 w-4"></i><span>Duplicates</span>
+      </a>
+    {% endstudio_overflow_menu %}
+{% endstudio_header_actions %}
 
 {% studio_list_filter search status_filter "Search events..." "event" %}
 

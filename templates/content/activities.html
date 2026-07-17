@@ -264,13 +264,14 @@
 
   <section id="live-events" class="border-t border-border bg-card py-12 sm:py-20 lg:py-28" data-testid="activities-live-events-section">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-        <div class="max-w-3xl">
+      <div class="max-w-3xl">
           <p class="text-sm font-medium uppercase tracking-widest text-accent">Live events</p>
           <h2 class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Upcoming community sessions</h2>
           <p class="mt-4 text-base leading-relaxed text-muted-foreground">See the next building sessions, office hours, mock interviews, and career conversations on the community calendar.</p>
-        </div>
-        <a href="/events" class="{% button_classes 'secondary' %}" data-testid="activities-view-all-events">View all events</a>
+        <a href="/events" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="activities-view-all-events">
+          View all events
+          <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
+        </a>
       </div>
 
       {% if upcoming_events %}
@@ -297,13 +298,14 @@
 
   <section id="workshops" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28" data-testid="activities-workshops-section">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-        <div class="max-w-3xl">
+      <div class="max-w-3xl">
           <p class="text-sm font-medium uppercase tracking-widest text-accent">Workshops</p>
           <h2 class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Recent hands-on workshops</h2>
           <p class="mt-4 text-base leading-relaxed text-muted-foreground">Preview recent workshops with recordings, step-by-step tutorials, and practical materials.</p>
-        </div>
-        <a href="/workshops" class="{% button_classes 'secondary' %}" data-testid="activities-view-all-workshops">View all workshops</a>
+        <a href="/workshops" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="activities-view-all-workshops">
+          View all workshops
+          <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
+        </a>
       </div>
 
       {% if recent_workshops %}

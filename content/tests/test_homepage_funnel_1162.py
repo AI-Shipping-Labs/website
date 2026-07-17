@@ -42,12 +42,6 @@ HOME_CTA_OWNERS = {
         'lg',
         'w-full sm:w-auto',
     ),
-    'home-activities-tier-link': (
-        "{% button_classes 'secondary' size='md' %}",
-        'secondary',
-        'md',
-        '',
-    ),
     'home-free-tier-cta': (
         "{% button_classes 'secondary' size='lg' extra='mt-auto w-full' %}",
         'secondary',

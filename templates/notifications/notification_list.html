@@ -8,13 +8,13 @@
 
 <main class="min-h-screen pt-24">
   <div class="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
-    <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div class="mb-8">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">Notifications</h1>
         <p class="mt-2 text-sm text-muted-foreground">Updates from your courses, events, and community activity.</p>
       </div>
       <button onclick="markAllRead()" id="mark-all-btn" {% if unread_count == 0 %}hidden{% endif %}
-              class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+              class="mt-4 {% if unread_count == 0 %}hidden{% else %}inline-flex{% endif %} min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
         <i data-lucide="check-check" class="h-4 w-4"></i>
         Mark all as read
       </button>

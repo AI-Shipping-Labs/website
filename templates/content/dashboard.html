@@ -58,12 +58,10 @@
     {% if show_free_activation_checklist %}
     <!-- Free activation checklist (issue #1161). -->
     <section class="mb-8" data-testid="free-activation-checklist">
-      <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+      <div class="mb-4">
           <p class="text-sm font-medium uppercase tracking-wide text-accent">Getting started</p>
           <h2 class="mt-1 text-2xl font-semibold tracking-tight text-foreground">Start building with your Free account</h2>
-        </div>
-        <p class="max-w-xl text-sm text-muted-foreground">Start with open courses and live events, then learn how sprints and plans work.</p>
+        <p class="mt-2 max-w-xl text-sm text-muted-foreground">Start with open courses and live events, then learn how sprints and plans work.</p>
       </div>
       <div class="grid gap-3 md:grid-cols-3">
         {% for item in free_activation_checklist_items %}
@@ -134,12 +132,12 @@
       <div class="grid gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]" data-testid="dashboard-primary-sections">
         <!-- Continue Learning -->
         <section class="min-w-0" data-testid="dashboard-continue-learning-section">
-          <div class="mb-4 flex items-center justify-between gap-3">
+          <div class="mb-4">
             <h2 class="flex min-w-0 items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
               <i data-lucide="book-open" class="h-5 w-5 shrink-0 text-accent"></i>
               Continue learning
             </h2>
-            <div class="flex shrink-0 items-center gap-1 text-sm">
+            <div class="mt-1 flex flex-wrap gap-4 text-sm">
               <a href="/courses" class="inline-flex min-h-[44px] items-center rounded-md px-2 text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Courses</a>
               <a href="/workshops" class="inline-flex min-h-[44px] items-center rounded-md px-2 text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Workshops</a>
             </div>
@@ -240,12 +238,12 @@
 
         <!-- Upcoming Events -->
         <section class="min-w-0" data-testid="dashboard-upcoming-events-section">
-          <div class="mb-4 flex items-center justify-between gap-3">
+          <div class="mb-4">
             <h2 class="flex min-w-0 items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
               <i data-lucide="calendar" class="h-5 w-5 shrink-0 text-accent"></i>
               Upcoming events
             </h2>
-            <a href="/events" class="inline-flex min-h-[44px] shrink-0 items-center rounded-md px-2 text-sm text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">View all events</a>
+            <a href="/events" class="inline-flex min-h-[44px] items-center rounded-md px-2 text-sm text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">View all events</a>
           </div>
           {% if upcoming_events %}
           <div class="space-y-4">
@@ -447,12 +445,12 @@
         {% if active_sprint_opportunities or not plan %}
         <!-- Active Sprints -->
         <section>
-          <div class="mb-4 flex items-center justify-between gap-3">
+          <div class="mb-4">
             <h2 class="flex min-w-0 items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
               <i data-lucide="users" class="h-5 w-5 shrink-0 text-accent"></i>
               {{ active_sprint_section_title }}
             </h2>
-            <a href="{{ active_sprint_discovery_url }}" class="inline-flex min-h-[44px] shrink-0 items-center rounded-md px-2 text-sm text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Activities</a>
+            <a href="{{ active_sprint_discovery_url }}" class="inline-flex min-h-[44px] items-center rounded-md px-2 text-sm text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Activities</a>
           </div>
           {% if active_sprint_opportunities %}
           <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-1" data-testid="dashboard-active-sprints">
@@ -499,12 +497,12 @@
       <div class="grid gap-8 lg:grid-cols-2" data-testid="dashboard-discovery-sections">
         <!-- Recent Content -->
         <section class="min-w-0">
-          <div class="mb-4 flex items-center justify-between gap-3">
+          <div class="mb-4">
             <h2 class="flex min-w-0 items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
               <i data-lucide="newspaper" class="h-5 w-5 shrink-0 text-accent"></i>
               Recent content
             </h2>
-            <a href="/blog" class="inline-flex min-h-[44px] shrink-0 items-center rounded-md px-2 text-sm text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Browse blog</a>
+            <a href="/blog" class="inline-flex min-h-[44px] items-center rounded-md px-2 text-sm text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Browse blog</a>
           </div>
           {% if recent_content %}
           <div class="space-y-3" data-testid="dashboard-recent-content">

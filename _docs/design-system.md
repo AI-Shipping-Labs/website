@@ -131,6 +131,20 @@ Common card padding:
 - List rows: `px-3 py-2` with `min-h-[44px]`.
 - Studio table cells: `px-4 py-3`.
 
+Public/member page headers and standalone section headers use a title-first
+stack at every viewport. Their document and visual order is eyebrow, title,
+intro or status metadata, then links, buttons, and filters. Header controls are
+left-aligned and wrap; never pin them opposite the title with responsive
+`justify-between` or a two-column row. Discovery links immediately following a
+marketing-section intro use
+`mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline`
+plus the canonical focus-visible ring and a trailing `h-4 w-4` decorative
+`arrow-right` icon. This rule does not apply to alert/banner dismissal rows,
+content/action callout cards, repeated cards, table/list rows, pager rows,
+pricing tier-name/meta rows, badge/arrow rows, or other card-internal metadata
+layouts. The separate Studio stacked-header contract below remains authoritative
+for Studio surfaces.
+
 Variable-height detail cards:
 
 - Do not force related detail content into competing multi-column layouts when sections can have very different content height. A single vertical flow is often clearer than side-by-side blocks with awkward empty space.

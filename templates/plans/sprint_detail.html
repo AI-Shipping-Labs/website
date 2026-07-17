@@ -21,7 +21,7 @@
         <h1 class="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl" data-testid="sprint-detail-name">{{ sprint.name }}</h1>
         <div class="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span data-testid="sprint-date-range">{% sprint_date_range sprint %}</span>
-          {% member_status_badge sprint.sprint_badge_current.label size="sm" extra_class=sprint.sprint_badge_current.css_class uppercase=True testid="sprint-status-badge" %}
+          {% member_status_badge sprint.sprint_badge_current.label status=sprint.sprint_badge_current.state size="sm" uppercase=True testid="sprint-status-badge" %}
         </div>
         <p class="mt-3">
           {% member_tier_badge sprint.min_tier_level tone="accent_strong" size="sm" icon="lock" testid="sprint-tier-badge" %}

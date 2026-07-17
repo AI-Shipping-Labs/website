@@ -39,7 +39,7 @@
                 <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
                   <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
-                      {% member_status_badge item.sprint.sprint_badge_current.label size="sm" extra_class=item.sprint.sprint_badge_current.css_class uppercase=True testid="sprints-sprint-status" %}
+                      {% member_status_badge item.sprint.sprint_badge_current.label status=item.sprint.sprint_badge_current.state size="sm" uppercase=True testid="sprints-sprint-status" %}
                       {% member_tier_badge item.required_tier_level tone="accent_strong" size="sm" icon="lock" testid="sprints-sprint-tier" %}
                       {% if item.enrolled %}
                       <span class="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-300" data-testid="sprints-sprint-enrolled">

@@ -18,9 +18,9 @@ class ProjectDifficultyColorTest(TestCase):
 
     def test_difficulty_color_table(self):
         cases = [
-            ('intermediate', 'bg-yellow-500/20 text-yellow-400'),
-            ('beginner', 'bg-green-500/20 text-green-400'),
-            ('advanced', 'bg-red-500/20 text-red-400'),
+            ('intermediate', 'bg-yellow-500/15 text-yellow-800 dark:text-yellow-400'),
+            ('beginner', 'bg-green-500/15 text-green-800 dark:text-green-400'),
+            ('advanced', 'bg-red-500/15 text-red-800 dark:text-red-400'),
             ('', 'bg-secondary text-muted-foreground'),
         ]
         project = Project(slug='difficulty-test')

@@ -25,7 +25,7 @@
   data-workshop-slug="{{ workshop.slug }}"
   {% endif %}
   {% if completion_button_testid %}data-testid="{{ completion_button_testid }}{{ completion_button_id_suffix|default:'' }}"{% endif %}
-  class="{% if completion_button_full_width %}flex w-full{% else %}inline-flex{% endif %} items-center justify-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-medium transition-colors flex-shrink-0 min-h-[44px] {% if is_completed %}border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20{% else %}border-border bg-card text-foreground hover:bg-muted{% endif %}"
+  class="{% if completion_button_full_width %}flex w-full{% else %}inline-flex{% endif %} items-center justify-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-medium transition-colors flex-shrink-0 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if is_completed %}border-green-500/30 bg-green-500/10 text-green-800 dark:text-green-400 hover:bg-green-500/20{% else %}border-border bg-card text-foreground hover:bg-muted{% endif %}"
 >
   {% if is_completed %}
   <i data-lucide="check-circle-2" class="h-4 w-4"></i>

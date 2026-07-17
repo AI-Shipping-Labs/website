@@ -794,7 +794,10 @@ class FreeCourseAccessTest(TierSetupMixin, TestCase):
         response = self.client.get('/courses/free-course')
         self.assertContains(response, 'Sign up free to start this course')
         self.assertEqual(response.context['required_tier_name'], '')
-        self.assertContains(response, '>Free<')
+        self.assertRegex(
+            response.content.decode(),
+            r'<span[^>]*data-component="member-badge"[^>]*>\s*Free\s*</span>',
+        )
         self.assertContains(response, 'data-testid="inline-register-card"')
         self.assertNotContains(response, 'data-testid="course-gated-cta"')
         self.assertNotContains(response, 'data-testid="gated-required-tier"')

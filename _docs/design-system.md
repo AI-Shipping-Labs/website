@@ -41,6 +41,16 @@ All theme-aware color should come from the variables in `templates/base.html`. U
 
 Raw Tailwind palette colors are allowed only when their meaning matches the tone table in [Pills, Badges, and Chips](#pills-badges-and-chips). Existing usage is not precedent by itself; check its semantic meaning. Theme-aware non-state UI continues to use design tokens.
 
+Compact semantic status and categorical badges on public/member surfaces use
+`bg-<color>-500/15 text-<color>-800 dark:text-<color>-400`. Their normal-size
+text must reach at least 4.5:1 against the browser-computed, alpha-composited
+effective background in both themes. A raw `text-<color>-600` class is not
+sufficient contrast evidence. This recipe is owned by
+`content.templatetags.member_badges` where a shared tone exists; alerts,
+buttons, links, standalone headings, and large decorative/status icons retain
+their own component-specific border, focus, live-region, and contrast recipes
+instead of copying badge colors.
+
 ## Typography Scale
 
 Inter uses weights 300 through 700. Headings always use `font-semibold`, never `font-bold`. Do not copy `font-bold` from a legacy page; fix a touched legacy heading instead. Every heading at `text-2xl` or larger includes `tracking-tight`. Eyebrows use `tracking-widest`, never `tracking-wider`.

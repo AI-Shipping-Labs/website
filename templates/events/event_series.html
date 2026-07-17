@@ -68,11 +68,7 @@
           <p class="mt-2 text-xs text-muted-foreground">Sign in to register for the whole series.</p>
           {% elif is_series_registered %}
           <div class="flex flex-wrap items-center gap-3">
-            <span class="inline-flex items-center gap-2 rounded-lg bg-green-500/20 px-4 py-2.5 text-sm font-semibold text-green-400"
-                  data-testid="series-registered-state">
-              <i data-lucide="check-circle" class="h-4 w-4"></i>
-              You're registered for this series
-            </span>
+            {% member_status_badge "You're registered for this series" status="registered" size="md" icon="check-circle" testid="series-registered-state" extra_class="rounded-lg py-2.5 font-semibold" %}
             <button type="button"
                     class="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                     data-testid="series-cancel-button"
@@ -150,15 +146,10 @@
             {# Issue #863/#866: staff preview surfaces cancelled occurrences #}
             {# with a clear red chip; the public list never includes them. #}
             {% if event.status == 'cancelled' %}
-            <span class="inline-flex min-h-[44px] items-center rounded-full bg-red-500/20 px-2.5 py-1 text-xs font-medium text-red-400" data-testid="series-event-state-cancelled">
-              Cancelled
-            </span>
+            {% member_status_badge "Cancelled" status="cancelled" testid="series-event-state-cancelled" extra_class="min-h-[44px] py-1" %}
             {# Issue #857: per-occurrence registration state. #}
             {% elif event.user_reg_state == 'registered' %}
-            <span class="inline-flex min-h-[44px] items-center gap-1 rounded-full bg-green-500/20 px-2.5 py-1 text-xs font-medium text-green-400" data-testid="series-event-state-registered">
-              <i data-lucide="check" class="h-3 w-3"></i>
-              Registered
-            </span>
+            {% member_status_badge "Registered" status="registered" icon="check" testid="series-event-state-registered" extra_class="min-h-[44px] py-1" %}
             {% elif event.user_reg_state == 'past' %}
             <span class="inline-flex min-h-[44px] items-center rounded bg-secondary px-2 py-1 text-xs font-medium text-muted-foreground" data-testid="series-event-state-past">
               Past

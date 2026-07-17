@@ -84,6 +84,7 @@ from studio.views.crm import (
 )
 from studio.views.dashboard import dashboard
 from studio.views.downloads import download_edit, download_list
+from studio.views.email_log import email_log_list
 from studio.views.email_templates import (
     email_template_edit,
     email_template_list,
@@ -1296,6 +1297,11 @@ urlpatterns = [
         'ses-events/',
         ses_event_list,
         name='studio_ses_event_list',
+    ),
+    path(
+        'email-log/',
+        email_log_list,
+        name='studio_email_log_list',
     ),
     path(
         'ses-events/<int:pk>/',

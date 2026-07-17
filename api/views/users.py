@@ -76,7 +76,11 @@ from crm.services.activity_context import (
     normalize_activity_category,
     serialize_activity_for_api,
 )
-from email_app.models import EmailLog, SesEvent
+from email_app.models import SesEvent
+from email_app.services.email_log_history import (
+    DISPOSITIONS,
+    user_history_queryset,
+)
 from questionnaires.models import Persona
 from questionnaires.onboarding import get_onboarding_response
 
@@ -1050,7 +1054,11 @@ def user_ses_events(request, email):
 
 _EMAIL_LOG_EXAMPLE = {
     "id": 42,
+    "recipient_email": "alice@example.com",
+    "user_id": 12,
+    "user_email": "alice@example.com",
     "email_type": "campaign",
+    "subject": "What we shipped this week",
     "sent_at": "2026-05-19T08:30:00+00:00",
     "ses_message_id": "0103018f-aaaa-bbbb-cccc-000000000000",
     "opened_at": "2026-05-19T09:00:00+00:00",
@@ -1062,7 +1070,45 @@ _EMAIL_LOG_EXAMPLE = {
     "bounce_subtype": "",
     "complained_at": None,
     "campaign_id": 7,
+    "campaign_subject": "What we shipped this week",
     "disposition": "opened",
+}
+
+_USER_EMAIL_LOG_PAGE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "email_logs": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer"},
+                    "recipient_email": {"type": "string"},
+                    "user_id": {"type": ["integer", "null"]},
+                    "user_email": {"type": ["string", "null"]},
+                    "email_type": {"type": "string"},
+                    "subject": {"type": "string"},
+                    "campaign_id": {"type": ["integer", "null"]},
+                    "campaign_subject": {"type": ["string", "null"]},
+                    "sent_at": {"type": "string", "format": "date-time"},
+                    "ses_message_id": {"type": "string"},
+                    "opened_at": {"type": ["string", "null"]},
+                    "opens": {"type": "integer"},
+                    "clicked_at": {"type": ["string", "null"]},
+                    "clicks": {"type": "integer"},
+                    "bounced_at": {"type": ["string", "null"]},
+                    "bounce_type": {"type": "string"},
+                    "bounce_subtype": {"type": "string"},
+                    "complained_at": {"type": ["string", "null"]},
+                    "disposition": {
+                        "type": "string", "enum": list(DISPOSITIONS),
+                    },
+                },
+            },
+        },
+        "count": {"type": "integer"},
+        "limit": {"type": "integer"},
+    },
 }
 
 
@@ -1104,15 +1150,25 @@ _EMAIL_LOG_EXAMPLE = {
                         "``welcome``, ``verification``)."
                     ),
                 },
+                "status": {
+                    "type": "string",
+                    "required": False,
+                    "enum": list(DISPOSITIONS),
+                    "description": "Exclusive strongest disposition.",
+                },
             },
             "responses": {
                 200: {
                     "description": "Email logs page.",
+                    "schema": _USER_EMAIL_LOG_PAGE_SCHEMA,
                     "example": {
                         "email_logs": [_EMAIL_LOG_EXAMPLE],
                         "count": 1,
                         "limit": 50,
                     },
+                },
+                401: {
+                    "description": "Missing, invalid, or non-staff token.",
                 },
                 404: {
                     "description": "Unknown email.",
@@ -1130,7 +1186,7 @@ _EMAIL_LOG_EXAMPLE = {
 )
 def user_email_log(request, email):
     """``GET /api/users/<email>/email-log``."""
-    user = _find_user(email)
+    user = resolve_user_by_email(email)
     if user is None:
         return _user_not_found_response()
 
@@ -1141,12 +1197,26 @@ def user_email_log(request, email):
     if err is not None:
         return err
 
-    qs = EmailLog.objects.filter(user=user)
+    qs = user_history_queryset(user)
     if since is not None:
         qs = qs.filter(sent_at__gte=since)
     kind_filter = request.GET.get("kind") or ""
     if kind_filter:
         qs = qs.filter(email_type=kind_filter)
+    status_filter = request.GET.get("status") or ""
+    if status_filter and status_filter not in DISPOSITIONS:
+        return error_response(
+            f"Invalid status: {status_filter!r}",
+            "validation_error",
+            status=422,
+            details={
+                "field": "status",
+                "value": status_filter,
+                "allowed": list(DISPOSITIONS),
+            },
+        )
+    if status_filter:
+        qs = qs.filter(disposition=status_filter)
     qs = qs.order_by("-sent_at")[:limit]
 
     rows = [serialize_email_log(log) for log in qs]

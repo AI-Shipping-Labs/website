@@ -303,7 +303,9 @@ def send_campaign_batch(campaign_id, user_ids, send_delay=None):
                     EmailLog.objects.create(
                         campaign=campaign,
                         user=user,
+                        recipient_email=user.email,
                         email_type='campaign',
+                        subject=campaign.subject,
                         ses_message_id=ses_message_id,
                     )
             except IntegrityError:

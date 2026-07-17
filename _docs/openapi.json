@@ -1626,6 +1626,216 @@
         ]
       }
     },
+    "/api/email-log": {
+      "get": {
+        "description": "Newest-first SES-accepted sends. Disposition is the exclusive strongest of sent, delivered, opened, clicked, bounced, and complained. Email bodies and raw provider payloads are omitted.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "description": "Recipient substring; an exact primary/alias address expands to canonical history.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "description": "Exact stored email_type value.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "sent",
+                "delivered",
+                "opened",
+                "clicked",
+                "bounced",
+                "complained"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "description": "Inclusive UTC sent date.",
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "description": "Inclusive UTC sent date.",
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Default 50; clamped to 200.",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "description": "Default 0; must be non-negative.",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "type": "integer"
+                    },
+                    "email_logs": {
+                      "items": {
+                        "properties": {
+                          "bounce_subtype": {
+                            "type": "string"
+                          },
+                          "bounce_type": {
+                            "type": "string"
+                          },
+                          "bounced_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "campaign_id": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "campaign_subject": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "clicked_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "clicks": {
+                            "type": "integer"
+                          },
+                          "complained_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "disposition": {
+                            "enum": [
+                              "sent",
+                              "delivered",
+                              "opened",
+                              "clicked",
+                              "bounced",
+                              "complained"
+                            ],
+                            "type": "string"
+                          },
+                          "email_type": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "integer"
+                          },
+                          "opened_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "opens": {
+                            "type": "integer"
+                          },
+                          "recipient_email": {
+                            "type": "string"
+                          },
+                          "sent_at": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "ses_message_id": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": "string"
+                          },
+                          "user_email": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "user_id": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Matching outbound sends."
+          },
+          "401": {
+            "description": "Missing, invalid, or non-staff token."
+          },
+          "422": {
+            "description": "Invalid filter or pagination value."
+          }
+        },
+        "summary": "List accepted outbound emails",
+        "tags": [
+          "Email log"
+        ]
+      }
+    },
     "/api/event-series": {
       "delete": {
         "description": "DELETE returns 405 with a structured error -- deletion is not exposed through the API. Hide the series with ``PATCH is_active=false``.",
@@ -11334,6 +11544,23 @@
               "description": "Exact ``email_type`` filter (e.g. ``campaign``, ``welcome``, ``verification``).",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "description": "Exclusive strongest disposition.",
+              "enum": [
+                "sent",
+                "delivered",
+                "opened",
+                "clicked",
+                "bounced",
+                "complained"
+              ],
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -11348,6 +11575,7 @@
                       "bounce_type": "",
                       "bounced_at": null,
                       "campaign_id": 7,
+                      "campaign_subject": "What we shipped this week",
                       "clicked_at": null,
                       "clicks": 0,
                       "complained_at": null,
@@ -11356,15 +11584,131 @@
                       "id": 42,
                       "opened_at": "2026-05-19T09:00:00+00:00",
                       "opens": 3,
+                      "recipient_email": "alice@example.com",
                       "sent_at": "2026-05-19T08:30:00+00:00",
-                      "ses_message_id": "0103018f-aaaa-bbbb-cccc-000000000000"
+                      "ses_message_id": "0103018f-aaaa-bbbb-cccc-000000000000",
+                      "subject": "What we shipped this week",
+                      "user_email": "alice@example.com",
+                      "user_id": 12
                     }
                   ],
                   "limit": 50
+                },
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "type": "integer"
+                    },
+                    "email_logs": {
+                      "items": {
+                        "properties": {
+                          "bounce_subtype": {
+                            "type": "string"
+                          },
+                          "bounce_type": {
+                            "type": "string"
+                          },
+                          "bounced_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "campaign_id": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "campaign_subject": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "clicked_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "clicks": {
+                            "type": "integer"
+                          },
+                          "complained_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "disposition": {
+                            "enum": [
+                              "sent",
+                              "delivered",
+                              "opened",
+                              "clicked",
+                              "bounced",
+                              "complained"
+                            ],
+                            "type": "string"
+                          },
+                          "email_type": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "integer"
+                          },
+                          "opened_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "opens": {
+                            "type": "integer"
+                          },
+                          "recipient_email": {
+                            "type": "string"
+                          },
+                          "sent_at": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "ses_message_id": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": "string"
+                          },
+                          "user_email": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "user_id": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
                 }
               }
             },
             "description": "Email logs page."
+          },
+          "401": {
+            "description": "Missing, invalid, or non-staff token."
           },
           "404": {
             "content": {

@@ -69,7 +69,8 @@ from community.models import CommunityAuditLog
 from community.services.slack_links import build_slack_profile_url
 from content.models import Enrollment, UserCourseProgress
 from crm.models import CRMRecord
-from email_app.models import EmailLog, SesEvent
+from email_app.models import SesEvent
+from email_app.services.email_log_history import user_history_queryset
 from events.models import EventRegistration
 from integrations.config import get_config
 from payments.models import CheckoutFulfillment, PaymentAccountMismatch, Tier
@@ -1137,12 +1138,6 @@ def _build_event_registration_rows(user):
 
 def _recent_deliverability_rows(user):
     return {
-        "email_logs": list(
-            EmailLog.objects
-            .filter(Q(user=user) | Q(recipient_email__iexact=user.email))
-            .select_related("campaign")
-            .order_by("-sent_at")[:5]
-        ),
         "ses_events": list(
             SesEvent.objects
             .filter(Q(user=user) | Q(recipient_email__iexact=user.email))
@@ -1356,6 +1351,7 @@ def user_detail(request, user_id):
     event_registration_rows = _build_event_registration_rows(user)
     activity_timeline = _build_activity_timeline(user)
     deliverability_rows = _recent_deliverability_rows(user)
+    email_history = list(user_history_queryset(user)[:10])
     open_payment_mismatches = list(
         _payment_mismatch_queryset().filter(
             Q(status=PaymentAccountMismatch.STATUS_OPEN),
@@ -1430,10 +1426,16 @@ def user_detail(request, user_id):
         'account_lifecycle_label': lifecycle_label(account_lifecycle),
         'bounce_recorded_at': user.bounce_recorded_at,
         'last_bounce_diagnostic': user.last_bounce_diagnostic or '',
-        'recent_email_logs': deliverability_rows["email_logs"],
         'recent_ses_events': deliverability_rows["ses_events"],
-        'email_log_url': f"/api/users/{user.email}/email-log",
-        'ses_events_url': f"{reverse('studio_ses_event_list')}?q={user.email}",
+        'email_history': email_history,
+        'email_history_url': (
+            f"{reverse('studio_email_log_list')}?"
+            f"{urlencode({'q': user.email})}"
+        ),
+        'ses_events_url': (
+            f"{reverse('studio_ses_event_list')}?"
+            f"{urlencode({'user': user.pk})}"
+        ),
         'aliases': list(user.email_aliases.order_by("email")),
         'status': _user_status(user),
         'crm_record': crm_record,

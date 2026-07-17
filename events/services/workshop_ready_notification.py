@@ -168,8 +168,9 @@ def _send_one(event, workshop, recipient):
         email_log = EmailLog.objects.create(
             event=event,
             user=recipient.user,
-            recipient_email='' if recipient.user else recipient.email,
+            recipient_email=recipient.email,
             email_type=EMAIL_TYPE,
+            subject=subject,
             ses_message_id=ses_message_id,
         )
         notification = None

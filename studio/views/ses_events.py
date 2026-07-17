@@ -28,8 +28,10 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 
+from accounts.models import User
 from email_app.models import EmailCampaign
 from email_app.models.ses_event import SesEvent
+from email_app.services.email_log_history import canonical_addresses
 from studio.decorators import staff_required
 from studio.utils import coerce_page_number
 
@@ -101,7 +103,7 @@ def _normalize_type_filter(raw):
 
 
 def _apply_filters(queryset, *, search, type_filter, bounce_type,
-                   bounce_subtype, since, until, campaign_id=None):
+                   bounce_subtype, since, until, campaign_id=None, user=None):
     """Apply every query-string filter to the base SES-event queryset.
 
     Extracted so the upcoming JSON API (issue #764) can lift this helper
@@ -129,6 +131,12 @@ def _apply_filters(queryset, *, search, type_filter, bounce_type,
 
     if campaign_id is not None:
         queryset = queryset.filter(email_log__campaign_id=campaign_id)
+
+    if user is not None:
+        identity = Q(user_id=user.pk)
+        for address in canonical_addresses(user):
+            identity |= Q(recipient_email__iexact=address)
+        queryset = queryset.filter(identity).distinct()
 
     return queryset
 
@@ -180,6 +188,7 @@ def ses_event_list(request):
     bounce_type = request.GET.get('bounce_type', '').strip()
     bounce_subtype = request.GET.get('bounce_subtype', '').strip()
     raw_campaign_id = request.GET.get('campaign', '').strip()
+    raw_user_id = request.GET.get('user', '').strip()
     since = _parse_iso_date(request.GET.get('since', ''))
     until = _parse_iso_date(request.GET.get('until', ''))
     campaign = None
@@ -191,6 +200,12 @@ def ses_event_list(request):
             campaign_id = None
         if campaign_id is not None:
             campaign = EmailCampaign.objects.filter(pk=campaign_id).first()
+    identity_user = None
+    if raw_user_id:
+        try:
+            identity_user = User.objects.filter(pk=int(raw_user_id)).first()
+        except (TypeError, ValueError):
+            identity_user = None
 
     base_queryset = (
         SesEvent.objects
@@ -206,6 +221,7 @@ def ses_event_list(request):
         since=since,
         until=until,
         campaign_id=campaign.pk if campaign is not None else campaign_id,
+        user=identity_user,
     )
 
     paginator = Paginator(filtered, SES_EVENT_PAGE_SIZE)
@@ -296,6 +312,8 @@ def ses_event_list(request):
         ),
         'campaign': campaign,
         'campaign_id': raw_campaign_id,
+        'identity_user': identity_user,
+        'user_filter': raw_user_id,
         **headline_counts,
     })
 

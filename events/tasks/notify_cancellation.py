@@ -155,7 +155,9 @@ def send_cancellation_notice_one(event_id, user_id):
     email_log = EmailLog.objects.create(
         user=user,
         event=event,
+        recipient_email=user.email,
         email_type='event_cancelled',
+        subject=subject,
         ses_message_id=ses_message_id,
         dedupe_key=dedupe_key,
     )

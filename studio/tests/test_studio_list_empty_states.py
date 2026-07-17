@@ -67,6 +67,7 @@ PARTIAL_USERS = {
     'crm/list.html',
     'imports/list.html',
     'ses_events/list.html',
+    'email_log/list.html',
     'call_hosts/list.html',
     'hosts/list.html',
     'marketing_pages/list.html',

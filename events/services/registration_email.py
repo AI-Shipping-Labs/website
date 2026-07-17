@@ -129,7 +129,9 @@ def send_registration_confirmation(registration):
     email_log = EmailLog.objects.create(
         user=user,
         event=event,
+        recipient_email=user.email,
         email_type='event_registration',
+        subject=subject,
         ses_message_id=ses_message_id,
         dedupe_key=dedupe_key,
     )

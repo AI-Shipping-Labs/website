@@ -55,10 +55,16 @@
     <a href="{% url 'studio_ses_event_list' %}" class="ml-3 text-xs text-muted-foreground hover:text-foreground">Clear</a>
   </div>
   {% endif %}
+  {% if identity_user %}
+  <div class="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground" data-testid="ses-event-user-filter">
+    User history: <a href="{% url 'studio_user_detail' identity_user.pk %}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ identity_user.email }}</a>
+    <a href="{% url 'studio_ses_event_list' %}" class="ml-3 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Clear</a>
+  </div>
+  {% endif %}
   <div class="flex flex-wrap items-center gap-2" data-testid="ses-event-type-chips">
     {% with chip_base="px-4 py-1.5 rounded-full text-sm border transition-colors" chip_active="bg-accent text-accent-foreground border-accent" chip_idle="bg-secondary text-muted-foreground border-border hover:text-foreground hover:bg-muted" %}
     {% for value, label in type_chips %}
-    <a href="?type={{ value }}{% if search %}&amp;q={{ search }}{% endif %}{% if bounce_type %}&amp;bounce_type={{ bounce_type }}{% endif %}{% if bounce_subtype %}&amp;bounce_subtype={{ bounce_subtype }}{% endif %}{% if since %}&amp;since={{ since }}{% endif %}{% if until %}&amp;until={{ until }}{% endif %}{% if campaign_id %}&amp;campaign={{ campaign_id }}{% endif %}"
+    <a href="?type={{ value }}{% if search %}&amp;q={{ search|urlencode }}{% endif %}{% if bounce_type %}&amp;bounce_type={{ bounce_type|urlencode }}{% endif %}{% if bounce_subtype %}&amp;bounce_subtype={{ bounce_subtype|urlencode }}{% endif %}{% if since %}&amp;since={{ since }}{% endif %}{% if until %}&amp;until={{ until }}{% endif %}{% if campaign_id %}&amp;campaign={{ campaign_id }}{% endif %}{% if user_filter %}&amp;user={{ user_filter }}{% endif %}"
        data-type-filter="{{ value }}"
        class="{{ chip_base }} {% if type_filter == value %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">{{ label }}</a>
     {% endfor %}
@@ -73,6 +79,7 @@
     {% if since %}<input type="hidden" name="since" value="{{ since }}">{% endif %}
     {% if until %}<input type="hidden" name="until" value="{{ until }}">{% endif %}
     {% if campaign_id %}<input type="hidden" name="campaign" value="{{ campaign_id }}">{% endif %}
+    {% if user_filter %}<input type="hidden" name="user" value="{{ user_filter }}">{% endif %}
     <input type="text" name="q" value="{{ search }}" placeholder="Search by recipient email..."
            autocomplete="off"
            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-72 focus:outline-none focus:ring-1 focus:ring-accent">
@@ -90,6 +97,7 @@
       <input type="hidden" name="type" value="{{ type_filter }}">
       {% if search %}<input type="hidden" name="q" value="{{ search }}">{% endif %}
       {% if campaign_id %}<input type="hidden" name="campaign" value="{{ campaign_id }}">{% endif %}
+      {% if user_filter %}<input type="hidden" name="user" value="{{ user_filter }}">{% endif %}
       <label class="flex flex-col gap-1 text-xs text-muted-foreground">
         <span>Bounce type</span>
         <select name="bounce_type"

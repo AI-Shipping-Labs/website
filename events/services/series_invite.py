@@ -216,11 +216,13 @@ def _render_series_email(
     return subject, full_html
 
 
-def _log_send(user, email_type, ses_message_id):
+def _log_send(user, email_type, subject, ses_message_id):
     from email_app.models import EmailLog
     return EmailLog.objects.create(
         user=user,
+        recipient_email=user.email,
         email_type=email_type,
+        subject=subject,
         ses_message_id=ses_message_id,
     )
 
@@ -251,7 +253,7 @@ def send_series_registration_invite(user, series, events):
         ics_content=ics_content,
         method='REQUEST',
     )
-    email_log = _log_send(user, 'series_registration', ses_message_id)
+    email_log = _log_send(user, 'series_registration', subject, ses_message_id)
     logger.info(
         'Sent series registration invite to %s for series "%s" '
         '(%d occurrences, SES: %s)',
@@ -333,7 +335,7 @@ def send_series_update_to_subscribers(event, user_ids=None, old_start_iso=None):
                 ics_content=ics_content,
                 method='REQUEST',
             )
-            _log_send(user, 'series_update', ses_message_id)
+            _log_send(user, 'series_update', subject, ses_message_id)
             sent += 1
         except Exception:
             logger.exception(
@@ -402,7 +404,7 @@ def send_series_cancellation_to_subscribers(event):
                 ics_content=ics_content,
                 method='CANCEL',
             )
-            _log_send(user, 'series_cancellation', ses_message_id)
+            _log_send(user, 'series_cancellation', subject, ses_message_id)
             sent += 1
         except Exception:
             logger.exception(

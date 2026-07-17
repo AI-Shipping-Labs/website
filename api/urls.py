@@ -43,6 +43,7 @@ from api.views.course_enrollments import (
 )
 from api.views.crm_export import crm_export
 from api.views.docs import docs_page, openapi_json
+from api.views.email_log import email_log_list
 from api.views.enrollments import (
     sprint_enrollment_detail,
     sprint_enrollments_collection,
@@ -173,6 +174,11 @@ urlpatterns = [
         "openapi.json",
         openapi_json,
         name="api_openapi_json",
+    ),
+    path(
+        "email-log",
+        email_log_list,
+        name="api_email_log_list",
     ),
     path(
         "docs",

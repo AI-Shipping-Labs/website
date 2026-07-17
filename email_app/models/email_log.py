@@ -42,13 +42,15 @@ class EmailLog(models.Model):
     recipient_email = models.EmailField(
         blank=True,
         default='',
+        db_index=True,
         help_text=(
-            'Destination address. Populated for sends to a non-user mailbox '
-            '(e.g. an event host); blank when ``user`` carries the address.'
+            'Immutable destination address used for this send, including '
+            'ordinary sends attached to a user.'
         ),
     )
     email_type = models.CharField(
         max_length=100,
+        db_index=True,
         help_text=(
             'Type of email: "campaign", "welcome", "payment_failed", '
             '"cancellation", "community_invite", "lead_magnet_delivery", '
@@ -57,7 +59,14 @@ class EmailLog(models.Model):
     )
     sent_at = models.DateTimeField(
         auto_now_add=True,
+        db_index=True,
         help_text='When the email was sent.',
+    )
+    subject = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Immutable rendered subject passed to Amazon SES.',
     )
     ses_message_id = models.CharField(
         max_length=255,

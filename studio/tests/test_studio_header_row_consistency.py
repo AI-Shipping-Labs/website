@@ -1,4 +1,4 @@
-"""Static contract for the 30 Studio list headers migrated in issue #1274."""
+"""Static contract for Studio list headers using the shared stacked pattern."""
 
 from __future__ import annotations
 
@@ -41,6 +41,7 @@ HEADER_INVENTORY = {
     'ses_events/list.html',
     'tags/list.html',
     'maven_events/list.html',
+    'email_log/list.html',
 }
 
 ACTIONLESS_HEADERS = {
@@ -53,6 +54,7 @@ ACTIONLESS_HEADERS = {
     'call_hosts/list.html',
     'ses_events/list.html',
     'maven_events/list.html',
+    'email_log/list.html',
 }
 
 FORBIDDEN_HEADER_TOKENS = (
@@ -76,8 +78,8 @@ def _source(relative: str) -> str:
 
 
 class StudioHeaderInventoryTest(SimpleTestCase):
-    def test_inventory_is_exactly_thirty_existing_templates(self):
-        self.assertEqual(len(HEADER_INVENTORY), 30)
+    def test_inventory_is_exactly_thirty_one_existing_templates(self):
+        self.assertEqual(len(HEADER_INVENTORY), 31)
         missing = sorted(
             relative
             for relative in HEADER_INVENTORY

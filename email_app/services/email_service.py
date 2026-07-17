@@ -230,8 +230,9 @@ class EmailService:
         if isinstance(user, Model) and getattr(user, "pk", None):
             email_log = EmailLog.objects.create(
                 user=user,
-                recipient_email=to_email if to_email != user.email else "",
+                recipient_email=to_email,
                 email_type=template_name,
+                subject=subject,
                 ses_message_id=ses_message_id,
             )
         else:

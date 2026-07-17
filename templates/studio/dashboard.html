@@ -11,7 +11,7 @@
 {% if worker_info.expect_worker %}
 <section class="mb-6" data-testid="dashboard-worker-panel" aria-labelledby="worker-status-heading">
   <div class="border {% if worker_info.alive %}border-border bg-card{% else %}border-red-500/50 bg-red-500/10{% endif %} rounded-lg p-4">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div class="space-y-3">
       <div class="flex items-start gap-3 min-w-0">
         {% if worker_info.alive %}
           <span class="w-3 h-3 mt-1.5 rounded-full bg-green-500 flex-shrink-0" aria-hidden="true"></span>
@@ -38,10 +38,12 @@
           </div>
         {% endif %}
       </div>
-      <a href="{% url 'studio_worker' %}" class="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-secondary transition-colors shrink-0">
-        <i data-lucide="server" class="w-4 h-4"></i>
-        Worker dashboard
-      </a>
+      <div class="flex flex-wrap items-center gap-2">
+        <a href="{% url 'studio_worker' %}" class="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+          <i data-lucide="server" class="w-4 h-4"></i>
+          Worker dashboard
+        </a>
+      </div>
     </div>
   </div>
 </section>

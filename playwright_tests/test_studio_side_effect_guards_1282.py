@@ -374,6 +374,7 @@ def test_operator_dismisses_every_explicit_slack_announcement(
 
     dialogs['accept'] = False
     page.goto(f'{django_server}/studio/event-series/{ids[1]}/')
+    page.get_by_label('More actions').click()
     page.get_by_test_id('event-series-announce-slack').click()
     assert len(requests) == 1
     dialogs['accept'] = True
@@ -466,6 +467,7 @@ def test_operator_previews_idempotent_carry_over_before_copying(
     dialogs = _dialog_controller(page)
     requests = _side_effect_requests(page)
     page.goto(f'{django_server}/studio/plans/{target_id}/')
+    page.get_by_label('More actions').click()
     button = page.get_by_test_id('studio-plan-carry-over')
     assert '3 unfinished tasks from Source Sprint into Target Sprint' in button.get_attribute('title')
     button.click()
@@ -495,6 +497,7 @@ def test_operator_starts_advisory_draft_with_full_context(
     dialogs = _dialog_controller(page)
     requests = _side_effect_requests(page)
     page.goto(f'{django_server}/studio/plans/{target_id}/')
+    page.get_by_label('More actions').click()
     button = page.get_by_test_id('studio-plan-draft-next-sprint')
     title = button.get_attribute('title')
     assert all(fragment in title for fragment in (
@@ -541,6 +544,7 @@ def test_plan_confirmations_stay_truthful_at_empty_boundaries(
     _dialog_controller(page)
     requests = _side_effect_requests(page)
     page.goto(f'{django_server}/studio/plans/{no_source_id}/')
+    page.get_by_label('More actions').click()
     carry = page.get_by_test_id('studio-plan-carry-over')
     assert carry.get_attribute('title') == (
         'No prior sprint plan is available to carry into No Source Target. Continue?'
@@ -555,6 +559,7 @@ def test_plan_confirmations_stay_truthful_at_empty_boundaries(
         source_items=('Already there',), target_items=('Already there',),
     )
     page.goto(f'{django_server}/studio/plans/{zero_target}/')
+    page.get_by_label('More actions').click()
     carry = page.get_by_test_id('studio-plan-carry-over')
     assert '0 unfinished tasks from Zero Source into Zero Target' in carry.get_attribute('title')
     carry.click()

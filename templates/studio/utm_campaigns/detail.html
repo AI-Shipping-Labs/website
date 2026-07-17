@@ -4,49 +4,39 @@
 {% block studio_title %}{{ campaign.name }}{% endblock %}
 
 {% block studio_content %}
-<div class="mb-6">
-  <a href="{% url 'studio_utm_campaign_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-    &larr; Back to UTM Campaigns
-  </a>
-</div>
-
-<div class="mb-8 flex items-start justify-between">
-  <div>
-    <h1 class="text-2xl font-semibold text-foreground">
-      {{ campaign.name }}
+{% studio_header_title_meta as campaign_header_meta %}
       {% if campaign.is_archived %}
-      <span class="ml-2 align-middle text-xs px-2 py-1 rounded-full bg-secondary text-muted-foreground">Archived</span>
+      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-secondary text-muted-foreground">Archived</span>
       {% endif %}
-    </h1>
     <p class="text-sm text-muted-foreground mt-1">
       Slug: <code class="font-mono">{{ campaign.slug }}</code>
       &middot; Default source: <code class="font-mono">{{ campaign.default_utm_source }}</code>
       &middot; Default medium: <code class="font-mono">{{ campaign.default_utm_medium }}</code>
     </p>
-    {% if campaign.notes %}
-    <p class="mt-3 text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 max-w-2xl whitespace-pre-line">{{ campaign.notes }}</p>
-    {% endif %}
-  </div>
-  <div class="flex items-center space-x-2" data-testid="studio-header-actions">
-    {% include "studio/includes/_admin_link.html" with obj=campaign %}
+{% endstudio_header_title_meta %}
+{% url 'studio_utm_campaign_list' as campaign_list_url %}
+{% studio_header_actions title=campaign.name title_meta=campaign_header_meta back_url=campaign_list_url back_label='Back to UTM campaigns' %}
     <a href="{% url 'studio_utm_campaign_edit' campaign_id=campaign.pk %}"
-       class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+       class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
       Edit
     </a>
+    {% studio_overflow_menu %}
+    {% load admin_links %}{% admin_change_url campaign as admin_url %}{% if admin_url %}<a href="{{ admin_url }}" data-testid="studio-open-in-admin" title="Open in Django admin" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="wrench" class="h-4 w-4"></i><span>Open in Django admin</span></a>{% endif %}
     {% if campaign.is_archived %}
-      <form method="post" action="{% url 'studio_utm_campaign_unarchive' campaign_id=campaign.pk %}" class="inline">
+      <form method="post" action="{% url 'studio_utm_campaign_unarchive' campaign_id=campaign.pk %}" class="w-full">
         {% csrf_token %}
-        <button type="submit" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">Unarchive</button>
+        <button type="submit" class="flex min-h-[44px] w-full items-center px-4 py-2 text-left text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Unarchive</button>
       </form>
     {% else %}
-      <form method="post" action="{% url 'studio_utm_campaign_archive' campaign_id=campaign.pk %}" class="inline"
+      <form method="post" action="{% url 'studio_utm_campaign_archive' campaign_id=campaign.pk %}" class="w-full"
             onsubmit="return confirm('Archive this campaign?');">
         {% csrf_token %}
-        <button type="submit" class="bg-secondary border border-border text-red-400 px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">Archive</button>
+        <button type="submit" class="flex min-h-[44px] w-full items-center px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Archive</button>
       </form>
     {% endif %}
-  </div>
-</div>
+    {% endstudio_overflow_menu %}
+{% endstudio_header_actions %}
+{% if campaign.notes %}<p class="mb-8 text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 max-w-2xl whitespace-pre-line">{{ campaign.notes }}</p>{% endif %}
 
 {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
 

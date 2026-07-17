@@ -5,97 +5,23 @@
 {# include this partial via ``{% include %}`` and would break otherwise. #}
 
 {# Plan header (full width). Member email links to the user detail page. #}
-<header class="bg-card border border-border rounded-lg p-6 mb-6"
-        data-testid="plan-editor-header">
-  <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-    <div class="min-w-0">
-      {% if request.user.is_staff %}
-      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Sprint plan</p>
-      {% endif %}
-      <h1 class="text-2xl font-semibold text-foreground">
-        {% if request.user.is_staff %}
-        <a href="{% url 'studio_user_detail' user_id=plan.member.pk %}"
-           class="hover:underline">{{ plan.member.email }}</a>
-        {% else %}
-        {{ plan.member.email }}
-        {% endif %}
-      </h1>
-      <p class="text-sm text-muted-foreground mt-1">
-        {{ plan.sprint.name }}
-        <span class="mx-1">&middot;</span>
-        <span class="font-mono text-xs">{{ plan.sprint.slug }}</span>
-      </p>
-    </div>
-
-    <div class="flex flex-col items-start gap-2 sm:items-end" data-testid="studio-header-actions">
-      {% if request.user.is_staff %}
-      {% include "studio/includes/_admin_link.html" with obj=plan %}
-      <form method="post"
-            action="{% url 'studio_plan_visibility_update' plan_id=plan.pk %}"
-            class="flex items-center gap-2"
-            data-testid="plan-visibility-form">
-        {% csrf_token %}
-        <input type="hidden" name="next" value="{% url 'studio_plan_edit' plan_id=plan.pk %}">
-        <label for="plan-visibility" class="text-xs text-muted-foreground">Visibility</label>
-        <select id="plan-visibility"
-                name="visibility"
-                class="studio-select bg-secondary border border-border rounded-md px-2 py-1 text-xs text-foreground"
-                data-testid="plan-visibility-select">
-          <option value="private" {% if plan.visibility == 'private' %}selected{% endif %}>Private</option>
-          <option value="cohort" {% if plan.visibility == 'cohort' %}selected{% endif %}>Cohort</option>
-        </select>
-        <button type="submit"
-                class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-secondary text-foreground border border-border hover:bg-secondary/80">
-          Update
-        </button>
-      </form>
-      {% endif %}
-      <p class="text-xs text-muted-foreground" data-testid="plan-share-indicator">
-        {% if plan.shared_at %}
-          Shared <time datetime="{{ plan.shared_at.isoformat }}">{{ plan.shared_at|operator_datetime }}</time>
-        {% else %}
-          Not yet shared
-        {% endif %}
-      </p>
-      {# Issue #732: explicit Share / Re-share button. Staff-only — the #}
-      {# template only renders inside Studio routes where the request #}
-      {# is already gated to staff, but we keep the explicit check so #}
-      {# the markup is safe if the partial is ever reused. The re-share #}
-      {# variant wraps a JS confirm() prompt so a stray click does not #}
-      {# surprise-notify the member. #}
-      {% if request.user.is_staff %}
-      <form method="post"
-            action="{% url 'studio_plan_share' plan_id=plan.pk %}"
-            data-testid="plan-share-form"
-            {% if plan.shared_at %}onsubmit="return confirm('Send another notification?');"{% endif %}
-            class="mt-1">
-        {% csrf_token %}
-        {% if plan.shared_at %}
-        <button type="submit"
-                data-testid="plan-reshare-button"
-                class="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-secondary text-foreground border border-border hover:bg-secondary/80">
-          Re-share with member
-        </button>
-        {% else %}
-        <button type="submit"
-                data-testid="plan-share-button"
-                class="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-accent text-accent-foreground hover:bg-accent/90">
-          Share with member
-        </button>
-        {% endif %}
-      </form>
-      {% endif %}
-
-      {# Saved/Saving indicator. JS toggles the data-state attribute. #}
-      <div data-testid="save-indicator"
-           data-state="saved"
-           class="flex items-center gap-2 text-xs">
-        <span data-testid="save-indicator-dot"
-              class="w-2 h-2 rounded-full bg-emerald-500"></span>
-        <span data-testid="save-indicator-label" class="text-muted-foreground">Saved</span>
-      </div>
+<header class="bg-card border border-border rounded-lg p-6 mb-6 space-y-3" data-testid="plan-editor-header">
+  <div class="min-w-0">
+    {% if request.user.is_staff %}<p class="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-1">Sprint plan</p>{% endif %}
+    <h1 class="text-2xl font-semibold text-foreground break-all">{% if request.user.is_staff %}<a href="{% url 'studio_user_detail' user_id=plan.member.pk %}" class="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ plan.member.email }}</a>{% else %}{{ plan.member.email }}{% endif %}</h1>
+    <p class="text-sm text-muted-foreground mt-1">{{ plan.sprint.name }} <span class="mx-1">&middot;</span><span class="font-mono text-xs">{{ plan.sprint.slug }}</span></p>
+    <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <p data-testid="plan-share-indicator">{% if plan.shared_at %}Shared <time datetime="{{ plan.shared_at.isoformat }}">{{ plan.shared_at|operator_datetime }}</time>{% else %}Not yet shared{% endif %}</p>
+      <div data-testid="save-indicator" data-state="saved" class="flex items-center gap-2"><span data-testid="save-indicator-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span><span data-testid="save-indicator-label">Saved</span></div>
     </div>
   </div>
+  {% if request.user.is_staff %}
+  <div class="flex flex-wrap items-center gap-2" data-testid="studio-header-actions">
+    <form method="post" action="{% url 'studio_plan_share' plan_id=plan.pk %}" data-testid="plan-share-form" {% if plan.shared_at %}onsubmit="return confirm('Send another notification?');"{% endif %}>{% csrf_token %}{% if plan.shared_at %}<button type="submit" data-testid="plan-reshare-button" class="bg-secondary border border-border text-foreground px-3 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Re-share with member</button>{% else %}<button type="submit" data-testid="plan-share-button" class="bg-accent text-accent-foreground px-3 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Share with member</button>{% endif %}</form>
+    <form method="post" action="{% url 'studio_plan_visibility_update' plan_id=plan.pk %}" class="flex flex-wrap items-center gap-2" data-testid="plan-visibility-form">{% csrf_token %}<input type="hidden" name="next" value="{% url 'studio_plan_edit' plan_id=plan.pk %}"><label for="plan-visibility" class="text-xs text-muted-foreground">Visibility</label><select id="plan-visibility" name="visibility" class="studio-select bg-secondary border border-border rounded-md px-2 py-2 text-xs text-foreground" data-testid="plan-visibility-select"><option value="private" {% if plan.visibility == 'private' %}selected{% endif %}>Private</option><option value="cohort" {% if plan.visibility == 'cohort' %}selected{% endif %}>Cohort</option></select><button type="submit" class="bg-secondary border border-border text-foreground px-3 py-2 rounded-lg text-xs font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Update</button></form>
+    {% load studio_filters admin_links %}{% admin_change_url plan as admin_url %}{% if admin_url %}{% studio_overflow_menu %}<a href="{{ admin_url }}" data-testid="studio-open-in-admin" title="Open in Django admin" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="wrench" class="h-4 w-4"></i><span>Open in Django admin</span></a>{% endstudio_overflow_menu %}{% endif %}
+  </div>
+  {% endif %}
 </header>
 
 {# Toast region for transient error messages (drag failures, API errors). #}

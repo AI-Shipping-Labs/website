@@ -107,6 +107,9 @@ def _run_synchronously(series_id):
 
 def _click_create_zoom(page, django_server, series_pk, create_meeting_fn):
     """Click the button with the worker + Zoom both patched in-process."""
+    create_zoom = page.locator('[data-testid="series-create-zoom"]')
+    if not create_zoom.is_visible():
+        page.get_by_label("More actions").click()
     with patch(
         "studio.views.event_series.enqueue_create_series_zoom_meetings",
         side_effect=_run_synchronously,
@@ -114,7 +117,7 @@ def _click_create_zoom(page, django_server, series_pk, create_meeting_fn):
         "events.tasks.create_series_zoom_meetings.create_meeting",
         side_effect=create_meeting_fn,
     ):
-        page.locator('[data-testid="series-create-zoom"]').click()
+        create_zoom.click()
         page.wait_for_url(
             f"**/studio/event-series/{series_pk}/",
             timeout=10000,
@@ -138,6 +141,7 @@ class TestScenarioCreateAll:
             f"{django_server}/studio/event-series/{series.pk}/",
             wait_until="domcontentloaded",
         )
+        page.get_by_label("More actions").click()
         note = page.locator('[data-testid="series-zoom-eligible-note"]')
         assert "4 occurrences need a Zoom meeting" in note.inner_text()
 
@@ -181,6 +185,7 @@ class TestScenarioPreserveExisting:
             f"{django_server}/studio/event-series/{series.pk}/",
             wait_until="domcontentloaded",
         )
+        page.get_by_label("More actions").click()
         note = page.locator('[data-testid="series-zoom-eligible-note"]')
         assert "2 occurrences need a Zoom meeting" in note.inner_text()
 
@@ -267,6 +272,7 @@ class TestScenarioNothingToDo:
             f"{django_server}/studio/event-series/{series.pk}/",
             wait_until="domcontentloaded",
         )
+        page.get_by_label("More actions").click()
         disabled = page.locator('[data-testid="series-create-zoom-disabled"]')
         assert disabled.is_visible()
         assert "All occurrences have Zoom meetings" in disabled.inner_text()
@@ -298,6 +304,7 @@ class TestScenarioIneligibleSkipped:
             f"{django_server}/studio/event-series/{series.pk}/",
             wait_until="domcontentloaded",
         )
+        page.get_by_label("More actions").click()
         note = page.locator('[data-testid="series-zoom-eligible-note"]')
         assert "1 occurrence need a Zoom meeting" in note.inner_text()
 

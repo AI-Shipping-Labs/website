@@ -176,6 +176,7 @@ def test_event_series_actions_use_secondary_styles_and_zoom_post_still_runs(
         f"{django_server}/studio/event-series/{series.pk}/",
         wait_until="domcontentloaded",
     )
+    page.get_by_label("More actions").click()
 
     for selector in (
         '[data-testid="event-series-announce-slack"]',
@@ -183,7 +184,8 @@ def test_event_series_actions_use_secondary_styles_and_zoom_post_still_runs(
     ):
         classes = _button_classes(page, selector)
         _assert_no_raw_blue(classes)
-        assert "border-border" in classes
+        assert "min-h-[44px]" in classes
+        assert "focus-visible:ring-2" in classes
         assert "text-foreground" in classes
 
     for selector in (

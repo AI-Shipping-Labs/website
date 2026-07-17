@@ -8,92 +8,20 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
-<div class="mb-8">
-  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
-    <a href="{% url 'studio_event_list' %}" class="hover:text-foreground">Events</a>
-    <i data-lucide="chevron-right" class="w-4 h-4"></i>
-    <a href="{% url 'studio_event_series_list' %}" class="hover:text-foreground">Event series</a>
-    <i data-lucide="chevron-right" class="w-4 h-4"></i>
-    <span class="text-foreground">{{ series.name }}</span>
-  </div>
-  <header class="flex flex-col gap-4" data-testid="studio-header">
-    <div class="min-w-0">
-      <h1 class="text-2xl font-semibold text-foreground" data-testid="event-series-name">{{ series.name }}</h1>
-      {% comment %}
-      Issue #947: honest cadence from ``schedule_label`` (#877). Keep the
-      ``— N occurrence(s)`` suffix; only the leading cadence clause changed.
-      ``schedule_label`` is empty for a 0-occurrence (staff-preview) series,
-      in which case the {% if %} drops the leading clause and its em-dash
-      separator so no stray ``—`` renders before the count.
-      {% endcomment %}
-      <p class="text-muted-foreground mt-1" data-testid="event-series-cadence">
-        {% if series.schedule_label %}{{ series.schedule_label }} — {% endif %}{{ events|length }} occurrence{{ events|length|pluralize }}
-      </p>
-    </div>
-    <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
-      <a href="{{ series.get_absolute_url }}" target="_blank" rel="noopener noreferrer"
-         class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors flex items-center space-x-1">
-        <i data-lucide="external-link" class="mr-2 h-4 w-4"></i>
-        <span>View public series page</span>
-      </a>
-      <button type="button"
-              id="series-notify-btn"
-              onclick="notifySeriesSubscribers()"
-              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-              data-testid="event-series-notify">
-        Notify {{ series_notify_audience_count }} eligible members
-      </button>
-      <button type="button"
-              id="series-slack-btn"
-              onclick="postSeriesToSlack()"
-              class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors"
-              data-testid="event-series-announce-slack">
-        Post to Slack
-      </button>
-      {% comment %}Issue #859: one-click create Zoom meetings for every eligible
-         occurrence. POST-only (never a GET) and staff-gated by the view.
-         Disabled with explanatory copy when nothing is eligible.{% endcomment %}
-      {% if zoom_eligible_count > 0 %}
-      <form method="post" action="{% url 'studio_event_series_create_zoom' series_id=series.pk %}"
-            class="inline-flex flex-col items-start" data-testid="series-create-zoom-form">
-        {% csrf_token %}
-        <button type="submit"
-                class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors"
-                data-testid="series-create-zoom">
-          Create Zoom meetings for all events
-        </button>
-        <span class="mt-1 text-xs text-muted-foreground" data-testid="series-zoom-eligible-note">
-          {{ zoom_eligible_count }} occurrence{{ zoom_eligible_count|pluralize }} need a Zoom meeting
-        </span>
-      </form>
-      {% else %}
-      <div class="inline-flex flex-col items-start">
-        <button type="button" disabled
-                class="bg-secondary border border-border text-muted-foreground px-4 py-2 rounded-lg text-sm font-medium cursor-not-allowed"
-                data-testid="series-create-zoom-disabled">
-          All occurrences have Zoom meetings
-        </button>
-      </div>
-      {% endif %}
-      <button type="submit"
-              form="event-series-metadata-form"
-              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-              data-testid="event-series-metadata-save">
-        Save metadata
-      </button>
-      <form method="post" action="{% url 'studio_event_series_delete' series_id=series.pk %}"
-            data-testid="event-series-delete-form"
-            onsubmit="return confirm('Delete this series? The member events will remain.');">
-        {% csrf_token %}
-        <button type="submit"
-                class="border border-red-500/40 bg-red-500/10 text-red-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500/20 transition-colors"
-                data-testid="event-series-delete-submit">
-          Delete series
-        </button>
-      </form>
-    </div>
-  </header>
-</div>
+{% studio_header_title_meta as series_header_meta %}
+  <span class="sr-only" aria-hidden="true" data-testid="event-series-name">{{ series.name }}</span>
+  <p class="text-sm text-muted-foreground" data-testid="event-series-cadence">{% if series.schedule_label %}{{ series.schedule_label }} — {% endif %}{{ events|length }} occurrence{{ events|length|pluralize }}</p>
+{% endstudio_header_title_meta %}
+{% url 'studio_event_series_list' as series_list_url %}
+{% studio_header_actions title=series.name title_meta=series_header_meta back_url=series_list_url back_label='Back to event series' %}
+  <button type="button" id="series-notify-btn" onclick="notifySeriesSubscribers()" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="event-series-notify">Notify {{ series_notify_audience_count }} eligible members</button>
+  <a href="{{ series.get_absolute_url }}" target="_blank" rel="noopener noreferrer" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="external-link" class="h-4 w-4"></i><span>View public series page</span></a>
+  {% studio_overflow_menu %}
+    <button type="button" id="series-slack-btn" onclick="postSeriesToSlack()" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-left text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="event-series-announce-slack"><i data-lucide="message-square" class="h-4 w-4"></i><span>Post to Slack</span></button>
+    {% if zoom_eligible_count > 0 %}<form method="post" action="{% url 'studio_event_series_create_zoom' series_id=series.pk %}" class="w-full" data-testid="series-create-zoom-form">{% csrf_token %}<button type="submit" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-left text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="series-create-zoom">Create Zoom meetings for all events</button><span class="block px-4 pb-2 text-xs text-muted-foreground" data-testid="series-zoom-eligible-note">{{ zoom_eligible_count }} occurrence{{ zoom_eligible_count|pluralize }} need a Zoom meeting</span></form>{% else %}<div><button type="button" disabled class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-left text-sm text-muted-foreground cursor-not-allowed" data-testid="series-create-zoom-disabled">All occurrences have Zoom meetings</button></div>{% endif %}
+    <div class="border-t border-border"><form method="post" action="{% url 'studio_event_series_delete' series_id=series.pk %}" class="w-full" data-testid="event-series-delete-form" onsubmit="return confirm('Delete this series? The member events will remain.');">{% csrf_token %}<button type="submit" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="event-series-delete-submit">Delete series</button></form></div>
+  {% endstudio_overflow_menu %}
+{% endstudio_header_actions %}
 
 {% if add_error %}
 <div class="mb-4 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300" data-testid="add-error">
@@ -302,6 +230,13 @@
           Overwrites slug and description on every event in this series.
         </span>
       </label>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 pt-2">
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              data-testid="event-series-metadata-save">
+        Save metadata
+      </button>
     </div>
   </form>
 

@@ -210,6 +210,7 @@ class TestStudioDownloadsMarkdownPlan:
             f"{django_server}/studio/plans/{plan_pk}/",
             wait_until="domcontentloaded",
         )
+        page.get_by_label("More actions").click()
         button = page.get_by_role("link", name="Download Markdown")
         button.wait_for(state="visible")
 

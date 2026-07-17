@@ -23,7 +23,7 @@ the course edit page in one click.
 {# ---------------------------------------------------------------------- #}
 <section data-testid="peer-review-course-header"
          class="bg-card border border-border rounded-lg p-4 sm:p-6 mb-6">
-  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+  <div class="space-y-3">
     <div class="min-w-0">
       <h1 class="text-xl sm:text-2xl font-semibold text-foreground break-words">
         Peer reviews for {{ course.title }}
@@ -59,7 +59,7 @@ the course edit page in one click.
     <div class="flex flex-wrap items-center gap-2">
       <a href="{% url 'studio_course_edit' course_id=course.pk %}"
          data-testid="back-to-course-edit"
-         class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-secondary text-sm text-foreground hover:bg-muted transition-colors">
+         class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-secondary text-sm text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
         <i data-lucide="arrow-left" class="w-4 h-4"></i>
         Back to course edit
       </a>

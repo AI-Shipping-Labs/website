@@ -4,20 +4,14 @@
 {% block studio_title %}Response — {{ response.respondent.email }}{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8">
-  <a href="{% url 'studio_questionnaire_responses' questionnaire_id=questionnaire.pk %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-    &larr; Back to responses
-  </a>
-  <div class="mt-2 flex items-start justify-between">
-    <div>
-      <h1 class="text-2xl font-semibold text-foreground" data-testid="response-detail-respondent">{{ response.respondent.email }}</h1>
-      <p class="text-sm text-muted-foreground mt-1">{{ questionnaire.title }}</p>
-    </div>
-    <div data-testid="response-detail-status">
+{% studio_header_title_meta as response_header_meta %}
+    <span class="sr-only" aria-hidden="true" data-testid="response-detail-respondent">{{ response.respondent.email }}</span>
+    <div data-testid="response-detail-status" class="text-sm">
       {% studio_status_badge response.status response.get_status_display %}
     </div>
-  </div>
-</div>
+{% endstudio_header_title_meta %}
+{% url 'studio_questionnaire_responses' questionnaire_id=questionnaire.pk as responses_url %}
+{% studio_header_actions title=response.respondent.email subtitle=questionnaire.title title_meta=response_header_meta back_url=responses_url back_label='Back to responses' %}{% endstudio_header_actions %}
 
 {% if persona_signal %}
 <div class="mb-4 max-w-3xl bg-card border border-border rounded-lg p-4"
@@ -27,12 +21,12 @@
 </div>
 {% endif %}
 
-<div class="mb-4 max-w-3xl flex items-center justify-between">
+<div class="mb-4 max-w-3xl space-y-3">
   <p class="text-sm text-muted-foreground">
     Customize this member's question set without touching the shared base questions.
   </p>
   <a href="{% url 'studio_response_question_create' questionnaire_id=questionnaire.pk response_id=response.pk %}"
-     class="bg-accent text-accent-foreground px-3 py-2 rounded-lg text-sm font-medium hover:opacity-90 shrink-0"
+     class="inline-flex min-h-[44px] items-center bg-accent text-accent-foreground px-3 py-2 rounded-lg text-sm font-medium hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
      data-testid="response-detail-add-question">
     Add custom question
   </a>

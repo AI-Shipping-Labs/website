@@ -1,33 +1,13 @@
 {% extends "studio/base.html" %}
-{% load studio_filters %}
+{% load studio_filters admin_links %}
 
 {% block studio_title %}{% if is_synced %}View Recording{% elif recording %}Edit Recording{% else %}New Recording{% endif %}{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8">
-  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
-    <a href="{% url 'studio_recording_list' %}" class="hover:text-foreground">Recordings</a>
-    <i data-lucide="chevron-right" class="w-4 h-4"></i>
-    <span class="text-foreground">{% if recording %}{{ recording.title }}{% else %}New Recording{% endif %}</span>
-  </div>
-  <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
-    <div class="min-w-0">
-      <h1 class="text-2xl font-semibold text-foreground">{% if is_synced %}View Recording{% elif recording %}Edit Recording{% else %}New Recording{% endif %}</h1>
-    </div>
-    <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
-      {% if recording %}
-      {% include "studio/includes/_admin_link.html" with obj=recording %}
-      {% endif %}
-      {% if recording and recording.workshop %}
-      <a href="{{ recording.workshop.get_absolute_url }}" target="_blank" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors flex items-center space-x-1" data-testid="view-on-site">
-        <i data-lucide="external-link" class="w-4 h-4"></i>
-        <span>View workshop</span>
-      </a>
-      {% endif %}
-    </div>
-  </header>
-</div>
-
+{% studio_header_actions title=is_synced|yesno:'View Recording,Edit Recording' subtitle=recording.title back_url='/studio/recordings/' back_label='Back to recordings' %}
+  {% if recording and recording.workshop %}<a href="{{ recording.workshop.get_absolute_url }}" target="_blank" rel="noopener noreferrer" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="view-on-site"><i data-lucide="external-link" class="h-4 w-4"></i><span>View workshop</span></a>{% endif %}
+  {% if recording %}{% admin_change_url recording as admin_url %}{% if admin_url %}{% studio_overflow_menu %}<a href="{{ admin_url }}" data-testid="studio-open-in-admin" title="Open in Django admin" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="wrench" class="h-4 w-4"></i><span>Open in Django admin</span></a>{% endstudio_overflow_menu %}{% endif %}{% endif %}
+{% endstudio_header_actions %}
 {% if recording and is_synced %}
 {% studio_origin_panel recording %}
 {% endif %}

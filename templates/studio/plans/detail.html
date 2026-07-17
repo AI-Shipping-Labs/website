@@ -1,100 +1,38 @@
 {% extends "studio/base.html" %}
-{% load plan_markdown %}
+{% load plan_markdown studio_filters %}
 
 {% block studio_title %}Plan: {{ plan.member.email }}{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8">
-  <a href="{% url 'studio_plan_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-    &larr; Back to Plans
-  </a>
-  <div class="mt-2 flex items-start justify-between">
-    <div>
-      <h1 class="text-2xl font-semibold text-foreground">
-        <a href="{% url 'studio_user_detail' user_id=plan.member.pk %}" class="hover:underline" data-testid="plan-detail-member-link">{{ plan.member.email }}</a>
-      </h1>
-      <p class="text-sm text-muted-foreground mt-1">
-        Sprint: <a href="{% url 'studio_sprint_detail' sprint_id=plan.sprint.pk %}" class="text-accent hover:underline">{{ plan.sprint.name }}</a>
-        {% if plan.shared_at %}· Shared {{ plan.shared_at|operator_date }}{% endif %}
-      </p>
-      <p class="text-sm text-foreground mt-2" data-testid="plan-detail-title">{{ plan.display_title }}</p>
-    </div>
-    <div class="flex items-center gap-2" data-testid="studio-header-actions">
-      {% include "studio/includes/_admin_link.html" with obj=plan %}
-      <form method="post"
-            action="{% url 'studio_plan_visibility_update' plan_id=plan.pk %}"
-            class="flex items-center gap-2"
-            data-testid="plan-detail-visibility-form">
-        {% csrf_token %}
-        <input type="hidden" name="next" value="{% url 'studio_plan_detail' plan_id=plan.pk %}">
-        <label for="plan-detail-visibility" class="text-xs text-muted-foreground">Visibility</label>
-        <select id="plan-detail-visibility"
-                name="visibility"
-                class="studio-select bg-secondary border border-border rounded-md px-2 py-2 text-sm text-foreground"
-                data-testid="plan-detail-visibility-select">
-          <option value="private" {% if plan.visibility == 'private' %}selected{% endif %}>Private</option>
-          <option value="cohort" {% if plan.visibility == 'cohort' %}selected{% endif %}>Cohort</option>
-        </select>
-        <button type="submit"
-                class="bg-secondary text-foreground px-3 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
-          Update
-        </button>
-      </form>
-      <form method="post" action="{% url 'studio_plan_view_as_member' plan_id=plan.pk %}" class="inline">
-        {% csrf_token %}
-        <button type="submit"
-                class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
-                data-testid="studio-plan-view-as-member">
-          View as member
-        </button>
-      </form>
-      <a href="{% url 'studio_plan_markdown_download' plan_id=plan.pk %}"
-         class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors inline-flex items-center gap-2"
-         data-testid="studio-plan-download-markdown">
-        <i data-lucide="download" class="h-4 w-4"></i>
-        Download Markdown
-      </a>
-      <form method="post" action="{% url 'studio_plan_carry_over' plan_id=plan.pk %}" class="inline"
-            onsubmit="return confirm('{{ carry_over_confirmation|escapejs }}');">
-        {% csrf_token %}
-        <button type="submit"
-                class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
-                title="{{ carry_over_confirmation }}"
-                data-testid="studio-plan-carry-over">
-          Carry over unfinished tasks
-        </button>
-      </form>
-      <form method="post" action="{% url 'studio_plan_draft_next_sprint' plan_id=plan.pk %}" class="inline"
-            onsubmit="return confirm('{{ draft_next_sprint_confirmation|escapejs }}');">
-        {% csrf_token %}
-        <button type="submit"
-                class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
-                title="{{ draft_next_sprint_confirmation }}"
-                data-testid="studio-plan-draft-next-sprint">
-          Draft next sprint plan
-        </button>
-      </form>
-      {% if move_unfinished_counts.total %}
-        {% if move_target_sprints %}
-          <a href="{% url 'studio_plan_move_unfinished' plan_id=plan.pk %}"
-             class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
-             data-testid="studio-plan-move-unfinished">
-            Move unfinished items to another sprint
-          </a>
-        {% else %}
-          <span class="border border-border text-muted-foreground px-3 py-2 rounded-lg text-sm"
-                data-testid="studio-plan-move-unavailable">
-            No later sprint available
-          </span>
-        {% endif %}
-      {% endif %}
-      <a href="{% url 'studio_plan_edit' plan_id=plan.pk %}"
-         class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
-        Edit plan
-      </a>
-    </div>
-  </div>
-</div>
+{% studio_header_title_meta as plan_header_meta %}
+  <span class="sr-only" aria-hidden="true" data-testid="plan-detail-title">{{ plan.display_title }}</span>
+  <p class="text-sm text-muted-foreground">
+    Member: <a href="{% url 'studio_user_detail' user_id=plan.member.pk %}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="plan-detail-member-link">{{ plan.member.email }}</a>
+    · Sprint: <a href="{% url 'studio_sprint_detail' sprint_id=plan.sprint.pk %}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ plan.sprint.name }}</a>
+    {% if plan.shared_at %}· Shared {{ plan.shared_at|operator_date }}{% endif %}
+  </p>
+{% endstudio_header_title_meta %}
+{% url 'studio_plan_list' as plan_list_url %}
+{% studio_header_actions title=plan.member.email subtitle=plan.display_title title_meta=plan_header_meta back_url=plan_list_url back_label='Back to plans' %}
+  <a href="{% url 'studio_plan_edit' plan_id=plan.pk %}" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Edit plan</a>
+  <form method="post" action="{% url 'studio_plan_view_as_member' plan_id=plan.pk %}">{% csrf_token %}<button type="submit" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="studio-plan-view-as-member">View as member</button></form>
+  {% studio_overflow_menu %}
+    <a href="{% url 'studio_plan_markdown_download' plan_id=plan.pk %}" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="studio-plan-download-markdown"><i data-lucide="download" class="h-4 w-4"></i><span>Download Markdown</span></a>
+    <form method="post" action="{% url 'studio_plan_carry_over' plan_id=plan.pk %}" class="w-full" onsubmit="return confirm('{{ carry_over_confirmation|escapejs }}');">{% csrf_token %}<button type="submit" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-left text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" title="{{ carry_over_confirmation }}" data-testid="studio-plan-carry-over">Carry over unfinished tasks</button></form>
+    <form method="post" action="{% url 'studio_plan_draft_next_sprint' plan_id=plan.pk %}" class="w-full" onsubmit="return confirm('{{ draft_next_sprint_confirmation|escapejs }}');">{% csrf_token %}<button type="submit" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-left text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" title="{{ draft_next_sprint_confirmation }}" data-testid="studio-plan-draft-next-sprint">Draft next sprint plan</button></form>
+    {% if move_unfinished_counts.total %}{% if move_target_sprints %}<a href="{% url 'studio_plan_move_unfinished' plan_id=plan.pk %}" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="studio-plan-move-unfinished">Move unfinished items to another sprint</a>{% else %}<span class="flex min-h-[44px] w-full items-center px-4 py-2 text-sm text-muted-foreground" data-testid="studio-plan-move-unavailable">No later sprint available</span>{% endif %}{% endif %}
+    {% load admin_links %}{% admin_change_url plan as admin_url %}{% if admin_url %}<a href="{{ admin_url }}" data-testid="studio-open-in-admin" title="Open in Django admin" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="wrench" class="h-4 w-4"></i><span>Open in Django admin</span></a>{% endif %}
+  {% endstudio_overflow_menu %}
+{% endstudio_header_actions %}
+
+<section class="bg-card border border-border rounded-lg p-4 mb-8 max-w-2xl" data-testid="plan-access-card">
+  <h2 class="text-sm font-medium text-foreground mb-3">Plan access</h2>
+  <form method="post" action="{% url 'studio_plan_visibility_update' plan_id=plan.pk %}" class="flex flex-wrap items-end gap-2" data-testid="plan-detail-visibility-form">
+    {% csrf_token %}<input type="hidden" name="next" value="{% url 'studio_plan_detail' plan_id=plan.pk %}">
+    <div><label for="plan-detail-visibility" class="block text-xs text-muted-foreground mb-1">Visibility</label><select id="plan-detail-visibility" name="visibility" class="studio-select bg-secondary border border-border rounded-md px-2 py-2 text-sm text-foreground" data-testid="plan-detail-visibility-select"><option value="private" {% if plan.visibility == 'private' %}selected{% endif %}>Private</option><option value="cohort" {% if plan.visibility == 'cohort' %}selected{% endif %}>Cohort</option></select></div>
+    <button type="submit" class="bg-secondary border border-border text-foreground px-3 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Update</button>
+  </form>
+</section>
 
 {# Shareable Summary block. The five bullets here track _plan.md. #}
 <section data-testid="plan-summary" class="bg-card border border-border rounded-lg p-6 mb-8">

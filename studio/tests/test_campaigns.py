@@ -213,7 +213,7 @@ class StudioCampaignDetailTest(TestCase):
         response = self.client.get(f"/studio/campaigns/{self.campaign.pk}/")
         self.assertContains(response, 'data-testid="send-campaign-btn"')
         self.assertContains(response, "Send Test")
-        self.assertContains(response, "Duplicate Campaign")
+        self.assertContains(response, "Duplicate campaign")
         self.assertContains(response, 'name="test_recipients"')
 
     def test_detail_hides_send_button_for_non_draft_campaign(self):
@@ -223,7 +223,7 @@ class StudioCampaignDetailTest(TestCase):
         response = self.client.get(f"/studio/campaigns/{self.campaign.pk}/")
 
         self.assertNotContains(response, 'data-testid="send-campaign-btn"')
-        self.assertContains(response, "Duplicate Campaign")
+        self.assertContains(response, "Duplicate campaign")
 
     def test_duplicate_campaign_creates_draft_copy_and_redirects(self):
         self.campaign.status = "sent"
@@ -887,16 +887,15 @@ class StudioCampaignDetailPreviewTest(TestCase):
         self.assertContains(response, "Send to 3 recipient")
 
     def test_detail_send_button_has_destructive_class(self):
-        """Send uses a clearly destructive background (red-600), distinct
-        from the neutral/secondary style used by Edit, Duplicate, Test
-        Send."""
+        """Send uses the outlined destructive treatment, distinct from Edit."""
         campaign = EmailCampaign.objects.create(
             subject="Send style", body="x", status="draft",
         )
         response = self.client.get(f"/studio/campaigns/{campaign.pk}/")
         html = response.content.decode()
-        self.assertIn("bg-red-600", html)
         self.assertContains(response, 'data-testid="send-campaign-btn"')
+        self.assertIn("border-red-500/40 bg-red-500/10 text-red-300", html)
+        self.assertNotIn("bg-red-600", html)
 
     def test_detail_send_form_has_confirm_onsubmit(self):
         """The Send form has an onsubmit confirm() guard — the JS

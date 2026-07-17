@@ -4,45 +4,19 @@
 {% block studio_title %}Campaign: {{ campaign.subject }}{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8">
-  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
-    <a href="{% url 'studio_campaign_list' %}" class="hover:text-foreground">Campaigns</a>
-    <i data-lucide="chevron-right" class="w-4 h-4"></i>
-    <span class="text-foreground">{{ campaign.subject }}</span>
-  </div>
-  <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
-    <div class="min-w-0">
-      <h1 class="text-2xl font-semibold text-foreground break-all">{{ campaign.subject }}</h1>
-    </div>
-    <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
-      {% include "studio/includes/_admin_link.html" with obj=campaign %}
-      {% if campaign.status == 'draft' %}
-      <form method="post" action="{% url 'studio_campaign_send' campaign_id=campaign.pk %}"
-            onsubmit="return confirm('Send to {{ recipient_count }} recipients? This cannot be undone.');">
-        {% csrf_token %}
-        <button type="submit"
-                data-testid="send-campaign-btn"
-                class="border border-red-500/40 bg-red-500/10 text-red-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500/20 transition-colors">
-          Send to {{ recipient_count }} recipient{{ recipient_count|pluralize }}
-        </button>
-      </form>
-      <a href="{% url 'studio_campaign_edit' campaign_id=campaign.pk %}"
-         data-testid="edit-campaign-link"
-         class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
-        Edit
-      </a>
-      {% else %}
-      <form method="post" action="{% url 'studio_campaign_duplicate' campaign_id=campaign.pk %}" class="inline">
-        {% csrf_token %}
-        <button type="submit" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
-          Duplicate Campaign
-        </button>
-      </form>
-      {% endif %}
-    </div>
-  </header>
-  {% worker_status_inline %}
-</div>
+{% url 'studio_campaign_list' as campaign_list_url %}
+{% studio_header_actions title=campaign.subject back_url=campaign_list_url back_label='Back to campaigns' %}
+  {% if campaign.status == 'draft' %}
+  <form method="post" action="{% url 'studio_campaign_send' campaign_id=campaign.pk %}" onsubmit="return confirm('Send to {{ recipient_count }} recipients? This cannot be undone.');">{% csrf_token %}<button type="submit" data-testid="send-campaign-btn" class="border border-red-500/40 bg-red-500/10 text-red-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Send to {{ recipient_count }} recipient{{ recipient_count|pluralize }}</button></form>
+  <a href="{% url 'studio_campaign_edit' campaign_id=campaign.pk %}" data-testid="edit-campaign-link" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Edit</a>
+  {% endif %}
+  {% studio_overflow_menu %}
+    {% load admin_links %}{% admin_change_url campaign as admin_url %}{% if admin_url %}<a href="{{ admin_url }}" data-testid="studio-open-in-admin" title="Open in Django admin" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="wrench" class="h-4 w-4"></i><span>Open in Django admin</span></a>{% endif %}
+    <form method="post" action="{% url 'studio_campaign_duplicate' campaign_id=campaign.pk %}" class="w-full">{% csrf_token %}<button type="submit" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-left text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Duplicate campaign</button></form>
+    {% if campaign.status == 'draft' %}<div class="border-t border-border"><form method="post" action="{% url 'studio_campaign_delete' campaign_id=campaign.pk %}" class="w-full" onsubmit="return confirm('Permanently delete draft campaign &quot;{{ campaign.subject|escapejs }}&quot;? This cannot be undone.');">{% csrf_token %}<button type="submit" data-testid="delete-campaign-btn" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Delete</button></form></div>{% endif %}
+  {% endstudio_overflow_menu %}
+{% endstudio_header_actions %}
+{% worker_status_inline %}
 
 <div class="max-w-3xl space-y-6">
   {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
@@ -186,50 +160,6 @@
     </form>
   </div>
 
-  <!-- 4. Action Bar -->
-  <div class="bg-card border border-border rounded-lg p-6">
-    <h2 class="text-lg font-semibold text-foreground mb-4">Actions</h2>
-    <div class="flex flex-wrap items-center gap-3">
-      {% if campaign.status == 'draft' %}
-      {# Send Campaign — destructive-primary: filled red, guarded by confirm() #}
-      <form method="post" action="{% url 'studio_campaign_send' campaign_id=campaign.pk %}"
-            onsubmit="return confirm('Send to {{ recipient_count }} recipients? This cannot be undone.');">
-        {% csrf_token %}
-        <button type="submit"
-                class="bg-red-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
-          Send to {{ recipient_count }} recipient{{ recipient_count|pluralize }}
-        </button>
-      </form>
-      {% endif %}
-
-      {# Duplicate — neutral, always visible #}
-      <form method="post" action="{% url 'studio_campaign_duplicate' campaign_id=campaign.pk %}" class="inline">
-        {% csrf_token %}
-        <button type="submit" class="bg-secondary text-foreground border border-border px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
-          Duplicate Campaign
-        </button>
-      </form>
-
-      {% if campaign.status == 'draft' %}
-      {# Edit — neutral, draft only #}
-      <a href="{% url 'studio_campaign_edit' campaign_id=campaign.pk %}"
-         class="bg-secondary text-foreground border border-border px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
-        Edit
-      </a>
-
-      {# Delete — outline-destructive (visually secondary to Send). Draft only. #}
-      <form method="post" action="{% url 'studio_campaign_delete' campaign_id=campaign.pk %}" class="inline"
-            onsubmit="return confirm('Permanently delete draft campaign &quot;{{ campaign.subject|escapejs }}&quot;? This cannot be undone.');">
-        {% csrf_token %}
-        <button type="submit"
-                data-testid="delete-campaign-btn"
-                class="border border-red-600 text-red-500 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-600/10 transition-colors">
-          Delete
-        </button>
-      </form>
-      {% endif %}
-    </div>
-  </div>
 </div>
 {% endblock %}
 

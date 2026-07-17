@@ -131,7 +131,7 @@ class UtmCampaignCreateViewTest(TestCase):
     def test_create_form_renders(self):
         response = self.client.get('/studio/utm-campaigns/new')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'New UTM Campaign')
+        self.assertContains(response, 'New UTM campaign')
 
     def test_create_success_redirects_to_detail(self):
         response = self.client.post('/studio/utm-campaigns/new', {

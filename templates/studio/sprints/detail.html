@@ -4,36 +4,15 @@
 {% block studio_title %}{{ sprint.name }}{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8">
-  <a href="{% url 'studio_sprint_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-    &larr; Back to Sprints
-  </a>
-  <div class="mt-2 flex items-start justify-between">
-    <div>
-      <h1 class="text-2xl font-semibold text-foreground">{{ sprint.name }}</h1>
-      <p class="text-sm text-muted-foreground mt-1 font-mono">{{ sprint.slug }}</p>
-    </div>
-    <div class="flex items-center gap-2" data-testid="studio-header-actions">
-      {% include "studio/includes/_admin_link.html" with obj=sprint %}
-      <a href="{{ sprint.get_absolute_url }}"
-         target="_blank"
-         rel="noopener noreferrer"
-         class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors flex items-center space-x-1"
-         data-testid="view-on-site">
-        View on site
-      </a>
-      <a href="{% url 'studio_sprint_bulk_enroll' sprint_id=sprint.pk %}"
-         class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
-         data-testid="sprint-bulk-enroll-link">
-        Enroll members
-      </a>
-      <a href="{% url 'studio_sprint_edit' sprint_id=sprint.pk %}"
-         class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
-        Edit sprint
-      </a>
-    </div>
-  </div>
-</div>
+{% url 'studio_sprint_list' as sprint_list_url %}
+{% studio_header_actions title=sprint.name subtitle=sprint.slug back_url=sprint_list_url back_label='Back to sprints' %}
+  <a href="{% url 'studio_sprint_edit' sprint_id=sprint.pk %}" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Edit sprint</a>
+  <a href="{% url 'studio_sprint_bulk_enroll' sprint_id=sprint.pk %}" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="sprint-bulk-enroll-link">Enroll members</a>
+  {% studio_overflow_menu %}
+    <a href="{{ sprint.get_absolute_url }}" target="_blank" rel="noopener noreferrer" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="view-on-site"><i data-lucide="external-link" class="h-4 w-4"></i><span>View on site</span></a>
+    {% load admin_links %}{% admin_change_url sprint as admin_url %}{% if admin_url %}<a href="{{ admin_url }}" data-testid="studio-open-in-admin" title="Open in Django admin" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="wrench" class="h-4 w-4"></i><span>Open in Django admin</span></a>{% endif %}
+  {% endstudio_overflow_menu %}
+{% endstudio_header_actions %}
 
 <div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-2xl">
   <dl class="grid grid-cols-2 gap-4 text-sm">
@@ -461,7 +440,7 @@
 
 <section class="mb-6" data-testid="plan-ready-email-panel">
   <div class="bg-card border border-border rounded-lg p-6">
-    <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+    <div class="space-y-3">
       <div>
         <h2 class="text-lg font-semibold text-foreground">Send plan-ready emails</h2>
         <p class="text-sm text-muted-foreground mt-1" data-testid="plan-ready-email-helper">
@@ -474,7 +453,7 @@
           {% endif %}
         </p>
       </div>
-      <form method="post"
+      <form method="post" class="flex flex-wrap items-center gap-2"
             action="{% url 'studio_sprint_send_plan_ready_emails' sprint_id=sprint.pk %}"
             {% if plan_ready_email_preview.eligible_count %}onsubmit="return confirm('Send plan-ready emails to {{ plan_ready_email_preview.eligible_count }} eligible member{{ plan_ready_email_preview.eligible_count|pluralize }}?');"{% endif %}
             data-testid="plan-ready-email-form">
@@ -510,7 +489,7 @@
 
 <section class="mb-6" data-testid="partner-intro-email-panel">
   <div class="bg-card border border-border rounded-lg p-6">
-    <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+    <div class="space-y-3">
       <div>
         <h2 class="text-lg font-semibold text-foreground">Send partner intro emails</h2>
         <p class="text-sm text-muted-foreground mt-1" data-testid="partner-intro-email-helper">
@@ -531,7 +510,7 @@
           {% endif %}
         </p>
       </div>
-      <form method="post"
+      <form method="post" class="flex flex-wrap items-center gap-2"
             action="{% url 'studio_sprint_send_partner_intro_emails' sprint_id=sprint.pk %}"
             {% if partner_intro_email_preview.send_ready and partner_intro_email_preview.eligible_count %}onsubmit="return confirm('Send partner intro emails to {{ partner_intro_email_preview.eligible_count }} eligible member{{ partner_intro_email_preview.eligible_count|pluralize }}?');"{% endif %}
             data-testid="partner-intro-email-form">

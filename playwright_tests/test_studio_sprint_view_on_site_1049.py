@@ -68,6 +68,7 @@ def test_staff_operator_opens_public_sprint_from_studio(
 
     action_row = page.locator('[data-testid="studio-header-actions"]')
     assert action_row.count() == 1
+    page.get_by_label("More actions").click()
 
     view_on_site = action_row.locator('[data-testid="view-on-site"]')
     assert view_on_site.count() == 1

@@ -377,8 +377,8 @@ class SprintDetailViewOnSiteTest(TestCase):
         row_marker = 'data-testid="studio-header-actions"'
         self.assertIn(row_marker, body)
         row_start = body.index(row_marker)
-        row_open = body.rfind('<div', 0, row_start)
-        row_end = body.index('</div>', row_start) + len('</div>')
+        row_open = body.rfind('<header', 0, row_start)
+        row_end = body.index('</header>', row_start) + len('</header>')
         return body[row_open:row_end]
 
     def test_header_renders_one_view_on_site_link_with_public_sprint_url(self):
@@ -413,7 +413,7 @@ class SprintDetailViewOnSiteTest(TestCase):
         link_end = header.index('</a>', testid_start) + len('</a>')
         view_on_site_link = header[link_start:link_end]
         self.assertIn('href="/sprints/june-2026"', view_on_site_link)
-        self.assertIn('bg-secondary border border-border', view_on_site_link)
+        self.assertIn('min-h-[44px]', view_on_site_link)
         self.assertNotIn('/studio/sprints/', view_on_site_link)
         self.assertNotIn('/board', view_on_site_link)
         self.assertNotIn('/api/', view_on_site_link)

@@ -5,24 +5,12 @@
 
 {% block studio_content %}
 <div class="space-y-6">
-  <div class="flex items-center justify-between flex-wrap gap-4">
-    <div>
-      <a href="{% url 'studio_ses_event_list' %}"
-         class="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-         data-testid="ses-event-detail-back-link">
-        &larr; Back to SES events
-      </a>
-      <h1 class="mt-1 text-2xl font-semibold text-foreground">SES event #{{ event.pk }}</h1>
-      <p class="text-muted-foreground mt-1">
-        Inspected from the read-only audit log. The bounce webhook at
-        <code class="font-mono text-xs">/api/ses-events</code> wrote this row.
-      </p>
-    </div>
     {% ses_severity event as detail_severity %}
     {% ses_severity_label event as detail_severity_label %}
     {% ses_severity_classes event as detail_severity_classes %}
     {% ses_severity_consequence event as detail_severity_consequence %}
-    <div class="flex flex-col items-end gap-2">
+    {% studio_header_title_meta as ses_detail_meta %}
+    <div class="flex flex-wrap items-center gap-2">
       <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium {{ pill_class }}"
             data-testid="ses-event-detail-pill"
             data-event-type="{{ event.event_type }}">{{ event.get_event_type_display }}</span>
@@ -41,7 +29,9 @@
         <span>{{ detail_severity_label }} &mdash; {{ detail_severity_consequence }}</span>
       </span>
     </div>
-  </div>
+    {% endstudio_header_title_meta %}
+    {% url 'studio_ses_event_list' as ses_event_list_url %}
+    {% with event_number=event.pk|stringformat:'s' %}{% studio_header_actions title='SES event #'|add:event_number subtitle='Inspected from the read-only audit log. The bounce webhook at /api/ses-events wrote this row.' title_meta=ses_detail_meta back_url=ses_event_list_url back_label='Back to SES events' %}{% endstudio_header_actions %}{% endwith %}
 
   <div class="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-6">
     {# Left column — metadata. #}

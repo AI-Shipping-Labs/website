@@ -1,25 +1,21 @@
 {% extends "studio/base.html" %}
+{% load studio_filters admin_links %}
 
 {% block studio_title %}{% if form_action == 'edit' %}Edit sprint{% else %}New sprint{% endif %}{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8">
-  <a href="{% url 'studio_sprint_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-    &larr; Back to Sprints
-  </a>
-  <header class="mt-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
-    <div class="min-w-0">
-      <h1 class="text-2xl font-semibold text-foreground">
-        {% if form_action == 'edit' %}Edit sprint{% else %}New sprint{% endif %}
-      </h1>
-    </div>
-    <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
-      {% if form_action == 'edit' and sprint %}
-      {% include "studio/includes/_admin_link.html" with obj=sprint %}
-      {% endif %}
-    </div>
-  </header>
-</div>
+{% if form_action == 'edit' %}
+{% studio_header_actions title='Edit sprint' back_url='/studio/sprints/' back_label='Back to sprints' %}
+  {% if sprint %}
+    {% admin_change_url sprint as admin_url %}
+    {% if admin_url %}
+      {% studio_overflow_menu %}
+        <a href="{{ admin_url }}" data-testid="studio-open-in-admin" title="Open in Django admin" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="wrench" class="h-4 w-4" aria-hidden="true"></i><span>Open in Django admin</span></a>
+      {% endstudio_overflow_menu %}
+    {% endif %}
+  {% endif %}
+{% endstudio_header_actions %}
+{% else %}{% studio_header_actions title='New sprint' back_url='/studio/sprints/' back_label='Back to sprints' %}{% endstudio_header_actions %}{% endif %}
 
 {% if error %}
 <div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm">

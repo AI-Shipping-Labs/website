@@ -1,29 +1,21 @@
 {% extends "studio/base.html" %}
+{% load studio_filters admin_links %}
 
 {% block studio_title %}Edit Link{% endblock %}
 
 {% block studio_content %}
-<div class="mb-6">
-  <a href="{% url 'studio_utm_campaign_detail' campaign_id=campaign.pk %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-    &larr; Back to {{ campaign.name }}
-  </a>
-  <header class="mt-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
-    <div class="min-w-0">
-      <h1 class="text-2xl font-semibold text-foreground">Edit link</h1>
-      <p class="text-sm text-muted-foreground mt-1">Campaign: <code class="font-mono">{{ campaign.slug }}</code>
-        <a href="https://github.com/AI-Shipping-Labs/website/blob/main/_docs/utm_links.md"
-           target="_blank" rel="noopener noreferrer"
-           class="ml-1 text-accent hover:underline"
-           data-testid="utm-fields-help-link">(?) UTM field guide</a>
-      </p>
-    </div>
-    <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
-      {% if link %}
-      {% include "studio/includes/_admin_link.html" with obj=link %}
-      {% endif %}
-    </div>
-  </header>
-</div>
+{% url 'studio_utm_campaign_detail' campaign_id=campaign.pk as campaign_url %}
+{% studio_header_actions title='Edit link' subtitle=campaign.slug back_url=campaign_url back_label=campaign.name %}
+  {% if link %}
+    {% admin_change_url link as admin_url %}
+    {% if admin_url %}
+      {% studio_overflow_menu %}
+        <a href="{{ admin_url }}" data-testid="studio-open-in-admin" title="Open in Django admin" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="wrench" class="h-4 w-4" aria-hidden="true"></i><span>Open in Django admin</span></a>
+      {% endstudio_overflow_menu %}
+    {% endif %}
+  {% endif %}
+{% endstudio_header_actions %}
+<p class="mb-6 text-sm text-muted-foreground">Campaign: <code class="font-mono">{{ campaign.slug }}</code> · <a href="https://github.com/AI-Shipping-Labs/website/blob/main/_docs/utm_links.md" target="_blank" rel="noopener noreferrer" class="ml-1 text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="utm-fields-help-link">(?) UTM field guide</a></p>
 
 {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
 

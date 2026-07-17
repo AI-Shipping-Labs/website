@@ -130,6 +130,7 @@ class TestScenarioSlackOneClick:
             f"{django_server}/studio/event-series/{series.pk}/",
             wait_until="domcontentloaded",
         )
+        page.get_by_label("More actions").click()
 
         # The in-process server shares this process, so patching the
         # view-level symbol intercepts the real chat.postMessage transport
@@ -227,6 +228,7 @@ class TestScenarioReNotifyGuard:
             f"{django_server}/studio/event-series/{series.pk}/",
             wait_until="domcontentloaded",
         )
+        page.get_by_label("More actions").click()
         notify_btn = page.locator('[data-testid="event-series-notify"]')
         page.once("dialog", lambda dialog: dialog.accept())
         notify_btn.click()
@@ -274,6 +276,7 @@ class TestScenarioEmptySeries:
             f"{django_server}/studio/event-series/{series.pk}/",
             wait_until="domcontentloaded",
         )
+        page.get_by_label("More actions").click()
         page.once("dialog", lambda dialog: dialog.accept())
         page.locator('[data-testid="event-series-announce-slack"]').click()
         status = page.locator('[data-testid="series-slack-status"]')

@@ -21,8 +21,10 @@
       </a>
 
       {% if project.cover_image_url %}
-      <div class="mb-8 overflow-hidden rounded-lg">
-        <img src="{{ project.cover_image_url }}" alt="{{ project.title }}" class="w-full object-cover">
+      <div class="mb-8 overflow-hidden rounded-lg" data-testid="project-detail-cover">
+        <img src="{{ project.cover_image_url }}" alt="{{ project.title }}" class="w-full object-cover"
+             data-testid="project-detail-cover-image"
+             onerror="this.closest('[data-testid=project-detail-cover]').hidden = true;">
       </div>
       {% endif %}
 

@@ -15,9 +15,10 @@ Expected context:
     decoding="async"
     class="h-full w-full object-cover transition-transform group-hover:scale-105"
     data-testid="{{ preview_testid }}-image"
+    onerror="this.hidden = true; this.nextElementSibling.hidden = false; this.nextElementSibling.classList.remove('hidden');"
   >
-  {% else %}
-  <div class="flex h-full w-full flex-col border-b border-border bg-secondary p-4 sm:p-5" data-testid="{{ preview_testid }}-fallback">
+  {% endif %}
+  <div class="{% if preview_cover_url %}hidden {% endif %}flex h-full w-full flex-col border-b border-border bg-secondary p-4 sm:p-5" data-testid="{{ preview_testid }}-fallback"{% if preview_cover_url %} hidden{% endif %}>
     {% if preview_decorative_fallback %}
     <div class="flex h-full min-h-0 items-center justify-center">
       <span class="inline-flex h-14 w-14 items-center justify-center rounded-full border border-accent/20 bg-background/70 text-accent sm:h-16 sm:w-16" aria-hidden="true">
@@ -62,5 +63,4 @@ Expected context:
     </div>
     {% endif %}
   </div>
-  {% endif %}
 </div>

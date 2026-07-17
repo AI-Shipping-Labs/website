@@ -25,7 +25,7 @@
       {% for status in status_options %}<option value="{{ status }}"{% if selected_status == status %} selected{% endif %}>{% if status == 'partial' %}Completed with errors{% else %}{{ status|capfirst }}{% endif %}</option>{% endfor %}
     </select>
   </div>
-  <button type="submit" class="{% studio_action_class 'primary' %}">Apply</button>
+  <button type="submit" class="{% studio_action_class 'secondary' %}">Apply</button>
   {% if filters_active %}<a href="{% url 'studio_sync_history' %}" class="{% studio_action_class 'secondary' %}">Clear filters</a>{% endif %}
 </form>
 

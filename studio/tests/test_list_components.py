@@ -86,7 +86,11 @@ ROW_NAVIGATION_CALLS = {
         "studio_list_action sprint_edit_url 'Edit' 'secondary'",
     ],
     "templates/studio/sync/history.html": [
-        "studio_action_class 'secondary' %}\"",
+        (
+            "studio_action_class 'secondary' %}\"\n"
+            '              aria-expanded="false"\n'
+            '              data-action="sync-history-details"'
+        ),
     ],
     "templates/studio/utm_campaigns/list.html": [
         "studio_action_class 'secondary' %}\">View</a>",

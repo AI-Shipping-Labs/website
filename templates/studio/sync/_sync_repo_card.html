@@ -10,7 +10,8 @@ The card carries ``data-status="{{ repo.overall_status|default:'' }}"`` so
 the JS poller on the dashboard can tell whether anything on the page is
 still in flight.
 {% endcomment %}
-<div class="bg-card border border-border rounded-lg p-6"
+<div id="sync-source-{{ repo.source.pk }}"
+     class="scroll-mt-24 bg-card border border-border rounded-lg p-6"
      data-repo-card
      data-repo-name="{{ repo.repo_name }}"
      data-status="{{ repo.overall_status|default:'' }}">
@@ -59,7 +60,8 @@ still in flight.
       </div>
       {% endif %}
     </div>
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="flex flex-col items-start gap-2">
+      <div class="flex flex-wrap items-center gap-2">
       <form method="post" action="{% url 'studio_sync_repo_trigger' repo.repo_name %}" class="sync-form {% studio_list_class 'action_form' %}">
         {% csrf_token %}
         <button type="submit" class="sync-btn {% studio_action_class 'async' %}" data-original-text="Sync now">
@@ -86,6 +88,8 @@ still in flight.
          title="Edit ContentSource rows for this repo in Django admin">
         <span>Edit in admin</span>
       </a>
+      </div>
+      <p class="max-w-xl text-xs text-muted-foreground">Sync now applies changed files; Force resync re-imports everything from the repo.</p>
     </div>
   </div>
 
@@ -132,7 +136,7 @@ still in flight.
     </div>
 
     <!-- Per content type breakdown -->
-    <div class="overflow-x-auto">
+    <div class="studio-responsive-table overflow-x-auto">
       <table class="w-full text-sm">
         <thead>
           <tr class="text-left text-xs text-muted-foreground uppercase tracking-wider">
@@ -258,11 +262,11 @@ still in flight.
                 <span>{{ ct.display_name }}</span>
               </span>
             </td>
-            <td class="py-2 pr-2 sm:pr-4 text-right {% if ct.created %}text-green-400{% else %}text-muted-foreground{% endif %}">{{ ct.created }}</td>
-            <td class="py-2 pr-2 sm:pr-4 text-right {% if ct.updated %}text-blue-400{% else %}text-muted-foreground{% endif %}">{{ ct.updated }}</td>
-            <td class="py-2 pr-2 sm:pr-4 text-right hidden sm:table-cell {% if ct.deleted %}text-red-400{% else %}text-muted-foreground{% endif %}">{{ ct.deleted }}</td>
-            <td class="py-2 pr-2 sm:pr-4 text-right hidden sm:table-cell text-muted-foreground" data-unchanged>{{ ct.unchanged }}</td>
-            <td class="py-2 pr-2 sm:pr-4">
+            <td class="py-2 pr-2 sm:pr-4 text-right {% if ct.created %}text-green-400{% else %}text-muted-foreground{% endif %}" data-label="Created">{{ ct.created }}</td>
+            <td class="py-2 pr-2 sm:pr-4 text-right {% if ct.updated %}text-blue-400{% else %}text-muted-foreground{% endif %}" data-label="Updated">{{ ct.updated }}</td>
+            <td class="py-2 pr-2 sm:pr-4 text-right hidden sm:table-cell {% if ct.deleted %}text-red-400{% else %}text-muted-foreground{% endif %}" data-label="Deleted">{{ ct.deleted }}</td>
+            <td class="py-2 pr-2 sm:pr-4 text-right hidden sm:table-cell text-muted-foreground" data-label="Unchanged" data-unchanged>{{ ct.unchanged }}</td>
+            <td class="py-2 pr-2 sm:pr-4" data-label="Status">
               {% sync_status_pill ct.status ct.errors_count 'xs' %}
             </td>
           </tr>
@@ -314,14 +318,7 @@ still in flight.
     </div>
 
     <!-- Errors -->
-    {% if repo.last_batch.errors %}
-    <div class="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-      <p class="text-xs text-red-400 font-medium mb-1">Errors ({{ repo.last_batch.errors|length }})</p>
-      {% for error in repo.last_batch.errors %}
-      <p class="text-xs text-red-300 font-mono">{{ error.file }}: {{ error.error }}</p>
-      {% endfor %}
-    </div>
-    {% endif %}
+    {% include "studio/sync/_structured_errors.html" with errors=repo.last_batch.errors errors_total=repo.last_batch.errors_total errors_unique=repo.last_batch.errors_unique %}
   </div>
   {% endif %}
 </div>

@@ -20,7 +20,6 @@ from collections import OrderedDict
 
 from django.conf import settings
 from django.contrib import messages
-from django.db.models import Max, Min
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -32,6 +31,14 @@ from integrations.services import content_sync_queue
 from integrations.services.content_sync_queue import (
     enqueue_content_sync,
     enqueue_content_syncs,
+)
+from integrations.services.sync_observability import (
+    SYNC_HISTORY_STATUSES,
+    enrich_sources_with_health,
+    logical_history_page,
+    logical_status,
+    structure_error_groups,
+    structure_errors,
 )
 from studio.decorators import staff_required
 from studio.services.content_sources_io import (
@@ -458,7 +465,7 @@ _CONTENT_TYPE_DISPLAY = {
 }
 
 
-def _aggregate_batch(logs):
+def _aggregate_batch(logs, *, structured_errors=None):
     """Aggregate a queryset of SyncLog entries into a batch summary dict.
 
     The aggregate dict surfaces ``errors_count`` on every per-type row and at
@@ -483,11 +490,7 @@ def _aggregate_batch(logs):
     per_type = OrderedDict()
     tiers_synced = False
     tiers_count = 0
-    # Track the overall status. ``None`` means we haven't seen any logs
-    # yet; once we have, ``skipped``/``success`` get demoted by a worse
-    # status (failed > partial > success/skipped).
-    overall_status = None
-    seen_non_skipped = False
+    logs = list(logs)
 
     def _ensure_entry(content_type, log):
         display = _CONTENT_TYPE_DISPLAY.get(
@@ -583,25 +586,8 @@ def _aggregate_batch(logs):
             tiers_synced = True
             tiers_count = log.tiers_count
 
-        if log.status == 'failed':
-            overall_status = 'failed'
-        elif log.status == 'partial' and overall_status != 'failed':
-            overall_status = 'partial'
-        elif log.status == 'success' and overall_status not in (
-            'failed', 'partial',
-        ):
-            overall_status = 'success'
-            seen_non_skipped = True
-        elif log.status == 'skipped' and overall_status is None:
-            # Stays as 'skipped' unless a later (worse) log overrides.
-            overall_status = 'skipped'
-
-    # If every log in the batch was a skip, surface that to the pill;
-    # otherwise default to success when nothing worse happened.
-    if overall_status is None:
-        overall_status = 'success'
-    elif overall_status == 'skipped' and seen_non_skipped:
-        overall_status = 'success'
+    overall_status = logical_status(logs)
+    structured_errors = structured_errors or structure_errors(all_errors)
 
     # Compute course-level breakdown (issue #224) and tree (issue #280)
     # for course-type sources. The tree shows what really changed by
@@ -659,8 +645,10 @@ def _aggregate_batch(logs):
         'total_updated': total_updated,
         'total_unchanged': total_unchanged,
         'total_deleted': total_deleted,
-        'errors': all_errors,
-        'errors_count': len(all_errors),
+        'errors': structured_errors['items'],
+        'errors_count': structured_errors['total_count'],
+        'errors_total': structured_errors['total_count'],
+        'errors_unique': structured_errors['unique_count'],
         'per_type': list(per_type.values()),
         'tiers_synced': tiers_synced,
         'tiers_count': tiers_count,
@@ -707,10 +695,17 @@ def _build_repos_context():
     Issue #310: with one ContentSource per repo, the per-source loop is
     trivial — each card maps 1:1 to a single source.
     """
-    sources = ContentSource.objects.all().order_by('repo_name')
+    sources = list(ContentSource.objects.all().order_by('repo_name'))
+    enriched = enrich_sources_with_health(sources)
+    error_groups = [
+        (result.errors or []) if result else []
+        for _source, _health, result in enriched
+    ]
+    structured_groups = structure_error_groups(error_groups)
 
     repos = OrderedDict()
-    for source in sources:
+    result_by_source = {}
+    for (source, health, result), structured in zip(enriched, structured_groups):
         repo = {
             'repo_name': source.repo_name,
             'source': source,
@@ -723,6 +718,7 @@ def _build_repos_context():
             'synced_commit_url': source.synced_commit_url,
             'webhook_secret_configured': source.webhook_secret_configured,
             'webhook_security_status': source.webhook_security_status,
+            'health': health,
         }
         if source.last_sync_status == 'failed':
             last_log = (
@@ -736,26 +732,17 @@ def _build_repos_context():
                 repo['overall_status'] = source.last_sync_status
         elif source.last_sync_status:
             repo['overall_status'] = source.last_sync_status
+        result_by_source[source.pk] = (result, structured)
         repos[source.repo_name] = repo
 
     # Get the most recent batch of sync logs for each repo (one source per repo).
     for repo in repos.values():
         source = repo['source']
-        latest_logs = SyncLog.objects.filter(
-            source=source,
-        ).exclude(status__in=['running', 'queued']).order_by('-started_at')
-
-        newest = _latest_result_log_for_dashboard(latest_logs)
+        newest, structured = result_by_source[source.pk]
         if newest:
-            if newest.batch_id:
-                batch_logs = SyncLog.objects.filter(
-                    batch_id=newest.batch_id,
-                    source=source,
-                )
-            else:
-                # Single log per source for non-batch syncs.
-                batch_logs = SyncLog.objects.filter(pk=newest.pk)
-            repo['last_batch'] = _aggregate_batch(batch_logs)
+            repo['last_batch'] = _aggregate_batch(
+                [newest], structured_errors=structured,
+            )
         else:
             repo['last_batch'] = None
 
@@ -797,52 +784,52 @@ def sync_dashboard(request):
 
 @staff_required
 def sync_history(request, source_id=None):
-    """Display aggregated sync history per batch."""
-    sources = ContentSource.objects.all()
-    source_ids = [s.pk for s in sources]
-
-    # Get all sync logs, grouped by batch
-    all_logs = SyncLog.objects.filter(
-        source_id__in=source_ids,
-    ).select_related('source').order_by('-started_at')[:200]
-
-    # Group by batch_id or by timestamp proximity
+    """Display filtered, paginated logical sync history."""
+    sources = list(ContentSource.objects.order_by('repo_name'))
+    source_value = (request.GET.get('source') or '').strip()
+    status_value = (request.GET.get('status') or '').strip()
+    selected_source = next(
+        (source for source in sources if str(source.pk) == source_value),
+        None,
+    ) if source_value else None
+    filters_invalid = bool(
+        (source_value and selected_source is None)
+        or (status_value and status_value not in SYNC_HISTORY_STATUSES)
+    )
     batches = []
-    seen_batch_ids = set()
-    seen_log_ids = set()
-
-    for log in all_logs:
-        if log.pk in seen_log_ids:
-            continue
-
-        if log.batch_id and log.batch_id not in seen_batch_ids:
-            seen_batch_ids.add(log.batch_id)
-            batch_logs = SyncLog.objects.filter(
-                batch_id=log.batch_id,
-            ).select_related('source')
-            for bl in batch_logs:
-                seen_log_ids.add(bl.pk)
-            agg = _aggregate_batch(batch_logs)
-            agg['started_at'] = batch_logs.aggregate(
-                min_start=Min('started_at'),
-            )['min_start']
-            agg['finished_at'] = batch_logs.aggregate(
-                max_finish=Max('finished_at'),
-            )['max_finish']
-            agg['batch_id'] = str(log.batch_id)
-            agg['log_count'] = batch_logs.count()
-            batches.append(agg)
-        elif not log.batch_id:
-            seen_log_ids.add(log.pk)
-            agg = _aggregate_batch([log])
-            agg['started_at'] = log.started_at
-            agg['finished_at'] = log.finished_at
-            agg['batch_id'] = None
-            agg['log_count'] = 1
+    page_obj = None
+    if not filters_invalid:
+        page_obj, groups = logical_history_page(
+            source=selected_source,
+            status=status_value or None,
+            page=request.GET.get('page', 1),
+            page_size=50,
+        )
+        raw_groups = [
+            [error for log in logs for error in (log.errors or [])]
+            for _row, logs in groups
+        ]
+        structured_groups = structure_error_groups(raw_groups)
+        for (row, logs), structured in zip(groups, structured_groups):
+            agg = _aggregate_batch(logs, structured_errors=structured)
+            agg.update({
+                'started_at': row['started_at'],
+                'finished_at': row['finished_at'],
+                'batch_id': str(logs[0].batch_id) if logs[0].batch_id else None,
+                'history_id': str(row['history_id']),
+                'log_count': row['log_count'],
+            })
             batches.append(agg)
 
     return render(request, 'studio/sync/history.html', {
-        'batches': batches[:50],
+        'batches': batches,
+        'sources': sources,
+        'selected_source': source_value,
+        'selected_status': status_value,
+        'status_options': SYNC_HISTORY_STATUSES,
+        'filters_active': bool(source_value or status_value),
+        'filters_invalid': filters_invalid,
+        'page_obj': page_obj,
     })
 
 

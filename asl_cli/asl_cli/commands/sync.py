@@ -29,6 +29,34 @@ def sync_trigger(source_id, fmt):
     emit(get_client().post(f"{API}/sync/sources/{source_id}/trigger"), fmt)
 
 
+@sync.command("history")
+@click.option("--source", default=None, help="Filter by content source UUID.")
+@click.option(
+    "--status",
+    type=click.Choice(["queued", "running", "failed", "partial", "success", "skipped"]),
+    default=None,
+)
+@click.option("--page", type=click.IntRange(min=1), default=1, show_default=True)
+@click.option("--page-size", type=click.IntRange(min=1), default=50, show_default=True)
+@format_option
+def sync_history(source, status, page, page_size, fmt):
+    """List logical content sync history."""
+    params = {"page": page, "page_size": page_size}
+    if source:
+        params["source"] = source
+    if status:
+        params["status"] = status
+    emit(get_client().get(f"{API}/sync/history", params=params), fmt)
+
+
+@sync.command("history-detail")
+@click.argument("history_id")
+@format_option
+def sync_history_detail(history_id, fmt):
+    """Show one logical content sync history item."""
+    emit(get_client().get(f"{API}/sync/history/{history_id}"), fmt)
+
+
 @sync.command("plan-sprints")
 @click.option("--since", default=None, help="ISO timestamp for retroactive backfill.")
 @click.option("--dry-run", is_flag=True, default=False)

@@ -176,6 +176,16 @@ class SyncLog(models.Model):
 
     class Meta:
         ordering = ['-started_at']
+        indexes = [
+            models.Index(
+                fields=['source', 'status', '-started_at'],
+                name='sync_src_status_started_idx',
+            ),
+            models.Index(
+                fields=['batch_id', '-started_at'],
+                name='sync_batch_started_idx',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.source.repo_name} - {self.status} at {self.started_at}'

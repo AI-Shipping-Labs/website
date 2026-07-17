@@ -9,6 +9,7 @@ import pytest
 from asl_cli.cli import cli
 from asl_cli.commands import events as events_module
 from asl_cli.commands import groups
+from asl_cli.commands import sync as sync_module
 from asl_cli.commands._shared import TIER_LEVELS, TierLevel
 from click.testing import CliRunner
 
@@ -73,6 +74,40 @@ def test_raw_help_documents_method_path_escape_hatch():
     assert "PATH" in result.output
     assert "get|post|patch|put|delete" in result.output.lower()
     assert "/api/events" in result.output
+
+
+class RecordingSyncClient:
+    def __init__(self):
+        self.calls = []
+
+    def get(self, path, **kwargs):
+        self.calls.append((path, kwargs))
+        return {"ok": True}
+
+
+def test_sync_history_constructs_all_filter_and_paging_flags(monkeypatch):
+    client = RecordingSyncClient()
+    monkeypatch.setattr(sync_module, "get_client", lambda: client)
+    result = CliRunner().invoke(cli, [
+        "sync", "history", "--source", "source-id", "--status", "failed",
+        "--page", "3", "--page-size", "75", "--format", "json",
+    ])
+    assert result.exit_code == 0, result.output
+    assert client.calls == [
+        ("/api/sync/history", {"params": {
+            "page": 3, "page_size": 75, "source": "source-id", "status": "failed",
+        }}),
+    ]
+
+
+def test_sync_history_detail_constructs_history_id_path(monkeypatch):
+    client = RecordingSyncClient()
+    monkeypatch.setattr(sync_module, "get_client", lambda: client)
+    result = CliRunner().invoke(
+        cli, ["sync", "history-detail", "batch-id", "--format", "json"],
+    )
+    assert result.exit_code == 0, result.output
+    assert client.calls == [("/api/sync/history/batch-id", {})]
 
 
 class RecordingEventsClient:

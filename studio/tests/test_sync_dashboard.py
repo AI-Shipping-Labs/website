@@ -368,7 +368,8 @@ class StudioSyncDashboardUnchangedTest(TestCase):
         self.assertContains(
             response,
             '<td class="py-2 pr-2 sm:pr-4 text-right hidden sm:table-cell '
-            'text-muted-foreground" data-unchanged>17</td>',
+            'text-muted-foreground" data-label="Unchanged" '
+            'data-unchanged>17</td>',
             html=False,
         )
 

@@ -1,5 +1,7 @@
 """Tests for Studio UTM campaign views and importer."""
 
+import re
+
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 
@@ -390,12 +392,21 @@ class UtmFieldGuideHelpLinkTest(TestCase):
             f'/studio/utm-campaigns/{self.campaign.pk}/links/{self.link.pk}/edit'
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response,
-            f'<a href="{self.DOC_URL}" target="_blank" rel="noopener noreferrer" '
-            f'class="ml-1 text-accent hover:underline" '
-            f'data-testid="utm-fields-help-link">(?) UTM field guide</a>',
-            html=True,
+        match = re.search(
+            r'<a\b[^>]*data-testid="utm-fields-help-link"[^>]*>[^<]*</a>',
+            response.content.decode(),
+        )
+        self.assertIsNotNone(match)
+        anchor = match.group(0)
+        self.assertIn(f'href="{self.DOC_URL}"', anchor)
+        self.assertIn('target="_blank"', anchor)
+        self.assertIn('rel="noopener noreferrer"', anchor)
+        self.assertIn('>(?) UTM field guide</a>', anchor)
+        self.assertIn(
+            'focus-visible:outline-none focus-visible:ring-2 '
+            'focus-visible:ring-accent focus-visible:ring-offset-2 '
+            'focus-visible:ring-offset-background',
+            anchor,
         )
 
 

@@ -19,11 +19,17 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
+from django.template.defaultfilters import timesince_filter
 from django.test import TestCase
 from django.utils import timezone
 from django_q.models import OrmQ, Task
 from django_q.signing import SignedPackage
+from freezegun import freeze_time
 
+from accounts.templatetags.date_formatting import (
+    operator_datetime_seconds,
+    operator_datetime_tz,
+)
 from jobs.tasks import build_task_name
 
 User = get_user_model()
@@ -508,17 +514,30 @@ class WorkerDashboardRendersQueuedTasksTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
+    @freeze_time('2026-07-16T12:00:00Z')
     def test_pending_tasks_section_lists_queued_tasks(self):
         # ``lock_age_seconds=7`` puts the lock 7s in the past — an expired
         # claim. The Lock-expires column should say so explicitly.
         now = timezone.now()
-        _enqueue_ormq(name='visible-task', lock_age_seconds=7, lock_now=now)
+        ormq = _enqueue_ormq(
+            name='visible-task',
+            lock_age_seconds=7,
+            lock_now=now,
+        )
         with patch('studio.worker_health.Stat.get_all', return_value=[]):
-            with patch('studio.views.worker.timezone.now', return_value=now):
-                response = self.client.get('/studio/worker/')
+            response = self.client.get('/studio/worker/')
         self.assertContains(response, 'Pending Tasks (1)')
         self.assertContains(response, 'visible-task')
-        self.assertContains(response, 'expired 7s ago')
+        self.assertContains(
+            response,
+            f'{operator_datetime_seconds(ormq.lock)} '
+            f'(expired {timesince_filter(ormq.lock)} ago)',
+        )
+        self.assertContains(
+            response,
+            f'title="{operator_datetime_tz(ormq.lock)}"',
+        )
+        self.assertNotContains(response, 'expired 7s ago')
         self.assertContains(response, 'data-action="delete-queued"')
 
     def test_pending_section_hidden_when_queue_empty(self):

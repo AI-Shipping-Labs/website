@@ -828,6 +828,42 @@ class TagRuleInjectionProjectTest(TestCase):
         self.assertContains(response, 'Get the Guide')
 
 
+class RoadmapAction1280Test(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        Article.objects.create(
+            title='Roadmap Article', slug='roadmap-article',
+            date=date(2026, 7, 17), content_markdown='Content',
+            tags=['roadmap-configured'], published=True,
+        )
+        Project.objects.create(
+            title='Roadmap Project', slug='roadmap-project',
+            date=date(2026, 7, 17), content_markdown='Content',
+            tags=['roadmap-fallback'], published=True,
+        )
+        TagRule.objects.create(
+            tag='roadmap-configured', component_type='roadmap_signup',
+            component_config={'url': '/custom-roadmap', 'cta_text': 'Build it'},
+            position='after_content',
+        )
+        TagRule.objects.create(
+            tag='roadmap-fallback', component_type='roadmap_signup',
+            component_config={}, position='after_content',
+        )
+
+    def test_configured_article_and_fallback_project_actions_are_canonical(self):
+        configured = self.client.get('/blog/roadmap-article')
+        self.assertContains(configured, 'data-testid="tag-rule-roadmap-cta"')
+        self.assertContains(configured, 'href="/custom-roadmap"')
+        self.assertContains(configured, 'Build it')
+        self.assertContains(configured, 'min-h-[44px]')
+
+        fallback = self.client.get('/projects/roadmap-project')
+        self.assertContains(fallback, 'data-testid="tag-rule-roadmap-cta"')
+        self.assertContains(fallback, 'href="/"')
+        self.assertContains(fallback, 'Get Started')
+
+
 class TagRuleInjectionRecordingTest(TestCase):
     """Issue #426: tag-rule injection no longer runs on event detail pages.
 

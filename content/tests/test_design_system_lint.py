@@ -28,6 +28,8 @@ from pathlib import Path, PurePosixPath
 from django.conf import settings
 from django.test import SimpleTestCase, tag
 
+from content.utils.markdown import render_markdown
+
 
 @dataclass(frozen=True)
 class Match:
@@ -180,7 +182,7 @@ BASELINE: dict[str, dict[str, int]] = {
     "legacy_px5_py25_pair": {  # Initial legacy debt: #1240.
         "templates/content/_gated_access_card.html": 1,
         "templates/content/_verify_email_required.html": 1,
-        "templates/content/course_detail.html": 4,
+        "templates/content/course_detail.html": 2,
         "templates/content/reader/_bottom_nav.html": 2,
         "templates/content/reader/_completion_button.html": 1,
         "templates/content/workshops_list.html": 2,
@@ -492,6 +494,42 @@ class DesignSystemLintTest(SimpleTestCase):
                 len(results["public_font_bold"]["templates/new/untracked.html"]),
                 1,
             )
+
+
+@tag("core")
+class DesignSystemButtonExamplesContractTest(SimpleTestCase):
+    """Keep button guidance outside the canonical Django example fence."""
+
+    def test_destructive_theme_guidance_renders_as_prose_after_example(self):
+        design_system = (Path(settings.BASE_DIR) / "_docs/design-system.md").read_text(
+            encoding="utf-8"
+        )
+        final_example = (
+            '<button type="button" class="{% button_classes \'primary\' size=\'sm\' %}">'
+            "Ping</button>"
+        )
+        guidance = (
+            "The transparent destructive variant uses `text-red-700 dark:text-red-400`\n"
+            "against product backgrounds. Keep this theme split when extending the helper;\n"
+            "`text-red-400` alone is not readable enough in the light theme."
+        )
+
+        example_index = design_system.index(final_example)
+        closing_fence_index = design_system.index("\n```", example_index)
+        guidance_index = design_system.index(guidance, closing_fence_index)
+        self.assertLess(example_index, closing_fence_index)
+        self.assertLess(closing_fence_index, guidance_index)
+
+        rendered = render_markdown(design_system, include_codehilite=False)
+        code_blocks = re.findall(r"<pre><code.*?</code></pre>", rendered, flags=re.DOTALL)
+        self.assertFalse(
+            any("The transparent destructive variant" in block for block in code_blocks)
+        )
+        self.assertIn(
+            "<p>The transparent destructive variant uses "
+            "<code>text-red-700 dark:text-red-400</code>",
+            rendered,
+        )
 
 
 @tag("core")

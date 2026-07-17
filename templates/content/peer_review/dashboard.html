@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load accounts_extras %}
 
 {% block title %}Peer Reviews - {{ course.title }} | {{ site_name }}{% endblock %}
 
@@ -21,7 +22,7 @@
   <div class="bg-purple-500/10 border border-purple-500/30 rounded-lg p-6 mb-8">
     <h2 class="text-lg font-semibold text-purple-400 mb-2">Certificate Earned</h2>
     <p class="text-foreground mb-4">Congratulations! You have earned your certificate of completion for {{ course.title }}.</p>
-    <a href="{{ certificate.get_absolute_url }}" class="inline-block bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors">
+    <a href="{{ certificate.get_absolute_url }}" class="{% button_classes 'primary' extra='mt-4' %}" data-testid="peer-review-certificate-cta">
       View Certificate
     </a>
   </div>

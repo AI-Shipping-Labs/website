@@ -1,5 +1,6 @@
 {# Render tag rule components at a given position. #}
 {# Expects: tag_rules (dict with 'after_content' and 'sidebar' lists), position (string) #}
+{% load accounts_extras %}
 
 {% for rule in rules %}
 <div class="tag-rule-component tag-rule-{{ rule.component_type }}" data-tag="{{ rule.tag }}" data-component="{{ rule.component_type }}">
@@ -59,7 +60,8 @@
         <p class="mt-2 text-sm text-muted-foreground">{{ rule.component_config.description }}</p>
         {% endif %}
         <a href="{% if rule.component_config.url %}{{ rule.component_config.url }}{% else %}/{% endif %}"
-           class="mt-4 inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700">
+           class="{% button_classes 'primary' extra='mt-4' %}"
+           data-testid="tag-rule-roadmap-cta">
           {% if rule.component_config.cta_text %}{{ rule.component_config.cta_text }}{% else %}Get Started{% endif %}
           <i data-lucide="arrow-right" class="h-4 w-4"></i>
         </a>

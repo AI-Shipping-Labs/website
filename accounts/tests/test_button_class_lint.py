@@ -46,7 +46,22 @@ SCOPED_TEMPLATES = (
     'templates/plans/member_plan_detail.html',
     'templates/plans/sprint_detail.html',
     'templates/plans/cohort_board.html',
+    'templates/content/peer_review/dashboard.html',
+    'templates/includes/tag_rule_components.html',
+    'templates/events/cancel_registration_confirm.html',
 )
+
+FORBIDDEN_ACTION_PALETTE_TOKENS = (
+    'bg-purple-600',
+    'hover:bg-purple-700',
+    'bg-green-600',
+    'hover:bg-green-700',
+    'bg-red-500/90',
+)
+
+
+def _scan_forbidden_action_palette(html: str) -> list[str]:
+    return [token for token in FORBIDDEN_ACTION_PALETTE_TOKENS if token in html]
 
 # Tokens we forbid inside a button-shaped class attribute. ``py-1`` without
 # ``py-1.5`` is matched with a word-boundary negative lookahead.
@@ -178,6 +193,23 @@ class ButtonPaddingLintTest(TestCase):
                 'Lint self-test failed to detect a known-bad button. '
                 f'Violations seen: {violations!r}'
             ),
+        )
+
+    def test_non_studio_templates_have_no_forbidden_action_palette(self):
+        templates = Path(settings.BASE_DIR) / 'templates'
+        offenders = []
+        for path in templates.rglob('*.html'):
+            if 'studio' in path.relative_to(templates).parts:
+                continue
+            for token in _scan_forbidden_action_palette(path.read_text()):
+                offenders.append(f'{path.relative_to(templates)}: {token}')
+        self.assertEqual(offenders, [])
+
+    def test_action_palette_lint_rejects_synthetic_violation(self):
+        bad = '<a class="rounded bg-green-600 hover:bg-green-700">Go</a>'
+        self.assertEqual(
+            _scan_forbidden_action_palette(bad),
+            ['bg-green-600', 'hover:bg-green-700'],
         )
 
     def test_lint_allows_form_inputs_with_px4_py25(self):

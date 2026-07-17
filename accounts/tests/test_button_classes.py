@@ -90,6 +90,22 @@ class ButtonClassesTagTest(TestCase):
         # Variant color treatment still applied.
         self.assertIn('bg-accent', result)
 
+    def test_destructive_is_theme_safe_at_sm_and_md_with_stable_order(self):
+        for size in ('sm', 'md'):
+            with self.subTest(size=size):
+                result = button_classes(
+                    'destructive', size=size, extra='test-extra',
+                )
+                self.assertIn('text-red-700 dark:text-red-400', result)
+                self.assertIn('border-red-500/30 bg-transparent', result)
+                self.assertIn('hover:bg-red-500/10', result)
+                self.assertIn('focus-visible:ring-2', result)
+                self.assertTrue(result.endswith(' test-extra'))
+                if size == 'md':
+                    self.assertIn('min-h-[44px]', result)
+                else:
+                    self.assertNotIn('min-h-[44px]', result)
+
     def test_lg_size_renders_marketing_class_string_with_min_height(self):
         result = button_classes('primary', size='lg')
         self.assertIn('px-6 py-3', result)

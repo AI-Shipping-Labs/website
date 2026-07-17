@@ -121,7 +121,12 @@ from api.views.sprints import (
     sprint_roster_activity,
     sprints_collection,
 )
-from api.views.sync_sources import sync_source_trigger, sync_sources_collection
+from api.views.sync_sources import (
+    sync_history_collection,
+    sync_history_detail,
+    sync_source_trigger,
+    sync_sources_collection,
+)
 from api.views.tier_overrides import tier_overrides_grant
 from api.views.tier_reconcile import (
     tier_reconcile_apply,
@@ -360,6 +365,16 @@ urlpatterns = [
         "sync/sources/<uuid:source_id>/trigger",
         sync_source_trigger,
         name="api_sync_source_trigger",
+    ),
+    path(
+        "sync/history",
+        sync_history_collection,
+        name="api_sync_history_collection",
+    ),
+    path(
+        "sync/history/<str:history_id>",
+        sync_history_detail,
+        name="api_sync_history_detail",
     ),
     # ---- URL redirects (issue #674) -----------------------------------
     # Register the ``bulk`` literal BEFORE the ``<int:id>`` capture so the

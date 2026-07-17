@@ -62,6 +62,8 @@ Run `uv run asl <group> --help` for exact flags. Key commands:
 
 - `asl sync sources` — list content sources (with UUIDs).
 - `asl sync trigger <uuid>` — force resync.
+- `asl sync history [--source UUID] [--status STATUS] [--page N] [--page-size N]` — list read-only logical sync batches; sync status comes from `SyncLog`, not django-q task success.
+- `asl sync history-detail <history_id>` — inspect complete deduplicated errors and optional Studio entity targets for one batch or singleton run.
 - `asl sync plan-sprints [--since ...] [--dry-run]` — Slack plan-sprints ingestion.
 
 ### Background tasks (`asl worker --help`)

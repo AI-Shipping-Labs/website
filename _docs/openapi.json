@@ -9577,6 +9577,215 @@
         ]
       }
     },
+    "/api/sync/history": {
+      "get": {
+        "description": "Staff-only read of deduplicated logical sync batches.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "queued",
+                "running",
+                "failed",
+                "partial",
+                "success",
+                "skipped"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "items": [
+                    {
+                      "batch_id": "906dbf60-4091-4f09-b1c7-2d291d702b34",
+                      "commits": [
+                        "a1b2c3d4e5f6"
+                      ],
+                      "counts": {
+                        "created": 1,
+                        "deleted": 0,
+                        "unchanged": 3,
+                        "updated": 2
+                      },
+                      "errors_total": 3,
+                      "errors_unique": 1,
+                      "finished_at": "2026-07-17T10:02:00+00:00",
+                      "history_id": "906dbf60-4091-4f09-b1c7-2d291d702b34",
+                      "log_count": 1,
+                      "repo_names": [
+                        "AI-Shipping-Labs/content"
+                      ],
+                      "source_ids": [
+                        "5b4c0e3f-1f3c-4f8f-9c9d-2e5d0e2c8a51"
+                      ],
+                      "started_at": "2026-07-17T10:00:00+00:00",
+                      "status": "partial",
+                      "status_label": "Completed with errors",
+                      "tiers": {
+                        "count": 0,
+                        "synced": false
+                      }
+                    }
+                  ],
+                  "pagination": {
+                    "count": 1,
+                    "has_next": false,
+                    "has_previous": false,
+                    "page": 1,
+                    "page_size": 50,
+                    "total_pages": 1
+                  }
+                }
+              }
+            },
+            "description": "A page of compact logical sync history."
+          },
+          "404": {
+            "description": "Source not found."
+          },
+          "422": {
+            "description": "Invalid source, status, page, or page size."
+          }
+        },
+        "summary": "List logical content sync history",
+        "tags": [
+          "Sync Sources"
+        ]
+      }
+    },
+    "/api/sync/history/{history_id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "history_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "batch_id": "906dbf60-4091-4f09-b1c7-2d291d702b34",
+                  "commits": [
+                    "a1b2c3d4e5f6"
+                  ],
+                  "counts": {
+                    "created": 1,
+                    "deleted": 0,
+                    "unchanged": 3,
+                    "updated": 2
+                  },
+                  "errors": [
+                    {
+                      "count": 3,
+                      "file": "articles/example.md",
+                      "message": "Frontmatter is invalid",
+                      "target": {
+                        "id": "42",
+                        "slug": "example",
+                        "studio_url": "/studio/articles/42/edit",
+                        "type": "article"
+                      }
+                    }
+                  ],
+                  "errors_total": 3,
+                  "errors_unique": 1,
+                  "finished_at": "2026-07-17T10:02:00+00:00",
+                  "history_id": "906dbf60-4091-4f09-b1c7-2d291d702b34",
+                  "log_count": 1,
+                  "per_type": [
+                    {
+                      "content_type": "article",
+                      "counts": {
+                        "created": 0,
+                        "deleted": 0,
+                        "updated": 1
+                      },
+                      "items": [
+                        {
+                          "action": "updated",
+                          "content_type": "article",
+                          "slug": "example",
+                          "title": "Example"
+                        }
+                      ],
+                      "source_ids": [
+                        "5b4c0e3f-1f3c-4f8f-9c9d-2e5d0e2c8a51"
+                      ],
+                      "status": "partial"
+                    }
+                  ],
+                  "repo_names": [
+                    "AI-Shipping-Labs/content"
+                  ],
+                  "source_ids": [
+                    "5b4c0e3f-1f3c-4f8f-9c9d-2e5d0e2c8a51"
+                  ],
+                  "started_at": "2026-07-17T10:00:00+00:00",
+                  "status": "partial",
+                  "status_label": "Completed with errors",
+                  "tiers": {
+                    "count": 0,
+                    "synced": false
+                  }
+                }
+              }
+            },
+            "description": "Logical summary, item details, and deduplicated structured errors."
+          },
+          "404": {
+            "description": "History item not found."
+          }
+        },
+        "summary": "Get logical sync history detail",
+        "tags": [
+          "Sync Sources"
+        ]
+      }
+    },
     "/api/sync/sources": {
       "delete": {
         "description": "Source deletion is intentionally unavailable through the API; use Studio.",
@@ -9607,9 +9816,20 @@
                   "sources": [
                     {
                       "created_at": "2026-04-15T12:00:00+00:00",
+                      "health": {
+                        "content_age_seconds": 3600,
+                        "content_fresh_at": "2026-04-15T12:00:00+00:00",
+                        "errors_total": 4,
+                        "errors_unique": 2,
+                        "latest_history_id": "906dbf60-4091-4f09-b1c7-2d291d702b34",
+                        "stale": false,
+                        "stale_after_days": 7,
+                        "status": "success",
+                        "status_label": "success"
+                      },
                       "id": "5b4c0e3f-1f3c-4f8f-9c9d-2e5d0e2c8a51",
                       "is_private": true,
-                      "last_sync_status": "ok",
+                      "last_sync_status": "success",
                       "last_synced_at": "2026-04-15T12:00:00+00:00",
                       "last_synced_commit": "a1b2c3d4e5f6",
                       "max_files": 5000,
@@ -9726,7 +9946,7 @@
                     "created_at": "2026-04-15T12:00:00+00:00",
                     "id": "5b4c0e3f-1f3c-4f8f-9c9d-2e5d0e2c8a51",
                     "is_private": true,
-                    "last_sync_status": "ok",
+                    "last_sync_status": "success",
                     "last_synced_at": "2026-04-15T12:00:00+00:00",
                     "last_synced_commit": "a1b2c3d4e5f6",
                     "max_files": 5000,
@@ -9758,7 +9978,7 @@
                     "created_at": "2026-04-15T12:00:00+00:00",
                     "id": "5b4c0e3f-1f3c-4f8f-9c9d-2e5d0e2c8a51",
                     "is_private": true,
-                    "last_sync_status": "ok",
+                    "last_sync_status": "success",
                     "last_synced_at": "2026-04-15T12:00:00+00:00",
                     "last_synced_commit": "a1b2c3d4e5f6",
                     "max_files": 5000,

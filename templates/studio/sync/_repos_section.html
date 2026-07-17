@@ -1,3 +1,4 @@
+{% load studio_filters %}
 {% comment %}
 Per-repo sync cards section.
 
@@ -13,6 +14,24 @@ itself once nothing is running anymore.
 <div id="sync-repos-section"
      class="space-y-6"
      data-any-running="{% if any_running %}true{% else %}false{% endif %}">
+  <nav class="rounded-lg border border-border bg-card p-3" aria-label="Content source health" data-testid="sync-health-summary">
+    <div class="grid grid-cols-1 gap-2">
+      {% for repo in repos %}
+      <a href="#sync-source-{{ repo.source.pk }}"
+         class="flex min-h-[44px] min-w-0 flex-col gap-2 rounded-md px-3 py-2 hover:bg-muted sm:flex-row sm:items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+         data-testid="sync-health-row">
+        <span class="min-w-0 flex-1 break-all font-medium text-foreground">{{ repo.repo_name }}</span>
+        <span class="text-sm {% if repo.health.stale %}text-amber-400{% else %}text-muted-foreground{% endif %}" data-health-freshness>
+          {% if repo.health.content_fresh_at %}Content refreshed {{ repo.health.content_fresh_at|timesince }} ago{% else %}Never refreshed{% endif %}
+        </span>
+        {% sync_status_pill repo.health.status repo.health.errors_total %}
+        {% if repo.health.errors_total %}
+        <span class="text-xs text-red-400">{{ repo.health.errors_total }} total / {{ repo.health.errors_unique }} unique</span>
+        {% endif %}
+      </a>
+      {% endfor %}
+    </div>
+  </nav>
   {% for repo in repos %}
     {% include "studio/sync/_sync_repo_card.html" with repo=repo %}
   {% endfor %}

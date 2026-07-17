@@ -43,6 +43,7 @@ from studio.decorators import staff_required
 from studio.services.banner_panel import banner_panel_context
 from studio.utils import get_github_edit_url, is_synced, studio_pagination_context
 from studio.views.form_helpers import parse_comma_separated_tags
+from studio.views.notifications import notification_action_context
 
 logger = logging.getLogger(__name__)
 
@@ -671,6 +672,17 @@ def _event_edit_panels_context(event) -> dict:
     )
     context['registrations'] = registrations
     context['registration_count'] = registrations.count()
+    context['reschedule_guard_enabled'] = (
+        not is_synced(event) and event.start_datetime is not None
+    )
+    if event.start_datetime is not None:
+        effective_end = event.effective_end_datetime
+        context['reschedule_initial_start_ms'] = int(
+            event.start_datetime.timestamp() * 1000
+        )
+        context['reschedule_initial_end_ms'] = int(
+            effective_end.timestamp() * 1000
+        )
     # Issue #936: per-event attendance rollup. ``joined_count`` is the
     # number of registrations whose ``joined_at`` is set (first
     # live-window join click). Rendered as ``joined_count /
@@ -758,7 +770,10 @@ def event_edit(request, event_id):
             context['timezone_options'] = build_timezone_options()
             context['tz_settings_link'] = _should_autodetect_tz(request.user)
             _apply_host_context(context, selected_host_ids)
-            _apply_workshop_ready_context(context, event)
+            context.update(_event_edit_panels_context(event))
+            context.update(notification_action_context(
+                'event', event, includes_slack=False,
+            ))
             return render(request, 'studio/events/form.html', context)
         if synced:
             # Synced events: only allow operational fields
@@ -855,7 +870,10 @@ def event_edit(request, event_id):
                 context['timezone_options'] = build_timezone_options()
                 context['tz_settings_link'] = _should_autodetect_tz(request.user)
                 _apply_host_context(context, selected_host_ids)
-                _apply_workshop_ready_context(context, event)
+                context.update(_event_edit_panels_context(event))
+                context.update(notification_action_context(
+                    'event', event, includes_slack=False,
+                ))
                 return render(request, 'studio/events/form.html', context)
             start_dt, end_dt = _parse_event_datetime(request.POST, posted_tz)
             # The Studio picker has minute precision. Preserve stored
@@ -946,6 +964,9 @@ def event_edit(request, event_id):
     context['github_edit_url'] = get_github_edit_url(event)
     context['notify_url'] = reverse('studio_event_notify', kwargs={'event_id': event.pk})
     context['announce_url'] = reverse('studio_event_announce_slack', kwargs={'event_id': event.pk})
+    context.update(notification_action_context(
+        'event', event, includes_slack=False,
+    ))
     # ``form_values`` and ``errors`` are only meaningful on the create flow
     # (issue #574). Provide empty defaults here so the shared template's
     # ``form_values.foo`` lookups resolve cleanly when rendering edit.

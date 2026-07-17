@@ -123,6 +123,30 @@ def _get_eligible_users(required_level):
     )
 
 
+def get_notification_eligible_user_count(content_type, content):
+    """Return the exact in-app audience size used by ``notify``."""
+    config = CONTENT_TYPE_CONFIG.get(content_type)
+    if not config:
+        return 0
+    required_level = getattr(content, config['level_field'], 0)
+    return _get_eligible_users(required_level).count()
+
+
+def get_series_notification_eligible_user_count(series):
+    """Return the exact in-app audience size used by ``notify_series``."""
+    from notifications.services.slack_announcements import (
+        _series_upcoming_sessions,
+    )
+
+    sessions = _series_upcoming_sessions(series)
+    if not sessions:
+        return 0
+    lowest_level = min(
+        getattr(event, 'required_level', 0) or 0 for event in sessions
+    )
+    return _get_eligible_users(lowest_level).count()
+
+
 def series_notification_title(series):
     """Return the notification title for an event-series announcement.
 

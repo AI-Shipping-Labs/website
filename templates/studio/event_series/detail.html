@@ -41,7 +41,7 @@
               onclick="notifySeriesSubscribers()"
               class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
               data-testid="event-series-notify">
-        Notify subscribers
+        Notify {{ series_notify_audience_count }} eligible members
       </button>
       <button type="button"
               id="series-slack-btn"
@@ -328,6 +328,13 @@ function _seriesCsrf() {
 function notifySeriesSubscribers() {
   var btn = document.getElementById('series-notify-btn');
   var status = document.getElementById('series-notify-status');
+  var idleLabel = 'Notify {{ series_notify_audience_count }} eligible members';
+  if (!window.confirm(
+    'Notify {{ series_notify_audience_count }} eligible members in app? ' +
+    'This cannot be undone.'
+  )) {
+    return;
+  }
   btn.disabled = true;
   btn.textContent = 'Sending...';
   status.style.display = 'none';
@@ -350,20 +357,26 @@ function notifySeriesSubscribers() {
       status.className = 'mb-4 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300';
     }
     btn.disabled = false;
-    btn.textContent = 'Notify subscribers';
+    btn.textContent = idleLabel;
   })
   .catch(function(err) {
     status.style.display = 'block';
     status.textContent = 'Network error: ' + err.message;
     status.className = 'mb-4 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300';
     btn.disabled = false;
-    btn.textContent = 'Notify subscribers';
+    btn.textContent = idleLabel;
   });
 }
 
 function postSeriesToSlack() {
   var btn = document.getElementById('series-slack-btn');
   var status = document.getElementById('series-slack-status');
+  if (!window.confirm(
+    'Post this announcement to the configured #announcements channel? ' +
+    'This cannot be undone.'
+  )) {
+    return;
+  }
   btn.disabled = true;
   btn.textContent = 'Posting...';
   status.style.display = 'none';

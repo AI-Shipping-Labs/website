@@ -8,6 +8,7 @@ from django.utils.text import slugify
 from events.models import Event
 from studio.decorators import staff_required
 from studio.utils import get_github_edit_url, is_synced, studio_pagination_context
+from studio.views.notifications import notification_action_context
 
 
 @staff_required
@@ -60,5 +61,6 @@ def recording_edit(request, recording_id):
         'github_edit_url': get_github_edit_url(recording),
         'notify_url': reverse('studio_recording_notify', kwargs={'recording_id': recording.pk}),
         'announce_url': reverse('studio_recording_announce_slack', kwargs={'recording_id': recording.pk}),
+        **notification_action_context('recording', recording),
     }
     return render(request, 'studio/recordings/form.html', context)

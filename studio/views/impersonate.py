@@ -1,5 +1,8 @@
 """Studio views for user impersonation."""
 
+import logging
+
+from django.contrib import messages
 from django.contrib.auth import get_user_model, login, logout
 from django.shortcuts import get_object_or_404, redirect
 from django.views.decorators.http import require_POST
@@ -8,6 +11,7 @@ from accounts.return_context import get_next_url, should_skip_logout_redirect
 from studio.decorators import staff_required
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 def impersonate_as(request, target_user):
@@ -24,7 +28,28 @@ def impersonate_as(request, target_user):
 def impersonate_user(request, user_id):
     """Log the admin in as the target user, storing the admin's ID in session."""
     target_user = get_object_or_404(User, pk=user_id)
+    actor = request.user
+    if target_user.is_superuser:
+        logger.warning(
+            'studio_impersonation_refused_superuser '
+            'actor_id=%s actor_email=%s target_id=%s target_email=%s',
+            actor.pk,
+            actor.email,
+            target_user.pk,
+            target_user.email,
+        )
+        messages.error(request, 'Cannot log in as a superuser.')
+        return redirect('studio_user_detail', user_id=target_user.pk)
+
     impersonate_as(request, target_user)
+    logger.info(
+        'studio_impersonation_started '
+        'actor_id=%s actor_email=%s target_id=%s target_email=%s',
+        actor.pk,
+        actor.email,
+        target_user.pk,
+        target_user.email,
+    )
     return redirect('/')
 
 

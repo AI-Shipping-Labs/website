@@ -12,6 +12,7 @@ from studio.views.form_helpers import (
     parse_comma_separated_tags,
     reject_synced_content_post,
 )
+from studio.views.notifications import notification_action_context
 
 
 @staff_required
@@ -67,6 +68,15 @@ def download_edit(request, download_id):
                     'is_synced': synced,
                     'form_error': str(exc),
                     'github_edit_url': get_github_edit_url(download),
+                    'notify_url': reverse(
+                        'studio_download_notify',
+                        kwargs={'download_id': download.pk},
+                    ),
+                    'announce_url': reverse(
+                        'studio_download_announce_slack',
+                        kwargs={'download_id': download.pk},
+                    ),
+                    **notification_action_context('download', download),
                 }, status=400)
             secure_metadata = None
         if publish_requested and secure_metadata is not None:
@@ -92,6 +102,15 @@ def download_edit(request, download_id):
                     'is_synced': synced,
                     'form_error': str(exc),
                     'github_edit_url': get_github_edit_url(download),
+                    'notify_url': reverse(
+                        'studio_download_notify',
+                        kwargs={'download_id': download.pk},
+                    ),
+                    'announce_url': reverse(
+                        'studio_download_announce_slack',
+                        kwargs={'download_id': download.pk},
+                    ),
+                    **notification_action_context('download', download),
                 }, status=400)
         if replacement_url:
             download.file_url = replacement_url
@@ -113,6 +132,7 @@ def download_edit(request, download_id):
         'github_edit_url': get_github_edit_url(download),
         'notify_url': reverse('studio_download_notify', kwargs={'download_id': download.pk}),
         'announce_url': reverse('studio_download_announce_slack', kwargs={'download_id': download.pk}),
+        **notification_action_context('download', download),
         # Issues #788/#931: banner / social-image panel.
         **banner_panel_context(
             content_type='download',

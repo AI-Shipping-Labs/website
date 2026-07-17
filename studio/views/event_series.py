@@ -52,7 +52,10 @@ from integrations.services.banner_generator.dispatch import (
     enqueue_if_missing,
 )
 from notifications.models import Notification
-from notifications.services import NotificationService
+from notifications.services import (
+    NotificationService,
+    get_series_notification_eligible_user_count,
+)
 from notifications.services.notification_service import series_notification_title
 from notifications.services.slack_announcements import (
     post_series_slack_announcement,
@@ -73,6 +76,14 @@ MAX_OCCURRENCES = 26
 
 # Issue #958: valid occurrence/series access levels.
 _VALID_REQUIRED_LEVELS = {value for value, _label in VISIBILITY_CHOICES}
+
+
+def _series_notification_context(series):
+    return {
+        'series_notify_audience_count': (
+            get_series_notification_eligible_user_count(series)
+        ),
+    }
 
 
 def _parse_date_str(date_str):
@@ -469,6 +480,7 @@ def event_series_detail(request, series_id):
                     not series.timezone
                     and _should_autodetect_tz(request.user)
                 ),
+                **_series_notification_context(series),
             }, status=400)
         # Issue #896: re-enqueue the auto-banner render when the name drifts.
         # ``enqueue_if_missing`` hashes ``series.name`` and short-circuits
@@ -514,6 +526,7 @@ def event_series_detail(request, series_id):
         # Issue #859: one-click "create Zoom meetings for all events".
         'zoom_eligible_count': eligible_occurrence_count(series),
         'zoom_last_run': series.zoom_meetings_last_run,
+        **_series_notification_context(series),
         # Issues #896/#931: banner / social-image panel.
         **banner_panel_context(
             content_type='event_series',
@@ -552,6 +565,7 @@ def _render_add_occurrence_error(request, series, add_error):
             not series.timezone
             and _should_autodetect_tz(request.user)
         ),
+        **_series_notification_context(series),
     }, status=400)
 
 

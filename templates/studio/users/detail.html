@@ -36,7 +36,8 @@
   distinct behavior and has been removed.
 {% endcomment %}
 <div class="flex flex-wrap items-center gap-2 mb-8 max-w-4xl" data-testid="user-detail-actions">
-  <form method="post" action="{% url 'studio_impersonate' detail_user.pk %}" class="inline-flex">
+  <form method="post" action="{% url 'studio_impersonate' detail_user.pk %}" class="inline-flex"
+        onsubmit="return confirm('Log in as {{ detail_user.email|escapejs }}? Your Studio session will be paused until you stop impersonating.');">
     {% csrf_token %}
     <button type="submit"
             data-testid="user-detail-impersonate"

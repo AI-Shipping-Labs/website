@@ -38,7 +38,7 @@
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_questionnaire_response_detail' questionnaire_id=questionnaire.pk response_id=response.pk as response_detail_url %}
-            {% studio_list_action response_detail_url 'View' 'primary' %}
+            {% studio_list_action response_detail_url 'View' 'secondary' %}
           </div>
         </td>
       </tr>

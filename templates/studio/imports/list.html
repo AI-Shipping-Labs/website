@@ -122,7 +122,7 @@
         <td class="px-4 py-3 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_import_batch_detail' batch_id=batch.pk as import_detail_url %}
-            {% studio_list_action import_detail_url 'Details' 'primary' %}
+            {% studio_list_action import_detail_url 'Details' 'secondary' %}
           </div>
         </td>
       </tr>

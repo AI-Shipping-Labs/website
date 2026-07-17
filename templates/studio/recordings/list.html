@@ -45,9 +45,9 @@
           {% url 'studio_recording_edit' recording_id=recording.pk as recording_edit_url %}
           <div class="{% studio_list_class 'action_group' %}">
             {% if recording.source_repo %}
-            {% studio_list_action recording_edit_url 'View' 'primary' %}
+            {% studio_list_action recording_edit_url 'View' 'secondary' %}
             {% else %}
-            {% studio_list_action recording_edit_url 'Edit' 'primary' %}
+            {% studio_list_action recording_edit_url 'Edit' 'secondary' %}
             {% endif %}
             {% if recording.workshop %}
             {% studio_list_action recording.workshop.get_absolute_url 'View workshop' 'secondary' True %}

@@ -72,7 +72,7 @@
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           {% url 'studio_workshop_detail' workshop_id=workshop.pk as workshop_detail_url %}
           <div class="{% studio_list_class 'action_group' %}">
-            {% studio_list_action workshop_detail_url 'View' 'primary' %}
+            {% studio_list_action workshop_detail_url 'View' 'secondary' %}
             {% studio_list_action workshop.get_absolute_url 'View on site' 'secondary' True 'noopener noreferrer' %}
           </div>
         </td>

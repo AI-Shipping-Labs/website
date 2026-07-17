@@ -47,9 +47,9 @@
           {% url 'studio_project_review' project_id=project.pk as project_review_url %}
           <div class="{% studio_list_class 'action_group' %}">
             {% if project.source_repo %}
-            {% studio_list_action project_review_url 'View' 'primary' %}
+            {% studio_list_action project_review_url 'View' 'secondary' %}
             {% else %}
-            {% studio_list_action project_review_url 'Review' 'primary' %}
+            {% studio_list_action project_review_url 'Review' 'secondary' %}
             {% endif %}
             {% studio_list_action project.get_absolute_url 'View on site' 'secondary' True %}
           </div>

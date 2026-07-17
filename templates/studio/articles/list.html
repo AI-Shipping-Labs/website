@@ -46,9 +46,9 @@
           {% url 'studio_article_edit' article_id=article.pk as article_edit_url %}
           <div class="{% studio_list_class 'action_group' %}">
             {% if article.source_repo %}
-            {% studio_list_action article_edit_url 'View' 'primary' %}
+            {% studio_list_action article_edit_url 'View' 'secondary' %}
             {% else %}
-            {% studio_list_action article_edit_url 'Edit' 'primary' %}
+            {% studio_list_action article_edit_url 'Edit' 'secondary' %}
             {% endif %}
             {% if article.published %}
             {% studio_list_action article.get_absolute_url 'View on site' 'secondary' True %}

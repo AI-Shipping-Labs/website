@@ -14,6 +14,93 @@ from events.models import Event
 User = get_user_model()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# Issue #1277: every current primary-looking row action is navigation or
+# disclosure. Keeping the exact 32-call-site inventory here makes additions,
+# removals, and conditional-branch regressions deliberate review events.
+ROW_NAVIGATION_CALLS = {
+    "templates/studio/articles/list.html": [
+        "studio_list_action article_edit_url 'View' 'secondary'",
+        "studio_list_action article_edit_url 'Edit' 'secondary'",
+    ],
+    "templates/studio/campaigns/list.html": [
+        "studio_action_class 'secondary' %}\">Edit</a>",
+        "{% else %}\n            <a href=\"{% url 'studio_campaign_detail' campaign_id=campaign.pk %}\" class=\"{% studio_action_class 'secondary' %}\">View</a>",
+    ],
+    "templates/studio/call_hosts/list.html": [
+        "studio_list_action host_edit_url 'Edit' 'secondary'",
+    ],
+    "templates/studio/courses/list.html": [
+        "studio_list_action course_edit_url 'View' 'secondary'",
+        "studio_list_action course_edit_url 'Edit' 'secondary'",
+    ],
+    "templates/studio/downloads/list.html": [
+        "studio_list_action download_edit_url 'View' 'secondary'",
+        "studio_list_action download_edit_url 'Edit' 'secondary'",
+    ],
+    "templates/studio/email_templates/list.html": [
+        "studio_list_action edit_url 'Edit' 'secondary'",
+    ],
+    "templates/studio/event_series/list.html": [
+        "studio_list_action detail_url 'Manage' 'secondary'",
+    ],
+    "templates/studio/events/_list_table.html": [
+        "studio_list_action event_edit_url 'Edit' 'secondary'",
+    ],
+    "templates/studio/hosts/list.html": [
+        "studio_list_action host_edit_url 'Edit' 'secondary'",
+    ],
+    "templates/studio/imports/list.html": [
+        "studio_list_action import_detail_url 'Details' 'secondary'",
+    ],
+    "templates/studio/marketing_pages/list.html": [
+        "studio_list_action edit_url 'View' 'secondary'",
+        "studio_list_action edit_url 'Edit' 'secondary'",
+    ],
+    "templates/studio/personas/list.html": [
+        "studio_list_action persona_edit_url 'Edit' 'secondary'",
+    ],
+    "templates/studio/plans/list.html": [
+        "studio_list_action plan_edit_url 'Edit' 'secondary'",
+    ],
+    "templates/studio/projects/list.html": [
+        "studio_list_action project_review_url 'View' 'secondary'",
+        "studio_list_action project_review_url 'Review' 'secondary'",
+    ],
+    "templates/studio/questionnaires/list.html": [
+        "studio_list_action edit_url 'Edit' 'secondary'",
+    ],
+    "templates/studio/questionnaires/responses.html": [
+        "studio_list_action response_detail_url 'View' 'secondary'",
+    ],
+    "templates/studio/recordings/list.html": [
+        "studio_list_action recording_edit_url 'View' 'secondary'",
+        "studio_list_action recording_edit_url 'Edit' 'secondary'",
+    ],
+    "templates/studio/redirects/list.html": [
+        "studio_action_class 'secondary' %}\">Edit</a>",
+    ],
+    "templates/studio/ses_events/list.html": [
+        'studio_action_class \'secondary\' %}"\n               data-testid="ses-event-view-link"',
+    ],
+    "templates/studio/sprints/list.html": [
+        "studio_list_action sprint_edit_url 'Edit' 'secondary'",
+    ],
+    "templates/studio/sync/history.html": [
+        "studio_action_class 'secondary' %}\"",
+    ],
+    "templates/studio/utm_campaigns/list.html": [
+        "studio_action_class 'secondary' %}\">View</a>",
+    ],
+    "templates/studio/users/list.html": [
+        'studio_action_class \'secondary\' %}" data-testid="user-view-link">View</a>',
+    ],
+    "templates/studio/_worker_pending_tasks.html": [
+        'studio_action_class \'secondary\' %}"\n                   data-action="inspect">Inspect</a>',
+    ],
+    "templates/studio/workshops/list.html": [
+        "studio_list_action workshop_detail_url 'View' 'secondary'",
+    ],
+}
 
 class StudioListComponentTemplateTest(TestCase):
     """The target list templates should render through shared list helpers."""
@@ -227,7 +314,6 @@ class StudioListComponentRenderTest(TestCase):
         self.assertContains(response, 'studio-actions-cell')
         self.assertContains(response, 'studio-action-group')
         self.assertContains(response, 'studio-action')
-        self.assertContains(response, 'border-accent bg-accent')
         self.assertContains(response, 'border-border bg-secondary')
         self.assertContains(response, 'whitespace-nowrap')
 
@@ -269,7 +355,7 @@ class StudioListComponentRenderTest(TestCase):
         self.assertNotContains(response, f'/studio/impersonate/{user.pk}/')
         self.assertNotContains(response, 'Login as')
         self.assertContains(response, 'studio-action-group')
-        self.assertContains(response, 'border-accent bg-accent')
+        self.assertContains(response, 'border-border bg-secondary')
 
     def test_redirect_list_uses_destructive_action_confirming_item(self):
         from integrations.models import Redirect
@@ -316,11 +402,11 @@ class StudioListRowActionPillStyleTest(TestCase):
     # the cell uses the canonical helpers.
     canonical_call_sites = [
         ('templates/studio/plans/list.html', [
-            "studio_list_action plan_edit_url 'Edit' 'primary'",
+            "studio_list_action plan_edit_url 'Edit' 'secondary'",
             "studio_list_action plan_detail_url 'View plan' 'secondary'",
         ]),
         ('templates/studio/sprints/list.html', [
-            "studio_list_action sprint_edit_url 'Edit' 'primary'",
+            "studio_list_action sprint_edit_url 'Edit' 'secondary'",
             "studio_list_action sprint_detail_url 'View' 'secondary'",
         ]),
         ('templates/studio/downloads/list.html', [
@@ -417,6 +503,39 @@ class StudioListRowActionPillStyleTest(TestCase):
                         ),
                     )
 
+    def test_navigation_inventory_uses_secondary_at_all_32_call_sites(self):
+        self.assertEqual(len(ROW_NAVIGATION_CALLS), 25)
+        self.assertEqual(sum(map(len, ROW_NAVIGATION_CALLS.values())), 32)
+
+        for path, expected_calls in ROW_NAVIGATION_CALLS.items():
+            with self.subTest(path=path):
+                source = self._template_source(path)
+                self.assertNotRegex(
+                    source,
+                    r"studio_(?:list_action|action_class)[^\n]*'primary'",
+                    msg=f"{path} contains a primary navigation/disclosure action",
+                )
+                for expected in expected_calls:
+                    self.assertEqual(
+                        source.count(expected),
+                        1,
+                        msg=f"{path} must contain exactly one '{expected}'",
+                    )
+
+    def test_primary_row_variant_requires_an_explicit_mutation_allowlist(self):
+        # There are currently no accent-primary row mutations. A future valid
+        # one must be added to an explicit mutation allowlist here rather than
+        # silently reintroducing primary navigation.
+        primary_calls = []
+        studio_templates = REPO_ROOT / "templates" / "studio"
+        for path in studio_templates.rglob("*.html"):
+            for match in re.finditer(
+                r"studio_(?:list_action|action_class)[^\n]*'primary'",
+                path.read_text(),
+            ):
+                primary_calls.append(f"{path.relative_to(REPO_ROOT)}:{match.group(0)}")
+        self.assertEqual(primary_calls, [])
+
     def test_email_templates_no_longer_uses_literal_actions_cell_class(self):
         source = self._template_source(
             'templates/studio/email_templates/list.html'
@@ -472,7 +591,6 @@ class StudioListRowActionRenderTest(TestCase):
 
         response = self.client.get('/studio/plans/')
         self.assertContains(response, 'studio-action-group')
-        self.assertContains(response, 'border-accent bg-accent')
         self.assertContains(response, 'border-border bg-secondary')
         # No bare text-accent link inside the row.
         self.assertNotContains(
@@ -491,7 +609,6 @@ class StudioListRowActionRenderTest(TestCase):
         )
         response = self.client.get('/studio/sprints/')
         self.assertContains(response, 'studio-action-group')
-        self.assertContains(response, 'border-accent bg-accent')
         self.assertContains(response, 'border-border bg-secondary')
         self.assertNotContains(
             response,
@@ -507,7 +624,7 @@ class StudioListRowActionRenderTest(TestCase):
         )
         response = self.client.get('/studio/downloads/')
         self.assertContains(response, 'studio-action-group')
-        self.assertContains(response, 'border-accent bg-accent')
+        self.assertContains(response, 'border-border bg-secondary')
         self.assertContains(response, 'data-testid="view-on-site"')
         self.assertContains(response, 'rel="noopener noreferrer"')
 
@@ -521,8 +638,8 @@ class StudioListRowActionRenderTest(TestCase):
         )
         response = self.client.get('/studio/email-templates/')
         self.assertContains(response, 'studio-action-group')
-        # Edit pill (primary)
-        self.assertContains(response, 'border-accent bg-accent')
+        # Edit navigation pill (secondary)
+        self.assertContains(response, 'border-border bg-secondary')
         # Reset to default pill (destructive)
         self.assertContains(response, 'border-red-500/40')
         self.assertContains(response, 'Reset to default')

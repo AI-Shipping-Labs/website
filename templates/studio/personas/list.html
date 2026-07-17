@@ -70,7 +70,7 @@
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_persona_detail' persona_id=persona.pk as persona_detail_url %}
             {% url 'studio_persona_edit' persona_id=persona.pk as persona_edit_url %}
-            {% studio_list_action persona_edit_url 'Edit' 'primary' %}
+            {% studio_list_action persona_edit_url 'Edit' 'secondary' %}
             {% studio_list_action persona_detail_url 'View' 'secondary' %}
           </div>
         </td>

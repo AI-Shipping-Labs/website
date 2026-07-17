@@ -60,7 +60,7 @@
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           {% url 'studio_event_edit' event_id=event.pk as event_edit_url %}
           <div class="{% studio_list_class 'action_group' %}">
-            {% studio_list_action event_edit_url 'Edit' 'primary' %}
+            {% studio_list_action event_edit_url 'Edit' 'secondary' %}
             {% studio_list_action event.get_absolute_url 'View on site' 'secondary' True %}
           </div>
         </td>

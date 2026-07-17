@@ -82,7 +82,7 @@
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_plan_detail' plan_id=plan.pk as plan_detail_url %}
             {% url 'studio_plan_edit' plan_id=plan.pk as plan_edit_url %}
-            {% studio_list_action plan_edit_url 'Edit' 'primary' %}
+            {% studio_list_action plan_edit_url 'Edit' 'secondary' %}
             {% studio_list_action plan_detail_url 'View plan' 'secondary' %}
           </div>
         </td>

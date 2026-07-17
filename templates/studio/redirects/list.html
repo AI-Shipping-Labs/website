@@ -46,7 +46,7 @@
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %}">
             <a href="{% url 'studio_redirect_edit' redirect_id=redir.pk %}"
-               class="{% studio_action_class 'primary' %}">Edit</a>
+               class="{% studio_action_class 'secondary' %}">Edit</a>
             <form method="post" action="{% url 'studio_redirect_toggle' redirect_id=redir.pk %}" class="{% studio_list_class 'action_form' %}">
               {% csrf_token %}
               <button type="submit" class="{% studio_action_class 'secondary' %}">

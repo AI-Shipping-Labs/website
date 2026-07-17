@@ -66,7 +66,7 @@
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_sprint_detail' sprint_id=sprint.pk as sprint_detail_url %}
             {% url 'studio_sprint_edit' sprint_id=sprint.pk as sprint_edit_url %}
-            {% studio_list_action sprint_edit_url 'Edit' 'primary' %}
+            {% studio_list_action sprint_edit_url 'Edit' 'secondary' %}
             {% studio_list_action sprint_detail_url 'View' 'secondary' %}
           </div>
         </td>

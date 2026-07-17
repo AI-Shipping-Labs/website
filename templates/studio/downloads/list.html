@@ -57,9 +57,9 @@
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_download_edit' download_id=download.pk as download_edit_url %}
             {% if download.source_repo %}
-              {% studio_list_action download_edit_url 'View' 'primary' %}
+              {% studio_list_action download_edit_url 'View' 'secondary' %}
             {% else %}
-              {% studio_list_action download_edit_url 'Edit' 'primary' %}
+              {% studio_list_action download_edit_url 'Edit' 'secondary' %}
             {% endif %}
             {% studio_list_action download.get_absolute_url 'View on site' 'secondary' True 'noopener noreferrer' %}
           </div>

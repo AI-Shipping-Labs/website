@@ -298,6 +298,25 @@ class ReviewDashboardViewTest(TestCase):
         self.assertContains(response, 'Great work!')
         self.assertContains(response, '4/5')
 
+    def test_certificate_action_is_canonical_and_conditional(self):
+        submission = ProjectSubmission.objects.create(
+            user=self.user, course=self.course,
+            project_url='https://github.com/test/certified',
+            status='certified',
+        )
+        certificate = CourseCertificate.objects.create(
+            user=self.user, course=self.course, submission=submission,
+        )
+        response = self.client.get('/courses/test-course/reviews')
+        self.assertContains(response, 'data-testid="peer-review-certificate-cta"')
+        self.assertContains(response, f'href="{certificate.get_absolute_url()}"')
+        self.assertContains(response, 'min-h-[44px]')
+        self.assertContains(response, 'bg-accent')
+
+        certificate.delete()
+        response = self.client.get('/courses/test-course/reviews')
+        self.assertNotContains(response, 'peer-review-certificate-cta')
+
     def test_redirect_if_anonymous(self):
         self.client.logout()
         response = self.client.get('/courses/test-course/reviews')

@@ -297,6 +297,10 @@ Additional use examples:
 <button type="button" class="{% button_classes 'primary' size='sm' %}">Ping</button>
 ```
 
+The transparent destructive variant uses `text-red-700 dark:text-red-400`
+against product backgrounds. Keep this theme split when extending the helper;
+`text-red-400` alone is not readable enough in the light theme.
+
 Joining order in the rendered class string is `base size variant extra`. Do not reshuffle: per-call overrides rely on appearing last.
 
 Rendered class strings, per (variant, size):

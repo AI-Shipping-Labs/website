@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load accounts_extras %}
 
 {% block title %}Cancel registration{% if event %} - {{ event.title }}{% endif %} | AI Shipping Labs{% endblock %}
 
@@ -21,14 +22,16 @@
             {% csrf_token %}
             <button
               type="submit"
-              class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-red-500/90 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-red-500"
+              class="{% button_classes 'destructive' size='md' extra='w-full' %}"
+              data-testid="cancel-registration-submit"
             >
               <i data-lucide="x-circle" class="h-4 w-4"></i>
               Cancel my registration
             </button>
             <a
               href="{{ event_url }}"
-              class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-transparent px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              class="{% button_classes 'secondary' size='md' extra='w-full' %}"
+              data-testid="cancel-registration-keep"
             >
               Keep my registration
             </a>
@@ -41,7 +44,8 @@
           <p class="text-muted-foreground mb-6">{{ message }}</p>
           <a
             href="{{ event_url|default:'/events' }}"
-            class="inline-flex items-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+            class="{% button_classes 'primary' size='md' %}"
+            data-testid="cancel-registration-expired-destination"
           >
             Go to event page
             <i data-lucide="arrow-right" class="h-4 w-4"></i>
@@ -54,7 +58,8 @@
           <p class="text-muted-foreground mb-6">{{ message }}</p>
           <a
             href="/events"
-            class="inline-flex items-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+            class="{% button_classes 'primary' size='md' %}"
+            data-testid="cancel-registration-invalid-destination"
           >
             Browse events
             <i data-lucide="arrow-right" class="h-4 w-4"></i>
@@ -67,7 +72,8 @@
           <p class="text-muted-foreground mb-6">{{ message }}</p>
           <a
             href="{{ event_url|default:'/events' }}"
-            class="inline-flex items-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+            class="{% button_classes 'primary' size='md' %}"
+            data-testid="cancel-registration-already-cancelled-destination"
           >
             Go to event page
             <i data-lucide="arrow-right" class="h-4 w-4"></i>
@@ -80,7 +86,8 @@
           <p class="text-muted-foreground mb-6">{{ message }}</p>
           <a
             href="{{ event_url|default:'/events' }}"
-            class="inline-flex items-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+            class="{% button_classes 'primary' size='md' %}"
+            data-testid="cancel-registration-event-finished-destination"
           >
             Go to event page
             <i data-lucide="arrow-right" class="h-4 w-4"></i>

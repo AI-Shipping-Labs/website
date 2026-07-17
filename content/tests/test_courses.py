@@ -10,6 +10,7 @@ Covers:
 - Admin CRUD for courses
 """
 
+import datetime
 import json
 
 from django.contrib.auth import get_user_model
@@ -21,6 +22,7 @@ from django.utils import timezone
 
 from content.access import LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from content.models import (
+    Cohort,
     Course,
     CourseInstructor,
     Instructor,
@@ -28,6 +30,7 @@ from content.models import (
     Unit,
     UserCourseProgress,
 )
+from content.models.cohort import CohortEnrollment
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
@@ -591,6 +594,31 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
     def test_shows_instructor_bio(self):
         response = self.client.get('/courses/detail-course')
         self.assertContains(response, 'Expert in AI.')
+
+    def test_cohort_actions_use_primary_and_secondary_canonical_chrome(self):
+        cohort = Cohort.objects.create(
+            course=self.course, name='Action Cohort',
+            start_date=timezone.now().date() + datetime.timedelta(days=7),
+            end_date=timezone.now().date() + datetime.timedelta(days=35),
+            is_active=True,
+        )
+        user = User.objects.create_user(
+            email='cohort-actions@test.com', password='pw', tier=self.main_tier,
+            email_verified=True,
+        )
+        self.client.force_login(user)
+        response = self.client.get('/courses/detail-course')
+        self.assertContains(response, f'data-testid="cohort-enroll-{cohort.pk}"')
+        self.assertContains(response, 'data-action="enroll"')
+        self.assertContains(response, 'bg-accent')
+        self.assertContains(response, 'min-h-[44px]')
+
+        CohortEnrollment.objects.create(user=user, cohort=cohort)
+        response = self.client.get('/courses/detail-course')
+        self.assertContains(response, f'data-testid="cohort-unenroll-{cohort.pk}"')
+        self.assertContains(response, 'data-action="unenroll"')
+        self.assertContains(response, 'border-border bg-transparent')
+        self.assertNotContains(response, 'bg-green-500/10')
 
     def test_instructor_bio_uses_rendered_bio_html(self):
         course = Course.objects.create(

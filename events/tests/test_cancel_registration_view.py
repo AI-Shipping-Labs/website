@@ -89,6 +89,11 @@ class CancelRegistrationGetValidTokenTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Community Lunch')
         self.assertContains(response, 'Cancel my registration')
+        self.assertContains(response, 'data-testid="cancel-registration-submit"')
+        self.assertContains(response, 'data-testid="cancel-registration-keep"')
+        self.assertContains(response, 'text-red-700')
+        self.assertContains(response, 'dark:text-red-400')
+        self.assertContains(response, 'min-h-[44px]')
         self.assertContains(
             response,
             f'action="/api/events/community-lunch/cancel-registration?token={token}"',
@@ -136,6 +141,10 @@ class CancelRegistrationExpiredTokenTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'expired')
+        self.assertContains(
+            response, 'data-testid="cancel-registration-expired-destination"',
+        )
+        self.assertNotContains(response, 'cancel-registration-submit')
         self.assertTrue(
             EventRegistration.objects.filter(pk=self.registration.pk).exists(),
         )
@@ -171,6 +180,10 @@ class CancelRegistrationTamperedTokenTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'invalid')
+        self.assertContains(
+            response, 'data-testid="cancel-registration-invalid-destination"',
+        )
+        self.assertNotContains(response, 'cancel-registration-submit')
         self.assertNotContains(response, 'Community Lunch')
         self.assertTrue(
             EventRegistration.objects.filter(pk=self.registration.pk).exists(),
@@ -233,6 +246,15 @@ class CancelRegistrationAlreadyCancelledTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'not registered')
 
+        get_response = client.get(
+            f'/events/community-lunch/cancel-registration?token={token}',
+        )
+        self.assertContains(
+            get_response,
+            'data-testid="cancel-registration-already-cancelled-destination"',
+        )
+        self.assertNotContains(get_response, 'cancel-registration-submit')
+
 
 class CancelRegistrationCompletedEventTest(TestCase):
     """Cancelling a finished event preserves the row.
@@ -281,6 +303,11 @@ class CancelRegistrationCompletedEventTest(TestCase):
         response = client.get(
             f'/events/last-weeks-talk/cancel-registration?token={self.token}',
         )
+        self.assertContains(
+            response,
+            'data-testid="cancel-registration-event-finished-destination"',
+        )
+        self.assertNotContains(response, 'cancel-registration-submit')
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'already started or finished')

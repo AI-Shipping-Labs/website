@@ -53,7 +53,8 @@ PRODUCT_BUTTON_VARIANT_CLASSES = {
         'border border-border bg-transparent text-foreground hover:bg-secondary'
     ),
     'destructive': (
-        'border border-red-500/30 bg-transparent text-red-400 hover:bg-red-500/10'
+        'border border-red-500/30 bg-transparent text-red-700 '
+        'dark:text-red-400 hover:bg-red-500/10'
     ),
 }
 

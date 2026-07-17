@@ -3,6 +3,7 @@
 {% load member_badges %}
 {% load seo_tags %}
 {% load teaser_tags %}
+{% load accounts_extras %}
 
 {% block title %}{{ course.title }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}{% seo_description course %}{% endblock %}
@@ -150,7 +151,8 @@
               {% if cohort.pk in user_enrolled_cohort_ids %}
               <button
                 type="button"
-                class="cohort-action-btn inline-flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 px-5 py-2.5 text-sm font-medium text-green-400 transition-colors hover:bg-green-500/20"
+                class="{% button_classes 'secondary' size='md' extra='cohort-action-btn' %}"
+                data-testid="cohort-unenroll-{{ cohort.pk }}"
                 data-cohort-id="{{ cohort.pk }}"
                 data-course-slug="{{ course.slug }}"
                 data-action="unenroll"
@@ -165,7 +167,8 @@
               {% else %}
               <button
                 type="button"
-                class="cohort-action-btn inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+                class="{% button_classes 'primary' size='md' extra='cohort-action-btn' %}"
+                data-testid="cohort-enroll-{{ cohort.pk }}"
                 data-cohort-id="{{ cohort.pk }}"
                 data-course-slug="{{ course.slug }}"
                 data-action="enroll"

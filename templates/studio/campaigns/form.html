@@ -50,7 +50,7 @@
               class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
         <option value="" {% if not selected_event_id %}selected{% endif %}>No event — use tier/tag audience below</option>
         {% for event in event_options %}
-        <option value="{{ event.pk }}" {% if event.pk == selected_event_id %}selected{% endif %}>{{ event.title }}</option>
+        <option value="{{ event.pk }}" {% if event.pk == selected_event_id %}selected{% endif %}>{{ event.title }} — {{ event.start_datetime|operator_datetime }}</option>
         {% endfor %}
       </select>
       <p class="text-xs text-muted-foreground mt-1" data-testid="target-event-help">
@@ -70,7 +70,10 @@
         <option value="20" {% if campaign.target_min_level == 20 %}selected{% endif %}>Main and above</option>
         <option value="30" {% if campaign.target_min_level == 30 %}selected{% endif %}>Premium only</option>
       </select>
-      <p class="text-xs text-muted-foreground mt-1" data-testid="recipient-count-helper">
+      <p class="text-xs text-muted-foreground mt-1"
+         data-testid="recipient-count-helper"
+         data-recipient-count-url="{% url 'studio_campaign_recipient_count' %}"
+         aria-live="polite">
         Will reach {{ recipient_count }} eligible recipient{{ recipient_count|pluralize }} at the current audience and tag filters. Save to refresh this count after changes.
       </p>
     </div>
@@ -164,4 +167,31 @@
     <a href="{% if is_edit %}{% url 'studio_campaign_detail' campaign_id=campaign.pk %}{% else %}{% url 'studio_campaign_list' %}{% endif %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
   </div>
 </form>
+
+<script>
+(function() {
+  var select = document.getElementById('target-event-select');
+  var helper = document.querySelector('[data-testid="recipient-count-helper"]');
+  if (!select || !helper) return;
+
+  select.addEventListener('change', function() {
+    var url = helper.getAttribute('data-recipient-count-url');
+    var query = select.value ? ('?event=' + encodeURIComponent(select.value)) : '';
+    fetch(url + query, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(function(response) {
+        if (!response.ok) throw new Error('recipient preview failed');
+        return response.json();
+      })
+      .then(function(data) {
+        var count = data.recipient_count;
+        var noun = count === 1 ? 'recipient' : 'recipients';
+        helper.textContent = 'Will reach ' + count + ' eligible ' + noun +
+          ' at the current audience and tag filters. Save to refresh this count after changes.';
+      })
+      .catch(function() {
+        helper.textContent = 'Recipient preview could not be refreshed. Save the draft to retry.';
+      });
+  });
+})();
+</script>
 {% endblock %}

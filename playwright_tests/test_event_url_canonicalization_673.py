@@ -194,7 +194,7 @@ class TestRenameEmitsNewSlug:
         slug_input.fill("q-and-a-may")
         # Issue #860: link-less event — accept the "no meeting link" confirm.
         admin.on("dialog", lambda d: d.accept())
-        admin.locator('button[type="submit"]').first.click()
+        admin.locator('[data-testid="sticky-save-action"]').click()
         admin.wait_for_load_state("domcontentloaded")
 
         # Confirm the rename actually landed in the DB.

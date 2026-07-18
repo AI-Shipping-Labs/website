@@ -7,12 +7,12 @@
       <button type="button" id="notify-subscribers-btn"
               onclick="notifySubscribers()"
               aria-label="{% if notify_status_mode == 'in_app_eligible_members' %}Notify eligible members in app ({{ notify_audience_count }} eligible members){% else %}Notify subscribers ({{ notify_audience_count }} eligible members){% endif %}"
-              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity{% if compact %} w-full{% endif %}">
+              class="min-h-[44px] bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background{% if compact %} w-full{% endif %}">
         {{ notify_button_label|default:"Notify subscribers" }}
       </button>
       <button type="button" id="post-to-slack-btn"
               onclick="postToSlack()"
-              class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors{% if compact %} w-full{% endif %}">
+              class="min-h-[44px] bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background{% if compact %} w-full{% endif %}">
         Post to Slack
       </button>
     </div>

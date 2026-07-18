@@ -181,8 +181,12 @@ class PlanEditorShareButtonTest(TestCase):
         )
         self.assertContains(response, 'data-testid="plan-share-button"')
         self.assertContains(response, 'Share with member')
-        # No confirm prompt on first share.
-        self.assertNotContains(response, "onsubmit=\"return confirm(")
+        # No confirm prompt on the first-share form. Other editor lifecycle
+        # actions intentionally require confirmation.
+        self.assertContains(
+            response,
+            'data-testid="plan-share-form" >',
+        )
         # The re-share testid is absent.
         self.assertNotContains(response, 'data-testid="plan-reshare-button"')
 

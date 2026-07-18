@@ -544,7 +544,7 @@
         ]
       },
       "patch": {
-        "description": "Partial update. Changing ``position`` re-packs sibling positions inside the same week (atomically).",
+        "description": "Partial update. Changing ``position`` re-packs sibling positions inside the same week (atomically). Blank or whitespace-only descriptions are rejected with 422 before any field, position, or timestamp changes.",
         "parameters": [
           {
             "in": "path",
@@ -606,7 +606,7 @@
             "description": "Checkpoint not found."
           },
           "422": {
-            "description": "Invalid position value."
+            "description": "Invalid position or blank description."
           }
         },
         "summary": "Update a checkpoint",
@@ -13284,7 +13284,7 @@
     },
     "/api/weeks/{week_id}/checkpoints": {
       "post": {
-        "description": "Creates a checkpoint at the optional ``position`` index inside the given week. Without ``position`` we append; with a ``position`` at a non-end value, existing siblings shift down by 1 inside a single ``transaction.atomic`` so concurrent inserts cannot leave a partial reorder.",
+        "description": "Creates a checkpoint at the optional ``position`` index inside the given week. Without ``position`` we append; with a ``position`` at a non-end value, existing siblings shift down by 1 inside a single ``transaction.atomic`` so concurrent inserts cannot leave a partial reorder. A description containing only whitespace is rejected with 422 before any rows move.",
         "parameters": [
           {
             "in": "path",
@@ -13358,7 +13358,7 @@
             "description": "Week not found or not visible."
           },
           "422": {
-            "description": "Invalid position value."
+            "description": "Invalid position or blank description."
           }
         },
         "summary": "Create a checkpoint",

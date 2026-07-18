@@ -24,8 +24,17 @@ def render_plan_markdown_export(plan):
     """
     exported = timezone.localdate().isoformat()
     progress = plan.weeks.aggregate(
-        total=Count('checkpoints'),
-        done=Count('checkpoints', filter=Q(checkpoints__done_at__isnull=False)),
+        total=Count(
+            'checkpoints',
+            filter=~Q(checkpoints__description__regex=r'^\s*$'),
+        ),
+        done=Count(
+            'checkpoints',
+            filter=(
+                Q(checkpoints__done_at__isnull=False)
+                & ~Q(checkpoints__description__regex=r'^\s*$')
+            ),
+        ),
     )
     lines = [
         f'# {_heading_text(plan.display_title)}',
@@ -140,7 +149,7 @@ def _timeline_lines(plan):
         if theme:
             heading = f'{heading}: {theme}'
         lines.append(heading)
-        checkpoints = week.checkpoints.order_by('position', 'id')
+        checkpoints = week.checkpoints.meaningful().order_by('position', 'id')
         lines.extend(_checkbox_lines(
             checkpoints,
             text_attr='description',

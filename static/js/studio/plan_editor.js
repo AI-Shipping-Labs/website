@@ -811,7 +811,8 @@
       );
       if (!list) { return; }
 
-      // Optimistic empty chip; replace with server-issued id on success.
+      // Client-local draft. It reaches the API only after meaningful text is
+      // committed; abandoning a blank draft never creates a legacy row.
       const li = document.createElement('li');
       li.className = 'plan-editor-checkpoint group flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent';
       li.setAttribute('data-testid', 'checkpoint-chip');
@@ -820,6 +821,7 @@
       li.setAttribute('data-item-id', '');
       li.setAttribute('data-week-id', String(weekId));
       li.setAttribute('data-done', 'false');
+      li.setAttribute('data-checkpoint-draft', 'true');
       li.setAttribute('tabindex', '0');
       li.innerHTML =
         '<span class="plan-editor-drag-handle cursor-grab text-muted-foreground" data-checkpoint-drag-handle aria-hidden="true">::</span>' +
@@ -827,36 +829,11 @@
         '<span class="plan-editor-checkpoint-text plan-markdown flex-1" data-testid="checkpoint-text" data-checkpoint-text data-markdown-source=""></span>' +
         '<button type="button" data-testid="checkpoint-delete" data-checkpoint-delete class="plan-editor-checkpoint-delete text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">x</button>';
       list.appendChild(li);
-
-      apiCall('POST', 'weeks/' + weekId + '/checkpoints', {
-        description: '',
-      }).then(function (result) {
-        if (result.ok && result.data && result.data.id) {
-          li.dataset.checkpointId = String(result.data.id);
-          li.dataset.itemId = String(result.data.id);
-          li.dataset.position = String(result.data.position);
-          if (checkpointBoard) {
-            checkpointBoard.bindCard(li);
-            checkpointBoard.bindSortable();
-          } else {
-            bindCheckpointChip(li);
-          }
-          // Auto-enter inline edit so the user can type immediately.
-          const textEl = li.querySelector('[data-testid="checkpoint-text"]');
-          if (checkpointBoard) {
-            checkpointBoard.enterInlineEdit(li);
-          } else {
-            enterInlineEdit(li, textEl, result.data.id);
-          }
-          // Hide the empty-week hint if it was visible.
-          const hint = btn.parentNode.querySelector('[data-testid="empty-week-hint"]');
-          if (hint) { hint.classList.add('hidden'); }
-        } else {
-          li.remove();
-          setIndicator('failed', result.message);
-          showToast("Couldn't add checkpoint (" + result.code + ').');
-        }
-      });
+      const hint = btn.parentNode.querySelector('[data-testid="empty-week-hint"]');
+      if (hint) { hint.classList.add('hidden'); }
+      if (checkpointBoard) {
+        checkpointBoard.enterInlineEdit(li);
+      }
     });
   });
 

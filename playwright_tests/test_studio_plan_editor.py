@@ -676,32 +676,35 @@ class TestStaffAddsAndDeletesCheckpoint:
         )
         _wait_for_editor(page)
 
-        # Add a checkpoint: click ``+ Add checkpoint``, fill the inline
-        # textarea that auto-opens, blur to commit. Two API calls run
-        # under the hood -- POST /api/weeks/<id>/checkpoints (create
-        # empty), then PATCH /api/checkpoints/<id> with the text.
+        # Clicking Add creates only a client-local draft. Committing
+        # meaningful text sends exactly one create request.
+        writes = []
+        page.on(
+            "request",
+            lambda request: writes.append(request)
+            if (
+                request.method in {"POST", "PATCH"}
+                and ("/api/weeks/" in request.url or "/api/checkpoints/" in request.url)
+            )
+            else None,
+        )
+        page.locator(
+            '[data-week-number="1"] [data-testid="add-checkpoint"]'
+        ).click()
+        assert writes == []
+        edit_ta = page.locator('[data-testid="checkpoint-edit-textarea"]')
+        edit_ta.wait_for(state="visible")
+        edit_ta.fill("New checkpoint")
         with page.expect_response(
             lambda response: response.request.method == "POST"
             and "/api/weeks/" in response.url
             and response.url.endswith("/checkpoints")
         ) as create_response:
-            page.locator(
-                '[data-week-number="1"] [data-testid="add-checkpoint"]'
-            ).click()
-        assert create_response.value.status == 201
-        edit_ta = page.locator('[data-testid="checkpoint-edit-textarea"]')
-        edit_ta.wait_for(state="visible")
-        edit_ta.fill("New checkpoint")
-        new_chip = edit_ta.locator(
-            'xpath=ancestor::*[@data-testid="checkpoint-chip"]'
-        )
-        expect(new_chip).to_have_attribute("data-checkpoint-id", re.compile(r"^\d+$"))
-        with page.expect_response(
-            lambda response: response.request.method == "PATCH"
-            and "/api/checkpoints/" in response.url
-        ) as edit_response:
             page.locator('[data-testid="summary-goal"]').click()  # blur
-        assert edit_response.value.status == 200
+        assert create_response.value.status == 201
+        new_chip = _checkpoint_chip(page, 1, "New checkpoint")
+        expect(new_chip).to_have_attribute("data-checkpoint-id", re.compile(r"^\d+$"))
+        assert len(writes) == 1
         page.locator(
             '[data-testid="save-indicator"][data-state="saved"]'
         ).wait_for()
@@ -740,6 +743,54 @@ class TestStaffAddsAndDeletesCheckpoint:
         # Reload and verify the survivor is the new checkpoint, not A.
         _reload_editor(page)
         assert _checkpoint_descriptions(page, 1) == ["New checkpoint"]
+
+    def test_blank_drafts_are_local_and_blank_existing_edit_is_refused(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_staff_user("staff@test.com")
+        _create_user("member@test.com", tier_slug="free", email_verified=True)
+        plan = _seed_plan("staff@test.com", "member@test.com", [["Keep me"]])
+        context = _auth_context(browser, "staff@test.com")
+        page = context.new_page()
+        writes = []
+        page.on(
+            "request",
+            lambda request: writes.append((request.method, request.url))
+            if (
+                request.method in {"POST", "PATCH"}
+                and ("/api/weeks/" in request.url or "/api/checkpoints/" in request.url)
+            )
+            else None,
+        )
+        page.goto(f"{django_server}/studio/plans/{plan.pk}/edit/")
+        _wait_for_editor(page)
+        add = page.locator(
+            '[data-week-number="1"] [data-testid="add-checkpoint"]'
+        )
+
+        add.click()
+        page.locator('[data-testid="checkpoint-edit-textarea"]').press("Escape")
+        assert writes == []
+
+        add.click()
+        draft = page.locator('[data-testid="checkpoint-edit-textarea"]')
+        draft.fill("   ")
+        page.locator('[data-testid="summary-goal"]').click()
+        assert writes == []
+
+        keep = _checkpoint_chip(page, 1, "Keep me")
+        keep.locator('[data-testid="checkpoint-text"]').click()
+        existing = page.locator('[data-testid="checkpoint-edit-textarea"]')
+        existing.fill("   ")
+        page.locator('[data-testid="summary-goal"]').click()
+        assert writes == []
+        expect(keep).to_contain_text("Keep me")
+        expect(page.get_by_test_id("plan-editor-toast")).to_contain_text(
+            "delete it instead"
+        )
+        context.close()
 
     def test_cancel_delete_keeps_checkpoint_and_restores_focus(
         self, django_server, browser,
@@ -1025,8 +1076,11 @@ class TestEditorSurfacesNoErrorsDuringSession:
             ).wait_for()
 
         # Add three checkpoints.
-        for _ in range(3):
+        for index in range(3):
             page.locator('[data-week-number="1"] [data-testid="add-checkpoint"]').click()
+            draft = page.locator('[data-testid="checkpoint-edit-textarea"]')
+            draft.fill(f"Checkpoint {index + 1}")
+            page.locator('[data-testid="summary-goal"]').click()
             page.locator(
                 '[data-testid="save-indicator"][data-state="saved"]'
             ).wait_for()

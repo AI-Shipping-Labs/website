@@ -146,6 +146,11 @@ class StudioDetailHeaderInventoryTest(SimpleTestCase):
         self.assertIn('data-testid="studio-plan-carry-over"', plan)
         self.assertIn('data-testid="studio-plan-move-unfinished"', plan)
 
+        editor = source("plans/_editor_body.html")
+        self.assertIn('data-testid="studio-plan-carry-over"', editor)
+        self.assertIn('data-testid="studio-plan-draft-next-sprint"', editor)
+        self.assertIn('name="return_to"', editor)
+
         series = source("event_series/detail.html")
         self.assertIn('data-testid="event-series-metadata-save"', series)
         self.assertIn('data-testid="event-series-delete-form"', series)

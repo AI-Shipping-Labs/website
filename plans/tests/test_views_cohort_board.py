@@ -75,19 +75,51 @@ class CohortBoardAccessTest(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 404)
 
-    def test_board_returns_404_for_non_enrolled_staff_member(self):
-        """The board is member-scoped -- staff who are not enrolled get 404.
-
-        Staff use Studio (#432) for full access; the cohort board is
-        the same surface every member sees.
-        """
+    def test_board_allows_non_enrolled_staff_in_read_only_operator_mode(self):
         staff = User.objects.create_user(
             email='staff@test.com', password='pw', is_staff=True,
         )
         self.client.force_login(staff)
         url = reverse('cohort_board', kwargs={'sprint_slug': self.sprint.slug})
         response = self.client.get(url)
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="staff-view-label"')
+        self.assertContains(response, 'data-testid="staff-board-back-to-sprint"')
+        self.assertNotContains(response, 'cohort-board-leave-sprint')
+        self.assertNotContains(response, 'ask-team-button')
+        self.assertNotContains(response, ' (you)')
+        self.assertContains(
+            response,
+            reverse('studio_plan_detail', kwargs={'plan_id': self.member.plans.get().pk}),
+        )
+
+    def test_staff_mode_excludes_plan_only_ghost_and_remains_operator_if_enrolled(self):
+        staff = User.objects.create_user(
+            email='enrolled-staff@test.com', password='pw', is_staff=True,
+        )
+        staff_plan = Plan.objects.create(
+            member=staff, sprint=self.sprint, visibility='cohort',
+        )
+        ghost = User.objects.create_user(email='ghost@test.com', password='pw')
+        ghost_plan = Plan.objects.create(
+            member=ghost, sprint=self.sprint, visibility='cohort',
+        )
+        SprintEnrollment.objects.filter(sprint=self.sprint, user=ghost).delete()
+        self.client.force_login(staff)
+
+        response = self.client.get(
+            reverse('cohort_board', kwargs={'sprint_slug': self.sprint.slug}),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="staff-view-label"')
+        self.assertContains(
+            response,
+            reverse('studio_plan_detail', kwargs={'plan_id': staff_plan.pk}),
+        )
+        self.assertNotContains(response, f'progress-row-{ghost.pk}')
+        self.assertNotContains(response, str(ghost_plan.display_title))
+        self.assertNotContains(response, ' (you)')
 
     def test_board_returns_200_for_enrolled_member(self):
         self.client.force_login(self.member)

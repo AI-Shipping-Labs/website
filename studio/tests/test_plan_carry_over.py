@@ -9,6 +9,7 @@ import datetime
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
+from django.urls import reverse
 
 from plans.models import Checkpoint, Plan, Sprint, Week
 
@@ -114,4 +115,21 @@ class StudioPlanCarryOverTest(TestCase):
         # source/only_plan untouched
         self.assertEqual(
             Checkpoint.objects.filter(week__plan=lone_plan).count(), 0,
+        )
+
+    def test_editor_return_target_is_allowlisted_to_same_plan(self):
+        self.client.force_login(self.staff)
+        editor_url = reverse('studio_plan_edit', kwargs={'plan_id': self.dest.pk})
+        response = self.client.post(
+            self._url(self.dest), {'return_to': editor_url},
+        )
+        self.assertRedirects(response, editor_url, fetch_redirect_response=False)
+
+        response = self.client.post(
+            self._url(self.dest), {'return_to': 'https://evil.example/steal'},
+        )
+        self.assertRedirects(
+            response,
+            reverse('studio_plan_detail', kwargs={'plan_id': self.dest.pk}),
+            fetch_redirect_response=False,
         )

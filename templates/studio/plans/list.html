@@ -59,6 +59,7 @@
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Member</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Sprint</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Progress</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Shared</th>
         <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
       </tr>
@@ -71,8 +72,9 @@
         </td>
         <td class="px-6 py-4 text-sm text-foreground" title="{{ plan.display_title|plain_text_preview:160 }}">{{ plan.display_title|plain_text_preview:96 }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ plan.sprint.name }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="plan-list-progress-{{ plan.pk }}">{{ plan.progress_done }}/{{ plan.progress_total }} checkpoints</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">
-          {% if plan.shared_at %}{{ plan.shared_at|operator_date }}{% else %}-{% endif %}
+          {% if plan.shared_at %}{{ plan.shared_at|operator_date }}{% else %}Not shared{% endif %}
         </td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %}">
@@ -85,7 +87,7 @@
       </tr>
       {% empty %}
         {% url 'studio_plan_list' as plans_clear_url %}
-        {% studio_empty_state 'filter' entity_label='plan' entity_label_plural='plans' clear_url=plans_clear_url colspan=5 %}
+        {% studio_empty_state 'filter' entity_label='plan' entity_label_plural='plans' clear_url=plans_clear_url colspan=6 %}
       {% endfor %}
     </tbody>
   </table>

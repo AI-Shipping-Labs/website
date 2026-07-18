@@ -383,7 +383,14 @@
       if (!input || !rendered) { return; }
       const prior = rendered.dataset.markdownSource || input.defaultValue || '';
       const priorHtml = rendered.innerHTML;
-      const value = input.value;
+      const value = input.value.trim();
+      if (!value) {
+        input.value = prior;
+        setExistingEditorState(card, false);
+        setCardStatus(card, 'Enter a task or delete it instead.', 'failed');
+        card.focus();
+        return;
+      }
       setCardStatus(card, 'Saving...', 'saving');
       writeWithRetry(
         'PATCH',
@@ -450,17 +457,72 @@
       ta.select();
 
       let finished = false;
+      const isDraft = card.dataset.checkpointDraft === 'true';
+
+      function removeDraft() {
+        const weekId = parseInt(card.dataset.weekId, 10);
+        const weekCard = card.closest(
+          '[data-testid="week-card"], [data-testid="plan-week"]'
+        );
+        const addButton = weekCard
+          ? weekCard.querySelector('[data-testid="add-checkpoint"]')
+          : null;
+        card.remove();
+        updateEmptyWeekHint(weekId);
+        updateProgress();
+        if (addButton) { addButton.focus(); }
+      }
+
       function finish(save) {
         if (finished) { return; }
-        finished = true;
         const value = ta.value.trim();
+        if (isDraft && (!save || !value)) {
+          finished = true;
+          removeDraft();
+          return;
+        }
+        if (!isDraft && save && !value) {
+          finished = true;
+          ta.replaceWith(textEl);
+          card.dataset.editing = 'false';
+          bindCard(card);
+          setCardStatus(card, 'Enter a task or delete it instead.', 'failed');
+          showToast('Enter a task or delete it instead.');
+          card.focus();
+          return;
+        }
+        finished = true;
         const nextText = textEl;
         nextText.innerHTML = save ? renderMarkdown(value || prior) : priorHtml;
         nextText.dataset.markdownSource = save ? (value || prior) : prior;
         ta.replaceWith(nextText);
         card.dataset.editing = 'false';
         bindCard(card);
-        if (save && value && value !== prior) {
+        if (isDraft && save) {
+          request(
+            'POST',
+            'weeks/' + card.dataset.weekId + '/checkpoints',
+            { description: value }
+          ).then(function (result) {
+            if (!result.ok || !result.data || !result.data.id) {
+              showToast("Couldn't add checkpoint. The draft was kept locally.");
+              card.dataset.editing = 'false';
+              card.dataset.checkpointDraft = 'true';
+              bindCard(card);
+              card.focus();
+              return;
+            }
+            card.dataset.checkpointDraft = 'false';
+            card.dataset.checkpointId = String(result.data.id);
+            card.dataset.itemId = String(result.data.id);
+            card.dataset.position = String(result.data.position);
+            nextText.innerHTML = result.data.description_html || renderMarkdown(value);
+            nextText.dataset.markdownSource = result.data.description || value;
+            bindCard(card);
+            bindSortable();
+            updateProgress();
+          });
+        } else if (save && value && value !== prior) {
           writeWithRetry(
             'PATCH',
             'checkpoints/' + card.dataset.checkpointId,

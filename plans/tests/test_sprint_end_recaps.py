@@ -143,6 +143,26 @@ class SprintEndRecapTaskTest(TierSetupMixin, TestCase):
         self.assertIn('no checkpoints yet', notification.body)
 
     @patch('email_app.services.email_service.EmailService._send_ses')
+    def test_legacy_blank_checkpoint_does_not_inflate_recap(self, mock_ses):
+        mock_ses.return_value = 'ses-ok'
+        sprint = self._sprint('meaningful-progress')
+        member = self._member('meaningful-progress@test.com')
+        plan = self._shared_plan(sprint, member, checkpoints=2, done=1)
+        week = plan.weeks.get(week_number=1)
+        Checkpoint.objects.create(
+            week=week,
+            description='  \n\t ',
+            done_at=timezone.now(),
+            position=2,
+        )
+
+        send_sprint_end_recaps(today=self.today)
+
+        notification = Notification.objects.get(user=member)
+        self.assertIn('1 of 2 checkpoints', notification.body)
+        self.assertNotIn('2 of 3 checkpoints', notification.body)
+
+    @patch('email_app.services.email_service.EmailService._send_ses')
     def test_delivery_is_idempotent_for_same_sprint_member(self, mock_ses):
         mock_ses.return_value = 'ses-ok'
         sprint = self._sprint('idempotent')

@@ -4,6 +4,7 @@ import datetime
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
 from crm.models import CRMRecord
 from email_app.models import EmailLog
@@ -11,6 +12,7 @@ from notifications.models import Notification
 from plans.models import (
     PLAN_READY_EMAIL_STATUS_FAILED,
     PLAN_READY_EMAIL_STATUS_SENT,
+    Checkpoint,
     InterviewNote,
     NextStep,
     Plan,
@@ -96,6 +98,22 @@ class PlanAccessControlTest(TestCase):
         self.assertContains(response, 'Review workshop links')
         self.assertContains(response, '(done)')
         self.assertNotContains(response, 'Facilitator follow-up')
+
+    def test_read_only_detail_hides_legacy_blank_but_editor_keeps_it(self):
+        week = Week.objects.create(plan=self.plan, week_number=1)
+        meaningful = Checkpoint.objects.create(
+            week=week, description='Meaningful checkpoint',
+        )
+        blank = Checkpoint.objects.create(week=week, description='  \n\t ')
+        self.client.force_login(self.staff)
+
+        detail = self.client.get(f'/studio/plans/{self.plan.pk}/')
+        editor = self.client.get(f'/studio/plans/{self.plan.pk}/edit/')
+
+        self.assertContains(detail, 'Meaningful checkpoint')
+        self.assertNotContains(detail, f'data-item-id="{blank.pk}"')
+        self.assertContains(editor, f'data-checkpoint-id="{meaningful.pk}"')
+        self.assertContains(editor, f'data-checkpoint-id="{blank.pk}"')
 
 
 class PlanCreateMemberProfilePanelTest(TestCase):
@@ -286,6 +304,20 @@ class PlanListFilterTest(TestCase):
         self.assertContains(response, f'href="/studio/plans/{self.plan_a_x.pk}/"')
         self.assertContains(response, f'href="/studio/plans/{self.plan_a_y.pk}/"')
         self.assertNotContains(response, f'href="/studio/plans/{self.plan_b_x.pk}/"')
+
+    def test_plan_list_progress_excludes_legacy_blank_checkpoints(self):
+        week = Week.objects.create(plan=self.plan_a_x, week_number=1)
+        Checkpoint.objects.create(week=week, description='done', done_at=timezone.now())
+        Checkpoint.objects.create(week=week, description='todo')
+        Checkpoint.objects.create(week=week, description='  \n ')
+
+        response = self.client.get('/studio/plans/')
+
+        self.assertContains(
+            response,
+            f'data-testid="plan-list-progress-{self.plan_a_x.pk}">1/2 checkpoints',
+        )
+        self.assertContains(response, 'Not shared')
 
 
 class PlanCreateTest(TestCase):

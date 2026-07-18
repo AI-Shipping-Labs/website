@@ -53,9 +53,9 @@ from plans.models import (
 from plans.services import (
     FirstSprintDraftSourceMissing,
     MoveUnfinishedItemsError,
+    annotate_plan_progress,
     apply_first_sprint_draft,
     carry_over_unfinished_tasks,
-    count_unfinished_carry_over_items,
     create_plan_for_enrollment,
     draft_first_sprint_plan,
     draft_next_sprint_plan,
@@ -67,6 +67,10 @@ from plans.services import (
 )
 from studio.decorators import staff_required
 from studio.services.plan_editor import build_plan_editor_context
+from studio.services.plan_lifecycle_actions import (
+    build_plan_lifecycle_action_context,
+    lifecycle_return_url,
+)
 from studio.utils import studio_pagination_context
 from studio.views.impersonate import impersonate_as
 
@@ -92,7 +96,9 @@ def plan_list(request):
     member_filter = (request.GET.get('member') or '').strip()
     search = (request.GET.get('q') or '').strip()
 
-    plans = Plan.objects.select_related('member', 'sprint').order_by('-created_at')
+    plans = annotate_plan_progress(
+        Plan.objects.select_related('member', 'sprint'),
+    ).order_by('-created_at')
 
     sprint_filter_id = None
     if sprint_filter.isdigit():
@@ -350,35 +356,6 @@ def plan_detail(request, plan_id):
     if move_counts['total']:
         move_target_sprints = list(eligible_move_target_sprints(source_plan=plan))
 
-    carry_source = find_carry_over_source_plan(destination_plan=plan)
-    target_name = plan.sprint.name
-    if carry_source is None:
-        carry_confirmation = (
-            f'No prior sprint plan is available to carry into {target_name}. '
-            'Continue?'
-        )
-        draft_confirmation = (
-            f'Draft the {target_name} sprint plan with the LLM? No prior '
-            'plan is available for carry-over. The draft is held for '
-            'review, not published. Continue?'
-        )
-    else:
-        carry_count = count_unfinished_carry_over_items(
-            source_plan=carry_source,
-            destination_plan=plan,
-        )
-        task_label = 'task' if carry_count == 1 else 'tasks'
-        source_name = carry_source.sprint.name
-        carry_confirmation = (
-            f'Carry {carry_count} unfinished {task_label} from {source_name} '
-            f'into {target_name}? This cannot be undone.'
-        )
-        draft_confirmation = (
-            f'Draft the {target_name} sprint plan with the LLM and carry '
-            f'{carry_count} unfinished {task_label} from {source_name}? '
-            'The draft is held for review, not published. Continue?'
-        )
-
     return render(request, 'studio/plans/detail.html', {
         'plan': plan,
         'detail_user': plan.member,
@@ -392,8 +369,7 @@ def plan_detail(request, plan_id):
         'external_notes': external_notes,
         'move_unfinished_counts': move_counts,
         'move_target_sprints': move_target_sprints,
-        'carry_over_confirmation': carry_confirmation,
-        'draft_next_sprint_confirmation': draft_confirmation,
+        **build_plan_lifecycle_action_context(plan),
         # Read-only #plan-sprints Slack ingest linked to this plan (#889).
         'slack_threads': threads_for_plan(plan),
     })
@@ -509,6 +485,7 @@ def plan_edit(request, plan_id):
         viewer=request.user,
         token_name=EDITOR_TOKEN_NAME,
     )
+    context.update(build_plan_lifecycle_action_context(plan))
     return render(request, 'studio/plans/edit.html', context)
 
 
@@ -611,7 +588,7 @@ def plan_carry_over(request, plan_id):
             f'{plan.member.email} has no previous sprint plan to carry '
             'tasks over from.',
         )
-        return redirect('studio_plan_detail', plan_id=plan.pk)
+        return redirect(lifecycle_return_url(request, plan))
 
     copied = carry_over_unfinished_tasks(
         source_plan=source_plan,
@@ -629,7 +606,7 @@ def plan_carry_over(request, plan_id):
             f'No new tasks to carry over from "{source_plan.sprint.name}" '
             f'for {plan.member.email} (already up to date).',
         )
-    return redirect('studio_plan_detail', plan_id=plan.pk)
+    return redirect(lifecycle_return_url(request, plan))
 
 
 @staff_required

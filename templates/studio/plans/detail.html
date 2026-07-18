@@ -88,9 +88,9 @@
     {% for week in weeks %}
     <li data-week-number="{{ week.week_number }}" class="border border-border rounded-lg p-4">
       <h3 class="text-sm font-semibold text-foreground">Week {{ week.week_number }}{% if week.theme %} — {{ week.theme }}{% endif %}</h3>
-      {% if week.checkpoints.all %}
+      {% if week.checkpoints.meaningful %}
       <ul class="list-disc list-inside text-sm text-foreground mt-2 space-y-1">
-        {% for cp in week.checkpoints.all %}
+        {% for cp in week.checkpoints.meaningful %}
         <li>{{ cp.description }}{% if cp.done_at %} <span class="text-xs text-muted-foreground">(done {{ cp.done_at|operator_date }})</span>{% endif %}</li>
         {% endfor %}
       </ul>

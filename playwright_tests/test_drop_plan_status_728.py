@@ -147,14 +147,16 @@ class TestDropPlanStatus728:
         )
         # No status <select> in the filter form.
         assert page.locator('select[name="status"]').count() == 0
-        # The table has no Status column. The Title column is expected after
-        # #1047 added first-class plan titles.
+        # #728 removed only the Status column. Title (#1047) and checkpoint
+        # Progress (#1284) are independent, intentional plan-list columns.
         # Headers render via Tailwind's ``uppercase`` class, so Playwright's
         # ``inner_text()`` returns the visually-uppercased form. Compare
         # case-insensitively so the test is robust to future CSS changes.
         headers = page.locator("table thead th").all_inner_texts()
         headers = [h.strip() for h in headers]
-        expected = ["Member", "Title", "Sprint", "Shared", "Actions"]
+        expected = [
+            "Member", "Title", "Sprint", "Progress", "Shared", "Actions",
+        ]
         assert len(headers) == len(expected)
         for actual, want in zip(headers, expected):
             assert re.fullmatch(want, actual, re.IGNORECASE), (

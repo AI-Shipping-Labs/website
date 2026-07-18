@@ -1,26 +1,20 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Confirm contacts import{% endblock %}
 
 {% block studio_content %}
-<div class="mb-6">
-  <a href="{% url 'studio_user_import' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-    &larr; Choose a different file
-  </a>
-  <h1 class="text-2xl font-semibold text-foreground mt-2">Confirm import</h1>
-  <p class="text-muted-foreground mt-1 text-sm">
-    Reviewing <span class="font-mono">{{ filename }}</span> ({{ total_rows }} data row{{ total_rows|pluralize }}).
-    Pick the email column, optionally set a tag and tier, then click Import.
-  </p>
-</div>
+{% url 'studio_user_import' as import_url %}
+{% studio_header_actions title="Confirm import" subtitle=header_subtitle back_url=import_url back_label="Choose a different file" %}{% endstudio_header_actions %}
 
 {% if error %}
-<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-red-500/20 text-red-400" data-testid="import-error">
+<div class="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-400"
+     data-testid="import-error" role="alert">
   {{ error }}
 </div>
 {% endif %}
 
-<div class="bg-card border border-border rounded-lg p-6 max-w-4xl mb-6" data-testid="import-preview">
+<div class="bg-card border border-border rounded-lg p-4 sm:p-6 max-w-4xl mb-6" data-testid="import-preview">
   <h2 class="text-lg font-semibold text-foreground mb-3">Preview (first {{ preview_rows|length }} row{{ preview_rows|length|pluralize }})</h2>
   <div class="overflow-x-auto">
     <table class="w-full text-sm">
@@ -44,25 +38,26 @@
   </div>
 </div>
 
-<div class="bg-card border border-border rounded-lg p-6 max-w-3xl">
+<div class="bg-card border border-border rounded-lg p-4 sm:p-6 max-w-3xl">
   <form method="post" action="{% url 'studio_user_import_confirm' %}" data-testid="import-confirm-form">
     {% csrf_token %}
 
     <div class="mb-6">
       <label for="id_email_column" class="block text-sm font-medium text-foreground mb-1">Email column</label>
-      <select id="id_email_column" name="email_column" required class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+      <select id="id_email_column" name="email_column" required
+              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
               data-testid="import-email-column"
-              >
+              aria-describedby="email-column-help import-preview-feedback">
         {% for col in header %}
         <option value="{{ col }}" {% if col == default_email_column %}selected{% endif %}>{{ col }}</option>
         {% endfor %}
       </select>
-      <p class="text-xs text-muted-foreground mt-1">All other columns are ignored.</p>
+      <p id="email-column-help" class="text-xs text-muted-foreground mt-1">All other columns are ignored.</p>
     </div>
 
     <div class="mb-6">
       <label for="id_tag" class="block text-sm font-medium text-foreground mb-1">Tag (optional)</label>
-      <input type="text" id="id_tag" name="tag"
+      <input type="text" id="id_tag" name="tag" value="{{ selected_tag }}"
              placeholder="e.g. event-2026-signup"
              autocomplete="off"
              data-testid="import-tag-input"
@@ -74,12 +69,12 @@
 
     <div class="mb-6">
       <label for="id_tier" class="block text-sm font-medium text-foreground mb-1">Tier</label>
-      <select id="id_tier" name="tier_id" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-              data-testid="import-tier-select"
-              >
-        <option value="{{ no_tier_sentinel }}" selected>(no tier change)</option>
+      <select id="id_tier" name="tier_id"
+              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+              data-testid="import-tier-select">
+        <option value="{{ no_tier_sentinel }}" {% if selected_tier_value == no_tier_sentinel %}selected{% endif %}>(no tier change)</option>
         {% for tier in tiers %}
-        <option value="{{ tier.pk }}">{{ tier.name }}</option>
+        <option value="{{ tier.pk }}" {% if tier.pk|stringformat:"s" == selected_tier_value %}selected{% endif %}>{{ tier.name }}</option>
         {% endfor %}
       </select>
       <p class="text-xs text-muted-foreground mt-1">
@@ -87,16 +82,121 @@
       </p>
     </div>
 
-    <div class="flex items-center gap-3">
+    <section class="mb-6 rounded-lg border border-border bg-secondary p-4"
+             id="import-preview-feedback" data-testid="import-outcome-card"
+             aria-live="polite" aria-atomic="true">
+      <h2 class="text-base font-semibold text-foreground">Expected outcome</h2>
+      <p class="mt-2 text-sm text-foreground" data-testid="import-outcome-summary">{{ outcome_summary }}</p>
+      <p class="mt-2 text-sm text-amber-700 dark:text-amber-400{% if not preview.warning %} hidden{% endif %}"
+         data-testid="import-email-warning">{{ preview.warning }}</p>
+      <p class="mt-1 text-sm text-muted-foreground{% if not preview.warning or not preview.can_apply %} hidden{% endif %}"
+         data-testid="import-invalid-skip-help">Invalid rows will be skipped.</p>
+      <p class="mt-2 text-sm font-medium text-red-700 dark:text-red-400{% if preview.can_apply %} hidden{% endif %}"
+         data-testid="import-block-reason" role="alert">Choose another email column to continue.</p>
+      <p class="mt-2 text-sm text-muted-foreground hidden" data-testid="import-preview-loading">Checking the selected email column…</p>
+      <p class="mt-2 text-sm text-red-700 dark:text-red-400 hidden" data-testid="import-preview-error" role="alert"></p>
+      <button type="button" data-testid="import-preview-retry"
+              class="mt-3 hidden min-h-[44px] rounded-lg border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+        Retry preview
+      </button>
+    </section>
+
+    <div class="flex flex-wrap items-center gap-3">
       <button type="submit"
               data-testid="import-confirm-submit"
-              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+              {% if not preview.can_apply %}disabled aria-disabled="true"{% endif %}
+              class="min-h-[44px] bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
         Import
       </button>
-      <a href="{% url 'studio_user_import' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+      <a href="{% url 'studio_user_import' %}"
+         class="inline-flex min-h-[44px] items-center text-sm text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
         Cancel
       </a>
     </div>
+    <p class="mt-2 text-sm text-red-700 dark:text-red-400{% if preview.can_apply %} hidden{% endif %}"
+       data-testid="import-disabled-reason">Import is unavailable until the selected column contains at least one valid email address.</p>
   </form>
 </div>
+
+<script>
+(() => {
+  const form = document.querySelector('[data-testid="import-confirm-form"]');
+  const emailColumn = document.querySelector('[data-testid="import-email-column"]');
+  const submit = document.querySelector('[data-testid="import-confirm-submit"]');
+  const summary = document.querySelector('[data-testid="import-outcome-summary"]');
+  const warning = document.querySelector('[data-testid="import-email-warning"]');
+  const skipHelp = document.querySelector('[data-testid="import-invalid-skip-help"]');
+  const blockReason = document.querySelector('[data-testid="import-block-reason"]');
+  const disabledReason = document.querySelector('[data-testid="import-disabled-reason"]');
+  const loading = document.querySelector('[data-testid="import-preview-loading"]');
+  const previewError = document.querySelector('[data-testid="import-preview-error"]');
+  const retry = document.querySelector('[data-testid="import-preview-retry"]');
+  const csrf = form.querySelector('[name="csrfmiddlewaretoken"]').value;
+  let requestNumber = 0;
+
+  const phrase = (count, singular, plural = `${singular}s`) =>
+    `${count} ${count === 1 ? singular : plural}`;
+
+  const outcomeText = data =>
+    `${phrase(data.created, 'new user')} will be created, ` +
+    `${phrase(data.updated, 'existing user')} will be updated, ` +
+    `${phrase(data.total_skipped, 'row')} will be skipped ` +
+    `(${phrase(data.malformed, 'invalid email')}, ` +
+    `${phrase(data.skipped, 'duplicate')}).`;
+
+  const setCanApply = canApply => {
+    submit.disabled = !canApply;
+    submit.setAttribute('aria-disabled', String(!canApply));
+    disabledReason.classList.toggle('hidden', canApply);
+    blockReason.classList.toggle('hidden', canApply);
+  };
+
+  const renderPreview = data => {
+    summary.textContent = outcomeText(data);
+    warning.textContent = data.warning || '';
+    warning.classList.toggle('hidden', !data.warning);
+    skipHelp.classList.toggle('hidden', !data.warning || !data.can_apply);
+    setCanApply(data.can_apply);
+  };
+
+  const recompute = async () => {
+    const currentRequest = ++requestNumber;
+    setCanApply(false);
+    blockReason.classList.add('hidden');
+    disabledReason.textContent = 'Import is unavailable while the selected column is being checked.';
+    loading.classList.remove('hidden');
+    previewError.classList.add('hidden');
+    retry.classList.add('hidden');
+
+    try {
+      const body = new URLSearchParams({email_column: emailColumn.value});
+      const response = await fetch('{% url "studio_user_import_preview" %}', {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded'},
+        body,
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Could not update the preview.');
+      }
+      if (currentRequest !== requestNumber) return;
+      renderPreview(data);
+      disabledReason.textContent = 'Import is unavailable until the selected column contains at least one valid email address.';
+    } catch (error) {
+      if (currentRequest !== requestNumber) return;
+      setCanApply(false);
+      blockReason.classList.add('hidden');
+      disabledReason.textContent = 'Import is unavailable until the preview succeeds.';
+      previewError.textContent = `${error.message} Retry the preview to continue.`;
+      previewError.classList.remove('hidden');
+      retry.classList.remove('hidden');
+    } finally {
+      if (currentRequest === requestNumber) loading.classList.add('hidden');
+    }
+  };
+
+  emailColumn.addEventListener('change', recompute);
+  retry.addEventListener('click', recompute);
+})();
+</script>
 {% endblock %}

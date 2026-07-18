@@ -154,6 +154,7 @@ def test_course_side_panel_and_synced_course_readonly(django_server, browser):
 
     page.goto(f"{django_server}/studio/courses/{synced.pk}/edit", wait_until="domcontentloaded")
     assert page.locator('[data-testid="sticky-save-action"]').count() == 0
+    page.locator('[data-testid="studio-header-overflow"] summary').click()
     assert page.locator('[data-testid="sticky-github-source-link"]').is_visible()
     assert page.locator('input[name="title"]').is_disabled()
     context.close()

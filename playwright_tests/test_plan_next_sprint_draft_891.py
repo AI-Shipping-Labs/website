@@ -203,10 +203,22 @@ class TestDegradesWhenAiOff:
                 f"{django_server}/studio/plans/{dest_id}/",
                 wait_until="domcontentloaded",
             )
+            dialogs = []
+
+            def accept_draft(dialog):
+                dialogs.append(dialog.message)
+                dialog.accept()
+
+            page.once("dialog", accept_draft)
+            page.locator(
+                '[data-testid="studio-header-overflow"] summary'
+            ).click()
             page.locator(
                 '[data-testid="studio-plan-draft-next-sprint"]'
             ).click()
             page.wait_for_load_state("domcontentloaded")
+            assert dialogs and "draft" in dialogs[0].lower()
+            assert "held for review, not published" in dialogs[0]
 
             body = page.content()
             assert "AI draft was skipped because AI is off" in body

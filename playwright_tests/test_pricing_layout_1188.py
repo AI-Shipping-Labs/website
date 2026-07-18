@@ -169,11 +169,15 @@ def test_pricing_desktop_cards_keep_intrinsic_heights_after_email_expand(
     after = {slug: _card_metrics(page, slug) for slug in ("free", "basic", "main", "premium")}
 
     assert after["free"]["height"] > before["free"]["height"]
+    # Issue #1281 intentionally stretches the desktop grid row after the
+    # expanded Free signup card becomes the tallest item. All cards retain
+    # a shared top/bottom baseline rather than keeping their old heights.
     for slug in ("basic", "main", "premium"):
-        assert abs(after[slug]["height"] - before[slug]["height"]) <= 2
         assert abs(after[slug]["top"] - after["free"]["top"]) <= 2
-        gap = after[slug]["ctaTop"] - after[slug]["featuresBottom"]
-        assert gap < 80, f"{slug} CTA has a large blank gap: {gap}px"
+        assert abs(after[slug]["bottom"] - after["free"]["bottom"]) <= 2
+
+    paid_cta_tops = [after[slug]["ctaTop"] for slug in ("basic", "main", "premium")]
+    assert max(paid_cta_tops) - min(paid_cta_tops) <= 2
 
 
 @pytest.mark.django_db(transaction=True)

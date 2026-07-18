@@ -210,8 +210,19 @@ class TestStudioUserCrmOverview:
 
         # Submitting the impersonation form lands the staff user on '/'
         # as the target user.
+        dialogs = []
+
+        def accept_impersonation(dialog):
+            dialogs.append(dialog.message)
+            dialog.accept()
+
+        page.once("dialog", accept_impersonation)
         impersonate.click()
         page.wait_for_url(f"{django_server}/")
+        assert dialogs == [
+            "Log in as crm-target@test.com? Your Studio session will be "
+            "paused until you stop impersonating."
+        ]
         context.close()
 
     def test_user_detail_is_usable_at_mobile_390x844(

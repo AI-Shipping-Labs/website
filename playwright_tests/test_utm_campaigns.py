@@ -358,6 +358,7 @@ class TestScenario7ArchiveCampaign:
 
         # Click Archive (handle confirm dialog)
         page.on("dialog", lambda d: d.accept())
+        page.locator('[data-testid="studio-header-overflow"] summary').click()
         page.click('button:has-text("Archive")')
         page.wait_for_load_state("domcontentloaded")
         assert page.url.rstrip("/").endswith("/studio/utm-campaigns")

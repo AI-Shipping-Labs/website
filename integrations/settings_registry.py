@@ -1084,6 +1084,71 @@ INTEGRATION_GROUPS = [
     },
 ]
 
+# Explicit scalar types consumed by Studio validation. This allowlist is kept
+# separate from key spelling so composite values such as STRIPE_PAYMENT_LINKS,
+# SITE_BASE_URL_ALIASES, and relative-path-capable CONTENT_CDN_BASE remain
+# strings. Consumers may continue using the legacy ``is_boolean``/``is_email``
+# presentation flags; ``value_type`` is the authoritative save contract.
+SETTING_VALUE_TYPES = {
+    # Booleans
+    'AUTHENTICATED_CHECKOUT_BINDING_ENABLED': 'boolean',
+    'LEGACY_NUMERIC_CHECKOUT_REFERENCE_ENABLED': 'boolean',
+    'ZOOM_WAITING_ROOM': 'boolean',
+    'ZOOM_JOIN_BEFORE_HOST': 'boolean',
+    'SES_WEBHOOK_VALIDATION_ENABLED': 'boolean',
+    'RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD': 'boolean',
+    'S3_ENABLED': 'boolean',
+    'SLACK_ENABLED': 'boolean',
+    'STAFF_SLACK_JOIN_NOTIFY_ENABLED': 'boolean',
+    'ONBOARDING_REMINDER_ENABLED': 'boolean',
+    'SPRINT_END_AUTO_DISTRIBUTE_FEEDBACK_ENABLED': 'boolean',
+    'ONBOARDING_AI_ENABLED': 'boolean',
+    'ONBOARDING_AI_STREAMING': 'boolean',
+    'NEXT_SPRINT_DRAFT_USE_PROFILE': 'boolean',
+    'LOGFIRE_ENABLED': 'boolean',
+    'MAVEN_ENROLLMENT_ENABLED': 'boolean',
+    'TRIGGERS_ENABLED': 'boolean',
+    # Base-10 integers
+    'CHECKOUT_BINDING_TTL_MINUTES': 'integer',
+    'EMAIL_BATCH_SIZE': 'integer',
+    'CAMPAIGN_BATCH_INTERVAL_SECONDS': 'integer',
+    'RECORDING_PRESIGNED_URL_TTL_SECONDS': 'integer',
+    'DOWNLOAD_PRESIGNED_URL_TTL_SECONDS': 'integer',
+    'DOWNLOAD_DELIVERY_TOKEN_TTL_HOURS': 'integer',
+    'CALENDLY_WEBHOOK_TOLERANCE_SECONDS': 'integer',
+    'CALENDLY_WEBHOOK_RETENTION_DAYS': 'integer',
+    'PLAN_SPRINTS_FIRST_RUN_LOOKBACK_DAYS': 'integer',
+    'PLAN_SPRINTS_THREAD_REFRESH_DAYS': 'integer',
+    'PLAN_SPRINTS_INGEST_LEASE_MINUTES': 'integer',
+    'PLAN_SPRINTS_RAW_TEXT_RETENTION_DAYS': 'integer',
+    'ONBOARDING_REMINDER_DELAY_DAYS': 'integer',
+    'SPRINT_BADGE_WINDOW_DAYS': 'integer',
+    'CRM_EXPORT_MAX_LIMIT': 'integer',
+    'USER_ACTIVITY_RETENTION_DAYS': 'integer',
+    'UNVERIFIED_USER_TTL_DAYS': 'integer',
+    'BANNER_GENERATOR_TIMEOUT_SECONDS': 'integer',
+    'BANNER_UPLOAD_MAX_MB': 'integer',
+    'LLM_MAX_RETRIES': 'integer',
+    'ONBOARDING_AI_DEADLINE_SECONDS': 'integer',
+    'ONBOARDING_AI_MAX_ATTEMPTS': 'integer',
+    'MAVEN_OVERRIDE_DURATION_DAYS': 'integer',
+    # One absolute HTTP(S) URL
+    'STRIPE_CUSTOMER_PORTAL_URL': 'url',
+    'CALENDLY_CONNECTED_USER_URI': 'url',
+    'CALENDLY_ORGANIZATION_URI': 'url',
+    'CALENDLY_WEBHOOK_SUBSCRIPTION_URI': 'url',
+    'SLACK_INVITE_URL': 'url',
+    'SITE_BASE_URL': 'url',
+    'BANNER_GENERATOR_FUNCTION_URL': 'url',
+    'LLM_BASE_URL': 'url',
+}
+
+for _group in INTEGRATION_GROUPS:
+    for _key_definition in _group['keys']:
+        _value_type = SETTING_VALUE_TYPES.get(_key_definition['key'])
+        if _value_type:
+            _key_definition['value_type'] = _value_type
+
 
 def get_group_by_name(name):
     """Look up an integration group by its name.

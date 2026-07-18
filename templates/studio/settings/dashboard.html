@@ -38,7 +38,7 @@
              autocomplete="off"
              placeholder="Search by key, description, section, or provider"
              data-settings-filter
-             class="w-full rounded-lg border border-border bg-gray-900 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent">
+             class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent">
       <button type="button"
               data-settings-filter-clear
               class="hidden shrink-0 rounded-md border border-border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent">
@@ -118,8 +118,11 @@ function toggleReveal(btn) {
 function clearOverride(btn, fieldKey) {
   var form = btn.closest('form');
   if (!form) { return; }
-  var input = form.querySelector('[name="' + fieldKey + '"]');
-  if (input) { input.value = ''; }
+  var clearInput = document.createElement('input');
+  clearInput.type = 'hidden';
+  clearInput.name = 'clear_override';
+  clearInput.value = fieldKey;
+  form.appendChild(clearInput);
   form.submit();
 }
 

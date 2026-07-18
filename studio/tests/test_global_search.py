@@ -7,7 +7,8 @@ from django.utils import timezone
 
 from content.models import Article, Course, Download, Project, Workshop
 from email_app.models import EmailCampaign
-from events.models import Event
+from events.models import Event, EventSeries
+from studio.views.global_search import GROUP_NAMES, NAVIGATION_ITEMS
 
 User = get_user_model()
 
@@ -53,12 +54,7 @@ class StudioGlobalSearchTest(TestCase):
     def test_short_queries_return_empty_groups(self):
         results = self._get_results(' n ')
 
-        self.assertEqual(results, {
-            'users': [],
-            'content': [],
-            'events': [],
-            'campaigns': [],
-        })
+        self.assertEqual(results, {group: [] for group in GROUP_NAMES})
 
     def test_grouped_results_include_compact_payloads_only(self):
         Article.objects.create(
@@ -89,15 +85,9 @@ class StudioGlobalSearchTest(TestCase):
 
         results = self._get_results('needle')
 
-        self.assertEqual(
-            {group: bool(items) for group, items in results.items()},
-            {
-                'users': True,
-                'content': True,
-                'events': True,
-                'campaigns': True,
-            },
-        )
+        self.assertEqual(set(results), set(GROUP_NAMES))
+        for group in ('users', 'articles', 'courses', 'events', 'campaigns'):
+            self.assertTrue(results[group], group)
         for group, items in results.items():
             for item in items:
                 self.assertEqual(item['group'], group)
@@ -174,14 +164,13 @@ class StudioGlobalSearchTest(TestCase):
 
         results = self._get_results('omni')
 
-        content_urls = {item['url'] for item in results['content']}
         self.assertIn(
             reverse('studio_article_edit', kwargs={'article_id': article.pk}),
-            content_urls,
+            {item['url'] for item in results['articles']},
         )
         self.assertIn(
             reverse('studio_recording_edit', kwargs={'recording_id': recording.pk}),
-            content_urls,
+            {item['url'] for item in results['recordings']},
         )
         self.assertIn(
             reverse('studio_event_edit', kwargs={'event_id': event.pk}),
@@ -196,7 +185,7 @@ class StudioGlobalSearchTest(TestCase):
         exact = User.objects.create_user(email='ranked@example.com', password='pw')
         prefix = User.objects.create_user(email='ranked-prefix@example.com', password='pw')
         loose = User.objects.create_user(email='loose-ranked@example.com', password='pw')
-        for index in range(6):
+        for index in range(9):
             User.objects.create_user(
                 email=f'caponly-{index}@example.com',
                 password='pw',
@@ -209,7 +198,54 @@ class StudioGlobalSearchTest(TestCase):
         self.assertLess(user_ids.index(prefix.pk), user_ids.index(loose.pk))
 
         capped_users = self._get_results('caponly')['users']
-        self.assertEqual(len(capped_users), 5)
+        self.assertEqual(len(capped_users), 8)
+
+    def test_event_series_and_navigation_have_canonical_urls(self):
+        series = EventSeries.objects.create(
+            name='Needle Operator Series',
+            slug='needle-operator-series',
+            start_time=timezone.now().time(),
+        )
+
+        results = self._get_results('needle operator')
+        self.assertEqual(
+            results['event_series'][0]['url'],
+            reverse(
+                'studio_event_series_detail',
+                kwargs={'series_id': series.pk},
+            ),
+        )
+        settings = self._get_results('settings')['pages'][0]
+        self.assertEqual(settings['label'], 'Settings')
+        self.assertEqual(settings['url'], reverse('studio_settings'))
+
+    def test_every_sidebar_destination_is_searchable_with_privilege_filtering(self):
+        for label, route_name, _aliases, superuser_only in NAVIGATION_ITEMS:
+            with self.subTest(label=label):
+                results = self._get_results(label)['pages']
+                urls = {item['url'] for item in results}
+                if superuser_only:
+                    self.assertNotIn(reverse(route_name), urls)
+                else:
+                    self.assertIn(reverse(route_name), urls)
+
+        self.client.logout()
+        self.staff.is_superuser = True
+        self.staff.save(update_fields=['is_superuser'])
+        for label, route_name, _aliases, superuser_only in NAVIGATION_ITEMS:
+            if not superuser_only:
+                continue
+            with self.subTest(superuser_label=label):
+                self.assertIn(
+                    reverse(route_name),
+                    {item['url'] for item in self._get_results(label)['pages']},
+                )
+
+    def test_host_aliases_use_clarified_labels(self):
+        event_hosts = self._get_results('event hosts')['pages'][0]
+        call_hosts = self._get_results('call hosts')['pages'][0]
+        self.assertEqual(event_hosts['label'], 'Event hosts')
+        self.assertEqual(call_hosts['label'], 'Call hosts (scheduling)')
 
     def test_no_token_authenticated_global_search_api_is_added(self):
         self._login_staff()

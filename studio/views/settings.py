@@ -21,7 +21,7 @@ from django.conf import settings as django_settings
 from django.contrib import messages
 from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
+from django.core.validators import URLValidator, validate_email
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
@@ -238,6 +238,7 @@ def _build_group_context(group_def, db_settings):
             'multiline': key_def.get('multiline', False),
             'is_boolean': key_def.get('is_boolean', False),
             'is_email': key_def.get('is_email', False),
+            'value_type': key_def.get('value_type', 'string'),
             'optional': key_def.get('optional', False),
             'current_value': current_value,
             'source': source,
@@ -419,34 +420,74 @@ def settings_save_group(request, group_name):
         messages.error(request, f'Unknown integration group: {group_name}')
         return redirect('studio_settings')
 
-    # Validate the whole group before writing any row so one typo cannot leave
-    # a partially updated provider configuration. Runtime delivery validates
-    # again because env/import/legacy rows can bypass this Studio boundary.
+    clear_override = request.POST.get('clear_override', '')
+    registered_keys = {key_def['key'] for key_def in group_def['keys']}
+    if clear_override not in registered_keys:
+        clear_override = ''
+
+    normalized_values = {}
+    type_labels = {
+        'url': 'URL',
+        'integer': 'integer',
+        'boolean': 'boolean',
+        'email': 'email address',
+    }
+    url_validator = URLValidator(schemes=('http', 'https'))
+
+    # Validate and normalize the entire group before touching any row. Runtime
+    # consumers still keep their defensive fallbacks because env/import/legacy
+    # values can bypass this Studio boundary.
     for key_def in group_def['keys']:
-        if not key_def.get('is_email'):
-            continue
         key = key_def['key']
-        value = request.POST.get(key, '').strip()
-        if not value:
+        if key == clear_override:
+            normalized_values[key] = ''
+            continue
+
+        value_type = key_def.get('value_type', 'string')
+        if key_def.get('is_email'):
+            value_type = 'email'
+        if value_type == 'boolean':
+            raw_value = request.POST.get(key)
+            value = 'false' if raw_value is None else raw_value.strip().lower()
+        else:
+            value = request.POST.get(key, '')
+            if value_type in {'url', 'integer', 'email'}:
+                value = value.strip()
+        normalized_values[key] = value
+
+        if value == '' and value_type != 'boolean':
             continue
         try:
-            validate_email(value)
-        except ValidationError:
+            if value_type == 'url':
+                url_validator(value)
+            elif value_type == 'integer':
+                int(value, 10)
+            elif value_type == 'boolean' and value not in {'true', 'false'}:
+                raise ValidationError('Invalid boolean')
+            elif value_type == 'email':
+                validate_email(value)
+        except (ValidationError, ValueError):
             messages.error(
                 request,
-                f'{key} must be a valid email address. No settings were saved.',
+                f'{key} must be a valid {type_labels[value_type]}. '
+                'No settings were saved.',
             )
             return redirect(
                 f'/studio/settings/#{_section_id_for_group_name(group_name)}'
             )
 
     saved_count = 0
+    cleared_keys = []
     for key_def in group_def['keys']:
         key = key_def['key']
-        if key_def.get('is_boolean'):
-            # Booleans always store an explicit "true"/"false" — an unticked
-            # checkbox means false, never absent. Don't delete these rows.
-            value = 'true' if request.POST.get(key) == 'true' else 'false'
+        value = normalized_values[key]
+        if key == clear_override or (value == '' and not key_def.get('is_boolean')):
+            deleted, _ = IntegrationSetting.objects.filter(key=key).delete()
+            if deleted:
+                cleared_keys.append(key)
+            continue
+
+        if value != '':
             IntegrationSetting.objects.update_or_create(
                 key=key,
                 defaults={
@@ -456,30 +497,18 @@ def settings_save_group(request, group_name):
                     'description': key_def.get('description', ''),
                 },
             )
-        else:
-            value = request.POST.get(key, '')
-            if key_def.get('is_email'):
-                value = value.strip()
-            if value == '':
-                # Empty value clears the DB override and falls back to env.
-                # ``key`` came from iterating the registry above, so we know
-                # it is safe to delete — we never touch keys outside the
-                # registry from this view.
-                IntegrationSetting.objects.filter(key=key).delete()
-            else:
-                IntegrationSetting.objects.update_or_create(
-                    key=key,
-                    defaults={
-                        'value': value,
-                        'is_secret': key_def.get('is_secret', False),
-                        'group': group_name,
-                        'description': key_def.get('description', ''),
-                    },
-                )
-        saved_count += 1
+            saved_count += 1
 
     clear_config_cache()
-    messages.success(request, f'{group_def["label"]} settings saved ({saved_count} keys).')
+    messages.success(
+        request,
+        f'Saved {saved_count} settings in {group_def["label"]}.',
+    )
+    for key in cleared_keys:
+        messages.success(
+            request,
+            f'Cleared override for {key} — now using env/default.',
+        )
     return redirect(f'/studio/settings/#{_section_id_for_group_name(group_name)}')
 
 

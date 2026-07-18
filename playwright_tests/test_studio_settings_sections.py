@@ -1,6 +1,7 @@
 """Playwright coverage for Studio settings section navigation and filtering."""
 
 import os
+import re
 
 import pytest
 
@@ -133,7 +134,7 @@ class TestStudioSettingsSections:
         page.wait_for_load_state("domcontentloaded")
 
         body_text = page.locator("body").inner_text()
-        assert "Stripe settings saved" in body_text
+        assert re.search(r"Saved \d+ settings in Stripe\.", body_text)
         assert page.locator('[data-settings-section="payments"]').is_visible()
         assert page.locator("#integration-stripe").is_visible()
         assert page.locator("#integration-slack").is_hidden()

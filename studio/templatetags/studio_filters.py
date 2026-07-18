@@ -690,6 +690,18 @@ def studio_sidebar_state(path):
         or operations_active
     )
     events_expanded = events_active or not any_other_section_active
+    active_section = next((
+        slug for slug, active in (
+            ('events', events_active),
+            ('content', content_active),
+            ('people', people_active),
+            ('planning', planning_active),
+            ('onboarding', onboarding_active),
+            ('communication', communication_active),
+            ('tracking', tracking_active),
+            ('operations', operations_active),
+        ) if active
+    ), '')
 
     return {
         'content_active': content_active,
@@ -702,6 +714,7 @@ def studio_sidebar_state(path):
         'tracking_active': tracking_active,
         'operations_active': operations_active,
         'triggers_active': triggers_active,
+        'active_section': active_section,
     }
 
 

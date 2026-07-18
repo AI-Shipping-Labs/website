@@ -200,7 +200,7 @@
       metadata, so editable even on synced rows.
     {% endcomment %}
     <div>
-      <label class="block text-sm font-medium text-foreground mb-1" for="host-email-input">Host platform user email</label>
+      <label class="block text-sm font-medium text-foreground mb-1" for="host-email-input">Auto-register host (platform email)</label>
       <input type="email" name="host_email" id="host-email-input"
              value="{% if event %}{{ event.host_email|default:'' }}{% else %}{{ form_values.host_email|default:'' }}{% endif %}"
              placeholder="host@example.com"

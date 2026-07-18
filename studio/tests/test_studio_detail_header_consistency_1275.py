@@ -57,7 +57,6 @@ ACTIONLESS = {
     "worker_task_detail.html",
     "worker_inspect.html",
     "ses_events/detail.html",
-    "questionnaires/response_detail.html",
 }
 CANONICAL_FOCUS_RING = (
     "focus-visible:outline-none focus-visible:ring-2 "

@@ -19,8 +19,9 @@ import json
 from django.contrib import messages
 from django.db import transaction
 from django.db.models import Count, Q
-from django.http import HttpResponseNotAllowed, JsonResponse
+from django.http import Http404, HttpResponseBadRequest, HttpResponseNotAllowed, JsonResponse, QueryDict
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils.text import slugify
 
 from questionnaires.models import (
@@ -29,8 +30,18 @@ from questionnaires.models import (
     Question,
     Questionnaire,
     QuestionOption,
+    Response,
     ResponseQuestion,
     ResponseQuestionOption,
+)
+from questionnaires.response_workflows import (
+    VALID_PURPOSES,
+    VALID_RESPONSE_STATUSES,
+    VALID_REVIEW_FILTERS,
+    ResponseNotSubmitted,
+    compact_response_queryset,
+    response_queryset,
+    transition_response_review,
 )
 from studio.decorators import staff_required
 from studio.utils import studio_pagination_context
@@ -147,6 +158,11 @@ def questionnaire_list(request):
         .annotate(
             num_questions=Count('questions', distinct=True),
             num_responses=Count('responses', distinct=True),
+            num_submitted=Count(
+                'responses',
+                filter=Q(responses__status='submitted'),
+                distinct=True,
+            ),
         )
         .order_by('-created_at')
     )
@@ -625,23 +641,94 @@ def question_option_reorder(request, questionnaire_id, question_id):
 
 
 # ---------------------------------------------------------------------------
-# Response viewing (read-only)
+# Response viewing and review queue
 # ---------------------------------------------------------------------------
+
+_QUEUE_RETURN_KEYS = {
+    'status', 'review', 'purpose', 'questionnaire', 'q', 'page',
+}
+
+
+def _response_filters(request, *, queue=False):
+    status_default = 'submitted' if queue else 'all'
+    review_default = 'awaiting' if queue else 'all'
+    status = request.GET.get('status') or status_default
+    review = request.GET.get('review') or review_default
+    purpose = request.GET.get('purpose') or 'all'
+    if status not in VALID_RESPONSE_STATUSES:
+        status = status_default
+    if review not in VALID_REVIEW_FILTERS:
+        review = review_default
+    if purpose not in VALID_PURPOSES:
+        purpose = 'all'
+    raw_questionnaire = request.GET.get('questionnaire') or ''
+    questionnaire_id = (
+        int(raw_questionnaire) if raw_questionnaire.isdigit() else None
+    )
+    return {
+        'status': status,
+        'review': review,
+        'purpose': purpose,
+        'questionnaire': questionnaire_id,
+        'search': (request.GET.get('q') or '').strip(),
+    }
+
+
+def _safe_queue_query(raw_query):
+    """Reconstruct only server-known queue parameters from a submitted value."""
+    source = QueryDict(raw_query or '')
+    safe = QueryDict('', mutable=True)
+    for key in _QUEUE_RETURN_KEYS:
+        if key in source:
+            safe[key] = source.get(key, '')
+    return safe.urlencode()
+
+
+@staff_required
+def questionnaire_response_queue(request):
+    """Global 50-row operator queue across every questionnaire purpose."""
+    filters = _response_filters(request, queue=True)
+    queryset = compact_response_queryset(**filters)
+    pager = studio_pagination_context(request, queryset, per_page=50)
+    questionnaires = Questionnaire.objects.order_by('title', 'pk')
+    filters_active = any((
+        filters['status'] != 'submitted',
+        filters['review'] != 'awaiting',
+        filters['purpose'] != 'all',
+        filters['questionnaire'] is not None,
+        bool(filters['search']),
+    ))
+    return render(request, 'studio/questionnaires/response_queue.html', {
+        'responses': pager['page'].object_list,
+        'questionnaires': questionnaires,
+        'status_filter': filters['status'],
+        'review_filter': filters['review'],
+        'purpose_filter': filters['purpose'],
+        'questionnaire_filter': filters['questionnaire'],
+        'search': filters['search'],
+        'filters_active': filters_active,
+        'return_query': request.GET.urlencode(),
+        **pager,
+    })
 
 
 @staff_required
 def questionnaire_responses(request, questionnaire_id):
     """List of responses: respondent, status, submitted date, answered count."""
     questionnaire = get_object_or_404(Questionnaire, pk=questionnaire_id)
-    responses = list(
-        questionnaire.responses
-        .select_related('respondent')
-        .annotate(answered_count=Count('answers', distinct=True))
-        .order_by('-created_at')
+    filters = _response_filters(request)
+    responses = compact_response_queryset(
+        status=filters['status'],
+        review='all',
+        purpose='all',
+        questionnaire=questionnaire.pk,
+        search='',
     )
     return render(request, 'studio/questionnaires/responses.html', {
         'questionnaire': questionnaire,
         'responses': responses,
+        'status_filter': filters['status'],
+        'filters_active': filters['status'] != 'all',
     })
 
 
@@ -656,8 +743,9 @@ def questionnaire_response_detail(request, questionnaire_id, response_id):
     """
     questionnaire = get_object_or_404(Questionnaire, pk=questionnaire_id)
     response = get_object_or_404(
-        questionnaire.responses.select_related('respondent'),
+        response_queryset(),
         pk=response_id,
+        questionnaire=questionnaire,
     )
 
     # Map question_id -> Answer so the template renders blanks for
@@ -694,6 +782,54 @@ def questionnaire_response_detail(request, questionnaire_id, response_id):
     })
 
 
+@staff_required
+def questionnaire_response_review(request, questionnaire_id, response_id):
+    """POST-only, scoped, idempotent review/reopen transition."""
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    action = request.POST.get('action') or ''
+    if action not in {'review', 'reopen'}:
+        return HttpResponseBadRequest('Unknown review action.')
+    try:
+        response, changed = transition_response_review(
+            response_id=response_id,
+            questionnaire_id=questionnaire_id,
+            reviewed=action == 'review',
+            actor=request.user,
+        )
+    except Response.DoesNotExist as exc:
+        raise Http404 from exc
+    except ResponseNotSubmitted:
+        messages.error(request, 'Only submitted responses can be reviewed.')
+        response = get_object_or_404(
+            Response, pk=response_id, questionnaire_id=questionnaire_id,
+        )
+        changed = False
+    else:
+        if action == 'review':
+            messages.success(
+                request,
+                'Response marked reviewed.' if changed
+                else 'Response was already reviewed.',
+            )
+        else:
+            messages.success(
+                request,
+                'Response marked awaiting review.' if changed
+                else 'Response was already awaiting review.',
+            )
+
+    if request.POST.get('return_to') == 'queue':
+        target = reverse('studio_questionnaire_response_queue')
+        query = _safe_queue_query(request.POST.get('return_query'))
+        return redirect(f'{target}?{query}' if query else target)
+    return redirect(
+        'studio_questionnaire_response_detail',
+        questionnaire_id=response.questionnaire_id,
+        response_id=response.pk,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Per-member response-question customization (issue #802)
 #
@@ -708,8 +844,9 @@ def _get_response_for_questionnaire(questionnaire_id, response_id):
     """Fetch a response scoped to its questionnaire, or 404."""
     questionnaire = get_object_or_404(Questionnaire, pk=questionnaire_id)
     response = get_object_or_404(
-        questionnaire.responses.select_related('respondent'),
+        response_queryset(),
         pk=response_id,
+        questionnaire=questionnaire,
     )
     return questionnaire, response
 

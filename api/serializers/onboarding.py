@@ -173,11 +173,63 @@ def serialize_response(response, *, persona):
         }
 
     return {
+        "id": response.pk,
+        "user_id": response.respondent_id,
         "email": response.respondent.email,
+        "studio_user_url": reverse(
+            'studio_user_detail', kwargs={'user_id': response.respondent_id},
+        ),
+        "studio_response_url": reverse(
+            'studio_questionnaire_response_detail',
+            kwargs={
+                'questionnaire_id': response.questionnaire_id,
+                'response_id': response.pk,
+            },
+        ),
         "questionnaire_slug": response.questionnaire.slug,
         "status": response.status,
         "submitted_at": _isoformat_or_none(response.submitted_at),
+        "reviewed_at": _isoformat_or_none(response.reviewed_at),
+        "reviewed_by": (
+            response.reviewed_by.email if response.reviewed_by is not None else None
+        ),
+        "review_state": response.review_state,
         "persona": persona_payload,
         "crm_record": _serialize_crm_record(response),
         "questions": questions,
+    }
+
+
+def serialize_response_summary(response):
+    """Compact list-row shape for the all-purpose operator queue API."""
+    return {
+        "id": response.pk,
+        "user_id": response.respondent_id,
+        "email": response.respondent.email,
+        "studio_user_url": reverse(
+            'studio_user_detail', kwargs={'user_id': response.respondent_id},
+        ),
+        "studio_response_url": reverse(
+            'studio_questionnaire_response_detail',
+            kwargs={
+                'questionnaire_id': response.questionnaire_id,
+                'response_id': response.pk,
+            },
+        ),
+        "questionnaire": {
+            "id": response.questionnaire_id,
+            "slug": response.questionnaire.slug,
+            "title": response.questionnaire.title,
+            "purpose": response.questionnaire.purpose,
+        },
+        "status": response.status,
+        "submitted_at": _isoformat_or_none(response.submitted_at),
+        "updated_at": _isoformat_or_none(response.updated_at),
+        "answered_count": response.answered_count,
+        "reviewed_at": _isoformat_or_none(response.reviewed_at),
+        "reviewed_by": (
+            response.reviewed_by.email if response.reviewed_by is not None else None
+        ),
+        "review_state": response.review_state,
+        "crm_record": _serialize_crm_record(response),
     }

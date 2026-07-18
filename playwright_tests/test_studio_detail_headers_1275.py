@@ -20,7 +20,6 @@ ACTIONLESS = {
     "worker-task",
     "worker-inspect",
     "ses-detail",
-    "response-detail",
     "event-create",
     "marketing-create",
     "sprint-create",

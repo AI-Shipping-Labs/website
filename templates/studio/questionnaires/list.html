@@ -20,12 +20,13 @@
   <table class="w-full">
     <thead class="bg-secondary">
       <tr>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Purpose</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Questions</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Responses</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Active</th>
-        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-widest">Title</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-widest">Purpose</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-widest">Questions</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-widest">Responses</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-widest">Submitted</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-widest">Active</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-widest">Actions</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-border">
@@ -40,6 +41,9 @@
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Questions" data-testid="questionnaire-question-count">{{ q.num_questions }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Responses" data-testid="questionnaire-response-count">{{ q.num_responses }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Submitted" data-testid="questionnaire-submitted-count">
+          {% if q.num_submitted %}{% url 'studio_questionnaire_response_queue' as response_queue_url %}<a href="{{ response_queue_url }}?status=submitted&amp;review=all&amp;questionnaire={{ q.pk }}" class="inline-flex min-h-[44px] items-center text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" aria-label="View {{ q.num_submitted }} submitted responses for {{ q.title }}">{{ q.num_submitted }}</a>{% else %}0{% endif %}
+        </td>
         <td class="px-6 py-4 text-sm" data-label="Active">
           {% if q.is_active %}
           <span class="text-green-400" data-testid="questionnaire-active-yes">Active</span>
@@ -58,7 +62,7 @@
       </tr>
       {% empty %}
         {% url 'studio_questionnaire_list' as questionnaires_clear_url %}
-        {% studio_empty_state 'filter' entity_label='questionnaire' entity_label_plural='questionnaires' clear_url=questionnaires_clear_url colspan=6 %}
+        {% studio_empty_state 'filter' entity_label='questionnaire' entity_label_plural='questionnaires' clear_url=questionnaires_clear_url colspan=7 %}
       {% endfor %}
     </tbody>
   </table>

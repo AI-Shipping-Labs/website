@@ -229,6 +229,14 @@ class Response(TimestampedModelMixin, models.Model):
         default='draft',
     )
     submitted_at = models.DateTimeField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_questionnaire_responses',
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -237,17 +245,62 @@ class Response(TimestampedModelMixin, models.Model):
                 fields=['questionnaire', 'respondent'],
                 name='unique_response_per_respondent_per_questionnaire',
             ),
+            models.CheckConstraint(
+                condition=(
+                    Q(status='submitted')
+                    | (
+                        Q(reviewed_at__isnull=True)
+                        & Q(reviewed_by__isnull=True)
+                    )
+                ),
+                name='response_draft_review_fields_null',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(reviewed_by__isnull=True)
+                    | Q(reviewed_at__isnull=False)
+                ),
+                name='response_reviewer_requires_timestamp',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['status', 'reviewed_at', '-submitted_at'],
+                name='response_review_queue_idx',
+            ),
         ]
 
     def __str__(self):
         return f'{self.respondent} -> {self.questionnaire}'
 
     def mark_submitted(self):
-        """Flip status to ``submitted`` and stamp ``submitted_at``."""
+        """Submit (or re-submit) and return the response to the review queue."""
         self.status = 'submitted'
         self.submitted_at = timezone.now()
-        self.save(update_fields=['status', 'submitted_at', 'updated_at'])
+        self.reviewed_at = None
+        self.reviewed_by = None
+        self.save(update_fields=[
+            'status', 'submitted_at', 'reviewed_at', 'reviewed_by', 'updated_at',
+        ])
         return self
+
+    @property
+    def review_state(self):
+        if self.status != 'submitted':
+            return 'not_applicable'
+        if self.reviewed_at is None:
+            return 'awaiting'
+        return 'reviewed'
+
+    @property
+    def review_label(self):
+        if self.review_state == 'not_applicable':
+            return 'Not applicable'
+        if self.review_state == 'awaiting':
+            return 'Awaiting review'
+        if self.reviewed_by_id is None:
+            return 'Reviewed before queue launch'
+        return 'Reviewed'
 
 
 class ResponseQuestion(TimestampedModelMixin, models.Model):

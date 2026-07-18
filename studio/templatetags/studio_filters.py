@@ -60,6 +60,10 @@ ACTION_KIND_CLASSES = {
 STATUS_BADGE_CLASSES = {
     'published': 'bg-green-500/20 text-green-700 dark:text-green-300',
     'draft': 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300',
+    'submitted': 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
+    'awaiting': 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300',
+    'reviewed': 'bg-secondary text-muted-foreground',
+    'not_applicable': 'bg-secondary text-muted-foreground',
     'upcoming': 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
     'sending': 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
     'sent': 'bg-green-500/20 text-green-700 dark:text-green-300',

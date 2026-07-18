@@ -1,0 +1,93 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Questionnaire responses{% endblock %}
+
+{% block studio_content %}
+{% url 'studio_questionnaire_list' as questionnaire_list_url %}
+{% studio_header_actions title="Questionnaire responses" subtitle="Review submitted responses across every questionnaire." back_url=questionnaire_list_url back_label="Back to questionnaires" testid="questionnaire-response-queue-header" %}{% endstudio_header_actions %}
+
+<form method="get" class="mb-6 grid grid-cols-1 gap-4 rounded-lg border border-border bg-card p-4 sm:grid-cols-2 xl:grid-cols-6" data-testid="questionnaire-response-queue-filters">
+  <div class="sm:col-span-2 xl:col-span-2">
+    <label for="response-queue-search" class="mb-1 block text-sm font-medium text-foreground">Search</label>
+    <input id="response-queue-search" name="q" type="search" value="{{ search }}" placeholder="Email, name, title, or slug"
+           class="min-h-[44px] w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent">
+  </div>
+  <div>
+    <label for="response-queue-status" class="mb-1 block text-sm font-medium text-foreground">Status</label>
+    <select id="response-queue-status" name="status" class="studio-select min-h-[44px] w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent">
+      <option value="submitted" {% if status_filter == 'submitted' %}selected{% endif %}>Submitted</option>
+      <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+      <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All</option>
+    </select>
+  </div>
+  <div>
+    <label for="response-queue-review" class="mb-1 block text-sm font-medium text-foreground">Review state</label>
+    <select id="response-queue-review" name="review" class="studio-select min-h-[44px] w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent">
+      <option value="awaiting" {% if review_filter == 'awaiting' %}selected{% endif %}>Awaiting review</option>
+      <option value="reviewed" {% if review_filter == 'reviewed' %}selected{% endif %}>Reviewed</option>
+      <option value="all" {% if review_filter == 'all' %}selected{% endif %}>All</option>
+    </select>
+  </div>
+  <div>
+    <label for="response-queue-purpose" class="mb-1 block text-sm font-medium text-foreground">Purpose</label>
+    <select id="response-queue-purpose" name="purpose" class="studio-select min-h-[44px] w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent">
+      <option value="all" {% if purpose_filter == 'all' %}selected{% endif %}>All</option>
+      <option value="onboarding" {% if purpose_filter == 'onboarding' %}selected{% endif %}>Onboarding</option>
+      <option value="feedback" {% if purpose_filter == 'feedback' %}selected{% endif %}>Feedback</option>
+      <option value="general" {% if purpose_filter == 'general' %}selected{% endif %}>General</option>
+    </select>
+  </div>
+  <div>
+    <label for="response-queue-questionnaire" class="mb-1 block text-sm font-medium text-foreground">Questionnaire</label>
+    <select id="response-queue-questionnaire" name="questionnaire" class="studio-select min-h-[44px] w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent">
+      <option value="">All</option>
+      {% for questionnaire in questionnaires %}<option value="{{ questionnaire.pk }}" {% if questionnaire_filter == questionnaire.pk %}selected{% endif %}>{{ questionnaire.title }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="flex flex-wrap items-center gap-2 sm:col-span-2 xl:col-span-6">
+    <button type="submit" class="min-h-[44px] rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Apply filters</button>
+    <a href="{% url 'studio_questionnaire_response_queue' %}" class="inline-flex min-h-[44px] items-center rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Clear filters</a>
+  </div>
+</form>
+
+{% if responses or filters_active %}
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="w-full" data-testid="questionnaire-response-queue-table">
+    <thead class="bg-secondary"><tr>
+      <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground">Questionnaire</th>
+      <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground">Respondent</th>
+      <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground">Purpose</th>
+      <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground">Submitted</th>
+      <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground">Answered</th>
+      <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground">Review state</th>
+      <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground">Reviewed by/at</th>
+      <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-muted-foreground">Actions</th>
+    </tr></thead>
+    <tbody class="divide-y divide-border">
+      {% for response in responses %}
+      <tr class="hover:bg-secondary/50" data-testid="questionnaire-response-queue-row">
+        <td class="px-4 py-3 text-sm text-foreground" data-label="Questionnaire"><a href="{% url 'studio_questionnaire_response_detail' questionnaire_id=response.questionnaire_id response_id=response.pk %}" class="inline-flex min-h-[44px] items-center break-words text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ response.questionnaire.title }}</a></td>
+        <td class="px-4 py-3 text-sm" data-label="Respondent">{% include "studio/questionnaires/_respondent_links.html" %}</td>
+        <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Purpose">{{ response.questionnaire.get_purpose_display }}</td>
+        <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Submitted">{% if response.submitted_at %}{{ response.submitted_at|operator_datetime }}{% else %}—{% endif %}</td>
+        <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Answered">{{ response.answered_count }}</td>
+        <td class="px-4 py-3" data-label="Review state">{% studio_status_badge response.review_state response.review_label %}</td>
+        <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Reviewed by/at">{% if response.reviewed_at %}{% if response.reviewed_by %}<span class="break-all">{{ response.reviewed_by.email }}</span><br>{% endif %}{{ response.reviewed_at|operator_datetime }}{% else %}—{% endif %}</td>
+        <td class="px-4 py-3 {% studio_list_class 'action_cell' %}" data-label="Actions"><div class="{% studio_list_class 'action_group' %}">
+          {% url 'studio_questionnaire_response_detail' questionnaire_id=response.questionnaire_id response_id=response.pk as detail_url %}{% studio_list_action detail_url 'View' 'secondary' %}
+          {% if response.review_state == 'awaiting' %}{% studio_action_class 'primary' as primary_action_class %}<form method="post" action="{% url 'studio_questionnaire_response_review' questionnaire_id=response.questionnaire_id response_id=response.pk %}" class="{% studio_list_class 'action_form' %}">{% csrf_token %}<input type="hidden" name="action" value="review"><input type="hidden" name="return_to" value="queue"><input type="hidden" name="return_query" value="{{ return_query }}"><button type="submit" class="{{ primary_action_class }}" data-testid="questionnaire-response-mark-reviewed">Mark reviewed</button></form>{% endif %}
+        </div></td>
+      </tr>
+      {% empty %}
+      {% url 'studio_questionnaire_response_queue' as queue_clear_url %}
+      {% studio_empty_state 'filter' entity_label='response' entity_label_plural='responses' clear_url=queue_clear_url colspan=8 empty_message='No responses match these filters.' %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if show_pager %}{% include "studio/includes/list_pager.html" with pager_testid_prefix="questionnaire-response-queue-pager" %}{% endif %}
+</div>
+{% else %}
+{% studio_empty_state 'fresh' entity_label='response' entity_label_plural='responses' empty_message='No responses awaiting review.' %}
+{% endif %}
+{% endblock %}

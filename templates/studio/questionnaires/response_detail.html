@@ -11,7 +11,15 @@
     </div>
 {% endstudio_header_title_meta %}
 {% url 'studio_questionnaire_responses' questionnaire_id=questionnaire.pk as responses_url %}
-{% studio_header_actions title=response.respondent.email subtitle=questionnaire.title title_meta=response_header_meta back_url=responses_url back_label='Back to responses' %}{% endstudio_header_actions %}
+{% studio_header_actions title=response.respondent.email subtitle=questionnaire.title title_meta=response_header_meta back_url=responses_url back_label='Back to responses' %}
+  <a href="{% url 'studio_user_detail' user_id=response.respondent_id %}" class="inline-flex min-h-[44px] min-w-0 break-all items-center rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" aria-label="Open Studio profile for {{ response.respondent.email }}" data-testid="response-detail-user-profile">{{ response.respondent.email }}</a>
+  {% if response.respondent.crm_record %}<a href="{% url 'studio_crm_detail' crm_id=response.respondent.crm_record.pk %}" class="inline-flex min-h-[44px] items-center rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" aria-label="Open CRM record for {{ response.respondent.email }}" data-testid="response-detail-crm">Open CRM record</a>{% endif %}
+  {% if response.status == 'submitted' %}{% if response.review_state == 'awaiting' %}<form method="post" action="{% url 'studio_questionnaire_response_review' questionnaire_id=questionnaire.pk response_id=response.pk %}">{% csrf_token %}<input type="hidden" name="action" value="review"><input type="hidden" name="return_to" value="detail"><button type="submit" class="min-h-[44px] rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="response-detail-mark-reviewed">Mark reviewed</button></form>{% else %}<form method="post" action="{% url 'studio_questionnaire_response_review' questionnaire_id=questionnaire.pk response_id=response.pk %}">{% csrf_token %}<input type="hidden" name="action" value="reopen"><input type="hidden" name="return_to" value="detail"><button type="submit" class="min-h-[44px] rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="response-detail-reopen">Mark awaiting review</button></form>{% endif %}{% endif %}
+{% endstudio_header_actions %}
+
+<div class="mb-4 max-w-3xl rounded-lg border border-border bg-card p-4" data-testid="response-detail-review-state">
+  <div class="flex flex-wrap items-center gap-2">{% studio_status_badge response.review_state response.review_label %}{% if response.reviewed_at %}<span class="text-sm text-muted-foreground">{% if response.reviewed_by %}by <span class="break-all">{{ response.reviewed_by.email }}</span> {% endif %}at {{ response.reviewed_at|operator_datetime }}</span>{% endif %}</div>
+</div>
 
 {% if persona_signal %}
 <div class="mb-4 max-w-3xl bg-card border border-border rounded-lg p-4"
@@ -68,9 +76,7 @@
     </div>
   </div>
   {% empty %}
-  <div class="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground text-sm" data-testid="response-detail-empty">
-    This response has no questions.
-  </div>
+  {% studio_empty_state 'fresh' entity_label='question' entity_label_plural='questions' empty_message='This response has no questions.' testid_suffix='response-detail-empty' %}
   {% endfor %}
 </div>
 {% endblock %}

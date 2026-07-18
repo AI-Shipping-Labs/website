@@ -3,8 +3,14 @@
 import json
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, tag
+from django.db import connection
+from django.http import QueryDict
+from django.test import Client, TestCase, tag
+from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
+from community.models import CommunityAuditLog
+from crm.models import CRMRecord
 from questionnaires.models import (
     Answer,
     Persona,
@@ -61,6 +67,23 @@ class QuestionnaireCrudTest(StaffUserMixin, TestCase):
         response = self.client.get('/studio/questionnaires/')
         self.assertContains(response, 'Counts QC')
         self.assertContains(response, 'Feedback')
+
+    def test_annotated_count_query_is_bounded_as_responses_scale(self):
+        q = Questionnaire.objects.create(title='Bounded counts 1289')
+        member = User.objects.create_user(email='bounded-count-0@test.com')
+        Response.objects.create(questionnaire=q, respondent=member)
+        with CaptureQueriesContext(connection) as baseline_queries:
+            self.client.get('/studio/questionnaires/?q=Bounded+counts+1289')
+        for index in range(1, 11):
+            Response.objects.create(
+                questionnaire=q,
+                respondent=User.objects.create_user(
+                    email=f'bounded-count-{index}@test.com',
+                ),
+            )
+        with CaptureQueriesContext(connection) as scaled_queries:
+            self.client.get('/studio/questionnaires/?q=Bounded+counts+1289')
+        self.assertLessEqual(len(scaled_queries), len(baseline_queries))
 
     def test_empty_state_shown_when_no_questionnaires(self):
         # The #801 seed migration creates onboarding questionnaires; clear
@@ -304,6 +327,203 @@ class ResponseViewingTest(StaffUserMixin, TestCase):
         response = self.client.get(path)
         self.assertEqual(response.status_code, 302)
         self.assertIn('/accounts/login/', response.url)
+
+    def test_profile_link_and_optional_descriptive_crm_link_on_list_and_detail(self):
+        record = CRMRecord.objects.create(user=self.member)
+        paths = [
+            f'/studio/questionnaires/{self.questionnaire.pk}/responses/',
+            (
+                f'/studio/questionnaires/{self.questionnaire.pk}/responses/'
+                f'{self.response.pk}/'
+            ),
+        ]
+        for path in paths:
+            with self.subTest(path=path):
+                page = self.client.get(path)
+                self.assertContains(page, f'/studio/users/{self.member.pk}/')
+                self.assertContains(page, f'/studio/crm/{record.pk}/')
+                self.assertContains(page, 'Open CRM record for member@test.com')
+
+        record.delete()
+        for path in paths:
+            with self.subTest(path=path):
+                page = self.client.get(path)
+                self.assertContains(page, f'/studio/users/{self.member.pk}/')
+                self.assertNotContains(page, 'Open CRM record for')
+
+    def test_response_detail_keeps_questionnaire_scope(self):
+        other = Questionnaire.objects.create(title='Wrong parent')
+        page = self.client.get(
+            f'/studio/questionnaires/{other.pk}/responses/{self.response.pk}/',
+        )
+        self.assertEqual(page.status_code, 404)
+
+
+@tag('core')
+class ResponseQueueStudioTest(StaffUserMixin, TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.onboarding = Questionnaire.objects.create(
+            title='Onboarding 1289', purpose='onboarding',
+        )
+        cls.feedback = Questionnaire.objects.create(
+            title='Feedback 1289', purpose='feedback',
+        )
+        cls.awaiting = []
+        for index in range(2):
+            member = User.objects.create_user(email=f'awaiting-{index}@test.com')
+            response = Response.objects.create(
+                questionnaire=cls.onboarding, respondent=member,
+            )
+            response.mark_submitted()
+            cls.awaiting.append(response)
+        cls.draft = Response.objects.create(
+            questionnaire=cls.onboarding,
+            respondent=User.objects.create_user(email='draft-1289@test.com'),
+        )
+        cls.reviewed = Response.objects.create(
+            questionnaire=cls.onboarding,
+            respondent=User.objects.create_user(email='reviewed-1289@test.com'),
+            status='submitted', submitted_at=timezone.now(),
+            reviewed_at=timezone.now(), reviewed_by=cls.staff,
+        )
+        cls.feedback_response = Response.objects.create(
+            questionnaire=cls.feedback,
+            respondent=User.objects.create_user(email='feedback-1289@test.com'),
+        )
+        cls.feedback_response.mark_submitted()
+
+    def setUp(self):
+        self.client.login(**self.staff_credentials)
+
+    def test_default_queue_and_composed_filters(self):
+        page = self.client.get('/studio/questionnaire-responses/')
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, 'awaiting-0@test.com')
+        self.assertContains(page, 'awaiting-1@test.com')
+        self.assertContains(page, 'feedback-1289@test.com')
+        self.assertNotContains(page, 'draft-1289@test.com')
+        self.assertNotContains(page, 'reviewed-1289@test.com')
+
+        filtered = self.client.get(
+            '/studio/questionnaire-responses/',
+            {
+                'status': 'submitted', 'review': 'awaiting',
+                'purpose': 'onboarding', 'questionnaire': self.onboarding.pk,
+                'q': 'awaiting-1',
+            },
+        )
+        self.assertContains(filtered, 'awaiting-1@test.com')
+        self.assertNotContains(filtered, 'awaiting-0@test.com')
+        self.assertNotContains(filtered, 'feedback-1289@test.com')
+
+    def test_draft_plus_review_filter_is_truthfully_empty(self):
+        page = self.client.get(
+            '/studio/questionnaire-responses/?status=draft&review=awaiting',
+        )
+        self.assertContains(page, 'No responses match these filters.')
+        self.assertNotContains(page, 'draft-1289@test.com')
+
+    def test_review_action_idempotency_draft_error_and_safe_return(self):
+        response = self.awaiting[0]
+        url = (
+            f'/studio/questionnaires/{self.onboarding.pk}/responses/'
+            f'{response.pk}/review'
+        )
+        return_query = 'status=submitted&review=awaiting&purpose=onboarding&page=2'
+        first = self.client.post(url, {
+            'action': 'review', 'return_to': 'queue', 'return_query': return_query,
+        })
+        self.assertEqual(first.url.split('?', 1)[0], '/studio/questionnaire-responses/')
+        self.assertEqual(
+            QueryDict(first.url.split('?', 1)[1]), QueryDict(return_query),
+        )
+        response.refresh_from_db()
+        original_at = response.reviewed_at
+        second = self.client.post(url, {
+            'action': 'review', 'return_to': 'queue',
+            'return_query': 'next=https://attacker.test&status=submitted',
+        })
+        self.assertEqual(
+            second.url, '/studio/questionnaire-responses/?status=submitted',
+        )
+        response.refresh_from_db()
+        self.assertEqual(response.reviewed_at, original_at)
+        self.assertEqual(
+            CommunityAuditLog.objects.filter(
+                action='questionnaire_response_reviewed', user=response.respondent,
+            ).count(),
+            1,
+        )
+
+        draft_url = (
+            f'/studio/questionnaires/{self.onboarding.pk}/responses/'
+            f'{self.draft.pk}/review'
+        )
+        draft_result = self.client.post(draft_url, {
+            'action': 'review', 'return_to': 'detail',
+        }, follow=True)
+        self.assertContains(
+            draft_result, 'Only submitted responses can be reviewed.',
+        )
+
+    def test_review_route_is_post_only_and_staff_only(self):
+        response = self.awaiting[0]
+        url = (
+            f'/studio/questionnaires/{self.onboarding.pk}/responses/'
+            f'{response.pk}/review'
+        )
+        self.assertEqual(self.client.get(url).status_code, 405)
+        self.client.logout()
+        self.assertEqual(self.client.post(url, {'action': 'review'}).status_code, 302)
+
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.login(**self.staff_credentials)
+        self.assertEqual(
+            csrf_client.post(url, {'action': 'review'}).status_code, 403,
+        )
+
+        nonstaff = User.objects.create_user(
+            email='queue-nonstaff-1289@test.com', password='pw',
+        )
+        self.client.login(email=nonstaff.email, password='pw')
+        denied = self.client.post(url, {'action': 'review'})
+        self.assertEqual(denied.status_code, 403)
+        self.assertNotContains(denied, response.respondent.email, status_code=403)
+
+    def test_questionnaire_counts_and_per_questionnaire_status_order(self):
+        page = self.client.get('/studio/questionnaires/?q=Onboarding+1289')
+        row = next(q for q in page.context['questionnaires'] if q == self.onboarding)
+        self.assertEqual(row.num_responses, 4)
+        self.assertEqual(row.num_submitted, 3)
+        self.assertContains(
+            page,
+            (
+                '/studio/questionnaire-responses/?status=submitted&amp;review=all'
+                f'&amp;questionnaire={self.onboarding.pk}'
+            ),
+        )
+        drafts = self.client.get(
+            f'/studio/questionnaires/{self.onboarding.pk}/responses/?status=draft',
+        )
+        self.assertContains(drafts, 'draft-1289@test.com')
+        self.assertNotContains(drafts, 'awaiting-0@test.com')
+
+    def test_dashboard_attention_count_scope_and_pluralization(self):
+        page = self.client.get('/studio/')
+        onboarding = next(
+            item for item in page.context['attention_items']
+            if item['label'] == 'onboarding responses awaiting review'
+        )
+        self.assertEqual(onboarding['count'], 2)
+        self.assertContains(
+            page,
+            (
+                '/studio/questionnaire-responses/?status=submitted&amp;'
+                'review=awaiting&amp;purpose=onboarding'
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------

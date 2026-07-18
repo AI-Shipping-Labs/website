@@ -4,6 +4,7 @@ from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 
 from content.models import Project
+from content.services.project_author import resolve_project_author_user
 from studio.decorators import staff_required
 from studio.services.banner_panel import banner_panel_context
 from studio.utils import get_github_edit_url, is_synced, studio_pagination_context
@@ -34,7 +35,9 @@ def project_list(request):
 @staff_required
 def project_review(request, project_id):
     """Review a project submission (read-only for synced items)."""
-    project = get_object_or_404(Project, pk=project_id)
+    project = get_object_or_404(
+        Project.objects.select_related('submitter'), pk=project_id,
+    )
     synced = is_synced(project)
 
     if request.method == 'POST':
@@ -51,6 +54,7 @@ def project_review(request, project_id):
 
     return render(request, 'studio/projects/review.html', {
         'project': project,
+        'project_author_user': resolve_project_author_user(project),
         'is_synced': synced,
         'github_edit_url': get_github_edit_url(project),
         # Issues #788/#931: banner / social-image panel.

@@ -198,7 +198,6 @@ class BuildSuiteShardingTests(unittest.TestCase):
                 any(
                     test_id.startswith(
                         "tests.test_r1_migration_compatibility."
-                        "R1ProductionMigrationCompatibilityTest."
                     )
                     for test_id in ids
                 ),
@@ -215,10 +214,16 @@ class BuildSuiteShardingTests(unittest.TestCase):
             for test_id in ids
             if test_id.startswith(
                 "tests.test_r1_migration_compatibility."
-                "R1ProductionMigrationCompatibilityTest."
             )
         ]
-        self.assertEqual(len(matrix_ids), 3, matrix_ids)
+        self.assertEqual(len(matrix_ids), 6, matrix_ids)
+        self.assertEqual(
+            {test_id.rsplit(".", 2)[-2] for test_id in matrix_ids},
+            {
+                "R1ProductionMigrationCompatibilityTest",
+                "PostR1ProductionOverlapCompatibilityTest",
+            },
+        )
 
 
 class ReadShardEnvTests(unittest.TestCase):

@@ -47,13 +47,13 @@ seed:
 
 # Run all Django tests
 test:
-	uv run python manage.py test --exclude-tag=visual_regression --parallel
+	uv run python manage.py test --exclude-tag=visual_regression --exclude-tag=postgres_migration --parallel
 
 # Run only the core subset of Django tests (auth, access control, payments,
 # sync happy paths, critical model invariants). Targeted at <45s wall time.
 # See _docs/testing-guidelines.md ("Core test subset") for the tagging policy.
 test-core:
-	uv run python manage.py test --tag=core --exclude-tag=visual_regression --parallel
+	uv run python manage.py test --tag=core --exclude-tag=visual_regression --exclude-tag=postgres_migration --parallel
 
 # Run the live LLM-judge scenario tests (tests/live_judge/). These hit the
 # REAL configured provider (LLM_API_KEY must be set) and assert plain-English

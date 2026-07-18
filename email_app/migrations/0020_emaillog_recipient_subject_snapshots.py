@@ -25,6 +25,7 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 blank=True,
                 default="",
+                db_default="",
                 help_text="Immutable rendered subject passed to Amazon SES.",
                 max_length=255,
             ),

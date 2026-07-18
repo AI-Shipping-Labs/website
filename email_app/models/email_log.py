@@ -66,6 +66,7 @@ class EmailLog(models.Model):
         max_length=255,
         blank=True,
         default='',
+        db_default='',
         help_text='Immutable rendered subject passed to Amazon SES.',
     )
     ses_message_id = models.CharField(

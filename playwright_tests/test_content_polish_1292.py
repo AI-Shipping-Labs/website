@@ -208,6 +208,45 @@ def test_share_and_revoke_workshop_draft(django_server, browser):
     _shot(page, "workshop-published-desktop-light.png")
 
 
+def test_create_missing_workshop_preview_without_revocation_warning(
+    django_server, browser,
+):
+    from content.models import Workshop
+
+    _clear_content_polish_data()
+    workshop = Workshop.objects.create(
+        slug="create-preview-1298", title="Create Preview 1298",
+        description="Legacy draft without a preview token",
+        date=timezone.localdate() + timedelta(days=30), status="draft",
+    )
+    Workshop.objects.filter(pk=workshop.pk).update(preview_token=None)
+    connection.close()
+
+    page = _staff_page(browser)
+    page.goto(
+        f"{django_server}/studio/workshops/{workshop.pk}/",
+        wait_until="domcontentloaded",
+    )
+    create = page.get_by_test_id("workshop-preview-create")
+    expect(create).to_have_text("Create preview link")
+    expect(page.get_by_test_id("workshop-preview-regenerate")).to_have_count(0)
+    expect(page.get_by_text("The old URL will stop working", exact=False)).to_have_count(0)
+    consent = page.get_by_role("button", name="Keep analytics off")
+    if consent.is_visible():
+        consent.click()
+        expect(consent).not_to_be_visible()
+    _shot(page, "workshop-preview-create-desktop-light.png")
+
+    dialogs = []
+    page.on("dialog", lambda dialog: dialogs.append(dialog.message))
+    create.click()
+    page.wait_for_load_state("domcontentloaded")
+    assert dialogs == []
+    expect(page.get_by_text("Workshop preview link created.", exact=True)).to_be_visible()
+    expect(page.get_by_test_id("workshop-preview-url")).to_be_visible()
+    expect(page.get_by_test_id("workshop-preview-regenerate")).to_be_visible()
+
+
 def test_workshop_preview_preserves_gates(django_server, browser):
     from content.models import Workshop, WorkshopPage
     from events.models import Event

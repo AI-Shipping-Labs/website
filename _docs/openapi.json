@@ -864,7 +864,7 @@
     },
     "/api/contacts/import": {
       "post": {
-        "description": "Per-row tags are MERGED into the user's existing tags (idempotent append, not replace). Per-row ``tier`` is accepted only when live Stripe confirms the active subscription maps to the same tier; otherwise the row is warned. Tier overrides are intentionally not available through this endpoint.",
+        "description": "Per-row tags are MERGED into the user's existing tags (idempotent append, not replace). Per-row ``tier`` is accepted only when live Stripe confirms the active subscription maps to the same tier; otherwise the row is warned. Tier overrides are intentionally not available through this endpoint. Set ``dry_run`` to true to classify created, updated, duplicate, and malformed rows without database writes or provider/notification side effects.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -877,7 +877,8 @@
                     ]
                   }
                 ],
-                "default_tag": "imported-2026-05"
+                "default_tag": "imported-2026-05",
+                "dry_run": true
               },
               "schema": {
                 "properties": {
@@ -892,6 +893,11 @@
                   },
                   "default_tier": {
                     "type": "string"
+                  },
+                  "dry_run": {
+                    "default": false,
+                    "description": "When true, return classification counts and warnings without applying any contact changes.",
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -909,6 +915,7 @@
               "application/json": {
                 "example": {
                   "created": 1,
+                  "dry_run": true,
                   "malformed": 0,
                   "skipped": 0,
                   "updated": 0,
@@ -927,7 +934,7 @@
                 }
               }
             },
-            "description": "Malformed body or unknown default tier."
+            "description": "Malformed body, non-boolean dry_run, or unknown default tier."
           }
         },
         "summary": "Bulk upsert contacts",

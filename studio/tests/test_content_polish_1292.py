@@ -251,13 +251,45 @@ class ContentPolishStudioTest(TestCase):
         detail = reverse("studio_workshop_detail", args=[self.workshop.pk])
         response = self.client.get(detail)
         self.assertContains(response, self.workshop.get_preview_url())
+        self.assertContains(response, 'data-testid="workshop-preview-regenerate"')
+        self.assertContains(response, "The old URL will stop working")
         old_token = self.workshop.preview_token
         response = self.client.post(
-            reverse("studio_workshop_regenerate_preview_token", args=[self.workshop.pk])
+            reverse("studio_workshop_regenerate_preview_token", args=[self.workshop.pk]),
+            follow=True,
         )
-        self.assertRedirects(response, detail, fetch_redirect_response=False)
+        self.assertRedirects(response, detail)
+        self.assertContains(response, "Workshop preview link regenerated.")
         self.workshop.refresh_from_db()
         self.assertNotEqual(self.workshop.preview_token, old_token)
+
+    def test_legacy_null_workshop_requires_token_before_preview_share(self):
+        Workshop.objects.filter(pk=self.workshop.pk).update(preview_token=None)
+        self.workshop.refresh_from_db()
+        detail = reverse("studio_workshop_detail", args=[self.workshop.pk])
+
+        response = self.client.get(detail)
+        self.assertContains(response, 'data-testid="workshop-preview-unavailable"')
+        self.assertContains(response, 'data-testid="workshop-preview-create"')
+        self.assertContains(response, "Create preview link")
+        self.assertNotContains(response, "The old URL will stop working")
+        self.assertNotContains(response, "Regenerating revokes")
+        self.assertNotContains(response, 'data-testid="workshop-preview-regenerate"')
+        self.assertNotContains(response, 'data-testid="workshop-preview-url"')
+        self.assertNotContains(response, 'data-testid="workshop-preview-open"')
+        self.assertNotContains(response, 'data-testid="preview-draft"')
+        self.assertNotContains(response, f'href="{detail}"')
+
+        regenerate = reverse(
+            "studio_workshop_regenerate_preview_token",
+            args=[self.workshop.pk],
+        )
+        response = self.client.post(regenerate, follow=True)
+        self.assertRedirects(response, detail)
+        self.assertContains(response, "Workshop preview link created.")
+        self.workshop.refresh_from_db()
+        self.assertIsNotNone(self.workshop.preview_token)
+        self.assertEqual(self.client.get(self.workshop.get_preview_url()).status_code, 200)
 
     def test_published_workshop_detail_uses_canonical_public_action_and_copy(self):
         self.workshop.status = "published"

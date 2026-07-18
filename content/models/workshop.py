@@ -235,6 +235,7 @@ class Workshop(
     )
     preview_token = models.UUIDField(
         default=uuid.uuid4,
+        null=True,
         unique=True,
         editable=False,
     )
@@ -304,6 +305,11 @@ class Workshop(
         return f'/workshops/{self.url_key}'
 
     def get_preview_url(self):
+        # R1 deliberately permits NULL while the production image overlaps
+        # this schema.  A legacy-created row is not previewable until the
+        # idempotent reconciliation assigns its private token.
+        if self.preview_token is None:
+            return ''
         return reverse(
             'workshop_preview',
             kwargs={'preview_token': self.preview_token},

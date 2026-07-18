@@ -26,6 +26,14 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name="workshop",
             name="preview_token",
-            field=models.UUIDField(default=uuid.uuid4, unique=True, editable=False),
+            # Keep the physical column nullable throughout R1.  The deployed
+            # dc075646 image omits this column, and PostgreSQL's nullable
+            # unique semantics let every overlapping legacy insert succeed.
+            field=models.UUIDField(
+                default=uuid.uuid4,
+                null=True,
+                unique=True,
+                editable=False,
+            ),
         ),
     ]

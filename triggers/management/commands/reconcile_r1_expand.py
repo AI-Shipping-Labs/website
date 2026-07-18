@@ -4,6 +4,8 @@ import uuid
 
 from django.core.management.base import BaseCommand
 
+from content.models import Workshop
+from email_app.models import EmailLog
 from events.models import Event
 from integrations.models import MavenEnrollmentEvent
 from integrations.services.maven import _identity
@@ -15,7 +17,14 @@ from triggers.secrets import decrypt_secret
 def reconcile_r1_expand():
     """Repair compatibility sentinels idempotently before worker handoff."""
 
-    counts = {"subscriptions": 0, "events": 0, "emissions": 0, "maven": 0}
+    counts = {
+        "subscriptions": 0,
+        "events": 0,
+        "emissions": 0,
+        "maven": 0,
+        "workshops": 0,
+        "email_logs": 0,
+    }
 
     for subscription in TriggerSubscription.objects.all().iterator():
         legacy = subscription.legacy_secret or ""
@@ -70,6 +79,21 @@ def reconcile_r1_expand():
         row.identity_hash = _identity(row.email, row.course_key, row.cohort_key)
         row.save(update_fields=["course_key", "cohort_key", "identity_hash", "updated_at"])
         counts["maven"] += 1
+
+    # Exact production R1 does not know these columns.  NULL/empty sentinels
+    # keep its writes valid during overlap and are repaired before the new
+    # worker consumes them.  Only authoritative campaign subjects are
+    # derivable; transactional/event empty sentinels remain explicitly empty.
+    for workshop in Workshop.objects.filter(preview_token__isnull=True).iterator():
+        workshop.preview_token = uuid.uuid4()
+        workshop.save(update_fields=["preview_token"])
+        counts["workshops"] += 1
+
+    for log in EmailLog.objects.select_related("campaign").filter(subject="").iterator():
+        if log.campaign_id and log.campaign.subject:
+            log.subject = log.campaign.subject
+            log.save(update_fields=["subject"])
+            counts["email_logs"] += 1
 
     return counts
 

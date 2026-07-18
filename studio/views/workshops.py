@@ -147,13 +147,16 @@ def workshop_detail(request, workshop_id):
         for item in workshop.resolved_materials
     ]
 
+    preview_path = workshop.get_preview_url()
     return render(request, 'studio/workshops/detail.html', {
         'workshop': workshop,
         'pages_with_urls': pages_with_urls,
         'github_edit_url': get_github_edit_url(workshop),
         'resolved_materials': resolved_materials,
         'materials_source': source,
-        'preview_url': request.build_absolute_uri(workshop.get_preview_url()),
+        'preview_url': (
+            request.build_absolute_uri(preview_path) if preview_path else ''
+        ),
         'public_url': request.build_absolute_uri(workshop.get_absolute_url()),
     })
 
@@ -161,10 +164,12 @@ def workshop_detail(request, workshop_id):
 @staff_required
 @require_POST
 def workshop_regenerate_preview_token(request, workshop_id):
-    """Rotate a workshop bearer preview link and invalidate the old one."""
+    """Create or rotate a workshop bearer preview link."""
     workshop = get_object_or_404(Workshop, pk=workshop_id)
+    had_preview_token = workshop.preview_token is not None
     workshop.regenerate_preview_token()
-    messages.success(request, 'Workshop preview link regenerated.')
+    action = 'regenerated' if had_preview_token else 'created'
+    messages.success(request, f'Workshop preview link {action}.')
     return redirect('studio_workshop_detail', workshop_id=workshop.pk)
 
 

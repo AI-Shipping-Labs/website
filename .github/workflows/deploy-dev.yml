@@ -406,6 +406,7 @@ jobs:
       AWS_REGION: eu-west-1
       REPO_ROOT: 387546586013.dkr.ecr.eu-west-1.amazonaws.com
       REPO_URI: 387546586013.dkr.ecr.eu-west-1.amazonaws.com/ai-shipping-labs
+      R1_PRODUCTION_TAG: 20260716-162837-dc07564
       # Issue #1140 stopgap for the cold-start ELB health race. These
       # intentionally align deploy/deploy_dev.sh's post-waiter /ping recovery
       # with the follow-up wake-dev-ecs verification: a HARD monotonic 1500s
@@ -458,6 +459,12 @@ jobs:
         run: |
           docker tag ai-shipping-labs:${{ env.TAG }} ${{ env.REPO_URI }}:${{ env.TAG }}
           docker push ${{ env.REPO_URI }}:${{ env.TAG }}
+
+      - name: Rehearse exact R1 image rollback and forward recovery
+        run: |
+          bash deploy/verify_r1_image_rollback_recovery.sh \
+            "${REPO_URI}:${TAG}" \
+            "${REPO_URI}:${R1_PRODUCTION_TAG}"
 
       - name: Deploy to Dev
         run: bash deploy/deploy_dev.sh ${{ env.TAG }}

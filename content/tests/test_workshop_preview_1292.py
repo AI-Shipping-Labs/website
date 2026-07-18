@@ -27,6 +27,11 @@ class WorkshopPreviewTest(TestCase):
         self.workshop.regenerate_preview_token()
         self.assertNotEqual(self.workshop.preview_token, token)
 
+    def test_legacy_null_token_never_builds_a_preview_url(self):
+        Workshop.objects.filter(pk=self.workshop.pk).update(preview_token=None)
+        self.workshop.refresh_from_db()
+        self.assertEqual(self.workshop.get_preview_url(), "")
+
     def test_draft_requires_token_and_preview_is_noindex(self):
         self.assertEqual(self.client.get(self.workshop.get_absolute_url()).status_code, 404)
         response = self.client.get(self.workshop.get_preview_url())

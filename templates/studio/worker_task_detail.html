@@ -68,6 +68,10 @@
         <p class="text-xs text-muted-foreground uppercase">Attempt</p>
         <p class="text-foreground">{{ task.attempt_count }}</p>
       </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">Affected entity</p>
+        {% if affected_entity.state == 'available' %}<a href="{{ affected_entity.studio_url }}" class="inline-flex min-h-11 items-center text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" title="{{ affected_entity.label }}">{{ affected_entity.label }}</a>{% elif affected_entity.state == 'missing' %}<p class="text-foreground">{{ affected_entity.label }}</p>{% else %}<p class="text-muted-foreground" title="No recognized affected entity"><span class="sr-only">No recognized affected entity</span>—</p>{% endif %}
+      </div>
     </div>
     <div class="p-4">
       <p class="text-xs text-muted-foreground uppercase mb-1">Function</p>

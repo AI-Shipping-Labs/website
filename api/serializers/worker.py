@@ -71,10 +71,7 @@ def _looks_like_traceback(text):
     """
     if not isinstance(text, str):
         return False
-    return (
-        text.startswith("Traceback")
-        or "\nTraceback (most recent call last):" in text
-    )
+    return text.startswith("Traceback") or "\nTraceback (most recent call last):" in text
 
 
 def extract_error_summary(error_message):
@@ -102,9 +99,7 @@ def extract_error_summary(error_message):
     if not error_message:
         return NO_ERROR_DETAILS_PLACEHOLDER
 
-    nonblank_lines = [
-        line.strip() for line in error_message.splitlines() if line.strip()
-    ]
+    nonblank_lines = [line.strip() for line in error_message.splitlines() if line.strip()]
     if not nonblank_lines:
         return NO_ERROR_DETAILS_PLACEHOLDER
 
@@ -125,7 +120,7 @@ def _duration_seconds(task):
     return (task.stopped - task.started).total_seconds()
 
 
-def serialize_task_row(task):
+def serialize_task_row(task, *, affected_entity=None):
     """Compact row dict used by the list endpoints (failed + generic).
 
     Mirrors the columns the Studio failed-tasks table renders, plus the
@@ -147,10 +142,11 @@ def serialize_task_row(task):
         "duration_seconds": _duration_seconds(task),
         "success": task.success,
         "error_summary": error_summary,
+        "affected_entity": affected_entity,
     }
 
 
-def serialize_task_detail(task):
+def serialize_task_detail(task, *, affected_entity=None):
     """Full detail dict for ``GET /api/worker/tasks/<task_id>``.
 
     Returns every column the Studio detail page renders (args/kwargs as
@@ -195,4 +191,5 @@ def serialize_task_detail(task):
         "error": error,
         "traceback": traceback_text,
         "is_traceback": is_traceback,
+        "affected_entity": affected_entity,
     }

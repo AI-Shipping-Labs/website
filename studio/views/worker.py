@@ -35,16 +35,28 @@ and redirect.
 
 import logging
 import pprint
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django_q.models import OrmQ, Task
 from django_q.tasks import async_task
 
 from api.serializers.worker import extract_error_summary
+from jobs.task_entities import (
+    resolve_task_affected_entity,
+    resolve_tasks_affected_entities,
+)
+from jobs.task_history import (
+    VALID_TASK_STATUSES,
+    filter_task_history,
+    is_valid_operator_date,
+    parse_operator_date_range,
+)
 from jobs.tasks.names import (
     build_task_name,
     constrain_task_name,
@@ -58,7 +70,7 @@ logger = logging.getLogger(__name__)
 
 # Flash shown when the operator clicks a pending row that has already been
 # drained AND no completed Task row exists either (e.g. queue was wiped).
-STALE_QUEUED_INFO = 'Task already finished or removed from the queue.'
+STALE_QUEUED_INFO = "Task already finished or removed from the queue."
 
 
 def _safe_task_field(ormq, attr, default=None):
@@ -73,7 +85,7 @@ def _safe_task_field(ormq, attr, default=None):
         value = getattr(ormq, attr)
         return value() if callable(value) else value
     except Exception:  # pragma: no cover - defensive
-        logger.exception('Failed to read OrmQ.%s for row id=%s', attr, ormq.pk)
+        logger.exception("Failed to read OrmQ.%s for row id=%s", attr, ormq.pk)
         return default
 
 
@@ -93,34 +105,34 @@ def _ormq_summary(ormq, now=None):
     * ``unlocked`` — ``lock IS NULL``: nothing has touched the row yet.
     """
     now = now or timezone.now()
-    lock_state = 'unlocked'
+    lock_state = "unlocked"
     lock_seconds = None
     if ormq.lock is not None:
         delta = (ormq.lock - now).total_seconds()
         if delta > 0:
-            lock_state = 'future'
+            lock_state = "future"
             lock_seconds = delta
         else:
-            lock_state = 'expired'
+            lock_state = "expired"
             lock_seconds = -delta
-    name = _safe_task_field(ormq, 'name')
-    func = _safe_task_field(ormq, 'func')
+    name = _safe_task_field(ormq, "name")
+    func = _safe_task_field(ormq, "func")
     return {
-        'id': ormq.pk,
-        'key': ormq.key,
-        'task_id': _safe_task_field(ormq, 'task_id'),
-        'name': name,
+        "id": ormq.pk,
+        "key": ormq.key,
+        "task_id": _safe_task_field(ormq, "task_id"),
+        "name": name,
         # Display-layer fallback (issue #920): codename / empty names become
         # the dotted func path so the operator can still identify the task.
-        'display_name': humanize_task_name(name, func),
-        'func': func,
-        'group': _safe_task_field(ormq, 'group'),
-        'args': _safe_task_field(ormq, 'args'),
-        'kwargs': _safe_task_field(ormq, 'kwargs'),
-        'q_options': _safe_task_field(ormq, 'q_options'),
-        'lock': ormq.lock,
-        'lock_state': lock_state,
-        'lock_seconds': lock_seconds,
+        "display_name": humanize_task_name(name, func),
+        "func": func,
+        "group": _safe_task_field(ormq, "group"),
+        "args": _safe_task_field(ormq, "args"),
+        "kwargs": _safe_task_field(ormq, "kwargs"),
+        "q_options": _safe_task_field(ormq, "q_options"),
+        "lock": ormq.lock,
+        "lock_state": lock_state,
+        "lock_seconds": lock_seconds,
     }
 
 
@@ -130,20 +142,18 @@ def _build_pending_context(request):
     Extracted so the auto-refresh fragment endpoint can reuse it without
     re-running cluster-heartbeat / failed-task queries.
     """
-    queued = OrmQ.objects.all().order_by('pk')
+    queued = OrmQ.objects.all().order_by("pk")
     queue_depth = queued.count()
     pager = studio_pagination_context(
         request,
         queued,
-        page_param='pending_page',
+        page_param="pending_page",
     )
     now = timezone.now()
-    queued_summaries = [
-        _ormq_summary(q, now=now) for q in pager['page'].object_list
-    ]
+    queued_summaries = [_ormq_summary(q, now=now) for q in pager["page"].object_list]
     return {
-        'queue_depth': queue_depth,
-        'queued_tasks': queued_summaries,
+        "queue_depth": queue_depth,
+        "queued_tasks": queued_summaries,
         **pager,
     }
 
@@ -158,21 +168,57 @@ def worker_status(request):
     """
     pending = _build_pending_context(request)
 
-    if request.GET.get('fragment') == 'pending':
+    if request.GET.get("fragment") == "pending":
         # Auto-refresh endpoint: just the pending table, no chrome.
-        return render(request, 'studio/_worker_pending_tasks.html', pending)
+        return render(request, "studio/_worker_pending_tasks.html", pending)
 
     worker_info = get_worker_status()
 
-    # Recent tasks (last 50)
-    recent_tasks = Task.objects.order_by('-started')[:50]
+    q = (request.GET.get("q") or "").strip()
+    status_filter = request.GET.get("status", "all")
+    if status_filter not in VALID_TASK_STATUSES:
+        status_filter = "all"
+    date_from = request.GET.get("date_from", "")
+    date_to = request.GET.get("date_to", "")
+    date_from_invalid = bool(date_from) and not is_valid_operator_date(date_from)
+    date_to_invalid = bool(date_to) and not is_valid_operator_date(date_to)
+    start, end, date_error_field = parse_operator_date_range(date_from, date_to)
+    date_error = None
+    if date_error_field:
+        date_error = (
+            "From date must be on or before To date."
+            if not date_from_invalid and not date_to_invalid
+            else "Enter dates in YYYY-MM-DD format."
+        )
+        recent_queryset = Task.objects.none()
+    else:
+        recent_queryset = filter_task_history(
+            Task.objects.all(),
+            q=q,
+            status=status_filter,
+            start=start,
+            end=end,
+        ).order_by("-started", "-id")
+    task_pager = studio_pagination_context(
+        request,
+        recent_queryset,
+        per_page=50,
+        page_param="task_page",
+    )
+    recent_tasks = list(task_pager["page"].object_list)
 
     # Success/failure counts
     success_count = Task.objects.filter(success=True).count()
     failure_count = Task.objects.filter(success=False).count()
 
     # Failed tasks with error details (last 20)
-    failed_tasks = Task.objects.filter(success=False).order_by('-started')[:20]
+    failed_tasks = list(Task.objects.filter(success=False).order_by("-started", "-id")[:20])
+
+    # Resolve both completed surfaces in one bounded batch. A failed task can
+    # appear in Recent and the recovery panel; combining the slices avoids a
+    # duplicate model lookup for that overlap while still inspecting at most
+    # the 50 displayed history rows plus the existing 20 failed rows.
+    visible_entities = resolve_tasks_affected_entities([*recent_tasks, *failed_tasks])
 
     # Compute duration for recent tasks
     tasks_with_duration = []
@@ -183,41 +229,82 @@ def worker_status(request):
         error_message = None
         if not task.success and task.result is not None:
             error_message = str(task.result)
-        tasks_with_duration.append({
-            'task': task,
-            'duration': duration,
-            'error_message': error_message,
-            'display_name': humanize_task_name(task.name, task.func),
-        })
+        tasks_with_duration.append(
+            {
+                "task": task,
+                "duration": duration,
+                "error_message": error_message,
+                "display_name": humanize_task_name(task.name, task.func),
+                "affected_entity": visible_entities.get(task.id),
+            }
+        )
 
     failed_with_details = []
     for task in failed_tasks:
-        error_message = str(task.result) if task.result is not None else 'No error details'
+        error_message = str(task.result) if task.result is not None else "No error details"
         # ``extract_error_summary`` lives in ``api/serializers/worker.py`` so the
         # JSON API (issue #714) and this HTML view share one definition of the
         # collapsed-row heuristic. See that module for the full rationale.
         summary_line = extract_error_summary(error_message)
-        failed_with_details.append({
-            'task': task,
-            'error_message': error_message,
-            'error_summary': summary_line,
-            'display_name': humanize_task_name(task.name, task.func),
-        })
+        failed_with_details.append(
+            {
+                "task": task,
+                "error_message": error_message,
+                "error_summary": summary_line,
+                "display_name": humanize_task_name(task.name, task.func),
+                "affected_entity": visible_entities.get(task.id),
+            }
+        )
 
-    return render(request, 'studio/worker.html', {
-        'worker_info': worker_info,
-        # Backwards-compatible aliases used by older template fragments / tests.
-        'worker_alive': worker_info['alive'],
-        'worker_idle': worker_info['idle'],
-        'last_heartbeat_age': worker_info['last_heartbeat_age'],
-        'cluster_count': worker_info['cluster_count'],
-        'queue_depth': pending['queue_depth'],
-        'queued_tasks': pending['queued_tasks'],
-        'success_count': success_count,
-        'failure_count': failure_count,
-        'tasks_with_duration': tasks_with_duration,
-        'failed_with_details': failed_with_details,
-    })
+    pending_page = request.GET.get("pending_page")
+    pending_fragment_query = {"fragment": "pending"}
+    if pending_page:
+        pending_fragment_query["pending_page"] = pending_page
+    clear_query = {"pending_page": pending_page} if pending_page else {}
+    clear_url = reverse("studio_worker")
+    if clear_query:
+        clear_url += "?" + urlencode(clear_query)
+
+    return render(
+        request,
+        "studio/worker.html",
+        {
+            "worker_info": worker_info,
+            # Backwards-compatible aliases used by older template fragments / tests.
+            "worker_alive": worker_info["alive"],
+            "worker_idle": worker_info["idle"],
+            "last_heartbeat_age": worker_info["last_heartbeat_age"],
+            "cluster_count": worker_info["cluster_count"],
+            "queue_depth": pending["queue_depth"],
+            "queued_tasks": pending["queued_tasks"],
+            # Pending keeps its existing independent pager context.
+            **{key: value for key, value in pending.items() if key not in {"queue_depth", "queued_tasks"}},
+            "success_count": success_count,
+            "failure_count": failure_count,
+            "tasks_with_duration": tasks_with_duration,
+            "failed_with_details": failed_with_details,
+            "task_page": task_pager["page"],
+            "task_paginator": task_pager["paginator"],
+            "task_show_pager": task_pager["show_pager"],
+            "task_pager_first_url": task_pager["pager_first_url"],
+            "task_pager_prev_url": task_pager["pager_prev_url"],
+            "task_pager_next_url": task_pager["pager_next_url"],
+            "task_pager_last_url": task_pager["pager_last_url"],
+            "task_page_start_index": task_pager["page_start_index"],
+            "task_page_end_index": task_pager["page_end_index"],
+            "task_filtered_total": task_pager["filtered_total"],
+            "task_q": q,
+            "task_status": status_filter,
+            "task_date_from": date_from,
+            "task_date_to": date_to,
+            "task_date_from_invalid": date_from_invalid,
+            "task_date_to_invalid": date_to_invalid,
+            "task_date_error": date_error,
+            "task_filters_active": bool(q or status_filter != "all" or date_from or date_to),
+            "task_clear_url": clear_url,
+            "pending_fragment_url": (reverse("studio_worker") + "?" + urlencode(pending_fragment_query)),
+        },
+    )
 
 
 def _stale_ormq_redirect(request, task_id):
@@ -233,9 +320,9 @@ def _stale_ormq_redirect(request, task_id):
     if task_id:
         completed = Task.objects.filter(id=task_id).first()
         if completed is not None:
-            return redirect('studio_worker_task_detail', task_id=task_id)
+            return redirect("studio_worker_task_detail", task_id=task_id)
     messages.info(request, STALE_QUEUED_INFO)
-    return redirect('studio_worker')
+    return redirect("studio_worker")
 
 
 @staff_required
@@ -250,11 +337,15 @@ def worker_inspect_task(request, ormq_id):
     try:
         ormq = OrmQ.objects.get(pk=ormq_id)
     except OrmQ.DoesNotExist:
-        return _stale_ormq_redirect(request, request.GET.get('task_id'))
+        return _stale_ormq_redirect(request, request.GET.get("task_id"))
     summary = _ormq_summary(ormq)
-    return render(request, 'studio/worker_inspect.html', {
-        'task': summary,
-    })
+    return render(
+        request,
+        "studio/worker_inspect.html",
+        {
+            "task": summary,
+        },
+    )
 
 
 @staff_required
@@ -269,12 +360,11 @@ def worker_drain_queue(request):
     if deleted:
         messages.success(
             request,
-            f'Drained queue: deleted {deleted} pending task'
-            f'{"" if deleted == 1 else "s"}.',
+            f"Drained queue: deleted {deleted} pending task{'' if deleted == 1 else 's'}.",
         )
     else:
-        messages.info(request, 'Queue is already empty.')
-    return redirect('studio_worker')
+        messages.info(request, "Queue is already empty.")
+    return redirect("studio_worker")
 
 
 @staff_required
@@ -289,11 +379,11 @@ def worker_delete_queued(request, ormq_id):
     try:
         ormq = OrmQ.objects.get(pk=ormq_id)
     except OrmQ.DoesNotExist:
-        return _stale_ormq_redirect(request, request.POST.get('task_id'))
-    name = _safe_task_field(ormq, 'name') or f'#{ormq.pk}'
+        return _stale_ormq_redirect(request, request.POST.get("task_id"))
+    name = _safe_task_field(ormq, "name") or f"#{ormq.pk}"
     ormq.delete()
-    messages.success(request, f'Deleted queued task: {name}.')
-    return redirect('studio_worker')
+    messages.success(request, f"Deleted queued task: {name}.")
+    return redirect("studio_worker")
 
 
 def _format_task_value(value):
@@ -304,7 +394,7 @@ def _format_task_value(value):
     legible.
     """
     if value is None:
-        return ''
+        return ""
     if isinstance(value, str):
         return value
     try:
@@ -322,10 +412,7 @@ def _looks_like_traceback(text):
     """
     if not isinstance(text, str):
         return False
-    return (
-        text.startswith('Traceback')
-        or '\nTraceback (most recent call last):' in text
-    )
+    return text.startswith("Traceback") or "\nTraceback (most recent call last):" in text
 
 
 @staff_required
@@ -341,15 +428,20 @@ def worker_task_detail(request, task_id):
     if task.started and task.stopped:
         duration = (task.stopped - task.started).total_seconds()
     result_text = _format_task_value(task.result)
-    return render(request, 'studio/worker_task_detail.html', {
-        'task': task,
-        'display_name': humanize_task_name(task.name, task.func),
-        'duration_seconds': duration,
-        'args_text': _format_task_value(task.args),
-        'kwargs_text': _format_task_value(task.kwargs),
-        'result_text': result_text,
-        'result_is_traceback': (not task.success) and _looks_like_traceback(result_text),
-    })
+    return render(
+        request,
+        "studio/worker_task_detail.html",
+        {
+            "task": task,
+            "display_name": humanize_task_name(task.name, task.func),
+            "duration_seconds": duration,
+            "args_text": _format_task_value(task.args),
+            "kwargs_text": _format_task_value(task.kwargs),
+            "result_text": result_text,
+            "result_is_traceback": (not task.success) and _looks_like_traceback(result_text),
+            "affected_entity": resolve_task_affected_entity(task),
+        },
+    )
 
 
 def _resubmit_failed(task):
@@ -360,9 +452,9 @@ def _resubmit_failed(task):
     it doesn't keep reappearing in the failed list.
     """
     retry_name = task.name or build_task_name(
-        'Retry failed task',
+        "Retry failed task",
         task.func,
-        'Studio worker recovery',
+        "Studio worker recovery",
     )
     async_task(
         task.func,
@@ -382,16 +474,16 @@ def worker_retry_failed(request, task_id):
     """Re-enqueue a single failed task and delete the failure row."""
     task = Task.objects.filter(pk=task_id, success=False).first()
     if task is None:
-        raise Http404('Failed task not found')
+        raise Http404("Failed task not found")
     name = task.name or task_id
     try:
         _resubmit_failed(task)
     except Exception as exc:
-        logger.exception('Retry failed for task %s', task_id)
-        messages.error(request, f'Could not retry {name}: {exc}')
-        return redirect('studio_worker')
-    messages.success(request, f'Re-queued failed task: {name}.')
-    return redirect('studio_worker')
+        logger.exception("Retry failed for task %s", task_id)
+        messages.error(request, f"Could not retry {name}: {exc}")
+        return redirect("studio_worker")
+    messages.success(request, f"Re-queued failed task: {name}.")
+    return redirect("studio_worker")
 
 
 @staff_required
@@ -400,11 +492,11 @@ def worker_delete_failed(request, task_id):
     """Delete a single failed task row."""
     task = Task.objects.filter(pk=task_id, success=False).first()
     if task is None:
-        raise Http404('Failed task not found')
+        raise Http404("Failed task not found")
     name = task.name or task_id
     task.delete()
-    messages.success(request, f'Deleted failed task: {name}.')
-    return redirect('studio_worker')
+    messages.success(request, f"Deleted failed task: {name}.")
+    return redirect("studio_worker")
 
 
 @staff_required
@@ -413,8 +505,8 @@ def worker_bulk_retry_failed(request):
     """Re-enqueue every failed task and delete the corresponding failure rows."""
     failed = list(Task.objects.filter(success=False))
     if not failed:
-        messages.info(request, 'No failed tasks to retry.')
-        return redirect('studio_worker')
+        messages.info(request, "No failed tasks to retry.")
+        return redirect("studio_worker")
     requeued = 0
     errors = 0
     for task in failed:
@@ -422,21 +514,19 @@ def worker_bulk_retry_failed(request):
             _resubmit_failed(task)
             requeued += 1
         except Exception:
-            logger.exception('Bulk retry failed for task %s', task.pk)
+            logger.exception("Bulk retry failed for task %s", task.pk)
             errors += 1
     if errors:
         messages.warning(
             request,
-            f'Re-queued {requeued} failed task'
-            f'{"" if requeued == 1 else "s"}; {errors} could not be re-queued.',
+            f"Re-queued {requeued} failed task{'' if requeued == 1 else 's'}; {errors} could not be re-queued.",
         )
     else:
         messages.success(
             request,
-            f'Re-queued {requeued} failed task'
-            f'{"" if requeued == 1 else "s"}.',
+            f"Re-queued {requeued} failed task{'' if requeued == 1 else 's'}.",
         )
-    return redirect('studio_worker')
+    return redirect("studio_worker")
 
 
 @staff_required
@@ -447,12 +537,11 @@ def worker_bulk_delete_failed(request):
     if deleted:
         messages.success(
             request,
-            f'Deleted {deleted} failed task'
-            f'{"" if deleted == 1 else "s"}.',
+            f"Deleted {deleted} failed task{'' if deleted == 1 else 's'}.",
         )
     else:
-        messages.info(request, 'No failed tasks to delete.')
-    return redirect('studio_worker')
+        messages.info(request, "No failed tasks to delete.")
+    return redirect("studio_worker")
 
 
 @staff_required
@@ -466,15 +555,15 @@ def worker_test_smoke(request):
     flash so the operator can spot it in Recent Tasks.
     """
     task_id = async_task(
-        'jobs.tasks.test_worker_smoke.run',
+        "jobs.tasks.test_worker_smoke.run",
         task_name=build_task_name(
-            'Test worker smoke',
-            'queue dispatch',
-            'Studio worker page',
+            "Test worker smoke",
+            "queue dispatch",
+            "Studio worker page",
         ),
     )
     messages.success(
         request,
-        f'Test task queued (id={task_id}). Check Recent tasks for the result.',
+        f"Test task queued (id={task_id}). Check Recent tasks for the result.",
     )
-    return redirect('studio_worker')
+    return redirect("studio_worker")

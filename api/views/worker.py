@@ -38,16 +38,123 @@ from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.worker import serialize_task_detail, serialize_task_row
 from api.utils import require_methods
+from jobs.task_entities import (
+    resolve_task_affected_entity,
+    resolve_tasks_affected_entities,
+)
+from jobs.task_history import filter_task_history, parse_operator_date_range
+
+_AFFECTED_ENTITY_SCHEMA = {
+    "description": (
+        "Privacy-safe current Studio entity resolved from an allow-listed task "
+        "signature. Null means the task signature is unsupported or malformed."
+    ),
+    "oneOf": [
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["kind", "id", "label", "state", "studio_url"],
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": [
+                        "article",
+                        "course",
+                        "project",
+                        "download",
+                        "workshop",
+                        "event",
+                        "event_series",
+                        "campaign",
+                        "content_source",
+                    ],
+                },
+                "id": {
+                    "description": "Integer model id, or UUID string for a content source.",
+                    "oneOf": [
+                        {"type": "integer", "minimum": 1},
+                        {"type": "string", "format": "uuid"},
+                    ],
+                },
+                "label": {"type": "string"},
+                "state": {"type": "string", "enum": ["available", "missing"]},
+                "studio_url": {
+                    "description": "Canonical Studio destination; null when state is missing.",
+                    "oneOf": [{"type": "string"}, {"type": "null"}],
+                },
+            },
+        },
+        {"type": "null"},
+    ],
+}
+
+_AVAILABLE_AFFECTED_ENTITY_EXAMPLE = {
+    "kind": "article",
+    "id": 42,
+    "label": "Article #42 — Agent operations",
+    "state": "available",
+    "studio_url": "/studio/articles/42/edit",
+}
+
+_MISSING_AFFECTED_ENTITY_EXAMPLE = {
+    "kind": "content_source",
+    "id": "d34db33f-18a4-4af3-b93d-9d2d7a125012",
+    "label": "Content source d34db33f-18a4-4af3-b93d-9d2d7a125012 (not found)",
+    "state": "missing",
+    "studio_url": None,
+}
 
 _WORKER_TASK_EXAMPLE = {
-    "id": "ab12cd34ef56",
+    "task_id": "ab12cd34ef56",
     "name": "complete-finished-events",
     "group": "scheduled",
-    "func": "events.tasks.complete_finished_events.complete_finished_events",
-    "started": "2026-05-20T04:00:00+00:00",
-    "stopped": "2026-05-20T04:00:02+00:00",
+    "function": "integrations.services.banner_generator.tasks.render_banner_for_content",
+    "started_at": "2026-05-20T04:00:00+00:00",
+    "stopped_at": "2026-05-20T04:00:02+00:00",
+    "duration_seconds": 2.0,
     "success": True,
-    "result": None,
+    "error_summary": None,
+    "affected_entity": _AVAILABLE_AFFECTED_ENTITY_EXAMPLE,
+}
+
+_WORKER_TASK_MISSING_EXAMPLE = dict(
+    _WORKER_TASK_EXAMPLE,
+    task_id="ef78ab90cd12",
+    name="content-sync-source",
+    function="integrations.services.github.sync_content_source",
+    success=False,
+    error_summary="Lookup failed",
+    affected_entity=_MISSING_AFFECTED_ENTITY_EXAMPLE,
+)
+
+_WORKER_TASK_RESPONSE_SCHEMA = {
+    "type": "object",
+    "required": ["affected_entity"],
+    "properties": {"affected_entity": _AFFECTED_ENTITY_SCHEMA},
+    "additionalProperties": True,
+}
+
+_WORKER_TASK_COLLECTION_SCHEMA = {
+    "type": "object",
+    "required": ["tasks", "count", "limit"],
+    "properties": {
+        "tasks": {
+            "type": "array",
+            "items": _WORKER_TASK_RESPONSE_SCHEMA,
+        },
+        "count": {"type": "integer", "minimum": 0},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+    },
+}
+
+_WORKER_TASK_PAGED_COLLECTION_SCHEMA = {
+    **_WORKER_TASK_COLLECTION_SCHEMA,
+    "required": ["tasks", "count", "limit", "total_count", "offset"],
+    "properties": {
+        **_WORKER_TASK_COLLECTION_SCHEMA["properties"],
+        "total_count": {"type": "integer", "minimum": 0},
+        "offset": {"type": "integer", "minimum": 0},
+    },
 }
 
 # Caps. ``LIMIT_MAX`` is the absolute ceiling on rows the API will
@@ -115,6 +222,41 @@ def _parse_limit(raw, default):
     return min(value, LIMIT_MAX), None
 
 
+def _parse_offset(raw):
+    if raw is None or raw == "":
+        return 0, None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = -1
+    if value < 0:
+        return None, error_response(
+            "offset must be a non-negative integer",
+            "validation_error",
+            status=422,
+            details={"field": "offset", "value": raw},
+        )
+    return value, None
+
+
+def _parse_api_dates(request):
+    raw_from = request.GET.get("date_from", "")
+    raw_to = request.GET.get("date_to", "")
+    start, end, field = parse_operator_date_range(raw_from, raw_to)
+    if field:
+        return (
+            None,
+            None,
+            error_response(
+                "Invalid worker task date range",
+                "validation_error",
+                status=422,
+                details={"field": field, "value": request.GET.get(field)},
+            ),
+        )
+    return start, end, None
+
+
 @token_required
 @csrf_exempt
 @require_methods("GET")
@@ -133,6 +275,7 @@ def _parse_limit(raw, default):
                 200: {
                     "description": "Task detail.",
                     "example": _WORKER_TASK_EXAMPLE,
+                    "schema": _WORKER_TASK_RESPONSE_SCHEMA,
                 },
                 404: {
                     "description": "No task with this id.",
@@ -153,7 +296,12 @@ def worker_task_detail(request, task_id):
     task = Task.objects.filter(pk=task_id).first()
     if task is None:
         return JsonResponse({"error": "Task not found"}, status=404)
-    return JsonResponse(serialize_task_detail(task))
+    return JsonResponse(
+        serialize_task_detail(
+            task,
+            affected_entity=resolve_task_affected_entity(task),
+        )
+    )
 
 
 @token_required
@@ -166,36 +314,29 @@ def worker_task_detail(request, task_id):
         "GET": {
             "summary": "List failed worker tasks",
             "description": (
-                "Newest-first list of django-q tasks with "
-                "``success=False``. Use ``since`` to scope to a deploy."
+                "Newest-first list of django-q tasks with ``success=False``. Use ``since`` to scope to a deploy."
             ),
             "query": {
                 "limit": {
                     "type": "integer",
                     "required": False,
-                    "description": (
-                        "Page size. Default 20; clamped to 200."
-                    ),
+                    "description": ("Page size. Default 20; clamped to 200."),
                 },
                 "since": {
                     "type": "string",
                     "required": False,
-                    "description": (
-                        "ISO-8601 datetime; only tasks started at or "
-                        "after this are returned."
-                    ),
+                    "description": ("ISO-8601 datetime; only tasks started at or after this are returned."),
                 },
             },
             "responses": {
                 200: {
                     "description": "Failed-task page.",
                     "example": {
-                        "tasks": [
-                            dict(_WORKER_TASK_EXAMPLE, success=False),
-                        ],
+                        "tasks": [_WORKER_TASK_MISSING_EXAMPLE],
                         "count": 1,
                         "limit": 20,
                     },
+                    "schema": _WORKER_TASK_COLLECTION_SCHEMA,
                 },
                 422: {
                     "description": "Invalid ``limit`` or ``since``.",
@@ -226,14 +367,17 @@ def worker_tasks_failed(request):
     qs = Task.objects.filter(success=False)
     if since is not None:
         qs = qs.filter(started__gte=since)
-    qs = qs.order_by("-started")[:limit]
+    qs = list(qs.order_by("-started", "-id")[:limit])
 
-    tasks = [serialize_task_row(t) for t in qs]
-    return JsonResponse({
-        "tasks": tasks,
-        "count": len(tasks),
-        "limit": limit,
-    })
+    entities = resolve_tasks_affected_entities(qs)
+    tasks = [serialize_task_row(t, affected_entity=entities.get(t.id)) for t in qs]
+    return JsonResponse(
+        {
+            "tasks": tasks,
+            "count": len(tasks),
+            "limit": limit,
+        }
+    )
 
 
 @token_required
@@ -248,17 +392,15 @@ def worker_tasks_failed(request):
             "description": (
                 "Newest-first list of django-q tasks. Default returns "
                 "the most recent 50 across success and failed. "
-                "``status``, ``group``, ``since``, and ``limit`` narrow "
-                "the result."
+                "``status``, ``group``, ``since``, ``q``, operator-date "
+                "bounds, ``offset``, and ``limit`` compose to narrow the result."
             ),
             "query": {
                 "status": {
                     "type": "string",
                     "enum": ["success", "failed", "all"],
                     "required": False,
-                    "description": (
-                        "Bucket filter. Default ``all``."
-                    ),
+                    "description": ("Bucket filter. Default ``all``."),
                 },
                 "group": {
                     "type": "string",
@@ -268,31 +410,33 @@ def worker_tasks_failed(request):
                 "limit": {
                     "type": "integer",
                     "required": False,
-                    "description": (
-                        "Page size. Default 50; clamped to 200."
-                    ),
+                    "description": ("Page size. Default 50; clamped to 200."),
                 },
                 "since": {
                     "type": "string",
                     "required": False,
-                    "description": (
-                        "ISO-8601 datetime; only tasks started at or "
-                        "after this are returned."
-                    ),
+                    "description": ("ISO-8601 datetime; only tasks started at or after this are returned."),
                 },
+                "q": {"type": "string", "required": False, "description": "Name/function substring."},
+                "date_from": {"type": "string", "format": "date", "required": False},
+                "date_to": {"type": "string", "format": "date", "required": False},
+                "offset": {"type": "integer", "required": False, "description": "Zero-based row offset."},
             },
             "responses": {
                 200: {
                     "description": "Task page.",
                     "example": {
-                        "tasks": [_WORKER_TASK_EXAMPLE],
-                        "count": 1,
+                        "tasks": [_WORKER_TASK_EXAMPLE, _WORKER_TASK_MISSING_EXAMPLE],
+                        "count": 2,
                         "limit": 50,
+                        "total_count": 2,
+                        "offset": 0,
                     },
+                    "schema": _WORKER_TASK_PAGED_COLLECTION_SCHEMA,
                 },
                 422: {
                     "description": (
-                        "Invalid ``status``, ``limit``, or ``since``."
+                        "Invalid ``status``, dates, ``offset``, ``limit``, or ``since``."
                     ),
                     "example": {
                         "error": "Invalid status value: 'queued'",
@@ -313,8 +457,9 @@ def worker_tasks_collection(request):
 
     Default returns the most recent 50 tasks (success + failed)
     newest-first. ``status`` narrows to one bucket; ``group`` filters
-    on exact ``Task.group`` match; ``since`` and ``limit`` behave the
-    same as on ``/failed``.
+    on exact ``Task.group`` match. Search/operator-date filters apply
+    before ``offset``/``limit``; ``since`` and the existing cap remain
+    backward compatible.
     """
     status_value = request.GET.get("status", "all")
     if status_value not in VALID_STATUS_VALUES:
@@ -339,6 +484,13 @@ def worker_tasks_collection(request):
     if err is not None:
         return err
     group = request.GET.get("group") or None
+    offset, err = _parse_offset(request.GET.get("offset"))
+    if err is not None:
+        return err
+    start, end, err = _parse_api_dates(request)
+    if err is not None:
+        return err
+    q = (request.GET.get("q") or "").strip()
 
     qs = Task.objects.all()
     if status_value == "success":
@@ -349,11 +501,18 @@ def worker_tasks_collection(request):
         qs = qs.filter(group=group)
     if since is not None:
         qs = qs.filter(started__gte=since)
-    qs = qs.order_by("-started")[:limit]
+    qs = filter_task_history(qs, q=q, start=start, end=end)
+    total_count = qs.count()
+    qs = list(qs.order_by("-started", "-id")[offset : offset + limit])
 
-    tasks = [serialize_task_row(t) for t in qs]
-    return JsonResponse({
-        "tasks": tasks,
-        "count": len(tasks),
-        "limit": limit,
-    })
+    entities = resolve_tasks_affected_entities(qs)
+    tasks = [serialize_task_row(t, affected_entity=entities.get(t.id)) for t in qs]
+    return JsonResponse(
+        {
+            "tasks": tasks,
+            "count": len(tasks),
+            "limit": limit,
+            "total_count": total_count,
+            "offset": offset,
+        }
+    )

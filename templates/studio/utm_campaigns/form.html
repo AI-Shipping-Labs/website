@@ -24,21 +24,22 @@
     {% csrf_token %}
 
     <div class="mb-6">
-      <label class="block text-sm font-medium text-foreground mb-1">Name</label>
-      <input type="text" name="name" value="{{ form_data.name|default:'' }}" required
+      <label for="utm-campaign-name" class="block text-sm font-medium text-foreground mb-1">Name</label>
+      <input id="utm-campaign-name" type="text" name="name" value="{{ form_data.name|default:'' }}" required
              placeholder="Membership campaign — April 2026"
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
       <p class="text-xs text-muted-foreground mt-1">Human-readable name shown in Studio.</p>
     </div>
 
     <div class="mb-6">
-      <label class="block text-sm font-medium text-foreground mb-1">Slug</label>
+      <label for="utm-campaign-slug" class="block text-sm font-medium text-foreground mb-1">Slug</label>
       {% if slug_locked %}
-        <input type="text" value="{{ form_data.slug }}" readonly
+        <input id="utm-campaign-slug" type="text" value="{{ form_data.slug }}" readonly
                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-muted-foreground font-mono cursor-not-allowed">
         <p class="text-xs text-yellow-400 mt-1">Slug is locked because changing it would break attribution for existing links.</p>
       {% else %}
-        <input type="text" name="slug" value="{{ form_data.slug|default:'' }}" required
+        <input id="utm-campaign-slug" type="text" name="slug" value="{{ form_data.slug|default:'' }}" required
+               data-create-prefill="{% if form_action == 'create' %}true{% else %}false{% endif %}"
                pattern="[a-z0-9_]+"
                placeholder="ai_shipping_labs_launch_april2026"
                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground font-mono focus:outline-none focus:ring-1 focus:ring-accent">
@@ -48,8 +49,8 @@
 
     <div class="grid grid-cols-2 gap-4 mb-6">
       <div>
-        <label class="block text-sm font-medium text-foreground mb-1">Default <code>utm_source</code></label>
-        <input type="text" name="default_utm_source" value="{{ form_data.default_utm_source|default:'' }}" required
+        <label for="utm-campaign-default-source" class="block text-sm font-medium text-foreground mb-1">utm_source (required)</label>
+        <input id="utm-campaign-default-source" type="text" name="default_utm_source" value="{{ form_data.default_utm_source|default:'' }}" required
                list="utm-source-presets" autocomplete="off"
                placeholder="newsletter"
                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
@@ -85,4 +86,21 @@
     </div>
   </form>
 </div>
+{% if form_action == 'create' %}
+<script>
+(function() {
+  var name = document.getElementById('utm-campaign-name');
+  var slug = document.getElementById('utm-campaign-slug');
+  if (!name || !slug || slug.dataset.createPrefill !== 'true') return;
+  var operatorTouchedSlug = Boolean(slug.value);
+  slug.addEventListener('input', function() { operatorTouchedSlug = true; });
+  name.addEventListener('blur', function() {
+    if (operatorTouchedSlug || slug.value) return;
+    slug.value = name.value.toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

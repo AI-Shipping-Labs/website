@@ -50,6 +50,7 @@ from studio.views.campaigns import (
     campaign_list,
     campaign_recipient_count,
     campaign_recipients,
+    campaign_recount,
     campaign_send,
     campaign_test_send,
 )
@@ -65,6 +66,9 @@ from studio.views.courses import (
     course_access_revoke,
     course_create_stripe_product,
     course_edit,
+    course_instructor_add,
+    course_instructor_remove,
+    course_instructor_reorder,
     course_list,
     course_user_search,
     module_create,
@@ -330,6 +334,7 @@ from studio.views.workshops import (
     workshop_detail,
     workshop_edit,
     workshop_list,
+    workshop_regenerate_preview_token,
     workshop_resync,
 )
 
@@ -341,6 +346,9 @@ urlpatterns = [
     # Courses
     path('courses/', course_list, name='studio_course_list'),
     path('courses/<int:course_id>/edit', course_edit, name='studio_course_edit'),
+    path('courses/<int:course_id>/instructors/add', course_instructor_add, name='studio_course_instructor_add'),
+    path('courses/<int:course_id>/instructors/reorder', course_instructor_reorder, name='studio_course_instructor_reorder'),
+    path('courses/<int:course_id>/instructors/<int:association_id>/remove', course_instructor_remove, name='studio_course_instructor_remove'),
     path('courses/<int:course_id>/modules/add', module_create, name='studio_module_create'),
     path('courses/<int:course_id>/modules/reorder', module_reorder, name='studio_module_reorder'),
     path('modules/<int:module_id>/units/add', unit_create, name='studio_unit_create'),
@@ -589,6 +597,11 @@ urlpatterns = [
     path('workshops/', workshop_list, name='studio_workshop_list'),
     path('workshops/resync/', workshop_resync, name='studio_workshop_resync'),
     path('workshops/<int:workshop_id>/', workshop_detail, name='studio_workshop_detail'),
+    path(
+        'workshops/<int:workshop_id>/preview-token/regenerate',
+        workshop_regenerate_preview_token,
+        name='studio_workshop_regenerate_preview_token',
+    ),
     path('workshops/<int:workshop_id>/edit', workshop_edit, name='studio_workshop_edit'),
     path('workshops/<int:workshop_id>/notify', workshop_notify, name='studio_workshop_notify'),
     path('workshops/<int:workshop_id>/announce-slack', workshop_announce_slack, name='studio_workshop_announce_slack'),
@@ -622,6 +635,7 @@ urlpatterns = [
         campaign_recipient_count,
         name='studio_campaign_recipient_count',
     ),
+    path('campaigns/recount/', campaign_recount, name='studio_campaign_recount'),
     path('campaigns/<int:campaign_id>/', campaign_detail, name='studio_campaign_detail'),
     path(
         'campaigns/<int:campaign_id>/recipients/',

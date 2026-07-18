@@ -90,7 +90,7 @@ def utm_campaign_create(request):
 
     return render(request, 'studio/utm_campaigns/form.html', {
         'campaign': None,
-        'form_data': {},
+        'form_data': {'default_utm_source': 'newsletter'},
         'form_action': 'create',
     })
 

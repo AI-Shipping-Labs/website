@@ -5,13 +5,27 @@ import json
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.db.models import Q
-from django.http import HttpResponseForbidden, JsonResponse
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
-from content.models import Course, CourseAccess, Enrollment, Module, Unit
+from content.models import (
+    Course,
+    CourseAccess,
+    CourseInstructor,
+    Enrollment,
+    Instructor,
+    Module,
+    Unit,
+)
+from content.services.course_instructors import (
+    CourseInstructorError,
+    add_course_instructor,
+    remove_course_instructor,
+    reorder_course_instructors,
+)
 from studio.decorators import staff_required
 from studio.services.banner_panel import banner_panel_context
 from studio.utils import get_github_edit_url, is_synced, studio_pagination_context
@@ -94,6 +108,15 @@ def course_edit(request, course_id):
     active_enrollment_count = Enrollment.objects.filter(
         course=course, unenrolled_at__isnull=True,
     ).count()
+    course_instructor_rows = list(
+        CourseInstructor.objects.filter(course=course)
+        .select_related('instructor')
+        .order_by('position', 'pk')
+    )
+    attached_ids = [row.instructor_id for row in course_instructor_rows]
+    available_instructors = Instructor.objects.exclude(pk__in=attached_ids).order_by(
+        'name', 'instructor_id',
+    )
 
     return render(request, 'studio/courses/form.html', {
         'course': course,
@@ -106,6 +129,8 @@ def course_edit(request, course_id):
         'announce_url': reverse('studio_course_announce_slack', kwargs={'course_id': course.pk}),
         'access_count': access_count,
         'active_enrollment_count': active_enrollment_count,
+        'course_instructor_rows': course_instructor_rows,
+        'available_instructors': available_instructors,
         **notification_action_context('course', course),
         # Issues #788/#931: banner / social-image panel.
         **banner_panel_context(
@@ -117,6 +142,80 @@ def course_edit(request, course_id):
             url_kwarg='course_id',
         ),
     })
+
+
+def _course_instructors_redirect(course):
+    return redirect(
+        f"{reverse('studio_course_edit', kwargs={'course_id': course.pk})}#instructors"
+    )
+
+
+def _source_owned_response(course):
+    if course.source_repo:
+        return HttpResponse(
+            'Course instructors are owned by course.yaml. Edit them in GitHub.',
+            status=409,
+        )
+    return None
+
+
+@staff_required
+@require_POST
+def course_instructor_add(request, course_id):
+    course = get_object_or_404(Course, pk=course_id)
+    if response := _source_owned_response(course):
+        return response
+    instructor_id = request.POST.get('instructor_id', '').strip()
+    raw_position = request.POST.get('position', '').strip()
+    try:
+        position = int(raw_position)
+    except (TypeError, ValueError):
+        position = -1
+    try:
+        add_course_instructor(course, instructor_id, position)
+    except CourseInstructorError as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, 'Instructor added and order normalized.')
+    return _course_instructors_redirect(course)
+
+
+@staff_required
+@require_POST
+def course_instructor_remove(request, course_id, association_id):
+    course = get_object_or_404(Course, pk=course_id)
+    if response := _source_owned_response(course):
+        return response
+    try:
+        remove_course_instructor(course, association_id)
+    except CourseInstructorError as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, 'Instructor removed and order normalized.')
+    return _course_instructors_redirect(course)
+
+
+@staff_required
+@require_POST
+def course_instructor_reorder(request, course_id):
+    course = get_object_or_404(Course, pk=course_id)
+    if response := _source_owned_response(course):
+        return response
+    raw_ids = request.POST.getlist('association_id')
+    raw_positions = request.POST.getlist('position')
+    try:
+        association_ids = [int(value) for value in raw_ids]
+        positions = [int(value) for value in raw_positions]
+    except (TypeError, ValueError):
+        association_ids = []
+        positions = []
+    try:
+        reorder_course_instructors(course, association_ids, positions)
+    except CourseInstructorError as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, 'Instructor order saved.')
+    return _course_instructors_redirect(course)
 
 
 @staff_required

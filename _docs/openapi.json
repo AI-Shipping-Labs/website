@@ -289,6 +289,99 @@
         ]
       }
     },
+    "/api/campaigns/recipient-count": {
+      "post": {
+        "description": "Evaluates unsaved audience filters with the exact campaign send eligibility rules and returns only an aggregate count.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "audience_verification": "verified_only",
+                "slack_filter": "yes",
+                "target_event": null,
+                "target_min_level": 20,
+                "target_tags_any": [
+                  "sprint-july"
+                ],
+                "target_tags_none": [
+                  "bounced"
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "audience_verification": {
+                    "enum": [
+                      "verified_only",
+                      "everyone"
+                    ],
+                    "type": "string"
+                  },
+                  "slack_filter": {
+                    "enum": [
+                      "any",
+                      "yes",
+                      "no"
+                    ],
+                    "type": "string"
+                  },
+                  "target_event": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "target_min_level": {
+                    "enum": [
+                      0,
+                      10,
+                      20,
+                      30
+                    ],
+                    "type": "integer"
+                  },
+                  "target_tags_any": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "target_tags_none": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "recipient_count": 42
+                }
+              }
+            },
+            "description": "Aggregate eligible-recipient count."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "422": {
+            "description": "Invalid audience filters."
+          }
+        },
+        "summary": "Count eligible campaign recipients",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
     "/api/campaigns/{campaign_id}": {
       "get": {
         "parameters": [
@@ -1284,6 +1377,122 @@
         "summary": "Unenroll a user (soft-delete)",
         "tags": [
           "Course Enrollments"
+        ]
+      }
+    },
+    "/api/courses/{slug}/instructors": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "instructors": [
+                    {
+                      "instructor_id": "ada",
+                      "name": "Ada",
+                      "position": 0
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Privacy-limited ordered instructor associations."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Course not found."
+          }
+        },
+        "summary": "List ordered course instructors",
+        "tags": [
+          "Courses"
+        ]
+      },
+      "put": {
+        "description": "Atomically replaces instructors for a database-managed course and normalizes positions to contiguous zero-based values.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "instructor_ids": [
+                  "ada",
+                  "grace"
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "instructor_ids": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "instructor_ids"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "instructors": [
+                    {
+                      "instructor_id": "ada",
+                      "name": "Ada",
+                      "position": 0
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Normalized ordered associations."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Course not found."
+          },
+          "409": {
+            "description": "Course instructors are source-owned."
+          },
+          "422": {
+            "description": "Unknown, duplicate, or malformed ids."
+          }
+        },
+        "summary": "Replace ordered course instructors",
+        "tags": [
+          "Courses"
         ]
       }
     },
@@ -14120,6 +14329,81 @@
         "summary": "Get worker task detail",
         "tags": [
           "Worker Tasks"
+        ]
+      }
+    },
+    "/api/workshops/{slug}/preview-link": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "preview_url": "https://aishippinglabs.com/workshops/preview/123e4567-e89b-12d3-a456-426614174000",
+                  "slug": "agents-in-production"
+                }
+              }
+            },
+            "description": "Private workshop preview URL."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Workshop not found."
+          }
+        },
+        "summary": "Get workshop draft preview link",
+        "tags": [
+          "Workshops"
+        ]
+      }
+    },
+    "/api/workshops/{slug}/preview-token/regenerate": {
+      "post": {
+        "description": "Rotates the private token so the old preview URL immediately returns 404.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "preview_url": "https://aishippinglabs.com/workshops/preview/123e4567-e89b-12d3-a456-426614174000",
+                  "slug": "agents-in-production"
+                }
+              }
+            },
+            "description": "Private workshop preview URL."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Workshop not found."
+          }
+        },
+        "summary": "Regenerate workshop draft preview token",
+        "tags": [
+          "Workshops"
         ]
       }
     }

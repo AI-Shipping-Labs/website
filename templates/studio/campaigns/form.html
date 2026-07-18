@@ -70,12 +70,14 @@
         <option value="20" {% if campaign.target_min_level == 20 %}selected{% endif %}>Main and above</option>
         <option value="30" {% if campaign.target_min_level == 30 %}selected{% endif %}>Premium only</option>
       </select>
-      <p class="text-xs text-muted-foreground mt-1"
+      <div class="mt-1 text-xs text-muted-foreground"
          data-testid="recipient-count-helper"
-         data-recipient-count-url="{% url 'studio_campaign_recipient_count' %}"
+         data-recipient-count-url="{% url 'studio_campaign_recount' %}"
+         data-last-count="{{ recipient_count }}"
          aria-live="polite">
-        Will reach {{ recipient_count }} eligible recipient{{ recipient_count|pluralize }} at the current audience and tag filters. Save to refresh this count after changes.
-      </p>
+        <span data-recipient-count-status>Will reach {{ recipient_count }} eligible recipient{{ recipient_count|pluralize }} with the current audience filters.</span>
+        <button type="button" data-recipient-count-retry hidden class="ml-1 text-accent underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Retry</button>
+      </div>
     </div>
 
     {# Issue #357: tag scoping ANDs with the audience tier filter above. #}
@@ -170,28 +172,74 @@
 
 <script>
 (function() {
-  var select = document.getElementById('target-event-select');
+  var form = document.querySelector('form[method="post"]');
   var helper = document.querySelector('[data-testid="recipient-count-helper"]');
-  if (!select || !helper) return;
+  if (!form || !helper) return;
+  var status = helper.querySelector('[data-recipient-count-status]');
+  var retry = helper.querySelector('[data-recipient-count-retry]');
+  var audienceNames = [
+    'target_event', 'target_min_level', 'target_tags_any',
+    'target_tags_none', 'slack_filter', 'audience_verification'
+  ];
+  var timer = null;
+  var controller = null;
+  var requestNumber = 0;
 
-  select.addEventListener('change', function() {
+  function renderCount(count) {
+    var noun = count === 1 ? 'recipient' : 'recipients';
+    helper.dataset.lastCount = String(count);
+    status.textContent = 'Will reach ' + count + ' eligible ' + noun +
+      ' with the current audience filters.';
+    retry.hidden = true;
+  }
+
+  function recountAudience() {
+    if (controller) controller.abort();
+    controller = new AbortController();
+    var currentRequest = ++requestNumber;
+    var data = new FormData();
+    audienceNames.forEach(function(name) {
+      var field = form.elements[name];
+      if (field) data.append(name, field.value);
+    });
+    status.textContent = 'Counting eligible recipients…';
+    retry.hidden = true;
     var url = helper.getAttribute('data-recipient-count-url');
-    var query = select.value ? ('?event=' + encodeURIComponent(select.value)) : '';
-    fetch(url + query, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+    var csrf = form.querySelector('input[name="csrfmiddlewaretoken"]').value;
+    fetch(url, {
+      method: 'POST',
+      body: data,
+      credentials: 'same-origin',
+      headers: {'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest'},
+      signal: controller.signal
+    })
       .then(function(response) {
-        if (!response.ok) throw new Error('recipient preview failed');
+        if (!response.ok) throw new Error('recipient recount failed');
         return response.json();
       })
       .then(function(data) {
-        var count = data.recipient_count;
-        var noun = count === 1 ? 'recipient' : 'recipients';
-        helper.textContent = 'Will reach ' + count + ' eligible ' + noun +
-          ' at the current audience and tag filters. Save to refresh this count after changes.';
+        if (currentRequest !== requestNumber) return;
+        renderCount(data.recipient_count);
       })
-      .catch(function() {
-        helper.textContent = 'Recipient preview could not be refreshed. Save the draft to retry.';
+      .catch(function(error) {
+        if (error.name === 'AbortError' || currentRequest !== requestNumber) return;
+        var last = helper.dataset.lastCount;
+        status.textContent = 'Could not refresh the audience. Last confirmed count: ' + last + '.';
+        retry.hidden = false;
       });
+  }
+
+  function schedule() {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(recountAudience, 300);
+  }
+
+  audienceNames.forEach(function(name) {
+    var field = form.elements[name];
+    if (!field) return;
+    field.addEventListener(field.tagName === 'SELECT' ? 'change' : 'input', schedule);
   });
+  retry.addEventListener('click', recountAudience);
 })();
 </script>
 {% endblock %}

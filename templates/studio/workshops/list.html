@@ -28,9 +28,9 @@
   <table class="{% studio_list_class 'table' %}">
     <thead class="{% studio_list_class 'thead' %}">
       <tr>
-        <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="min-w-64 {% studio_list_class 'th' %}">Title</th>
         <th class="{% studio_list_class 'th' %}">Status</th>
-        <th class="{% studio_list_class 'th' %}">Date</th>
+        <th class="whitespace-nowrap {% studio_list_class 'th' %}">Date</th>
         <th class="{% studio_list_class 'th' %}">Skill level</th>
         <th class="{% studio_list_class 'th' %}">Landing gate</th>
         <th class="{% studio_list_class 'th' %}">Pages gate</th>
@@ -44,7 +44,7 @@
     <tbody class="{% studio_list_class 'tbody' %}" data-testid="workshop-rows">
       {% for workshop in workshops %}
       <tr class="{% studio_list_class 'row' %}" data-testid="workshop-row">
-        <td class="px-6 py-4">
+        <td class="min-w-64 px-6 py-4">
           <a href="{% url 'studio_workshop_detail' workshop_id=workshop.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ workshop.title }}</a>
           <p class="text-xs text-muted-foreground mt-1">{{ workshop.slug }}</p>
         </td>

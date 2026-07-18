@@ -153,7 +153,19 @@ def workshop_detail(request, workshop_id):
         'github_edit_url': get_github_edit_url(workshop),
         'resolved_materials': resolved_materials,
         'materials_source': source,
+        'preview_url': request.build_absolute_uri(workshop.get_preview_url()),
+        'public_url': request.build_absolute_uri(workshop.get_absolute_url()),
     })
+
+
+@staff_required
+@require_POST
+def workshop_regenerate_preview_token(request, workshop_id):
+    """Rotate a workshop bearer preview link and invalidate the old one."""
+    workshop = get_object_or_404(Workshop, pk=workshop_id)
+    workshop.regenerate_preview_token()
+    messages.success(request, 'Workshop preview link regenerated.')
+    return redirect('studio_workshop_detail', workshop_id=workshop.pk)
 
 
 # Field options used by the edit form. Mirrors ``content.access.VISIBILITY_CHOICES``

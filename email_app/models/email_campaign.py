@@ -1,7 +1,4 @@
-from django.contrib.auth import get_user_model
 from django.db import models
-
-from accounts.tier_audience import effective_level_at_least_q
 
 
 class EmailCampaign(models.Model):
@@ -170,54 +167,18 @@ class EmailCampaign(models.Model):
         Empty tag lists mean "no filter on that side" — both empty
         reproduces the exact pre-#357 behavior.
         """
-        User = get_user_model()
-        verification_filter = {}
-        if self.audience_verification != self.AUDIENCE_VERIFICATION_EVERYONE:
-            verification_filter['email_verified'] = True
-        # Issue #1076: when ``target_event`` is set the base set is the
-        # event's registrants (the ``EventRegistration.user`` reverse
-        # relation). The registrant set REPLACES the "all users at tier
-        # level" base set; the tier/tag/Slack/verification filters then AND
-        # on top (default ``target_min_level=0`` adds no extra tier gate).
-        if self.target_event_id is not None:
-            user_qs = User.objects.filter(
-                event_registrations__event_id=self.target_event_id,
-            )
-        else:
-            user_qs = User.objects.all()
-        base_qs = (
-            user_qs.filter(
-                unsubscribed=False,
-                **verification_filter,
-            )
-            .filter(effective_level_at_least_q(self.target_min_level))
+        from email_app.services.campaign_audience import (
+            eligible_campaign_recipients,
         )
-        if self.slack_filter == self.SLACK_FILTER_YES:
-            base_qs = base_qs.filter(slack_member=True)
-        elif self.slack_filter == self.SLACK_FILTER_NO:
-            base_qs = base_qs.filter(slack_member=False)
-        base_qs = base_qs.distinct()
 
-        include_tags = list(self.target_tags_any or [])
-        exclude_tags = list(self.target_tags_none or [])
-        if not include_tags and not exclude_tags:
-            return base_qs
-
-        # Tag membership lives in a JSONField list; SQLite (used in tests)
-        # does not support ``__overlap`` on JSONField. Match the
-        # Python-side approach #354 used for the user-list filter so
-        # behavior is consistent across both backends.
-        include_set = set(include_tags)
-        exclude_set = set(exclude_tags)
-        eligible_ids = []
-        for pk, tags in base_qs.values_list('pk', 'tags'):
-            tags = set(tags or [])
-            if include_set and not (tags & include_set):
-                continue
-            if exclude_set and (tags & exclude_set):
-                continue
-            eligible_ids.append(pk)
-        return User.objects.filter(pk__in=eligible_ids)
+        return eligible_campaign_recipients(
+            target_min_level=self.target_min_level,
+            target_tags_any=self.target_tags_any,
+            target_tags_none=self.target_tags_none,
+            slack_filter=self.slack_filter,
+            audience_verification=self.audience_verification,
+            target_event_id=self.target_event_id,
+        )
 
     def get_recipient_count(self):
         """Return the estimated number of eligible recipients."""

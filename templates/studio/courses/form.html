@@ -49,27 +49,6 @@
       </div>
     </div>
 
-    {% if course %}
-    <div data-testid="course-instructors-readonly">
-      <label class="block text-sm font-medium text-foreground mb-1">Instructors</label>
-      {% with course_instructors=course.ordered_instructors %}
-      {% if course_instructors %}
-      <ul class="space-y-1 text-sm text-foreground">
-        {% for instructor in course_instructors %}
-        <li class="flex items-center gap-2">
-          <span class="text-muted-foreground text-xs">#{{ forloop.counter0 }}</span>
-          <span>{{ instructor.name }}</span>
-        </li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p class="text-sm text-muted-foreground">No instructors attached.</p>
-      {% endif %}
-      {% endwith %}
-      <p class="mt-1 text-xs text-muted-foreground">Instructors are managed via the content repo's <code>instructors:</code> list and via the Django admin's CourseInstructor inline.</p>
-    </div>
-    {% endif %}
-
     <div>
       <label class="block text-sm font-medium text-foreground mb-1">Discussion URL</label>
       <input type="url" name="discussion_url" value="{{ course.discussion_url|default:'' }}"
@@ -167,6 +146,86 @@
     {% include "studio/includes/forms/action_row.html" with is_synced=is_synced submit_label="Create Course" cancel_url=course_cancel_url %}
   {% endif %}
 </form>
+
+{% if course %}
+<section id="instructors" class="mt-6 bg-card border border-border rounded-lg p-6 space-y-4" data-testid="course-instructors-section">
+  <div>
+    <h2 class="text-lg font-semibold text-foreground">Instructors</h2>
+    {% if is_synced %}
+    <p class="mt-1 text-sm text-muted-foreground">This ordered list is owned by <code>course.yaml instructors:</code>. Edit it in GitHub, then re-sync the course.</p>
+    {% else %}
+    <p class="mt-1 text-sm text-muted-foreground">Position 0 is the primary instructor used by course cards and listings.</p>
+    {% endif %}
+  </div>
+
+  {% if course_instructor_rows %}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-secondary">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Instructor</th>
+          <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Stable id</th>
+          <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Position</th>
+          {% if not is_synced %}<th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">Actions</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for association in course_instructor_rows %}
+        <tr data-testid="course-instructor-row">
+          <td class="px-4 py-3 text-foreground">{{ association.instructor.name }}</td>
+          <td class="px-4 py-3 font-mono text-xs text-muted-foreground">{{ association.instructor.instructor_id }}</td>
+          <td class="px-4 py-3">
+            {% if is_synced %}
+            <span class="text-muted-foreground">{{ association.position }}</span>
+            {% else %}
+            <input type="hidden" name="association_id" value="{{ association.pk }}" form="course-instructor-order-form">
+            <label class="sr-only" for="course-instructor-position-{{ association.pk }}">Position for {{ association.instructor.name }}</label>
+            <input id="course-instructor-position-{{ association.pk }}" type="number" min="0" name="position" value="{{ association.position }}" form="course-instructor-order-form"
+                   class="w-24 rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+            {% endif %}
+          </td>
+          {% if not is_synced %}
+          <td class="px-4 py-3 text-right">
+            <form method="post" action="{% url 'studio_course_instructor_remove' course_id=course.pk association_id=association.pk %}" onsubmit="return confirm('Remove {{ association.instructor.name }} from this course?');">
+              {% csrf_token %}
+              <button type="submit" class="inline-flex min-h-[44px] items-center rounded-md border border-red-500/30 bg-transparent px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:text-red-400">Remove</button>
+            </form>
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-sm text-muted-foreground" data-testid="course-instructors-empty">No instructors attached.</p>
+  {% endif %}
+
+  {% if not is_synced %}
+  {% if course_instructor_rows %}
+  <form id="course-instructor-order-form" method="post" action="{% url 'studio_course_instructor_reorder' course_id=course.pk %}">
+    {% csrf_token %}
+    <button type="submit" class="inline-flex min-h-[44px] items-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Save order</button>
+  </form>
+  {% endif %}
+  <form method="post" action="{% url 'studio_course_instructor_add' course_id=course.pk %}" class="grid gap-4 border-t border-border pt-4 sm:grid-cols-[minmax(0,1fr)_8rem_auto] sm:items-end" data-testid="course-instructor-add-form">
+    {% csrf_token %}
+    <div>
+      <label for="course-instructor-add-id" class="block text-sm font-medium text-foreground mb-1">Add instructor</label>
+      <select id="course-instructor-add-id" name="instructor_id" required class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="">Choose an instructor</option>
+        {% for instructor in available_instructors %}<option value="{{ instructor.instructor_id }}">{{ instructor.name }} ({{ instructor.instructor_id }})</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="course-instructor-add-position" class="block text-sm font-medium text-foreground mb-1">Position</label>
+      <input id="course-instructor-add-position" type="number" min="0" name="position" value="{{ course_instructor_rows|length }}" required class="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+    <button type="submit" class="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Add</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
 
 {% if course %}
   {% include "studio/includes/banner_generator_section.html" with banner_url=banner_url banner_regenerate_url=banner_regenerate_url banner_generator_enabled=banner_generator_enabled banner_last_task=banner_last_task banner_source=banner_source custom_banner_url=custom_banner_url banner_upload_url=banner_upload_url banner_remove_url=banner_remove_url banner_upload_enabled=banner_upload_enabled %}

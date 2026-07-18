@@ -21,7 +21,12 @@ from api.views.articles import (
     article_preview_token_regenerate,
 )
 from api.views.boot_timing import boot_timing_diagnostics
-from api.views.campaigns import campaign_detail, campaign_recipients, campaigns_collection
+from api.views.campaigns import (
+    campaign_detail,
+    campaign_recipient_count,
+    campaign_recipients,
+    campaigns_collection,
+)
 from api.views.checkpoints import (
     checkpoint_detail,
     checkpoint_move,
@@ -41,6 +46,7 @@ from api.views.course_enrollments import (
     course_enrollment_detail,
     course_enrollments_collection,
 )
+from api.views.course_instructors import course_instructors
 from api.views.crm_export import crm_export
 from api.views.docs import docs_page, openapi_json
 from api.views.email_log import email_log_list
@@ -171,6 +177,10 @@ from api.views.worker import (
     worker_tasks_collection,
     worker_tasks_failed,
 )
+from api.views.workshop_previews import (
+    workshop_preview_link,
+    workshop_preview_token_regenerate,
+)
 
 urlpatterns = [
     # ---- API documentation (issue #722) -------------------------------
@@ -185,6 +195,16 @@ urlpatterns = [
         "openapi.json",
         openapi_json,
         name="api_openapi_json",
+    ),
+    path(
+        "workshops/<slug:slug>/preview-link",
+        workshop_preview_link,
+        name="api_workshop_preview_link",
+    ),
+    path(
+        "workshops/<slug:slug>/preview-token/regenerate",
+        workshop_preview_token_regenerate,
+        name="api_workshop_preview_token_regenerate",
     ),
     path(
         "email-log",
@@ -224,6 +244,16 @@ urlpatterns = [
         "campaigns",
         campaigns_collection,
         name="api_campaigns_collection",
+    ),
+    path(
+        "campaigns/recipient-count",
+        campaign_recipient_count,
+        name="api_campaign_recipient_count",
+    ),
+    path(
+        "courses/<slug:slug>/instructors",
+        course_instructors,
+        name="api_course_instructors",
     ),
     path(
         "campaigns/<int:campaign_id>",

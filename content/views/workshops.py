@@ -32,8 +32,9 @@ from urllib.parse import quote, urlencode
 
 from django.db.models import Exists, OuterRef, Prefetch
 from django.http import Http404, HttpResponsePermanentRedirect, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.cache import patch_cache_control
 from django.utils.text import slugify
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
@@ -931,6 +932,11 @@ def workshop_detail(request, slug):
     by explicit redirect views before this route.
     """
     workshop = _resolve_workshop_by_slug(slug)
+    return _render_workshop_landing(request, workshop)
+
+
+def _render_workshop_landing(request, workshop, *, draft_preview=False):
+    """Render one workshop landing while preserving every existing gate."""
     user = request.user
 
     pages = list(workshop.pages.all().order_by('sort_order'))
@@ -949,6 +955,7 @@ def workshop_detail(request, slug):
         'related_content': build_related_content_rail(workshop),
         'resolved_materials': materials,
         'can_show_materials': can_show_materials,
+        'draft_preview': draft_preview,
     })
     # Issue #652: when the pages paywall renders the anonymous-on-registered
     # branch (signup CTA visible), surface the inline register card. The
@@ -964,6 +971,24 @@ def workshop_detail(request, slug):
         # renders.
         context['hide_footer_newsletter'] = True
     return render(request, 'content/workshop_detail.html', context)
+
+
+@ensure_csrf_cookie
+def workshop_preview(request, preview_token):
+    """Render a draft landing by bearer token, bypassing publication only."""
+    workshop = get_object_or_404(Workshop, preview_token=preview_token)
+    if workshop.status == 'published':
+        response = redirect(workshop.get_absolute_url())
+    else:
+        response = _render_workshop_landing(
+            request,
+            workshop,
+            draft_preview=True,
+        )
+    response['X-Robots-Tag'] = 'noindex, nofollow, noarchive'
+    response['Referrer-Policy'] = 'no-referrer'
+    patch_cache_control(response, private=True, no_store=True, max_age=0)
+    return response
 
 
 def _build_timestamps_with_pages(event, workshop):

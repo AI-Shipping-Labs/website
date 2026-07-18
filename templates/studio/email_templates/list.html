@@ -19,6 +19,7 @@
       <tr>
         <th class="text-left px-4 py-3">Template</th>
         <th class="text-left px-4 py-3">Subject</th>
+        <th class="text-left px-4 py-3 min-w-64">Sent when</th>
         <th class="text-left px-4 py-3">Status</th>
         <th class="text-left px-4 py-3">Last edited</th>
         <th class="text-right px-4 py-3">Actions</th>
@@ -33,6 +34,7 @@
         <td class="px-4 py-3 text-muted-foreground" data-label="Subject">
           <span title="{{ row.subject|subject_preview:160 }}">{{ row.subject|subject_preview:96 }}</span>
         </td>
+        <td class="px-4 py-3 text-muted-foreground" data-label="Sent when" data-testid="template-sent-when">{{ row.sent_when }}</td>
         <td class="px-4 py-3" data-label="Status">
           {% if row.edited %}
             <span class="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent" data-testid="edited-badge">

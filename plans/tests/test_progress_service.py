@@ -42,6 +42,11 @@ class AnnotatePlanProgressTest(TestCase):
                 week=week_2,
                 description=f'todo {index}',
             )
+        Checkpoint.objects.create(
+            week=week_2,
+            description='  \n ',
+            done_at=timezone.now(),
+        )
 
         annotated_plan = annotate_plan_progress(
             Plan.objects.filter(pk=plan.pk),

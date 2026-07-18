@@ -69,6 +69,21 @@ class CheckpointCreateTest(CheckpointsApiTestBase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["position"], 0)
 
+    def test_blank_description_is_422_without_shifting_or_creating(self):
+        existing = Checkpoint.objects.create(
+            week=self.week, description="keep", position=0,
+        )
+        before_updated_at = existing.updated_at
+
+        response = self._post({"description": " \n\t ", "position": 0})
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "validation_error")
+        self.assertEqual(Checkpoint.objects.filter(week=self.week).count(), 1)
+        existing.refresh_from_db()
+        self.assertEqual(existing.position, 0)
+        self.assertEqual(existing.updated_at, before_updated_at)
+
     def test_create_at_position_zero_shifts_existing(self):
         a = Checkpoint.objects.create(
             week=self.week, description="a", position=0,
@@ -137,6 +152,24 @@ class CheckpointPatchTest(CheckpointsApiTestBase):
         self.assertEqual(response.status_code, 200)
         cp.refresh_from_db()
         self.assertIsNotNone(cp.done_at)
+
+    def test_blank_description_is_422_without_mutation(self):
+        cp = Checkpoint.objects.create(
+            week=self.week, description="keep", position=0,
+        )
+        before_updated_at = cp.updated_at
+        response = self.client.patch(
+            f"/api/checkpoints/{cp.id}",
+            data=json.dumps({"description": "   ", "position": 4}),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "validation_error")
+        cp.refresh_from_db()
+        self.assertEqual(cp.description, "keep")
+        self.assertEqual(cp.position, 0)
+        self.assertEqual(cp.updated_at, before_updated_at)
 
 
 class CheckpointDeleteTest(CheckpointsApiTestBase):

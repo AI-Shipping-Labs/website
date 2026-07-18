@@ -11,10 +11,17 @@ def annotate_plan_progress(queryset):
     filtered to checkpoints with ``done_at`` set.
     """
     return queryset.annotate(
-        progress_total=Count('weeks__checkpoints', distinct=True),
+        progress_total=Count(
+            'weeks__checkpoints',
+            filter=~Q(weeks__checkpoints__description__regex=r'^\s*$'),
+            distinct=True,
+        ),
         progress_done=Count(
             'weeks__checkpoints',
-            filter=Q(weeks__checkpoints__done_at__isnull=False),
+            filter=(
+                Q(weeks__checkpoints__done_at__isnull=False)
+                & ~Q(weeks__checkpoints__description__regex=r'^\s*$')
+            ),
             distinct=True,
         ),
     )

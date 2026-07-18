@@ -211,6 +211,24 @@ class PlanMarkdownDownloadTest(TestCase):
         ]]
         self.assertEqual(positions, sorted(positions))
 
+    def test_legacy_blank_checkpoint_is_absent_from_export_and_progress(self):
+        blank = Checkpoint.objects.create(
+            week=self.week,
+            description='  \n\t ',
+            done_at=timezone.now(),
+            position=2,
+        )
+        self.client.force_login(self.owner)
+
+        markdown = _decode(self.client.get(_member_download_url(self.plan)))
+
+        self.assertIn('- Progress: 1 of 2 checkpoints done', markdown)
+        self.assertNotIn(f'checkpoint-{blank.pk}', markdown)
+        self.assertNotIn('- [x]   \n', markdown)
+        timeline = markdown.split('## Timeline', 1)[1].split('## Resources', 1)[0]
+        self.assertEqual(timeline.count('- [x] '), 1)
+        self.assertEqual(timeline.count('- [ ] '), 1)
+
     def test_empty_fields_and_collections_render_stable_placeholders(self):
         empty = Plan.objects.create(
             member=self.teammate,

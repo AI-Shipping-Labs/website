@@ -46,6 +46,15 @@ _CHECKPOINT_EXAMPLE = {
 }
 
 
+def _blank_description_error():
+    return error_response(
+        "description must contain non-whitespace text",
+        "validation_error",
+        status=422,
+        details={"description": "Enter a checkpoint or delete it instead"},
+    )
+
+
 def _coerce_datetime(value):
     """Accept either an ISO string (parsed) or None. Returns the parsed
     datetime, ``None``, or the original value if it is already a
@@ -126,7 +135,8 @@ def _load_checkpoint_for_write(user, checkpoint_id):
                 "with a ``position`` at a non-end value, existing "
                 "siblings shift down by 1 inside a single "
                 "``transaction.atomic`` so concurrent inserts cannot "
-                "leave a partial reorder."
+                "leave a partial reorder. A description containing only "
+                "whitespace is rejected with 422 before any rows move."
             ),
             "request_body": {
                 "required": ["description"],
@@ -157,7 +167,9 @@ def _load_checkpoint_for_write(user, checkpoint_id):
                         "code": "unknown_week",
                     },
                 },
-                422: {"description": "Invalid position value."},
+                422: {
+                    "description": "Invalid position or blank description."
+                },
             },
         },
     },
@@ -189,6 +201,8 @@ def week_checkpoints_create(request, week_id):
             "missing_field",
             details={"field": "description"},
         )
+    if not isinstance(description, str) or not description.strip():
+        return _blank_description_error()
 
     requested_position = data.get("position")
     if requested_position is not None and (
@@ -233,7 +247,9 @@ def week_checkpoints_create(request, week_id):
             "summary": "Update a checkpoint",
             "description": (
                 "Partial update. Changing ``position`` re-packs sibling "
-                "positions inside the same week (atomically)."
+                "positions inside the same week (atomically). Blank or "
+                "whitespace-only descriptions are rejected with 422 before "
+                "any field, position, or timestamp changes."
             ),
             "request_body": {
                 "properties": {
@@ -254,7 +270,9 @@ def week_checkpoints_create(request, week_id):
                 },
                 400: {"description": "Invalid JSON body."},
                 404: {"description": "Checkpoint not found."},
-                422: {"description": "Invalid position value."},
+                422: {
+                    "description": "Invalid position or blank description."
+                },
             },
         },
         "DELETE": {
@@ -297,6 +315,12 @@ def checkpoint_detail(request, checkpoint_id):
             "invalid_type",
             details={"field": "body", "expected": "object"},
         )
+
+    if "description" in data and (
+        not isinstance(data["description"], str)
+        or not data["description"].strip()
+    ):
+        return _blank_description_error()
 
     update_fields = []
     if "description" in data:

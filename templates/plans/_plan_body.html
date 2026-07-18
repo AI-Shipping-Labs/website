@@ -128,7 +128,7 @@ is already copied (count == 0) we show an "all caught up" notice instead.
           data-testid="checkpoint-list"
           data-checkpoint-list
           data-week-id="{{ week.pk }}">
-        {% for checkpoint in week.checkpoints.all %}
+        {% for checkpoint in week.checkpoints.meaningful %}
         {% include "plans/_checkpoint_card.html" with checkpoint=checkpoint week=week plan_can_edit=plan_can_edit task_surface="member" %}
         {% empty %}
         <li class="py-3 text-sm italic text-muted-foreground" data-testid="empty-week-hint">No checkpoints in this week.</li>

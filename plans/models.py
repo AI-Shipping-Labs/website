@@ -632,7 +632,7 @@ class PlanQuerySet(models.QuerySet):
             member__sprint_enrollments__sprint=sprint,
         ).exclude(member=viewer).distinct()
 
-    def cohort_progress_rows(self, *, sprint, viewer):
+    def cohort_progress_rows(self, *, sprint, viewer, access=None):
         """Plans for ``sprint``'s cohort progress board, regardless of visibility.
 
         Sibling helper to :meth:`visible_on_cohort_board` (issue #461).
@@ -656,10 +656,13 @@ class PlanQuerySet(models.QuerySet):
         """
         if not is_authenticated_user(viewer):
             return self.none()
-        viewer_enrolled = SprintEnrollment.objects.filter(
-            sprint=sprint, user=viewer,
-        ).exists()
-        if not viewer_enrolled:
+        if access is None:
+            viewer_enrolled = SprintEnrollment.objects.filter(
+                sprint=sprint, user=viewer,
+            ).exists()
+            if not viewer_enrolled:
+                return self.none()
+        elif not access.allowed:
             return self.none()
         from plans.services.progress import annotate_plan_progress  # noqa: PLC0415
 
@@ -1187,6 +1190,13 @@ class Week(TimestampedModelMixin, models.Model):
         return f'Week {self.week_number} — {self.plan_id}'
 
 
+class CheckpointQuerySet(models.QuerySet):
+    """Checkpoint rows with the product-level meaningful-text policy."""
+
+    def meaningful(self):
+        return self.exclude(description__regex=r'^\s*$')
+
+
 class Checkpoint(TimestampedModelMixin, models.Model):
     """A single bullet inside a week.
 
@@ -1201,6 +1211,8 @@ class Checkpoint(TimestampedModelMixin, models.Model):
     description = models.TextField()
     position = models.PositiveSmallIntegerField(default=0)
     done_at = models.DateTimeField(null=True, blank=True)
+
+    objects = CheckpointQuerySet.as_manager()
 
     class Meta:
         ordering = ['week', 'position', 'id']

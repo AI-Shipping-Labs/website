@@ -132,6 +132,7 @@ def _checkpoint_progress(plan_ids):
         return {}
     rows = (
         Checkpoint.objects
+        .meaningful()
         .filter(week__plan_id__in=plan_ids)
         .values('week__plan_id')
         .annotate(

@@ -33,6 +33,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from plans.cohort_access import resolve_cohort_board_access
 from plans.cohort_rows import build_progress_rows
 from plans.comments_permissions import composer_state_for_owner_view
 from plans.markdown_export import (
@@ -44,7 +45,6 @@ from plans.models import (
     Plan,
     PlanRequest,
     Sprint,
-    SprintEnrollment,
 )
 from plans.services import (
     annotate_plan_progress,
@@ -103,19 +103,19 @@ def cohort_board(request, sprint_slug):
     members; current cohorts are 5-30 so a single page is fine.
     """
     sprint = get_object_or_404(Sprint, slug=sprint_slug)
-    viewer_enrolled = SprintEnrollment.objects.filter(
-        sprint=sprint, user=request.user,
-    ).exists()
-    if not viewer_enrolled:
+    access = resolve_cohort_board_access(sprint=sprint, viewer=request.user)
+    if not access.allowed:
         # Not enrolled -> 404. Visible only to members of this sprint.
         raise Http404('Not enrolled in this sprint')
 
-    viewer_plan = _viewer_plan_for_sprint(sprint, request.user)
+    viewer_plan = None
+    if not access.staff_operator:
+        viewer_plan = _viewer_plan_for_sprint(sprint, request.user)
     sprint_has_ended = sprint.has_ended()
 
     plans = list(
         Plan.objects.cohort_progress_rows(
-            sprint=sprint, viewer=request.user,
+            sprint=sprint, viewer=request.user, access=access,
         )
         .select_related('member')
         .prefetch_related('weeks'),
@@ -135,7 +135,7 @@ def cohort_board(request, sprint_slug):
     progress_rows = build_progress_rows(
         plans=plans,
         no_plan_members=no_plan_members,
-        viewer=request.user,
+        viewer=None if access.staff_operator else request.user,
     )
 
     if viewer_plan is not None:
@@ -151,6 +151,8 @@ def cohort_board(request, sprint_slug):
         hours=_PLAN_REQUEST_RATE_LIMIT_HOURS,
     )
     viewer_pinged_recently = (
+        not access.staff_operator
+        and
         viewer_plan is None
         and PlanRequest.objects.filter(
             sprint=sprint, member=request.user, created_at__gte=cutoff,
@@ -166,6 +168,7 @@ def cohort_board(request, sprint_slug):
             'viewer_plan': viewer_plan,
             'sprint_has_ended': sprint_has_ended,
             'viewer_pinged_recently': viewer_pinged_recently,
+            'staff_view': access.staff_operator,
         },
     )
 
@@ -248,8 +251,17 @@ def my_plan_detail(request, sprint_slug, plan_id):
     """
     plan = _owner_plan_or_404(plan_id, sprint_slug, request.user)
     progress = plan.weeks.aggregate(
-        total=Count('checkpoints'),
-        done=Count('checkpoints', filter=Q(checkpoints__done_at__isnull=False)),
+        total=Count(
+            'checkpoints',
+            filter=~Q(checkpoints__description__regex=r'^\s*$'),
+        ),
+        done=Count(
+            'checkpoints',
+            filter=(
+                Q(checkpoints__done_at__isnull=False)
+                & ~Q(checkpoints__description__regex=r'^\s*$')
+            ),
+        ),
     )
     # Comments composer rules live in plans.comments_permissions so
     # this view body stays free of inlined visibility / staff

@@ -152,6 +152,10 @@ class StudioSprintDetailEnrollLinkTest(TestCase):
         response = self.client.get(f'/studio/sprints/{self.sprint.pk}/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="sprint-bulk-enroll-link"')
+        self.assertContains(response, 'data-testid="sprint-cohort-board-link"')
+        self.assertContains(response, 'href="/sprints/may-2026/board"')
+        self.assertContains(response, 'target="_blank"')
+        self.assertContains(response, 'rel="noopener noreferrer"')
         self.assertContains(response, 'data-testid="sprint-enrollment-count"')
 
 

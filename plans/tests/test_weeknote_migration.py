@@ -21,7 +21,10 @@ class WeekNoteSingletonMigrationTest(TransactionTestCase):
 
     def tearDown(self):
         self.executor.loader.build_graph()
-        self.executor.migrate(self.migrate_to)
+        # Restore the current schema, not merely this historical migration.
+        # Otherwise later modules in an explicit multi-app test run see the
+        # plans tables stranded at 0020.
+        self.executor.migrate(self.executor.loader.graph.leaf_nodes())
         super().tearDown()
 
     def test_duplicate_week_notes_fold_into_latest_note(self):

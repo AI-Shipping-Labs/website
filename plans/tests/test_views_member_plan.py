@@ -21,6 +21,7 @@ from plans.models import (
     Plan,
     Resource,
     Sprint,
+    SprintEnrollment,
     Week,
 )
 
@@ -412,6 +413,38 @@ class MyPlanDetailOwnerSurfaceTest(TestCase):
         )
         self.assertNotContains(response, 'Internal notes')
         self.assertNotContains(response, 'href="/studio/')
+
+    def test_legacy_blank_checkpoint_is_hidden_from_owner_and_teammate_views(self):
+        blank = Checkpoint.objects.create(
+            week=self.week,
+            description='  \n\t ',
+        )
+        SprintEnrollment.objects.get_or_create(
+            sprint=self.sprint,
+            user=self.other,
+        )
+        owner_url = reverse(
+            'my_plan_detail',
+            kwargs={'sprint_slug': self.sprint.slug, 'plan_id': self.plan.pk},
+        )
+        teammate_url = reverse(
+            'member_plan_detail',
+            kwargs={'sprint_slug': self.sprint.slug, 'plan_id': self.plan.pk},
+        )
+
+        self.client.force_login(self.owner)
+        owner_response = self.client.get(owner_url)
+        self.client.force_login(self.other)
+        teammate_response = self.client.get(teammate_url)
+
+        for response in (owner_response, teammate_response):
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, 'Build <strong>prototype</strong>', html=True)
+            self.assertNotContains(response, f'data-item-id="{blank.pk}"')
+            self.assertEqual(
+                response.content.decode().count('data-testid="plan-checkpoint"'),
+                1,
+            )
 
     def test_owner_page_shows_bulk_move_only_before_final_week(self):
         Week.objects.create(plan=self.plan, week_number=2, position=1)

@@ -16,6 +16,7 @@ from events.models.event import HIDDEN_FROM_PUBLIC_STATUSES
 from events.services.time_windows import upcoming_events_queryset, upcoming_window_q
 from integrations.models import ContentSource
 from plans.models import Plan, Sprint
+from questionnaires.models import Response
 from studio.decorators import staff_required
 from studio.worker_health import get_worker_status
 
@@ -132,6 +133,11 @@ def dashboard(request):
         course_counts['draft_count'] + article_counts['draft_count']
     )
     missing_zoom_join_url_count = _missing_zoom_join_url_count(now)
+    onboarding_awaiting_review_count = Response.objects.filter(
+        status='submitted',
+        reviewed_at__isnull=True,
+        questionnaire__purpose='onboarding',
+    ).count()
 
     pending_projects = Project.objects.filter(
         status='pending_review',
@@ -190,6 +196,22 @@ def dashboard(request):
             f"{reverse('studio_project_list')}?status=pending_review",
             'folder-kanban',
             description='Review submitted projects before publishing.',
+        ))
+    if onboarding_awaiting_review_count:
+        noun = (
+            'onboarding response awaiting review'
+            if onboarding_awaiting_review_count == 1
+            else 'onboarding responses awaiting review'
+        )
+        attention_items.append(_attention_item(
+            noun,
+            onboarding_awaiting_review_count,
+            (
+                f"{reverse('studio_questionnaire_response_queue')}"
+                '?status=submitted&review=awaiting&purpose=onboarding'
+            ),
+            'clipboard-check',
+            description='Review completed onboarding intake before planning.',
         ))
     if failed_sync_count:
         attention_items.append(_attention_item(

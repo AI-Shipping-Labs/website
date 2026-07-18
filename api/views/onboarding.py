@@ -75,6 +75,7 @@ _VALID_PURPOSES = [choice for choice, _label in PURPOSE_CHOICES]
 # is a convenience value (no status filter); the two concrete values match
 # ``RESPONSE_STATUS_CHOICES``.
 _VALID_BULK_STATUSES = ["draft", "submitted", "all"]
+_VALID_REVIEW_FILTERS = ["awaiting", "reviewed", "all"]
 
 
 def _parse_offset(raw, *, field="offset"):
@@ -353,10 +354,17 @@ def onboarding_personas(request):
 # ---- Shared response-object example for the OpenAPI docs --------------------
 
 _RESPONSE_EXAMPLE = {
+    "id": 84,
+    "user_id": 12,
     "email": "alex@example.com",
+    "studio_user_url": "/studio/users/12/",
+    "studio_response_url": "/studio/questionnaires/5/responses/84/",
     "questionnaire_slug": "onboarding-engineer",
     "status": "submitted",
     "submitted_at": "2026-05-19T08:30:00+00:00",
+    "reviewed_at": None,
+    "reviewed_by": None,
+    "review_state": "awaiting",
     "persona": {
         "slug": "priya",
         "name": "Priya",
@@ -404,7 +412,9 @@ def _onboarding_response_queryset():
     """
     return (
         Response.objects.filter(questionnaire__purpose="onboarding")
-        .select_related("respondent", "respondent__crm_record", "questionnaire")
+        .select_related(
+            "respondent", "respondent__crm_record", "questionnaire", "reviewed_by",
+        )
         .prefetch_related(
             "response_questions",
             "answers__selected_options",
@@ -530,6 +540,14 @@ def onboarding_response_detail(request, email):
                         "Unknown slug -> 422."
                     ),
                 },
+                "review": {
+                    "type": "string",
+                    "required": False,
+                    "description": (
+                        "``awaiting`` / ``reviewed`` / ``all``. Default ``all`` "
+                        "for backward-compatible plan generation."
+                    ),
+                },
                 "limit": {
                     "type": "integer",
                     "required": False,
@@ -594,6 +612,19 @@ def onboarding_responses_collection(request):
             },
         )
 
+    review = request.GET.get("review") or "all"
+    if review not in _VALID_REVIEW_FILTERS:
+        return error_response(
+            f"Invalid review: {review!r}",
+            "validation_error",
+            status=422,
+            details={
+                "field": "review",
+                "value": review,
+                "allowed": list(_VALID_REVIEW_FILTERS),
+            },
+        )
+
     persona_filter = request.GET.get("persona")
     if persona_filter == "":
         persona_filter = None
@@ -611,6 +642,12 @@ def onboarding_responses_collection(request):
     qs = _onboarding_response_queryset()
     if status != "all":
         qs = qs.filter(status=status)
+    if review != "all":
+        qs = qs.filter(status="submitted")
+        if review == "awaiting":
+            qs = qs.filter(reviewed_at__isnull=True)
+        else:
+            qs = qs.filter(reviewed_at__isnull=False)
     if since is not None:
         if filtering_submitted:
             qs = qs.filter(submitted_at__gte=since)

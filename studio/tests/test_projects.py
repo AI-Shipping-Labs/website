@@ -1,9 +1,12 @@
 """Tests for studio project moderation views."""
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import Client, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
+from accounts.models import EmailAlias
 from content.models import Project
 
 User = get_user_model()
@@ -184,3 +187,69 @@ class StudioProjectReviewTest(TestCase):
 
         self.assertNotContains(response, 'data-testid="origin-panel"')
         self.assertNotContains(response, 'data-testid="synced-banner"')
+
+    def test_authoritative_submitter_links_even_when_inactive(self):
+        submitter = User.objects.create_user(
+            email='inactive-author@test.com', is_active=False,
+        )
+        self.project.author = 'Public author label'
+        self.project.submitter = submitter
+        self.project.save(update_fields=['author', 'submitter'])
+        response = self.client.get(f'/studio/projects/{self.project.pk}/review')
+        self.assertContains(response, f'/studio/users/{submitter.pk}/')
+        self.assertContains(response, 'Public author label')
+
+    def test_legacy_primary_and_alias_email_resolve_only_active_accounts(self):
+        owner = User.objects.create_user(email='canonical-author@test.com')
+        alias = EmailAlias.objects.create(
+            user=owner, email='legacy-author@test.com', source='manual',
+        )
+        for author in (owner.email.upper(), f'  {alias.email}  '):
+            with self.subTest(author=author):
+                self.project.author = author
+                self.project.submitter = None
+                self.project.save(update_fields=['author', 'submitter'])
+                response = self.client.get(
+                    f'/studio/projects/{self.project.pk}/review',
+                )
+                self.assertContains(response, f'/studio/users/{owner.pk}/')
+
+        owner.is_active = False
+        owner.save(update_fields=['is_active'])
+        response = self.client.get(f'/studio/projects/{self.project.pk}/review')
+        self.assertNotContains(response, f'/studio/users/{owner.pk}/')
+
+    def test_names_non_email_blank_and_html_stay_plain_without_get_writes(self):
+        duplicate_a = User.objects.create_user(
+            email='dup-a@test.com', first_name='Same', last_name='Name',
+        )
+        User.objects.create_user(
+            email='dup-b@test.com', first_name='Same', last_name='Name',
+        )
+        for author, visible in (
+            ('Same Name', 'Same Name'),
+            ('not-an-email', 'not-an-email'),
+            ('', 'Unknown'),
+            ('<script>alert(1)</script>', '&lt;script&gt;alert(1)&lt;/script&gt;'),
+        ):
+            with self.subTest(author=author):
+                self.project.author = author
+                self.project.submitter = None
+                self.project.save(update_fields=['author', 'submitter'])
+                response = self.client.get(
+                    f'/studio/projects/{self.project.pk}/review',
+                )
+                self.assertContains(response, visible)
+                self.assertNotContains(
+                    response,
+                    f'/studio/users/{duplicate_a.pk}/',
+                )
+                self.project.refresh_from_db()
+                self.assertIsNone(self.project.submitter)
+
+    def test_project_review_query_count_is_bounded(self):
+        self.project.submitter = User.objects.create_user(email='bounded@test.com')
+        self.project.save(update_fields=['submitter'])
+        with CaptureQueriesContext(connection) as queries:
+            self.client.get(f'/studio/projects/{self.project.pk}/review')
+        self.assertLessEqual(len(queries), 7)

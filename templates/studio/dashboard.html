@@ -62,7 +62,7 @@
     {% if attention_items %}
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         {% for item in attention_items %}
-          <a href="{{ item.url }}" class="flex items-start gap-3 rounded-lg border {% if item.tone == 'critical' %}border-red-500/40 bg-red-500/10{% else %}border-border bg-secondary/30{% endif %} p-3 hover:border-accent/60 transition-colors" data-testid="studio-dashboard-attention-item">
+          <a href="{{ item.url }}" class="flex min-h-[44px] items-start gap-3 rounded-lg border {% if item.tone == 'critical' %}border-red-500/40 bg-red-500/10{% else %}border-border bg-secondary/30{% endif %} p-3 hover:border-accent/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="studio-dashboard-attention-item">
             <span class="w-9 h-9 rounded-lg {% if item.tone == 'critical' %}bg-red-500/20 text-red-300{% else %}bg-accent/15 text-accent{% endif %} flex items-center justify-center shrink-0">
               <i data-lucide="{{ item.icon }}" class="w-4 h-4"></i>
             </span>

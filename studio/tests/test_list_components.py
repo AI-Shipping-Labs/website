@@ -527,9 +527,8 @@ class StudioListRowActionPillStyleTest(TestCase):
                     )
 
     def test_primary_row_variant_requires_an_explicit_mutation_allowlist(self):
-        # There are currently no accent-primary row mutations. A future valid
-        # one must be added to an explicit mutation allowlist here rather than
-        # silently reintroducing primary navigation.
+        # Accent-primary row mutations must stay on this explicit allowlist so
+        # navigation/disclosure links cannot silently adopt the primary style.
         primary_calls = []
         studio_templates = REPO_ROOT / "templates" / "studio"
         for path in studio_templates.rglob("*.html"):
@@ -538,7 +537,13 @@ class StudioListRowActionPillStyleTest(TestCase):
                 path.read_text(),
             ):
                 primary_calls.append(f"{path.relative_to(REPO_ROOT)}:{match.group(0)}")
-        self.assertEqual(primary_calls, [])
+        self.assertEqual(
+            primary_calls,
+            [
+                "templates/studio/questionnaires/response_queue.html:"
+                "studio_action_class 'primary'",
+            ],
+        )
 
     def test_email_templates_no_longer_uses_literal_actions_cell_class(self):
         source = self._template_source(

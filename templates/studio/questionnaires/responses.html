@@ -4,30 +4,31 @@
 {% block studio_title %}{{ questionnaire.title }} — Responses{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8">
-  <a href="{% url 'studio_questionnaire_detail' questionnaire_id=questionnaire.pk %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-    &larr; Back to {{ questionnaire.title }}
-  </a>
-  <h1 class="text-2xl font-semibold text-foreground mt-2" data-testid="questionnaire-responses-title">Responses</h1>
-  <p class="text-muted-foreground mt-1">{{ questionnaire.title }}</p>
-</div>
+{% url 'studio_questionnaire_detail' questionnaire_id=questionnaire.pk as questionnaire_url %}
+{% studio_header_actions title="Responses" subtitle=questionnaire.title back_url=questionnaire_url back_label='Back to questionnaire' testid='questionnaire-responses-title' %}{% endstudio_header_actions %}
 
-{% if responses %}
+<form method="get" class="mb-6 flex flex-wrap items-end gap-3" data-testid="questionnaire-responses-filters">
+  <div><label for="questionnaire-response-status" class="mb-1 block text-sm font-medium text-foreground">Status</label><select id="questionnaire-response-status" name="status" class="studio-select min-h-[44px] rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent"><option value="all" {% if status_filter == 'all' %}selected{% endif %}>All</option><option value="submitted" {% if status_filter == 'submitted' %}selected{% endif %}>Submitted</option><option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option></select></div>
+  <button type="submit" class="min-h-[44px] rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Apply filter</button>
+</form>
+
+{% if responses or filters_active %}
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="w-full">
     <thead class="bg-secondary">
       <tr>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Respondent</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Submitted</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Answered</th>
-        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-widest">Respondent</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-widest">Status</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-widest">Submitted</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-widest">Answered</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-widest">Review state</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-widest">Actions</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-border">
       {% for response in responses %}
       <tr class="hover:bg-secondary/50 transition-colors" data-testid="questionnaire-response-row">
-        <td class="px-6 py-4 text-sm text-foreground" data-testid="questionnaire-response-respondent">{{ response.respondent.email }}</td>
+        <td class="px-6 py-4 text-sm text-foreground" data-testid="questionnaire-response-respondent">{% include "studio/questionnaires/_respondent_links.html" %}</td>
         <td class="px-6 py-4" data-label="Status">
           {% studio_status_badge response.status response.get_status_display %}
         </td>
@@ -35,6 +36,7 @@
           {% if response.submitted_at %}{{ response.submitted_at|operator_datetime }}{% else %}—{% endif %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Answered">{{ response.answered_count }}</td>
+        <td class="px-6 py-4" data-label="Review state">{% studio_status_badge response.review_state response.review_label %}</td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_questionnaire_response_detail' questionnaire_id=questionnaire.pk response_id=response.pk as response_detail_url %}
@@ -42,13 +44,14 @@
           </div>
         </td>
       </tr>
+      {% empty %}
+      {% url 'studio_questionnaire_responses' questionnaire_id=questionnaire.pk as responses_clear_url %}
+      {% studio_empty_state 'filter' entity_label='response' entity_label_plural='responses' clear_url=responses_clear_url colspan=6 empty_message='No responses match this status.' testid_suffix='questionnaire-responses-empty' %}
       {% endfor %}
     </tbody>
   </table>
 </div>
 {% else %}
-<div class="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground text-sm" data-testid="questionnaire-responses-empty">
-  No responses collected yet.
-</div>
+{% studio_empty_state 'fresh' entity_label='response' entity_label_plural='responses' empty_message='No responses collected yet.' testid_suffix='questionnaire-responses-empty' %}
 {% endif %}
 {% endblock %}

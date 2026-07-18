@@ -1,0 +1,12 @@
+<div class="flex min-w-0 flex-wrap items-center gap-2" data-testid="questionnaire-respondent-links">
+  <a href="{% url 'studio_user_detail' user_id=response.respondent_id %}"
+     class="min-h-[44px] min-w-0 break-all inline-flex items-center text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+     aria-label="Open Studio profile for {{ response.respondent.email }}"
+     data-testid="questionnaire-respondent-profile">{{ response.respondent.email }}</a>
+  {% if response.respondent.crm_record %}
+  <a href="{% url 'studio_crm_detail' crm_id=response.respondent.crm_record.pk %}"
+     class="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+     aria-label="Open CRM record for {{ response.respondent.email }}"
+     data-testid="questionnaire-respondent-crm">CRM</a>
+  {% endif %}
+</div>

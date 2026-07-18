@@ -5,7 +5,7 @@
 
 {% block studio_content %}
 {% url 'studio_project_list' as project_list_url %}
-{% studio_header_actions title=is_synced|yesno:'View Project,Review Project' subtitle=project.title back_url=project_list_url back_label='Back to projects' %}
+{% studio_header_actions title=is_synced|yesno:'View project,Review project' subtitle=project.title back_url=project_list_url back_label='Back to projects' %}
   {% if not is_synced and project.status == 'pending_review' %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="approve"><button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Approve</button></form>{% endif %}
   <a href="{{ project.get_absolute_url }}" target="_blank" rel="noopener noreferrer" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="view-on-site"><i data-lucide="external-link" class="h-4 w-4"></i><span>View on site</span></a>
   {% load admin_links %}{% admin_change_url project as admin_url %}{% if admin_url or not is_synced and project.status == 'pending_review' %}{% studio_overflow_menu %}
@@ -23,10 +23,19 @@
   <div class="bg-card border border-border rounded-lg p-6">
     <h2 class="text-xl font-semibold text-foreground mb-4">{{ project.title }}</h2>
 
-    <div class="grid grid-cols-2 gap-4 mb-6">
+    <div class="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-2">
       <div>
         <p class="text-sm text-muted-foreground">Author</p>
-        <p class="text-sm text-foreground">{{ project.author|default:"Unknown" }}</p>
+        <p class="text-sm text-foreground break-words" data-testid="project-review-author">
+          {% if project_author_user %}
+          <a href="{% url 'studio_user_detail' user_id=project_author_user.pk %}"
+             class="inline-flex min-h-[44px] items-center text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+             aria-label="Open Studio profile for project author {{ project.author|default:project_author_user.email }}"
+             data-testid="project-review-author-profile">{{ project.author|default:project_author_user.email }}</a>
+          {% else %}
+          {{ project.author|default:"Unknown" }}
+          {% endif %}
+        </p>
       </div>
       <div>
         <p class="text-sm text-muted-foreground">Status</p>

@@ -3,6 +3,7 @@
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from django.utils import timezone
 
 from questionnaires.models import (
     Answer,
@@ -13,6 +14,7 @@ from questionnaires.models import (
     ResponseQuestion,
     ResponseQuestionOption,
 )
+from questionnaires.response_workflows import transition_response_review
 
 User = get_user_model()
 
@@ -191,3 +193,65 @@ class AnswerModelTest(TestCase):
         rq = self._rq('text')
         answer = Answer.objects.create(response=self.response, question=rq)
         self.assertEqual(answer.display_value, '')
+
+
+class ResponseReviewStateTest(TestCase):
+    def setUp(self):
+        self.questionnaire = Questionnaire.objects.create(title='Review state')
+        self.member = User.objects.create_user(email='review-member@test.com')
+        self.staff = User.objects.create_user(
+            email='review-staff@test.com', is_staff=True,
+        )
+        self.response = Response.objects.create(
+            questionnaire=self.questionnaire, respondent=self.member,
+        )
+
+    def test_mark_submitted_always_requeues(self):
+        self.response.status = 'submitted'
+        self.response.reviewed_at = timezone.now()
+        self.response.reviewed_by = self.staff
+        self.response.save()
+        self.response.mark_submitted()
+        self.assertEqual(self.response.review_state, 'awaiting')
+        self.assertIsNone(self.response.reviewed_at)
+        self.assertIsNone(self.response.reviewed_by)
+
+    def test_database_rejects_review_fields_on_draft(self):
+        self.response.reviewed_at = timezone.now()
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.response.save()
+
+    def test_database_rejects_reviewer_without_timestamp(self):
+        self.response.status = 'submitted'
+        self.response.reviewed_by = self.staff
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.response.save()
+
+    def test_deleted_reviewer_preserves_review_timestamp_and_historical_label(self):
+        self.response.mark_submitted()
+        transition_response_review(
+            response_id=self.response.pk, reviewed=True, actor=self.staff,
+        )
+        reviewed_at = Response.objects.get(pk=self.response.pk).reviewed_at
+        self.staff.delete()
+        self.response.refresh_from_db()
+        self.assertEqual(self.response.reviewed_at, reviewed_at)
+        self.assertIsNone(self.response.reviewed_by)
+        self.assertEqual(self.response.review_label, 'Reviewed before queue launch')
+
+    def test_queue_index_and_review_state_semantics(self):
+        index = next(
+            item for item in Response._meta.indexes
+            if item.name == 'response_review_queue_idx'
+        )
+        self.assertEqual(index.fields, ['status', 'reviewed_at', '-submitted_at'])
+        self.assertEqual(self.response.review_state, 'not_applicable')
+        self.response.mark_submitted()
+        self.assertEqual(self.response.review_state, 'awaiting')
+        transition_response_review(
+            response_id=self.response.pk, reviewed=True, actor=self.staff,
+        )
+        self.response.refresh_from_db()
+        self.assertEqual(self.response.review_state, 'reviewed')

@@ -107,6 +107,10 @@ from api.views.plans import (
     sprint_plans_collection,
     sprint_plans_send_ready_emails,
 )
+from api.views.questionnaire_responses import (
+    questionnaire_response_detail as questionnaire_response_by_id,
+)
+from api.views.questionnaire_responses import questionnaire_responses_collection
 from api.views.redirects import (
     redirect_detail,
     redirects_bulk_upsert,
@@ -850,6 +854,16 @@ urlpatterns = [
         "onboarding/responses/<path:email>",
         onboarding_response_detail,
         name="api_onboarding_response_detail",
+    ),
+    path(
+        "questionnaire-responses",
+        questionnaire_responses_collection,
+        name="api_questionnaire_responses_collection",
+    ),
+    path(
+        "questionnaire-responses/<int:response_id>",
+        questionnaire_response_by_id,
+        name="api_questionnaire_response_detail",
     ),
     # ---- SES events: webhook (POST) + aggregate list (GET) -------------
     # SNS POSTs bounce/complaint notifications here (auth = SNS signature,

@@ -209,6 +209,8 @@ from studio.views.questionnaires import (
     questionnaire_edit,
     questionnaire_list,
     questionnaire_response_detail,
+    questionnaire_response_queue,
+    questionnaire_response_review,
     questionnaire_responses,
     response_question_create,
     response_question_delete,
@@ -1043,6 +1045,11 @@ urlpatterns = [
     # Questionnaires (issue #800). Planning section. The literal ``new``
     # route is registered before the ``<int:questionnaire_id>`` routes so
     # the slug is not swallowed by the int converter.
+    path(
+        'questionnaire-responses/',
+        questionnaire_response_queue,
+        name='studio_questionnaire_response_queue',
+    ),
     path('questionnaires/', questionnaire_list, name='studio_questionnaire_list'),
     path('questionnaires/new', questionnaire_create, name='studio_questionnaire_create'),
     path(
@@ -1092,6 +1099,11 @@ urlpatterns = [
         'questionnaires/<int:questionnaire_id>/responses/<int:response_id>/',
         questionnaire_response_detail,
         name='studio_questionnaire_response_detail',
+    ),
+    path(
+        'questionnaires/<int:questionnaire_id>/responses/<int:response_id>/review',
+        questionnaire_response_review,
+        name='studio_questionnaire_response_review',
     ),
     # Per-member response-question customization (issue #802).
     path(

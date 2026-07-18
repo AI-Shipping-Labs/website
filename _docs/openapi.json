@@ -5814,6 +5814,15 @@
           },
           {
             "in": "query",
+            "name": "review",
+            "required": false,
+            "schema": {
+              "description": "``awaiting`` / ``reviewed`` / ``all``. Default ``all`` for backward-compatible plan generation.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -5847,6 +5856,7 @@
                         "studio_url": "/studio/crm/42/#onboarding"
                       },
                       "email": "alex@example.com",
+                      "id": 84,
                       "persona": {
                         "archetype": "The Engineer transitioning to AI",
                         "name": "Priya",
@@ -5882,8 +5892,14 @@
                           "question_type": "long_text"
                         }
                       ],
+                      "review_state": "awaiting",
+                      "reviewed_at": null,
+                      "reviewed_by": null,
                       "status": "submitted",
-                      "submitted_at": "2026-05-19T08:30:00+00:00"
+                      "studio_response_url": "/studio/questionnaires/5/responses/84/",
+                      "studio_user_url": "/studio/users/12/",
+                      "submitted_at": "2026-05-19T08:30:00+00:00",
+                      "user_id": 12
                     }
                   ]
                 }
@@ -5942,6 +5958,7 @@
                     "studio_url": "/studio/crm/42/#onboarding"
                   },
                   "email": "alex@example.com",
+                  "id": 84,
                   "persona": {
                     "archetype": "The Engineer transitioning to AI",
                     "name": "Priya",
@@ -5977,8 +5994,14 @@
                       "question_type": "long_text"
                     }
                   ],
+                  "review_state": "awaiting",
+                  "reviewed_at": null,
+                  "reviewed_by": null,
                   "status": "submitted",
-                  "submitted_at": "2026-05-19T08:30:00+00:00"
+                  "studio_response_url": "/studio/questionnaires/5/responses/84/",
+                  "studio_user_url": "/studio/users/12/",
+                  "submitted_at": "2026-05-19T08:30:00+00:00",
+                  "user_id": 12
                 }
               }
             },
@@ -7149,6 +7172,186 @@
         "summary": "Create a week",
         "tags": [
           "Weeks"
+        ]
+      }
+    },
+    "/api/questionnaire-responses": {
+      "get": {
+        "description": "Staff-token queue. Defaults to submitted, awaiting review, newest first. Count is computed before limit/offset slicing.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "review",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "purpose",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "questionnaire",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "limit": 50,
+                  "offset": 0,
+                  "responses": [
+                    {
+                      "answered_count": 4,
+                      "crm_record": null,
+                      "email": "alex@example.com",
+                      "id": 84,
+                      "questionnaire": {
+                        "id": 5,
+                        "purpose": "onboarding",
+                        "slug": "onboarding-engineer",
+                        "title": "Engineer onboarding"
+                      },
+                      "review_state": "awaiting",
+                      "reviewed_at": null,
+                      "reviewed_by": null,
+                      "status": "submitted",
+                      "studio_response_url": "/studio/questionnaires/5/responses/84/",
+                      "studio_user_url": "/studio/users/12/",
+                      "submitted_at": "2026-05-19T08:30:00+00:00",
+                      "updated_at": "2026-05-19T08:30:00+00:00",
+                      "user_id": 12
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Response summaries."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "422": {
+            "description": "Invalid filter."
+          }
+        },
+        "summary": "List all-purpose questionnaire responses",
+        "tags": [
+          "Questionnaire responses"
+        ]
+      }
+    },
+    "/api/questionnaire-responses/{response_id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "response_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Full shared response payload."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Response not found."
+          }
+        },
+        "summary": "Get a full questionnaire response snapshot",
+        "tags": [
+          "Questionnaire responses"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "response_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated full response payload."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Response not found."
+          },
+          "409": {
+            "description": "Draft response cannot be reviewed."
+          },
+          "422": {
+            "description": "Invalid JSON fields or types."
+          }
+        },
+        "summary": "Review or reopen a submitted response",
+        "tags": [
+          "Questionnaire responses"
         ]
       }
     },

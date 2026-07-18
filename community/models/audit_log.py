@@ -70,6 +70,14 @@ class CommunityAuditLog(models.Model):
         # whether the override was newly granted or refreshed/extended.
         ("maven_enrollment_override", "Maven: cohort enrollment override"),
         ("maven_step_retry", "Maven: operator step retry"),
+        (
+            "questionnaire_response_reviewed",
+            "Questionnaire response reviewed",
+        ),
+        (
+            "questionnaire_response_reopened",
+            "Questionnaire response reopened",
+        ),
     ]
 
     user = models.ForeignKey(

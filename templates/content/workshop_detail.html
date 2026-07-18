@@ -5,6 +5,7 @@
 {% load teaser_tags %}
 
 {% block title %}{{ workshop.title }} | AI Shipping Labs{% endblock %}
+{% block robots %}{% if draft_preview %}<meta name="robots" content="noindex,nofollow,noarchive">{% else %}{{ block.super }}{% endif %}{% endblock %}
 {% block meta_description %}{% seo_description workshop %}{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ site_url }}{{ workshop.get_absolute_url }}">{% endblock %}
 {% block og_tags %}{% og_tags workshop %}{% endblock %}

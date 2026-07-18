@@ -13,9 +13,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
-from accounts.tier_audience import effective_level_at_least_q
 from accounts.utils.tags import normalize_tags
 from email_app.models import EmailCampaign
+from email_app.services.campaign_audience import campaign_recipient_count as recount
 from email_app.services.campaign_recipients import (
     build_campaign_recipient_rows,
     campaign_recipient_mode,
@@ -320,6 +320,76 @@ def campaign_recipient_count(request):
     })
 
 
+def _audience_from_post(post):
+    """Strictly validate unsaved Studio audience fields without widening."""
+    errors = {}
+    raw_level = post.get("target_min_level", "0")
+    try:
+        target_min_level = int(raw_level)
+    except (TypeError, ValueError):
+        target_min_level = None
+    valid_levels = {value for value, _label in EmailCampaign.TARGET_LEVEL_CHOICES}
+    if target_min_level not in valid_levels:
+        errors["target_min_level"] = "Unknown tier level."
+
+    slack_filter = post.get("slack_filter", "any")
+    valid_slack = {value for value, _label in EmailCampaign.SLACK_FILTER_CHOICES}
+    if slack_filter not in valid_slack:
+        errors["slack_filter"] = "Unknown Slack filter."
+
+    audience_verification = post.get("audience_verification", "verified_only")
+    valid_verification = {
+        value for value, _label in EmailCampaign.AUDIENCE_VERIFICATION_CHOICES
+    }
+    if audience_verification not in valid_verification:
+        errors["audience_verification"] = "Unknown verification filter."
+
+    raw_event = post.get("target_event", "").strip()
+    target_event_id = None
+    if raw_event:
+        try:
+            target_event_id = int(raw_event)
+        except (TypeError, ValueError):
+            errors["target_event"] = "Event must be a numeric id."
+        else:
+            if not Event.objects.filter(pk=target_event_id).exists():
+                errors["target_event"] = "Unknown event."
+
+    def parse_tags(name):
+        raw = post.get(name, "")
+        if not isinstance(raw, str):
+            errors[name] = "Tags must be text."
+            return []
+        return normalize_tags(TAG_INPUT_SPLIT_RE.split(raw))
+
+    audience = {
+        "target_min_level": target_min_level,
+        "target_tags_any": parse_tags("target_tags_any"),
+        "target_tags_none": parse_tags("target_tags_none"),
+        "slack_filter": slack_filter,
+        "audience_verification": audience_verification,
+        "target_event_id": target_event_id,
+    }
+    return audience, errors
+
+
+@staff_required
+@require_POST
+def campaign_recount(request):
+    """Count an unsaved campaign audience and never return identities."""
+    audience, errors = _audience_from_post(request.POST)
+    if errors:
+        return JsonResponse(
+            {
+                "error": "Invalid audience filters.",
+                "code": "invalid_audience",
+                "details": errors,
+            },
+            status=400,
+        )
+    return JsonResponse({"recipient_count": recount(**audience)})
+
+
 @staff_required
 def campaign_create(request):
     """Create a new email campaign.
@@ -584,15 +654,7 @@ def _recipient_count_for_level(target_min_level):
     counted, and ``.distinct()`` so a user with both a qualifying base tier
     and an active override is counted once.
     """
-    return (
-        User.objects.filter(
-            effective_level_at_least_q(target_min_level),
-            unsubscribed=False,
-            email_verified=True,
-        )
-        .distinct()
-        .count()
-    )
+    return recount(target_min_level=target_min_level)
 
 
 @staff_required

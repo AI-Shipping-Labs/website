@@ -8,7 +8,7 @@
 {% url 'studio_workshop_list' as workshop_list_url %}
 {% studio_header_actions title=workshop.title title_meta=workshop_header_meta back_url=workshop_list_url back_label='Back to workshops' %}
   <a href="{% url 'studio_workshop_edit' workshop_id=workshop.pk %}" data-testid="edit-workshop-link" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="pencil" class="h-4 w-4"></i><span>Edit</span></a>
-  <a href="{{ workshop.get_absolute_url }}" target="_blank" rel="noopener noreferrer" data-testid="view-on-site" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="external-link" class="h-4 w-4"></i><span>View on site</span></a>
+  <a href="{% if workshop.status == 'published' %}{{ workshop.get_absolute_url }}{% else %}{{ workshop.get_preview_url }}{% endif %}" target="_blank" rel="noopener noreferrer" data-testid="{% if workshop.status == 'published' %}view-on-site{% else %}preview-draft{% endif %}" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="external-link" class="h-4 w-4"></i><span>{% if workshop.status == 'published' %}View on site{% else %}Preview draft{% endif %}</span></a>
   {% load admin_links %}{% admin_change_url workshop as admin_url %}{% if admin_url %}{% studio_overflow_menu %}<a href="{{ admin_url }}" data-testid="studio-open-in-admin" title="Open in Django admin" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="wrench" class="h-4 w-4"></i><span>Open in Django admin</span></a>{% endstudio_overflow_menu %}{% endif %}
 {% endstudio_header_actions %}
 
@@ -17,6 +17,40 @@
 <div class="max-w-4xl space-y-6">
 
   {% studio_origin_panel workshop %}
+
+  <section class="bg-card border border-border rounded-lg p-6" data-testid="{% if workshop.status == 'published' %}workshop-public-link-panel{% else %}workshop-preview-link-panel{% endif %}">
+    {% if workshop.status == 'published' %}
+    <h2 class="text-lg font-semibold text-foreground">Public page</h2>
+    <p class="mt-1 text-sm text-muted-foreground">This workshop is published. Share its canonical public page; previously shared draft preview links redirect there.</p>
+    <label for="workshop-public-url" class="mt-4 block text-sm font-medium text-foreground">Canonical workshop URL</label>
+    <input id="workshop-public-url" type="url" readonly value="{{ public_url }}"
+           class="mt-1 w-full rounded-lg border border-border bg-secondary px-3 py-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+           data-testid="workshop-public-url" onclick="this.select()">
+    <div class="mt-3 flex flex-wrap gap-2">
+      <a href="{{ workshop.get_absolute_url }}" target="_blank" rel="noopener noreferrer"
+         class="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+         data-testid="workshop-public-open"><i data-lucide="external-link" class="h-4 w-4"></i><span>View on site</span></a>
+    {% else %}
+    <h2 class="text-lg font-semibold text-foreground">Preview link</h2>
+    <p class="mt-1 text-sm text-muted-foreground">Anyone with this private link can review the draft landing page. Existing tutorial and recording access gates still apply.</p>
+    <label for="workshop-preview-url" class="mt-4 block text-sm font-medium text-foreground">Shareable preview URL</label>
+    <input id="workshop-preview-url" type="url" readonly value="{{ preview_url }}"
+           class="mt-1 w-full rounded-lg border border-border bg-secondary px-3 py-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+           data-testid="workshop-preview-url" onclick="this.select()">
+    <div class="mt-3 flex flex-wrap gap-2">
+      <a href="{{ workshop.get_preview_url }}" target="_blank" rel="noopener noreferrer"
+         class="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+         data-testid="workshop-preview-open"><i data-lucide="external-link" class="h-4 w-4"></i><span>Preview draft</span></a>
+    {% endif %}
+      <form method="post" action="{% url 'studio_workshop_regenerate_preview_token' workshop_id=workshop.pk %}" onsubmit="return confirm('Regenerate this preview link? The old URL will stop working.');">
+        {% csrf_token %}
+        <button type="submit"
+                class="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                data-testid="workshop-preview-regenerate"><i data-lucide="refresh-cw" class="h-4 w-4"></i><span>Regenerate link</span></button>
+      </form>
+    </div>
+    {% if workshop.status == 'published' %}<p class="mt-2 text-xs text-muted-foreground">Regenerating revokes any previously shared draft preview URL.</p>{% endif %}
+  </section>
 
   <!-- Details card -->
   <div class="bg-card border border-border rounded-lg p-6">

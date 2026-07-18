@@ -10,6 +10,7 @@
     <code>{{ template_name }}</code>
   </p>
   <h1 class="text-2xl font-semibold text-foreground mt-1">Edit <code>{{ template_name }}</code></h1>
+  <p class="mt-2 text-sm text-foreground" data-testid="template-sent-when"><span class="font-medium">Sent when:</span> {{ sent_when }}</p>
   <p class="text-muted-foreground mt-1">
     Edits are persisted as a database override and beat the on-disk template
     on the next send. Use the preview pane on the right to see the rendered

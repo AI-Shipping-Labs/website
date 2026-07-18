@@ -11,8 +11,11 @@ they will be added in a follow-up. This module ships models + the helper
 methods the sync pipeline and admin need.
 """
 
+import uuid
+
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.urls import reverse
 
 from content.access import (
     LEVEL_BASIC,
@@ -230,6 +233,11 @@ class Workshop(
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default='draft',
     )
+    preview_token = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        editable=False,
+    )
     landing_required_level = models.IntegerField(
         default=0,
         choices=UNIT_VISIBILITY_CHOICES,
@@ -294,6 +302,16 @@ class Workshop(
     def get_absolute_url(self):
         """Public landing URL: ``/workshops/<slug>``."""
         return f'/workshops/{self.url_key}'
+
+    def get_preview_url(self):
+        return reverse(
+            'workshop_preview',
+            kwargs={'preview_token': self.preview_token},
+        )
+
+    def regenerate_preview_token(self):
+        self.preview_token = uuid.uuid4()
+        self.save(update_fields=['preview_token'])
 
     def get_studio_edit_url(self):
         return f'/studio/workshops/{self.pk}/edit'

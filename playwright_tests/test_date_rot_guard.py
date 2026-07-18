@@ -15,7 +15,9 @@ pytestmark = pytest.mark.core
 PLAYWRIGHT_DIR = Path(__file__).parent
 DATE_ROT_OK = "date-rot-ok:"
 
-DATE_STRING_RE = re.compile(r"\b2026-\d{2}-\d{2}\b|\b\d{2}/\d{2}/2026\b")
+DATE_STRING_RE = re.compile(
+    r"(?<!\d)2026-\d{2}-\d{2}(?!\d)|(?<!\d)\d{2}/\d{2}/2026(?!\d)"
+)
 FUTURE_SENSITIVE_EVENT_FIELDS = {
     "start_datetime",
     "end_datetime",
@@ -346,6 +348,20 @@ def test_date_rot_guard_rejects_unsafe_future_sensitive_fixture():
     assert len(violations) == 1
     assert "start_datetime" in violations[0].snippet
     assert "timezone.now" in violations[0].format()
+
+
+def test_date_rot_guard_rejects_iso_timestamp_with_t_boundary():
+    source = textwrap.dedent(
+        """
+        def test_bad_iso_timestamp():
+            Event.objects.create(start_datetime="2026-07-18T12:00:00Z")
+        """
+    )
+
+    violations = _scan_source(Path("sample.py"), source)
+
+    assert len(violations) == 1
+    assert "start_datetime" in violations[0].snippet
 
 
 def test_date_rot_guard_rejects_unsafe_sprint_start_date_fixture():

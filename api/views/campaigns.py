@@ -27,6 +27,7 @@ from api.utils import (
     validation_response,
 )
 from email_app.models import EmailCampaign
+from email_app.services.campaign_audience import campaign_recipient_count as recount
 from email_app.services.campaign_recipients import serialize_campaign_recipients
 from events.models import Event
 
@@ -75,6 +76,89 @@ _CAMPAIGN_EXAMPLE = {
     "sent_count": 0,
     "created_at": "2026-04-15T12:00:00+00:00",
 }
+
+AUDIENCE_FIELDS = {
+    "target_min_level",
+    "target_tags_any",
+    "target_tags_none",
+    "slack_filter",
+    "audience_verification",
+    "target_event",
+}
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Campaigns",
+    methods={
+        "POST": {
+            "summary": "Count eligible campaign recipients",
+            "description": (
+                "Evaluates unsaved audience filters with the exact campaign "
+                "send eligibility rules and returns only an aggregate count."
+            ),
+            "request_body": {
+                "type": "object",
+                "properties": {
+                    "target_min_level": {"type": "integer", "enum": [0, 10, 20, 30]},
+                    "target_tags_any": {"type": "array", "items": {"type": "string"}},
+                    "target_tags_none": {"type": "array", "items": {"type": "string"}},
+                    "slack_filter": {"type": "string", "enum": ["any", "yes", "no"]},
+                    "audience_verification": {"type": "string", "enum": ["verified_only", "everyone"]},
+                    "target_event": {"type": ["integer", "null"]},
+                },
+                "example": {
+                    "target_min_level": 20,
+                    "target_tags_any": ["sprint-july"],
+                    "target_tags_none": ["bounced"],
+                    "slack_filter": "yes",
+                    "audience_verification": "verified_only",
+                    "target_event": None,
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Aggregate eligible-recipient count.",
+                    "example": {"recipient_count": 42},
+                },
+                401: {"description": "Missing or invalid staff token."},
+                422: {"description": "Invalid audience filters."},
+            },
+        },
+    },
+)
+def campaign_recipient_count(request):
+    """POST ``/api/campaigns/recipient-count`` without saving a draft."""
+    data, parse_error = parse_json_body(request)
+    if parse_error:
+        return parse_error
+    if not isinstance(data, dict):
+        return body_must_be_object_response()
+    unknown = sorted(set(data) - AUDIENCE_FIELDS)
+    if unknown:
+        return validation_response({field: "Unknown field." for field in unknown})
+
+    draft = EmailCampaign()
+    values, errors = _collect_campaign_values(data, existing=draft)
+    if errors:
+        return validation_response(errors)
+    audience = {
+        "target_min_level": values.get("target_min_level", draft.target_min_level),
+        "target_tags_any": values.get("target_tags_any", draft.target_tags_any),
+        "target_tags_none": values.get("target_tags_none", draft.target_tags_none),
+        "slack_filter": values.get("slack_filter", draft.slack_filter),
+        "audience_verification": values.get(
+            "audience_verification", draft.audience_verification
+        ),
+        "target_event_id": (
+            values["target_event"].pk
+            if values.get("target_event") is not None
+            else None
+        ),
+    }
+    return JsonResponse({"recipient_count": recount(**audience)})
 
 
 def _iso(value):

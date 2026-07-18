@@ -56,6 +56,55 @@ TEMPLATE_DISPLAY_ORDER = [
     'sprint_week_note_prompt',
 ]
 
+# Canonical operator guidance for every editable/registered template. Keep
+# this keyed by the actual template slug so list and edit/error renders cannot
+# drift apart. The completeness test intentionally fails when registration is
+# extended without documenting the real send trigger.
+TEMPLATE_SENT_WHEN = {
+    'account_email_change_confirm': 'Sent when a member requests an account email-address change.',
+    'account_email_changed_notice': 'Sent to the previous address after an account email change succeeds.',
+    'basic_welcome': 'Sent when a member first receives Basic membership access.',
+    'cancellation': 'Sent when a paid membership is scheduled to cancel.',
+    'cofounder_welcome': 'Sent when a cofounder membership signup is completed.',
+    'community_invite': 'Sent when an eligible member is invited to the private community.',
+    'download_delivery': 'Sent when a visitor requests delivery of a downloadable resource.',
+    'email_verification_signup': 'Sent when a new account must verify its email address.',
+    'email_verification_signup_reminder': 'Sent when an unverified account is reminded to verify its email address.',
+    'email_verification_subscribe': 'Sent when a newsletter subscriber must verify their email address.',
+    'email_verification_subscribe_reminder': 'Sent when an unverified newsletter subscriber is reminded to verify.',
+    'event_cancelled': 'Sent to registered attendees when an event is cancelled.',
+    'event_recording_ready': 'Sent to event hosts when a recording is ready for Studio review.',
+    'event_registration': 'Sent when a member successfully registers for an event.',
+    'event_reminder': 'Sent to registered attendees before an upcoming event.',
+    'event_rescheduled': 'Sent to registered attendees when an event schedule changes.',
+    'event_workshop_ready': 'Sent to registered attendees when the related workshop is ready.',
+    'free_welcome': 'Sent when a new Free member account is created.',
+    'lead_magnet_delivery': 'Sent when a visitor requests a free lead-magnet resource.',
+    'maven_cohort_removal_notification': 'Sent to staff when a member is removed from a Maven cohort.',
+    'maven_welcome': 'Sent when a Maven enrollee receives course access.',
+    'onboarding_reminder': 'Sent when a paid member has not completed onboarding after one week.',
+    'password_reset': 'Sent when someone requests a password-reset link.',
+    'payment_failed': 'Sent when a paid membership invoice payment fails.',
+    'plan_shared': 'Sent when staff shares a sprint plan with its member.',
+    'post_event_followup': 'Sent to registered attendees after an event with its follow-up resources.',
+    'premium_welcome': 'Sent when a member first receives Premium membership access.',
+    'slack_join_notification': 'Sent to staff when a known member joins the Slack workspace.',
+    'sprint_end_recap': 'Sent to sprint participants when their sprint-end recap is ready.',
+    'sprint_partner_intro': 'Sent when enrolled sprint partners are introduced to each other.',
+    'sprint_week_note_prompt': 'Sent to sprint participants when their weekly progress note is due.',
+    'sprint_week_start': 'Sent to sprint participants when a new sprint week begins.',
+    'staff_signup_notification': 'Sent to staff when a new paid member signs up.',
+    'welcome': 'Sent when a new paid member account is created.',
+    'welcome_back': 'Sent when a returning paid member resubscribes.',
+    'welcome_imported': 'Sent when staff imports a contact and explicitly triggers its welcome.',
+    'workshop_announcement': 'Sent when staff announces a published workshop to its selected audience.',
+}
+
+
+def _sent_when(template_name):
+    """Return canonical trigger guidance, failing loudly if it is missing."""
+    return TEMPLATE_SENT_WHEN[template_name]
+
 
 def _all_template_names():
     """Return the canonical list of editable template slugs."""
@@ -181,6 +230,7 @@ def email_template_list(request):
             'subject': subject,
             'edited': edited,
             'updated_at': updated_at,
+            'sent_when': _sent_when(template_name),
         })
     return render(
         request,
@@ -212,6 +262,7 @@ def email_template_edit(request, template_name):
                 {
                     'template_name': template_name,
                     'initial': initial,
+                    'sent_when': _sent_when(template_name),
                 },
             )
         if not body_markdown.strip():
@@ -225,6 +276,7 @@ def email_template_edit(request, template_name):
                 {
                     'template_name': template_name,
                     'initial': initial,
+                    'sent_when': _sent_when(template_name),
                 },
             )
 
@@ -249,6 +301,7 @@ def email_template_edit(request, template_name):
         {
             'template_name': template_name,
             'initial': initial,
+            'sent_when': _sent_when(template_name),
         },
     )
 

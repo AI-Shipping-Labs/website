@@ -7,6 +7,7 @@ integration doc anchor on GitHub.
 """
 
 import os
+import re
 
 import pytest
 
@@ -76,7 +77,10 @@ class TestStudioSettingsObservability:
         card.locator('button[type="submit"]').click()
         page.wait_for_load_state("domcontentloaded")
 
-        assert "Observability settings saved" in page.locator("body").inner_text()
+        assert re.search(
+            r"Saved \d+ settings in Observability\.",
+            page.locator("body").inner_text(),
+        )
 
         # Reload — the value is still masked (a password input), never shown
         # as plaintext text, exactly like other secret keys.

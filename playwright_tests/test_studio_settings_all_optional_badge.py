@@ -9,6 +9,7 @@ nonsensical "Partial (x/0)" badge.
 """
 
 import os
+import re
 
 import pytest
 
@@ -76,7 +77,10 @@ class TestStudioSettingsAllOptionalBadge:
         card.locator('button[type="submit"]').click()
         page.wait_for_load_state("domcontentloaded")
 
-        assert "Analytics settings saved" in page.locator("body").inner_text()
+        assert re.search(
+            r"Saved \d+ settings in Analytics\.",
+            page.locator("body").inner_text(),
+        )
 
         page.goto(
             f"{django_server}/studio/settings/#analytics",

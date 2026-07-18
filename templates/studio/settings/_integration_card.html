@@ -37,7 +37,7 @@ Context:
            data-field-search-text="{{ field.key }} {{ field.description }}">
         <div class="flex items-center justify-between mb-1 gap-2">
           <div class="flex items-center gap-1.5 min-w-0">
-            <label for="field-{{ field.key }}" class="block text-sm font-medium text-gray-300">{{ field.description }}</label>
+            <label for="field-{{ field.key }}" class="block text-sm font-medium text-foreground">{{ field.description }}</label>
             {% if field.docs_url %}
               {% comment %}
               (?) help-icon link to the per-key setup docs (issue #641,
@@ -54,7 +54,7 @@ Context:
                  data-docs-link="{{ field.key }}"
                  aria-label="Setup docs for {{ field.key }}"
                  title="Setup docs for {{ field.key }}"
-                 class="inline-flex items-center justify-center w-5 h-5 rounded-full border border-border text-[10px] leading-none text-gray-300 hover:text-gray-100 hover:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-0 transition-colors">?</a>
+                 class="inline-flex items-center justify-center w-5 h-5 rounded-full border border-border text-[10px] leading-none text-muted-foreground hover:text-foreground hover:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-0 transition-colors">?</a>
             {% endif %}
           </div>
           {# Source badge — replaces the old "(from env)" text. Three states. #}
@@ -66,13 +66,13 @@ Context:
                   class="px-2 py-0.5 text-xs rounded-full bg-blue-500/20 text-blue-400 whitespace-nowrap">Source: env</span>
           {% elif field.source == 'default' %}
             <span data-source-badge="default"
-                  class="px-2 py-0.5 text-xs rounded-full bg-gray-500/20 text-gray-400 whitespace-nowrap">Source: default</span>
+                  class="px-2 py-0.5 text-xs rounded-full bg-muted text-muted-foreground whitespace-nowrap">Source: default</span>
           {% elif field.source == 'django_settings' %}
             <span data-source-badge="django_settings"
-                  class="px-2 py-0.5 text-xs rounded-full bg-gray-500/20 text-gray-400 whitespace-nowrap">Source: Django settings</span>
+                  class="px-2 py-0.5 text-xs rounded-full bg-muted text-muted-foreground whitespace-nowrap">Source: Django settings</span>
           {% else %}
             <span data-source-badge="none"
-                  class="px-2 py-0.5 text-xs rounded-full bg-gray-500/20 text-gray-400 whitespace-nowrap">Source: not set</span>
+                  class="px-2 py-0.5 text-xs rounded-full bg-muted text-muted-foreground whitespace-nowrap">Source: not set</span>
           {% endif %}
         </div>
         <div class="flex items-center gap-2">
@@ -83,8 +83,8 @@ Context:
                      name="{{ field.key }}"
                      value="true"
                      {% if field.current_value|lower == "true" %}checked{% endif %}
-                     class="h-4 w-4 rounded border-gray-600 bg-gray-700 text-accent focus:ring-accent focus:ring-offset-0">
-              <span class="text-sm text-gray-300">Enabled</span>
+                     class="h-4 w-4 rounded border-border bg-background text-accent focus:ring-accent focus:ring-offset-0">
+              <span class="text-sm text-foreground">Enabled</span>
             </label>
           {% elif field.multiline %}
             <textarea id="field-{{ field.key }}" name="{{ field.key }}" rows="6"
@@ -92,7 +92,7 @@ Context:
               data-1p-ignore="true"
               data-bwignore="true"
               data-lpignore="true"
-              class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">{{ field.current_value }}</textarea>
+              class="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono placeholder:text-muted-foreground focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">{{ field.current_value }}</textarea>
           {% elif field.is_secret %}
             <div class="relative w-full">
               <input type="password" id="field-{{ field.key }}" name="{{ field.key }}" value="{{ field.current_value }}"
@@ -100,9 +100,9 @@ Context:
                 data-1p-ignore="true"
                 data-bwignore="true"
                 data-lpignore="true"
-                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent pr-16">
+                class="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono placeholder:text-muted-foreground focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent pr-16">
               <button type="button" onclick="toggleReveal(this)"
-                class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-200 transition-colors px-2 py-1">Show</button>
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1">Show</button>
             </div>
           {% else %}
             <input type="{% if field.is_email %}email{% else %}text{% endif %}" id="field-{{ field.key }}" name="{{ field.key }}" value="{{ field.current_value }}"
@@ -110,7 +110,7 @@ Context:
               data-1p-ignore="true"
               data-bwignore="true"
               data-lpignore="true"
-              class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+              class="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono placeholder:text-muted-foreground focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
           {% endif %}
           {% comment %}
           Clear-override icon button — only shown when DB is winning. Clears
@@ -124,7 +124,7 @@ Context:
                     data-clear-override="{{ field.key }}"
                     title="Remove this DB override and use the fallback value"
                     aria-label="Clear override for {{ field.key }}"
-                    class="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-md border border-border text-xs text-gray-400 hover:text-gray-200 hover:bg-muted/60 transition-colors">
+                    class="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
               &times;
             </button>
           {% endif %}
@@ -132,20 +132,20 @@ Context:
         {# One-line muted hint — only renders for DB-override state. Secrets redacted. #}
         {% if field.source == 'db' %}
           {% if field.env_value %}
-            <p class="mt-1 text-xs text-gray-500" data-env-hint="present">
+            <p class="mt-1 text-xs text-muted-foreground" data-env-hint="present">
               Env value: <span class="font-mono">{% if field.is_secret %}************{% else %}{{ field.env_value }}{% endif %}</span> (would apply if override cleared)
             </p>
           {% elif field.django_settings_fallback %}
-            <p class="mt-1 text-xs text-gray-500" data-env-hint="django-settings">
+            <p class="mt-1 text-xs text-muted-foreground" data-env-hint="django-settings">
               Clearing this override restores the Django settings fallback.
             </p>
           {% else %}
-            <p class="mt-1 text-xs text-gray-500" data-env-hint="absent">
+            <p class="mt-1 text-xs text-muted-foreground" data-env-hint="absent">
               No env value set (clearing override would leave this empty)
             </p>
           {% endif %}
         {% endif %}
-        <p class="mt-0.5 text-xs text-gray-500 font-mono">{{ field.key }}</p>
+        <p class="mt-0.5 text-xs text-muted-foreground font-mono">{{ field.key }}</p>
       </div>
       {% endfor %}
     </div>

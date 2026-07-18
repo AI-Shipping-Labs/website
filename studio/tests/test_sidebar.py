@@ -578,7 +578,7 @@ class StudioSidebarStructureTest(TestCase):
 
         expected_order = [
             '<span>Users</span>',
-            '<span>Call hosts</span>',
+            '<span>Call hosts (scheduling)</span>',
             '<span>Imports</span>',
             '<span>Tier overrides</span>',
             '<span>Tags</span>',
@@ -594,6 +594,41 @@ class StudioSidebarStructureTest(TestCase):
         self.assertEqual(positions, sorted(positions))
         self.assertNotIn('<span>Sprints</span>', people)
         self.assertNotIn('<span>Plans</span>', people)
+
+    def test_search_host_labels_and_persistence_hooks_render(self):
+        response = self._get_studio_dashboard()
+        body = response.content.decode()
+
+        self.assertEqual(
+            body.count('data-studio-global-search-input data-testid="studio-global-search-input"'),
+            1,
+        )
+        self.assertIn('<span>Event hosts</span>', body)
+        self.assertIn('<span>Call hosts (scheduling)</span>', body)
+        self.assertIn("var STORAGE_KEY = 'studio-nav-open';", body)
+        self.assertIn('data-studio-active-section=""', body)
+        for slug in (
+            'events', 'content', 'people', 'planning', 'onboarding',
+            'communication', 'tracking', 'operations',
+        ):
+            self.assertIn(f'aria-controls="studio-section-{slug}"', body)
+
+    def test_active_section_is_exposed_for_safe_client_merge(self):
+        self.client.login(email='staff@test.com', password='pw')
+        response = self.client.get('/studio/events/')
+        self.assertContains(response, 'data-studio-active-section="events"')
+        self.assertContains(
+            response,
+            'aria-expanded="true"\n                  aria-controls="studio-section-events"',
+        )
+
+    def test_event_form_uses_clarified_host_label_only(self):
+        self.client.login(email='staff@test.com', password='pw')
+        response = self.client.get('/studio/events/new')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Auto-register host (platform email)')
+        self.assertNotContains(response, 'Host platform user email')
+        self.assertContains(response, 'name="host_email"')
 
     def test_studio_sidebar_state_assigns_people_planning_and_onboarding(self):
         for path in ('/studio/sprints/', '/studio/plans/'):

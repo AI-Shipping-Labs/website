@@ -185,7 +185,8 @@ double-rendering. See issue #347.
       below — keep them in sync.
       {% endcomment %}
       <div class="relative -mx-6 min-h-0 flex-1 md:mx-0 md:min-h-0 md:flex-none">
-      <nav id="studio-sidebar-nav" class="h-full space-y-0.5 overflow-y-auto px-6 pb-10 md:h-auto md:space-y-0.5 md:overflow-visible md:px-0 md:pb-0">
+      {% studio_sidebar_state request.path as state %}
+      <nav id="studio-sidebar-nav" data-studio-active-section="{{ state.active_section }}" class="h-full space-y-0.5 overflow-y-auto px-6 pb-10 md:h-auto md:space-y-0.5 md:overflow-visible md:px-0 md:pb-0">
 
         <!-- Top utility row: back to website + theme toggle -->
         <div class="space-y-1">
@@ -214,14 +215,30 @@ double-rendering. See issue #347.
           </a>
         </div>
 
+        <div class="relative py-2" data-studio-global-search data-search-endpoint="{% url 'studio_global_search' %}">
+          <label for="studio-global-search-input" class="sr-only">Search Studio</label>
+          <div class="relative">
+            <i data-lucide="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"></i>
+            <input id="studio-global-search-input" type="search"
+                   class="h-11 w-full rounded-lg border border-border bg-background pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+                   placeholder="Search Studio" autocomplete="off" role="combobox"
+                   aria-label="Search Studio" aria-expanded="false"
+                   aria-controls="studio-global-search-results"
+                   data-studio-global-search-input data-testid="studio-global-search-input">
+            <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">/</span>
+          </div>
+          <div id="studio-global-search-results"
+               class="absolute left-0 z-50 mt-1 hidden max-h-[60vh] w-[min(28rem,calc(100vw-3rem))] overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
+               role="listbox" data-studio-global-search-results
+               data-testid="studio-global-search-results"></div>
+        </div>
+
         {% comment %}
         Per-section expansion booleans, keyed off ``request.path``. See
         ``studio.templatetags.studio_filters.studio_sidebar_state`` for
         the rules. Keep this in lock-step with the per-link active
         highlight rules below.
         {% endcomment %}
-        {% studio_sidebar_state request.path as state %}
-
         <!-- Events Section (expanded by default on dashboard) -->
         <div>
           <button type="button"
@@ -256,7 +273,7 @@ double-rendering. See issue #347.
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/studio/hosts' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
                  data-testid="sidebar-hosts-link">
                 <i data-lucide="user-round-check" class="w-4 h-4"></i>
-                <span>Hosts</span>
+                <span>Event hosts</span>
               </a>
             </li>
           </ul>
@@ -353,7 +370,7 @@ double-rendering. See issue #347.
               <a href="{% url 'studio_call_host_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/studio/call-hosts' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="phone" class="w-4 h-4"></i>
-                <span>Call hosts</span>
+                <span>Call hosts (scheduling)</span>
               </a>
             </li>
             <li>
@@ -720,31 +737,32 @@ double-rendering. See issue #347.
       or the flash will render twice on the same page.
       {% endcomment %}
       {% include "_partials/messages.html" %}
-      <div class="relative mb-5 max-w-3xl" data-studio-global-search data-search-endpoint="{% url 'studio_global_search' %}">
-        <label for="studio-global-search-input" class="sr-only">Search Studio</label>
-        <div class="relative">
-          <i data-lucide="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"></i>
-          <input id="studio-global-search-input"
-                 type="search"
-                 class="h-11 w-full rounded-lg border border-border bg-card pl-9 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-                 placeholder="Search users, content, events, campaigns"
-                 autocomplete="off"
-                 role="combobox"
-                 aria-expanded="false"
-                 aria-controls="studio-global-search-results"
-                 data-studio-global-search-input
-                 data-testid="studio-global-search-input">
-          <span class="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 text-xs text-muted-foreground md:block">/</span>
-        </div>
-        <div id="studio-global-search-results"
-             class="absolute z-30 mt-2 hidden max-h-[70vh] w-[min(48rem,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
-             role="listbox"
-             data-studio-global-search-results
-             data-testid="studio-global-search-results"></div>
-      </div>
       {% block studio_content %}{% endblock %}
     </div>
   </main>
+</div>
+
+<div id="studio-quick-jump" class="fixed inset-0 z-[70] hidden items-start justify-center bg-black/55 px-4 pt-[12vh]" data-studio-quick-jump data-testid="studio-quick-jump">
+  <section role="dialog" aria-modal="true" aria-labelledby="studio-quick-jump-title"
+           class="w-full max-w-2xl overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+    <div class="flex items-center justify-between border-b border-border px-4 py-3">
+      <h2 id="studio-quick-jump-title" class="text-sm font-semibold text-foreground">Quick jump</h2>
+      <span class="text-xs text-muted-foreground">Esc to close</span>
+    </div>
+    <div class="relative" data-studio-global-search data-search-endpoint="{% url 'studio_global_search' %}" data-quick-jump-search>
+      <label for="studio-quick-jump-input" class="sr-only">Search Studio pages and records</label>
+      <i data-lucide="search" class="pointer-events-none absolute left-4 top-[1.4rem] h-5 w-5 text-muted-foreground"></i>
+      <input id="studio-quick-jump-input" type="search" role="combobox"
+             aria-label="Search Studio pages and records" aria-expanded="false"
+             aria-controls="studio-quick-jump-results" autocomplete="off"
+             placeholder="Search pages, people, and content"
+             class="h-14 w-full border-0 bg-card pl-12 pr-4 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent"
+             data-studio-global-search-input data-testid="studio-quick-jump-input">
+      <div id="studio-quick-jump-results" role="listbox"
+           class="hidden max-h-[min(60vh,32rem)] overflow-y-auto border-t border-border bg-card"
+           data-studio-global-search-results data-testid="studio-quick-jump-results"></div>
+    </div>
+  </section>
 </div>
 
 <script>
@@ -854,14 +872,35 @@ document.addEventListener('click', function(event) {
   });
 })();
 
-// Sidebar section collapse/expand (issue #570). The initial expanded /
-// collapsed state is rendered server-side via ``studio_sidebar_state`` so
-// the right sections are visible without any JS. This script only flips
-// state when the user clicks a section header. Section-header <button>s
-// never navigate, and the mobile-drawer click handler above is scoped to
-// <a> elements, so toggling a section in the open mobile drawer does not
-// close the drawer. People links are flat; there is no per-Users sub-toggle.
+// Version-tolerant top-level sidebar preferences (#1287). Server-rendered
+// state remains the no-JS and storage-failure fallback.
 (function() {
+  var STORAGE_KEY = 'studio-nav-open';
+  var nav = document.getElementById('studio-sidebar-nav');
+  var activeSection = nav ? nav.getAttribute('data-studio-active-section') : '';
+
+  function readPreferences() {
+    try {
+      var parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '{}');
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+        return {};
+      }
+      return parsed;
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function writePreference(section, expanded) {
+    try {
+      var preferences = readPreferences();
+      preferences[section] = expanded;
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+    } catch (error) {
+      // Storage may be blocked or quota-limited. Server state still works.
+    }
+  }
+
   function rotateChevron(chevron, expanded) {
     if (!chevron) { return; }
     // Tailwind's ``rotate-180`` class flips the chevron when the section
@@ -870,26 +909,28 @@ document.addEventListener('click', function(event) {
     chevron.classList.toggle('-rotate-90', !expanded);
   }
 
-  function toggleControlled(button, listSelector, chevronSelector) {
+  function setControlled(button, expanded, chevronSelector) {
     var controlsId = button.getAttribute('aria-controls');
     var list = controlsId ? document.getElementById(controlsId) : null;
     if (!list) { return; }
-    var expanded = button.getAttribute('aria-expanded') === 'true';
-    var next = !expanded;
-    button.setAttribute('aria-expanded', next ? 'true' : 'false');
-    list.classList.toggle('hidden', !next);
-    rotateChevron(button.querySelector(chevronSelector), next);
+    button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    list.classList.toggle('hidden', !expanded);
+    rotateChevron(button.querySelector(chevronSelector), expanded);
   }
 
+  var preferences = readPreferences();
   document.querySelectorAll('[data-studio-section-toggle]').forEach(function(button) {
-    // Set initial chevron rotation to match server-rendered state.
-    rotateChevron(
-      button.querySelector('.studio-section-chevron'),
-      button.getAttribute('aria-expanded') === 'true'
-    );
+    var section = (button.getAttribute('aria-controls') || '').replace('studio-section-', '');
+    button.setAttribute('data-studio-section-key', section);
+    var serverExpanded = button.getAttribute('aria-expanded') === 'true';
+    var preferred = typeof preferences[section] === 'boolean' ? preferences[section] : serverExpanded;
+    var mergedExpanded = section === activeSection ? true : preferred;
+    setControlled(button, mergedExpanded, '.studio-section-chevron');
     button.addEventListener('click', function(event) {
       event.preventDefault();
-      toggleControlled(button, null, '.studio-section-chevron');
+      var next = button.getAttribute('aria-expanded') !== 'true';
+      writePreference(section, next);
+      setControlled(button, section === activeSection ? true : next, '.studio-section-chevron');
     });
   });
 
@@ -900,19 +941,33 @@ document.addEventListener('click', function(event) {
     );
     button.addEventListener('click', function(event) {
       event.preventDefault();
-      toggleControlled(button, null, '.studio-trigger-chevron');
+      setControlled(
+        button,
+        button.getAttribute('aria-expanded') !== 'true',
+        '.studio-trigger-chevron'
+      );
     });
   });
 })();
 
 (function() {
   var groupLabels = {
+    pages: 'Pages',
     users: 'Users',
-    content: 'Content',
     events: 'Events',
+    event_series: 'Event series',
+    workshops: 'Workshops',
+    articles: 'Articles',
+    courses: 'Courses',
+    recordings: 'Recordings',
+    downloads: 'Downloads',
+    projects: 'Projects',
     campaigns: 'Campaigns'
   };
-  var groupOrder = ['users', 'content', 'events', 'campaigns'];
+  var groupOrder = [
+    'pages', 'users', 'events', 'event_series', 'workshops', 'articles',
+    'courses', 'recordings', 'downloads', 'projects', 'campaigns'
+  ];
 
   function escapeHtml(value) {
     return String(value || '').replace(/[&<>"']/g, function(char) {
@@ -967,7 +1022,10 @@ document.addEventListener('click', function(event) {
         item.setAttribute('aria-selected', index === activeIndex ? 'true' : 'false');
       });
       if (activeIndex >= 0 && activeItems[activeIndex]) {
+        input.setAttribute('aria-activedescendant', activeItems[activeIndex].id);
         activeItems[activeIndex].scrollIntoView({ block: 'nearest' });
+      } else {
+        input.removeAttribute('aria-activedescendant');
       }
     }
 
@@ -993,7 +1051,7 @@ document.addEventListener('click', function(event) {
         html += '<h3 class="px-3 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">' + escapeHtml(groupLabels[group] || group) + '</h3>';
         html += '<div class="pb-2">';
         items.forEach(function(item) {
-          html += '<button type="button" role="option" aria-selected="false" class="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-secondary" data-studio-search-result data-result-url="' + escapeHtml(item.url) + '">';
+          html += '<button type="button" role="option" aria-selected="false" class="flex min-h-[44px] w-full items-start gap-3 px-3 py-2 text-left hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent" data-studio-search-result data-result-url="' + escapeHtml(item.url) + '">';
           html += '<span class="mt-0.5 rounded border border-border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">' + escapeHtml(item.type) + '</span>';
           html += '<span class="min-w-0 flex-1">';
           html += '<span class="block truncate text-sm font-medium text-foreground">' + escapeHtml(item.label) + '</span>';
@@ -1014,7 +1072,8 @@ document.addEventListener('click', function(event) {
       activeIndex = -1;
       results.innerHTML = html;
       activeItems = Array.prototype.slice.call(results.querySelectorAll('[data-studio-search-result]'));
-      activeItems.forEach(function(item) {
+      activeItems.forEach(function(item, index) {
+        item.id = input.id + '-option-' + index;
         item.addEventListener('mousedown', function(event) {
           event.preventDefault();
         });
@@ -1077,9 +1136,10 @@ document.addEventListener('click', function(event) {
         activeIndex = Math.max(activeIndex - 1, 0);
         updateActive();
       } else if (event.key === 'Enter') {
-        if (activeIndex >= 0 && activeItems[activeIndex]) {
+        var selected = activeIndex >= 0 ? activeItems[activeIndex] : activeItems[0];
+        if (selected) {
           event.preventDefault();
-          navigate(activeItems[activeIndex]);
+          navigate(selected);
         }
       } else if (event.key === 'Escape') {
         setExpanded(false);
@@ -1094,7 +1154,51 @@ document.addEventListener('click', function(event) {
 
   document.querySelectorAll('[data-studio-global-search]').forEach(setupStudioSearch);
 
+  var quickJump = document.querySelector('[data-studio-quick-jump]');
+  var quickJumpInput = quickJump ? quickJump.querySelector('[data-studio-global-search-input]') : null;
+  var focusBeforeQuickJump = null;
+
+  function isQuickJumpOpen() {
+    return quickJump && !quickJump.classList.contains('hidden');
+  }
+
+  function openQuickJump() {
+    if (!quickJump || !quickJumpInput) { return; }
+    focusBeforeQuickJump = document.activeElement;
+    quickJump.classList.remove('hidden');
+    quickJump.classList.add('flex');
+    quickJumpInput.focus();
+    quickJumpInput.select();
+  }
+
+  function closeQuickJump() {
+    if (!isQuickJumpOpen()) { return; }
+    quickJump.classList.add('hidden');
+    quickJump.classList.remove('flex');
+    if (focusBeforeQuickJump && typeof focusBeforeQuickJump.focus === 'function') {
+      focusBeforeQuickJump.focus();
+    }
+  }
+
+  if (quickJump) {
+    quickJump.addEventListener('click', function(event) {
+      if (event.target === quickJump) {
+        closeQuickJump();
+      }
+    });
+  }
+
   document.addEventListener('keydown', function(event) {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      openQuickJump();
+      return;
+    }
+    if (event.key === 'Escape' && isQuickJumpOpen()) {
+      event.preventDefault();
+      closeQuickJump();
+      return;
+    }
     if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) {
       return;
     }

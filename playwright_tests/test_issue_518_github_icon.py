@@ -472,6 +472,7 @@ def test_studio_sticky_action_bar_both_themes(django_server, browser):
     _set_theme(page, "light")
     _wait_for_lucide(page)
 
+    page.locator('[data-testid="studio-header-overflow"] summary').click()
     sticky = page.locator('[data-testid="sticky-github-source-link"]')
     assert sticky.count() == 1
     icon = sticky.locator('svg[data-icon="github"]').first
@@ -489,6 +490,7 @@ def test_studio_sticky_action_bar_both_themes(django_server, browser):
     _set_theme(page, "dark")
     _wait_for_lucide(page)
 
+    page.locator('[data-testid="studio-header-overflow"] summary').click()
     sticky = page.locator('[data-testid="sticky-github-source-link"]')
     assert sticky.count() == 1
     icon = sticky.locator('svg[data-icon="github"]').first

@@ -409,6 +409,7 @@ class TestMoveUnfinishedPlanItems:
             f"{django_server}/studio/plans/{source_id}/",
             wait_until="domcontentloaded",
         )
+        page.locator('[data-testid="studio-header-overflow"] summary').click()
         page.get_by_test_id("studio-plan-move-unfinished").click()
         page.wait_for_url(
             f"{django_server}/studio/plans/{source_id}/move-unfinished/"

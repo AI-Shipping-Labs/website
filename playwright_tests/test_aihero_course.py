@@ -194,20 +194,18 @@ class TestScenario1AnonymousDiscoversCourse:
         # Course title appears in the listing
         assert "7-Day AI Agents Email Crash-Course" in body
 
-        # Free badge is visible
-        free_badge = page.locator(
-            'span.text-green-400:has-text("Free")'
-        )
-        assert free_badge.count() >= 1
+        # The canonical member badge identifies the course as Free.
+        course_card = page.locator('a[href="/courses/aihero"]').first
+        free_badge = course_card.locator(
+            '[data-component="member-badge"]'
+        ).filter(has_text="Free")
+        assert free_badge.is_visible()
 
         # Instructor name appears
         assert "Alexey Grigorev" in body
 
         # Step 2: Click on the course card
-        course_link = page.locator(
-            'a[href="/courses/aihero"]'
-        ).first
-        course_link.click()
+        course_card.click()
         page.wait_for_load_state("domcontentloaded")
 
         # Lands on /courses/aihero
@@ -240,11 +238,11 @@ class TestScenario2AnonymousLandingPageSignupCTA:
         # Course title
         assert "7-Day AI Agents Email Crash-Course" in body
 
-        # Free badge
+        # The canonical member badge identifies the course as Free.
         free_badge = page.locator(
-            'span.text-green-400:has-text("Free")'
-        )
-        assert free_badge.count() >= 1
+            '[data-component="member-badge"]'
+        ).filter(has_text="Free")
+        assert free_badge.is_visible()
 
         # Instructor name and bio
         assert "Alexey Grigorev" in body

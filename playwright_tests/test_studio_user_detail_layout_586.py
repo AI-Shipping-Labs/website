@@ -226,10 +226,21 @@ class TestUserDetailLayout586:
 
         # Click the Login as user button. The impersonate endpoint
         # redirects the staff session to '/' as the target user.
+        dialogs = []
+
+        def accept_impersonation(dialog):
+            dialogs.append(dialog.message)
+            dialog.accept()
+
+        page.once("dialog", accept_impersonation)
         page.locator(
             '[data-testid="user-detail-impersonate"]'
         ).click()
         page.wait_for_url(f"{django_server}/")
+        assert dialogs == [
+            "Log in as layout2@test.com? Your Studio session will be paused "
+            "until you stop impersonating."
+        ]
         # Confirm the session is now the target user by hitting the
         # account page and reading the identity it serves.
         page.goto(

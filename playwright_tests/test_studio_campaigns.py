@@ -171,6 +171,7 @@ class TestStaffAbortsDelete:
         detail_url = f"{django_server}/studio/campaigns/{campaign.pk}/"
         page.goto(detail_url, wait_until="domcontentloaded")
 
+        page.locator('[data-testid="studio-header-overflow"] summary').click()
         page.locator('[data-testid="delete-campaign-btn"]').click()
 
         # Dialog dismissed → no navigation.
@@ -210,6 +211,7 @@ class TestStaffConfirmsDelete:
         detail_url = f"{django_server}/studio/campaigns/{campaign.pk}/"
         page.goto(detail_url, wait_until="domcontentloaded")
 
+        page.locator('[data-testid="studio-header-overflow"] summary').click()
         page.locator('[data-testid="delete-campaign-btn"]').click()
         page.wait_for_load_state("domcontentloaded")
 

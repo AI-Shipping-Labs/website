@@ -343,15 +343,15 @@ class TestScenario3StaffSeesLegacyUrlWarning:
         )
         assert response.status == 200
 
-        # The dashboard renders SyncLog.errors as
-        # `<file>: <error message>` lines inside the AI-Shipping-Labs/blog
-        # repo card. Locate the card by its repo-name heading and assert
-        # the legacy warning is inside it.
+        # Issue #1286 renders SyncLog.errors in a structured disclosure inside
+        # the exact repository card. Expand it before checking the details.
         blog_card = page.locator(
-            '.bg-card:has-text("AI-Shipping-Labs/blog")'
-        ).first
+            '[data-repo-card][data-repo-name="AI-Shipping-Labs/blog"]'
+        )
         blog_card.wait_for()
-        card_text = blog_card.inner_text()
+        errors = blog_card.get_by_test_id('sync-structured-errors')
+        errors.locator('summary').click()
+        card_text = errors.inner_text()
         # Both the source path AND the offending URL must appear.
         assert 'legacy-test.md' in card_text, card_text
         assert '/event-recordings/foo' in card_text, card_text

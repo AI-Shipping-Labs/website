@@ -1,8 +1,8 @@
-"""Playwright checks for source-managed course edit page action row layout.
+"""Playwright checks for source-managed course edit page action hierarchy.
 
 Issue #490: source actions (Edit on GitHub, View on site, Re-sync source)
-should fit on a single row at desktop and wrap predictably on mobile,
-with the YAML guide link visible.
+remain reachable after the standardized Studio header moved secondary actions
+into the shared overflow menu. The YAML guide remains visible.
 """
 
 import os
@@ -63,7 +63,7 @@ def _staff_page(browser):
 def test_source_managed_action_row_desktop_single_line(
     django_server, browser, tmp_path,
 ):
-    """Desktop 1280x900: action buttons sit on one horizontal line."""
+    """Desktop 1280x900: primary and overflow actions remain reachable."""
     _reset_courses()
     course = _create_synced_course()
     context, page = _staff_page(browser)
@@ -77,29 +77,26 @@ def test_source_managed_action_row_desktop_single_line(
     action_row = page.locator('[data-testid="studio-header-actions"]').first
     assert action_row.is_visible()
 
-    github = page.locator('[data-testid="sticky-github-source-link"]').first
     view = page.locator('[data-testid="view-on-site"]').first
-    resync = page.locator('[data-testid="sticky-resync-source-button"]').first
     docs = page.locator('[data-testid="sticky-docs-link"]').first
+    overflow = page.locator('[data-testid="studio-header-overflow"]').first
+    overflow_toggle = overflow.locator("summary")
 
-    assert github.is_visible()
     assert view.is_visible()
-    assert resync.is_visible()
+    assert overflow_toggle.is_visible()
     assert docs.is_visible()
 
-    # All three action buttons should align on a single horizontal line.
-    g = github.bounding_box()
+    # The primary action and More actions control share the header row.
     v = view.bounding_box()
-    r = resync.bounding_box()
-    assert g is not None and v is not None and r is not None
-    row_height = max(g["height"], v["height"], r["height"])
-    # Within a single visual row: top-y values within one button height.
-    assert abs(g["y"] - v["y"]) < row_height, (
-        f"github y={g['y']} view y={v['y']} not on same row"
-    )
-    assert abs(g["y"] - r["y"]) < row_height, (
-        f"github y={g['y']} resync y={r['y']} not on same row"
-    )
+    o = overflow_toggle.bounding_box()
+    assert v is not None and o is not None
+    assert abs(v["y"] - o["y"]) < max(v["height"], o["height"])
+
+    overflow_toggle.click()
+    github = overflow.get_by_test_id("sticky-github-source-link")
+    resync = overflow.get_by_test_id("sticky-resync-source-button")
+    assert github.is_visible()
+    assert resync.is_visible()
 
     page.screenshot(
         path=str(tmp_path / "issue-490-action-row-desktop.png"),

@@ -1204,8 +1204,8 @@ class TestScenario13SyncQueuedButtonConfirmation:
         self._setup(django_server, page)
 
         blog_card = page.locator(
-            '.bg-card:has-text("AI-Shipping-Labs/blog")'
-        ).first
+            '[data-repo-card][data-repo-name="AI-Shipping-Labs/blog"]'
+        )
         # The card has two `button.sync-btn` buttons: 'Sync now' (first)
         # and 'Force resync' (second). Pick the first one explicitly so
         # `.inner_text()` / `.wait_for()` don't trip Playwright's
@@ -1297,8 +1297,8 @@ class TestScenario13SyncQueuedButtonConfirmation:
         self._setup(django_server, page)
 
         blog_card = page.locator(
-            '.bg-card:has-text("AI-Shipping-Labs/blog")'
-        ).first
+            '[data-repo-card][data-repo-name="AI-Shipping-Labs/blog"]'
+        )
         # First sync-btn = 'Sync now' (second is 'Force resync').
         sync_btn = blog_card.locator('button.sync-btn').first
         sync_btn_text = sync_btn.locator('span.sync-btn-text')
@@ -1322,7 +1322,12 @@ class TestScenario13SyncQueuedButtonConfirmation:
         page.wait_for_function(
             """
             startedAt => {
-                const el = document.querySelectorAll('button.sync-btn span.sync-btn-text')[0];
+                const card = document.querySelector(
+                  '[data-repo-card][data-repo-name="AI-Shipping-Labs/blog"]'
+                );
+                const el = card && card.querySelector(
+                  'button.sync-btn span.sync-btn-text'
+                );
                 return el
                 && Date.now() - startedAt >= 1000
                 && el.textContent.includes('Sync queued');
@@ -1333,7 +1338,10 @@ class TestScenario13SyncQueuedButtonConfirmation:
         )
         page.evaluate(
             """
-            const btn = document.querySelectorAll('button.sync-btn')[0];
+            const card = document.querySelector(
+              '[data-repo-card][data-repo-name="AI-Shipping-Labs/blog"]'
+            );
+            const btn = card.querySelector('button.sync-btn');
             const form = btn.closest('form');
             form.dispatchEvent(
               new Event('submit', {bubbles: true, cancelable: true})
@@ -1348,7 +1356,12 @@ class TestScenario13SyncQueuedButtonConfirmation:
         page.wait_for_function(
             """
             startedAt => {
-                const el = document.querySelectorAll('button.sync-btn span.sync-btn-text')[0];
+                const card = document.querySelector(
+                  '[data-repo-card][data-repo-name="AI-Shipping-Labs/blog"]'
+                );
+                const el = card && card.querySelector(
+                  'button.sync-btn span.sync-btn-text'
+                );
                 return el
                 && Date.now() - startedAt >= 1100
                 && el.textContent.includes('Sync queued');

@@ -1,5 +1,6 @@
 """Project preview card journeys for issue #1231."""
 
+import base64
 import datetime
 import os
 
@@ -13,6 +14,10 @@ pytestmark = pytest.mark.local_only
 COVER_URL = "https://cdn.example.com/project-cover-1231.png"
 CUSTOM_URL = "https://cdn.example.com/project-custom-1231.png"
 AUTO_URL = "https://cdn.example.com/project-auto-1231.png"
+TINY_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUB"
+    "AScY42YAAAAASUVORK5CYII="
+)
 
 
 def _reset_projects():
@@ -51,6 +56,17 @@ def _open(page, django_server, path):
     )
     assert response is not None
     assert response.status == 200
+
+
+def _serve_images(page, *urls):
+    """Keep preview precedence checks independent of external networking."""
+    for url in urls:
+        page.route(
+            url,
+            lambda route: route.fulfill(
+                status=200, content_type="image/png", body=TINY_PNG,
+            ),
+        )
 
 
 def _project_card(page, title, *, homepage=False):
@@ -93,6 +109,7 @@ def test_visitor_compares_covered_and_coverless_projects_without_grid_jump(
         day=1,
     )
     page.set_viewport_size({"width": 1440, "height": 1000})
+    _serve_images(page, COVER_URL)
 
     _open(page, django_server, "/projects")
     covered_card = _project_card(page, covered.title)
@@ -127,6 +144,7 @@ def test_visitor_recognizes_operator_selected_custom_project_banner(
         custom_banner_url=CUSTOM_URL,
         auto_banner_url=AUTO_URL,
     )
+    _serve_images(page, CUSTOM_URL, AUTO_URL)
 
     _open(page, django_server, "/projects")
     card = _project_card(page, project.title)
@@ -136,7 +154,7 @@ def test_visitor_recognizes_operator_selected_custom_project_banner(
     expect(card.locator(f'img[src="{AUTO_URL}"]')).to_have_count(0)
     expect(
         card.get_by_test_id("project-card-preview-fallback"),
-    ).to_have_count(0)
+    ).to_be_hidden()
 
     card.locator("a").first.click()
     page.wait_for_url(f"{django_server}{project.get_absolute_url()}")
@@ -162,6 +180,7 @@ def test_visitor_keeps_generated_preview_after_difficulty_filter(
         day=2,
         difficulty="advanced",
     )
+    _serve_images(page, AUTO_URL)
 
     _open(page, django_server, "/projects")
     card = _project_card(page, project.title)
@@ -191,6 +210,7 @@ def test_frontmatter_cover_remains_highest_priority_project_preview(
         custom_banner_url=CUSTOM_URL,
         auto_banner_url=AUTO_URL,
     )
+    _serve_images(page, COVER_URL, CUSTOM_URL, AUTO_URL)
 
     _open(page, django_server, "/projects")
     card = _project_card(page, project.title)
@@ -219,6 +239,7 @@ def test_homepage_and_catalog_share_custom_preview_copy_and_destination(
         "shared-homepage-project-1231",
         custom_banner_url=CUSTOM_URL,
     )
+    _serve_images(page, CUSTOM_URL)
 
     _open(page, django_server, "/")
     home_card = _project_card(page, project.title, homepage=True)

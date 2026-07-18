@@ -576,12 +576,14 @@ class TestStudioCRM:
             f"{django_server}/studio/crm/{pks['engaged_record_pk']}/",
             wait_until="domcontentloaded",
         )
+        page.locator('[data-testid="studio-header-overflow"] summary').click()
         page.locator(
             '[data-testid="crm-detail-archive"]'
         ).click()
         page.wait_for_url(
             f"**/studio/crm/{pks['engaged_record_pk']}/"
         )
+        page.locator('[data-testid="studio-header-overflow"] summary').click()
         assert page.locator(
             '[data-testid="crm-detail-reactivate"]'
         ).is_visible()
@@ -603,6 +605,7 @@ class TestStudioCRM:
             f"{django_server}/studio/crm/{pks['engaged_record_pk']}/",
             wait_until="domcontentloaded",
         )
+        page.locator('[data-testid="studio-header-overflow"] summary').click()
         page.locator(
             '[data-testid="crm-detail-reactivate"]'
         ).click()

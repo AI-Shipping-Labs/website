@@ -202,10 +202,21 @@ class TestDraftReflectsMemberProfile:
                 "plans.services.next_sprint_draft.llm.complete",
                 side_effect=_profile_aware_complete(seen),
             ):
+                dialogs = []
+                page.once(
+                    "dialog",
+                    lambda dialog: (
+                        dialogs.append(dialog.message), dialog.accept()
+                    ),
+                )
+                page.locator(
+                    '[data-testid="studio-header-overflow"] summary'
+                ).click()
                 page.locator(
                     '[data-testid="studio-plan-draft-next-sprint"]'
                 ).click()
                 page.wait_for_load_state("domcontentloaded")
+                assert dialogs and "held for review, not published" in dialogs[0]
 
             panel = page.locator('[data-testid="next-sprint-draft-panel"]')
             assert panel.count() == 1
@@ -249,10 +260,21 @@ class TestDraftForMemberWhoSkippedOnboarding:
                 "plans.services.next_sprint_draft.llm.complete",
                 side_effect=_profile_aware_complete(seen),
             ):
+                dialogs = []
+                page.once(
+                    "dialog",
+                    lambda dialog: (
+                        dialogs.append(dialog.message), dialog.accept()
+                    ),
+                )
+                page.locator(
+                    '[data-testid="studio-header-overflow"] summary'
+                ).click()
                 page.locator(
                     '[data-testid="studio-plan-draft-next-sprint"]'
                 ).click()
                 page.wait_for_load_state("domcontentloaded")
+                assert dialogs and "held for review, not published" in dialogs[0]
 
             # The draft still generates — no error, panel renders, editor usable.
             panel = page.locator('[data-testid="next-sprint-draft-panel"]')

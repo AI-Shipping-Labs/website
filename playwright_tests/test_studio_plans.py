@@ -492,7 +492,8 @@ class TestStaffCapturesInterviewNotes:
         # the member-scoped form.
         page.get_by_test_id("member-notes-add").click()
         page.wait_for_url(
-            f"{django_server}/studio/users/{member.pk}/notes/new?plan_id={plan.pk}",
+            f"{django_server}/studio/users/{member.pk}/notes/new"
+            f"?plan_id={plan.pk}&next=/studio/plans/{plan.pk}/%23member-notes",
         )
 
         # The visibility selector defaults to internal. The select's
@@ -506,16 +507,7 @@ class TestStaffCapturesInterviewNotes:
             "Member is changing jobs in 6 weeks - keep plan light",
         )
         page.locator('button[type="submit"]').click()
-        # The member-note form still redirects to the legacy user-profile
-        # anchor, but the profile no longer renders the notes section
-        # (issue #560). The plan detail page still includes the
-        # ``_member_notes.html`` partial, so we navigate back there — the
-        # natural surface for this plan-driven narrative.
-        page.wait_for_url(f"{django_server}/studio/users/{member.pk}/#member-notes")
-        page.goto(
-            f"{django_server}/studio/plans/{plan.pk}/",
-            wait_until="domcontentloaded",
-        )
+        page.wait_for_url(f"{django_server}/studio/plans/{plan.pk}/#member-notes")
 
         # Internal section now has the note; external is still empty.
         page.locator(
@@ -532,7 +524,8 @@ class TestStaffCapturesInterviewNotes:
         # explicitly below to be robust either way.
         page.get_by_test_id("member-notes-add").click()
         page.wait_for_url(
-            f"{django_server}/studio/users/{member.pk}/notes/new?plan_id={plan.pk}",
+            f"{django_server}/studio/users/{member.pk}/notes/new"
+            f"?plan_id={plan.pk}&next=/studio/plans/{plan.pk}/%23member-notes",
         )
         page.locator('select[name="visibility"]').select_option("external")
         page.locator('select[name="plan_id"]').select_option(str(plan.pk))
@@ -540,11 +533,7 @@ class TestStaffCapturesInterviewNotes:
             "Aim for one shipped prototype by week 3",
         )
         page.locator('button[type="submit"]').click()
-        page.wait_for_url(f"{django_server}/studio/users/{member.pk}/#member-notes")
-        page.goto(
-            f"{django_server}/studio/plans/{plan.pk}/",
-            wait_until="domcontentloaded",
-        )
+        page.wait_for_url(f"{django_server}/studio/plans/{plan.pk}/#member-notes")
 
         # External now has the new note; internal still has the
         # original. The two sections render independently.

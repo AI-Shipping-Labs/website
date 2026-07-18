@@ -367,24 +367,85 @@ class TestUserDetailLayout586:
         assert value_el.is_visible()
         assert "U01ABC123" in value_el.inner_text()
 
-        # Open in Slack anchor with target="_blank".
+        # Open in Slack anchor keeps the canonical profile destination and
+        # opens it separately from the support workflow.
         slack_link = page.locator(
             '[data-testid="user-detail-slack-profile-link"]'
         )
         assert slack_link.is_visible()
         assert slack_link.get_attribute("target") == "_blank"
+        assert slack_link.get_attribute("href") == (
+            "https://app.slack.com/client/T01TEAM123/U01ABC123"
+        )
+        slack_link.focus()
+        page.keyboard.press("Tab")
+        page.keyboard.press("Shift+Tab")
+        assert slack_link.evaluate("el => el === document.activeElement")
+        assert slack_link.evaluate("el => el.matches(':focus-visible')")
+        context.route(
+            "https://app.slack.com/client/T01TEAM123/U01ABC123",
+            lambda route: route.fulfill(
+                status=200, content_type="text/html", body="Slack profile"
+            ),
+        )
+        with page.expect_popup() as popup_info:
+            page.keyboard.press("Enter")
+        slack_popup = popup_info.value
+        slack_popup.wait_for_url(
+            "https://app.slack.com/client/T01TEAM123/U01ABC123",
+            wait_until="commit",
+        )
+        assert slack_popup.url == "https://app.slack.com/client/T01TEAM123/U01ABC123"
+        slack_popup.close()
 
-        # No <input name="slack_user_id">, no submit, no form posting
-        # to the slack-id-set endpoint.
-        assert page.locator(
-            'input[name="slack_user_id"]'
-        ).count() == 0
-        assert page.locator(
-            '[data-testid="user-detail-slack-id-submit"]'
-        ).count() == 0
-        assert page.locator(
-            f'form[action="/studio/users/{member_pk}/slack-id/"]'
-        ).count() == 0
+        # The accepted support surface keeps the edit form hidden until a
+        # staff operator invokes it with the keyboard, then normalizes and
+        # persists an edited ID and supports an explicit clear.
+        toggle = page.locator("#slack-id-edit-toggle")
+        form = page.locator("#slack-id-edit-form")
+        assert form.is_hidden()
+        toggle.focus()
+        page.keyboard.press("Tab")
+        page.keyboard.press("Shift+Tab")
+        assert toggle.evaluate("el => el === document.activeElement")
+        assert toggle.evaluate("el => el.matches(':focus-visible')")
+        page.keyboard.press("Enter")
+        slack_input = page.locator('input[name="slack_user_id"]')
+        assert slack_input.evaluate("el => el === document.activeElement")
+        assert slack_input.evaluate("el => el.matches(':focus-visible')")
+        assert form.get_attribute("action") == f"/studio/users/{member_pk}/slack-id/"
+        slack_input.fill("u01new456")
+        cancel = form.get_by_role("button", name="Cancel")
+        cancel.focus()
+        page.keyboard.press("Tab")
+        page.keyboard.press("Shift+Tab")
+        assert cancel.evaluate("el => el === document.activeElement")
+        assert cancel.evaluate("el => el.matches(':focus-visible')")
+        page.keyboard.press("Enter")
+        assert form.is_hidden()
+
+        toggle.focus()
+        page.keyboard.press("Enter")
+        slack_input.fill("u01new456")
+        save = form.get_by_role("button", name="Save")
+        save.focus()
+        page.keyboard.press("Tab")
+        page.keyboard.press("Shift+Tab")
+        assert save.evaluate("el => el === document.activeElement")
+        assert save.evaluate("el => el.matches(':focus-visible')")
+        page.keyboard.press("Enter")
+        page.get_by_text("Slack ID set to U01NEW456.").wait_for()
+        assert "U01NEW456" in value_el.inner_text()
+
+        page.locator("#slack-id-edit-toggle").focus()
+        page.keyboard.press("Enter")
+        page.locator('input[name="slack_user_id"]').fill("")
+        page.locator("#slack-id-edit-form").get_by_role(
+            "button", name="Save"
+        ).focus()
+        page.keyboard.press("Enter")
+        page.get_by_text("Slack ID cleared.").wait_for()
+        assert page.get_by_test_id("user-detail-slack-id-empty").is_visible()
         context.close()
 
     # ---------------- Scenario 6 --------------------------------------------

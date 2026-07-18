@@ -93,12 +93,27 @@
   var slug = document.getElementById('utm-campaign-slug');
   if (!name || !slug || slug.dataset.createPrefill !== 'true') return;
   var operatorTouchedSlug = Boolean(slug.value);
-  slug.addEventListener('input', function() { operatorTouchedSlug = true; });
+  var generatedSlug = '';
+  function takeManualControl(event) {
+    operatorTouchedSlug = true;
+    if (event && event.type === 'beforeinput' && generatedSlug && slug.value === generatedSlug) {
+      slug.value = '';
+      generatedSlug = '';
+    }
+  }
+  slug.addEventListener('pointerdown', takeManualControl);
+  slug.addEventListener('paste', takeManualControl);
+  slug.addEventListener('drop', takeManualControl);
+  slug.addEventListener('beforeinput', takeManualControl);
+  slug.addEventListener('input', takeManualControl);
   name.addEventListener('blur', function() {
-    if (operatorTouchedSlug || slug.value) return;
-    slug.value = name.value.toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '');
+    window.setTimeout(function() {
+      if (operatorTouchedSlug || slug.value) return;
+      generatedSlug = name.value.toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+      slug.value = generatedSlug;
+    }, 0);
   });
 })();
 </script>

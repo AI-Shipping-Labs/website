@@ -376,12 +376,12 @@ class TestStudioUsersNameLayout:
         assert tier_pill.inner_text().strip() == 'Premium'
         assert tier_pill.get_attribute('data-tier') == 'premium'
 
-        # The legacy Membership column is gone -- the row has exactly four
-        # td cells with the new data-label set.
+        # The legacy Membership column is gone. Joined is now its own sortable
+        # column, so the accepted row has five data-label cells.
         labels = row.locator('td').evaluate_all(
             "nodes => nodes.map(n => n.getAttribute('data-label'))"
         )
-        assert labels == ['User', 'Status', 'Last login', 'Actions']
+        assert labels == ['User', 'Status', 'Joined', 'Last login', 'Actions']
 
         context.close()
 
@@ -626,13 +626,13 @@ class TestStudioUsersNameLayout:
         assert row.is_visible()
 
         cells = row.locator('td')
-        # Four data-label cells in fixed order (issue #451):
-        # User / Status / Last login / Actions. The Membership and Tags
-        # columns are gone.
+        # Five data-label cells in fixed order. Membership and Tags remain
+        # absent while the accepted Joined column precedes Last login.
         assert cells.nth(0).get_attribute('data-label') == 'User'
         assert cells.nth(1).get_attribute('data-label') == 'Status'
-        assert cells.nth(2).get_attribute('data-label') == 'Last login'
-        assert cells.nth(3).get_attribute('data-label') == 'Actions'
+        assert cells.nth(2).get_attribute('data-label') == 'Joined'
+        assert cells.nth(3).get_attribute('data-label') == 'Last login'
+        assert cells.nth(4).get_attribute('data-label') == 'Actions'
 
         # The User card includes the full name AND email.
         user_cell_text = cells.nth(0).inner_text()

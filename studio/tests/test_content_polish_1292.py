@@ -9,6 +9,7 @@ from django.urls import reverse
 from content.models import Course, CourseInstructor, Instructor, MarketingPage, Workshop
 from content.services import course_instructors as instructor_service
 from content.services.course_instructors import CourseInstructorError
+from email_app.services.email_service import TEMPLATES_DIR
 from integrations.models import UtmCampaign, UtmCampaignLink
 from studio.views.email_templates import TEMPLATE_SENT_WHEN, _all_template_names
 
@@ -37,8 +38,10 @@ class ContentPolishStudioTest(TestCase):
 
     def test_every_editable_email_template_has_trigger_guidance(self):
         names = _all_template_names()
+        on_disk_names = {path.stem for path in TEMPLATES_DIR.glob("*.md")}
         self.assertTrue(names)
-        self.assertEqual(set(names), set(TEMPLATE_SENT_WHEN))
+        self.assertEqual(set(names), on_disk_names)
+        self.assertEqual(set(TEMPLATE_SENT_WHEN), on_disk_names)
         response = self.client.get(reverse("studio_email_template_list"))
         self.assertEqual(response.status_code, 200)
         for row in response.context["rows"]:
@@ -50,6 +53,25 @@ class ContentPolishStudioTest(TestCase):
         response = self.client.get(edit_url)
         self.assertEqual(response.context["sent_when"], expected)
         self.assertContains(response, expected)
+
+        series_guidance = {
+            "series_registration": ("registers for an event series", "calendar invitation"),
+            "series_update": ("session details change", "updated calendar invitation"),
+            "series_cancellation": (
+                "one session in an event series is cancelled",
+                "calendar cancellation update",
+            ),
+        }
+        for series_template, expected_phrases in series_guidance.items():
+            with self.subTest(series_template=series_template):
+                response = self.client.get(
+                    reverse("studio_email_template_edit", args=[series_template])
+                )
+                self.assertEqual(response.status_code, 200)
+                guidance = response.context["sent_when"]
+                self.assertTrue(guidance.strip())
+                for phrase in expected_phrases:
+                    self.assertIn(phrase, guidance)
         response = self.client.post(
             edit_url, {"subject": "", "body_markdown": "", "footer_note": ""}
         )

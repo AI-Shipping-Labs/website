@@ -128,6 +128,88 @@ class TestScenario1CreateCampaignAndLink:
         assert url_box.inner_text().strip() == EXPECTED_AI_HERO_URL
 
 
+@pytest.mark.django_db(transaction=True)
+def test_create_prefill_yields_to_manual_slug_and_survives_validation(
+    django_server, browser
+):
+    from integrations.models import UtmCampaign
+
+    _clear_utm()
+    _ensure_tiers()
+    _create_staff_user("utm-prefill-admin@test.com")
+    UtmCampaign.objects.create(
+        name="Existing campaign",
+        slug="manual_campaign",
+        default_utm_source="newsletter",
+        default_utm_medium="email",
+    )
+    UtmCampaign.objects.create(
+        name="Existing pasted campaign",
+        slug="pasted_campaign",
+        default_utm_source="newsletter",
+        default_utm_medium="email",
+    )
+    connection.close()
+
+    context = _auth_context(browser, "utm-prefill-admin@test.com")
+    page = context.new_page()
+    try:
+        page.goto(
+            f"{django_server}/studio/utm-campaigns/new",
+            wait_until="domcontentloaded",
+        )
+        name = page.locator('input[name="name"]')
+        slug = page.locator('input[name="slug"]')
+        source = page.locator('input[name="default_utm_source"]')
+        assert source.input_value() == "newsletter"
+
+        name.fill("Generated April Launch")
+        page.locator('textarea[name="notes"]').click()
+        page.wait_for_function(
+            "document.getElementById('utm-campaign-slug').value === "
+            "'generated_april_launch'"
+        )
+        assert slug.input_value() == "generated_april_launch"
+
+        slug.click()
+        page.keyboard.type("manual_campaign")
+        assert slug.input_value() == "manual_campaign"
+        name.fill("Renamed April Launch")
+        page.locator('input[name="default_utm_medium"]').fill("email")
+        page.get_by_role("button", name="Create Campaign").click()
+        page.get_by_text('A campaign with slug "manual_campaign" already exists.').wait_for()
+        assert slug.input_value() == "manual_campaign"
+        assert name.input_value() == "Renamed April Launch"
+
+        page.goto(
+            f"{django_server}/studio/utm-campaigns/new",
+            wait_until="domcontentloaded",
+        )
+        name = page.locator('input[name="name"]')
+        slug = page.locator('input[name="slug"]')
+        name.fill("Generated Paste Campaign")
+        page.locator('textarea[name="notes"]').click()
+        page.wait_for_function(
+            "document.getElementById('utm-campaign-slug').value === "
+            "'generated_paste_campaign'"
+        )
+        context.grant_permissions(
+            ["clipboard-read", "clipboard-write"], origin=django_server
+        )
+        page.evaluate("navigator.clipboard.writeText('pasted_campaign')")
+        slug.click()
+        page.keyboard.press("Control+V")
+        assert slug.input_value() == "pasted_campaign"
+        page.locator('input[name="default_utm_medium"]').fill("email")
+        page.get_by_role("button", name="Create Campaign").click()
+        page.get_by_text(
+            'A campaign with slug "pasted_campaign" already exists.'
+        ).wait_for()
+        assert slug.input_value() == "pasted_campaign"
+    finally:
+        context.close()
+
+
 # ---------------------------------------------------------------
 # Scenario 2: Marketer copies a generated URL
 # ---------------------------------------------------------------

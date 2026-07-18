@@ -86,6 +86,8 @@
              id="import-preview-feedback" data-testid="import-outcome-card"
              aria-live="polite" aria-atomic="true">
       <h2 class="text-base font-semibold text-foreground">Expected outcome</h2>
+      <h3 class="mt-3 text-sm font-semibold text-foreground{% if not preview.warning %} hidden{% endif %}"
+          data-testid="import-preview-warning-count">{% if preview.warning %}Warnings ({{ preview.total_skipped }}){% endif %}</h3>
       <p class="mt-2 text-sm text-foreground" data-testid="import-outcome-summary">{{ outcome_summary }}</p>
       <p class="mt-2 text-sm text-amber-700 dark:text-amber-400{% if not preview.warning %} hidden{% endif %}"
          data-testid="import-email-warning">{{ preview.warning }}</p>
@@ -124,6 +126,7 @@
   const emailColumn = document.querySelector('[data-testid="import-email-column"]');
   const submit = document.querySelector('[data-testid="import-confirm-submit"]');
   const summary = document.querySelector('[data-testid="import-outcome-summary"]');
+  const warningCount = document.querySelector('[data-testid="import-preview-warning-count"]');
   const warning = document.querySelector('[data-testid="import-email-warning"]');
   const skipHelp = document.querySelector('[data-testid="import-invalid-skip-help"]');
   const blockReason = document.querySelector('[data-testid="import-block-reason"]');
@@ -153,6 +156,8 @@
 
   const renderPreview = data => {
     summary.textContent = outcomeText(data);
+    warningCount.textContent = data.warning ? `Warnings (${data.total_skipped})` : '';
+    warningCount.classList.toggle('hidden', !data.warning);
     warning.textContent = data.warning || '';
     warning.classList.toggle('hidden', !data.warning);
     skipHelp.classList.toggle('hidden', !data.warning || !data.can_apply);

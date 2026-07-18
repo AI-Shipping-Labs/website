@@ -173,6 +173,8 @@ class ContactImportPreviewViewTest(TestCase):
             ('Grace', 'newsletter'),
         ))
         self.assertContains(response, 'Only 0/2 values in this column look like email addresses.')
+        self.assertContains(response, 'Warnings (2)')
+        self.assertNotContains(response, 'Warnings (0)')
         self.assertContains(response, 'Choose another email column to continue.')
         self.assertContains(response, 'disabled aria-disabled="true"')
 

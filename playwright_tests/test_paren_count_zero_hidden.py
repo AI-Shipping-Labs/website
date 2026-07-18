@@ -386,6 +386,9 @@ class TestStaffUserImportResult:
             f"{django_server}/studio/users/import/",
             wait_until="domcontentloaded")
 
+        from accounts.models import User
+        users_before_clean = User.objects.count()
+        connection.close()
         clean_csv = tmp_path / "clean.csv"
         clean_csv.write_text(
             "email\nclean-user-597@test.com\n", encoding="utf-8")
@@ -402,6 +405,9 @@ class TestStaffUserImportResult:
         # Heading text never reads "Warnings (0)".
         assert "Warnings (0)" not in body
         assert "Warnings ()" not in body
+        assert User.objects.filter(email="clean-user-597@test.com").exists()
+        assert User.objects.count() == users_before_clean + 1
+        connection.close()
 
         # Run 2: a CSV with two malformed rows that produce warnings.
         page.goto(
@@ -411,19 +417,26 @@ class TestStaffUserImportResult:
         # Two rows missing the @, which the importer treats as malformed.
         bad_csv.write_text(
             "email\nnotanemail\nstillbad\n", encoding="utf-8")
+        users_before = User.objects.count()
+        connection.close()
         page.locator('input[type="file"]').set_input_files(str(bad_csv))
-        page.locator('button[type="submit"]').first.click()
-        page.wait_for_load_state("networkidle")
         page.locator('button[type="submit"]').first.click()
         page.wait_for_load_state("networkidle")
 
         body = page.content()
-        # We expect a non-zero warnings count to appear with " (N)".
-        # The exact N depends on the importer; we only require that the
-        # rendered heading is "Warnings (X)" for some X >= 1, never
-        # "Warnings (0)".
+        # An all-invalid preview reports the exact warning count and cannot
+        # be applied. The disabled action is an intentional #1291 safety
+        # boundary, so verify both presentation and absence of writes.
+        assert "Warnings (2)" in body
         assert "Warnings (0)" not in body
-        assert "Warnings (" in body  # paren count is shown
+        confirm = page.get_by_test_id("import-confirm-submit")
+        assert confirm.is_disabled()
+        assert confirm.get_attribute("aria-disabled") == "true"
+        assert User.objects.count() == users_before
+        assert not User.objects.filter(
+            email__in=["notanemail", "stillbad"]
+        ).exists()
+        connection.close()
 
         ctx.close()
 

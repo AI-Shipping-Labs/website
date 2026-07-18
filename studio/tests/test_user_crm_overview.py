@@ -310,12 +310,13 @@ class PlanDetailReusesMemberNotesPartialTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Member notes')
         self.assertContains(response, 'Plan-detail note body')
-        # The "Add member note" affordance prefills plan_id in the
-        # plan-detail reuse path.
+        # The "Add member note" affordance prefills plan_id and returns
+        # to this plan's notes section in the plan-detail reuse path.
         self.assertContains(
             response,
             (
                 f'href="/studio/users/{self.member.pk}/notes/new'
-                f'?plan_id={self.spring_plan.pk}"'
+                f'?plan_id={self.spring_plan.pk}&amp;next=/studio/plans/'
+                f'{self.spring_plan.pk}/%23member-notes"'
             ),
         )

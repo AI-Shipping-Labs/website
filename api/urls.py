@@ -149,6 +149,7 @@ from api.views.users import (
     user_email_log,
     user_mark_bounced,
     user_ses_events,
+    user_slack_membership_check,
     user_tags_add,
     user_tags_remove,
     users_collection,
@@ -746,6 +747,11 @@ urlpatterns = [
         "users/<path:email>/crm-record",
         user_crm_record,
         name="api_user_crm_record",
+    ),
+    path(
+        "users/<path:email>/slack-membership/check",
+        user_slack_membership_check,
+        name="api_user_slack_membership_check",
     ),
     path(
         "users/<path:email>",

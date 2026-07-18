@@ -5,28 +5,22 @@
 {% block studio_title %}CRM{% endblock %}
 
 {% block studio_content %}
-<div class="mb-6">
-  <h1 class="text-2xl font-semibold text-foreground">CRM</h1>
-  <p class="text-sm text-muted-foreground mt-1">
-    The engaged subset of members. Staff opt-in to tracking via the
-    <span class="font-mono">Track in CRM</span> button on a user profile.
-  </p>
-</div>
+{% studio_header_actions title="CRM" subtitle="The engaged subset of members. Staff opt in to tracking from a user profile." %}{% endstudio_header_actions %}
 
 <!-- Filter chips and search -->
 <form method="get" class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" data-testid="crm-list-controls">
   <div class="flex flex-wrap items-center gap-2" data-testid="crm-filter-chips">
-    <a href="?filter={{ filter_active }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_active }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}{% if active_tag %}&tag={{ active_tag }}{% endif %}"
        data-testid="crm-filter-active"
        class="px-3 py-1.5 rounded-full text-xs font-medium border {% if active_filter == filter_active %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
       Active{{ counts.active|paren_count }}
     </a>
-    <a href="?filter={{ filter_archived }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_archived }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}{% if active_tag %}&tag={{ active_tag }}{% endif %}"
        data-testid="crm-filter-archived"
        class="px-3 py-1.5 rounded-full text-xs font-medium border {% if active_filter == filter_archived %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
       Archived{{ counts.archived|paren_count }}
     </a>
-    <a href="?filter={{ filter_all }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_all }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}{% if active_tag %}&tag={{ active_tag }}{% endif %}"
        data-testid="crm-filter-all"
        class="px-3 py-1.5 rounded-full text-xs font-medium border {% if active_filter == filter_all %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
       All{{ counts.all|paren_count }}
@@ -35,13 +29,13 @@
   <div class="flex flex-col gap-2 sm:items-end">
     <div class="flex flex-wrap items-center gap-2" data-testid="crm-lifecycle-filter-chips">
       <span class="text-xs text-muted-foreground">Lifecycle:</span>
-      <a href="?filter={{ active_filter }}{% if search %}&q={{ search }}{% endif %}"
+      <a href="?filter={{ active_filter }}{% if search %}&q={{ search }}{% endif %}{% if active_tag %}&tag={{ active_tag }}{% endif %}"
          data-lifecycle-filter=""
          class="px-3 py-1 rounded-full text-xs font-medium border {% if not account_lifecycle_filter %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
         All
       </a>
       {% for value, label in account_lifecycle_choices %}
-      <a href="?filter={{ active_filter }}&account_lifecycle={{ value }}{% if search %}&q={{ search }}{% endif %}"
+      <a href="?filter={{ active_filter }}&account_lifecycle={{ value }}{% if search %}&q={{ search }}{% endif %}{% if active_tag %}&tag={{ active_tag }}{% endif %}"
          data-lifecycle-filter="{{ value }}"
          class="px-3 py-1 rounded-full text-xs font-medium border {% if account_lifecycle_filter == value %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
         {{ label }}
@@ -51,6 +45,7 @@
     <div class="flex items-center gap-2">
       <input type="hidden" name="filter" value="{{ active_filter }}">
       {% if account_lifecycle_filter %}<input type="hidden" name="account_lifecycle" value="{{ account_lifecycle_filter }}">{% endif %}
+      {% if active_tag %}<input type="hidden" name="tag" value="{{ active_tag }}">{% endif %}
       <input type="text"
              name="q"
              value="{{ search }}"
@@ -67,7 +62,21 @@
   </div>
 </form>
 
-{% if rows or search or account_lifecycle_filter or active_filter == filter_archived %}
+<form method="get" class="mb-6 flex flex-wrap items-end gap-2" data-testid="crm-tag-filter-form">
+  <input type="hidden" name="filter" value="{{ active_filter }}">
+  {% if account_lifecycle_filter %}<input type="hidden" name="account_lifecycle" value="{{ account_lifecycle_filter }}">{% endif %}
+  {% if search %}<input type="hidden" name="q" value="{{ search }}">{% endif %}
+  <div>
+    <label for="crm-tag-filter" class="mb-1 block text-xs font-medium text-muted-foreground">Tag</label>
+    <select id="crm-tag-filter" name="tag" data-testid="crm-tag-filter" onchange="this.form.submit()" class="studio-select min-h-11 rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+      <option value="">All tags</option>
+      {% for tag in known_tags %}<option value="{{ tag }}" {% if tag == active_tag %}selected{% endif %}>{{ tag }}</option>{% endfor %}
+    </select>
+  </div>
+  <noscript><button type="submit" class="min-h-11 rounded-lg border border-border bg-secondary px-3 py-2 text-sm">Apply</button></noscript>
+</form>
+
+{% if rows or search or active_tag or account_lifecycle_filter or active_filter == filter_archived %}
 <div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="crm-list-table">
   <table class="min-w-full divide-y divide-border">
     <thead class="bg-secondary">
@@ -143,12 +152,12 @@
   <span>Showing {{ page.start_index }}-{{ page.end_index }} of {{ paginator.count }}</span>
   <div class="flex items-center gap-2">
     {% if page.has_previous %}
-    <a href="?filter={{ active_filter }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}&page={{ page.previous_page_number }}"
+    <a href="?filter={{ active_filter }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}{% if active_tag %}&tag={{ active_tag }}{% endif %}&page={{ page.previous_page_number }}"
        class="px-3 py-1 rounded border border-border hover:bg-secondary">Previous</a>
     {% endif %}
     <span>Page {{ page.number }} of {{ paginator.num_pages }}</span>
     {% if page.has_next %}
-    <a href="?filter={{ active_filter }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}&page={{ page.next_page_number }}"
+    <a href="?filter={{ active_filter }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}{% if active_tag %}&tag={{ active_tag }}{% endif %}&page={{ page.next_page_number }}"
        class="px-3 py-1 rounded border border-border hover:bg-secondary">Next</a>
     {% endif %}
   </div>

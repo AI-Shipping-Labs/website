@@ -1,5 +1,7 @@
 """Studio CRUD for member-scoped InterviewNote rows (issue #459)."""
 
+from urllib.parse import unquote, urlsplit
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404, redirect, render
@@ -65,6 +67,35 @@ def _member_detail_anchor(user):
     return f'/studio/users/{user.pk}/#member-notes'
 
 
+def _safe_note_return_url(raw, user):
+    """Accept only local Studio-relative return paths, including anchors."""
+    fallback = _member_detail_anchor(user)
+    value = (raw or '').strip()
+    if not value:
+        return fallback
+    decoded = value
+    try:
+        for _ in range(3):
+            candidate = unquote(decoded)
+            if candidate == decoded:
+                break
+            decoded = candidate
+        if any(ord(character) < 32 for character in decoded):
+            return fallback
+        if '\\' in decoded or decoded.startswith('//'):
+            return fallback
+        parts = urlsplit(decoded)
+    except (TypeError, ValueError):
+        return fallback
+    if parts.scheme or parts.netloc or not parts.path.startswith('/studio/'):
+        return fallback
+    # Prefix checks alone are not enough: browsers resolve dot segments before
+    # navigation, so ``/studio/../../outside`` is not a Studio destination.
+    if any(segment in {'.', '..'} for segment in parts.path.split('/')):
+        return fallback
+    return decoded
+
+
 def _render_form(
     request,
     *,
@@ -74,6 +105,7 @@ def _render_form(
     form_data,
     error='',
     status=200,
+    return_url=None,
 ):
     return render(request, 'studio/users/note_form.html', {
         'detail_user': detail_user,
@@ -84,6 +116,7 @@ def _render_form(
         'kind_choices': KIND_CHOICES,
         'visibility_choices': VISIBILITY_CHOICES,
         'error': error,
+        'return_url': return_url or _member_detail_anchor(detail_user),
     }, status=status)
 
 
@@ -91,6 +124,10 @@ def _render_form(
 def member_note_create(request, user_id):
     """Create a member note, optionally tied to one of the member's plans."""
     detail_user = get_object_or_404(User, pk=user_id)
+    return_url = _safe_note_return_url(
+        request.POST.get('next') if request.method == 'POST' else request.GET.get('next'),
+        detail_user,
+    )
     selected_plan = _selected_plan_for_member(
         detail_user,
         request.GET.get('plan_id', ''),
@@ -109,6 +146,7 @@ def member_note_create(request, user_id):
                 'tags': '',
                 'plan_id': str(selected_plan.pk) if selected_plan else '',
             },
+            return_url=return_url,
         )
 
     form_data = {
@@ -127,6 +165,7 @@ def member_note_create(request, user_id):
             form_data=form_data,
             error='Note body is required.',
             status=400,
+            return_url=return_url,
         )
 
     plan = _selected_plan_for_member(detail_user, form_data['plan_id'])
@@ -140,7 +179,7 @@ def member_note_create(request, user_id):
         created_by=request.user if request.user.is_authenticated else None,
     )
     messages.success(request, 'Member note added.')
-    return redirect(_member_detail_anchor(detail_user))
+    return redirect(return_url)
 
 
 @staff_required
@@ -151,6 +190,10 @@ def member_note_edit(request, user_id, note_id):
         InterviewNote.objects.select_related('member', 'plan'),
         pk=note_id,
         member=detail_user,
+    )
+    return_url = _safe_note_return_url(
+        request.POST.get('next') if request.method == 'POST' else request.GET.get('next'),
+        detail_user,
     )
 
     if request.method != 'POST':
@@ -166,6 +209,7 @@ def member_note_edit(request, user_id, note_id):
                 'tags': _format_note_tags(note.tags),
                 'plan_id': str(note.plan_id) if note.plan_id else '',
             },
+            return_url=return_url,
         )
 
     form_data = {
@@ -184,6 +228,7 @@ def member_note_edit(request, user_id, note_id):
             form_data=form_data,
             error='Note body is required.',
             status=400,
+            return_url=return_url,
         )
 
     note.plan = _selected_plan_for_member(detail_user, form_data['plan_id'])
@@ -193,7 +238,7 @@ def member_note_edit(request, user_id, note_id):
     note.tags = _parse_note_tags(form_data['tags'])
     note.save()
     messages.success(request, 'Member note updated.')
-    return redirect(_member_detail_anchor(detail_user))
+    return redirect(return_url)
 
 
 @staff_required
@@ -202,6 +247,7 @@ def member_note_delete(request, user_id, note_id):
     """Delete a member note; the URL user id must match the note owner."""
     detail_user = get_object_or_404(User, pk=user_id)
     note = get_object_or_404(InterviewNote, pk=note_id, member=detail_user)
+    return_url = _safe_note_return_url(request.POST.get('next'), detail_user)
     note.delete()
     messages.success(request, 'Member note deleted.')
-    return redirect(_member_detail_anchor(detail_user))
+    return redirect(return_url)

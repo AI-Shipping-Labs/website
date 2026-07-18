@@ -294,7 +294,7 @@ class PlanDetailMemberNotesTest(MemberNotesTestBase):
         self.assertContains(response, 'Spring 2026')
         self.assertContains(
             response,
-            f'href="/studio/users/{self.member.pk}/notes/{spring_note.pk}/edit"',
+            f'href="/studio/users/{self.member.pk}/notes/{spring_note.pk}/edit?next=',
         )
         self.assertContains(
             response,
@@ -304,7 +304,7 @@ class PlanDetailMemberNotesTest(MemberNotesTestBase):
             response,
             (
                 f'href="/studio/users/{self.member.pk}/notes/new'
-                f'?plan_id={self.summer_plan.pk}"'
+                f'?plan_id={self.summer_plan.pk}&amp;next='
             ),
         )
 

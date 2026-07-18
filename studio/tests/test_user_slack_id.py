@@ -165,12 +165,7 @@ class StudioUserDetailSlackIdRowTest(_SlackTeamIdSettingMixin, TestCase):
         )
         self.assertContains(response, 'Not linked')
 
-    def test_inline_edit_form_removed_from_detail_template(self):
-        # Issue #586: the Slack ID row is read-only on the user detail
-        # page. The form, input, and submit button must all be gone.
-        # The studio_user_slack_id_set route stays defined (callable
-        # from Django admin / scripts) but is no longer surfaced from
-        # the template.
+    def test_inline_edit_disclosure_present_on_detail_template(self):
         linked_html = self.client.get(
             f'/studio/users/{self.linked.pk}/'
         ).content.decode()
@@ -178,23 +173,15 @@ class StudioUserDetailSlackIdRowTest(_SlackTeamIdSettingMixin, TestCase):
             f'/studio/users/{self.unlinked.pk}/'
         ).content.decode()
         for html in (linked_html, unlinked_html):
-            self.assertNotIn('data-testid="user-detail-slack-id-form"', html)
-            self.assertNotIn('data-testid="user-detail-slack-id-input"', html)
-            self.assertNotIn('data-testid="user-detail-slack-id-submit"', html)
-            # The submit button labelled Save / Edit Slack ID / Set
-            # Slack ID copy must also be gone — those phrases only
-            # belonged to the inline edit form.
-            self.assertNotIn('name="slack_user_id"', html)
-        self.assertNotIn('Set Slack ID', unlinked_html)
-        self.assertNotIn('Edit Slack ID', linked_html)
-        # The form action URL specifically must not appear in either
-        # rendered template (it lives only on the Django admin path now).
-        self.assertNotIn(
+            self.assertIn('aria-controls="slack-id-edit-form"', html)
+            self.assertIn('name="slack_user_id"', html)
+            self.assertIn('id="slack-id-edit-form"', html)
+            self.assertIn('class="hidden mt-2 flex-col', html)
+        self.assertIn(
             f'action="/studio/users/{self.linked.pk}/slack-id/"', linked_html,
         )
-        self.assertNotIn(
-            f'action="/studio/users/{self.unlinked.pk}/slack-id/"',
-            unlinked_html,
+        self.assertIn(
+            f'action="/studio/users/{self.unlinked.pk}/slack-id/"', unlinked_html,
         )
 
     def test_unlinked_row_does_not_offer_second_django_admin_path(self):

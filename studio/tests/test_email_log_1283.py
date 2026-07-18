@@ -55,7 +55,7 @@ class EmailLogFocusContractTest(SimpleTestCase):
             'data-testid="user-email-history-section"'
         )
         history_end = user_detail.index(
-            'data-testid="user-aliases-section"', history_start,
+            'data-testid="user-tags-section"', history_start,
         )
         controls.extend(
             tag for tag in _interactive_tags(

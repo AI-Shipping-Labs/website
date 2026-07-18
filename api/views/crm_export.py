@@ -53,7 +53,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from accounts.lifecycle import account_lifecycle_q
 from accounts.models.email_alias import EmailAlias
-from accounts.utils.tags import normalize_tag
+from accounts.utils.tags import normalize_tag, user_ids_with_exact_tag
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.onboarding import serialize_response
@@ -256,7 +256,7 @@ def _base_queryset():
     gated query covers the whole page rather than one per member.
     """
     return (
-        User.objects.select_related("tier", "attribution")
+        User.objects.select_related("tier", "pending_tier", "attribution")
         .prefetch_related(
             "plans",
             "interview_notes",
@@ -533,6 +533,11 @@ def _serialize_member(
                         "with scope, email, q, since, limit, and offset."
                     ),
                 },
+                "tag": {
+                    "type": "string",
+                    "required": False,
+                    "description": "Exact normalized contact-tag filter.",
+                },
             },
             "responses": {
                 200: {
@@ -603,8 +608,17 @@ def crm_export(request):
     q_lower = q.lower()
     q_normalized = normalize_tag(q) if q else ""
     email = (request.GET.get("email") or "").strip()
+    raw_tag = request.GET.get("tag")
+    tag = normalize_tag(raw_tag) if raw_tag is not None else ""
+    if raw_tag is not None and not tag:
+        return error_response(
+            "Invalid tag", "validation_error", status=422,
+            details={"field": "tag", "value": raw_tag},
+        )
 
     qs = _base_queryset()
+    if tag:
+        qs = qs.filter(pk__in=user_ids_with_exact_tag(tag))
     bearer = request.user
     persona_by_questionnaire = _persona_map()
 

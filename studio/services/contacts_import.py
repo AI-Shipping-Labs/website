@@ -186,6 +186,7 @@ def import_contact_rows(
     default_tier=None,
     granted_by=None,
     tier_assignment_mode="override",
+    override_expires_at=None,
 ):
     """Upsert a batch of contact rows.
 
@@ -331,7 +332,13 @@ def import_contact_rows(
                         warnings=result.warnings,
                     )
                 else:
-                    _apply_tier_override(user, requested_tier, granted_by)
+                    if override_expires_at is None:
+                        _apply_tier_override(user, requested_tier, granted_by)
+                    else:
+                        _apply_tier_override(
+                            user, requested_tier, granted_by,
+                            expires_at=override_expires_at,
+                        )
             _apply_slack_member(
                 user,
                 row,
@@ -486,7 +493,7 @@ def _apply_tag(user, normalized_tag):
     user.save(update_fields=['tags'])
 
 
-def _apply_tier_override(user, override_tier, granted_by):
+def _apply_tier_override(user, override_tier, granted_by, *, expires_at=None):
     """Replace the manual grant while preserving source-specific access."""
     TierOverride.objects.filter(user=user, is_active=True).exclude(
         source__startswith='maven:',
@@ -495,7 +502,7 @@ def _apply_tier_override(user, override_tier, granted_by):
         user=user,
         original_tier=user.tier,
         override_tier=override_tier,
-        expires_at=timezone.now() + OVERRIDE_DURATION,
+        expires_at=expires_at or timezone.now() + OVERRIDE_DURATION,
         granted_by=granted_by,
         is_active=True,
         source='staff',

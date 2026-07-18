@@ -280,6 +280,7 @@ from studio.views.users import (
     user_export_csv,
     user_list,
     user_slack_id_set,
+    user_slack_membership_check,
     user_sync_from_stripe,
     user_tag_add,
     user_tag_remove,
@@ -831,6 +832,11 @@ urlpatterns = [
         'users/<int:user_id>/slack-id/',
         user_slack_id_set,
         name='studio_user_slack_id_set',
+    ),
+    path(
+        'users/<int:user_id>/slack-membership/check',
+        user_slack_membership_check,
+        name='studio_user_slack_membership_check',
     ),
     # Inline and per-user tier-override controls.
     path(

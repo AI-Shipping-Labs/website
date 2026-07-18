@@ -413,11 +413,13 @@ class TestStudioCRM:
         assert source.locator('[data-testid="member-note-source-link"]').is_visible()
 
         note.get_by_text("Edit").click()
-        page.wait_for_url("**/notes/**/edit")
+        page.wait_for_url("**/notes/**/edit?**")
         tags_input = page.locator('[data-testid="member-note-tags-input"]')
         tags_input.fill("slack, plan-sprints, Needs Follow Up")
         page.get_by_role("button", name="Save changes").click()
-        page.wait_for_url(f"{django_server}/studio/users/{pks['engaged_pk']}/#member-notes")
+        page.wait_for_url(
+            f"{django_server}/studio/crm/{pks['engaged_record_pk']}/#member-notes"
+        )
         page.goto(
             f"{django_server}/studio/crm/{pks['engaged_record_pk']}/",
             wait_until="domcontentloaded",

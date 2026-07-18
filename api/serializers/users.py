@@ -20,6 +20,7 @@ from django.utils import timezone
 
 from accounts.lifecycle import lifecycle_payload
 from accounts.models import TierOverride
+from accounts.services.subscription_summary import subscription_summary
 from accounts.utils.display import display_name
 
 BOUNCE_STATE_NONE = "none"
@@ -163,6 +164,7 @@ def serialize_user_state(user, *, compact=False):
         payload["aliases"] = list(
             user.email_aliases.order_by("email").values_list("email", flat=True)
         )
+        payload["subscription"] = subscription_summary(user)
     return payload
 
 

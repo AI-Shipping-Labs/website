@@ -153,23 +153,22 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None, force=
     override_deactivated = bool(sweep_overrides)
     deactivated_override_ids = [override.pk for override in sweep_overrides]
 
-    # Subscription-id metadata behaves the same in both modes: write only
-    # when the local field is empty. Force only widens billing_period_end.
-    subscription_id_would_change = bool(subscription_id and not user.subscription_id)
-    if force:
-        billing_period_end_would_change = bool(
-            period_end and user.billing_period_end != period_end
-        )
-        billing_period_end_overwritten = bool(
-            period_end
-            and user.billing_period_end is not None
-            and user.billing_period_end != period_end
-        )
-    else:
-        billing_period_end_would_change = bool(
-            period_end and user.billing_period_end is None
-        )
-        billing_period_end_overwritten = False
+    # Active-subscription metadata is refreshed in normal and force modes.
+    # Force remains distinct only in override sweeping and its explicit audit
+    # flag; operators should not need force merely to refresh cached billing
+    # metadata on the normal Sync from Stripe path.
+    subscription_id_would_change = bool(
+        subscription_id and user.subscription_id != subscription_id
+    )
+    billing_period_end_would_change = bool(
+        period_end and user.billing_period_end != period_end
+    )
+    billing_period_end_overwritten = bool(
+        force
+        and period_end
+        and user.billing_period_end is not None
+        and user.billing_period_end != period_end
+    )
 
     metadata_saved = subscription_id_would_change or billing_period_end_would_change
     tier_changed = user.tier_id != tier.pk

@@ -14120,7 +14120,7 @@
     },
     "/api/worker/tasks": {
       "get": {
-        "description": "Newest-first list of django-q tasks. Default returns the most recent 50 across success and failed. ``status``, ``group``, ``since``, and ``limit`` narrow the result.",
+        "description": "Newest-first list of django-q tasks. Default returns the most recent 50 across success and failed. ``status``, ``group``, ``since``, ``q``, operator-date bounds, ``offset``, and ``limit`` compose to narrow the result.",
         "parameters": [
           {
             "in": "query",
@@ -14162,6 +14162,42 @@
               "description": "ISO-8601 datetime; only tasks started at or after this are returned.",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "description": "Name/function substring.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": false,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": false,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "description": "Zero-based row offset.",
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -14169,20 +14205,158 @@
             "content": {
               "application/json": {
                 "example": {
-                  "count": 1,
+                  "count": 2,
                   "limit": 50,
+                  "offset": 0,
                   "tasks": [
                     {
-                      "func": "events.tasks.complete_finished_events.complete_finished_events",
+                      "affected_entity": {
+                        "id": 42,
+                        "kind": "article",
+                        "label": "Article #42 \u2014 Agent operations",
+                        "state": "available",
+                        "studio_url": "/studio/articles/42/edit"
+                      },
+                      "duration_seconds": 2.0,
+                      "error_summary": null,
+                      "function": "integrations.services.banner_generator.tasks.render_banner_for_content",
                       "group": "scheduled",
-                      "id": "ab12cd34ef56",
                       "name": "complete-finished-events",
-                      "result": null,
-                      "started": "2026-05-20T04:00:00+00:00",
-                      "stopped": "2026-05-20T04:00:02+00:00",
-                      "success": true
+                      "started_at": "2026-05-20T04:00:00+00:00",
+                      "stopped_at": "2026-05-20T04:00:02+00:00",
+                      "success": true,
+                      "task_id": "ab12cd34ef56"
+                    },
+                    {
+                      "affected_entity": {
+                        "id": "d34db33f-18a4-4af3-b93d-9d2d7a125012",
+                        "kind": "content_source",
+                        "label": "Content source d34db33f-18a4-4af3-b93d-9d2d7a125012 (not found)",
+                        "state": "missing",
+                        "studio_url": null
+                      },
+                      "duration_seconds": 2.0,
+                      "error_summary": "Lookup failed",
+                      "function": "integrations.services.github.sync_content_source",
+                      "group": "scheduled",
+                      "name": "content-sync-source",
+                      "started_at": "2026-05-20T04:00:00+00:00",
+                      "stopped_at": "2026-05-20T04:00:02+00:00",
+                      "success": false,
+                      "task_id": "ef78ab90cd12"
                     }
-                  ]
+                  ],
+                  "total_count": 2
+                },
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "maximum": 200,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "tasks": {
+                      "items": {
+                        "additionalProperties": true,
+                        "properties": {
+                          "affected_entity": {
+                            "description": "Privacy-safe current Studio entity resolved from an allow-listed task signature. Null means the task signature is unsupported or malformed.",
+                            "oneOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "description": "Integer model id, or UUID string for a content source.",
+                                    "oneOf": [
+                                      {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "article",
+                                      "course",
+                                      "project",
+                                      "download",
+                                      "workshop",
+                                      "event",
+                                      "event_series",
+                                      "campaign",
+                                      "content_source"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "state": {
+                                    "enum": [
+                                      "available",
+                                      "missing"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "studio_url": {
+                                    "description": "Canonical Studio destination; null when state is missing.",
+                                    "oneOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "id",
+                                  "label",
+                                  "state",
+                                  "studio_url"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "affected_entity"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "total_count": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "tasks",
+                    "count",
+                    "limit",
+                    "total_count",
+                    "offset"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -14206,7 +14380,7 @@
                 }
               }
             },
-            "description": "Invalid ``status``, ``limit``, or ``since``."
+            "description": "Invalid ``status``, dates, ``offset``, ``limit``, or ``since``."
           }
         },
         "summary": "List worker tasks",
@@ -14247,16 +14421,124 @@
                   "limit": 20,
                   "tasks": [
                     {
-                      "func": "events.tasks.complete_finished_events.complete_finished_events",
+                      "affected_entity": {
+                        "id": "d34db33f-18a4-4af3-b93d-9d2d7a125012",
+                        "kind": "content_source",
+                        "label": "Content source d34db33f-18a4-4af3-b93d-9d2d7a125012 (not found)",
+                        "state": "missing",
+                        "studio_url": null
+                      },
+                      "duration_seconds": 2.0,
+                      "error_summary": "Lookup failed",
+                      "function": "integrations.services.github.sync_content_source",
                       "group": "scheduled",
-                      "id": "ab12cd34ef56",
-                      "name": "complete-finished-events",
-                      "result": null,
-                      "started": "2026-05-20T04:00:00+00:00",
-                      "stopped": "2026-05-20T04:00:02+00:00",
-                      "success": false
+                      "name": "content-sync-source",
+                      "started_at": "2026-05-20T04:00:00+00:00",
+                      "stopped_at": "2026-05-20T04:00:02+00:00",
+                      "success": false,
+                      "task_id": "ef78ab90cd12"
                     }
                   ]
+                },
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "maximum": 200,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "tasks": {
+                      "items": {
+                        "additionalProperties": true,
+                        "properties": {
+                          "affected_entity": {
+                            "description": "Privacy-safe current Studio entity resolved from an allow-listed task signature. Null means the task signature is unsupported or malformed.",
+                            "oneOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "description": "Integer model id, or UUID string for a content source.",
+                                    "oneOf": [
+                                      {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "article",
+                                      "course",
+                                      "project",
+                                      "download",
+                                      "workshop",
+                                      "event",
+                                      "event_series",
+                                      "campaign",
+                                      "content_source"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "state": {
+                                    "enum": [
+                                      "available",
+                                      "missing"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "studio_url": {
+                                    "description": "Canonical Studio destination; null when state is missing.",
+                                    "oneOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "id",
+                                  "label",
+                                  "state",
+                                  "studio_url"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "affected_entity"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "tasks",
+                    "count",
+                    "limit"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -14302,14 +14584,100 @@
             "content": {
               "application/json": {
                 "example": {
-                  "func": "events.tasks.complete_finished_events.complete_finished_events",
+                  "affected_entity": {
+                    "id": 42,
+                    "kind": "article",
+                    "label": "Article #42 \u2014 Agent operations",
+                    "state": "available",
+                    "studio_url": "/studio/articles/42/edit"
+                  },
+                  "duration_seconds": 2.0,
+                  "error_summary": null,
+                  "function": "integrations.services.banner_generator.tasks.render_banner_for_content",
                   "group": "scheduled",
-                  "id": "ab12cd34ef56",
                   "name": "complete-finished-events",
-                  "result": null,
-                  "started": "2026-05-20T04:00:00+00:00",
-                  "stopped": "2026-05-20T04:00:02+00:00",
-                  "success": true
+                  "started_at": "2026-05-20T04:00:00+00:00",
+                  "stopped_at": "2026-05-20T04:00:02+00:00",
+                  "success": true,
+                  "task_id": "ab12cd34ef56"
+                },
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "affected_entity": {
+                      "description": "Privacy-safe current Studio entity resolved from an allow-listed task signature. Null means the task signature is unsupported or malformed.",
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "description": "Integer model id, or UUID string for a content source.",
+                              "oneOf": [
+                                {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                {
+                                  "format": "uuid",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "kind": {
+                              "enum": [
+                                "article",
+                                "course",
+                                "project",
+                                "download",
+                                "workshop",
+                                "event",
+                                "event_series",
+                                "campaign",
+                                "content_source"
+                              ],
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "enum": [
+                                "available",
+                                "missing"
+                              ],
+                              "type": "string"
+                            },
+                            "studio_url": {
+                              "description": "Canonical Studio destination; null when state is missing.",
+                              "oneOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "id",
+                            "label",
+                            "state",
+                            "studio_url"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "affected_entity"
+                  ],
+                  "type": "object"
                 }
               }
             },

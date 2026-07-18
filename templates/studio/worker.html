@@ -160,16 +160,49 @@
   {% endif %}
 
   <!-- Pending / Queued Tasks (auto-refreshed; see poller script below) -->
-  <div id="pending-tasks-wrapper" data-fragment-url="{% url 'studio_worker' %}?fragment=pending">
+  <div id="pending-tasks-wrapper" data-fragment-url="{{ pending_fragment_url }}">
     {% include "studio/_worker_pending_tasks.html" %}
   </div>
 
   <!-- Recent Tasks Table -->
   <div class="bg-card border border-border rounded-lg">
-    <div class="p-4 border-b border-border">
+    <div class="p-4 border-b border-border space-y-4">
       <h2 class="text-lg font-medium text-foreground">Recent Tasks</h2>
+      <form method="get" class="flex flex-wrap items-end gap-3" aria-describedby="task-filter-error" data-testid="worker-history-filters">
+        {% if request.GET.pending_page %}<input type="hidden" name="pending_page" value="{{ request.GET.pending_page }}">{% endif %}
+        <label class="grid gap-1 text-sm text-foreground">Search
+          <input type="search" name="q" value="{{ task_q }}" class="studio-input min-h-11" placeholder="Task name or function">
+        </label>
+        <label class="grid gap-1 text-sm text-foreground">Status
+          <select name="status" class="studio-select min-h-11">
+            <option value="all"{% if task_status == 'all' %} selected{% endif %}>All</option>
+            <option value="success"{% if task_status == 'success' %} selected{% endif %}>Success</option>
+            <option value="failed"{% if task_status == 'failed' %} selected{% endif %}>Failed</option>
+          </select>
+        </label>
+        <label class="grid gap-1 text-sm text-foreground">From date
+          {% if task_date_from_invalid %}
+            <input type="text" name="date_from" value="{{ task_date_from }}" class="studio-input min-h-11" inputmode="numeric" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" placeholder="YYYY-MM-DD" aria-invalid="true" aria-describedby="task-filter-error">
+          {% else %}
+            <input type="date" name="date_from" value="{{ task_date_from }}" class="studio-input min-h-11">
+          {% endif %}
+        </label>
+        <label class="grid gap-1 text-sm text-foreground">To date
+          {% if task_date_to_invalid %}
+            <input type="text" name="date_to" value="{{ task_date_to }}" class="studio-input min-h-11" inputmode="numeric" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" placeholder="YYYY-MM-DD" aria-invalid="true" aria-describedby="task-filter-error">
+          {% else %}
+            <input type="date" name="date_to" value="{{ task_date_to }}" class="studio-input min-h-11">
+          {% endif %}
+        </label>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="submit" class="min-h-[44px] rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Apply filters</button>
+          <a href="{{ task_clear_url }}" class="inline-flex min-h-[44px] items-center rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Clear filters</a>
+        </div>
+      </form>
+      {% if task_date_error %}<p id="task-filter-error" role="alert" class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">{{ task_date_error }}</p>{% endif %}
+      {% if not task_date_error %}<p class="text-sm text-muted-foreground">{{ task_filtered_total }} matching task{{ task_filtered_total|pluralize }}{% if task_filtered_total %}; showing {{ task_page_start_index }}–{{ task_page_end_index }}{% endif %}</p>{% endif %}
     </div>
-    {% if tasks_with_duration %}
+    {% if tasks_with_duration or task_filters_active and not task_date_error %}
       <div class="studio-responsive-table overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
@@ -178,6 +211,7 @@
               <th class="text-left px-4 py-3 text-muted-foreground font-medium">Started</th>
               <th class="text-left px-4 py-3 text-muted-foreground font-medium">Duration</th>
               <th class="text-left px-4 py-3 text-muted-foreground font-medium">Status</th>
+              <th class="text-left px-4 py-3 text-muted-foreground font-medium">Affected entity</th>
               <th class="text-left px-4 py-3 text-muted-foreground font-medium">Error</th>
             </tr>
           </thead>
@@ -208,20 +242,39 @@
                     <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400">Failed</span>
                   {% endif %}
                 </td>
+                <td class="px-4 py-3 min-w-52" data-label="Affected entity">
+                  {% if item.affected_entity.state == 'available' %}
+                    <a href="{{ item.affected_entity.studio_url }}" title="{{ item.affected_entity.label }}" aria-label="Open affected entity: {{ item.affected_entity.label }}" class="inline-flex min-h-11 items-center text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" onclick="event.stopPropagation();">{{ item.affected_entity.label|truncatechars:60 }}</a>
+                  {% elif item.affected_entity.state == 'missing' %}
+                    <span title="{{ item.affected_entity.label }}">{{ item.affected_entity.label|truncatechars:60 }}</span>
+                  {% else %}<span title="No recognized affected entity"><span class="sr-only">No recognized affected entity</span>—</span>{% endif %}
+                </td>
                 <td class="px-4 py-3 text-red-400 text-xs max-w-xs truncate" data-label="Error" title="{{ item.error_message }}">
                   {{ item.error_message|default:"" }}
                 </td>
               </tr>
+            {% empty %}
+              {% studio_empty_state 'filter' entity_label='task' entity_label_plural='tasks' clear_url=task_clear_url colspan=6 empty_message='No tasks match these filters.' %}
             {% endfor %}
           </tbody>
         </table>
       </div>
-    {% else %}
-      <div class="p-8 text-center text-muted-foreground">
-        No tasks recorded yet.
-      </div>
+      {% if task_show_pager %}
+      <nav class="flex flex-wrap items-center justify-between gap-3 border-t border-border p-4 text-sm" aria-label="Recent task pages">
+        <span>Page {{ task_page.number }} of {{ task_paginator.num_pages }}</span>
+        <div class="flex gap-2">
+          {% if task_pager_first_url %}<a href="{{ task_pager_first_url }}" class="rounded border border-border px-3 py-2">First</a>{% endif %}
+          {% if task_pager_prev_url %}<a href="{{ task_pager_prev_url }}" class="rounded border border-border px-3 py-2">Previous</a>{% endif %}
+          {% if task_pager_next_url %}<a href="{{ task_pager_next_url }}" class="rounded border border-border px-3 py-2">Next</a>{% endif %}
+          {% if task_pager_last_url %}<a href="{{ task_pager_last_url }}" class="rounded border border-border px-3 py-2">Last</a>{% endif %}
+        </div>
+      </nav>
+      {% endif %}
     {% endif %}
   </div>
+  {% if not tasks_with_duration and not task_filters_active and not task_date_error %}
+    {% studio_empty_state 'fresh' entity_label='task' entity_label_plural='tasks' empty_message='No tasks recorded yet.' %}
+  {% endif %}
 
   <!-- Failed Tasks Section -->
   {% if failed_with_details %}
@@ -269,9 +322,15 @@
       <div class="divide-y divide-border">
         {% for item in failed_with_details %}
           <div class="p-4 failed-task-row" data-failed-task-id="{{ item.task.id }}">
-            <div class="flex items-start justify-between gap-3 flex-wrap">
+            {% comment %}
+              Issue #1290 follows the established stacked mobile / side-by-side
+              desktop shell from studio/campaigns/recipients.html. The explicit
+              mobile w-full overrides keep identity and controls in separate
+              bounding regions at 393px; Playwright pins their non-overlap.
+            {% endcomment %}
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <button type="button"
-                      class="flex-1 min-w-0 text-left flex items-start gap-2 group"
+                      class="flex min-w-0 w-full items-start gap-2 text-left group sm:flex-1"
                       aria-expanded="false"
                       data-action="toggle-failed-trace"
                       onclick="toggleFailedTrace(this)">
@@ -287,7 +346,10 @@
                   </p>
                 </div>
               </button>
-              <div class="flex items-center gap-2 shrink-0">
+              <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0" data-testid="failed-task-controls">
+                <div class="w-full min-w-0 text-sm sm:w-auto sm:max-w-48">
+                  {% if item.affected_entity.state == 'available' %}<a href="{{ item.affected_entity.studio_url }}" title="{{ item.affected_entity.label }}" class="inline-flex min-h-11 max-w-full items-center truncate text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{{ item.affected_entity.label|truncatechars:60 }}</a>{% elif item.affected_entity.state == 'missing' %}<span title="{{ item.affected_entity.label }}" class="inline-block max-w-full truncate">{{ item.affected_entity.label|truncatechars:60 }}</span>{% else %}<span title="No recognized affected entity"><span class="sr-only">No recognized affected entity</span>—</span>{% endif %}
+                </div>
                 <form method="post" action="{% url 'studio_worker_retry_failed' item.task.id %}" class="{% studio_list_class 'action_form' %}"
                       onsubmit="return confirm('Re-queue failed task {{ item.display_name|escapejs }}?');">
                   {% csrf_token %}

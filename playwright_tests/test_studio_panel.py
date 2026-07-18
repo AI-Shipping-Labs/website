@@ -27,6 +27,7 @@ from datetime import timedelta
 
 import pytest
 from django.utils import timezone
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     SETTLE_TIMEOUT_MS,
@@ -686,10 +687,9 @@ class TestScenario8StaffModeratesProject:
         page.wait_for_load_state("domcontentloaded")
 
         # Then: User arrives at the review page
-        body = page.content()
-        assert "My AI Bot" in body
-        assert "Review Project" in body
-        assert "Test Author" in body
+        expect(page.get_by_role("heading", name="Review project")).to_be_visible()
+        expect(page.get_by_role("heading", name="My AI Bot")).to_be_visible()
+        expect(page.get_by_text("Test Author", exact=True)).to_be_visible()
 
         # Step 3: Click "Approve"
         page.click('button:has-text("Approve")')

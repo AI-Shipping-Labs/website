@@ -301,7 +301,17 @@ class TestStudioUserCrmOverview:
         assert (
             add_note.get_attribute("href")
             == f"/studio/users/{member_pk}/notes/new?plan_id={plan_pk}"
+            f"&next=/studio/plans/{plan_pk}/%23member-notes"
         )
+
+        add_note.click()
+        page.locator('textarea[name="body"]').fill("Plan return context preserved")
+        page.get_by_role("button", name="Save note").click()
+        page.wait_for_url(f"{django_server}/studio/plans/{plan_pk}/#member-notes")
+        assert page.locator(
+            '[data-testid="internal-notes"]',
+            has_text="Plan return context preserved",
+        ).is_visible()
 
         # Plan detail's link back to the member detail still works.
         member_link = page.locator('[data-testid="plan-detail-member-link"]')

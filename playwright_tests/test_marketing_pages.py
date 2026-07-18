@@ -83,6 +83,9 @@ def test_staff_publishes_manual_marketing_page_from_studio(django_server, browse
         assert "/studio/marketing-pages/" in page.url
         expect(page.locator('[data-testid="view-on-site"]')).to_be_visible()
         expect(page.get_by_text("/studio-launch-page")).to_be_visible()
+        expect(page.locator('[data-testid="marketing-page-public-path"]')).to_have_value(
+            "/studio-launch-page"
+        )
 
         response = page.goto(
             f"{django_server}/studio-launch-page",
@@ -100,8 +103,12 @@ def test_staff_publishes_manual_marketing_page_from_studio(django_server, browse
 
 @pytest.mark.django_db(transaction=True)
 def test_studio_rejects_reserved_route_without_shadowing_it(django_server, browser):
+    from content.models import MarketingPage
+
     staff_email = "marketing-page-collision@test.com"
     _create_staff_user(staff_email)
+    pages_before = MarketingPage.objects.count()
+    connection.close()
 
     context = _auth_context(browser, staff_email)
     page = context.new_page()
@@ -122,10 +129,88 @@ def test_studio_rejects_reserved_route_without_shadowing_it(django_server, brows
         expect(page.locator('[data-testid="form-errors"]')).to_contain_text(
             "conflicts with an existing route"
         )
+        public_path = page.get_by_test_id("marketing-page-public-path")
+        expect(public_path).to_have_value("/events")
+        expect(public_path).to_have_attribute("aria-invalid", "true")
+        expect(public_path).to_have_attribute(
+            "aria-describedby", "marketing-page-public-path-error"
+        )
+        error = page.locator("#marketing-page-public-path-error")
+        expect(error).to_have_attribute("role", "alert")
+        expect(error).to_have_attribute("aria-live", "polite")
+        assert MarketingPage.objects.count() == pages_before
+        connection.close()
 
         response = page.goto(f"{django_server}/events", wait_until="domcontentloaded")
         assert response.status == 200
         expect(page.get_by_text("Events Collision")).to_have_count(0)
+    finally:
+        context.close()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_create_prefill_yields_to_manual_path_and_survives_validation(
+    django_server, browser
+):
+    staff_email = "marketing-page-prefill@test.com"
+    _create_staff_user(staff_email)
+    _create_page(
+        title="Existing Manual Destination",
+        public_path="/manual-destination",
+        status="draft",
+    )
+    _create_page(
+        title="Existing Pasted Destination",
+        public_path="/pasted-destination",
+        status="draft",
+    )
+
+    context = _auth_context(browser, staff_email)
+    page = context.new_page()
+    try:
+        page.goto(
+            f"{django_server}/studio/marketing-pages/new",
+            wait_until="domcontentloaded",
+        )
+        title = page.locator('input[name="title"]')
+        public_path = page.get_by_test_id("marketing-page-public-path")
+        title.fill("Generated Launch Page")
+        page.locator('textarea[name="description"]').click()
+        expect(public_path).to_have_value("/generated-launch-page")
+
+        public_path.click()
+        page.keyboard.type("/manual-destination")
+        expect(public_path).to_have_value("/manual-destination")
+        title.fill("Renamed Launch Page")
+        page.locator('textarea[name="content_markdown"]').fill("Manual body")
+        page.get_by_test_id("sticky-save-action").click()
+        expect(page.get_by_test_id("form-errors")).to_contain_text(
+            "already uses this public path"
+        )
+        expect(public_path).to_have_value("/manual-destination")
+        expect(title).to_have_value("Renamed Launch Page")
+
+        page.goto(
+            f"{django_server}/studio/marketing-pages/new",
+            wait_until="domcontentloaded",
+        )
+        title = page.locator('input[name="title"]')
+        public_path = page.get_by_test_id("marketing-page-public-path")
+        title.fill("Generated Paste Page")
+        page.locator('textarea[name="description"]').click()
+        expect(public_path).to_have_value("/generated-paste-page")
+        context.grant_permissions(
+            ["clipboard-read", "clipboard-write"], origin=django_server
+        )
+        page.evaluate("navigator.clipboard.writeText('/pasted-destination')")
+        public_path.click()
+        page.keyboard.press("Control+V")
+        expect(public_path).to_have_value("/pasted-destination")
+        page.get_by_test_id("sticky-save-action").click()
+        expect(page.get_by_test_id("form-errors")).to_contain_text(
+            "already uses this public path"
+        )
+        expect(public_path).to_have_value("/pasted-destination")
     finally:
         context.close()
 

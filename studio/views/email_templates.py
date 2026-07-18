@@ -21,10 +21,6 @@ from django.utils.html import escape
 from django.views.decorators.http import require_POST
 
 from email_app.models import EmailTemplateOverride
-from email_app.services.email_classification import (
-    PROMOTIONAL_EMAIL_TYPES,
-    TRANSACTIONAL_EMAIL_TYPES,
-)
 from email_app.services.email_service import (
     TEMPLATES_DIR,
     EmailService,
@@ -88,6 +84,9 @@ TEMPLATE_SENT_WHEN = {
     'plan_shared': 'Sent when staff shares a sprint plan with its member.',
     'post_event_followup': 'Sent to registered attendees after an event with its follow-up resources.',
     'premium_welcome': 'Sent when a member first receives Premium membership access.',
+    'series_cancellation': 'Sent to registrants when one session in an event series is cancelled, with the calendar cancellation update.',
+    'series_registration': 'Sent after a member registers for an event series, with the calendar invitation for its sessions.',
+    'series_update': 'Sent to registrants when event-series session details change, with the updated calendar invitation.',
     'slack_join_notification': 'Sent to staff when a known member joins the Slack workspace.',
     'sprint_end_recap': 'Sent to sprint participants when their sprint-end recap is ready.',
     'sprint_partner_intro': 'Sent when enrolled sprint partners are introduced to each other.',
@@ -108,16 +107,13 @@ def _sent_when(template_name):
 
 def _all_template_names():
     """Return the canonical list of editable template slugs."""
-    # Source of truth: the central transactional classification set.
-    # We render in TEMPLATE_DISPLAY_ORDER and append any extras that may
-    # show up later so the page never silently drops one.
-    known = list(TEMPLATE_DISPLAY_ORDER)
-    for name in sorted(TRANSACTIONAL_EMAIL_TYPES | PROMOTIONAL_EMAIL_TYPES):
-        if name not in known:
-            known.append(name)
-    # Filter to ones we can actually load (file or override) so the list
-    # page never links to a 404.
-    return [n for n in known if _template_exists(n)]
+    # Every on-disk Markdown template is editable. Classification sets are
+    # delivery policy, not an editor registry, and may intentionally lag a
+    # newly introduced transactional variant.
+    on_disk = {path.stem for path in TEMPLATES_DIR.glob('*.md')}
+    ordered = [name for name in TEMPLATE_DISPLAY_ORDER if name in on_disk]
+    ordered.extend(sorted(on_disk - set(ordered)))
+    return ordered
 
 
 def _template_exists(template_name):

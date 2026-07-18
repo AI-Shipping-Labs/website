@@ -384,7 +384,7 @@
           <a href="{{ slack_profile_url }}"
              target="_blank" rel="noopener"
              data-testid="user-detail-slack-profile-link"
-             class="ml-2 inline-flex items-center text-xs text-accent hover:underline">
+             class="ml-2 inline-flex items-center rounded-sm text-xs text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
             Open in Slack
           </a>
           {% else %}
@@ -395,13 +395,13 @@
         {% else %}
         <span class="text-xs text-muted-foreground" data-testid="user-detail-slack-id-empty">Not linked</span>
         {% endif %}
-        <button type="button" id="slack-id-edit-toggle" aria-expanded="false" aria-controls="slack-id-edit-form" class="ml-2 min-h-11 rounded-lg px-2 text-xs text-accent hover:underline">Edit</button>
+        <button type="button" id="slack-id-edit-toggle" aria-expanded="false" aria-controls="slack-id-edit-form" class="ml-2 min-h-11 rounded-lg px-2 text-xs text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Edit</button>
         <form id="slack-id-edit-form" method="post" action="{% url 'studio_user_slack_id_set' detail_user.pk %}" class="hidden mt-2 flex-col gap-2 sm:flex-row sm:items-center">
           {% csrf_token %}
           <label for="slack-user-id" class="sr-only">Slack user ID</label>
-          <input id="slack-user-id" name="slack_user_id" value="{{ detail_user.slack_user_id }}" placeholder="U01ABC123" class="min-h-11 min-w-0 rounded-lg border border-border bg-secondary px-3 py-2 font-mono text-sm text-foreground">
-          <button type="submit" class="min-h-11 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-foreground">Save</button>
-          <button type="button" id="slack-id-edit-cancel" class="min-h-11 rounded-lg border border-border px-3 py-2 text-sm text-foreground">Cancel</button>
+          <input id="slack-user-id" name="slack_user_id" value="{{ detail_user.slack_user_id }}" placeholder="U01ABC123" class="min-h-11 min-w-0 rounded-lg border border-border bg-secondary px-3 py-2 font-mono text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+          <button type="submit" class="min-h-11 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Save</button>
+          <button type="button" id="slack-id-edit-cancel" class="min-h-11 rounded-lg border border-border px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Cancel</button>
         </form>
       </dd>
     </div>

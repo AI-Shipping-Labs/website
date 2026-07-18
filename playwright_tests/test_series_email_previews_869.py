@@ -33,8 +33,16 @@ PREVIEW_CASES = (
     ),
 )
 
+EXPECTED_GUIDANCE = {
+    "series_registration": "registers for an event series",
+    "series_update": "session details change",
+    "series_cancellation": "one session in an event series is cancelled",
+}
 
-@pytest.mark.parametrize("template_name,expected_copy,screenshot_name", PREVIEW_CASES)
+
+@pytest.mark.parametrize(
+    "template_name,expected_copy,screenshot_name", PREVIEW_CASES
+)
 def test_series_email_preview_uses_prompt_aware_calendar_copy(
     django_server,
     browser,
@@ -42,6 +50,7 @@ def test_series_email_preview_uses_prompt_aware_calendar_copy(
     expected_copy,
     screenshot_name,
 ):
+    expected_guidance = EXPECTED_GUIDANCE[template_name]
     _create_staff_user("staff-series-preview@test.com")
     context = _auth_context(browser, "staff-series-preview@test.com")
     page = context.new_page()
@@ -51,6 +60,10 @@ def test_series_email_preview_uses_prompt_aware_calendar_copy(
         wait_until="domcontentloaded",
     )
     assert response is not None and response.status == 200
+    sent_when = page.get_by_test_id("template-sent-when")
+    expect(sent_when).to_be_visible()
+    expect(sent_when).to_contain_text("Sent when:")
+    expect(sent_when).to_contain_text(expected_guidance)
     expect(page.locator('[data-testid="preview-status"]')).to_have_text(
         "Up to date"
     )

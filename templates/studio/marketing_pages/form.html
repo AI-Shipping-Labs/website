@@ -50,11 +50,12 @@
           <label for="marketing-page-public-path" class="block text-sm font-medium text-foreground mb-1">Public path</label>
           <input id="marketing-page-public-path" type="text" name="public_path" value="{{ page_obj.public_path|default:'' }}"
                  {% if is_synced %}disabled{% endif %}
+                 {% if errors.public_path %}aria-invalid="true" aria-describedby="marketing-page-public-path-error"{% endif %}
                  data-create-prefill="{% if not page_obj.pk and not is_synced %}true{% else %}false{% endif %}"
                  class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}"
                  data-testid="marketing-page-public-path">
           {% if errors.public_path %}
-          <p class="mt-1 text-sm text-destructive">{{ errors.public_path.0 }}</p>
+          <p id="marketing-page-public-path-error" role="alert" aria-live="polite" class="mt-1 text-sm text-destructive">{{ errors.public_path.0 }}</p>
           {% endif %}
         </div>
 
@@ -177,13 +178,35 @@
   var path = document.getElementById('marketing-page-public-path');
   if (!title || !path || path.dataset.createPrefill !== 'true') return;
   var operatorTouchedPath = Boolean(path.value);
-  path.addEventListener('input', function() { operatorTouchedPath = true; });
+  var generatedPath = '';
+  function takeManualControl(event) {
+    operatorTouchedPath = true;
+    // If the first edit follows a generated prefill, replace the suggestion
+    // instead of appending to it.  This also covers keyboard and paste input.
+    if (event && event.type === 'beforeinput' && generatedPath && path.value === generatedPath) {
+      path.value = '';
+      generatedPath = '';
+    }
+  }
+  path.addEventListener('pointerdown', takeManualControl);
+  path.addEventListener('paste', takeManualControl);
+  path.addEventListener('drop', takeManualControl);
+  path.addEventListener('beforeinput', takeManualControl);
+  path.addEventListener('input', takeManualControl);
   title.addEventListener('blur', function() {
-    if (operatorTouchedPath || path.value) return;
-    var slug = title.value.toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    if (slug) path.value = '/' + slug;
+    // Focus/input events on the destination run before this deferred task.
+    // That makes an explicit fill authoritative even when moving focus out
+    // of Title is what triggered this blur.
+    window.setTimeout(function() {
+      if (operatorTouchedPath || path.value) return;
+      var slug = title.value.toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      if (slug) {
+        generatedPath = '/' + slug;
+        path.value = generatedPath;
+      }
+    }, 0);
   });
 })();
 </script>

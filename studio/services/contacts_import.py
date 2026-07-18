@@ -13,7 +13,9 @@ they're collected as warnings and the import continues.
 """
 
 import csv
+import hashlib
 import io
+import json
 from dataclasses import dataclass, field
 
 from dateutil.relativedelta import relativedelta
@@ -21,6 +23,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
+from django.db.models.functions import Lower
 from django.utils import timezone
 
 from accounts.models import TierOverride
@@ -72,6 +75,79 @@ class ImportResult:
     skipped: int = 0
     malformed: int = 0
     warnings: list = field(default_factory=list)  # list[(row_number, value, reason)]
+
+
+@dataclass
+class PlannedContact:
+    """One unique, valid contact classified without mutating application state."""
+
+    row_number: int
+    row: dict
+    normalized_email: str
+    existing_user: object | None
+
+
+@dataclass
+class ImportPlan:
+    """Side-effect-free classification shared by preview and apply callers."""
+
+    total_rows: int
+    plausible_emails: int
+    created: int
+    updated: int
+    skipped: int
+    malformed: int
+    warnings: list
+    contacts: list[PlannedContact]
+    fingerprint: str
+
+    @property
+    def total_skipped(self):
+        return self.skipped + self.malformed
+
+    @property
+    def can_apply(self):
+        return self.plausible_emails > 0
+
+    @property
+    def warning(self):
+        if self.plausible_emails == self.total_rows:
+            return ""
+        return (
+            f"Only {self.plausible_emails}/{self.total_rows} values in this "
+            "column look like email addresses."
+        )
+
+    def as_result(self):
+        return ImportResult(
+            created=self.created,
+            updated=self.updated,
+            skipped=self.skipped,
+            malformed=self.malformed,
+            warnings=list(self.warnings),
+        )
+
+    def aggregate(self):
+        """Return the aggregate-only public preview contract."""
+        return {
+            "total_rows": self.total_rows,
+            "plausible_emails": self.plausible_emails,
+            "created": self.created,
+            "updated": self.updated,
+            "skipped": self.skipped,
+            "malformed": self.malformed,
+            "total_skipped": self.total_skipped,
+            "can_apply": self.can_apply,
+            "warning": self.warning,
+        }
+
+    def session_metadata(self, *, email_column):
+        """Return non-row session metadata used to detect a stale preview."""
+        return {
+            "email_column": email_column,
+            **self.aggregate(),
+            "fingerprint": self.fingerprint,
+        }
 
 
 def is_csv_upload(uploaded_file):
@@ -149,7 +225,106 @@ def _is_valid_email(value):
     return True
 
 
-def run_import(parsed, *, email_column, tag, tier, granted_by):
+def _normalized_email(value):
+    """Return the canonical case-insensitive identity key used by imports."""
+    return User.objects.normalize_email(value).lower()
+
+
+def plan_contact_rows(rows, *, lookup_batch_size=500):
+    """Classify contact rows without writes or provider calls.
+
+    Validation, normalization, within-file duplicate handling, and existing
+    user classification live here so Studio preview, Studio apply, API
+    dry-run, and API apply cannot drift. Existing identities are fetched in
+    bounded ``LOWER(email) IN (...)`` batches rather than one query per row.
+    """
+    rows = list(rows)
+    plausible_emails = 0
+    malformed = 0
+    skipped = 0
+    warnings = []
+    unique_rows = []
+    seen_emails = set()
+    fingerprint_rows = []
+
+    for index, row in enumerate(rows, start=1):
+        row_number = index + 1
+        raw_value = (row.get("email") or "").strip()
+        if not _is_valid_email(raw_value):
+            malformed += 1
+            warnings.append((row_number, raw_value, "malformed email"))
+            fingerprint_rows.append((row_number, "malformed"))
+            continue
+
+        plausible_emails += 1
+        normalized_email = _normalized_email(raw_value)
+        if normalized_email in seen_emails:
+            skipped += 1
+            warnings.append((row_number, raw_value, "duplicate within file"))
+            fingerprint_rows.append((row_number, "duplicate", normalized_email))
+            continue
+
+        seen_emails.add(normalized_email)
+        unique_rows.append((row_number, row, normalized_email))
+
+    existing_by_email = {}
+    unique_emails = list(seen_emails)
+    for start in range(0, len(unique_emails), lookup_batch_size):
+        batch = unique_emails[start:start + lookup_batch_size]
+        users = (
+            User.objects.annotate(_import_email=Lower("email"))
+            .filter(_import_email__in=batch)
+        )
+        for user in users:
+            existing_by_email[_normalized_email(user.email)] = user
+
+    contacts = []
+    created = 0
+    updated = 0
+    for row_number, row, normalized_email in unique_rows:
+        existing = existing_by_email.get(normalized_email)
+        classification = "updated" if existing is not None else "created"
+        if existing is None:
+            created += 1
+        else:
+            updated += 1
+        contacts.append(PlannedContact(
+            row_number=row_number,
+            row=row,
+            normalized_email=normalized_email,
+            existing_user=existing,
+        ))
+        fingerprint_rows.append((row_number, classification, normalized_email))
+
+    fingerprint = hashlib.sha256(
+        json.dumps(fingerprint_rows, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    plan = ImportPlan(
+        total_rows=len(rows),
+        plausible_emails=plausible_emails,
+        created=created,
+        updated=updated,
+        skipped=skipped,
+        malformed=malformed,
+        warnings=warnings,
+        contacts=contacts,
+        fingerprint=fingerprint,
+    )
+    if created + updated + skipped + malformed != len(rows):
+        raise AssertionError("contact import classification invariant failed")
+    return plan
+
+
+def plan_csv_import(parsed, *, email_column):
+    """Adapt a selected CSV column to the shared contact-row planner."""
+    rows = [
+        {"email": (row.get(email_column) or "").strip()}
+        for row in parsed.rows
+    ]
+    return plan_contact_rows(rows)
+
+
+def run_import(parsed, *, email_column, tag, tier, granted_by, plan=None):
     """Apply a CSV import to the database.
 
     Thin wrapper around :func:`import_contact_rows` that adapts the CSV-row
@@ -176,6 +351,7 @@ def run_import(parsed, *, email_column, tag, tier, granted_by):
         default_tag=tag or "",
         default_tier=tier,
         granted_by=granted_by,
+        plan=plan,
     )
 
 
@@ -187,6 +363,8 @@ def import_contact_rows(
     granted_by=None,
     tier_assignment_mode="override",
     override_expires_at=None,
+    dry_run=False,
+    plan=None,
 ):
     """Upsert a batch of contact rows.
 
@@ -220,17 +398,22 @@ def import_contact_rows(
             not already set per-row. Pass None to leave tiers alone.
         granted_by: ``User`` who initiated the batch (for ``TierOverride``).
         tier_assignment_mode: ``"override"`` or ``"stripe_validate"``.
+        override_expires_at: optional explicit expiry for override-mode tier
+            assignments; defaults to the long-lived Studio import duration.
+        dry_run: classify and return counts without applying any writes.
+        plan: optional precomputed ``ImportPlan`` to apply after caller review.
 
     Returns an ``ImportResult``. The whole batch runs in a single
     ``transaction.atomic`` so a mid-batch failure rolls back cleanly.
     """
-    result = ImportResult()
+    rows = list(rows)
+    plan = plan or plan_contact_rows(rows)
+    result = plan.as_result()
+    if dry_run:
+        return result
+
     normalized_default_tag = normalize_tag(default_tag) if default_tag else ""
     apply_default_tier = default_tier is not None and default_tier.level > 0
-
-    # Track first-occurrence emails so subsequent duplicates within the file
-    # are counted as ``skipped`` without re-running upsert logic.
-    seen_emails = set()
 
     # Cache resolved per-row tier slugs so a 1000-row import doesn't issue
     # 1000 ``Tier.objects.get()`` queries.
@@ -242,30 +425,13 @@ def import_contact_rows(
         return tier_cache[slug]
 
     with transaction.atomic():
-        for index, row in enumerate(rows, start=1):
-            row_number = index + 1
-            raw_value = (row.get("email") or "").strip()
-
-            if not _is_valid_email(raw_value):
-                result.malformed += 1
-                result.warnings.append(
-                    (row_number, raw_value, "malformed email")
-                )
-                continue
-
-            normalized_email = User.objects.normalize_email(raw_value).lower()
-            if normalized_email in seen_emails:
-                result.skipped += 1
-                result.warnings.append(
-                    (row_number, raw_value, "duplicate within file")
-                )
-                continue
-            seen_emails.add(normalized_email)
-
-            existing = User.objects.filter(email__iexact=normalized_email).first()
+        for contact in plan.contacts:
+            row_number = contact.row_number
+            row = contact.row
+            normalized_email = contact.normalized_email
+            existing = contact.existing_user
             if existing is not None:
                 user = existing
-                created_now = False
             else:
                 user = User.objects.create_user(
                     email=normalized_email,
@@ -274,7 +440,6 @@ def import_contact_rows(
                     unsubscribed=False,
                     signup_source="imported",
                 )
-                created_now = True
 
             # Default tag applies to every row.
             _apply_tag(user, normalized_default_tag)
@@ -345,11 +510,6 @@ def import_contact_rows(
                 row_number=row_number,
                 warnings=result.warnings,
             )
-
-            if created_now:
-                result.created += 1
-            else:
-                result.updated += 1
 
     return result
 

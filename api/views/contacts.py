@@ -105,7 +105,9 @@ def _serialize_user(user):
                 "accepted only when live Stripe confirms the active "
                 "subscription maps to the same tier; otherwise the row "
                 "is warned. Tier overrides are intentionally not "
-                "available through this endpoint."
+                "available through this endpoint. Set ``dry_run`` to true "
+                "to classify created, updated, duplicate, and malformed rows "
+                "without database writes or provider/notification side effects."
             ),
             "request_body": {
                 "required": ["contacts"],
@@ -116,6 +118,14 @@ def _serialize_user(user):
                     },
                     "default_tag": {"type": "string"},
                     "default_tier": {"type": "string"},
+                    "dry_run": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": (
+                            "When true, return classification counts and warnings "
+                            "without applying any contact changes."
+                        ),
+                    },
                 },
                 "example": {
                     "contacts": [
@@ -125,6 +135,7 @@ def _serialize_user(user):
                         },
                     ],
                     "default_tag": "imported-2026-05",
+                    "dry_run": True,
                 },
             },
             "responses": {
@@ -136,10 +147,13 @@ def _serialize_user(user):
                         "skipped": 0,
                         "malformed": 0,
                         "warnings": [],
+                        "dry_run": True,
                     },
                 },
                 400: {
-                    "description": "Malformed body or unknown default tier.",
+                    "description": (
+                        "Malformed body, non-boolean dry_run, or unknown default tier."
+                    ),
                     "example": {
                         "error": "contacts must be a list",
                         "code": "missing_contacts",
@@ -182,6 +196,13 @@ def contacts_import(request):
             "missing_contacts",
         )
 
+    dry_run = data.get("dry_run", False)
+    if not isinstance(dry_run, bool):
+        return error_response(
+            "dry_run must be a boolean",
+            "invalid_dry_run",
+        )
+
     default_tag = data.get("default_tag") or ""
     default_tier_slug = data.get("default_tier") or ""
     default_tier = None
@@ -199,21 +220,22 @@ def contacts_import(request):
         default_tier=default_tier,
         granted_by=request.user,
         tier_assignment_mode="stripe_validate",
+        dry_run=dry_run,
     )
 
-    return JsonResponse(
-        {
-            "created": result.created,
-            "updated": result.updated,
-            "skipped": result.skipped,
-            "malformed": result.malformed,
-            "warnings": [
-                {"row": row, "value": value, "reason": reason}
-                for (row, value, reason) in result.warnings
-            ],
-        },
-        status=200,
-    )
+    payload = {
+        "created": result.created,
+        "updated": result.updated,
+        "skipped": result.skipped,
+        "malformed": result.malformed,
+        "warnings": [
+            {"row": row, "value": value, "reason": reason}
+            for (row, value, reason) in result.warnings
+        ],
+    }
+    if dry_run:
+        payload["dry_run"] = True
+    return JsonResponse(payload, status=200)
 
 
 @token_required

@@ -55,7 +55,11 @@ from studio.views.campaigns import (
     campaign_test_send,
 )
 from studio.views.certificates import certificate_revoke, certificate_unrevoke
-from studio.views.contacts_import import user_import, user_import_confirm
+from studio.views.contacts_import import (
+    user_import,
+    user_import_confirm,
+    user_import_preview,
+)
 from studio.views.content_sources import (
     content_source_create,
     content_source_refresh,
@@ -802,6 +806,11 @@ urlpatterns = [
     # ``<int:user_id>/`` route so the literal ``import/`` prefix is not
     # swallowed by the int converter.
     path('users/import/', user_import, name='studio_user_import'),
+    path(
+        'users/import/preview',
+        user_import_preview,
+        name='studio_user_import_preview',
+    ),
     path('users/import/confirm', user_import_confirm, name='studio_user_import_confirm'),
 
     # Account merge UI (issue #842). Registered before the ``<int:user_id>/``

@@ -98,7 +98,9 @@ class TestStaffCapturesMemberContextAcrossSprints:
         )
         page.locator("text=No member notes yet.").wait_for(state="visible")
         page.get_by_role("link", name="Add member note").click()
-        page.wait_for_url(f"{django_server}/studio/users/{member_pk}/notes/new")
+        page.wait_for_url(
+            f"**/studio/users/{member_pk}/notes/new?next=/studio/crm/{crm_pk}/%23member-notes"
+        )
 
         assert page.locator('select[name="visibility"]').evaluate("el => el.value") == "internal"
         assert page.locator('select[name="kind"]').evaluate("el => el.value") == "intake"
@@ -108,11 +110,7 @@ class TestStaffCapturesMemberContextAcrossSprints:
             "Wants to ship a RAG side project; previously a backend engineer",
         )
         page.locator('button[type="submit"]').click()
-        # The member-note form still redirects to the legacy user-profile
-        # anchor. The profile page itself no longer renders the notes
-        # section (issue #560), so we hop to the CRM detail page — the
-        # canonical surface — to assert the note rendered.
-        page.wait_for_url(f"{django_server}/studio/users/{member_pk}/#member-notes")
+        page.wait_for_url(f"{django_server}/studio/crm/{crm_pk}/#member-notes")
         page.locator("text=Member note added.").wait_for(state="visible")
         page.goto(
             f"{django_server}/studio/crm/{crm_pk}/",
@@ -159,7 +157,7 @@ class TestStaffRecordsSprintSpecificMemberNote:
         )
         page.get_by_role("link", name="Add member note").click()
         page.wait_for_url(
-            f"{django_server}/studio/users/{member_pk}/notes/new?plan_id={spring_plan_pk}",
+            f"**/studio/users/{member_pk}/notes/new?plan_id={spring_plan_pk}&next=**",
         )
         assert page.locator('select[name="plan_id"]').evaluate("el => el.value") == str(spring_plan_pk)
 
@@ -168,10 +166,9 @@ class TestStaffRecordsSprintSpecificMemberNote:
             "Discussed pivot from RAG to agents on 2026-05-10",
         )
         page.locator('button[type="submit"]').click()
-        # The form redirect lands on the legacy user-profile anchor.
-        # Member notes now live on the CRM detail page (issue #560), so
-        # we hop there to assert the origin-plan link rendered correctly.
-        page.wait_for_url(f"{django_server}/studio/users/{member_pk}/#member-notes")
+        page.wait_for_url(
+            f"{django_server}/studio/plans/{spring_plan_pk}/#member-notes"
+        )
         page.goto(
             f"{django_server}/studio/crm/{crm_pk}/",
             wait_until="domcontentloaded",

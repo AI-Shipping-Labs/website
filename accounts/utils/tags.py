@@ -52,6 +52,7 @@ __all__ = [
     'delete_tag',
     'list_all_tags',
     'count_users_with_tag',
+    'user_ids_with_exact_tag',
 ]
 
 
@@ -127,6 +128,19 @@ def count_users_with_tag(name):
         if isinstance(tag_list, list) and normalized in tag_list:
             count += 1
     return count
+
+
+def user_ids_with_exact_tag(name):
+    """Return user IDs carrying the normalized tag as an exact list item."""
+    normalized = normalize_tag(name)
+    if not normalized:
+        return []
+    User = get_user_model()
+    return [
+        user_id
+        for user_id, tags in User.objects.values_list('id', 'tags').iterator()
+        if isinstance(tags, list) and normalized in tags
+    ]
 
 
 def rename_tag(old, new):

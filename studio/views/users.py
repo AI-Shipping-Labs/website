@@ -24,7 +24,6 @@ superusers.
 
 import csv
 import datetime
-import re
 import secrets
 from urllib.parse import urlencode
 
@@ -52,6 +51,11 @@ from accounts.lifecycle import (
 )
 from accounts.models import EmailAlias, TierOverride
 from accounts.services.email_resolution import normalize_email
+from accounts.services.slack_identity import (
+    is_valid_slack_user_id,
+    normalize_slack_user_id,
+)
+from accounts.services.subscription_summary import subscription_summary
 from accounts.utils.bounce import mark_permanent_bounce, record_soft_bounce
 from accounts.utils.tags import (
     add_tag as _add_tag_to_user,
@@ -67,6 +71,7 @@ from accounts.utils.tags import (
 )
 from community.models import CommunityAuditLog
 from community.services.slack_links import build_slack_profile_url
+from community.tasks.slack_membership import check_user_slack_membership
 from content.models import Enrollment, UserCourseProgress
 from crm.models import CRMRecord
 from email_app.models import SesEvent
@@ -81,6 +86,9 @@ from studio.utils import coerce_page_number, studio_pagination_context
 from studio.views.tier_overrides import DURATION_CHOICES
 
 User = get_user_model()
+
+USER_SORT_VALUES = {'joined', '-joined', 'last_login', '-last_login'}
+DEFAULT_USER_SORT = '-joined'
 
 
 # Filter chip values accepted on the list view and CSV export. Anything else
@@ -135,8 +143,6 @@ USER_LIST_PAGE_SIZE = 50
 # Grid org-wide user) and contain at least 3 alphanumeric characters total.
 # Used to validate the manual edit form (issue #561) so operators cannot save
 # a typo like "u-foo" or "cus_*" that would break the deep-link silently.
-SLACK_USER_ID_PATTERN = re.compile(r'^[UW][A-Z0-9]{2,}$')
-
 
 def _normalize_filter(value):
     """Map the raw ``filter`` query param to one of ``VALID_FILTERS``.
@@ -389,9 +395,10 @@ def _filtered_user_queryset(
     active_filter, search, tag_filter, slack_filter,
     bounce_filter=DEFAULT_BOUNCE_FILTER,
     account_lifecycle_filter=DEFAULT_ACCOUNT_LIFECYCLE_FILTER,
+    sort=DEFAULT_USER_SORT,
 ):
     """Return the filtered, annotated queryset backing list and export."""
-    return _apply_user_listing_filters(
+    qs = _apply_user_listing_filters(
         _annotated_user_queryset(),
         active_filter,
         search,
@@ -400,6 +407,14 @@ def _filtered_user_queryset(
         bounce_filter=bounce_filter,
         account_lifecycle_filter=account_lifecycle_filter,
     )
+    sort = sort if sort in USER_SORT_VALUES else DEFAULT_USER_SORT
+    if sort == 'joined':
+        return qs.order_by(F('date_joined').asc(nulls_last=True), 'pk')
+    if sort == '-joined':
+        return qs.order_by(F('date_joined').desc(nulls_last=True), 'pk')
+    if sort == 'last_login':
+        return qs.order_by(F('last_login').asc(nulls_last=True), 'pk')
+    return qs.order_by(F('last_login').desc(nulls_last=True), 'pk')
 
 
 def _user_listing_counts():
@@ -563,6 +578,7 @@ def _build_user_listing(
     active_filter, search, tag_filter='', slack_filter=DEFAULT_SLACK_FILTER,
     bounce_filter=DEFAULT_BOUNCE_FILTER,
     account_lifecycle_filter=DEFAULT_ACCOUNT_LIFECYCLE_FILTER,
+    sort=DEFAULT_USER_SORT,
 ):
     """Build filtered rows plus aggregate counts for the users page/export.
 
@@ -584,6 +600,7 @@ def _build_user_listing(
             active_filter, search, tag_filter, slack_filter,
             bounce_filter=bounce_filter,
             account_lifecycle_filter=account_lifecycle_filter,
+            sort=sort,
         )
     )
     return _user_rows_from_users(users), _user_listing_counts()
@@ -611,6 +628,16 @@ def _pager_querystring(request, page_number):
     return '?' + params.urlencode()
 
 
+def _listing_querystring(request, **updates):
+    """Build a list URL while preserving active filters and dropping page."""
+    params = request.GET.copy()
+    params.pop('page', None)
+    for key, value in updates.items():
+        params[key] = value
+    encoded = params.urlencode()
+    return '?' + encoded if encoded else ''
+
+
 @staff_required
 def user_list(request):
     """List platform Users with tier and subscriber filter chips."""
@@ -623,11 +650,15 @@ def user_list(request):
     search = request.GET.get('q', '')
     raw_tag = request.GET.get('tag', '')
     active_tag = normalize_tag(raw_tag) if raw_tag else ''
+    sort = request.GET.get('sort', DEFAULT_USER_SORT)
+    if sort not in USER_SORT_VALUES:
+        sort = DEFAULT_USER_SORT
 
     user_queryset = _filtered_user_queryset(
         active_filter, search, tag_filter=raw_tag, slack_filter=slack_filter,
         bounce_filter=bounce_filter,
         account_lifecycle_filter=account_lifecycle_filter,
+        sort=sort,
     )
     counts = _user_listing_counts()
 
@@ -683,6 +714,14 @@ def user_list(request):
         'account_lifecycle_filter': account_lifecycle_filter,
         'search': search,
         'active_tag': active_tag,
+        'sort': sort,
+        'joined_sort_url': _listing_querystring(
+            request, sort='-joined' if sort == 'joined' else 'joined',
+        ),
+        'last_login_sort_url': _listing_querystring(
+            request,
+            sort='-last_login' if sort == 'last_login' else 'last_login',
+        ),
         # Tag picker for the filter row (issue #694). Same sorted source as
         # the user-detail datalist so the dropdown matches the typeahead.
         'known_tags': list_all_tags(),
@@ -742,11 +781,15 @@ def user_export_csv(request):
     )
     search = request.GET.get('q', '')
     raw_tag = request.GET.get('tag', '')
+    sort = request.GET.get('sort', DEFAULT_USER_SORT)
+    if sort not in USER_SORT_VALUES:
+        sort = DEFAULT_USER_SORT
 
     user_rows, _counts = _build_user_listing(
         active_filter, search, tag_filter=raw_tag, slack_filter=slack_filter,
         bounce_filter=bounce_filter,
         account_lifecycle_filter=account_lifecycle_filter,
+        sort=sort,
     )
 
     timestamp = (
@@ -1343,7 +1386,10 @@ def user_detail(request, user_id):
     a :class:`crm.CRMRecord`. Plans, sprints, and member notes live on
     the CRM record page now.
     """
-    user = get_object_or_404(User.objects.select_related('tier'), pk=user_id)
+    user = get_object_or_404(
+        User.objects.select_related('tier', 'pending_tier'),
+        pk=user_id,
+    )
     override = _active_override_for_user(user)
     crm_record = CRMRecord.objects.filter(user=user).first()
     course_enrollments = _build_course_enrollments(user)
@@ -1456,6 +1502,7 @@ def user_detail(request, user_id):
         'slack_team_id': slack_team_id,
         'slack_profile_url': slack_profile_url,
         'stripe_account_id': stripe_account_id,
+        'subscription': subscription_summary(user),
         # Inline tier-override controls (issue #562).
         'available_override_tiers': available_override_tiers,
         'is_highest_tier': is_highest_tier,
@@ -1486,8 +1533,32 @@ def user_tier_override_create(request, user_id):
     duration = (request.POST.get('duration') or '').strip()
     redirect_url = _tier_override_redirect_url(request, user)
 
-    if not tier_id or not duration:
+    if not tier_id:
         messages.error(request, 'Missing required fields.')
+        return redirect(redirect_url)
+
+    now = timezone.now()
+    expires_at = next(
+        (now + delta for label, delta in DURATION_CHOICES if label == duration),
+        None,
+    )
+    if expires_at is None and request.POST.get('custom_expiry') is not None:
+        try:
+            until_date = datetime.datetime.strptime(
+                (request.POST.get('expires_at') or '').strip(), '%Y-%m-%d',
+            ).date()
+            today_utc = now.astimezone(datetime.timezone.utc).date()
+            if until_date < today_utc:
+                raise ValueError
+            expires_at = datetime.datetime.combine(
+                until_date,
+                datetime.time(23, 59, 59, tzinfo=datetime.timezone.utc),
+            )
+        except (TypeError, ValueError):
+            messages.error(request, 'Until date must be today or later.')
+            return redirect(redirect_url)
+    if expires_at is None:
+        messages.error(request, f'Invalid duration: {duration}.')
         return redirect(redirect_url)
 
     try:
@@ -1505,17 +1576,6 @@ def user_tier_override_create(request, user_id):
             'Tier override must upgrade the user. '
             f'Pick a tier above {user.tier.name if user.tier_id else "Free"}.',
         )
-        return redirect(redirect_url)
-
-    now = timezone.now()
-    expires_at = None
-    for label, delta in DURATION_CHOICES:
-        if label == duration:
-            expires_at = now + delta
-            break
-
-    if expires_at is None:
-        messages.error(request, f'Invalid duration: {duration}.')
         return redirect(redirect_url)
 
     # Replace only operator-authored grants. Source-specific entitlements such
@@ -1809,17 +1869,25 @@ def user_slack_id_set(request, user_id):
     accurately reflects that staff intentionally touched the row.
     """
     user = get_object_or_404(User, pk=user_id)
-    raw = (request.POST.get('slack_user_id') or '').strip().upper()
+    raw = normalize_slack_user_id(request.POST.get('slack_user_id'))
 
     if raw == '':
-        if user.slack_user_id:
-            user.slack_user_id = ''
-            user.slack_checked_at = timezone.now()
-            user.save(update_fields=['slack_user_id', 'slack_checked_at'])
+        previous = user.slack_user_id
+        user.slack_user_id = ''
+        user.slack_checked_at = timezone.now()
+        user.save(update_fields=['slack_user_id', 'slack_checked_at'])
+        CommunityAuditLog.objects.create(
+            user=user,
+            action='check',
+            details=(
+                f'source=studio_slack_id; actor={request.user.email}; '
+                f'action=clear; previous={previous!r}'
+            ),
+        )
         messages.success(request, 'Slack ID cleared.')
         return redirect('studio_user_detail', user_id=user.pk)
 
-    if not SLACK_USER_ID_PATTERN.match(raw):
+    if not is_valid_slack_user_id(raw):
         messages.error(
             request,
             'Invalid Slack ID. Must start with U or W followed by uppercase '
@@ -1827,8 +1895,38 @@ def user_slack_id_set(request, user_id):
         )
         return redirect('studio_user_detail', user_id=user.pk)
 
+    previous = user.slack_user_id
     user.slack_user_id = raw
     user.slack_checked_at = timezone.now()
     user.save(update_fields=['slack_user_id', 'slack_checked_at'])
+    CommunityAuditLog.objects.create(
+        user=user,
+        action='check',
+        details=(
+            f'source=studio_slack_id; actor={request.user.email}; '
+            f'action=set; previous={previous!r}; new={raw!r}'
+        ),
+    )
     messages.success(request, f'Slack ID set to {raw}.')
+    return redirect('studio_user_detail', user_id=user.pk)
+
+
+@staff_required
+@require_POST
+def user_slack_membership_check(request, user_id):
+    """Run one explicit Slack membership check for the selected user."""
+    user = get_object_or_404(User, pk=user_id)
+    outcome = check_user_slack_membership(
+        user,
+        audit_source=f'studio:{request.user.email}',
+    )
+    if outcome == 'member':
+        messages.success(request, 'Slack membership checked: Member.')
+    elif outcome == 'not_member':
+        messages.success(request, 'Slack membership checked: Not in Slack.')
+    else:
+        messages.error(
+            request,
+            'Slack membership could not be checked. Try again.',
+        )
     return redirect('studio_user_detail', user_id=user.pk)

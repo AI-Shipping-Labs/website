@@ -329,6 +329,7 @@ def studio_header_actions(
     testid='studio-header',
     actions_testid='studio-header-actions',
     title_meta=None,
+    title_testid=None,
 ):
     """Render the shared stacked Studio header around local action markup."""
     actions = mark_safe(content.strip())
@@ -344,6 +345,7 @@ def studio_header_actions(
             'testid': testid,
             'actions_testid': actions_testid,
             'title_meta': title_meta,
+            'title_testid': title_testid,
             'actions': actions,
         },
     )

@@ -27,6 +27,8 @@ This module adds the parts the shared importer does not provide:
   the calling token (mirrors the User Management API audit convention).
 """
 
+import datetime
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
@@ -116,6 +118,11 @@ def _is_valid_email(value):
                         "items": {"type": "string"},
                     },
                     "tier": {"type": "string"},
+                    "expires_at": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "Optional UTC expiry date, today or later.",
+                    },
                 },
                 "example": {
                     "emails": [
@@ -205,6 +212,28 @@ def tier_overrides_grant(request):
             "invalid_tier",
         )
 
+    override_expires_at = None
+    raw_expires_at = data.get("expires_at")
+    if raw_expires_at is not None:
+        try:
+            expiry_date = datetime.datetime.strptime(
+                raw_expires_at, "%Y-%m-%d",
+            ).date()
+            today_utc = timezone.now().astimezone(datetime.timezone.utc).date()
+            if expiry_date < today_utc:
+                raise ValueError
+            override_expires_at = datetime.datetime.combine(
+                expiry_date,
+                datetime.time(23, 59, 59, tzinfo=datetime.timezone.utc),
+            )
+        except (TypeError, ValueError):
+            return error_response(
+                "expires_at must be today or later in YYYY-MM-DD format",
+                "validation_error",
+                status=422,
+                details={"field": "expires_at", "value": raw_expires_at},
+            )
+
     # Batch cap check BEFORE any write so an over-cap batch grants nothing.
     if len(emails) > BATCH_CAP:
         return error_response(
@@ -217,7 +246,10 @@ def tier_overrides_grant(request):
     # Whole batch in one atomic block (matches the import). Idempotency pre-filter
     # + the importer call + audit rows all commit or roll back together.
     with transaction.atomic():
-        results = _grant_batch(emails, tier, request.user, actor_label)
+        results = _grant_batch(
+            emails, tier, request.user, actor_label,
+            expires_at=override_expires_at,
+        )
 
     granted = sum(1 for r in results if r["status"] == "granted")
     skipped = sum(1 for r in results if r["status"] == "skipped_idempotent")
@@ -226,6 +258,7 @@ def tier_overrides_grant(request):
     return JsonResponse(
         {
             "tier": tier.slug,
+            "expires_at": override_expires_at.isoformat() if override_expires_at else None,
             "granted": granted,
             "skipped": skipped,
             "malformed": malformed,
@@ -258,7 +291,7 @@ def _dedupe_emails(emails):
     return deduped
 
 
-def _grant_batch(emails, tier, granted_by, actor_label):
+def _grant_batch(emails, tier, granted_by, actor_label, *, expires_at=None):
     """Grant ``tier`` overrides to ``emails``; return the per-email results list.
 
     Idempotency approach (a): for each well-formed email, check for an existing
@@ -308,7 +341,10 @@ def _grant_batch(emails, tier, granted_by, actor_label):
             if existing_user is not None
             else None
         )
-        if existing_override is not None:
+        if (
+            existing_override is not None
+            and (expires_at is None or existing_override.expires_at == expires_at)
+        ):
             # Identical active override already in place -> no new row.
             # Surface the existing expiry so a re-grant attempt answers
             # "until when?" without a second read.
@@ -329,6 +365,7 @@ def _grant_batch(emails, tier, granted_by, actor_label):
             default_tier=tier,
             granted_by=granted_by,
             tier_assignment_mode="override",
+            override_expires_at=expires_at,
         )
 
         for index, raw, normalized, existed in to_grant:

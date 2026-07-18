@@ -1,17 +1,14 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}{% if form_action == 'edit' %}Edit member note{% else %}New member note{% endif %}{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8">
-  <a href="{% url 'studio_user_detail' user_id=detail_user.pk %}#member-notes" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-    &larr; Back to member
-  </a>
-  <h1 class="text-2xl font-semibold text-foreground mt-2">
-    {% if form_action == 'edit' %}Edit member note{% else %}New member note{% endif %}
-  </h1>
-  <p class="text-sm text-muted-foreground mt-1">{{ detail_user.email }}</p>
-</div>
+{% if form_action == 'edit' %}
+{% studio_header_actions title="Edit member note" subtitle=detail_user.email back_url=return_url back_label="Back" %}{% endstudio_header_actions %}
+{% else %}
+{% studio_header_actions title="New member note" subtitle=detail_user.email back_url=return_url back_label="Back" %}{% endstudio_header_actions %}
+{% endif %}
 
 {% if error %}
 <div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm">
@@ -23,6 +20,7 @@
   <form method="post"
         action="{% if form_action == 'edit' %}{% url 'studio_member_note_edit' user_id=detail_user.pk note_id=note.pk %}{% else %}{% url 'studio_member_note_create' user_id=detail_user.pk %}{% endif %}">
     {% csrf_token %}
+    <input type="hidden" name="next" value="{{ return_url }}">
 
     <div class="mb-6">
       <label class="block text-sm font-medium text-foreground mb-1">Kind</label>
@@ -75,7 +73,7 @@
               class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
         {% if form_action == 'edit' %}Save changes{% else %}Save note{% endif %}
       </button>
-      <a href="{% url 'studio_user_detail' user_id=detail_user.pk %}#member-notes" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+      <a href="{{ return_url }}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
         Cancel
       </a>
     </div>

@@ -142,7 +142,7 @@ def _set_slack_member_tag(user, present):
         )
 
 
-def _log_check_transition(user, previous_member, new_member):
+def _log_check_transition(user, previous_member, new_member, *, source):
     """Write a CommunityAuditLog row for a state transition.
 
     Caller is responsible for skipping no-op re-checks (same value as
@@ -154,9 +154,77 @@ def _log_check_transition(user, previous_member, new_member):
         details=json.dumps({
             "previous": previous_member,
             "new": new_member,
-            "source": "slack_membership_task",
+            "source": source,
         }),
     )
+
+
+def check_user_slack_membership(
+    user,
+    *,
+    service=None,
+    audit_source="slack_membership_task",
+):
+    """Check one selected user and apply only a definite Slack outcome.
+
+    This is the shared operation used by scheduled refreshes and explicit
+    Studio/API checks. ``unknown`` and provider exceptions are mutation-free.
+    """
+    try:
+        service = service or get_community_service()
+        outcome, uid = service.check_workspace_membership(user.email)
+    except Exception:
+        logger.exception(
+            "Unexpected error checking Slack membership for %s",
+            user.email,
+        )
+        return "unknown"
+    if outcome not in {"member", "not_member"}:
+        return "unknown"
+
+    is_first_check = user.slack_checked_at is None
+    previous_member = bool(user.slack_member)
+    now = timezone.now()
+
+    if outcome == "member":
+        update_fields = ["slack_member", "slack_checked_at"]
+        user.slack_member = True
+        user.slack_checked_at = now
+        if uid and not user.slack_user_id:
+            user.slack_user_id = uid
+            update_fields.append("slack_user_id")
+        if _backfill_name_from_slack(service, user):
+            update_fields.extend(["first_name", "last_name"])
+        user.save(update_fields=update_fields)
+        _set_slack_member_tag(user, True)
+        if is_first_check or previous_member is not True:
+            _log_check_transition(
+                user,
+                previous_member,
+                True,
+                source=audit_source,
+            )
+        if previous_member is False and is_first_check is False:
+            try:
+                notify_slack_join(user)
+            except Exception:
+                logger.exception(
+                    "Failed to send Slack-join staff notification for %s",
+                    user.email,
+                )
+    else:
+        user.slack_member = False
+        user.slack_checked_at = now
+        user.save(update_fields=["slack_member", "slack_checked_at"])
+        _set_slack_member_tag(user, False)
+        if is_first_check or previous_member is not False:
+            _log_check_transition(
+                user,
+                previous_member,
+                False,
+                source=audit_source,
+            )
+    return outcome
 
 
 def refresh_slack_membership(
@@ -233,73 +301,18 @@ def refresh_slack_membership(
         if index > 0 and sleep_seconds:
             time.sleep(sleep_seconds)
 
-        try:
-            outcome, uid = service.check_workspace_membership(user.email)
-        except Exception:
-            logger.exception(
-                "Unexpected error checking Slack membership for %s",
-                user.email,
-            )
-            unknown += 1
-            continue
-
+        was_first_check = user.slack_checked_at is None
+        previous_member = bool(user.slack_member)
+        outcome = check_user_slack_membership(user, service=service)
         if outcome == "unknown":
             unknown += 1
             continue
-
-        # Treat NULL slack_checked_at as a first check; both the
-        # state flip member<->not_member and the first-ever check
-        # are worth recording. Stale re-checks that return the same
-        # value are skipped to keep the audit table small.
-        is_first_check = user.slack_checked_at is None
-        previous_member = bool(user.slack_member)
-        now = timezone.now()
-
         if outcome == "member":
-            update_fields = ['slack_member', 'slack_checked_at']
-            user.slack_member = True
-            user.slack_checked_at = now
-            if uid and not user.slack_user_id:
-                user.slack_user_id = uid
-                update_fields.append('slack_user_id')
-            # Backfill first_name/last_name from the Slack profile if
-            # those fields are still empty locally (issue #699).
-            # Best-effort: a probe failure must NEVER break the
-            # membership update — the user is in Slack, that's the
-            # source of truth here.
-            if _backfill_name_from_slack(service, user):
-                update_fields.extend(['first_name', 'last_name'])
-            user.save(update_fields=update_fields)
-            _set_slack_member_tag(user, True)
             members += 1
-            if is_first_check or previous_member is not True:
-                transitions += 1
-                _log_check_transition(user, previous_member, True)
-            # Issue #959: staff heads-up on a GENUINE join. Fire ONLY on a
-            # forward transition observed on a PRIOR cycle: the user was a
-            # non-member previously (``previous_member is False``) AND was
-            # already checked before (``is_first_check is False``). The
-            # latter is the load-bearing backfill guard — it prevents the
-            # first-ever observation of a user who is already in Slack from
-            # email-blasting. Wrapped so a notifier failure never breaks the
-            # membership update or the chunk/chain loop.
-            if previous_member is False and is_first_check is False:
-                try:
-                    notify_slack_join(user)
-                except Exception:
-                    logger.exception(
-                        "Failed to send Slack-join staff notification for %s",
-                        user.email,
-                    )
         elif outcome == "not_member":
-            user.slack_member = False
-            user.slack_checked_at = now
-            user.save(update_fields=['slack_member', 'slack_checked_at'])
-            _set_slack_member_tag(user, False)
             not_members += 1
-            if is_first_check or previous_member is not False:
-                transitions += 1
-                _log_check_transition(user, previous_member, False)
+        if was_first_check or previous_member != (outcome == "member"):
+            transitions += 1
 
     total_checked = len(users)
 

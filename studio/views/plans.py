@@ -360,6 +360,7 @@ def plan_detail(request, plan_id):
         'plan': plan,
         'detail_user': plan.member,
         'current_plan': plan,
+        'member_notes_return_url': f'/studio/plans/{plan.pk}/#member-notes',
         'weeks': weeks,
         'resources': resources,
         'deliverables': deliverables,

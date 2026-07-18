@@ -9,7 +9,7 @@
       <i data-lucide="upload" class="h-4 w-4"></i>
       <span>Import contacts</span>
     </a>
-    <a href="{% url 'studio_user_export' %}?filter={{ active_filter }}&amp;slack={{ slack_filter }}&amp;bounce={{ bounce_filter }}{% if account_lifecycle_filter %}&amp;account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
+    <a href="{% url 'studio_user_export' %}?filter={{ active_filter }}&amp;slack={{ slack_filter }}&amp;bounce={{ bounce_filter }}&amp;sort={{ sort }}{% if account_lifecycle_filter %}&amp;account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
        class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
       <i data-lucide="download" class="h-4 w-4"></i>
       <span>Export CSV</span>
@@ -228,17 +228,23 @@
   {% if show_pager %}{% include "studio/users/_pager.html" %}{% endif %}
   <table class="w-full table-fixed">
     <colgroup>
-      <col class="w-[44%]">
+      <col class="w-[34%]">
       <col class="w-[14%]">
-      <col class="w-[22%]">
-      <col class="w-[20%]">
+      <col class="w-[18%]">
+      <col class="w-[18%]">
+      <col class="w-[16%]">
     </colgroup>
     <thead class="bg-secondary">
       <tr>
-        <th class="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
-        <th class="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-        <th class="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Last login</th>
-        <th class="text-right px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+        <th scope="col" class="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground">User</th>
+        <th scope="col" class="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground">Status</th>
+        <th scope="col" aria-sort="{% if sort == 'joined' %}ascending{% elif sort == '-joined' %}descending{% else %}none{% endif %}" class="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground">
+          <a href="{{ joined_sort_url }}" class="inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Joined{% if sort == 'joined' %} ↑{% elif sort == '-joined' %} ↓{% endif %}</a>
+        </th>
+        <th scope="col" aria-sort="{% if sort == 'last_login' %}ascending{% elif sort == '-last_login' %}descending{% else %}none{% endif %}" class="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground">
+          <a href="{{ last_login_sort_url }}" class="inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Last login{% if sort == 'last_login' %} ↑{% elif sort == '-last_login' %} ↓{% endif %}</a>
+        </th>
+        <th scope="col" class="text-right px-3 py-1.5 text-xs font-medium text-muted-foreground">Actions</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-border">
@@ -310,6 +316,10 @@
           <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium leading-4 {{ row.status|lower|studio_user_status_pill_classes }}"
                 data-testid="user-status">{{ row.status }}</span>
         </td>
+        <td class="px-3 py-1.5 align-top" data-label="Joined" data-testid="user-date-joined">
+          <div class="text-xs text-foreground">{{ row.date_joined|operator_date }}</div>
+          <div class="text-[11px] leading-4 text-muted-foreground">{{ row.date_joined|operator_time }}</div>
+        </td>
         <td class="px-3 py-1.5 align-top" data-label="Last login" data-testid="user-last-login">
           {% if row.last_login %}
           <div class="text-xs text-foreground">{{ row.last_login|operator_date }}</div>
@@ -326,7 +336,7 @@
       </tr>
       {% empty %}
         {% url 'studio_user_list' as users_clear_url %}
-        {% studio_empty_state 'filter' entity_label='user' entity_label_plural='users' clear_url=users_clear_url colspan=4 %}
+        {% studio_empty_state 'filter' entity_label='user' entity_label_plural='users' clear_url=users_clear_url colspan=5 %}
       {% endfor %}
     </tbody>
   </table>

@@ -4,7 +4,7 @@
       <h2 class="text-lg font-semibold text-foreground">Member notes</h2>
       <p class="text-xs text-muted-foreground mt-1">Internal notes stay staff-only. External notes are shareable with the member; staff edit them here.</p>
     </div>
-    <a href="{% if current_plan %}{% url 'studio_member_note_create' user_id=detail_user.pk %}?plan_id={{ current_plan.pk }}{% else %}{% url 'studio_member_note_create' user_id=detail_user.pk %}{% endif %}"
+    <a href="{% url 'studio_member_note_create' user_id=detail_user.pk %}?{% if current_plan %}plan_id={{ current_plan.pk }}&amp;{% endif %}next={{ member_notes_return_url|default:request.get_full_path|urlencode }}"
        data-testid="member-notes-add"
        class="inline-flex items-center justify-center bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity self-start sm:self-auto">
       Add member note
@@ -32,10 +32,11 @@
             {% include "studio/users/_member_note_plan_badge.html" %}
           </div>
           <span class="flex items-center gap-3 whitespace-nowrap">
-            <a href="{% url 'studio_member_note_edit' user_id=detail_user.pk note_id=note.pk %}" class="text-accent hover:underline">Edit</a>
+            <a href="{% url 'studio_member_note_edit' user_id=detail_user.pk note_id=note.pk %}?next={{ member_notes_return_url|default:request.get_full_path|urlencode }}" class="text-accent hover:underline">Edit</a>
             <form method="post" action="{% url 'studio_member_note_delete' user_id=detail_user.pk note_id=note.pk %}" class="inline"
                   onsubmit="return confirm('Delete this internal note?');">
               {% csrf_token %}
+              <input type="hidden" name="next" value="{{ member_notes_return_url|default:request.get_full_path }}">
               <button type="submit" class="text-destructive hover:underline">Delete</button>
             </form>
           </span>
@@ -94,10 +95,11 @@
             {% include "studio/users/_member_note_plan_badge.html" %}
           </div>
           <span class="flex items-center gap-3 whitespace-nowrap">
-            <a href="{% url 'studio_member_note_edit' user_id=detail_user.pk note_id=note.pk %}" class="text-accent hover:underline">Edit</a>
+            <a href="{% url 'studio_member_note_edit' user_id=detail_user.pk note_id=note.pk %}?next={{ member_notes_return_url|default:request.get_full_path|urlencode }}" class="text-accent hover:underline">Edit</a>
             <form method="post" action="{% url 'studio_member_note_delete' user_id=detail_user.pk note_id=note.pk %}" class="inline"
                   onsubmit="return confirm('Delete this external note?');">
               {% csrf_token %}
+              <input type="hidden" name="next" value="{{ member_notes_return_url|default:request.get_full_path }}">
               <button type="submit" class="text-destructive hover:underline">Delete</button>
             </form>
           </span>

@@ -44,7 +44,7 @@ from datetime import datetime
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import F, Q
 from django.http import JsonResponse
 from django.urls import reverse
 from django.utils import timezone
@@ -53,6 +53,10 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from accounts.lifecycle import ACCOUNT_LIFECYCLE_VALUES, account_lifecycle_q
 from accounts.services.email_resolution import resolve_user_by_email
+from accounts.services.slack_identity import (
+    is_valid_slack_user_id,
+    normalize_slack_user_id,
+)
 from accounts.utils.bounce import mark_permanent_bounce, record_soft_bounce
 from accounts.utils.tags import add_tag, normalize_tag, remove_tag
 from api.openapi import openapi_spec
@@ -65,6 +69,7 @@ from api.serializers.users import (
 from api.utils import parse_json_body, require_methods
 from api.views._permissions import bearer_is_admin
 from community.models import CommunityAuditLog
+from community.tasks.slack_membership import check_user_slack_membership
 from crm.models import CRMRecord
 from crm.services.activity_context import (
     ACTIVITY_CATEGORIES,
@@ -97,6 +102,7 @@ User = get_user_model()
 
 LIMIT_DEFAULT = 50
 LIMIT_MAX = 200
+USER_SORT_VALUES = ("joined", "-joined", "last_login", "-last_login")
 
 
 def _parse_limit(raw, *, default=LIMIT_DEFAULT, field="limit"):
@@ -184,13 +190,41 @@ def _parse_account_lifecycle(raw):
     )
 
 
+def _parse_user_sort(raw):
+    value = (raw or "").strip()
+    if not value:
+        return "-joined", None
+    if value in USER_SORT_VALUES:
+        return value, None
+    return None, error_response(
+        f"Invalid sort: {raw!r}",
+        "validation_error",
+        status=422,
+        details={
+            "field": "sort",
+            "value": raw,
+            "allowed": list(USER_SORT_VALUES),
+        },
+    )
+
+
+def _user_sort_expressions(value):
+    if value == "joined":
+        return (F("date_joined").asc(nulls_last=True), F("pk").asc())
+    if value == "last_login":
+        return (F("last_login").asc(nulls_last=True), F("pk").asc())
+    if value == "-last_login":
+        return (F("last_login").desc(nulls_last=True), F("pk").asc())
+    return (F("date_joined").desc(nulls_last=True), F("pk").asc())
+
+
 def _find_user(email):
     """Look up a ``User`` by case-insensitive email."""
     if not email:
         return None
     return (
         User.objects
-        .select_related("tier", "attribution")
+        .select_related("tier", "pending_tier", "attribution")
         .filter(email__iexact=email)
         .first()
     )
@@ -320,7 +354,7 @@ VALID_SES_EVENT_TYPES = tuple(
 
 # Allowed PATCH field set for the single-user write endpoint. Any other
 # key in the body returns a 422 ``unknown_field``.
-_PATCH_ALLOWED_FIELDS = {"unsubscribed", "email_verified"}
+_PATCH_ALLOWED_FIELDS = {"unsubscribed", "email_verified", "slack_user_id"}
 
 
 # ---- Read endpoints --------------------------------------------------------
@@ -409,6 +443,12 @@ _USER_EXAMPLE = {
                         "imported_or_unknown."
                     ),
                 },
+                "sort": {
+                    "type": "string",
+                    "enum": list(USER_SORT_VALUES),
+                    "required": False,
+                    "description": "Joined or last-login ordering.",
+                },
             },
             "responses": {
                 200: {
@@ -447,10 +487,13 @@ def users_collection(request):
     )
     if err is not None:
         return err
+    sort_value, err = _parse_user_sort(request.GET.get("sort"))
+    if err is not None:
+        return err
 
     q = (request.GET.get("q") or "").strip()
 
-    qs = User.objects.select_related("tier", "attribution")
+    qs = User.objects.select_related("tier", "pending_tier", "attribution")
 
     if since is not None:
         qs = qs.filter(date_joined__gte=since)
@@ -481,7 +524,7 @@ def users_collection(request):
                         break
         qs = qs.filter(scalar | Q(pk__in=tag_user_ids))
 
-    qs = qs.order_by("-date_joined")[:limit]
+    qs = qs.order_by(*_user_sort_expressions(sort_value))[:limit]
     rows = [serialize_user_state(u, compact=True) for u in qs]
     return JsonResponse(
         {"users": rows, "count": len(rows), "limit": limit},
@@ -537,6 +580,10 @@ def users_collection(request):
                             "Only ``true`` is accepted; demote-via-API "
                             "is forbidden."
                         ),
+                    },
+                    "slack_user_id": {
+                        "type": "string",
+                        "description": "Normalized U/W Slack ID; blank clears.",
                     },
                 },
                 "example": {"unsubscribed": True},
@@ -605,6 +652,23 @@ def user_detail(request, email):
             status=422,
             details={"field": "email_verified"},
         )
+    normalized_slack_id = None
+    if "slack_user_id" in data:
+        if not isinstance(data["slack_user_id"], str):
+            return error_response(
+                "slack_user_id must be a string",
+                "validation_error",
+                status=422,
+                details={"field": "slack_user_id"},
+            )
+        normalized_slack_id = normalize_slack_user_id(data["slack_user_id"])
+        if not is_valid_slack_user_id(normalized_slack_id):
+            return error_response(
+                "Invalid Slack ID. Must start with U or W followed by uppercase letters or digits.",
+                "validation_error",
+                status=422,
+                details={"field": "slack_user_id"},
+            )
 
     actor = _actor_label(request)
 
@@ -658,9 +722,72 @@ def user_detail(request, email):
                 )
             _audit(locked, "api_verify", details)
 
+        if "slack_user_id" in data:
+            previous = locked.slack_user_id or ""
+            locked.slack_user_id = normalized_slack_id
+            locked.slack_checked_at = timezone.now()
+            locked.save(update_fields=["slack_user_id", "slack_checked_at"])
+            _audit(
+                locked,
+                "check",
+                (
+                    f"source=api_slack_id; actor_token={actor}; "
+                    f"previous={previous!r}; new={normalized_slack_id!r}"
+                ),
+            )
+
         user = locked
 
     return JsonResponse(serialize_user_state(user), status=200)
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Users",
+    summary="Check one user Slack membership",
+    methods={
+        "POST": {
+            "summary": "Check cached Slack membership now",
+            "responses": {
+                200: {"description": "Definite member or not-member result."},
+                404: {"description": "Unknown email."},
+                503: {"description": "Slack membership unavailable."},
+            },
+        },
+    },
+)
+def user_slack_membership_check(request, email):
+    """Run the shared single-user Slack membership operation."""
+    user = _find_user(email)
+    if user is None:
+        return _user_not_found_response()
+    outcome = check_user_slack_membership(
+        user,
+        audit_source=f"api:{_actor_label(request)}",
+    )
+    if outcome == "unknown":
+        return error_response(
+            "Slack membership could not be checked",
+            "slack_membership_unavailable",
+            status=503,
+        )
+    user.refresh_from_db()
+    return JsonResponse(
+        {
+            "email": user.email,
+            "outcome": outcome,
+            "slack_member": bool(user.slack_member),
+            "slack_user_id": user.slack_user_id or "",
+            "slack_checked_at": (
+                user.slack_checked_at.isoformat()
+                if user.slack_checked_at is not None
+                else None
+            ),
+        },
+        status=200,
+    )
 
 
 @token_required

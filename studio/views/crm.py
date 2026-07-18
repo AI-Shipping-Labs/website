@@ -26,6 +26,7 @@ from accounts.lifecycle import (
     normalize_account_lifecycle,
 )
 from accounts.models import TierOverride
+from accounts.utils.tags import list_all_tags, normalize_tag, user_ids_with_exact_tag
 from community.models import STATUS_BOOKED, BookedCall
 from community.slack_config import get_slack_plan_sprints_user_token
 from crm.models import (
@@ -135,6 +136,8 @@ def crm_list(request):
         request.GET.get('account_lifecycle', ''),
     )
     search = (request.GET.get('q', '') or '').strip()
+    raw_tag = request.GET.get('tag', '')
+    active_tag = normalize_tag(raw_tag) if raw_tag else ''
 
     records_qs = (
         CRMRecord.objects
@@ -162,6 +165,11 @@ def crm_list(request):
     if search:
         records_qs = records_qs.filter(
             Q(user__email__icontains=search) | Q(persona__icontains=search)
+        )
+
+    if active_tag:
+        records_qs = records_qs.filter(
+            user_id__in=user_ids_with_exact_tag(active_tag),
         )
 
     paginator = Paginator(records_qs, CRM_LIST_PAGE_SIZE)
@@ -210,6 +218,8 @@ def crm_list(request):
         'active_filter': active_filter,
         'account_lifecycle_filter': account_lifecycle_filter,
         'search': search,
+        'active_tag': active_tag,
+        'known_tags': list_all_tags(),
         'counts': counts,
         'filter_all': FILTER_ALL,
         'filter_active': FILTER_ACTIVE,
@@ -321,6 +331,7 @@ def _record_detail_context(record, request):
         # note" button needs a plan prefill. The CRM record is
         # member-scoped, not plan-scoped, so we pass ``None``.
         'current_plan': None,
+        'member_notes_return_url': f'/studio/crm/{record.pk}/#member-notes',
         'django_admin_url': (
             f'/admin/accounts/user/{record.user.pk}/change/'
         ),

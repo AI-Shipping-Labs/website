@@ -110,6 +110,13 @@
         </label>
         {% endfor %}
       </div>
+      <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div>
+          <label for="override-expires-at" class="mb-1 block text-sm font-medium text-foreground">Until date</label>
+          <input id="override-expires-at" type="date" name="expires_at" class="min-h-11 rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        </div>
+        <button type="submit" name="custom_expiry" value="1" class="min-h-11 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground">Grant until date</button>
+      </div>
     </div>
 
     <div>

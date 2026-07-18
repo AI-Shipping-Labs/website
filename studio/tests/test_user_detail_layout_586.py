@@ -71,9 +71,9 @@ class _Base586(TestCase):
 
 
 class HeaderAndActionRowTest(_Base586):
-    """Header is identity-only; action row sits below with two buttons."""
+    """Shared Studio header owns identity and its contextual actions."""
 
-    def test_header_renders_email_with_no_action_buttons_inside(self):
+    def test_header_renders_email_and_owned_actions(self):
         member = self._make_member('hdr@test.com', tier=self.free)
         response = self.client.get(f'/studio/users/{member.pk}/')
         body = response.content.decode()
@@ -89,13 +89,9 @@ class HeaderAndActionRowTest(_Base586):
         self.assertIn('hdr@test.com', header_slice)
         self.assertIn('Visible to staff only', header_slice)
 
-        # The action testid + each button testid must NOT appear inside
-        # the header slice. They live in a separate row below.
-        self.assertNotIn('data-testid="user-detail-actions"', header_slice)
-        self.assertNotIn('data-testid="user-detail-impersonate"', header_slice)
-        self.assertNotIn(
-            'data-testid="studio-open-in-admin"', header_slice,
-        )
+        self.assertIn('data-testid="user-detail-actions"', header_slice)
+        self.assertIn('data-testid="user-detail-impersonate"', header_slice)
+        self.assertIn('data-testid="studio-open-in-admin"', header_slice)
 
     def test_action_row_immediately_after_header_with_two_controls(self):
         member = self._make_member('row@test.com', tier=self.free)
@@ -290,28 +286,23 @@ class GrantTemporaryUpgradeSectionTest(_Base586):
 
 
 class SlackIdReadOnlyTest(_Base586):
-    """Slack ID row is read-only on the detail page."""
+    """Slack ID row keeps display compact and exposes an edit disclosure."""
 
-    def test_slack_id_row_has_no_input_no_save_no_form(self):
+    def test_slack_id_row_has_collapsed_edit_form(self):
         member = self._make_member(
             'slack-edit@test.com', tier=self.free,
             slack_user_id='U01ADA999',
         )
         response = self.client.get(f'/studio/users/{member.pk}/')
         body = response.content.decode()
-        # No <input name="slack_user_id">.
-        self.assertNotIn('name="slack_user_id"', body)
-        # No save submit button testid.
-        self.assertNotIn('data-testid="user-detail-slack-id-submit"', body)
-        # No form posting to the slack-id-set endpoint.
+        self.assertIn('name="slack_user_id"', body)
+        self.assertIn('aria-expanded="false"', body)
+        self.assertIn('id="slack-id-edit-form"', body)
+        self.assertIn('class="hidden mt-2 flex-col', body)
         slack_id_set_url = reverse(
             'studio_user_slack_id_set', args=[member.pk],
         )
-        self.assertNotIn(f'action="{slack_id_set_url}"', body)
-        # The form testid is also gone.
-        self.assertNotIn('data-testid="user-detail-slack-id-form"', body)
-        # Helper copy about the U01ABC123 placeholder is gone.
-        self.assertNotIn('U01ABC123', body)
+        self.assertIn(f'action="{slack_id_set_url}"', body)
 
     def test_unlinked_row_does_not_render_admin_edit_link(self):
         member = self._make_member('slack-empty@test.com', tier=self.free)

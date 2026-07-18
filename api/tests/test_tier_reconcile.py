@@ -855,7 +855,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         user.refresh_from_db()
         self.assertEqual(user.billing_period_end, expected)
 
-    def test_apply_without_force_does_not_overwrite_existing_billing_period_end(self):
+    def test_apply_without_force_refreshes_existing_billing_period_end(self):
         stripe_period = 1_800_000_456
         pre_existing = datetime.fromtimestamp(
             1_700_000_000,
@@ -877,8 +877,10 @@ class TierReconcileApplyTest(TierReconcileTestBase):
 
         self.assertEqual(response.status_code, 200)
         user.refresh_from_db()
-        # Pre-existing value left untouched (today's behaviour).
-        self.assertEqual(user.billing_period_end, pre_existing)
+        expected = datetime.fromtimestamp(
+            stripe_period, tz=datetime_timezone.utc,
+        )
+        self.assertEqual(user.billing_period_end, expected)
 
     def test_apply_with_force_and_no_stripe_customer_id_is_still_skipped_no_writes(self):
         """User with no Stripe customer ID is excluded by

@@ -164,7 +164,7 @@ class StudioUserListTagFilterTest(TestCase):
 
         self.assertContains(
             response,
-            '/studio/users/export?filter=paid&amp;slack=yes&amp;bounce=any&amp;q=alice&amp;tag=early-adopter',
+            '/studio/users/export?filter=paid&amp;slack=yes&amp;bounce=any&amp;sort=-joined&amp;q=alice&amp;tag=early-adopter',
         )
 
     def test_view_link_present_for_each_user(self):

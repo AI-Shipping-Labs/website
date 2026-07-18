@@ -1362,6 +1362,15 @@
               ],
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "tag",
+            "required": false,
+            "schema": {
+              "description": "Exact normalized contact-tag filter.",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -10091,6 +10100,11 @@
                     },
                     "type": "array"
                   },
+                  "expires_at": {
+                    "description": "Optional UTC expiry date, today or later.",
+                    "format": "date",
+                    "type": "string"
+                  },
                   "tier": {
                     "type": "string"
                   }
@@ -10748,6 +10762,21 @@
               ],
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "description": "Joined or last-login ordering.",
+              "enum": [
+                "joined",
+                "-joined",
+                "last_login",
+                "-last_login"
+              ],
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -11213,6 +11242,10 @@
                   "email_verified": {
                     "description": "Only ``true`` is accepted; demote-via-API is forbidden.",
                     "type": "boolean"
+                  },
+                  "slack_user_id": {
+                    "description": "Normalized U/W Slack ID; blank clears.",
+                    "type": "string"
                   },
                   "unsubscribed": {
                     "type": "boolean"
@@ -12450,6 +12483,35 @@
           }
         },
         "summary": "List inbound SES events",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/users/{email}/slack-membership/check": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Definite member or not-member result."
+          },
+          "404": {
+            "description": "Unknown email."
+          },
+          "503": {
+            "description": "Slack membership unavailable."
+          }
+        },
+        "summary": "Check cached Slack membership now",
         "tags": [
           "Users"
         ]

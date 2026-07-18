@@ -1,8 +1,8 @@
 """Tests for the /studio/users/ list density rework (issue #451).
 
-Issue #451 reshapes the user list table from four columns
-(User / Membership / Tags / Actions) to four leaner columns
-(User / Status / Last login / Actions). The User cell now carries the
+Issue #451 reshaped the user list table from four columns
+(User / Membership / Tags / Actions) to leaner identity and status columns;
+issue #1288 adds a sortable Joined column beside Last login. The User cell carries the
 identity AND the tier pill (and an icon-only override pill) inline; the
 Status column gets its own slot; the Last login column surfaces a fact
 that was previously invisible; and a row-level ``<tr title="...">``
@@ -11,7 +11,7 @@ Slack workspace state on hover.
 
 Tests in this module own:
 
-- the table-header contract (exactly four headers, in order, with the
+- the table-header contract (five headers, in order, with the
   Membership / Tags headers explicitly gone)
 - the User cell render matrix (full_name vs email fallback)
 - the tier + override pill placement inside the User cell
@@ -29,6 +29,7 @@ import re
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
+from django.utils.html import strip_tags
 
 from accounts.models import TierOverride
 from payments.models import Tier
@@ -126,15 +127,16 @@ class UserListHeaderRowTest(TestCase):
             thead_match, 'No user-table <thead> in rendered users list.',
         )
         thead_html = thead_match.group(1)
-        return re.findall(
+        cells = re.findall(
             r'<th[^>]*>\s*(.*?)\s*</th>', thead_html, re.DOTALL,
         )
+        return [re.sub(r'\s+', ' ', strip_tags(cell)).strip() for cell in cells]
 
-    def test_header_row_has_exactly_four_cells_in_order(self):
+    def test_header_row_has_exactly_five_cells_in_order(self):
         cells = self._header_cells()
         self.assertEqual(
             cells,
-            ['User', 'Status', 'Last login', 'Actions'],
+            ['User', 'Status', 'Joined ↓', 'Last login', 'Actions'],
         )
 
     def test_header_does_not_contain_membership(self):

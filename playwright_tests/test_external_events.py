@@ -324,11 +324,10 @@ class TestStaffAddsExternalEventViaStudio:
         # Set status to upcoming so the event becomes publicly visible.
         page.locator('select[name="status"]').select_option("upcoming")
 
-        # Submit by clicking the sticky save button. The form has a
-        # ``button[type="submit"]`` inside the sticky action bar, and a
-        # real click triggers Playwright's navigation tracking cleanly.
+        # Submit through the stable sticky action. The edit header also has
+        # destructive submit buttons inside its overflow menu.
         with page.expect_navigation(wait_until="domcontentloaded"):
-            page.locator('button[type="submit"]').first.click()
+            page.locator('[data-testid="sticky-save-action"]').click()
 
         # After save the form reloads with Luma populated. The host
         # control is a <select> (issue #579), so input_value() returns
@@ -402,7 +401,7 @@ class TestClearingExternalHostRevertsToCommunityFlow:
         # "no meeting link" confirm — accept it.
         page.on("dialog", lambda d: d.accept())
         with page.expect_navigation(wait_until="domcontentloaded"):
-            page.locator('button[type="submit"]').first.click()
+            page.locator('[data-testid="sticky-save-action"]').click()
 
         # Public detail: external pill is gone and the community
         # registration card is back.
@@ -617,7 +616,7 @@ class TestStaffAssignsPartnerHostViaDropdown:
         page.locator('select[name="status"]').select_option("upcoming")
 
         with page.expect_navigation(wait_until="domcontentloaded"):
-            page.locator('button[type="submit"]').first.click()
+            page.locator('[data-testid="sticky-save-action"]').click()
 
         assert page.locator(
             '[data-testid="studio-event-external-host"]',
@@ -670,7 +669,7 @@ class TestStaffSwitchesEventBackToCommunity:
         # event, so submit fires the "no meeting link" confirm — accept it.
         page.on("dialog", lambda d: d.accept())
         with page.expect_navigation(wait_until="domcontentloaded"):
-            page.locator('button[type="submit"]').first.click()
+            page.locator('[data-testid="sticky-save-action"]').click()
 
         assert page.locator(
             '[data-testid="studio-event-external-host"]',

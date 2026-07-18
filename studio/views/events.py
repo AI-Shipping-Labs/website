@@ -7,13 +7,14 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.contrib import messages
-from django.db.models import Avg, Q
-from django.http import HttpResponse, JsonResponse
+from django.db import transaction
+from django.db.models import CASCADE, Avg, Q
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone as djtimezone
 from django.utils.text import slugify
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_safe
 
 from accounts.services.timezones import (
     build_timezone_options,
@@ -22,6 +23,7 @@ from accounts.services.timezones import (
     is_valid_timezone,
 )
 from content.access import VISIBILITY_CHOICES
+from email_app.models import EmailCampaign
 from events.models import Event, EventFeedback, EventHost, EventRegistration, Host
 from events.models.event import EXTERNAL_HOST_CHOICES
 from events.services.calendar_lifecycle import (
@@ -29,7 +31,9 @@ from events.services.calendar_lifecycle import (
     enqueue_schedule_update,
 )
 from events.services.display_time import resolve_event_creation_timezone
-from events.services.host_registration import maybe_register_host_as_attendee
+from events.services.occurrence_publication import (
+    run_occurrence_publication_lifecycle,
+)
 from events.services.workshop_ready_notification import (
     WorkshopReadyNotReady,
     assert_workshop_ready,
@@ -61,6 +65,11 @@ EVENT_PLATFORM_ICON_MAP = {
     'zoom': 'video',
     'custom': 'link',
 }
+
+EVENT_DELETE_HELP = (
+    'Only Studio events with no registrations or targeted campaigns can be '
+    'deleted. Linked operational history is removed.'
+)
 
 
 def annotate_derived_status(event, now=None):
@@ -498,6 +507,78 @@ def event_list_past(request):
     })
 
 
+def _new_event_form_values(default_tz, duplicate_source=None):
+    values = {
+        'title': '',
+        'slug': '',
+        'description': '',
+        'event_date': '',
+        'event_time': '',
+        'duration_hours': '1',
+        'timezone': default_tz,
+        'platform': 'zoom',
+        'status': 'draft',
+        'required_level': '0',
+        'location': '',
+        'tags': '',
+        'external_host': '',
+        'custom_url': '',
+        'host_email': '',
+    }
+    if duplicate_source is None:
+        return values
+
+    duration = duplicate_source.effective_end_datetime - duplicate_source.start_datetime
+    hours = duration.total_seconds() / 3600
+    values.update({
+        'title': f'{duplicate_source.title} (copy)',
+        'description': duplicate_source.description,
+        'duration_hours': str(int(hours)) if hours.is_integer() else str(round(hours, 1)),
+        'timezone': duplicate_source.timezone or default_tz,
+        'platform': duplicate_source.platform,
+        'required_level': str(duplicate_source.required_level),
+        'location': duplicate_source.location,
+        'tags': ', '.join(duplicate_source.tags or []),
+        'external_host': duplicate_source.external_host,
+    })
+    return values
+
+
+def _resolve_duplicate_source(raw_id):
+    try:
+        source_id = int(raw_id)
+    except (TypeError, ValueError):
+        return None
+    return Event.objects.filter(pk=source_id).first()
+
+
+def _new_event_context(request, form_values, errors, selected_host_ids, source=None):
+    tz_value = form_values['timezone'] or _default_timezone_for(request.user)
+    context = {
+        'event': None,
+        'is_synced': False,
+        'form_action': 'create',
+        'errors': errors,
+        'form_values': form_values,
+        'event_date': form_values['event_date'],
+        'event_time': form_values['event_time'],
+        'duration_hours': form_values['duration_hours'] or '1',
+        'external_host_choices': EXTERNAL_HOST_CHOICES,
+        'timezone_value': tz_value,
+        'timezone_label': get_timezone_label(tz_value) or tz_value,
+        'timezone_options': build_timezone_options(),
+        'tz_settings_link': _should_autodetect_tz(request.user),
+        'tz_autodetect': (
+            source is None
+            and _should_autodetect_tz(request.user)
+            and request.method != 'POST'
+        ),
+        'duplicate_source': source,
+    }
+    _apply_host_context(context, selected_host_ids)
+    return context
+
+
 @staff_required
 def event_create(request):
     """Create a single one-off Studio event.
@@ -512,29 +593,22 @@ def event_create(request):
     """
     errors = {}
     default_tz = _default_timezone_for(request.user)
-    form_values = {
-        'title': '',
-        'slug': '',
-        'description': '',
-        'event_date': '',
-        'event_time': '',
-        'duration_hours': '1',
-        # Issue #665: default to admin's preferred TZ, never 'Europe/Berlin'.
-        'timezone': default_tz,
-        'platform': 'zoom',
-        'status': 'draft',
-        'required_level': '0',
-        'location': '',
-        'tags': '',
-        'external_host': '',
-        'custom_url': '',
-        'host_email': '',
-    }
-    selected_host_ids = []
+    duplicate_source = _resolve_duplicate_source(
+        request.POST.get('duplicate_source_id'),
+    ) if request.method == 'POST' else None
+    form_values = _new_event_form_values(default_tz, duplicate_source)
+    selected_host_ids = _selected_host_ids_for_event(duplicate_source)
 
     if request.method == 'POST':
         for key in form_values:
             form_values[key] = request.POST.get(key, form_values[key]).strip()
+        if duplicate_source is not None:
+            # Duplication never accepts identity, schedule, delivery, or
+            # integration state from the source (or a forged form field).
+            form_values['slug'] = ''
+            form_values['status'] = 'draft'
+            form_values['custom_url'] = ''
+            form_values['host_email'] = ''
         selected_host_ids, host_error = _validate_host_ids(
             request.POST.getlist('host_ids'),
         )
@@ -611,35 +685,104 @@ def event_create(request):
             # (fire-and-forget; no-ops when banner-generator is disabled or
             # a cover image is supplied).
             enqueue_if_missing('event', event.pk)
-            maybe_register_host_as_attendee(event)
+            run_occurrence_publication_lifecycle(event)
+            messages.success(request, f'Event “{event.title}” created.')
+            if event.start_datetime < djtimezone.now():
+                messages.warning(
+                    request,
+                    "This event's start time is in the past.",
+                )
             return redirect('studio_event_edit', event_id=event.pk)
 
-    # Determine TZ value used for the shared picker partial.
-    tz_value = form_values['timezone'] or default_tz
-    context = {
-        'event': None,
-        'is_synced': False,
-        'form_action': 'create',
-        'errors': errors,
-        'form_values': form_values,
-        'event_date': form_values['event_date'],
-        'event_time': form_values['event_time'],
-        'duration_hours': form_values['duration_hours'] or '1',
-        'external_host_choices': EXTERNAL_HOST_CHOICES,
-        'timezone_value': tz_value,
-        'timezone_label': get_timezone_label(tz_value) or tz_value,
-        'timezone_options': build_timezone_options(),
-        'tz_settings_link': _should_autodetect_tz(request.user),
-        # Issue #855: on a fresh create with no user-chosen value, let the
-        # browser zone win over the bare UTC fallback. A re-rendered POST
-        # carries the admin's chosen value, so don't auto-detect then.
-        'tz_autodetect': (
-            _should_autodetect_tz(request.user)
-            and request.method != 'POST'
-        ),
-    }
-    _apply_host_context(context, selected_host_ids)
+    context = _new_event_context(
+        request, form_values, errors, selected_host_ids, duplicate_source,
+    )
     return render(request, 'studio/events/form.html', context)
+
+
+@staff_required
+@require_safe
+def event_duplicate(request, event_id):
+    """Render a read-only safe prefill for a new one-off event."""
+    source = get_object_or_404(Event, pk=event_id)
+    default_tz = _default_timezone_for(request.user)
+    form_values = _new_event_form_values(default_tz, source)
+    context = _new_event_context(
+        request,
+        form_values,
+        {},
+        _selected_host_ids_for_event(source),
+        source,
+    )
+    return render(request, 'studio/events/form.html', context)
+
+
+def _event_delete_refusal(event):
+    if event.origin != 'studio':
+        return 'source_managed'
+    if EventRegistration.objects.filter(event=event).exists():
+        return 'has_registrations'
+    if EmailCampaign.objects.filter(target_event=event).exists():
+        return 'targeted_campaigns'
+    return ''
+
+
+def _event_cascade_counts(event):
+    """Return bounded model-label counts for relations deleted with Event."""
+    counts = {}
+    for relation in event._meta.related_objects:
+        if relation.on_delete is not CASCADE:
+            continue
+        label = relation.related_model._meta.label_lower
+        counts[label] = relation.related_model._base_manager.filter(
+            **{relation.field.name: event},
+        ).count()
+    return counts
+
+
+@staff_required
+@require_POST
+def event_delete(request, event_id):
+    """Atomically delete one disposable Studio event after rechecking guards."""
+    with transaction.atomic():
+        event = Event.objects.select_for_update().filter(pk=event_id).first()
+        if event is None:
+            logger.warning(
+                'studio_event_delete_refused actor_user_id=%s event_id=%s reason=not_found',
+                request.user.pk,
+                event_id,
+            )
+            raise Http404
+
+        refusal = _event_delete_refusal(event)
+        if refusal:
+            logger.warning(
+                'studio_event_delete_refused actor_user_id=%s event_id=%s reason=%s',
+                request.user.pk,
+                event.pk,
+                refusal,
+            )
+            refusal_messages = {
+                'source_managed': 'Source-managed events cannot be deleted.',
+                'has_registrations': 'Events with registrations cannot be deleted.',
+                'targeted_campaigns': 'Campaigns targeting this event must be retargeted first.',
+            }
+            messages.error(request, refusal_messages[refusal])
+            return redirect('studio_event_edit', event_id=event.pk)
+
+        event_title = event.title
+        audit_fields = {
+            'actor_user_id': request.user.pk,
+            'event_id': event.pk,
+            'slug': event.slug,
+            'series_id': event.event_series_id,
+            'cascade_counts': _event_cascade_counts(event),
+        }
+        logger.info('studio_event_delete_accepted %s', audit_fields)
+        event.delete()
+
+    messages.success(request, f'Event “{event_title}” deleted.')
+    return redirect('studio_event_list')
 
 
 def _event_edit_panels_context(event) -> dict:
@@ -659,6 +802,20 @@ def _event_edit_panels_context(event) -> dict:
         f"{reverse('studio_campaign_create')}"
         f"?event={event.pk}&template=recording_available"
     )
+    context['registrant_campaign_url'] = (
+        f"{reverse('studio_campaign_create')}?event={event.pk}"
+    )
+    context['duplicate_url'] = reverse(
+        'studio_event_duplicate', kwargs={'event_id': event.pk},
+    )
+    context['delete_url'] = reverse(
+        'studio_event_delete', kwargs={'event_id': event.pk},
+    )
+    context['delete_eligible'] = not _event_delete_refusal(event)
+    context['delete_confirmation'] = (
+        f'Delete “{event.title}”? This cannot be undone.'
+    )
+    context['delete_help'] = EVENT_DELETE_HELP
     _apply_workshop_ready_context(context, event)
     # Issue #701: surface registered attendees on the edit page so
     # operators can see and export the roster without dropping into
@@ -817,15 +974,10 @@ def event_edit(request, event_id):
             # Issue #857: publishing/editing a series occurrence into a
             # registrable state auto-enrolls existing series registrants.
             # Best-effort, idempotent, gated on ``is_upcoming``.
-            if event.event_series_id:
-                from events.services.series_registration import (
-                    enroll_series_registrants_in_event,
-                )
-                enroll_series_registrants_in_event(event)
+            run_occurrence_publication_lifecycle(event)
             # Issue #869: a status flip to cancelled removes the occurrence
             # from series subscribers' calendars via a METHOD:CANCEL .ics.
             _maybe_notify_series_cancellation(event, old_status)
-            maybe_register_host_as_attendee(event)
         else:
             # Issue #670: snapshot the persisted start time BEFORE we
             # mutate the in-memory event. The Studio form re-parses
@@ -925,11 +1077,7 @@ def event_edit(request, event_id):
 
             # Issue #857: publishing/editing a series occurrence into a
             # registrable state auto-enrolls existing series registrants.
-            if event.event_series_id:
-                from events.services.series_registration import (
-                    enroll_series_registrants_in_event,
-                )
-                enroll_series_registrants_in_event(event)
+            run_occurrence_publication_lifecycle(event)
 
             zoom_error = sync_or_delete_zoom_meeting(event, old_event)
             if zoom_error is not None:
@@ -945,7 +1093,6 @@ def event_edit(request, event_id):
             # past-event edits stay silent.
             _maybe_notify_reschedule(request, event, old_start, old_end)
 
-            maybe_register_host_as_attendee(event)
 
             # Issue #869: a status flip to cancelled removes the occurrence
             # from series subscribers' calendars via a METHOD:CANCEL .ics.

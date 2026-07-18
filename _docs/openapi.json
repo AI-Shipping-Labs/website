@@ -2676,6 +2676,53 @@
         ]
       }
     },
+    "/api/event-series/{series_id}/publish-drafts": {
+      "post": {
+        "description": "Atomically changes only this series' draft occurrences to upcoming and runs the same idempotent enrollment and host lifecycle as Studio. The request has no body. Retrying is safe and returns a zero-count success.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "occurrence_ids": [
+                    11,
+                    12
+                  ],
+                  "published_count": 2,
+                  "series_id": 1
+                }
+              }
+            },
+            "description": "Publication summary (including no-op retries)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_series",
+                  "error": "Event series not found"
+                }
+              }
+            },
+            "description": "Event series not found."
+          }
+        },
+        "summary": "Publish all draft occurrences",
+        "tags": [
+          "Event Series"
+        ]
+      }
+    },
     "/api/event-series/{series_id}/zoom-meetings": {
       "post": {
         "description": "Programmatic equivalent of the Studio \"Create Zoom meetings for all events\" button (#859). Enqueues the same idempotent background job that creates a Zoom meeting for every eligible occurrence -- future (``is_upcoming``), ``platform='zoom'``, and no existing ``zoom_meeting_id``. Past / cancelled / draft and ``custom``-platform occurrences are skipped. The request returns immediately; the N Zoom API round-trips run on the worker.\n\nPass ``{\"dry_run\": true}`` to get the eligibility count WITHOUT enqueuing or calling Zoom. Unknown top-level keys are ignored; a body that is present but not a JSON object returns 422.\n\nIdempotent: occurrences that already carry a ``zoom_meeting_id`` are never recreated, so re-POSTing is safe and returns ``noop`` once nothing is left to create. Two rapid POSTs may enqueue two jobs, but the second job creates nothing for already-handled occurrences; there is no locking in v1.\n\nNo DELETE / remove counterpart is exposed (no-deletes-via-API policy) -- recreating or removing meetings would orphan live join links already mailed to attendees. Read the run result from ``zoom_meetings_last_run`` on ``GET /api/event-series/<id>``.",

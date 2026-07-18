@@ -79,6 +79,7 @@ from api.views.events import (
 )
 from events.models import Event, EventSeries
 from events.models.event_series import EVENT_SERIES_CADENCE_CHOICES
+from events.services.occurrence_publication import publish_series_drafts
 from events.services.series_registration import (
     enroll_series_registrants_in_event,
 )
@@ -833,6 +834,57 @@ def _next_slug_position(series):
         .first()
     )
     return (max_pos or 0) + 1
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Event Series",
+    summary="Publish every draft occurrence in an event series",
+    methods={
+        "POST": {
+            "summary": "Publish all draft occurrences",
+            "description": (
+                "Atomically changes only this series' draft occurrences to "
+                "upcoming and runs the same idempotent enrollment and host "
+                "lifecycle as Studio. The request has no body. Retrying is "
+                "safe and returns a zero-count success."
+            ),
+            "responses": {
+                200: {
+                    "description": "Publication summary (including no-op retries).",
+                    "example": {
+                        "series_id": 1,
+                        "published_count": 2,
+                        "occurrence_ids": [11, 12],
+                    },
+                },
+                404: {
+                    "description": "Event series not found.",
+                    "example": {
+                        "error": "Event series not found",
+                        "code": "unknown_series",
+                    },
+                },
+            },
+        },
+    },
+)
+def event_series_publish_drafts(request, series_id):
+    """``POST /api/event-series/<id>/publish-drafts``."""
+    try:
+        result = publish_series_drafts(
+            series_id,
+            actor_label=f'api-token:{request.auth_token.pk}',
+        )
+    except EventSeries.DoesNotExist:
+        return _unknown_series_response()
+    return JsonResponse({
+        'series_id': result.series_id,
+        'published_count': result.published_count,
+        'occurrence_ids': list(result.occurrence_ids),
+    })
 
 
 @token_required

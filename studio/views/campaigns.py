@@ -8,9 +8,10 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import Count, Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from accounts.tier_audience import effective_level_at_least_q
 from accounts.utils.tags import normalize_tags
@@ -302,6 +303,24 @@ def _event_picker_options():
 
 
 @staff_required
+@require_GET
+def campaign_recipient_count(request):
+    """Return the existing audience count for a draft event selection."""
+    event = _resolve_target_event(request.GET.get("event"))
+    if event is None:
+        recipient_count = _recipient_count_for_level(0)
+        selected_event_id = None
+    else:
+        draft = EmailCampaign(subject="", body="", target_event=event)
+        recipient_count = draft.get_recipient_count()
+        selected_event_id = event.pk
+    return JsonResponse({
+        "selected_event_id": selected_event_id,
+        "recipient_count": recipient_count,
+    })
+
+
+@staff_required
 def campaign_create(request):
     """Create a new email campaign.
 
@@ -349,13 +368,22 @@ def campaign_create(request):
     prefill_event = _resolve_target_event(request.GET.get("event"))
     template = request.GET.get("template", "")
     draft = None
-    if prefill_event is not None and template == RECORDING_AVAILABLE_TEMPLATE:
-        prefill = build_recording_available_prefill(prefill_event)
-        draft = EmailCampaign(
-            subject=prefill["subject"],
-            body=prefill["body"],
-            target_event=prefill_event,
-        )
+    if prefill_event is not None:
+        if template == RECORDING_AVAILABLE_TEMPLATE:
+            prefill = build_recording_available_prefill(prefill_event)
+            draft = EmailCampaign(
+                subject=prefill["subject"],
+                body=prefill["body"],
+                target_event=prefill_event,
+            )
+        else:
+            # Generic event shortcut: select the registrant audience while
+            # leaving campaign content blank for the operator to author.
+            draft = EmailCampaign(
+                subject="",
+                body="",
+                target_event=prefill_event,
+            )
         recipient_count = draft.get_recipient_count()
     else:
         # Brand-new campaign defaults to ``target_min_level=0`` (Everyone),

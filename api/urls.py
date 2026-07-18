@@ -54,6 +54,7 @@ from api.views.event_series import (
     event_series_occurrence_detail,
     event_series_occurrences_bulk,
     event_series_occurrences_reconcile,
+    event_series_publish_drafts,
     event_series_zoom_meetings,
 )
 from api.views.events import (
@@ -309,6 +310,11 @@ urlpatterns = [
         "event-series/<int:series_id>",
         event_series_detail,
         name="api_event_series_detail",
+    ),
+    path(
+        "event-series/<int:series_id>/publish-drafts",
+        event_series_publish_drafts,
+        name="api_event_series_publish_drafts",
     ),
     path(
         "event-series/<int:series_id>/occurrences/bulk",

@@ -391,6 +391,10 @@ class TestScenario6DeleteSeries:
         )
         # Bypass the JS confirm() dialog.
         page.on("dialog", lambda d: d.accept())
+        page.locator('[data-testid="studio-header-overflow"] summary').click()
+        assert page.locator(
+            '[data-testid="event-series-delete-submit"]'
+        ).is_visible()
         page.locator('[data-testid="event-series-delete-submit"]').click()
         page.wait_for_url(re.compile(r".*/studio/events/$"))
 

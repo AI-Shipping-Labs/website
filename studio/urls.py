@@ -48,6 +48,7 @@ from studio.views.campaigns import (
     campaign_duplicate,
     campaign_edit,
     campaign_list,
+    campaign_recipient_count,
     campaign_recipients,
     campaign_send,
     campaign_test_send,
@@ -113,11 +114,14 @@ from studio.views.event_series import (
     event_series_event_unpublish,
     event_series_list,
     event_series_notify,
+    event_series_publish_all,
     event_series_regenerate_banner,
 )
 from studio.views.events import (
     event_create,
     event_create_zoom,
+    event_delete,
+    event_duplicate,
     event_edit,
     event_list,
     event_list_past,
@@ -460,6 +464,16 @@ urlpatterns = [
         name='studio_event_duplicates_confirm',
     ),
     path('events/<int:event_id>/edit', event_edit, name='studio_event_edit'),
+    path(
+        'events/<int:event_id>/duplicate',
+        event_duplicate,
+        name='studio_event_duplicate',
+    ),
+    path(
+        'events/<int:event_id>/delete',
+        event_delete,
+        name='studio_event_delete',
+    ),
     path('events/<int:event_id>/create-zoom', event_create_zoom, name='studio_event_create_zoom'),
     path(
         'events/<int:event_id>/registrations.csv',
@@ -531,6 +545,11 @@ urlpatterns = [
         name='studio_event_series_create_zoom',
     ),
     path(
+        'event-series/<int:series_id>/publish-all',
+        event_series_publish_all,
+        name='studio_event_series_publish_all',
+    ),
+    path(
         'event-series/<int:series_id>/regenerate-banner',
         event_series_regenerate_banner,
         name='studio_event_series_regenerate_banner',
@@ -595,6 +614,11 @@ urlpatterns = [
     # Campaigns
     path('campaigns/', campaign_list, name='studio_campaign_list'),
     path('campaigns/new', campaign_create, name='studio_campaign_create'),
+    path(
+        'campaigns/recipient-count',
+        campaign_recipient_count,
+        name='studio_campaign_recipient_count',
+    ),
     path('campaigns/<int:campaign_id>/', campaign_detail, name='studio_campaign_detail'),
     path(
         'campaigns/<int:campaign_id>/recipients/',

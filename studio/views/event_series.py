@@ -37,6 +37,7 @@ from accounts.services.timezones import (
 )
 from content.access import VISIBILITY_CHOICES
 from events.models import Event, EventSeries
+from events.services.occurrence_publication import publish_series_drafts
 from events.services.series_registration import (
     enroll_series_registrants_in_event,
 )
@@ -294,6 +295,10 @@ def event_series_create(request):
             # Issue #896: enqueue an auto-banner render for the new series
             # (fire-and-forget; no-ops when banner-generator is disabled).
             enqueue_if_missing('event_series', series.pk)
+            messages.success(
+                request,
+                f'Event series “{series.name}” created.',
+            )
             return redirect('studio_event_series_detail', series_id=series.pk)
 
     tz_value = form_values['timezone'] or default_tz
@@ -505,6 +510,7 @@ def event_series_detail(request, series_id):
     now = dj_timezone.now()
     for event in events:
         annotate_derived_status(event, now=now)
+    draft_count = sum(event.status == 'draft' for event in events)
     # Issue #665: the add-occurrence form inherits the series' TZ; show
     # it in the picker so the admin sees the active zone next to the
     # date input.
@@ -512,6 +518,12 @@ def event_series_detail(request, series_id):
     return render(request, 'studio/event_series/detail.html', {
         'series': series,
         'events': events,
+        'draft_count': draft_count,
+        'publish_all_confirmation': (
+            f'Publish {draft_count} draft '
+            f'occurrence{"" if draft_count == 1 else "s"} '
+            f'in “{series.name}”?'
+        ),
         'timezone_value': tz_value,
         'timezone_label': get_timezone_label(tz_value) or tz_value,
         'timezone_options': build_timezone_options(),
@@ -835,9 +847,31 @@ def event_series_event_publish(request, series_id, event_id):
     """
     series = get_object_or_404(EventSeries, pk=series_id)
     event = get_object_or_404(Event, pk=event_id, event_series=series)
-    if event.status == 'draft':
-        event.status = 'upcoming'
-        event.save()
+    publish_series_drafts(
+        series.pk,
+        actor_label=f'studio-user:{request.user.pk}',
+        occurrence_ids=[event.pk],
+    )
+    return redirect('studio_event_series_detail', series_id=series.pk)
+
+
+@staff_required
+@require_POST
+def event_series_publish_all(request, series_id):
+    """Publish every currently locked draft child of one series."""
+    series = get_object_or_404(EventSeries, pk=series_id)
+    result = publish_series_drafts(
+        series.pk,
+        actor_label=f'studio-user:{request.user.pk}',
+    )
+    if result.published_count:
+        messages.success(
+            request,
+            f'Published {result.published_count} draft '
+            f'occurrence{"" if result.published_count == 1 else "s"}.',
+        )
+    else:
+        messages.info(request, 'No draft occurrences to publish.')
     return redirect('studio_event_series_detail', series_id=series.pk)
 
 

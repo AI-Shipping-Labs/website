@@ -2,7 +2,7 @@ from datetime import date
 
 from django.test import Client, TestCase
 
-from content.models import Article, CuratedLink, Project, Tutorial
+from content.models import Article, CuratedLink, Project, Tutorial, Workshop
 from events.models import Event
 
 
@@ -55,6 +55,13 @@ class HomeViewTest(TestCase):
             category='workshops',
             published=True,
         )
+        self.workshop = Workshop.objects.create(
+            title='Test Workshop',
+            slug='test-workshop',
+            description='Workshop desc',
+            date=date(2025, 9, 1),
+            status='published',
+        )
 
     def test_home_template(self):
         response = self.client.get('/')
@@ -64,20 +71,29 @@ class HomeViewTest(TestCase):
         response = self.client.get('/')
 
         self.assertEqual(list(response.context['articles']), [self.article])
-        self.assertEqual(list(response.context['projects']), [self.project])
-        self.assertEqual(list(response.context['curated_links']), [self.link])
+        self.assertEqual(list(response.context['workshops']), [self.workshop])
         self.assertEqual(response.context['upcoming_events'], [self.upcoming_event])
         self.assertNotIn('recordings', response.context)
         self.assertContains(response, 'Test Live Event')
         self.assertNotContains(response, 'Test Recording')
 
-    def test_home_project_card_shows_shared_free_access_badge(self):
+    def test_home_workshop_card_shows_shared_access_badge(self):
         response = self.client.get('/')
 
-        self.assertContains(response, 'data-testid="home-project-card"', count=1)
-        self.assertContains(response, 'data-testid="project-free-badge"', count=1)
-        self.assertContains(response, 'data-required-level="0"', count=1)
+        self.assertContains(response, 'data-testid="home-workshop-card"', count=1)
+        self.assertContains(response, 'data-testid="home-workshop-type-badge"', count=1)
+        self.assertContains(response, 'data-testid="home-workshop-access-badge"', count=1)
+        self.assertContains(response, 'data-required-level="5"', count=1)
         self.assertContains(response, 'data-lucide="badge-check"')
+
+    def test_home_workshops_uses_shared_empty_state(self):
+        Workshop.objects.all().delete()
+
+        response = self.client.get('/')
+
+        self.assertContains(response, 'data-testid="home-workshops-empty-state"')
+        self.assertContains(response, 'data-empty-kind="fresh"')
+        self.assertContains(response, 'New workshops are being prepared')
 
     def test_home_contains_new_sections_in_funnel_order(self):
         response = self.client.get('/')
@@ -91,8 +107,7 @@ class HomeViewTest(TestCase):
             'tiers',
             'join-free',
             'blog',
-            'projects',
-            'collection',
+            'workshops',
             'faq',
             'newsletter',
         )

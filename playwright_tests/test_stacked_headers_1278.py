@@ -317,17 +317,19 @@ def test_homepage_discovery_paths_and_quiet_event_state(
         ('home-activities-tier-link', '/activities#access-by-tier'),
         ('home-sprints-index-link', '/sprints'),
         ('home-upcoming-events-link', '/events?filter=upcoming'),
+        ('home-workshops-link', '/workshops'),
     )
     for testid, href in expected:
         link = page.get_by_test_id(testid)
         expect(link).to_have_attribute('href', href)
         assert link.locator('[data-lucide="arrow-right"][aria-hidden="true"]').count() == 1
-    for section, label, href in (
-        ('#blog', 'View all posts', '/blog'),
-        ('#projects', 'View all project ideas', '/projects'),
-        ('#collection', 'View all curated links', '/resources'),
-    ):
-        expect(page.locator(section).get_by_role('link', name=label)).to_have_attribute('href', href)
+    expect(
+        page.locator('#blog').get_by_role('link', name='View all posts')
+    ).to_have_attribute('href', '/blog')
+    expect(page.locator('#workshops')).to_be_visible()
+    expect(page.locator('#projects, #collection')).to_have_count(0)
+    expect(page.get_by_text('Pet & Portfolio Project Ideas')).to_have_count(0)
+    expect(page.get_by_text('Tools, Models & Courses')).to_have_count(0)
 
     with django_db_blocker.unblock():
         from django.db import connection
@@ -341,6 +343,7 @@ def test_homepage_discovery_paths_and_quiet_event_state(
     expect(page.get_by_test_id('home-upcoming-events-link')).to_have_count(0)
     expect(page.get_by_test_id('home-activities-tier-link')).to_be_visible()
     expect(page.get_by_test_id('home-sprints-index-link')).to_be_visible()
+    expect(page.get_by_test_id('home-workshops-link')).to_be_visible()
 
 
 @pytest.mark.core

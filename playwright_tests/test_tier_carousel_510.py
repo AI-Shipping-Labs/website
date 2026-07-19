@@ -467,7 +467,8 @@ def test_home_tiers_section_height_under_threshold(django_server, page):
 
     Acceptance threshold: section height <= 1449 * 0.85 = 1232px.
 
-    All four membership paths must still be in the DOM inside the carousel.
+    All three paid membership paths must still be in the carousel; the free
+    account path remains available in the separate Start Free section.
     """
     ensure_site_config_tiers()
     page.set_viewport_size(PIXEL_7)
@@ -487,11 +488,13 @@ def test_home_tiers_section_height_under_threshold(django_server, page):
         f"target ({upper_bound}px) vs pre-fix baseline {pre_fix_baseline_px}px"
     )
 
-    # All four membership paths still present.
-    for slug in ("free", "basic", "main", "premium"):
+    # All three paid membership paths still present.
+    for slug in ("basic", "main", "premium"):
         assert page.locator(
             f'[data-testid="home-tier-carousel"] [data-tier-card="{slug}"]'
         ).count() == 1
+    assert page.locator('[data-tier-card="free"]').count() == 0
+    assert page.locator('#join-free #register-form').count() == 1
 
 
 # ---------------------------------------------------------------------------
@@ -530,12 +533,13 @@ def test_desktop_layout_unchanged(django_server, page):
     page.set_viewport_size(DESKTOP)
     page.goto(f"{django_server}/", wait_until="networkidle")
 
-    # Grid display, 4 columns on home.
+    # Grid display, 3 paid columns on home.
     home_carousel = page.locator('[data-testid="home-tier-carousel"]')
     assert (
         home_carousel.evaluate("el => getComputedStyle(el).display") == "grid"
     )
-    assert page.locator('[data-testid="home-tier-card"]').count() == 4
+    assert page.locator('[data-testid="home-tier-card"]').count() == 3
+    assert page.locator('[data-tier-card="free"]').count() == 0
 
     # Highlighted Main has lg:scale-105 in effect.
     main_transform = page.evaluate(

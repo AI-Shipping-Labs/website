@@ -35,17 +35,15 @@ HOME_DISCOVERY = {
         '/sprints',
         'Explore sprints',
     ),
-    'home-upcoming-events-link': (
-        'See what the community is doing live',
-        '/events?filter=upcoming',
-        'View all upcoming events',
-    ),
 }
 
 HOME_UNTESTED_DISCOVERY = (
     ('Publish and share our thinking', '/blog', 'View all posts'),
-    ('Pet & Portfolio Project Ideas', '/projects', 'View all project ideas'),
-    ('Tools, Models & Courses', '/resources', 'View all curated links'),
+)
+
+HOME_COLLECTION_ACTIONS = (
+    ('home-upcoming-events-link', '/events?filter=upcoming'),
+    ('home-workshops-link', '/workshops'),
 )
 
 
@@ -67,9 +65,8 @@ def _opening_anchor(source, *, testid=None, href=None):
 class PublicStackedHeaderStaticTest(TestCase):
     """Lock the exact five-template, 15-header-plus-topic inventory."""
 
-    def test_homepage_six_headers_are_stacked_discovery_patterns(self):
+    def test_homepage_headers_use_discovery_links_or_collection_buttons(self):
         source = _source(HOME)
-        self.assertNotIn('lg:justify-between', source)
 
         for testid, (heading, href, label) in HOME_DISCOVERY.items():
             with self.subTest(testid=testid):
@@ -92,6 +89,15 @@ class PublicStackedHeaderStaticTest(TestCase):
                 self.assertIn(f'class="{DISCOVERY_CLASSES}"', anchor)
                 self.assertLess(source.index(heading), source.index(anchor))
                 self.assertIn(label, source[source.index(anchor):source.index(anchor) + 500])
+
+        for testid, href in HOME_COLLECTION_ACTIONS:
+            with self.subTest(testid=testid):
+                anchor = _opening_anchor(source, testid=testid)
+                self.assertIn(f'href="{href}"', anchor)
+                self.assertIn('button_classes', anchor)
+                self.assertIn("extra='shrink-0'", anchor)
+
+        self.assertGreaterEqual(source.count('sm:items-end sm:justify-between'), 2)
 
     def test_activities_two_headers_share_discovery_treatment(self):
         source = _source(ACTIVITIES)

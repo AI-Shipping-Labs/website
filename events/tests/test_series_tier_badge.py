@@ -124,8 +124,9 @@ class SeriesTierBadgeAnonymousTest(TestCase):
         badge = _badge_html_for_level(self.html, LEVEL_OPEN)
         self.assertIn('Free', badge)
         self.assertNotIn('data-lucide="lock"', badge)
-        # Neutral (muted) styling, not the accent paid styling.
-        self.assertIn('text-muted-foreground', badge)
+        # Free access uses the shared success treatment, not the paid accent.
+        self.assertIn('bg-green-500/15', badge)
+        self.assertIn('data-lucide="badge-check"', badge)
         self.assertNotIn('text-accent', badge)
 
     def test_basic_badge_reads_public_label_with_lock(self):

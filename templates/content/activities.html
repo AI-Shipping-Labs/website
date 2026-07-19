@@ -214,7 +214,7 @@
               <div class="space-y-5">
                 <div class="flex flex-wrap items-center gap-2">
                   {% member_status_badge item.sprint.get_status_display size="sm" uppercase=True testid="activities-sprint-status" %}
-                  {% member_tier_badge item.required_tier_level tone="accent_strong" size="sm" icon="lock" testid="activities-sprint-tier" %}
+                  {% member_access_badge item.required_tier_level testid="activities-sprint-tier" %}
                   {% if item.enrolled %}
                   {% member_status_badge "You're enrolled" status="registered" icon="check" testid="activities-sprint-enrolled" %}
                   {% endif %}

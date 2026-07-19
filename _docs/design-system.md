@@ -142,11 +142,13 @@ Common card padding:
 - List rows: `px-3 py-2` with `min-h-[44px]`.
 - Studio table cells: `px-4 py-3`.
 
-Public/member page headers and standalone section headers use a title-first
-stack at every viewport. Their document and visual order is eyebrow, title,
-intro or status metadata, then links, buttons, and filters. Header controls are
-left-aligned and wrap; never pin them opposite the title with responsive
-`justify-between` or a two-column row. Discovery links immediately following a
+Public/member page headers use a title-first stack. Marketing collection
+sections with one clear destination CTA use a responsive header/action row:
+stack the copy and button on mobile, then use `sm:flex-row sm:items-end
+sm:justify-between` with a non-growing CTA on wider screens. Render that CTA
+with `{% button_classes %}` so it reads as an action, not a continuation of the
+intro text. Filters and groups of actions stay below the title and wrap rather
+than being pinned opposite it. Narrative discovery links immediately following a
 marketing-section intro use
 `mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline`
 plus the canonical focus-visible ring and a trailing `h-4 w-4` decorative
@@ -227,7 +229,7 @@ The documented owner is mandatory for every instance of its named role, subject 
 | `templates/content/_gated_access_card.html` | Every paid/tier-gated content block, after the view supplies the documented gate context including `required_tier_name`. | `{% include "content/_gated_access_card.html" %}` |
 | `{% member_empty_state %}` from `member_empty_state` | Every member/public collection or section empty state. | `{% load member_empty_state %}` then `{% member_empty_state title='No items yet' body='Check back soon.' icon='inbox' kind='fresh' %}` |
 | `{% studio_empty_state %}` from `studio_filters` | Every Studio list empty state. Use `fresh` when no records exist and `filter` when active filters yield no rows. | `{% load studio_filters %}` then `{% studio_empty_state 'fresh' entity_label='article' entity_label_plural='articles' %}`; filter variant: `{% studio_empty_state 'filter' entity_label='article' entity_label_plural='articles' clear_url='/studio/articles/' colspan=6 %}` |
-| `{% member_tier_badge %}`, `{% member_label_badge %}`, and `{% member_status_badge %}` from `member_badges` | Every member/public tier, label, or status pill whose meaning these tags cover. | `{% load member_badges %}` then `{% member_tier_badge 10 %}`, `{% member_label_badge 'Workshop' %}`, and `{% member_status_badge 'Upcoming' status='upcoming' %}` |
+| `{% member_access_badge %}`, `{% member_tier_badge %}`, `{% member_label_badge %}`, and `{% member_status_badge %}` from `member_badges` | Use `member_access_badge` on every public/member content card: Free and Free-with-sign-in render as a green check badge; paid tiers render as an accent lock badge; all use the public access vocabulary and `sm` size. Use the lower-level tier tag only outside cards when a different documented treatment is required. | `{% load member_badges %}` then `{% member_access_badge item.required_level testid='item-access-badge' %}`, `{% member_label_badge 'Workshop' %}`, and `{% member_status_badge 'Upcoming' status='upcoming' %}` |
 | `{% button_classes %}` from `accounts_extras` | Every non-Studio product/public/member/marketing CTA. | `{% load accounts_extras %}` then `class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}"` |
 | `templates/content/_content_preview.html` | Every rendered catalog media band for a content type whose contract includes media. Workshop cards use it only for explicit cover/custom media; coverless and auto-only workshops omit the slot entirely. | `{% if workshop.card_image_url %}{% include "content/_content_preview.html" with preview_cover_url=workshop.card_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" %}{% endif %}` |
 | `templates/content/_clickable_card_classes.html` | Every fully clickable catalog/preview card anchor. | `class="{% include 'content/_clickable_card_classes.html' %} rounded-lg"` |

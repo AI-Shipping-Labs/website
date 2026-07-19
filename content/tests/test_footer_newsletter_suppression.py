@@ -40,7 +40,7 @@ User = get_user_model()
 FOOTER_NEWSLETTER_ANCHOR = 'id="newsletter"'
 FOOTER_NEWSLETTER_HEADING = 'Build AI in public, with a group.'
 INLINE_OPT_IN_DISCLOSURE = (
-    "By signing up free, you'll receive community updates. "
+    "Sign up for free to receive community updates. "
     "You can unsubscribe at any time."
 )
 

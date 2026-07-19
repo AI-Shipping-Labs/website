@@ -26,7 +26,7 @@ def _card_metrics(page):
     return page.locator('[data-testid="home-tier-card"]').evaluate_all(
         """cards => cards.map(card => {
           const cta = card.querySelector(
-            '[data-testid="home-free-tier-cta"], .tier-cta-link'
+            '.tier-cta-link'
           );
           const cardRect = card.getBoundingClientRect();
           const ctaRect = cta.getBoundingClientRect();
@@ -69,7 +69,7 @@ def test_desktop_cards_use_intrinsic_heights_and_preserve_billing(
 
     carousel = page.locator('[data-testid="home-tier-carousel"]')
     carousel.scroll_into_view_if_needed()
-    expect(carousel.locator('[data-testid="home-tier-card"]')).to_have_count(4)
+    expect(carousel.locator('[data-testid="home-tier-card"]')).to_have_count(3)
     assert carousel.evaluate('el => getComputedStyle(el).display') == 'grid'
     assert carousel.evaluate('el => getComputedStyle(el).alignItems') == 'flex-start'
 
@@ -80,9 +80,9 @@ def test_desktop_cards_use_intrinsic_heights_and_preserve_billing(
         # desktop scale transform while rejecting any stretch-created band.
         assert item['blankBelowCta'] <= 36, item
 
-    free_cta = carousel.locator('[data-testid="home-free-tier-cta"]')
     basic_cta = carousel.locator('[data-tier-card="basic"] .tier-cta-link')
-    expect(free_cta).to_have_attribute('href', '/#join-free')
+    expect(carousel.locator('[data-tier-card="free"]')).to_have_count(0)
+    expect(page.locator('#join-free #register-form')).to_be_attached()
     expect(carousel.locator('[data-tier-card="main"]')).to_contain_text(
         'Most Popular'
     )
@@ -92,7 +92,6 @@ def test_desktop_cards_use_intrinsic_heights_and_preserve_billing(
     expect(basic_cta).to_have_attribute('href', monthly_link)
     page.locator('#billing-toggle').click()
     expect(basic_cta).to_have_attribute('href', annual_link)
-    expect(free_cta).to_have_attribute('href', '/#join-free')
     page.locator('#billing-toggle').click()
     expect(basic_cta).to_have_attribute('href', monthly_link)
 
@@ -129,16 +128,14 @@ def test_mobile_carousel_still_centers_main_and_reaches_every_tier(
         'Most Popular'
     )
 
-    for slug in ('free', 'basic', 'main', 'premium'):
+    for slug in ('basic', 'main', 'premium'):
         card = carousel.locator(f'[data-tier-card="{slug}"]')
         card.scroll_into_view_if_needed()
         expect(card).to_be_visible()
         expect(card.locator('a').last).to_be_visible()
 
-    expect(
-        carousel.locator('[data-tier-card="free"]')
-        .get_by_role('link', name='Join free', exact=True)
-    ).to_have_attribute('href', '/#join-free')
+    expect(carousel.locator('[data-tier-card="free"]')).to_have_count(0)
+    expect(page.locator('#join-free #register-form')).to_be_attached()
 
 
 @pytest.mark.manual_visual
@@ -168,7 +165,7 @@ def test_homepage_tiers_light_dark_responsive_evidence(
                     page.wait_for_load_state('load')
                     _wait_for_main_centered(page)
                 tiers.scroll_into_view_if_needed()
-                expect(tiers.locator('[data-testid="home-tier-card"]')).to_have_count(4)
+                expect(tiers.locator('[data-testid="home-tier-card"]')).to_have_count(3)
                 assert page.evaluate(
                     "document.documentElement.classList.contains('dark')"
                 ) is (theme == 'dark')

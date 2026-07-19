@@ -152,17 +152,30 @@ def test_desktop_visitor_taxonomy_journey(django_server, page):
         page.get_by_role("heading", name="Past event recordings")
     ).to_be_visible()
     expect(page.locator("main")).to_contain_text("Recordings from past events")
-    expect(page.locator('[data-testid="past-card-event-link"]')).to_have_attribute(
+    standalone_card = page.locator('[data-testid="past-card-event-link"]')
+    workshop_card = page.locator('[data-testid="past-card-workshop-link"]')
+    expect(standalone_card).to_have_attribute(
         "href",
         re.compile(r"/events/\d+/standalone-taxonomy-1184"),
     )
-    expect(page.locator('[data-testid="past-card-workshop-link"]')).to_have_attribute(
+    expect(workshop_card).to_have_attribute(
         "href",
         "/workshops/linked-taxonomy-1184-workshop",
     )
-    expect(page.locator('[data-testid="past-card-recording-tier"]')).to_contain_text(
-        "Main or above"
-    )
+    standalone_badge = standalone_card.get_by_test_id("past-card-recording-tier")
+    expect(standalone_badge).to_have_attribute("data-required-level", "0")
+    expect(standalone_badge).to_contain_text("Free")
+    expect(
+        standalone_badge.locator(
+            'svg.lucide-badge-check, i[data-lucide="badge-check"]'
+        )
+    ).to_have_count(1)
+    workshop_badge = workshop_card.get_by_test_id("past-card-recording-tier")
+    expect(workshop_badge).to_have_attribute("data-required-level", "20")
+    expect(workshop_badge).to_contain_text("Main or above")
+    expect(
+        workshop_badge.locator('svg.lucide-lock, i[data-lucide="lock"]')
+    ).to_have_count(1)
 
     page.goto(f"{django_server}/workshops", wait_until="domcontentloaded")
     expect(page.get_by_role("heading", name="Hands-on AI workshops")).to_be_visible()

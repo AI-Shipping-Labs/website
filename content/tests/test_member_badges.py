@@ -59,6 +59,28 @@ class MemberBadgeRendererTest(SimpleTestCase):
                 self.assertIn(f'data-required-level="{level}"', html)
                 self.assertIn(label, html)
 
+    def test_card_access_badge_standardizes_free_and_paid_treatments(self):
+        free = render_template(
+            "{% load member_badges %}{% member_access_badge 0 %}",
+        )
+        registered = render_template(
+            "{% load member_badges %}{% member_access_badge 5 %}",
+        )
+        paid = render_template(
+            "{% load member_badges %}{% member_access_badge 20 %}",
+        )
+
+        for html, label in ((free, 'Free'), (registered, 'Free with sign-in')):
+            self.assertIn(label, html)
+            self.assertIn('bg-green-500/15', html)
+            self.assertIn('data-lucide="badge-check"', html)
+            self.assertIn('px-3 py-1 text-xs', html)
+
+        self.assertIn('Main or above', paid)
+        self.assertIn('bg-accent/20', paid)
+        self.assertIn('data-lucide="lock"', paid)
+        self.assertIn('px-3 py-1 text-xs', paid)
+
     def test_non_tier_badges_do_not_emit_required_level_metadata(self):
         html = render_template(
             """
@@ -150,7 +172,10 @@ class MemberBadgeTemplateUsageTest(SimpleTestCase):
             with self.subTest(template=template_path):
                 source = (ROOT / template_path).read_text()
                 self.assertIn('{% load member_badges %}', source)
-                self.assertRegex(source, r'{% member_(?:badge|tier_badge|status_badge|label_badge) ')
+                self.assertRegex(
+                    source,
+                    r'{% member_(?:badge|access_badge|tier_badge|status_badge|label_badge) ',
+                )
 
     def test_scoped_guest_templates_do_not_use_legacy_membership_prefix(self):
         template_paths = [

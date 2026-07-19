@@ -206,10 +206,14 @@ def test_past_recordings_view_single_heading_level_and_lock(django_server, page)
         "heading", level=3, name="Gated Members Recording 1139"
     )
     assert gated_title.count() == 1
-    # The gated recording still shows its lock indicator alongside the title.
-    # lucide.createIcons() swaps the <i data-lucide="lock"> placeholder for an
-    # <svg class="lucide lucide-lock">, so wait for the rendered icon.
-    lock_icon = gated_title.locator('svg.lucide-lock, i[data-lucide="lock"]')
+    # Access is a single canonical signal outside the heading. Lucide swaps
+    # the placeholder for an SVG after load, so accept either representation.
+    access_badge = past_section.locator(
+        '[data-testid="past-card-recording-tier"][data-required-level="10"]'
+    )
+    assert access_badge.inner_text().strip() == "Basic or above"
+    assert access_badge.evaluate("el => !el.closest('h3')")
+    lock_icon = access_badge.locator('svg.lucide-lock, i[data-lucide="lock"]')
     lock_icon.first.wait_for()
     assert lock_icon.count() == 1
 

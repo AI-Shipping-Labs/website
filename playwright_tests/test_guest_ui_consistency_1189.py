@@ -138,7 +138,9 @@ def test_guest_download_empty_states_use_shared_component(django_server, page):
 
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
-def test_home_and_projects_share_project_card_language(django_server, page):
+def test_home_omits_projects_while_catalog_keeps_canonical_card_language(
+    django_server, page,
+):
     from django.db import connection
 
     from content.models import Project
@@ -166,26 +168,9 @@ def test_home_and_projects_share_project_card_language(django_server, page):
     connection.close()
 
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
-    home_card = page.get_by_test_id("home-project-card").filter(
-        has_text=project.title,
-    )
-    expect(home_card).to_have_count(1)
-    home_text = home_card.inner_text()
-    assert "intermediate" in home_text
-    assert "Basic or above" in home_text
-    assert "Official" in home_text
-    assert "+2" in home_text
-    home_href = home_card.locator("a").first.get_attribute("href")
-    home_paid_badge = home_card.get_by_test_id("project-tier-badge")
-    expect(home_paid_badge).to_have_attribute("data-required-level", "10")
-    expect(home_paid_badge.locator("svg.lucide-lock")).to_have_count(1)
-    home_free_card = page.get_by_test_id("home-project-card").filter(
-        has_text=free_project.title,
-    )
-    home_free_badge = home_free_card.get_by_test_id("project-free-badge")
-    expect(home_free_badge).to_contain_text("Free")
-    expect(home_free_badge).to_have_attribute("data-required-level", "0")
-    expect(home_free_badge.locator("svg.lucide-badge-check")).to_have_count(1)
+    expect(page.get_by_test_id("home-project-card")).to_have_count(0)
+    expect(page.locator("#projects")).to_have_count(0)
+    expect(page.get_by_text("Pet & Portfolio Project Ideas")).to_have_count(0)
 
     page.goto(f"{django_server}/projects", wait_until="domcontentloaded")
     listing_card = page.locator('article:has-text("Shared 1189 Project")')
@@ -195,15 +180,24 @@ def test_home_and_projects_share_project_card_language(django_server, page):
     assert "Basic or above" in listing_text
     assert "Official" in listing_text
     assert "+2" in listing_text
-    assert listing_card.locator("a").first.get_attribute("href") == home_href
+    assert (
+        listing_card.locator("a").first.get_attribute("href")
+        == project.get_absolute_url()
+    )
     assert "focus-visible:ring-2" in (
         listing_card.locator("a").first.get_attribute("class") or ""
     )
     listing_paid_badge = listing_card.get_by_test_id("project-tier-badge")
     expect(listing_paid_badge).to_have_attribute("data-required-level", "10")
+    expect(listing_paid_badge.locator("svg.lucide-lock")).to_have_count(1)
     free_listing_card = page.locator(
         'article:has-text("Free Shared 1226 Project")'
     )
     listing_free_badge = free_listing_card.get_by_test_id("project-free-badge")
     expect(listing_free_badge).to_contain_text("Free")
     expect(listing_free_badge).to_have_attribute("data-required-level", "0")
+    expect(listing_free_badge.locator("svg.lucide-badge-check")).to_have_count(1)
+    assert (
+        free_listing_card.locator("a").first.get_attribute("href")
+        == free_project.get_absolute_url()
+    )

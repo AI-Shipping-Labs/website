@@ -135,11 +135,7 @@
                 component sources its label from LEVEL_TO_PUBLIC_LABEL and
                 preserves the numeric level as component metadata.
               {% endcomment %}
-              {% if event.required_level > 0 %}
-              {% member_tier_badge event.required_level tone="accent_strong" icon="lock" testid="series-event-tier" %}
-              {% else %}
-              {% member_tier_badge event.required_level tone="neutral" testid="series-event-tier" %}
-              {% endif %}
+              {% member_access_badge event.required_level testid="series-event-tier" %}
             </div>
           </div>
           <div class="flex-shrink-0 text-sm">

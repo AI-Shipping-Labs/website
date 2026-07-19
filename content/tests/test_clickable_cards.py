@@ -433,9 +433,8 @@ class HomepageBlogCardTest(TestCase):
         )
 
 
-class HomepageProjectsCardTest(TestCase):
-    """Visitor clicks the empty area of a homepage project preview and lands
-    on the project."""
+class HomepageProjectsRemovalTest(TestCase):
+    """Project cards stay off the homepage after the section was removed."""
 
     @classmethod
     def setUpTestData(cls):
@@ -447,19 +446,12 @@ class HomepageProjectsCardTest(TestCase):
             date=datetime.date(2026, 1, 1),
         )
 
-    def test_homepage_project_card_wraps_to_project_detail(self):
+    def test_homepage_does_not_render_project_cards(self):
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
-        scan = _scan_anchors(response.content.decode())
-        wrapper_links = [
-            a for a in scan.anchors
-            if a['href'] == '/projects/agent-marketplace'
-            and _focus_classes_present(a['class'])
-        ]
-        self.assertGreaterEqual(
-            len(wrapper_links), 1,
-            'Homepage #projects card should wrap to /projects/<slug> with focus ring.',
-        )
+        self.assertNotContains(response, 'id="projects"')
+        self.assertNotContains(response, '/projects/agent-marketplace')
+        self.assertNotContains(response, 'Pet &amp; Portfolio Project Ideas')
 
 
 class CatalogFocusRingRegressionTest(TestCase):

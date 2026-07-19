@@ -121,9 +121,11 @@ class HomePostLaunchCopyTest(TierSetupMixin, TestCase):
             "Event recordings coming soon. Check back",
         )
 
-    def test_projects_empty_state_no_coming_soon(self):
+    def test_projects_section_is_removed(self):
         response = self.client.get("/")
-        self.assertContains(
+        self.assertNotContains(response, 'id="projects"')
+        self.assertNotContains(response, "Pet &amp; Portfolio Project Ideas")
+        self.assertNotContains(
             response,
             "Project ideas land here as the community ships them.",
         )

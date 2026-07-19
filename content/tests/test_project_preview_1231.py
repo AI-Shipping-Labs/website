@@ -142,38 +142,37 @@ class SharedProjectPreviewRenderingTest(TestCase):
         )
 
     def test_shared_card_preserves_content_badges_and_canonical_links(self):
-        for path, card_testid in (
-            ("/", "home-project-card"),
-            ("/projects", "project-card"),
-        ):
-            with self.subTest(path=path):
-                response = self.client.get(path)
-                self.assertEqual(response.status_code, 200)
-                self.assertContains(response, f'data-testid="{card_testid}"')
-                self.assertContains(response, self.fallback_project.title)
-                self.assertContains(
-                    response,
-                    f'href="{self.fallback_project.get_absolute_url()}"',
-                )
-                self.assertContains(response, "Preview fixture description.")
-                self.assertContains(response, "AI Shipping Labs")
-                self.assertContains(response, "intermediate")
-                self.assertContains(response, "Official")
-                self.assertContains(response, "5 min read")
-                self.assertContains(response, "2 hours")
-                self.assertContains(response, "agents")
-                self.assertContains(response, 'data-lucide="arrow-right"')
+        response = self.client.get("/projects")
 
-    def test_homepage_uses_same_resolved_preview_and_destination(self):
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="project-card"')
+        self.assertContains(response, self.fallback_project.title)
+        self.assertContains(
+            response,
+            f'href="{self.fallback_project.get_absolute_url()}"',
+        )
+        self.assertContains(response, "Preview fixture description.")
+        self.assertContains(response, "AI Shipping Labs")
+        self.assertContains(response, "intermediate")
+        self.assertContains(response, "Official")
+        self.assertContains(response, "5 min read")
+        self.assertContains(response, "2 hours")
+        self.assertContains(response, "agents")
+        self.assertContains(response, 'data-lucide="arrow-right"')
+
+    def test_catalog_uses_resolved_preview_while_homepage_omits_projects(self):
         home = self.client.get("/")
         listing = self.client.get("/projects")
         expected_url = self.custom_project.display_image_url
         expected_href = self.custom_project.get_absolute_url()
 
-        for response in (home, listing):
-            with self.subTest(template=response.templates[0].name):
-                self.assertContains(response, expected_url)
-                self.assertContains(response, f'href="{expected_href}"')
+        self.assertContains(listing, expected_url)
+        self.assertContains(listing, f'href="{expected_href}"')
+        self.assertNotContains(home, 'data-testid="home-project-card"')
+        self.assertNotContains(home, self.custom_project.title)
+        self.assertNotContains(home, expected_url)
+        self.assertNotContains(home, f'href="{expected_href}"')
+        self.assertNotContains(home, "Pet &amp; Portfolio Project Ideas")
 
 
 class ProjectDetailBadgeAndGridTest(TestCase):

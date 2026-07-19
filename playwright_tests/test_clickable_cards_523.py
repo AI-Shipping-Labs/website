@@ -340,30 +340,39 @@ class TestHomepageBlogCardBodyClick:
 
 
 # ---------------------------------------------------------------
-# Scenario: Visitor clicks the empty area of a homepage project preview
-# and lands on the project
+# Scenario: Visitor clicks the empty area of a project catalog card
+# and lands on the canonical project detail page
 # ---------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
-class TestHomepageProjectCardBodyClick:
+class TestProjectCatalogCardBodyClick:
     def test_clicking_project_card_body_navigates_to_project_detail(
         self, django_server, page,
     ):
         _clear_all()
-        _create_project(
-            slug='homepage-proj',
-            title='Homepage Project Idea',
-            description='A project idea surfaced on the homepage.',
+        project = _create_project(
+            slug='catalog-proj',
+            title='Catalog Project Idea',
+            description='A project idea surfaced in the catalog.',
         )
 
-        page.goto(f'{django_server}/', wait_until='domcontentloaded')
-        page.locator('#projects').scroll_into_view_if_needed()
-        page.locator(
-            'text="A project idea surfaced on the homepage."'
-        ).first.click()
-        page.wait_for_load_state('domcontentloaded')
+        page.goto(f'{django_server}/projects', wait_until='domcontentloaded')
+        card = page.get_by_test_id('project-card').filter(
+            has_text=project.title,
+        )
+        expect(card).to_have_count(1)
 
-        assert '/projects/homepage-proj' in page.url
+        # Click the description rather than the title or preview link to prove
+        # the whole card body reaches the canonical detail destination.
+        card.get_by_text(
+            'A project idea surfaced in the catalog.', exact=True,
+        ).click()
+        page.wait_for_url(f'{django_server}{project.get_absolute_url()}')
+        expect(
+            page.locator('article header').get_by_role(
+                'heading', name=project.title,
+            )
+        ).to_be_visible()
 
 
 # ---------------------------------------------------------------

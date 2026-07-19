@@ -42,11 +42,17 @@ HOME_CTA_OWNERS = {
         'lg',
         'w-full sm:w-auto',
     ),
-    'home-free-tier-cta': (
-        "{% button_classes 'secondary' size='lg' extra='mt-auto w-full' %}",
+    'home-upcoming-events-link': (
+        "{% button_classes 'secondary' size='lg' extra='shrink-0' %}",
         'secondary',
         'lg',
-        'mt-auto w-full',
+        'shrink-0',
+    ),
+    'home-workshops-link': (
+        "{% button_classes 'secondary' size='lg' extra='shrink-0' %}",
+        'secondary',
+        'lg',
+        'shrink-0',
     ),
 }
 
@@ -103,6 +109,7 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
                 self.assertEqual(anchor.count('{% button_classes '), 1)
 
     def test_changed_home_ctas_render_exact_owned_variants_and_sizes(self):
+        _make_event('cta-event', start_datetime=timezone.now() + timedelta(days=1))
         body = self._body(self.client.get('/'))
 
         for testid, (_owner_call, variant, size, extra) in HOME_CTA_OWNERS.items():
@@ -131,8 +138,7 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
             'id="tiers"',
             'id="join-free"',
             'id="blog"',
-            'id="projects"',
-            'id="collection"',
+            'id="workshops"',
             'id="faq"',
             'id="newsletter"',
         ]
@@ -151,7 +157,7 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
         ]:
             self.assertContains(response, title, count=1)
         self.assertContains(response, 'A personalized onboarding plan')
-        self.assertContains(response, 'Main + Premium')
+        self.assertNotContains(response, 'Main + Premium')
         self.assertContains(response, 'href="/activities#access-by-tier"')
         self.assertContains(response, 'href="/#activities"')
         self.assertContains(response, 'href="/#tiers"')
@@ -160,21 +166,13 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
         self.assertLess(body.index('id="sprint-story"'), body.index('id="tiers"'))
         self.assertLess(body.index('id="testimonials"'), body.index('id="tiers"'))
 
-    def test_free_card_is_comparison_only_and_targets_separate_section(self):
+    def test_free_signup_lives_only_in_separate_section(self):
         response = self.client.get('/')
-        free = self._card(response, 'free')
-        self.assertIn('href="/#join-free"', free)
-        self.assertIn('Join free', free)
-        for forbidden in [
-            '<form', '<input', 'inline-register-card', 'home-inline-register-embed',
-            'pricing-inline-register-embed', 'data-auth-oauth-providers',
-            'inline-register-opt-in', 'creating an account',
-        ]:
-            self.assertNotIn(forbidden, free)
-
         body = self._body(response)
         tiers = self._section(response, 'tiers')
         join = self._section(response, 'join-free')
+        self.assertNotIn('data-tier-card="free"', tiers)
+        self.assertNotIn('Join free', tiers)
         self.assertLess(body.index('id="tiers"'), body.index('id="join-free"'))
         self.assertLess(body.index('id="join-free"'), body.index('id="blog"'))
         self.assertNotIn('id="register-form"', tiers)
@@ -278,7 +276,7 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
             ids,
             [
                 'about', 'activities', 'sprint-story', 'testimonials', 'tiers',
-                'join-free', 'blog', 'projects', 'collection', 'newsletter', 'faq',
+                'join-free', 'blog', 'workshops', 'newsletter', 'faq',
             ],
         )
         for section_id in ids:

@@ -139,6 +139,32 @@ def member_tier_badge(
 
 
 @register.inclusion_tag('includes/member_badge.html')
+def member_access_badge(
+    required_level,
+    size='sm',
+    element_id='',
+    testid='',
+    extra_class='',
+):
+    """Render the canonical access badge used on public/member cards."""
+    try:
+        level = int(required_level)
+    except (TypeError, ValueError):
+        level = 0
+    is_paid = level >= 10
+    return _context(
+        get_required_tier_label(level),
+        tone='accent_strong' if is_paid else 'success_soft',
+        size=size,
+        icon='lock' if is_paid else 'badge-check',
+        element_id=element_id,
+        testid=testid,
+        extra_class=extra_class,
+        required_level=level,
+    )
+
+
+@register.inclusion_tag('includes/member_badge.html')
 def member_status_badge(
     label,
     status='',

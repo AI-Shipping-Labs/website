@@ -1,6 +1,8 @@
 {% extends "base.html" %}
+{% load access_tags %}
 {% load accounts_extras %}
 {% load member_badges %}
+{% load member_empty_state %}
 {% load sprint_extras %}
 
 {% block title %}AI Shipping Labs | A Technical Community{% endblock %}
@@ -126,13 +128,12 @@
           <p class="mt-2 text-sm leading-6 text-muted-foreground">{{ activity.description }}</p>
         </article>
         {% endfor %}
-        <aside class="rounded-xl border border-accent/30 bg-accent/10 p-6 sm:col-span-2 lg:col-span-1" data-testid="home-personalized-plan-callout">
-          <div class="flex flex-wrap items-center gap-2">
-            <i data-lucide="route" class="h-5 w-5 text-accent" aria-hidden="true"></i>
-            <span class="rounded-full border border-accent/30 bg-background px-2.5 py-1 text-xs font-medium text-accent">Main + Premium</span>
+        <aside class="rounded-xl border border-border bg-background p-6 sm:col-span-2 lg:col-span-1" data-testid="home-personalized-plan-callout">
+          <div class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent">
+            <i data-lucide="route" class="h-5 w-5" aria-hidden="true"></i>
           </div>
           <h3 class="mt-4 text-lg font-semibold text-foreground">A personalized onboarding plan</h3>
-          <p class="mt-2 text-sm leading-6 text-muted-foreground">Share your goals in a short intake. Alexey prepares a plan you can use inside sprints and accountability check-ins.</p>
+          <p class="mt-2 text-sm leading-6 text-muted-foreground">Share your goals in a short intake. We prepare a plan you can use inside sprints and accountability check-ins.</p>
         </aside>
       </div>
     </div>
@@ -158,7 +159,7 @@
         </a>
       </div>
 
-      <div class="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:items-start">
+      <div class="mt-10">
         <div class="grid gap-4 sm:grid-cols-3" data-testid="home-sprint-story-steps">
           <article class="rounded-xl border border-border bg-card p-6">
             <div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-foreground">1</div>
@@ -183,21 +184,21 @@
           </article>
         </div>
 
-        <aside class="rounded-xl border border-border bg-card p-6 sm:p-8" data-testid="home-featured-sprint-card">
+        <aside class="mx-auto mt-6 max-w-2xl rounded-xl border border-border bg-card p-6 text-center sm:mt-8 sm:p-8" data-testid="home-featured-sprint-card">
           {% if featured_sprint %}
           <p class="text-sm font-medium uppercase tracking-widest text-accent">Current or next sprint</p>
           <h3 class="mt-3 text-2xl font-semibold text-foreground" data-testid="home-featured-sprint-name">{{ featured_sprint.name }}</h3>
           <p class="mt-2 text-sm text-muted-foreground" data-testid="home-featured-sprint-range">{% sprint_date_range featured_sprint %}</p>
           <div class="mt-5 space-y-3 text-sm text-muted-foreground">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center justify-center gap-2">
               <i data-lucide="calendar-range" class="h-4 w-4 shrink-0 text-accent"></i>
               <span>Visible public sprint window</span>
             </div>
-            <div class="flex items-center gap-2" data-testid="home-featured-sprint-tier">
-              {% member_tier_badge featured_sprint.min_tier_level tone="accent_strong" size="sm" icon="lock" %}
+            <div class="flex items-center justify-center gap-2" data-testid="home-featured-sprint-tier">
+              {% member_access_badge featured_sprint.min_tier_level testid="home-sprint-access-badge" %}
             </div>
           </div>
-          <div class="mt-6 flex flex-col gap-3 sm:flex-row">
+          <div class="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
             <a href="{{ featured_sprint.get_absolute_url }}" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-4 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" data-testid="home-featured-sprint-link">
               View this sprint
               <i data-lucide="arrow-right" class="h-4 w-4"></i>
@@ -225,7 +226,8 @@
   {% if upcoming_events %}
   <section id="upcoming-events" class="scroll-mt-24 border-t border-border bg-card py-12 sm:py-20 lg:py-28" data-testid="home-upcoming-events-section">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="max-w-3xl">
+      <div class="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div class="max-w-3xl">
           <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
             <i data-lucide="calendar-heart" class="h-4 w-4"></i>
             Live sessions on the calendar
@@ -236,7 +238,8 @@
           <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
             Follow the current schedule of building sessions, office hours, and community conversations. Each event shows the membership level it requires.
           </p>
-        <a href="/events?filter=upcoming" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="home-upcoming-events-link">
+        </div>
+        <a href="/events?filter=upcoming" class="{% button_classes 'secondary' size='lg' extra='shrink-0' %}" data-testid="home-upcoming-events-link">
           View all upcoming events
           <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
         </a>
@@ -307,49 +310,13 @@
         inside the scroll viewport so it is not clipped. Do NOT remove this padding
         without converting the badge to an in-flow element first.
 
-        Also: on mobile, Main (highlighted) is the dominant card — wider, full
-        feature list, larger padding. Free / Basic / Premium are compact peers —
-        narrower, condensed feature list on mobile, no positioning paragraph.
-        Desktop layout now shows four cards while preserving the highlighted
-        Main tier treatment.
+        Also: on mobile, Main (highlighted) is the dominant card — wider, with
+        its full feature list and larger padding. Basic and Premium are compact
+        peers. Desktop shows the three paid tiers in one row.
       {% endcomment %}
-      <div class="mx-auto mt-4 grid max-w-7xl gap-6 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:items-start max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:pt-6 max-lg:[scrollbar-width:none] sm:mt-16 lg:grid-cols-4 lg:items-start"
+      <div class="mx-auto mt-4 grid max-w-7xl gap-6 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:items-start max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:pt-6 max-lg:[scrollbar-width:none] sm:mt-16 lg:grid-cols-3 lg:items-start"
            data-tier-carousel
            data-testid="home-tier-carousel">
-        <div class="home-free-tier-card relative flex flex-col overflow-visible rounded-xl border border-border bg-background p-5 transition-all max-lg:flex-none max-lg:snap-center max-lg:w-[min(82vw,22rem)] max-lg:p-4 sm:p-8"
-             data-tier-card="free"
-             data-testid="home-tier-card">
-          <div class="mb-6 max-lg:mb-3">
-            <h3 class="text-lg font-semibold text-foreground">{{ free_tier.name }}</h3>
-            <p class="mt-1 text-sm text-accent">{{ free_tier.tagline }}</p>
-          </div>
-
-          <div class="mb-6 max-lg:mb-3">
-            <div class="flex items-baseline">
-              <span class="text-4xl font-semibold text-foreground">&euro;0</span>
-              <span class="ml-2 text-muted-foreground">/forever</span>
-            </div>
-            <p class="mt-2 text-sm text-muted-foreground">{{ free_tier.hook }}</p>
-          </div>
-
-          <p class="mb-6 text-sm text-muted-foreground max-lg:mb-4">{{ free_tier.description }}</p>
-
-          <ul class="mb-8 flex-1 space-y-3 max-lg:mb-4 max-lg:space-y-2">
-            {% for feature in free_tier.features %}
-            <li class="flex items-start gap-3 {% if forloop.counter > 2 %}max-lg:hidden{% endif %}">
-              <i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent"></i>
-              <span class="text-sm text-foreground">{{ feature.text }}</span>
-            </li>
-            {% endfor %}
-          </ul>
-
-          <a href="/#join-free"
-             class="{% button_classes 'secondary' size='lg' extra='mt-auto w-full' %}"
-             data-testid="home-free-tier-cta">
-            Join free
-          </a>
-        </div>
-
         {% for tier in tiers %}
         {# Issues #510/#1235: cards size to their own content on mobile and desktop. #}
         <div class="relative flex flex-col overflow-visible rounded-xl border p-5 transition-all max-lg:flex-none max-lg:snap-center sm:p-8 {% if tier.highlighted %}border-accent bg-background shadow-xl ring-2 ring-accent/20 max-lg:w-[min(82vw,22rem)] lg:scale-105{% else %}border-border bg-background max-lg:w-[min(70vw,18rem)] max-lg:p-4{% endif %}"
@@ -499,85 +466,55 @@
     </div>
   </section>
 
-  <!-- Projects Section -->
-  <section id="projects" class="border-t border-border bg-card py-12 sm:py-20 lg:py-28">
+  <section id="workshops" class="scroll-mt-24 border-t border-border bg-card py-12 sm:py-20 lg:py-28" data-testid="home-workshops-section">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div>
+      <div class="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div class="max-w-3xl">
           <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
-            <i data-lucide="rocket" class="h-4 w-4"></i>
-            Project Ideas
+            <i data-lucide="graduation-cap" class="h-4 w-4" aria-hidden="true"></i>
+            Workshops
           </p>
           <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
-            Pet & Portfolio Project Ideas
+            Hands-on AI workshops
           </h2>
           <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
-            Project ideas and real projects from people who've taken courses. End-to-end AI applications and agentic workflows you can learn from and build on.
+            Practical sessions with a writeup, recording, materials, and code you can use after the workshop ends.
           </p>
-        <a href="/projects" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-          View all project ideas
+        </div>
+        <a href="/workshops" class="{% button_classes 'secondary' size='lg' extra='shrink-0' %}" data-testid="home-workshops-link">
+          View all workshops
           <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
         </a>
       </div>
 
-      {% if projects %}
-      <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {% for project in projects %}
-        {% include "content/_project_card.html" with project=project project_card_testid="home-project-card" project_card_surface_class="bg-background" %}
+      {% if workshops %}
+      <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3" data-testid="home-workshops-grid">
+        {% for workshop in workshops %}
+        <article class="group flex h-full flex-col overflow-hidden rounded-xl border border-border bg-background transition-colors hover:border-accent/50" data-testid="home-workshop-card">
+          <a href="{{ workshop.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %} flex flex-1 flex-col p-6">
+            <div class="flex items-center justify-between gap-3">
+              {% member_label_badge "Workshop" tone="muted" icon="graduation-cap" testid="home-workshop-type-badge" %}
+              {% member_access_badge workshop.pages_required_level testid="home-workshop-access-badge" %}
+            </div>
+            <h3 class="mt-4 text-lg font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">{{ workshop.title }}</h3>
+            {% if workshop.description_html %}
+            <p class="mt-3 line-clamp-3 text-sm leading-6 text-muted-foreground">{{ workshop.description_html|striptags|truncatechars:180 }}</p>
+            {% endif %}
+            <div class="mt-auto pt-6">
+              <p class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <i data-lucide="calendar" class="h-3.5 w-3.5" aria-hidden="true"></i>
+                {{ workshop.date|date:"M j, Y" }}
+              </p>
+            </div>
+          </a>
+        </article>
         {% endfor %}
       </div>
       {% else %}
-      <div class="mt-12 rounded-lg border border-border bg-background p-8 text-center">
-        <p class="text-muted-foreground">Project ideas land here as the community ships them.</p>
+      <div class="mt-10">
+        {% member_empty_state title='New workshops are being prepared' body='Browse the workshop catalog for the latest additions.' icon='graduation-cap' kind='fresh' primary_cta_label='View all workshops' primary_cta_url='/workshops' testid='home-workshops-empty-state' %}
       </div>
       {% endif %}
-    </div>
-  </section>
-
-  <!-- Collection / Curated Links Section -->
-  <section id="collection" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28">
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div>
-          <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
-            <i data-lucide="folder-open" class="h-4 w-4"></i>
-            Curated Links
-          </p>
-          <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
-            Tools, Models & Courses
-          </h2>
-          <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
-            Curated GitHub repos, model hubs, and learning resources.
-            Dev tools, local LLMs, and courses to level up.
-          </p>
-        <a href="/resources" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-          View all curated links
-          <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
-        </a>
-      </div>
-
-      <div class="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {% for link in curated_links %}
-        {# Issue #523 — keyboard-focus ring on the curated-link card wrapper. #}
-        <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer"
-           class="{% include 'content/_clickable_card_classes.html' %} flex flex-col rounded-xl border border-border bg-card p-6 transition-colors hover:border-accent/50">
-          <div class="flex flex-1 flex-col">
-            <div class="mb-2 flex items-start justify-between gap-2">
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                <i data-lucide="{{ link.category_icon_name }}" class="h-3.5 w-3.5"></i>
-                {{ link.category_label }}
-              </span>
-              {% if link.is_external %}
-              <i data-lucide="external-link" class="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent"></i>
-              {% endif %}
-            </div>
-            <h3 class="text-lg font-semibold text-foreground transition-colors group-hover:text-accent">{{ link.title }}</h3>
-            <p class="mt-2 line-clamp-3 text-sm text-muted-foreground">{{ link.description }}</p>
-            {% if link.source %}
-            <p class="mt-3 text-xs text-muted-foreground">{{ link.source }}</p>
-            {% endif %}
-          </div>
-        </a>
-        {% endfor %}
-      </div>
     </div>
   </section>
 

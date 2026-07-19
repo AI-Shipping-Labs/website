@@ -43,19 +43,16 @@ def test_value_story_precedes_peer_tiers_and_separate_conversion(
         "tiers",
         "join-free",
         "blog",
-        "projects",
-        "collection",
+        "workshops",
         "faq",
     ]
     expect(page.locator("#activities [data-testid=home-activity-card]")).to_have_count(5)
 
     tiers = page.locator("#tiers")
-    expect(tiers.locator('[data-testid="home-tier-card"]')).to_have_count(4)
+    expect(tiers.locator('[data-testid="home-tier-card"]')).to_have_count(3)
     expect(tiers.locator("form, input, [data-auth-oauth-providers]")).to_have_count(0)
-    free = tiers.locator('[data-tier-card="free"]')
-    expect(free.get_by_role("link", name="Join free", exact=True)).to_have_attribute(
-        "href", "/#join-free"
-    )
+    expect(tiers.locator('[data-tier-card="free"]')).to_have_count(0)
+    expect(tiers.get_by_role("link", name="Join free", exact=True)).to_have_count(0)
 
     join = page.locator("#join-free")
     expect(join).to_be_attached()
@@ -64,7 +61,7 @@ def test_value_story_precedes_peer_tiers_and_separate_conversion(
     assert join.evaluate("el => !el.closest('[data-tier-carousel]')")
 
 
-def test_direct_fragment_and_keyboard_free_cta_reveal_usable_section(
+def test_direct_fragment_reveals_usable_free_section(
     django_server, page, django_db_blocker
 ):
     _seed(django_db_blocker)
@@ -79,12 +76,9 @@ def test_direct_fragment_and_keyboard_free_cta_reveal_usable_section(
     )
     assert positions["headingTop"] >= positions["headerBottom"] - 1
 
-    page.locator("#tiers").scroll_into_view_if_needed()
-    cta = page.get_by_test_id("home-free-tier-cta")
-    cta.focus()
-    assert cta.evaluate("el => getComputedStyle(el).outlineStyle !== 'none'")
-    page.keyboard.press("Enter")
-    expect(page).to_have_url(f"{django_server}/#join-free")
+    submit = page.locator("#join-free #register-submit")
+    submit.focus()
+    assert submit.evaluate("el => getComputedStyle(el).outlineStyle !== 'none'")
     expect(page.locator("#join-free #register-form")).to_be_visible()
 
 
@@ -100,8 +94,8 @@ def test_password_mismatch_is_announced_without_request_or_card_mutation(
         else None,
     )
     page.goto(f"{django_server}/#join-free", wait_until="domcontentloaded")
-    free_height = page.locator('[data-tier-card="free"]').evaluate(
-        "el => el.getBoundingClientRect().height"
+    tier_heights = page.locator('[data-testid="home-tier-card"]').evaluate_all(
+        "cards => cards.map(card => card.getBoundingClientRect().height)"
     )
     page.locator("#register-email").fill("mismatch-1241@example.com")
     page.locator("#register-password").fill("Password123!")
@@ -112,9 +106,13 @@ def test_password_mismatch_is_announced_without_request_or_card_mutation(
     expect(error).to_have_text("Passwords do not match")
     expect(error).to_have_attribute("role", "alert")
     assert register_requests == []
-    assert page.locator('[data-tier-card="free"]').evaluate(
-        "el => el.getBoundingClientRect().height"
-    ) == free_height
+    current_tier_heights = page.locator('[data-testid="home-tier-card"]').evaluate_all(
+        "cards => cards.map(card => card.getBoundingClientRect().height)"
+    )
+    assert all(
+        abs(before - after) < 0.1
+        for before, after in zip(tier_heights, current_tier_heights, strict=True)
+    )
 
 
 @pytest.mark.parametrize("theme", ["light", "dark"])
@@ -130,9 +128,9 @@ def test_mobile_conversion_stays_outside_carousel_without_page_overflow(
         html_classes = (page.locator("html").get_attribute("class") or "").split()
         assert ("dark" in html_classes) is (theme == "dark")
         carousel = page.get_by_test_id("home-tier-carousel")
-        expect(carousel.locator('[data-testid="home-tier-card"]')).to_have_count(4)
-        page.get_by_test_id("home-free-tier-cta").click()
-        expect(page).to_have_url(f"{django_server}/#join-free")
+        expect(carousel.locator('[data-testid="home-tier-card"]')).to_have_count(3)
+        expect(carousel.locator('[data-tier-card="free"]')).to_have_count(0)
+        page.goto(f"{django_server}/#join-free", wait_until="domcontentloaded")
         join = page.locator("#join-free")
         expect(join.locator("#register-form")).to_be_visible()
         assert join.evaluate("el => !el.closest('[data-tier-carousel]')")

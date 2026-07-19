@@ -33,9 +33,7 @@ the inline card it replaced (#523 / #673 / #857 / #572).
     <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 mb-2 flex-wrap">
-          {% if event.required_level > 0 %}
-          {% member_tier_badge event.required_level tone="accent_strong" icon="lock" %}
-          {% endif %}
+          {% member_access_badge event.required_level testid="event-tier-badge" %}
           {% if event.id in registered_event_ids %}
           {% member_status_badge "Registered" status="registered" icon="check" %}
           {% endif %}

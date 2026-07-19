@@ -1,5 +1,5 @@
 import os
-from datetime import timedelta
+from datetime import date, timedelta
 from uuid import uuid4
 
 import pytest
@@ -35,36 +35,27 @@ def _seed_homepage_tiers(django_db_blocker):
         ensure_site_config_tiers()
 
 
-def test_homepage_free_cta_hands_off_to_registration_and_creates_account(
+def test_homepage_separate_free_section_creates_account(
     django_server, page, django_db_blocker
 ):
     _seed_homepage_tiers(django_db_blocker)
     email = _email("home-1162")
 
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
-    free_card = page.locator('[data-tier-card="free"]')
-    free_card.scroll_into_view_if_needed()
-    expect(free_card).to_contain_text("€0")
-    expect(free_card).to_contain_text("/forever")
-    expect(free_card.locator("form")).to_have_count(0)
-    expect(free_card.locator('[data-testid="inline-register-card"]')).to_have_count(0)
-    expect(free_card.locator("[data-auth-oauth-providers]")).to_have_count(0)
-
-    join_free = free_card.get_by_role("link", name="Join free", exact=True)
-    expect(join_free).to_have_attribute("href", "/#join-free")
-    assert join_free.evaluate("el => el.getBoundingClientRect().height") >= 44
-    join_free.focus()
-    assert join_free.evaluate(
-        "el => getComputedStyle(el).outlineStyle !== 'none'"
-    )
-    join_free.click()
-
-    page.wait_for_url(f"{django_server}/#join-free")
+    tiers = page.locator("#tiers")
+    expect(tiers.locator('[data-testid="home-tier-card"]')).to_have_count(3)
+    expect(tiers.locator('[data-tier-card="free"]')).to_have_count(0)
+    page.goto(f"{django_server}/#join-free", wait_until="domcontentloaded")
     join_section = page.locator("#join-free")
     expect(join_section).to_be_visible()
     expect(join_section.locator("#register-form")).to_be_visible()
     assert join_section.evaluate("el => !el.closest('[data-tier-carousel]')")
-    expect(page.get_by_text("By creating an account")).to_be_visible()
+    expect(
+        page.get_by_text(
+            "Sign up for free to receive community updates. "
+            "You can unsubscribe at any time."
+        )
+    ).to_be_visible()
     page.locator("#register-email").fill(email)
     page.locator("#register-password").fill("Password123!")
     page.locator("#register-password-confirm").fill("Password123!")
@@ -93,42 +84,48 @@ def test_homepage_free_handoff_keeps_oauth_on_dedicated_page_only(
         app.sites.add(Site.objects.get_current())
 
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
-    free_card = page.locator('[data-tier-card="free"]')
-    expect(free_card.get_by_role("link", name="Sign up with Google")).to_have_count(0)
-    free_card.get_by_role("link", name="Join free", exact=True).click()
-    page.wait_for_url(f"{django_server}/#join-free")
+    expect(page.locator("#tiers").get_by_role("link", name="Sign up with Google")).to_have_count(0)
+    page.goto(f"{django_server}/#join-free", wait_until="domcontentloaded")
     join_section = page.locator("#join-free")
     expect(join_section.get_by_role("link", name="Sign up with Google")).to_be_visible()
     expect(page.get_by_role("link", name="Terms of Service").first).to_be_visible()
     expect(page.get_by_role("link", name="Privacy Policy").first).to_be_visible()
 
-    expect(free_card.get_by_role("link", name="Sign up with Google")).to_have_count(0)
+    expect(page.locator("#tiers").get_by_role("link", name="Sign up with Google")).to_have_count(0)
 
 
-def test_homepage_billing_toggle_changes_paid_links_but_not_free(
+def test_homepage_billing_toggle_changes_all_three_paid_links(
     django_server, page, django_db_blocker
 ):
     _seed_homepage_tiers(django_db_blocker)
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
-    free_cta = page.locator('[data-testid="home-free-tier-cta"]')
-    basic_cta = page.locator('[data-tier-card="basic"] .tier-cta-link')
-    monthly_basic = basic_cta.get_attribute("data-link-monthly")
-    annual_basic = basic_cta.get_attribute("data-link-annual")
-    expect(basic_cta).to_have_attribute("href", monthly_basic)
-    expect(free_cta).to_have_attribute("href", "/#join-free")
+    tier_ctas = {
+        slug: page.locator(f'[data-tier-card="{slug}"] .tier-cta-link')
+        for slug in ("basic", "main", "premium")
+    }
+    links = {
+        slug: (
+            cta.get_attribute("data-link-monthly"),
+            cta.get_attribute("data-link-annual"),
+        )
+        for slug, cta in tier_ctas.items()
+    }
+    for slug, cta in tier_ctas.items():
+        expect(cta).to_have_attribute("href", links[slug][0])
+    expect(page.locator('[data-tier-card="free"]')).to_have_count(0)
 
     page.locator("#billing-toggle").click()
-    expect(basic_cta).to_have_attribute("href", annual_basic)
-    expect(free_cta).to_have_attribute("href", "/#join-free")
+    for slug, cta in tier_ctas.items():
+        expect(cta).to_have_attribute("href", links[slug][1])
     expect(page.locator('[data-tier-card="main"]')).to_contain_text("Most Popular")
 
     page.locator("#billing-toggle").click()
-    expect(basic_cta).to_have_attribute("href", monthly_basic)
-    expect(free_cta).to_have_attribute("href", "/#join-free")
+    for slug, cta in tier_ctas.items():
+        expect(cta).to_have_attribute("href", links[slug][0])
 
 
-def test_homepage_mobile_free_card_is_clean_and_all_tiers_reachable(
+def test_homepage_mobile_all_paid_tiers_and_separate_free_path_are_reachable(
     django_server, page, django_db_blocker
 ):
     _seed_homepage_tiers(django_db_blocker)
@@ -137,7 +134,8 @@ def test_homepage_mobile_free_card_is_clean_and_all_tiers_reachable(
     page.wait_for_load_state("load")
 
     carousel = page.locator('[data-testid="home-tier-carousel"]')
-    expect(carousel.locator('[data-testid="home-tier-card"]')).to_have_count(4)
+    expect(carousel.locator('[data-testid="home-tier-card"]')).to_have_count(3)
+    expect(carousel.locator('[data-tier-card="free"]')).to_have_count(0)
     assert carousel.evaluate("el => el.scrollWidth > el.clientWidth")
     assert page.evaluate(
         "() => document.documentElement.scrollWidth - window.innerWidth"
@@ -159,15 +157,11 @@ def test_homepage_mobile_free_card_is_clean_and_all_tiers_reachable(
     assert main_delta.json_value() < 60
     expect(main).to_contain_text("Most Popular")
 
-    free_card = carousel.locator('[data-tier-card="free"]')
-    free_card.scroll_into_view_if_needed()
-    expect(free_card.locator("form")).to_have_count(0)
-    expect(free_card.locator('[data-testid="inline-register-card"]')).to_have_count(0)
-    join_free = free_card.get_by_role("link", name="Join free", exact=True)
-    expect(join_free).to_be_visible()
-    assert join_free.evaluate("el => el.getBoundingClientRect().height") >= 44
-    join_free.click()
-    page.wait_for_url(f"{django_server}/#join-free")
+    for slug in ("basic", "main", "premium"):
+        card = carousel.locator(f'[data-tier-card="{slug}"]')
+        card.scroll_into_view_if_needed()
+        expect(card).to_be_visible()
+    page.goto(f"{django_server}/#join-free", wait_until="domcontentloaded")
     join_section = page.locator("#join-free")
     expect(join_section).to_be_visible()
     expect(join_section.locator("#register-form")).to_be_visible()
@@ -221,6 +215,7 @@ def test_homepage_upcoming_event_card_navigates_to_event_detail(
             end_datetime=timezone.now() + timedelta(days=2, hours=1),
             status="upcoming",
             published=True,
+            required_level=20,
         )
 
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
@@ -228,9 +223,52 @@ def test_homepage_upcoming_event_card_navigates_to_event_detail(
     section.scroll_into_view_if_needed()
     card = section.locator('[data-testid="home-upcoming-event-card"]').first
     expect(card).to_contain_text("Open Office Hours")
+    access = card.locator(
+        '[data-testid="event-tier-badge"][data-required-level="20"]'
+    )
+    expect(access).to_have_text("Main or above")
+    expect(access.locator('svg.lucide-lock, i[data-lucide="lock"]')).to_have_count(1)
+    cta = section.get_by_test_id("home-upcoming-events-link")
+    expect(cta).to_have_attribute("href", "/events?filter=upcoming")
     card.locator('[data-testid="event-card-link"]').click()
     page.wait_for_url(f"{django_server}{event.get_absolute_url()}", timeout=10000)
     expect(page.locator("main")).to_contain_text("Open Office Hours")
+
+
+def test_homepage_workshop_card_and_collection_cta_use_canonical_destinations(
+    django_server, page, django_db_blocker
+):
+    with django_db_blocker.unblock():
+        from content.models import Workshop
+
+        ensure_site_config_tiers()
+        Workshop.objects.all().delete()
+        workshop = Workshop.objects.create(
+            title="Build a Retrieval Agent",
+            slug="retrieval-agent-1301",
+            status="published",
+            date=date(2026, 7, 18),
+            description="Build and evaluate a practical retrieval workflow.",
+            landing_required_level=0,
+            pages_required_level=5,
+            recording_required_level=20,
+        )
+
+    page.goto(f"{django_server}/", wait_until="domcontentloaded")
+    section = page.get_by_test_id("home-workshops-section")
+    card = section.get_by_test_id("home-workshop-card")
+    expect(card).to_contain_text("Build a Retrieval Agent")
+    expect(card.get_by_test_id("home-workshop-type-badge")).to_have_text("Workshop")
+    access = card.locator(
+        '[data-testid="home-workshop-access-badge"][data-required-level="5"]'
+    )
+    expect(access).to_have_text("Free with sign-in")
+    expect(access.locator('svg.lucide-badge-check, i[data-lucide="badge-check"]')).to_have_count(1)
+    expect(section.get_by_test_id("home-workshops-link")).to_have_attribute(
+        "href", "/workshops"
+    )
+    card.locator("a").click()
+    page.wait_for_url(f"{django_server}{workshop.get_absolute_url()}")
 
 
 def test_homepage_upcoming_events_empty_state_stays_discoverable(

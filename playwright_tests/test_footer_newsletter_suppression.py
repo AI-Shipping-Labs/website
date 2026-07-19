@@ -34,7 +34,7 @@ from playwright_tests.conftest import (
 
 FOOTER_HEADING = 'Build AI in public, with a group.'
 INLINE_OPT_IN_COPY = (
-    "By signing up free, you'll receive community updates. "
+    "Sign up for free to receive community updates. "
     "You can unsubscribe at any time."
 )
 

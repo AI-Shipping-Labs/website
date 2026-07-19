@@ -40,7 +40,7 @@
                   <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
                       {% member_status_badge item.sprint.sprint_badge_current.label status=item.sprint.sprint_badge_current.state size="sm" uppercase=True testid="sprints-sprint-status" %}
-                      {% member_tier_badge item.required_tier_level tone="accent_strong" size="sm" icon="lock" testid="sprints-sprint-tier" %}
+                      {% member_access_badge item.required_tier_level testid="sprints-sprint-tier" %}
                       {% if item.enrolled %}
                       <span class="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-300" data-testid="sprints-sprint-enrolled">
                         <i data-lucide="check" class="h-3.5 w-3.5"></i>

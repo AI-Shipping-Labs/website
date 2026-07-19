@@ -71,7 +71,8 @@ def test_capture_homepage_ia_review_matrix(
         if auth == "anonymous":
             tiers = page.locator("#tiers")
             join = page.locator("#join-free")
-            expect(tiers.locator('[data-testid="home-tier-card"]')).to_have_count(4)
+            expect(tiers.locator('[data-testid="home-tier-card"]')).to_have_count(3)
+            expect(tiers.locator('[data-tier-card="free"]')).to_have_count(0)
             expect(tiers.locator("form, input, [data-auth-oauth-providers]")).to_have_count(0)
             expect(join.locator("#register-form")).to_have_count(1)
             assert join.evaluate("el => !el.closest('[data-tier-carousel]')")
@@ -91,11 +92,7 @@ def test_capture_homepage_ia_review_matrix(
                     arg=carousel.element_handle(),
                 )
                 assert centered_delta.json_value() < 60
-                free = tiers.locator('[data-tier-card="free"]')
-                free.evaluate(
-                    "el => el.scrollIntoView({block: 'nearest', inline: 'center'})"
-                )
-                expect(free.get_by_role("link", name="Join free", exact=True)).to_be_visible()
+                expect(page.get_by_test_id("header-join-free-link")).to_be_visible()
                 if theme == "dark":
                     page.locator("#register-email").fill("visual-error@example.com")
                     page.locator("#register-password").fill("Password123!")

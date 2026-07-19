@@ -31,22 +31,19 @@ class HomepageTierLayoutTemplateTest(SimpleTestCase):
     def test_desktop_grid_starts_cards_at_their_intrinsic_height(self):
         grid = _tier_grid_markup(self.home)
 
-        self.assertIn('lg:grid-cols-4', grid)
+        self.assertIn('lg:grid-cols-3', grid)
         self.assertIn('lg:items-start', grid)
         self.assertNotIn('items-stretch', grid)
         self.assertNotIn('content-stretch', grid)
 
     def test_no_homepage_tier_card_forces_full_desktop_height(self):
-        self.assertEqual(self.tier_section.count('data-testid="home-tier-card"'), 2)
+        self.assertEqual(self.tier_section.count('data-testid="home-tier-card"'), 1)
         self.assertEqual(self.tier_section.count('lg:min-h-full'), 0)
         self.assertEqual(self.tier_section.count('min-h-screen'), 0)
 
-    def test_free_and_paid_cta_contracts_remain_separate(self):
-        self.assertEqual(
-            self.tier_section.count('data-testid="home-free-tier-cta"'), 1
-        )
-        self.assertIn('href="/#join-free"', self.tier_section)
-        self.assertIn('Join free', self.tier_section)
+    def test_membership_comparison_contains_only_paid_tiers(self):
+        self.assertNotIn('data-testid="home-free-tier-cta"', self.tier_section)
+        self.assertNotIn('data-tier-card="free"', self.tier_section)
         self.assertNotIn('inline-register-card', self.tier_section)
         self.assertNotIn('<form', self.tier_section)
         self.assertIn('data-link-annual=', self.tier_section)

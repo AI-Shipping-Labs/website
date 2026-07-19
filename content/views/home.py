@@ -20,9 +20,7 @@ from content.models import (
     Article,
     Course,
     CourseAccess,
-    CuratedLink,
     Enrollment,
-    Project,
     Unit,
     UserContentCompletion,
     UserCourseProgress,
@@ -105,8 +103,8 @@ FEATURES = [
     },
     {
         'icon': 'brain',
-        'title': 'Calibrate your judgment',
-        'description': 'Develop better instincts through peer feedback, expert guidance, and exposure to real-world decision-making patterns.',
+        'title': 'Learn from real implementations',
+        'description': 'See how working AI systems are designed, debugged, and improved through practical examples and shared experience.',
     },
 ]
 
@@ -152,22 +150,6 @@ HOME_ACTIVITIES = [
         ),
     },
 ]
-
-FREE_HOME_TIER = {
-    'name': 'Free',
-    'tagline': 'Start shipping with us',
-    'description': (
-        'Create a free account to get community updates, browse open '
-        'resources, and register for free/open events without a checkout.'
-    ),
-    'hook': 'Newsletter, open resources, and live-event access.',
-    'features': [
-        {'text': 'Community updates and newsletter emails', 'included': True},
-        {'text': 'Open resources, recordings, and tutorials', 'included': True},
-        {'text': 'Register for free/open live events', 'included': True},
-    ],
-}
-
 
 FAQ_ITEMS = [
     {
@@ -217,8 +199,7 @@ SECTION_NAV = [
     {'id': 'tiers', 'label': 'Membership'},
     {'id': 'join-free', 'label': 'Start Free'},
     {'id': 'blog', 'label': 'Blog'},
-    {'id': 'projects', 'label': 'Projects'},
-    {'id': 'collection', 'label': 'Curated Links'},
+    {'id': 'workshops', 'label': 'Workshops'},
     {'id': 'newsletter', 'label': 'Newsletter'},
     {'id': 'faq', 'label': 'FAQ'},
 ]
@@ -254,8 +235,7 @@ def home(request):
 def _public_home(request):
     """Render the public marketing homepage for anonymous users."""
     articles = Article.objects.filter(published=True)[:3]
-    projects = Project.objects.filter(published=True)[:3]
-    curated_links = CuratedLink.objects.filter(published=True)[:6]
+    workshops = Workshop.objects.filter(status='published').order_by('-date')[:3]
 
     # Add payment links to tiers
     stripe_links = get_stripe_payment_links()
@@ -278,12 +258,10 @@ def _public_home(request):
     ]
     context = {
         'articles': articles,
-        'projects': projects,
-        'curated_links': curated_links,
+        'workshops': workshops,
         'testimonials': TESTIMONIALS,
         'features': FEATURES,
         'home_activities': HOME_ACTIVITIES,
-        'free_tier': FREE_HOME_TIER,
         'tiers': tiers_with_links,
         'featured_sprint': featured_sprint,
         'featured_sprint_required_tier_name': (

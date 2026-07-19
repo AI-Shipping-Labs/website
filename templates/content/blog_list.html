@@ -47,11 +47,11 @@
                 {% endif %}
               </div>
               <div class="flex-1">
+                <div class="mb-3 flex flex-wrap items-center gap-2">
+                  {% member_access_badge article.required_level testid="article-access-badge" %}
+                </div>
                 <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
-                  {% if article.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}{{ article.title }}
-                  {% if article.required_level > 0 %}
-                  {% member_tier_badge article.required_level tone="neutral" size="xs" extra_class="ml-2 inline-flex align-middle" %}
-                  {% endif %}
+                  {{ article.title }}
                 </h2>
                 <p class="mt-2 text-sm sm:text-base text-muted-foreground line-clamp-2">{{ article.description|strip_markdown }}</p>
                 <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">

@@ -135,6 +135,9 @@
                     <i data-lucide="video" class="h-5 w-5 text-accent"></i>
                     {% if event.kind == 'workshop' and event.workshop %}
                     {% member_label_badge "Workshop" tone="accent_strong" icon="graduation-cap" testid="past-card-workshop-badge" %}
+                    {% member_access_badge event.workshop.recording_required_level testid="past-card-recording-tier" %}
+                    {% else %}
+                    {% member_access_badge event.required_level testid="past-card-recording-tier" %}
                     {% endif %}
                     {% if event.is_external %}
                     {# Issue #572 — external host pill on past recordings list. #}
@@ -143,11 +146,6 @@
                     {% endwith %}
                     {% endif %}
                     <h3 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
-                      {% if event.kind == 'workshop' and event.workshop %}
-                        {% if event.workshop.recording_required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}
-                      {% elif event.required_level > 0 %}
-                        <i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>
-                      {% endif %}
                       {{ event.title }}
                     </h3>
                   </div>
@@ -177,9 +175,6 @@
                 <i data-lucide="play" class="h-4 w-4"></i>
                 Watch recording
               </a>
-              {% if event.workshop.recording_required_level > 0 %}
-              {% member_tier_badge event.workshop.recording_required_level tone="accent_strong" size="sm" icon="lock" testid="past-card-recording-tier" extra_class="min-h-[44px]" %}
-              {% endif %}
               {% else %}
               <a href="{{ event.get_absolute_url }}"
                  class="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
@@ -187,9 +182,6 @@
                 <i data-lucide="play" class="h-4 w-4"></i>
                 Watch recording
               </a>
-              {% if event.required_level > 0 %}
-              {% member_tier_badge event.required_level tone="accent_strong" size="sm" icon="lock" testid="past-card-recording-tier" extra_class="min-h-[44px]" %}
-              {% endif %}
               {% endif %}
             </div>
             {% if event.tags %}
@@ -236,10 +228,10 @@
                     {% member_label_badge external_host_label tone="accent_outline_strong" icon="external-link" testid="event-card-external-badge" %}
                     {% endwith %}
                     {% endif %}
-                    {% if event.kind == 'workshop' and event.workshop and event.workshop.recording_required_level > 0 %}
-                    {% member_tier_badge event.workshop.recording_required_level tone="accent_strong" icon="lock" testid="past-card-recording-tier" %}
-                    {% elif event.required_level > 0 %}
-                    {% member_tier_badge event.required_level tone="accent_strong" icon="lock" testid="past-card-recording-tier" %}
+                    {% if event.kind == 'workshop' and event.workshop %}
+                    {% member_access_badge event.workshop.recording_required_level testid="past-card-recording-tier" %}
+                    {% else %}
+                    {% member_access_badge event.required_level testid="past-card-recording-tier" %}
                     {% endif %}
                   </div>
                   <h3 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">

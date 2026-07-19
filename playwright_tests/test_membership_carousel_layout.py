@@ -128,8 +128,9 @@ def test_home_membership_mobile_carousel_and_desktop_grid(django_server, page):
     carousel = page.locator('[data-testid="home-tier-carousel"]')
     expect(carousel).to_be_visible()
     assert carousel.evaluate("el => getComputedStyle(el).display") == "grid"
-    assert page.locator('[data-testid="home-tier-card"]').count() == 4
-    expect(page.locator('[data-tier-card="free"]')).to_contain_text("Start shipping with us")
+    assert page.locator('[data-testid="home-tier-card"]').count() == 3
+    expect(page.locator('[data-tier-card="free"]')).to_have_count(0)
+    expect(page.locator('#join-free #register-form')).to_be_visible()
     _assert_no_body_overflow(page)
     _screenshot(page, '[data-testid="home-tier-carousel"]', "home-desktop-tiers")
 

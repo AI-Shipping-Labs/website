@@ -103,9 +103,7 @@
             {# Issue #673 — canonical event URL via get_absolute_url. #}
             <a href="{{ event.get_absolute_url }}" class="block rounded-lg border border-border bg-secondary/50 p-3 hover:border-accent/50 transition-colors">
               <div class="flex items-center gap-2 mb-1 flex-wrap">
-                {% if event.required_level > 0 %}
-                {% member_tier_badge event.required_level tone="accent_strong" icon="lock" %}
-                {% endif %}
+                {% member_access_badge event.required_level testid="calendar-event-access-badge" %}
               </div>
               <div class="font-medium text-foreground">{{ event.title }}</div>
             </a>
@@ -138,9 +136,7 @@
               {# Issue #673 — canonical event URL via get_absolute_url. #}
               <a href="{{ event.get_absolute_url }}" class="block rounded-lg border border-border bg-card p-4 hover:border-accent/50 transition-colors">
                 <div class="flex items-center gap-2 mb-2 flex-wrap">
-                  {% if event.required_level > 0 %}
-                  {% member_tier_badge event.required_level tone="accent_strong" icon="lock" %}
-                  {% endif %}
+                  {% member_access_badge event.required_level testid="agenda-event-access-badge" %}
                 </div>
                 <div class="font-medium text-foreground">{{ event.title }}</div>
               </a>

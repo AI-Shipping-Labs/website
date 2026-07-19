@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load member_badges %}
 {% load member_empty_state %}
 {% load teaser_tags %}
 
@@ -29,8 +30,11 @@
           <a href="/tutorials/{{ tutorial.slug }}" class="{% include 'content/_clickable_card_classes.html' %}">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div class="flex-1">
+                <div class="mb-3 flex flex-wrap items-center gap-2">
+                  {% member_access_badge tutorial.required_level testid="tutorial-access-badge" %}
+                </div>
                 <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
-                  {% if tutorial.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}{{ tutorial.title }}
+                  {{ tutorial.title }}
                 </h2>
                 <p class="mt-2 text-sm sm:text-base text-muted-foreground line-clamp-2">{{ tutorial.description|strip_markdown }}</p>
                 <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">

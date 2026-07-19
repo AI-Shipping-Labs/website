@@ -60,21 +60,12 @@ class HomepageMobileLayoutTest(TestCase):
         self.assertIn("py-2", match.group(0))
         self.assertIn("px-3", match.group(0))
 
-    def test_view_all_projects_link_has_tap_target(self):
-        """View all projects link should have py-2 and px-3 for adequate mobile tap target."""
+    def test_view_all_workshops_is_a_touch_sized_button(self):
+        """The workshop collection CTA uses the shared touch-sized button."""
         content = self._get_homepage_content()
-        match = re.search(r'<a[^>]*href="/projects"[^>]*>', content)
-        self.assertIsNotNone(match, "View all projects link not found")
-        self.assertIn("py-2", match.group(0))
-        self.assertIn("px-3", match.group(0))
-
-    def test_view_all_curated_links_has_tap_target(self):
-        """View all curated links should have py-2 and px-3 for adequate mobile tap target."""
-        content = self._get_homepage_content()
-        match = re.search(r'<a[^>]*href="/resources"[^>]*>', content)
-        self.assertIsNotNone(match, "View all curated links link not found")
-        self.assertIn("py-2", match.group(0))
-        self.assertIn("px-3", match.group(0))
+        match = re.search(r'<a[^>]*data-testid="home-workshops-link"[^>]*>', content)
+        self.assertIsNotNone(match, "View all workshops button not found")
+        self.assertIn("min-h-[44px]", match.group(0))
 
     # -- Pricing section overflow --
 
@@ -86,12 +77,12 @@ class HomepageMobileLayoutTest(TestCase):
         self.assertIn("overflow-x-hidden", tiers_match.group(1))
 
     def test_pricing_cards_stack_on_mobile(self):
-        """Homepage membership cards should use lg:grid-cols-4 (stacking on mobile by default)."""
+        """Homepage membership cards should use three desktop columns."""
         content = self._get_homepage_content()
         # Find the pricing grid
         tiers_pos = content.index('id="tiers"')
-        grid_match = re.search(r'class="[^"]*lg:grid-cols-4[^"]*"', content[tiers_pos:])
-        self.assertIsNotNone(grid_match, "Pricing grid with lg:grid-cols-4 not found")
+        grid_match = re.search(r'class="[^"]*lg:grid-cols-3[^"]*"', content[tiers_pos:])
+        self.assertIsNotNone(grid_match, "Pricing grid with lg:grid-cols-3 not found")
 
     def test_highlighted_card_scale_only_on_large_screens(self):
         """The highlighted pricing card should only scale on lg+ screens (lg:scale-105)."""

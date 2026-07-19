@@ -37,11 +37,7 @@
             {% endif %}
             <div class="min-w-0 p-4 sm:p-5">
               <div class="mb-3 flex flex-wrap items-center gap-2">
-                {% if course.is_free %}
-                {% member_tier_badge course.required_level tone="success_soft" %}
-                {% elif course.required_level > 0 %}
-                {% member_tier_badge course.required_level tone="accent_strong" icon="lock" %}
-                {% endif %}
+                {% member_access_badge course.required_level testid="course-access-badge" %}
                 {% if course.pk in enrolled_course_ids %}
                 {% member_status_badge "Enrolled" status="enrolled" icon="check-circle-2" testid="enrolled-badge" %}
                 {% endif %}

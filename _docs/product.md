@@ -7,7 +7,7 @@ AI Shipping Labs is a paid membership community platform for action-oriented bui
 ## User Personas
 
 ### Anonymous Visitor
-Arrives from search, social, or referral. Can browse the public homepage, read open (level 0) articles, recordings, projects, tutorials, curated links, and event listings. Sees membership tiers, testimonials, FAQ, and newsletter signup CTAs. Cannot access gated content, vote, register for events, or use the dashboard.
+Arrives from search, social, or referral. Can browse the public homepage, including its Blog, Workshops, and optional upcoming Events collections, and use the Resources navigation to reach open (level 0) projects, tutorials, curated links, recordings, and other standalone catalogs. Sees membership tiers, testimonials, FAQ, and newsletter signup CTAs. Cannot access gated content, vote, register for events, or use the dashboard.
 
 ### Free Member (Newsletter Subscriber)
 Has an account (email + password or via newsletter signup with double opt-in). Can log in and see the personalized dashboard. Can access all open (level 0) content, register for open events, view notifications, and manage email preferences from the account page. Cannot access content gated at Basic or above.
@@ -54,7 +54,7 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
-| Public homepage | `/` (anonymous) | Community marketing page ordered as hero, philosophy, real member activities, sprint format, optional live schedule, testimonials, tier comparison, a dedicated Free-account conversion section, blog, projects, curated links, FAQ, and newsletter; includes monthly/annual paid-tier switching and section-dot navigation | Everyone | Shipped |
+| Public homepage | `/` (anonymous) | Community marketing page ordered as hero, philosophy, real member activities, sprint format, optional upcoming Events, testimonials, tier comparison, a dedicated Free-account conversion section, Blog, Workshops, FAQ, and newsletter. Project Ideas and Curated Links remain standalone Resources destinations rather than homepage sections. Includes monthly/annual paid-tier switching and section-dot navigation. | Everyone | Shipped |
 | Member dashboard | `/` (authenticated) | Personalized dashboard showing welcome banner with tier badge, continue-learning section (in-progress courses with progress bars), upcoming registered events, recent accessible content, active polls, quick actions, and unread notifications | Authenticated users | Shipped |
 
 ### Authentication & Account
@@ -246,8 +246,9 @@ The homepage serves as the primary conversion funnel for anonymous visitors:
 2. Activities: explains five real participation modes and links to `/activities#access-by-tier`.
 3. Tiers: Free scrolls to the separate `#join-free` account section; paid tiers retain monthly/annual Stripe links.
 4. Dedicated Free conversion: one account-registration form outside every tier card and carousel.
-5. Blog, Projects, and Curated Links: canonical collection links.
-6. FAQ and footer newsletter: explanation and distinctly labeled newsletter subscription.
+5. Blog and Workshops: homepage collection previews link to their canonical catalogs; the optional upcoming Events section links to the upcoming Events listing when scheduled.
+6. Project Ideas and Curated Links: discoverable through the Resources navigation at `/projects` and `/resources`, not rendered as homepage sections.
+7. FAQ and footer newsletter: explanation and distinctly labeled newsletter subscription.
 
 ### Dashboard CTAs (Authenticated)
 The dashboard surfaces personalized actions:
@@ -268,7 +269,7 @@ The dashboard surfaces personalized actions:
 ## Key User Journeys
 
 ### 1. Discovery to Free Member
-Visitor lands on homepage (from search, social, or referral) -> reads hero and philosophy sections -> scrolls through testimonials -> browses open blog articles and recordings -> enters email in newsletter form (homepage, footer, or `/subscribe`) -> receives verification email -> clicks verification link -> becomes a confirmed newsletter subscriber. If they also create an account via `/accounts/register/`, they become a Free member with dashboard access.
+Visitor lands on homepage (from search, social, or referral) -> reads hero and philosophy sections -> explores upcoming Events when scheduled, open Blog articles, and Workshops -> uses the Resources navigation for standalone destinations such as Project Ideas and Curated Links -> enters email in newsletter form (homepage, footer, or `/subscribe`) -> receives verification email -> clicks verification link -> becomes a confirmed newsletter subscriber. If they also create an account via `/accounts/register/`, they become a Free member with dashboard access.
 
 ### 2. Free Member to Paid Upgrade
 Free member logs in -> sees dashboard with limited content -> browses blog and encounters a gated article (lock icon, blurred content overlay, "Upgrade to Basic to read this article") -> clicks "View Pricing" -> lands on `/pricing` -> compares tiers (monthly/annual toggle) -> selects a tier -> redirected to Stripe Checkout -> completes payment -> Stripe webhook updates their tier -> returns to site with full access to content at their new level.

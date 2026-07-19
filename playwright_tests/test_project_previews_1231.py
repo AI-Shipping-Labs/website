@@ -69,9 +69,8 @@ def _serve_images(page, *urls):
         )
 
 
-def _project_card(page, title, *, homepage=False):
-    testid = "home-project-card" if homepage else "project-card"
-    return page.get_by_test_id(testid).filter(has_text=title)
+def _project_card(page, title):
+    return page.get_by_test_id("project-card").filter(has_text=title)
 
 
 def _preview(card):
@@ -227,76 +226,6 @@ def test_frontmatter_cover_remains_highest_priority_project_preview(
             "heading", name=project.title,
         )
     ).to_be_visible()
-
-
-@pytest.mark.django_db(transaction=True)
-def test_homepage_and_catalog_share_custom_preview_copy_and_destination(
-    django_server, page,
-):
-    _reset_projects()
-    project = _create_project(
-        "Shared Homepage Project 1231",
-        "shared-homepage-project-1231",
-        custom_banner_url=CUSTOM_URL,
-    )
-    _serve_images(page, CUSTOM_URL)
-
-    _open(page, django_server, "/")
-    home_card = _project_card(page, project.title, homepage=True)
-    expect(_preview(home_card).get_by_role("img")).to_have_attribute(
-        "src", CUSTOM_URL,
-    )
-    home_copy = home_card.inner_text()
-    home_href = home_card.locator("a").first.get_attribute("href")
-
-    _open(page, django_server, "/projects")
-    listing_card = _project_card(page, project.title)
-    expect(_preview(listing_card).get_by_role("img")).to_have_attribute(
-        "src", CUSTOM_URL,
-    )
-    assert listing_card.inner_text() == home_copy
-    expect(listing_card.locator("a").first).to_have_attribute(
-        "href", home_href,
-    )
-    listing_card.locator("a").first.click()
-    page.wait_for_url(f"{django_server}{project.get_absolute_url()}")
-
-
-@pytest.mark.visual_regression
-@pytest.mark.django_db(transaction=True)
-def test_homepage_fallback_projects_keep_equal_reserved_previews(
-    django_server, page,
-):
-    _reset_projects()
-    projects = [
-        _create_project(
-            f"Fallback Homepage Project {index} 1231",
-            f"fallback-homepage-project-{index}-1231",
-            day=index,
-        )
-        for index in (1, 2, 3)
-    ]
-    page.set_viewport_size({"width": 1440, "height": 1000})
-
-    _open(page, django_server, "/")
-    cards = [
-        _project_card(page, project.title, homepage=True)
-        for project in projects
-    ]
-    for card in cards:
-        expect(
-            card.get_by_test_id("project-card-preview-fallback"),
-        ).to_be_visible()
-        expect(
-            card.get_by_test_id("project-card-preview-fallback").locator(
-                "svg.lucide-rocket",
-            )
-        ).to_have_count(1)
-    _assert_same_row(cards[0], cards[1])
-    _assert_same_row(cards[1], cards[2])
-
-    cards[0].locator("a").first.click()
-    page.wait_for_url(f"{django_server}{projects[0].get_absolute_url()}")
 
 
 @pytest.mark.django_db(transaction=True)

@@ -20,12 +20,21 @@ from zoneinfo import ZoneInfo
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
+from freezegun import freeze_time
 
 from content.access import LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from events.models import Event, EventSeries
 from tests.fixtures import StaffUserMixin, TierSetupMixin
 
 User = get_user_model()
+
+# date-rot-ok: this fixed instant deliberately verifies the exact UTC and
+# Europe/Berlin summer-time date copy. Freezing Django time before its one-hour
+# fallback end keeps Upcoming-list membership independent of the host clock.
+FIXED_TIMEZONE_EVENT_START = datetime(
+    2026, 7, 20, 12, 0, tzinfo=ZoneInfo('UTC'),
+)
+FROZEN_TIME_BEFORE_EVENT_END = '2026-07-19T12:00:00Z'
 
 
 class StudioEventListTest(StaffUserMixin, TestCase):
@@ -126,30 +135,29 @@ class StudioEventListTest(StaffUserMixin, TestCase):
         self.assertContains(response, 'data-lucide="layers"')
         self.assertNotContains(response, '>Friday Builds<')
 
+    @freeze_time(FROZEN_TIME_BEFORE_EVENT_END)
     def test_list_renders_operator_timezone_date(self):
         self.staff.preferred_timezone = 'Europe/Berlin'
         self.staff.save(update_fields=['preferred_timezone'])
         Event.objects.create(
             title='Berlin Date Event',
             slug='berlin-date-event',
-            start_datetime=datetime(
-                2026, 7, 20, 12, 0, tzinfo=ZoneInfo('UTC'),
-            ),
+            start_datetime=FIXED_TIMEZONE_EVENT_START,
         )
         response = self.client.get('/studio/events/')
         self.assertContains(response, 'data-testid="event-row-date"')
         self.assertContains(response, '2026-07-20 14:00 Europe/Berlin')
-        self.assertNotContains(response, '>Jul 20, 2026, 12:00<')
+        self.assertNotContains(response, '2026-07-20 12:00 Europe/Berlin')
 
+    @freeze_time(FROZEN_TIME_BEFORE_EVENT_END)
     def test_list_renders_utc_label_without_preference(self):
         Event.objects.create(
             title='UTC Date Event',
             slug='utc-date-event',
-            start_datetime=datetime(
-                2026, 7, 20, 12, 0, tzinfo=ZoneInfo('UTC'),
-            ),
+            start_datetime=FIXED_TIMEZONE_EVENT_START,
         )
         response = self.client.get('/studio/events/')
+        self.assertContains(response, 'data-testid="event-row-date"')
         self.assertContains(response, '2026-07-20 12:00 UTC')
 
     def test_list_renders_create_buttons(self):

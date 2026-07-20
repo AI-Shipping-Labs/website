@@ -1679,6 +1679,39 @@
         ]
       }
     },
+    "/api/crm/{email}/export.md": {
+      "get": {
+        "description": "Returns a complete staff-only Markdown hand-off for the tracked member identified by canonical primary email. The document includes internal notes and complete activity history. Staff-token only.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Markdown attachment."
+          },
+          "401": {
+            "description": "Missing, invalid, or non-staff token."
+          },
+          "404": {
+            "description": "The primary email is unknown, or the user is not tracked in CRM."
+          },
+          "405": {
+            "description": "Only GET is supported."
+          }
+        },
+        "summary": "Download one CRM record as Markdown",
+        "tags": [
+          "CRM"
+        ]
+      }
+    },
     "/api/deliverables/{item_id}": {
       "delete": {
         "parameters": [

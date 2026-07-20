@@ -85,6 +85,7 @@ from studio.views.crm import (
     crm_detail,
     crm_edit,
     crm_list,
+    crm_markdown_download,
     crm_reactivate,
     crm_slack_ingest_review,
     crm_slack_progress_change_undo,
@@ -932,6 +933,11 @@ urlpatterns = [
     path('assistant/', assistant, name='studio_assistant'),
 
     path('crm/<int:crm_id>/', crm_detail, name='studio_crm_detail'),
+    path(
+        'crm/<int:crm_id>/download.md',
+        crm_markdown_download,
+        name='studio_crm_markdown_download',
+    ),
     path('crm/<int:crm_id>/edit', crm_edit, name='studio_crm_edit'),
     path(
         'crm/<int:crm_id>/archive',

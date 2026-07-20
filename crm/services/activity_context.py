@@ -195,6 +195,49 @@ def build_activity_context(
     }
 
 
+def build_complete_activity_context(user):
+    """Return every relevant activity row for a CRM archive.
+
+    Interactive CRM/API timelines intentionally clamp their page size to 100.
+    A record archive has a different contract: it must be complete.  Keep this
+    separate entry point so callers cannot accidentally make an interactive
+    request unbounded, while still sharing categorisation, link resolution,
+    serialization, and paid-upgrade marker semantics with those surfaces.
+    """
+    rows = list(
+        UserActivity.objects.filter(
+            user=user,
+            event_type__in=RELEVANT_ACTIVITY_TYPES,
+        ).order_by('-occurred_at', '-id')
+    )
+    target_urls = resolve_activity_target_urls(rows)
+    activities = [
+        _serialize_activity(activity, target_urls.get(activity.pk, ''))
+        for activity in rows
+    ]
+
+    # The upgrade marker denotes the member's first paid event.  Iterating
+    # newest-first and retaining the final payment yields the oldest payment,
+    # matching ``build_activity_context`` whenever its window includes all
+    # payment rows.
+    first_payment_at = None
+    for activity in activities:
+        if activity['is_payment']:
+            first_payment_at = activity['occurred_at']
+    for activity in activities:
+        activity['is_upgrade_marker'] = (
+            first_payment_at is not None
+            and activity['is_payment']
+            and activity['occurred_at'] == first_payment_at
+        )
+
+    return {
+        'activities': activities,
+        'activity_total': len(activities),
+        'first_payment_at': first_payment_at,
+    }
+
+
 def serialize_activity_for_api(activity):
     """Return the JSON-ready row shape required by the staff activity API."""
     occurred_at = activity['occurred_at']

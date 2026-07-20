@@ -23,6 +23,20 @@ def _isoformat_or_none(value):
     return value.isoformat()
 
 
+def _prefetched_or_ordered(instance, relation_name, *ordering):
+    """Use an exactly ordered prefetch cache, falling back to a queryset.
+
+    Calling ``.order_by()`` on a related manager bypasses Django's prefetch
+    cache even when the prefetch used the same ordering. Export callers batch
+    those ordered relations explicitly, so consume that cache when present to
+    avoid one query per plan/child row.
+    """
+    cache = getattr(instance, "_prefetched_objects_cache", {})
+    if relation_name in cache:
+        return list(cache[relation_name])
+    return list(getattr(instance, relation_name).all().order_by(*ordering))
+
+
 def serialize_sprint(sprint):
     """Sprint dict shape used by every sprint endpoint."""
     series = sprint.event_series
@@ -109,7 +123,9 @@ def serialize_week(week, *, with_checkpoints=True):
     if with_checkpoints:
         data["checkpoints"] = [
             serialize_checkpoint(cp)
-            for cp in week.checkpoints.all().order_by("position", "id")
+            for cp in _prefetched_or_ordered(
+                week, "checkpoints", "position", "id",
+            )
         ]
     return data
 
@@ -159,13 +175,15 @@ def serialize_plan_detail(plan, *, viewer=None):
     everyone else (anonymous / ``None``) sees an empty list. The key
     is always present so the GET / PATCH response shape is stable.
     """
-    weeks = list(
-        plan.weeks.all().order_by("position", "week_number")
+    weeks = _prefetched_or_ordered(
+        plan, "weeks", "position", "week_number",
     )
-    visible_notes = (
-        InterviewNote.objects.visible_to(viewer).filter(plan=plan)
-        .order_by("-created_at")
-    )
+    visible_notes = getattr(plan, "_export_interview_notes", None)
+    if visible_notes is None:
+        visible_notes = (
+            InterviewNote.objects.visible_to(viewer).filter(plan=plan)
+            .order_by("-created_at")
+        )
     return {
         "id": plan.id,
         "sprint": plan.sprint.slug,
@@ -188,15 +206,21 @@ def serialize_plan_detail(plan, *, viewer=None):
         "weeks": [serialize_week(w, with_checkpoints=True) for w in weeks],
         "resources": [
             serialize_resource(r)
-            for r in plan.resources.all().order_by("position", "id")
+            for r in _prefetched_or_ordered(
+                plan, "resources", "position", "id",
+            )
         ],
         "deliverables": [
             serialize_deliverable(d)
-            for d in plan.deliverables.all().order_by("position", "id")
+            for d in _prefetched_or_ordered(
+                plan, "deliverables", "position", "id",
+            )
         ],
         "next_steps": [
             serialize_next_step(n)
-            for n in plan.next_steps.all().order_by("position", "id")
+            for n in _prefetched_or_ordered(
+                plan, "next_steps", "position", "id",
+            )
         ],
         "interview_notes": [
             serialize_interview_note(n) for n in visible_notes

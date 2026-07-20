@@ -45,8 +45,9 @@ any aggregate prefetch / serialization work; when present it wins over
 """
 
 from django.contrib.auth import get_user_model
-from django.db.models import Prefetch
-from django.http import JsonResponse
+from django.db.models import F, Prefetch
+from django.http import HttpResponse, JsonResponse
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
@@ -76,6 +77,16 @@ from api.views.users import (
     _parse_limit,
     _parse_since,
     resolve_crm_persona,
+)
+from community.models import STATUS_BOOKED, BookedCall
+from crm.models import CRMRecord
+from crm.services.activity_context import (
+    build_complete_activity_context,
+    serialize_activity_for_api,
+)
+from crm.services.markdown_export import (
+    markdown_filename_for_crm_record,
+    render_crm_record_markdown,
 )
 from integrations.config import get_config
 from plans.models import (
@@ -375,6 +386,7 @@ def _gated_plans_by_member(bearer, users):
                 queryset=InterviewNote.objects.select_related(
                     "member", "created_by",
                 ).order_by("-created_at"),
+                to_attr="_export_interview_notes",
             ),
         )
         .order_by("-created_at", "id")
@@ -443,6 +455,137 @@ def _serialize_member(
     payload["onboarding_responses"] = onboarding_responses
 
     return payload
+
+
+def build_single_crm_record_aggregate(crm_record, *, bearer, exported_at=None):
+    """Build the complete shared aggregate for one tracked CRM member.
+
+    This is the single-record counterpart to the shipped JSON collection
+    aggregate.  It deliberately reuses the same serializers, prefetched
+    queryset, and visibility gates, then augments that shape only with the
+    CRM-detail context required by a portable record archive.
+    """
+    exported_at = exported_at or timezone.now()
+    user = _base_queryset().get(pk=crm_record.user_id)
+    notes_by_member = _gated_notes_by_member(bearer, [user])
+    plans_by_member = _gated_plans_by_member(bearer, [user])
+    payload = _serialize_member(
+        user,
+        bearer,
+        _persona_map(),
+        notes_by_member,
+        plans_by_member,
+    )
+
+    # The #1079 course-enrollment serializer is intentionally identical to
+    # the per-course endpoint and therefore has no course slug.  Add it only
+    # to this archive aggregate; the existing JSON export remains byte-shape
+    # backward compatible.
+    course_slugs = [row.course.slug for row in user.enrollments.all()]
+    payload["course_enrollments"] = [
+        {"course_slug": slug, **item}
+        for slug, item in zip(course_slugs, payload["course_enrollments"])
+    ]
+
+    activity_context = build_complete_activity_context(user)
+    payload["activities"] = [
+        serialize_activity_for_api(item)
+        for item in activity_context["activities"]
+    ]
+    payload["booked_calls"] = [
+        {
+            "id": call.pk,
+            "host": call.host.name,
+            "host_slug": call.host.slug,
+            "invitee_email": call.invitee_email,
+            "invitee_name": call.invitee_name,
+            "scheduled_at": _isoformat_or_none(call.scheduled_at),
+            "calendly_event_uri": call.calendly_event_uri,
+            "calendly_invitee_uri": call.calendly_invitee_uri,
+            "reschedule_url": call.reschedule_url,
+            "cancel_url": call.cancel_url,
+            "created_at": _isoformat_or_none(call.created_at),
+            "updated_at": _isoformat_or_none(call.updated_at),
+        }
+        for call in (
+            BookedCall.objects.filter(
+                member=user,
+                status=STATUS_BOOKED,
+            )
+            .select_related("host")
+            .order_by(
+                F("scheduled_at").asc(nulls_last=True),
+                "created_at",
+                "id",
+            )
+        )
+    ]
+    payload["export_metadata"] = {
+        "studio_url": f"https://aishippinglabs.com{reverse('studio_crm_detail', kwargs={'crm_id': crm_record.pk})}",
+        "crm_record_id": crm_record.pk,
+        "exported_at": exported_at.isoformat(),
+    }
+    return payload
+
+
+@token_required
+@csrf_exempt
+@require_methods("GET")
+@openapi_spec(
+    tag="CRM",
+    summary="Download one CRM record as Markdown",
+    methods={
+        "GET": {
+            "summary": "Download one CRM record as Markdown",
+            "description": (
+                "Returns a complete staff-only Markdown hand-off for the "
+                "tracked member identified by canonical primary email. The "
+                "document includes internal notes and complete activity "
+                "history. Staff-token only."
+            ),
+            "responses": {
+                200: {"description": "Markdown attachment."},
+                401: {"description": "Missing, invalid, or non-staff token."},
+                404: {
+                    "description": (
+                        "The primary email is unknown, or the user is not "
+                        "tracked in CRM."
+                    ),
+                },
+                405: {"description": "Only GET is supported."},
+            },
+        },
+    },
+)
+def crm_record_markdown_export(request, email):
+    """Download the complete Markdown CRM archive for one primary email."""
+    user_id = (
+        User.objects.filter(email__iexact=email)
+        .values_list("id", flat=True)
+        .first()
+    )
+    if user_id is None:
+        return error_response("User not found", "user_not_found", status=404)
+
+    crm_record = CRMRecord.objects.filter(user_id=user_id).first()
+    if crm_record is None:
+        return error_response(
+            "CRM record not found",
+            "crm_record_not_found",
+            status=404,
+        )
+
+    aggregate = build_single_crm_record_aggregate(
+        crm_record,
+        bearer=request.user,
+    )
+    filename = markdown_filename_for_crm_record(crm_record.pk)
+    response = HttpResponse(
+        render_crm_record_markdown(aggregate),
+        content_type="text/markdown; charset=utf-8",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
 
 
 @token_required

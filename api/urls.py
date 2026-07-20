@@ -47,7 +47,7 @@ from api.views.course_enrollments import (
     course_enrollments_collection,
 )
 from api.views.course_instructors import course_instructors
-from api.views.crm_export import crm_export
+from api.views.crm_export import crm_export, crm_record_markdown_export
 from api.views.docs import docs_page, openapi_json
 from api.views.email_log import email_log_list
 from api.views.enrollments import (
@@ -914,6 +914,11 @@ urlpatterns = [
         "crm/export",
         crm_export,
         name="api_crm_export",
+    ),
+    path(
+        "crm/<path:email>/export.md",
+        crm_record_markdown_export,
+        name="api_crm_record_markdown_export",
     ),
     # ---- Event triggers (issue #1070) ---------------------------------
     # Staff-token-gated management + observability. No DELETE: deactivate

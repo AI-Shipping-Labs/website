@@ -776,7 +776,10 @@ class CrmExportQueryBudgetTest(CrmExportTestBase):
         # Warm the integration-settings config cache first so its one-off
         # stamp read does not perturb the count (it is otherwise stable).
         self.client.get(self.URL, **self._auth())
-        with self.assertNumQueries(57):
+        # Ordered prefetch caches are consumed directly by the shared plan
+        # serializer (#1304), removing per-plan child and plan-note queries
+        # while preserving the JSON payload.
+        with self.assertNumQueries(33):
             response = self.client.get(self.URL, **self._auth())
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["count"], 3)

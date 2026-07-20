@@ -94,6 +94,36 @@ def test_homepage_free_handoff_keeps_oauth_on_dedicated_page_only(
     expect(page.locator("#tiers").get_by_role("link", name="Sign up with Google")).to_have_count(0)
 
 
+def test_homepage_slack_only_signup_keeps_email_expanded(
+    django_server, page, django_db_blocker
+):
+    with django_db_blocker.unblock():
+        from allauth.socialaccount.models import SocialApp
+        from django.contrib.sites.models import Site
+        from django.db import connection
+
+        ensure_site_config_tiers()
+        SocialApp.objects.all().delete()
+        app = SocialApp.objects.create(
+            provider="slack",
+            name="Slack",
+            client_id="slack-1300",
+            secret="secret-1300",
+        )
+        app.sites.add(Site.objects.get_current())
+        connection.close()
+
+    page.goto(f"{django_server}/#join-free", wait_until="domcontentloaded")
+    join_section = page.locator("#join-free")
+    expect(join_section.locator("#register-email")).to_be_visible()
+    expect(join_section.locator("[data-auth-oauth-divider]")).to_have_count(0)
+    expect(join_section.locator("[data-auth-oauth-providers]")).to_have_count(0)
+    expect(
+        join_section.locator('[data-testid="inline-register-email-toggle"]')
+    ).to_have_count(0)
+    expect(join_section.get_by_role("link", name="Sign up with Slack")).to_have_count(0)
+
+
 def test_homepage_billing_toggle_changes_all_three_paid_links(
     django_server, page, django_db_blocker
 ):

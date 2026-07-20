@@ -1,4 +1,5 @@
-{% if oauth_google_enabled or oauth_github_enabled or oauth_slack_enabled %}
+{% load accounts_extras %}
+{% if oauth_google_enabled or oauth_github_enabled or oauth_slack_enabled and oauth_action != "Sign up" %}
 <div class="relative my-6" data-auth-oauth-divider>
   <div class="absolute inset-0 flex items-center">
     <div class="w-full border-t border-border"></div>
@@ -11,7 +12,7 @@
 <div class="space-y-4" data-auth-oauth-providers>
   {% if oauth_google_enabled %}
   <a href="{% url 'google_login' %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}"
-     class="flex min-h-[44px] w-full items-center justify-center gap-3 rounded-md border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+     class="{% button_classes 'secondary' size='md' extra='w-full' %}"
      data-testid="oauth-google-action"
      {% if oauth_action == "Sign up" %}data-ga-oauth-track-signup-start="true" data-ga-oauth-provider="google"{% endif %}>
     <svg class="h-5 w-5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -26,7 +27,7 @@
 
   {% if oauth_github_enabled %}
   <a href="{% url 'github_login' %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}"
-     class="flex min-h-[44px] w-full items-center justify-center gap-3 rounded-md border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+     class="{% button_classes 'secondary' size='md' extra='w-full' %}"
      data-testid="oauth-github-action"
      {% if oauth_action == "Sign up" %}data-ga-oauth-track-signup-start="true" data-ga-oauth-provider="github"{% endif %}>
     <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -36,11 +37,11 @@
   </a>
   {% endif %}
 
-  {% if oauth_slack_enabled %}
+  {% if oauth_slack_enabled and oauth_action != "Sign up" %}
   <a href="{% url 'slack_login' %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}"
-     class="flex min-h-[44px] w-full items-center justify-center gap-3 rounded-md border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+     class="{% button_classes 'secondary' size='md' extra='w-full' %}"
      data-testid="oauth-slack-action"
-     {% if oauth_action == "Sign up" %}data-ga-oauth-track-signup-start="true" data-ga-oauth-provider="slack"{% endif %}>
+     >
     <svg class="h-5 w-5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
       <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z" fill="#E01E5A"/>
       <path d="M8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312z" fill="#36C5F0"/>

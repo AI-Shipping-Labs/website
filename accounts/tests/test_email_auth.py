@@ -1229,7 +1229,7 @@ class RegisterPageTest(TestCase):
         self.assertIn("Sign up with Google", content)
         self.assertIn("Sign up with GitHub", content)
 
-    def test_register_page_contains_slack_button(self):
+    def test_register_page_omits_slack_button(self):
         app = SocialApp.objects.create(
             provider='slack',
             name='Slack',
@@ -1239,9 +1239,9 @@ class RegisterPageTest(TestCase):
         app.sites.add(Site.objects.get_current())
         resp = self.client.get("/accounts/register/")
         content = resp.content.decode()
-        self.assertIn("Sign up with Slack", content)
+        self.assertNotIn("Sign up with Slack", content)
 
-    def test_register_page_contains_slack_oauth_link(self):
+    def test_register_page_omits_slack_oauth_link(self):
         app = SocialApp.objects.create(
             provider='slack',
             name='Slack',
@@ -1251,7 +1251,7 @@ class RegisterPageTest(TestCase):
         app.sites.add(Site.objects.get_current())
         resp = self.client.get("/accounts/register/")
         content = resp.content.decode()
-        self.assertIn("/accounts/slack/login/", content)
+        self.assertNotIn("/accounts/slack/login/", content)
 
     def test_register_page_links_to_login(self):
         resp = self.client.get("/accounts/register/")

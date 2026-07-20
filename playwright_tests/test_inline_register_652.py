@@ -406,3 +406,36 @@ class TestInlineRegisterCard:
         assert (
             page.locator("[data-auth-oauth-providers]").count() == 0
         )
+
+    @pytest.mark.core
+    def test_slack_only_configuration_keeps_inline_email_signup_usable(
+        self, django_server, page, django_db_blocker
+    ):
+        with django_db_blocker.unblock():
+            _reset_state()
+            ensure_tiers()
+            _seed_free_course()
+            workshop, _ = _seed_anon_pages_workshop()
+            _configure_oauth("slack")
+
+        paths = (
+            "/pricing",
+            "/courses/inline-652-demo",
+            workshop.get_absolute_url(),
+        )
+        for path in paths:
+            page.goto(f"{django_server}{path}", wait_until="domcontentloaded")
+            card = page.locator('[data-testid="inline-register-card"]')
+            assert card.is_visible(), path
+            assert card.locator("#register-email").is_visible(), path
+            assert card.locator("[data-auth-oauth-divider]").count() == 0, path
+            assert card.locator("[data-auth-oauth-providers]").count() == 0, path
+            assert card.locator(
+                '[data-testid="inline-register-email-toggle"]'
+            ).count() == 0, path
+            assert card.locator(
+                '[data-testid="inline-register-oauth-toggle"]'
+            ).count() == 0, path
+            assert card.get_by_role(
+                "link", name="Sign up with Slack"
+            ).count() == 0, path

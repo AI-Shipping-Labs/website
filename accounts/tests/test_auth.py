@@ -283,11 +283,33 @@ class SharedAuthTemplateTest(TestCase):
 
         response = self.client.get("/accounts/register/")
 
-        self.assertContains(response, 'data-auth-oauth-divider')
-        self.assertContains(response, 'href="/accounts/slack/login/"')
-        self.assertContains(response, "Sign up with Slack")
+        self.assertNotContains(response, 'data-auth-oauth-divider')
+        self.assertNotContains(response, 'href="/accounts/slack/login/"')
+        self.assertNotContains(response, "Sign up with Slack")
         self.assertNotContains(response, "Sign up with Google")
         self.assertNotContains(response, "Sign up with GitHub")
+
+    def test_login_keeps_slack_and_preserves_safe_next(self):
+        _configure_provider('slack', 'Slack')
+
+        response = self.client.get("/accounts/login/?next=/account/")
+
+        self.assertContains(response, 'data-auth-oauth-divider')
+        self.assertContains(
+            response,
+            'href="/accounts/slack/login/?next=/account/"',
+        )
+        self.assertContains(response, "Sign in with Slack")
+
+    def test_login_slack_drops_unsafe_next(self):
+        _configure_provider('slack', 'Slack')
+
+        response = self.client.get(
+            "/accounts/login/?next=https://evil.example/account/"
+        )
+
+        self.assertContains(response, 'href="/accounts/slack/login/"')
+        self.assertNotContains(response, "evil.example")
 
 
 @tag('core')

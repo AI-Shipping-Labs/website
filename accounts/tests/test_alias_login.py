@@ -9,6 +9,8 @@ hand-built approximation.
 import json
 from unittest.mock import patch
 
+from allauth.core.exceptions import SignupClosedException
+from allauth.socialaccount.internal.flows.signup import process_signup
 from allauth.socialaccount.models import SocialAccount, SocialApp, SocialLogin
 from django.contrib.sites.models import Site
 from django.test import RequestFactory, TestCase, override_settings, tag
@@ -34,7 +36,7 @@ SECONDARY_PASSWORD = "Ssecondary456"
 def _register_social_apps():
     """Create the SocialApp rows allauth's connect() looks up, on the test site."""
     site = Site.objects.get_current()
-    for provider in ("google", "github"):
+    for provider in ("google", "github", "slack"):
         app, _created = SocialApp.objects.get_or_create(
             provider=provider,
             defaults={
@@ -277,6 +279,54 @@ class AliasOAuthAdapterTest(TestCase):
         self.assertNotEqual(sociallogin.user.pk, secondary.pk)
         self.assertFalse(
             SocialAccount.objects.filter(user_id=secondary.pk).exists()
+        )
+
+    def test_new_slack_identity_cannot_create_platform_user(self):
+        before = User.objects.count()
+        sociallogin = SocialLogin(
+            user=User(email="brand-new-slack@example.com"),
+            account=SocialAccount(provider="slack", uid="U-BRAND-NEW"),
+            email_addresses=[],
+        )
+
+        request = self._request()
+        self.assertFalse(self.adapter.is_open_for_signup(request, sociallogin))
+        with self.assertRaises(SignupClosedException):
+            process_signup(request, sociallogin)
+        self.assertEqual(User.objects.count(), before)
+
+    def test_existing_linked_slack_identity_remains_allowed(self):
+        canonical = User.objects.create_user(email="linked-slack@example.com")
+        account = SocialAccount.objects.create(
+            user=canonical,
+            provider="slack",
+            uid="U-LINKED",
+        )
+        sociallogin = SocialLogin(
+            user=canonical,
+            account=account,
+            email_addresses=[],
+        )
+
+        self.assertTrue(sociallogin.is_existing)
+        self.assertTrue(
+            self.adapter.is_open_for_signup(self._request(), sociallogin)
+        )
+
+    def test_slack_alias_resolution_remains_allowed(self):
+        canonical, _secondary = _merge_pair()
+        sociallogin = SocialLogin(
+            user=User(email=ALIAS_EMAIL),
+            account=SocialAccount(provider="slack", uid="U-ALIAS"),
+            email_addresses=[],
+        )
+
+        self.adapter.pre_social_login(self._request(), sociallogin)
+
+        self.assertEqual(sociallogin.user.pk, canonical.pk)
+        self.assertTrue(sociallogin.is_existing)
+        self.assertTrue(
+            self.adapter.is_open_for_signup(self._request(), sociallogin)
         )
 
 

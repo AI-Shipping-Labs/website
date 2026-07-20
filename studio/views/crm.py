@@ -265,6 +265,12 @@ def _record_detail_context(record, request):
         category=activity_category,
         include_category_counts=True,
     )
+    activity_filter_chips = _activity_filter_chips(request, activity_category)
+    activity_view_all_url = next(
+        chip['url']
+        for chip in activity_filter_chips
+        if chip['category'] == ACTIVITY_CATEGORY_ALL
+    )
     note_queryset = (
         InterviewNote.objects
         .filter(member=record.user)
@@ -317,8 +323,14 @@ def _record_detail_context(record, request):
         'activity_has_more': activity_context['activity_has_more'],
         'first_payment_at': activity_context['first_payment_at'],
         'active_activity_category': activity_category,
-        'activity_filter_chips': _activity_filter_chips(
-            request, activity_category,
+        'active_activity_category_label': (
+            ACTIVITY_CATEGORY_LABELS[activity_category]
+        ),
+        'activity_filter_chips': activity_filter_chips,
+        'activity_view_all_url': activity_view_all_url,
+        'activity_has_any': (
+            activity_context['activity_category_counts'][ACTIVITY_CATEGORY_ALL]
+            > 0
         ),
         'activity_category_counts': activity_context['activity_category_counts'],
         'onboarding_response': onboarding_response,

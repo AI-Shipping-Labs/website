@@ -128,14 +128,18 @@
 </section>
 
 <!-- Recent activity -->
-<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-activity-section">
+<section class="bg-card border border-border rounded-lg p-4 sm:p-6 mb-8 max-w-4xl" data-testid="crm-activity-section">
   <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
     <h2 class="text-lg font-semibold text-foreground">Recent activity</h2>
-    <div class="flex flex-wrap items-center gap-2" data-testid="crm-activity-filters">
+    <div class="flex w-full min-w-0 max-w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:flex-wrap sm:overflow-visible sm:pb-0"
+         role="group"
+         aria-label="Filter activity by category"
+         data-testid="crm-activity-filters">
       {% for chip in activity_filter_chips %}
       <a href="{{ chip.url }}"
          data-testid="crm-activity-filter-{{ chip.category }}"
-         class="px-3 py-1.5 rounded-full text-xs font-medium border {% if chip.active %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
+         {% if chip.active %}aria-current="true"{% endif %}
+         class="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-full border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:min-h-0 sm:px-3 sm:py-1.5 sm:text-xs {% if chip.active %}bg-accent text-accent-foreground border-accent{% else %}bg-secondary border-border text-muted-foreground hover:bg-secondary/80 hover:text-foreground sm:bg-transparent sm:hover:bg-transparent sm:hover:border-foreground{% endif %}">
         {{ chip.label }}
       </a>
       {% endfor %}
@@ -145,17 +149,14 @@
   {% if activities %}
   <ul class="divide-y divide-border" data-testid="crm-activity-list">
     {% for activity in activities %}
-    <li class="py-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3"
+    <li class="flex min-w-0 flex-col gap-2 py-3 sm:flex-row sm:items-start sm:gap-3"
         data-testid="crm-activity-row"
         data-category="{{ activity.category }}">
-      <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground shrink-0"
-            data-testid="crm-activity-type">
-        {{ activity.type_label }}
-      </span>
-      <div class="min-w-0 flex-1">
+      <div class="order-1 min-w-0 w-full text-sm [overflow-wrap:anywhere] sm:order-2 sm:flex-1 sm:w-auto"
+           data-testid="crm-activity-label-wrap">
         {% if activity.target_url %}
         <a href="{{ activity.target_url }}"
-           class="text-foreground hover:text-accent hover:underline"
+           class="text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
            data-testid="crm-activity-label">
           {{ activity.label }}
         </a>
@@ -163,21 +164,28 @@
         <span class="text-foreground" data-testid="crm-activity-label">{{ activity.label }}</span>
         {% endif %}
       </div>
-      <span class="inline-flex items-center text-xs px-2 py-1 rounded-full border border-border text-muted-foreground shrink-0"
-            data-testid="crm-activity-category">
-        {{ activity.category_label }}
-      </span>
-      <span class="text-xs text-muted-foreground font-mono tabular-nums shrink-0"
-            data-testid="crm-activity-time">
-        {{ activity.occurred_at|operator_datetime }}
-      </span>
+      <div class="order-2 flex min-w-0 flex-wrap items-center gap-2 sm:contents"
+           data-testid="crm-activity-metadata">
+        <span class="inline-flex w-fit max-w-full shrink-0 items-center rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground sm:order-1"
+              data-testid="crm-activity-type">
+          {{ activity.type_label }}
+        </span>
+        <span class="inline-flex w-fit max-w-full shrink-0 items-center rounded-full border border-border px-2 py-1 text-xs text-muted-foreground sm:order-3"
+              data-testid="crm-activity-category">
+          {{ activity.category_label }}
+        </span>
+        <span class="shrink-0 whitespace-nowrap font-mono text-xs tabular-nums text-muted-foreground sm:order-4"
+              data-testid="crm-activity-time">
+          {{ activity.occurred_at|operator_datetime }}
+        </span>
+      </div>
     </li>
     {% if activity.is_upgrade_marker %}
-    <li class="py-2 flex items-center gap-2 text-xs font-medium text-accent"
+    <li class="flex min-w-0 items-center gap-2 overflow-hidden py-2 text-xs font-medium text-accent"
         data-testid="crm-activity-upgrade-marker">
-      <span class="flex-1 border-t border-accent/40"></span>
+      <span class="min-w-0 flex-1 border-t border-accent/40"></span>
       <span class="shrink-0 uppercase tracking-wide">Upgraded to paid</span>
-      <span class="flex-1 border-t border-accent/40"></span>
+      <span class="min-w-0 flex-1 border-t border-accent/40"></span>
     </li>
     {% endif %}
     {% endfor %}
@@ -188,9 +196,18 @@
   </p>
   {% endif %}
   {% else %}
+  {% if activity_has_any and active_activity_category != 'all' %}
+  <div class="text-sm text-muted-foreground" data-testid="crm-activity-filter-empty">
+    <p>No {{ active_activity_category_label }} activity recorded for this member.</p>
+    <a href="{{ activity_view_all_url }}"
+       class="mt-2 inline-flex text-accent underline underline-offset-2 hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+       data-testid="crm-activity-view-all">View all activity</a>
+  </div>
+  {% else %}
   <p class="text-sm text-muted-foreground" data-testid="crm-activity-empty">
     No recorded activity yet. Activity will appear here as the member uses the site.
   </p>
+  {% endif %}
   {% endif %}
 </section>
 

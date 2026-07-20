@@ -13,6 +13,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -44,6 +45,10 @@ from crm.services.activity_context import (
     build_activity_context,
     normalize_activity_category,
 )
+from crm.services.markdown_export import (
+    markdown_filename_for_crm_record,
+    render_crm_record_markdown,
+)
 from crm.services.slack_updates import unmatched_threads
 from crm.tasks.apply_plan_sprint_progress import reverse_change, reverse_event
 from plans.models import InterviewNote, Plan
@@ -62,6 +67,25 @@ FILTER_ACTIVE = 'active'
 FILTER_ARCHIVED = 'archived'
 VALID_LIST_FILTERS = {FILTER_ALL, FILTER_ACTIVE, FILTER_ARCHIVED}
 DEFAULT_LIST_FILTER = FILTER_ACTIVE
+
+
+@staff_required
+def crm_markdown_download(request, crm_id):
+    """Download a complete staff-only CRM record archive."""
+    # Local import avoids making the ordinary CRM page depend on the API
+    # module during application import while retaining one shared #1079-based
+    # aggregate builder for both delivery surfaces.
+    from api.views.crm_export import build_single_crm_record_aggregate
+
+    record = get_object_or_404(CRMRecord, pk=crm_id)
+    aggregate = build_single_crm_record_aggregate(record, bearer=request.user)
+    filename = markdown_filename_for_crm_record(record.pk)
+    response = HttpResponse(
+        render_crm_record_markdown(aggregate),
+        content_type='text/markdown; charset=utf-8',
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 
 def _normalize_list_filter(raw):

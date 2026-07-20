@@ -44,11 +44,6 @@ class AccessibleActionClassContractTest(SimpleTestCase):
         'accounts/includes/_password_reset_request_form.html': (
             'id="password-reset-request-submit"',
         ),
-        'accounts/includes/_oauth_providers.html': (
-            'data-testid="oauth-google-action"',
-            'data-testid="oauth-github-action"',
-            'data-testid="oauth-slack-action"',
-        ),
         'content/projects_list.html': (
             'data-testid="project-difficulty-clear"',
             'data-testid="project-difficulty-{{ diff }}"',
@@ -82,8 +77,8 @@ class AccessibleActionClassContractTest(SimpleTestCase):
                         REQUIRED_CLASSES - _classes(opening_tag),
                     )
 
-    def test_all_three_enabled_oauth_variants_render_with_contract(self):
-        html = render_to_string(
+    def test_oauth_variants_render_with_contract(self):
+        signup_html = render_to_string(
             'accounts/includes/_oauth_providers.html',
             {
                 'oauth_google_enabled': True,
@@ -95,13 +90,34 @@ class AccessibleActionClassContractTest(SimpleTestCase):
             },
         )
 
-        for provider in ('google', 'github', 'slack'):
+        for provider in ('google', 'github'):
             with self.subTest(provider=provider):
                 opening_tag = _opening_tag(
-                    html, f'data-testid="oauth-{provider}-action"'
+                    signup_html, f'data-testid="oauth-{provider}-action"'
                 )
                 self.assertTrue(REQUIRED_CLASSES.issubset(_classes(opening_tag)))
                 self.assertIn('next=/projects%3Ftag%3Dpython', opening_tag)
+
+        self.assertNotIn('data-testid="oauth-slack-action"', signup_html)
+
+        login_html = render_to_string(
+            'accounts/includes/_oauth_providers.html',
+            {
+                'oauth_google_enabled': True,
+                'oauth_github_enabled': True,
+                'oauth_slack_enabled': True,
+                'oauth_action': 'Sign in',
+                'oauth_divider_text': 'continue with',
+                'next_url': '/account/',
+            },
+        )
+        for provider in ('google', 'github', 'slack'):
+            with self.subTest(login_provider=provider):
+                opening_tag = _opening_tag(
+                    login_html, f'data-testid="oauth-{provider}-action"'
+                )
+                self.assertTrue(REQUIRED_CLASSES.issubset(_classes(opening_tag)))
+                self.assertIn('next=/account/', opening_tag)
 
     def test_non_interactive_series_status_is_not_promoted_to_a_control(self):
         source = (TEMPLATES / 'events/event_series.html').read_text()

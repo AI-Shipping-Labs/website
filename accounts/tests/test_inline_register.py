@@ -64,6 +64,29 @@ class InlineRegisterPartialTest(TestCase):
         self.assertNotIn("Sign up with Slack", html)
         self.assertNotIn("or sign up with", html)
 
+    def test_partial_ignores_slack_as_a_signup_provider(self):
+        self._seed_provider("slack", "Slack")
+        html = render_to_string(self.template, {
+            "next_url": "/courses/demo",
+            "oauth_slack_enabled": True,
+            "collapse_email": True,
+        })
+
+        self.assertIn('id="register-email"', html)
+        self.assertNotIn("Sign up with Slack", html)
+        self.assertNotIn("/accounts/slack/login/", html)
+        self.assertNotIn('data-auth-oauth-divider', html)
+        self.assertNotIn('data-testid="inline-register-email-toggle"', html)
+        self.assertNotIn('data-testid="inline-register-oauth-toggle"', html)
+
+    def test_partial_keeps_account_then_slack_sequence_copy(self):
+        html = render_to_string(self.template, {"next_url": "/pricing"})
+
+        self.assertIn(
+            "Main and Premium members can join Slack after activating membership.",
+            html,
+        )
+
     def test_partial_login_link_carries_next_url(self):
         html = render_to_string(self.template, {
             "next_url": "/courses/demo-course",

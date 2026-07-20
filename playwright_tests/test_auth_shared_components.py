@@ -194,19 +194,60 @@ class TestSharedAuthJourneys:
         assert page.get_by_role("link", name="Sign in with GitHub").count() == 0
         assert page.get_by_role("link", name="Sign in with Slack").count() == 0
 
-    def test_register_shows_only_enabled_oauth_provider(
+    @pytest.mark.core
+    def test_register_excludes_slack_but_keeps_google_and_github(
+        self, django_server, page, django_db_blocker
+    ):
+        _configure_oauth(django_db_blocker, "google", "github", "slack")
+
+        page.goto(f"{django_server}/accounts/register/", wait_until="domcontentloaded")
+
+        assert page.locator("[data-auth-oauth-divider]").is_visible()
+        assert page.get_by_role("link", name="Sign up with Google").is_visible()
+        assert page.get_by_role("link", name="Sign up with GitHub").is_visible()
+        assert page.get_by_role("link", name="Sign up with Slack").count() == 0
+        assert page.locator('a[href*="/accounts/slack/login/"]').count() == 0
+
+    @pytest.mark.core
+    def test_slack_only_registration_keeps_email_expanded(
         self, django_server, page, django_db_blocker
     ):
         _configure_oauth(django_db_blocker, "slack")
 
         page.goto(f"{django_server}/accounts/register/", wait_until="domcontentloaded")
 
-        assert page.locator("[data-auth-oauth-divider]").is_visible()
-        slack = page.get_by_role("link", name="Sign up with Slack")
+        assert page.locator("#register-form").is_visible()
+        assert page.locator("#register-email").is_visible()
+        assert page.locator("[data-auth-oauth-divider]").count() == 0
+        assert page.locator("[data-auth-oauth-providers]").count() == 0
+        assert page.get_by_role("link", name="Sign up with Slack").count() == 0
+
+    @pytest.mark.core
+    def test_existing_account_slack_login_keeps_safe_next_only(
+        self, django_server, page, django_db_blocker
+    ):
+        _configure_oauth(django_db_blocker, "slack")
+
+        page.goto(
+            f"{django_server}/accounts/login/?next=/account/",
+            wait_until="domcontentloaded",
+        )
+        slack = page.get_by_role("link", name="Sign in with Slack")
         assert slack.is_visible()
-        assert slack.get_attribute("href").endswith("/accounts/slack/login/")
-        assert page.get_by_role("link", name="Sign up with Google").count() == 0
-        assert page.get_by_role("link", name="Sign up with GitHub").count() == 0
+        assert slack.get_attribute("href").endswith(
+            "/accounts/slack/login/?next=/account/"
+        )
+
+        page.goto(
+            f"{django_server}/accounts/login/?next=//evil.example/account/",
+            wait_until="domcontentloaded",
+        )
+        unsafe_slack = page.get_by_role("link", name="Sign in with Slack")
+        assert unsafe_slack.is_visible()
+        assert unsafe_slack.get_attribute("href").endswith(
+            "/accounts/slack/login/"
+        )
+        assert "evil.example" not in unsafe_slack.get_attribute("href")
 
     def test_email_only_auth_hides_oauth_on_both_pages(
         self, django_server, page, django_db_blocker

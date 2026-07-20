@@ -1,9 +1,9 @@
-"""Custom allauth social-account adapter (issue #845).
+"""Custom allauth social-account adapter (issues #845 and #1300).
 
-The only override is :meth:`SocialAccountAdapter.pre_social_login`, which routes
-a FIRST-EVER OAuth login whose verified email is an ``EmailAlias`` onto the
-canonical account instead of the deactivated secondary (or a brand-new
-duplicate).
+The adapter routes a first-ever OAuth login whose verified email is an
+``EmailAlias`` onto the canonical account, and prevents an unmatched Slack
+identity from creating a brand-new platform account. Existing linked Slack
+identities remain valid login methods.
 
 Why this is needed
 ------------------
@@ -71,3 +71,22 @@ class SocialAccountAdapter(DefaultSocialAccountAdapter):
         # allauth logs the session in as canonical -- never the dead secondary,
         # never a duplicate.
         sociallogin.connect(request, canonical)
+
+    def is_open_for_signup(self, request, sociallogin):
+        """Prevent a first-time Slack identity from creating an account.
+
+        Slack remains an authentication provider for identities already linked
+        to a platform user.  ``pre_social_login`` can also connect a first-time
+        provider identity to an existing canonical account via ``EmailAlias``;
+        both cases are existing logins by the time allauth asks whether signup
+        is open.  Only the unmatched, unsaved Slack branch would create a new
+        ``User``, so only that branch is closed.
+        """
+        provider = getattr(getattr(sociallogin, "account", None), "provider", "")
+        would_create_user = (
+            not sociallogin.is_existing
+            and not getattr(sociallogin.user, "pk", None)
+        )
+        if provider == "slack" and would_create_user:
+            return False
+        return super().is_open_for_signup(request, sociallogin)

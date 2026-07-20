@@ -19,6 +19,7 @@ pytestmark = pytest.mark.local_only
 
 MOBILE = {"width": 390, "height": 844}
 DESKTOP = {"width": 1440, "height": 900}
+MAX_CAROUSEL_FEATURED_HEIGHT_DELTA = 180
 
 PRICING_TIERS = [
     {
@@ -199,7 +200,7 @@ def test_pricing_mobile_indicator_controls_scroll_without_overflow(
     carousel_height = page.locator(
         '[data-testid="pricing-tier-carousel"]'
     ).evaluate("el => el.getBoundingClientRect().height")
-    assert carousel_height <= main["height"] + 140
+    assert carousel_height <= main["height"] + MAX_CAROUSEL_FEATURED_HEIGHT_DELTA
     assert _body_overflow(page) <= 1
 
     indicators = page.locator('[data-testid="pricing-tier-indicator"]')

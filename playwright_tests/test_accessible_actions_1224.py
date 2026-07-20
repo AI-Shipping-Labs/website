@@ -89,6 +89,8 @@ def test_auth_primary_and_oauth_actions_are_keyboard_accessible(
     _configure_oauth(django_db_blocker)
 
     page.goto(f'{django_server}/accounts/login/', wait_until='domcontentloaded')
+    slack_login = page.locator('[data-testid="oauth-slack-action"]')
+    _assert_keyboard_focus_and_height(page, slack_login)
     page.locator('#login-email').fill(email)
     page.locator('#login-password').fill(DEFAULT_PASSWORD)
     page.locator('#login-password').focus()
@@ -105,7 +107,7 @@ def test_auth_primary_and_oauth_actions_are_keyboard_accessible(
     register_submit = page.locator('#register-submit')
     oauth_actions = [
         page.locator(f'[data-testid="oauth-{provider}-action"]')
-        for provider in ('google', 'github', 'slack')
+        for provider in ('google', 'github')
     ]
     for action in (register_submit, *oauth_actions):
         _assert_keyboard_focus_and_height(page, action)
@@ -118,8 +120,7 @@ def test_auth_primary_and_oauth_actions_are_keyboard_accessible(
         '**/accounts/google/login/**',
         lambda route: route.fulfill(status=204),
     )
-    # Move backwards to Google from the final Slack action using the keyboard.
-    page.keyboard.press('Shift+Tab')
+    # Move backwards to Google from the final GitHub action using the keyboard.
     page.keyboard.press('Shift+Tab')
     assert oauth_actions[0].evaluate('el => el === document.activeElement')
     with page.expect_request('**/accounts/google/login/**') as request_info:

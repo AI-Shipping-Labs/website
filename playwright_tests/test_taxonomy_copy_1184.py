@@ -151,7 +151,7 @@ def test_desktop_visitor_taxonomy_journey(django_server, page):
     expect(
         page.get_by_role("heading", name="Past event recordings")
     ).to_be_visible()
-    expect(page.locator("main")).to_contain_text("Recordings from past events")
+    expect(page.locator("main")).to_contain_text("Catch up on live sessions you missed")
     standalone_card = page.locator('[data-testid="past-card-event-link"]')
     workshop_card = page.locator('[data-testid="past-card-workshop-link"]')
     expect(standalone_card).to_have_attribute(
@@ -180,7 +180,7 @@ def test_desktop_visitor_taxonomy_journey(django_server, page):
     page.goto(f"{django_server}/workshops", wait_until="domcontentloaded")
     expect(page.get_by_role("heading", name="Hands-on AI workshops")).to_be_visible()
     expect(page.locator("main")).to_contain_text(
-        "durable hands-on learning artifacts"
+        "Workshops start as live sessions on the events calendar"
     )
 
     page.goto(f"{django_server}/resources", wait_until="domcontentloaded")
@@ -230,7 +230,7 @@ def test_mobile_taxonomy_navigation_and_past_recordings(django_server, browser):
     expect(
         page.get_by_role("heading", name="Past event recordings")
     ).to_be_visible()
-    expect(page.locator("main")).to_contain_text("Recordings from past events")
+    expect(page.locator("main")).to_contain_text("Catch up on live sessions you missed")
 
     page.goto(f"{django_server}/resources", wait_until="domcontentloaded")
     expect(

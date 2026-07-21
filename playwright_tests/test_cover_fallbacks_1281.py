@@ -141,7 +141,7 @@ def test_pricing_sub_desktop_carousel_contract(
     assert carousel.evaluate("node => getComputedStyle(node).scrollSnapType").startswith("x")
     main = page.locator('[data-tier-card="main"]')
     assert main.evaluate("node => getComputedStyle(node).scrollSnapAlign") == "center"
-    badge = main.get_by_text("Most Popular")
+    badge = main.get_by_text("Most popular")
     expect(badge).to_be_visible()
     badge_box = badge.bounding_box()
     carousel_box = carousel.bounding_box()

@@ -96,8 +96,14 @@ class EventListRegisteredBadgeInlineTest(TierSetupMixin, TestCase):
         # Find the enclosing flex-wrap div
         flex_wrap_start = content.rfind("flex-wrap", 0, registered_pos)
         self.assertGreater(flex_wrap_start, 0)
-        # The flex-wrap should be within reasonable distance (badges row)
-        self.assertLess(registered_pos - flex_wrap_start, 600)
+        # Structural check rather than a character-distance heuristic:
+        # the badges row is rendered before the card title, so a
+        # "Registered" badge that landed in a trailing div would fall
+        # AFTER the <h3>. A raw distance threshold only measured how much
+        # markup the row happened to contain, and broke whenever a new
+        # badge (e.g. the series pill) was legitimately added to it.
+        title_pos = content.index("<h3", flex_wrap_start)
+        self.assertLess(registered_pos, title_pos)
 
 
 class EventListPastRecordingTapTargetTest(TestCase):

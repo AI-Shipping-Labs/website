@@ -6,7 +6,7 @@ Tests cover:
 - Tier comparison (4 tiers in order)
 - Monthly/annual billing toggle
 - Stripe payment link integration
-- Visual distinction of the Main ("Most Popular") tier
+- Visual distinction of the Main ("Most popular") tier
 - Cumulative feature lists
 - Rapid toggle stress test
 
@@ -331,23 +331,23 @@ class TestScenario2CompareAllFourTiers:
         assert "All mini-courses" in premium_features
         assert "Resume/LinkedIn/GitHub teardowns" in premium_features
     def test_only_main_tier_has_most_popular_badge(self, django_server, page):
-        """Verify only the Main tier card displays the Most Popular badge."""
+        """Verify only the Main tier card displays the Most popular badge."""
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
-        # The "Most Popular" text should appear exactly once on the page
-        badges = page.locator("text=Most Popular")
+        # The "Most popular" text should appear exactly once on the page
+        badges = page.locator("text=Most popular")
         assert badges.count() == 1
 
         # And it should be inside the Main tier card
         main_card = _get_tier_card_by_name(page, "Main")
-        main_badge = main_card.locator("text=Most Popular")
+        main_badge = main_card.locator("text=Most popular")
         assert main_badge.count() == 1
 
         # Verify other tiers do NOT have it
         for tier_name in ["Free", "Basic", "Premium"]:
             card = _get_tier_card_by_name(page, tier_name)
-            badge = card.locator("text=Most Popular")
+            badge = card.locator("text=Most popular")
             assert badge.count() == 0
     def test_paid_tiers_show_join_free_shows_subscribe(self, django_server, page):
         """Verify paid tiers show Join, Free shows the inline-register card.
@@ -739,18 +739,18 @@ class TestScenario8MainTierVisualDistinction:
     """
 
     def test_main_tier_has_most_popular_badge(self, django_server, page):
-        """Verify Most Popular badge appears on Main and no other card."""
+        """Verify Most popular badge appears on Main and no other card."""
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
         main_card = _get_tier_card_by_name(page, "Main")
-        badge = main_card.locator("text=Most Popular")
+        badge = main_card.locator("text=Most popular")
         assert badge.count() == 1
 
         # No other card has it
         for name in ["Free", "Basic", "Premium"]:
             card = _get_tier_card_by_name(page, name)
-            assert card.locator("text=Most Popular").count() == 0
+            assert card.locator("text=Most popular").count() == 0
     def test_main_tier_has_accent_border_and_ring(self, django_server, page):
         """Verify the Main tier card has border-accent and ring-2 ring-accent/20
         CSS classes."""

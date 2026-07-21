@@ -1,0 +1,20 @@
+{% comment %}
+Shared "or" rule between two alternative auth paths.
+
+Expected context:
+  divider_text   — optional label (default "or"). Keep it short; it sits
+                   in a gap in the border rule.
+  divider_class  — optional margin utility (default "my-6").
+
+Surfaces that render the OAuth row FIRST pass oauth_hide_divider=True to
+_oauth_providers.html and place this partial themselves, so the label
+always sits BETWEEN the two options it separates rather than above both.
+{% endcomment %}
+<div class="relative {{ divider_class|default:'my-6' }}" data-auth-oauth-divider>
+  <div class="absolute inset-0 flex items-center">
+    <div class="w-full border-t border-border"></div>
+  </div>
+  <div class="relative flex justify-center text-sm">
+    <span class="bg-card px-4 text-muted-foreground">{{ divider_text|default:'or' }}</span>
+  </div>
+</div>

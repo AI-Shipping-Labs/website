@@ -19,7 +19,7 @@
   {% include "content/reader/_floating_toggle.html" with reader_sidebar_label="workshop navigation" %}
   {% endif %}
   <div class="py-8 lg:py-12">
-    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col lg:flex-row gap-8" id="content-layout">
         {% if not is_gated %}
         {% include "content/reader/_sidebar.html" with reader_back_url=workshop.get_absolute_url reader_back_title=workshop.title reader_back_testid="sidebar-back-to-workshop" reader_sidebar_label="workshop navigation" reader_mobile_label="Workshop Navigation" reader_nav_aria_label="Workshop pages" reader_nav_testid="workshop-sidebar" reader_nav_kind="workshop" %}

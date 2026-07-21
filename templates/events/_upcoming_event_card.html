@@ -8,22 +8,6 @@ event ids the current user is registered for. Behaviour is unchanged from
 the inline card it replaced (#523 / #673 / #857 / #572).
 {% endcomment %}
 <article class="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 sm:p-5" data-testid="upcoming-event-card">
-  {% if event.event_series %}
-  {% comment %}
-  The series link lives OUTSIDE the wrapping clickable-card <a>
-  below. HTML5 forbids nested anchors — putting an <a> inside
-  another <a> causes the parser to split the outer anchor,
-  producing multiple sibling links and breaking the card's
-  click target. Same pattern as blog_list.html tag chips.
-  event.stopPropagation() is defensive in case a future
-  card-level click handler lands on the <article>.
-  {% endcomment %}
-  <p class="mb-2 text-sm" data-testid="event-card-series-link">
-    <a href="{{ event.event_series.get_absolute_url }}" class="text-accent hover:underline" onclick="event.stopPropagation();">
-      Series: {{ event.event_series.name }}
-    </a>
-  </p>
-  {% endif %}
   {# Issue #523 — keyboard-focus ring on the wrapping <a>. #}
   {# Issue #673 — single source of truth for the event URL is event.get_absolute_url. #}
   {# Issue #857 — a series occurrence routes the whole card to the #}
@@ -34,6 +18,14 @@ the inline card it replaced (#523 / #673 / #857 / #572).
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 mb-2 flex-wrap">
           {% member_access_badge event.required_level testid="event-tier-badge" %}
+          {% if event.event_series %}
+          {# Same pill as _upcoming_series_card.html so a series occurrence #}
+          {# is marked identically whether it renders grouped or standalone. #}
+          <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="series-card-badge">
+            <i data-lucide="repeat" class="h-3 w-3"></i>
+            Event series
+          </span>
+          {% endif %}
           {% if event.id in registered_event_ids %}
           {% member_status_badge "Registered" status="registered" icon="check" %}
           {% endif %}
@@ -47,6 +39,14 @@ the inline card it replaced (#523 / #673 / #857 / #572).
         <h3 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
           {{ event.title }}
         </h3>
+        {% if event.event_series %}
+        {# Plain text, not a link: the card's own anchor already routes to #}
+        {# the series page (see href above), so a nested <a> here would be #}
+        {# both invalid HTML and a duplicate of the card's click target. #}
+        <p class="mt-2 text-sm text-muted-foreground" data-testid="event-card-series-link">
+          Series: {{ event.event_series.name }}
+        </p>
+        {% endif %}
         {% if event.description_html %}
         <p class="mt-2 text-muted-foreground line-clamp-2">{{ event.description_html|striptags|truncatechars:200 }}</p>
         {% endif %}

@@ -551,6 +551,11 @@ def _build_workshops_catalog_context(
         or selected_access != CATALOG_ACCESS_ALL
         or bool(selected_skill_level)
     )
+    # Access and skill level are pill rows that already contain their own
+    # "All" option, so a separate reset control is redundant when one of
+    # them is the only thing filtering. Topic/technology/tag selections
+    # have no such affordance, so they still need the reset.
+    has_resettable_filters = bool(selected_tags) or bool(selected_tools)
     selected_topic_tags = [
         tag for tag in selected_tags
         if tag in tags_by_facet[FACET_TOPIC]
@@ -601,11 +606,29 @@ def _build_workshops_catalog_context(
         selected_tools=selected_tools,
     )
 
+    # The facet pill rows are collapsed by default (37 pills pushed the
+    # first card ~1.7 screens down on mobile), so the summary line has to
+    # carry the active-selection count — otherwise a filtered catalog
+    # looks unfiltered while the evidence is hidden inside the accordion.
+    topic_active_count = sum(1 for option in topic_options if option['is_active'])
+    technology_active_count = sum(
+        1 for option in technology_options if option['is_active']
+    )
     context = {
         'workshops': workshops,
         'all_tags': all_tags,
         'topic_options': topic_options,
         'technology_options': technology_options,
+        'topic_facet_label': (
+            f'Topics ({topic_active_count} selected)'
+            if topic_active_count else 'Topics'
+        ),
+        'technology_facet_label': (
+            f'Technologies ({technology_active_count} selected)'
+            if technology_active_count else 'Technologies'
+        ),
+        'topic_facet_open': bool(topic_active_count),
+        'technology_facet_open': bool(technology_active_count),
         'all_tools': all_tools,
         'selected_tags': selected_tags,
         'selected_tag_filters': _build_selected_tag_filters(
@@ -630,6 +653,7 @@ def _build_workshops_catalog_context(
         'skill_filter_options': skill_filter_options,
         'selected_tool_filters': selected_tool_filters,
         'has_active_filters': has_active_filters,
+        'has_resettable_filters': has_resettable_filters,
         'catalog_extra_params': catalog_extra_params,
         'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
         'base_path': base_path,
@@ -681,6 +705,9 @@ def workshops_catalog(request):
         catalog_testid='workshop-catalog',
     )
     context.update({
+        # Standalone page: the catalog heading is the page h1. The
+        # /workshops embed leaves this unset and keeps h2 under its hero.
+        'catalog_heading_tag': 'h1',
         'page_title': 'All Workshops | AI Shipping Labs',
         'page_meta_description': (
             'Browse the full AI Shipping Labs workshop catalog and archive, '

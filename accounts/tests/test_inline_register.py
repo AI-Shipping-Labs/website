@@ -79,13 +79,20 @@ class InlineRegisterPartialTest(TestCase):
         self.assertNotIn('data-testid="inline-register-email-toggle"', html)
         self.assertNotIn('data-testid="inline-register-oauth-toggle"', html)
 
-    def test_partial_keeps_account_then_slack_sequence_copy(self):
+    def test_partial_omits_paid_tier_slack_upsell(self):
+        """The Slack line was an upsell caveat for Main/Premium sitting at
+        the bottom of a FREE signup card, stacked under an unrelated
+        newsletter disclosure. It is not relevant to someone creating a
+        free account, so it must not come back here."""
         html = render_to_string(self.template, {"next_url": "/pricing"})
 
-        self.assertIn(
+        self.assertNotIn(
             "Main and Premium members can join Slack after activating membership.",
             html,
         )
+        # The newsletter opt-in disclosure (#653) DOES stay — it is the
+        # only notice that a free account subscribes you to updates.
+        self.assertIn("You can unsubscribe at any time.", html)
 
     def test_partial_login_link_carries_next_url(self):
         html = render_to_string(self.template, {
@@ -252,9 +259,12 @@ class InlineRegisterCollapseEmailVariantTest(TestCase):
     flag used by free course detail pages.
 
     When ``collapse_email=True`` and at least one OAuth provider is
-    configured, the email/password/confirm form is wrapped in a hidden
-    block and revealed by a "Sign up with your email" toggle rendered
-    below the OAuth row. When no OAuth provider is configured the form
+    configured, the card renders the OAuth row, then an "or" divider,
+    then a "Sign up with your email" LINK to /accounts/register/. The
+    email form is deliberately not rendered inline: expanding it in
+    place made the embedding page reflow awkwardly, so the email path
+    now navigates instead of disclosing (it was an inline toggle when
+    #687 first shipped). When no OAuth provider is configured the form
     renders expanded (no dead-end card with nothing to click).
 
     The flag is independent of ``compact``; surfaces opt into each
@@ -305,38 +315,37 @@ class InlineRegisterCollapseEmailVariantTest(TestCase):
             'id="inline-register-email-block"', html,
         )
 
-    def test_collapse_email_true_with_oauth_renders_toggle_and_hidden_block(self):
+    def test_collapse_email_true_with_oauth_links_out_to_register(self):
         """With ``collapse_email=True`` and one provider enabled, the
-        email form is wrapped in a hidden block with a toggle button
-        above it. The OAuth row is rendered inline (not hidden)."""
+        email path is a link to the standalone register page — not an
+        inline disclosure. The OAuth row is rendered inline (not
+        hidden)."""
         self._seed_provider("google", "Google")
         html = render_to_string(self.template, {
             "next_url": "/courses/demo",
             "oauth_google_enabled": True,
             "collapse_email": True,
         })
-        # Toggle button is present with the spec'd label.
-        self.assertIn('data-testid="inline-register-email-toggle"', html)
+        # Email CTA is present with the spec'd label.
+        self.assertIn('data-testid="inline-register-email-link"', html)
         self.assertIn("Sign up with your email", html)
-        # Email block wrapper exists with the ``hidden`` attribute on
-        # its opening tag (not inside the nested form).
-        self.assertIn('id="inline-register-email-block"', html)
-        block_segment = html.split('id="inline-register-email-block"', 1)[1]
-        opening_tag = block_segment.split('>', 1)[0]
-        self.assertIn('hidden', opening_tag)
-        # Form fields are still in the DOM (just inside the hidden block).
-        self.assertIn('id="register-email"', html)
-        self.assertIn('id="register-password"', html)
-        self.assertIn('id="register-password-confirm"', html)
+        # No inline disclosure machinery survives.
+        self.assertNotIn('data-testid="inline-register-email-toggle"', html)
+        self.assertNotIn('id="inline-register-email-block"', html)
+        # The email form is NOT inlined on this surface — navigating to
+        # /accounts/register/ is what makes the embedding page stop
+        # reflowing, so an inline form here would be the regression.
+        self.assertNotIn('id="register-email"', html)
+        self.assertNotIn('id="register-password"', html)
         # OAuth row is rendered inline (not behind a compact toggle).
         self.assertIn("Sign up with Google", html)
         self.assertNotIn(
             'data-testid="inline-register-oauth-toggle"', html,
         )
 
-    def test_collapse_email_true_oauth_renders_before_toggle(self):
-        """OAuth row must appear ABOVE the email toggle in the DOM so
-        the visitor sees the social buttons first."""
+    def test_collapse_email_true_oauth_renders_before_email_link(self):
+        """OAuth row must appear ABOVE the email link in the DOM so the
+        visitor sees the social buttons first."""
         self._seed_provider("google", "Google")
         html = render_to_string(self.template, {
             "next_url": "/courses/demo",
@@ -344,30 +353,42 @@ class InlineRegisterCollapseEmailVariantTest(TestCase):
             "collapse_email": True,
         })
         google_idx = html.index("Sign up with Google")
-        toggle_idx = html.index(
-            'data-testid="inline-register-email-toggle"',
-        )
-        self.assertLess(google_idx, toggle_idx)
+        link_idx = html.index('data-testid="inline-register-email-link"')
+        self.assertLess(google_idx, link_idx)
 
-    def test_collapse_email_toggle_aria_attributes(self):
-        """Toggle button must be a `<button type="button">` with the
-        ARIA disclosure pattern wired up (aria-expanded, aria-controls).
-        """
+    def test_collapse_email_link_targets_register_page_with_next(self):
+        """The email CTA is an anchor to the standalone register page and
+        carries ``next`` so the visitor returns to the embedding page."""
         self._seed_provider("google", "Google")
         html = render_to_string(self.template, {
             "next_url": "/courses/demo",
             "oauth_google_enabled": True,
             "collapse_email": True,
         })
-        toggle_idx = html.index('data-testid="inline-register-email-toggle"')
-        button_start = html.rfind('<button', 0, toggle_idx)
-        button_end = html.index('>', toggle_idx)
-        button_tag = html[button_start:button_end + 1]
-        self.assertIn('type="button"', button_tag)
-        self.assertIn('aria-expanded="false"', button_tag)
-        self.assertIn(
-            'aria-controls="inline-register-email-block"', button_tag,
-        )
+        link_idx = html.index('data-testid="inline-register-email-link"')
+        anchor_start = html.rfind('<a', 0, link_idx)
+        anchor_tag = html[anchor_start:html.index('>', link_idx) + 1]
+        self.assertIn('href="/accounts/register/?next=', anchor_tag)
+        self.assertIn('/courses/demo', anchor_tag)
+        # It must be a real navigation, not a disclosure control.
+        self.assertNotIn('aria-expanded', anchor_tag)
+
+    def test_collapse_email_divider_sits_between_oauth_and_email(self):
+        """Regression for the dangling divider: when the OAuth row is
+        rendered FIRST, the card must not open with "or sign up with"
+        referring to nothing above it."""
+        self._seed_provider("google", "Google")
+        html = render_to_string(self.template, {
+            "next_url": "/courses/demo",
+            "oauth_google_enabled": True,
+            "collapse_email": True,
+        })
+        self.assertNotIn("or sign up with", html)
+        google_idx = html.index("Sign up with Google")
+        divider_idx = html.index('data-auth-oauth-divider')
+        link_idx = html.index('data-testid="inline-register-email-link"')
+        self.assertLess(google_idx, divider_idx)
+        self.assertLess(divider_idx, link_idx)
 
     def test_collapse_email_true_without_oauth_renders_form_expanded(self):
         """Dead-end guard: if no OAuth provider is configured AND

@@ -212,7 +212,9 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         self.assertIn('Sign up with Google', self._section(response, 'join-free'))
         self.assertNotIn('Sign up with Google', self._section(response, 'tiers'))
-        self.assertContains(response, 'data-testid="inline-register-email-toggle"')
+        # The email path now navigates to /accounts/register/ instead of
+        # expanding an inline form, which made the page reflow.
+        self.assertContains(response, 'data-testid="inline-register-email-link"')
 
     def test_no_oauth_provider_expands_email_form(self):
         SocialApp.objects.all().delete()
@@ -231,7 +233,7 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
                 f'href="{settings.STRIPE_PAYMENT_LINKS[slug]["monthly"]}"', card
             )
             self.assertIn('data-link-annual=', card)
-        self.assertIn('Most Popular', self._card(response, 'main'))
+        self.assertIn('Most popular', self._card(response, 'main'))
 
         pricing = self.client.get('/pricing')
         self.assertContains(pricing, 'pricing-inline-register-embed')

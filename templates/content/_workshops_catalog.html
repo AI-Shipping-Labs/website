@@ -1,16 +1,29 @@
 {% load access_tags %}
+{% load accounts_extras %}
 {% load member_badges %}
 {% load member_empty_state %}
 {% load tag_filters %}
 
-<section id="{{ catalog_section_id|default:"workshop-catalog" }}" class="scroll-mt-24 py-10 sm:py-14 lg:py-16" data-testid="{{ catalog_testid|default:"workshop-catalog" }}">
+<section id="{{ catalog_section_id|default:"workshop-catalog" }}" class="scroll-mt-24 py-8 sm:py-16 lg:py-24" data-testid="{{ catalog_testid|default:"workshop-catalog" }}">
   <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
     <div class="mb-8">
       <div class="max-w-2xl">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">{{ catalog_eyebrow }}</p>
+        {% comment %}
+        /workshops/catalog is a standalone page and had no h1 at all —
+        this partial hard-coded h2 for both its consumers. The standalone
+        route passes catalog_heading_tag="h1"; the /workshops embed keeps
+        h2, since that page's hero already owns the h1.
+        {% endcomment %}
+        {% if catalog_heading_tag == "h1" %}
+        <h1 class="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+          {{ catalog_heading }}
+        </h1>
+        {% else %}
         <h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
           {{ catalog_heading }}
         </h2>
+        {% endif %}
         <p class="mt-3 max-w-2xl text-base leading-7 text-muted-foreground">
           {{ catalog_intro }}
         </p>
@@ -43,69 +56,34 @@
           {% endfor %}
         </div>
         {% endif %}
-        {% if has_published_workshops and has_active_filters %}
+        {% if has_published_workshops and has_resettable_filters %}
         <a href="{{ clear_filters_url }}" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="clear-workshop-filter">
-          View all workshops
+          Clear filters
         </a>
         {% endif %}
       </div>
       {% else %}
-      <a href="{{ catalog_all_url }}" class="mt-4 inline-flex min-h-[44px] items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="view-all-workshops-preview-cta">
+      <a href="{{ catalog_all_url }}" class="mt-4 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="view-all-workshops-preview-cta">
         View all workshops
-        <i data-lucide="arrow-right" class="ml-2 h-4 w-4"></i>
+        <i data-lucide="arrow-right" class="h-4 w-4"></i>
       </a>
       {% endif %}
     </div>
 
+    {% comment %}
+    Topics (24 pills) and Technologies (13) used to render fully
+    expanded, pushing the first card ~1428px down on a 390px screen —
+    roughly 1.7 screens of filter chrome before any content. They are
+    collapsed into the shared native details/summary accordion, and
+    auto-open when that facet has an active selection so a filtered
+    catalog never hides why it is filtered.
+    {% endcomment %}
     {% if show_catalog_filters and topic_options %}
-    <div class="mb-6 rounded-lg border border-border bg-secondary/20 px-4 py-4 sm:px-5" data-testid="workshop-facet-topic">
-      <div class="mb-3 flex flex-col gap-1">
-        <h3 class="text-sm font-semibold text-foreground">Topics</h3>
-        {% if selected_topic_summary %}
-        <p class="text-sm text-muted-foreground" data-testid="workshop-topic-summary">{{ selected_topic_summary }}</p>
-        {% endif %}
-      </div>
-      <div class="flex flex-wrap gap-2" aria-label="Workshop topic filters">
-        {% for topic in topic_options %}
-        <a
-          href="{{ topic.url }}"
-          class="inline-flex min-h-[44px] max-w-full items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if topic.is_active %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
-          data-testid="workshop-topic-option-{{ topic.slug }}"
-          data-facet="topic"
-          data-topic="{{ topic.slug }}"
-          {% if topic.is_active %}aria-current="page" aria-label="Remove {{ topic.label }} topic filter"{% else %}aria-label="Browse {{ topic.label }} workshops"{% endif %}
-        >
-          {{ topic.label }}
-          {% if topic.is_active %}
-          <i data-lucide="x" class="ml-1.5 h-3.5 w-3.5"></i>
-          {% endif %}
-        </a>
-        {% endfor %}
-      </div>
-    </div>
+    {% include "includes/_accordion.html" with summary=topic_facet_label body_template="content/_workshop_topic_facet_body.html" testid="workshop-facet-topic" open=topic_facet_open details_extra_class="mb-6" %}
     {% endif %}
 
     {% if show_catalog_filters and technology_options %}
-    <div class="mb-6 rounded-lg border border-border bg-secondary/20 px-4 py-4 sm:px-5" data-testid="workshop-facet-technology">
-      <h3 class="mb-3 text-sm font-semibold text-foreground">Technologies</h3>
-      <div class="flex flex-wrap gap-2" aria-label="Workshop technology filters">
-        {% for technology in technology_options %}
-        <a
-          href="{{ technology.url }}"
-          class="inline-flex min-h-[44px] max-w-full items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if technology.is_active %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
-          data-testid="workshop-technology-option-{{ technology.slug }}"
-          data-facet="technology"
-          {% if technology.source == "tool" %}data-tool="{{ technology.label }}"{% else %}data-topic="{{ technology.slug }}"{% endif %}
-          {% if technology.is_active %}aria-current="page" aria-label="Remove {{ technology.label }} technology filter"{% else %}aria-label="Filter by {{ technology.label }}"{% endif %}
-        >
-          {{ technology.label }}
-          {% if technology.is_active %}
-          <i data-lucide="x" class="ml-1.5 h-3.5 w-3.5"></i>
-          {% endif %}
-        </a>
-        {% endfor %}
-      </div>
-    </div>
+    {% include "includes/_accordion.html" with summary=technology_facet_label body_template="content/_workshop_technology_facet_body.html" testid="workshop-facet-technology" open=technology_facet_open details_extra_class="mb-6" %}
     {% endif %}
 
     {% if show_catalog_filters and has_published_workshops and has_active_filters %}
@@ -159,8 +137,10 @@
           {% include "content/_content_preview.html" with preview_cover_url=workshop.card_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label=workshop.pages_required_level|required_tier_label preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|member_short_date preview_tags=workshop.tags preview_image_loading="lazy" %}
           {% endif %}
           <div class="min-w-0 p-4 sm:p-5">
+            {# No "Workshop" type badge here: this partial only ever renders #}
+            {# on workshop-only surfaces (/workshops and /workshops/catalog), #}
+            {# so labelling every card "Workshop" restated the page it was on. #}
             <div class="mb-3 flex flex-wrap items-center gap-2" data-testid="workshop-card-primary-signals">
-              {% member_label_badge "Workshop" tone="muted" icon="graduation-cap" testid="workshop-card-type" %}
               {% if workshop.pages_required_level >= 10 %}
               {% member_access_badge workshop.pages_required_level testid="workshop-tier-badge" %}
               {% else %}
@@ -179,13 +159,11 @@
               {% if workshop_primary_instructor %}
               <span class="flex min-w-0 max-w-full items-center gap-1.5" data-testid="workshop-card-instructor">
                 <i data-lucide="user" class="h-3.5 w-3.5 flex-shrink-0"></i>
-                <span class="shrink-0 font-medium text-foreground/80">Instructor</span>
                 <span class="truncate">{{ workshop_primary_instructor.name }}</span>
               </span>
               {% endif %}
               <span class="flex items-center gap-1.5" data-testid="workshop-card-date">
                 <i data-lucide="calendar" class="h-3.5 w-3.5 flex-shrink-0"></i>
-                <span class="font-medium text-foreground/80">Date</span>
                 <time datetime="{{ workshop.date|form_date_value }}">{{ workshop.date|member_short_date }}</time>
               </span>
             </div>
@@ -194,43 +172,43 @@
             {% endif %}
             {% if workshop.core_tools %}
             <div class="mt-4 border-t border-border/60 pt-3" data-testid="workshop-card-tools" aria-label="Tools used in {{ workshop.title }}">
-              <p class="mb-2 text-[11px] font-semibold uppercase text-muted-foreground">Tools</p>
+              <p class="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Tools</p>
               <div class="flex flex-wrap gap-1.5">
                 {% for tool in workshop.core_tools|slice:":4" %}
-                <span class="inline-flex min-h-[30px] max-w-full items-center truncate rounded-full border border-border bg-background px-2.5 py-0.5 text-xs text-muted-foreground">
+                <span class="inline-flex max-w-full items-center truncate rounded-full border border-border bg-background px-2.5 py-0.5 text-xs text-muted-foreground">
                   {{ tool }}
                 </span>
                 {% endfor %}
                 {% if workshop.core_tools|length > 4 %}
-                <span class="inline-flex min-h-[30px] items-center rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ workshop.core_tools|length|add:'-4' }} more tools and technologies">+{{ workshop.core_tools|length|add:"-4" }}</span>
+                <span class="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ workshop.core_tools|length|add:'-4' }} more tools and technologies">+{{ workshop.core_tools|length|add:"-4" }}</span>
                 {% endif %}
               </div>
             </div>
             {% endif %}
             {% if workshop.card_has_deliverables %}
             <div class="mt-4 border-t border-border/60 pt-3" data-testid="workshop-card-deliverables">
-              <p class="mb-2 text-[11px] font-semibold uppercase text-muted-foreground">Includes</p>
+              <p class="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Includes</p>
               <div class="flex flex-wrap gap-1.5">
                 {% if workshop.card_has_tutorial_pages %}
-                <span class="inline-flex min-h-[32px] max-w-full items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground" data-testid="workshop-card-deliverable-pages">
+                <span class="inline-flex max-w-full items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" data-testid="workshop-card-deliverable-pages">
                   <i data-lucide="file-text" class="h-3 w-3 flex-shrink-0"></i>
                   <span class="truncate">Tutorial pages</span>
                 </span>
                 {% endif %}
                 {% if workshop.card_has_recording %}
-                <span class="inline-flex min-h-[32px] max-w-full items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground" data-testid="workshop-card-deliverable-recording">
+                <span class="inline-flex max-w-full items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" data-testid="workshop-card-deliverable-recording">
                   <i data-lucide="play-circle" class="h-3 w-3 flex-shrink-0"></i>
                   <span class="truncate">Recording</span>
                 </span>
                 {% endif %}
                 {% if workshop.card_has_code %}
-                <span class="inline-flex min-h-[32px] max-w-full items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground" data-testid="workshop-card-deliverable-code">
+                <span class="inline-flex max-w-full items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" data-testid="workshop-card-deliverable-code">
                   <i data-lucide="code-2" class="h-3 w-3 flex-shrink-0"></i>
                   <span class="truncate">Code</span>
                 </span>
                 {% endif %}
                 {% if workshop.card_has_materials %}
-                <span class="inline-flex min-h-[32px] max-w-full items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground" data-testid="workshop-card-deliverable-materials">
+                <span class="inline-flex max-w-full items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" data-testid="workshop-card-deliverable-materials">
                   <i data-lucide="paperclip" class="h-3 w-3 flex-shrink-0"></i>
                   <span class="truncate">Materials</span>
                 </span>
@@ -242,12 +220,12 @@
         </a>
         {% if workshop.tags %}
         <div class="border-t border-border/60 px-4 py-4 sm:px-5" data-testid="workshop-card-topics">
-          <p class="mb-2 text-[11px] font-semibold uppercase text-muted-foreground">Topics</p>
+          <p class="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Topics</p>
           <div class="flex flex-wrap gap-1.5" data-testid="workshop-card-tags">
             {% for tag in workshop.tags|slice:":3" %}
             <a
               href="{% tag_add_url base_path selected_tags tag catalog_extra_params %}"
-              class="inline-flex min-h-[32px] max-w-full items-center truncate rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              class="inline-flex max-w-full items-center truncate rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-secondary/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               data-testid="workshop-card-topic"
               aria-label="Browse {{ tag }} workshops"
               onclick="event.stopPropagation();"
@@ -256,7 +234,7 @@
             </a>
             {% endfor %}
             {% if workshop.tags|length > 3 %}
-            <span class="inline-flex min-h-[36px] items-center rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground" aria-label="{{ workshop.tags|length|add:'-3' }} more workshop tags">+{{ workshop.tags|length|add:"-3" }}</span>
+            <span class="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ workshop.tags|length|add:'-3' }} more workshop tags">+{{ workshop.tags|length|add:"-3" }}</span>
             {% endif %}
           </div>
         </div>
@@ -269,7 +247,11 @@
     {% if not has_published_workshops %}
     {% member_empty_state title='No workshops published yet' body='Check back soon.' icon='graduation-cap' kind='fresh' testid='workshops-empty-state' %}
     {% elif show_catalog_filters and has_active_filters %}
-    {% member_empty_state title='No workshops found' body='No workshops match the selected filters.' icon='graduation-cap' kind='filter' primary_cta_label='View all workshops' primary_cta_url=clear_filters_url testid='workshops-empty-state' %}
+    {# member_empty_state does not style its CTA — the contract is to #}
+    {# compute classes with button_classes and pass them in, otherwise #}
+    {# the CTA renders as a bare accent link. #}
+    {% button_classes 'secondary' as clear_filters_cta_class %}
+    {% member_empty_state title='No workshops found' body='No workshops match the selected filters.' icon='graduation-cap' kind='filter' primary_cta_label='View all workshops' primary_cta_url=clear_filters_url primary_cta_class=clear_filters_cta_class testid='workshops-empty-state' %}
     {% else %}
     {% member_empty_state title='No workshops published yet' body='Check back soon.' icon='graduation-cap' kind='fresh' testid='workshops-empty-state' %}
     {% endif %}

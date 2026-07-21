@@ -121,16 +121,16 @@ HOME_ACTIVITIES = [
         'icon': 'library',
         'title': 'Group learning',
         'description': (
-            'Turn solo research into shared leverage by publishing findings '
-            'in a format other builders can reuse.'
+            'Write up what you learn so other members can build on it, '
+            'instead of everyone solving the same problem alone.'
         ),
     },
     {
         'icon': 'code-2',
         'title': 'Building sessions',
         'description': (
-            'Join live 1.5–2 hour working sessions once or twice a month on '
-            'topics requested by members—not passive webinars.'
+            'Join live 1.5-2 hour working sessions on topics requested '
+            'by members.'
         ),
     },
     {
@@ -194,10 +194,10 @@ SECTION_NAV = [
     {'id': 'about', 'label': 'Philosophy'},
     {'id': 'activities', 'label': 'Activities'},
     {'id': 'sprint-story', 'label': 'Sprints'},
-    {'id': 'upcoming-events', 'label': 'Live Events'},
+    {'id': 'upcoming-events', 'label': 'Live events'},
     {'id': 'testimonials', 'label': 'Testimonials'},
     {'id': 'tiers', 'label': 'Membership'},
-    {'id': 'join-free', 'label': 'Start Free'},
+    {'id': 'join-free', 'label': 'Start free'},
     {'id': 'blog', 'label': 'Blog'},
     {'id': 'workshops', 'label': 'Workshops'},
     {'id': 'newsletter', 'label': 'Newsletter'},

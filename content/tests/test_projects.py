@@ -11,6 +11,7 @@ Covers:
 """
 
 import json
+import re
 from datetime import date
 
 from django.contrib.auth import get_user_model
@@ -402,12 +403,24 @@ class ProjectsListDisplayTest(TestCase):
         response = self.client.get('/projects')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="project-card-tags"', count=2)
-        self.assertContains(response, 'agents')
-        self.assertContains(response, 'rag')
-        self.assertContains(response, 'python')
-        self.assertContains(response, '+2')
-        self.assertNotContains(response, 'evaluation')
-        self.assertNotContains(response, 'deployment')
+        # Scope the cap assertions to the card tag rows: the page-level
+        # topic filter legitimately renders every tag, so a full-body
+        # assertNotContains would be wrong. The card row itself must show
+        # only the first three tags plus the +N overflow chip.
+        card_tag_rows = re.findall(
+            r'<div[^>]*data-testid="project-card-tags"[^>]*>(.*?)</div>',
+            response.content.decode(),
+            re.S,
+        )
+        self.assertEqual(len(card_tag_rows), 2)
+        many_tags_row = next(
+            row for row in card_tag_rows if '>agents</a>' in row
+        )
+        for visible_tag in ('agents', 'rag', 'python'):
+            self.assertIn(f'>{visible_tag}</a>', many_tags_row)
+        self.assertIn('+2', many_tags_row)
+        self.assertNotIn('evaluation', many_tags_row)
+        self.assertNotIn('deployment', many_tags_row)
 
     def test_official_badge_only_for_first_party_project_authors(self):
         Project.objects.create(

@@ -44,6 +44,40 @@
       </div>
       {% endif %}
 
+      {% if all_tags %}
+      <div class="mb-8" data-testid="project-tag-filter">
+        <p class="mb-2 text-sm font-medium text-muted-foreground">Filter by topic</p>
+        <div class="flex flex-wrap gap-2" aria-label="Filter projects by topic">
+          <a href="/projects{% if current_difficulty %}?difficulty={{ current_difficulty|urlencode }}{% endif %}"
+             class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if not selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
+             data-testid="project-tag-all"
+             {% if not selected_tags %}aria-current="page"{% endif %}>All</a>
+          {% for tag in all_tags|slice:":12" %}
+          <a href="{% tag_add_url base_path selected_tags tag %}{% if current_difficulty %}&amp;difficulty={{ current_difficulty|urlencode }}{% endif %}"
+             class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if tag in selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
+             data-testid="project-tag-{{ tag }}"
+             {% if tag in selected_tags %}aria-current="page"{% endif %}>{{ tag }}</a>
+          {% endfor %}
+        </div>
+        {% if all_tags|length > 12 %}
+        <details class="mt-2" {% if selected_tags %}open{% endif %} data-testid="project-tag-more">
+          <summary class="inline-flex min-h-[44px] cursor-pointer list-none items-center justify-center rounded-full bg-secondary px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 [&::-webkit-details-marker]:hidden"
+                   data-testid="project-tag-more-toggle">
+            More topics (+{{ all_tags|length|add:"-12" }})
+          </summary>
+          <div class="mt-2 flex flex-wrap gap-2">
+            {% for tag in all_tags|slice:"12:" %}
+            <a href="{% tag_add_url base_path selected_tags tag %}{% if current_difficulty %}&amp;difficulty={{ current_difficulty|urlencode }}{% endif %}"
+               class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if tag in selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
+               data-testid="project-tag-{{ tag }}"
+               {% if tag in selected_tags %}aria-current="page"{% endif %}>{{ tag }}</a>
+            {% endfor %}
+          </div>
+        </details>
+        {% endif %}
+      </div>
+      {% endif %}
+
       {% if projects %}
       <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {% for project in projects %}

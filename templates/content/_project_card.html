@@ -1,12 +1,21 @@
 {% load member_badges %}
 {% load teaser_tags %}
+{% load tag_filters %}
 {% comment %}
-Shared public project card for the homepage and /projects listing.
-The homepage may pass project_card_surface_class="bg-background" and a
+Shared public project card for the /projects listing and any future
+surface. Callers may pass project_card_surface_class="bg-background" and a
 page-specific test id; the entity hierarchy stays the same.
+
+Structure follows the downloads_list.html card shape: one anchor wraps the
+preview and body (the whole card body navigates to the project detail),
+and the tag row sits after that anchor inside the <article> so each chip
+can link to the tag-filtered listing — nested anchors are invalid HTML.
+Chip URLs honour base_path, selected_tags, and current_difficulty when the
+including page provides them, and fall back to /projects otherwise.
 {% endcomment %}
-<article class="group h-full overflow-hidden rounded-lg border border-border {% if project_card_surface_class %}{{ project_card_surface_class }}{% else %}bg-card{% endif %} transition-colors hover:border-accent/50" data-testid="{% if project_card_testid %}{{ project_card_testid }}{% else %}project-card{% endif %}">
-  <a href="{{ project.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %} flex h-full flex-col">
+{% firstof base_path "/projects" as project_tag_base %}
+<article class="group flex h-full flex-col overflow-hidden rounded-lg border border-border {% if project_card_surface_class %}{{ project_card_surface_class }}{% else %}bg-card{% endif %} transition-colors hover:border-accent/50" data-testid="{% if project_card_testid %}{{ project_card_testid }}{% else %}project-card{% endif %}">
+  <a href="{{ project.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %} flex flex-1 flex-col">
     {% include "content/_content_preview.html" with preview_cover_url=project.display_image_url preview_title=project.title preview_label="Project" preview_icon="rocket" preview_testid="project-card-preview" preview_image_loading="lazy" preview_decorative_fallback=True %}
     <div class="flex min-w-0 flex-1 flex-col p-4 sm:p-5">
       <div class="mb-3 flex items-start justify-between gap-3">
@@ -50,16 +59,18 @@ page-specific test id; the entity hierarchy stays the same.
         {% endif %}
       </div>
       {% endif %}
-      {% if project.tags %}
-      <div class="mt-4 flex flex-wrap gap-1.5" data-testid="project-card-tags">
-        {% for tag in project.tags|slice:":3" %}
-        <span class="max-w-full truncate rounded-full bg-secondary px-2 py-0.5 text-xs text-foreground/80">{{ tag }}</span>
-        {% endfor %}
-        {% if project.tags|length > 3 %}
-        <span class="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground">+{{ project.tags|length|add:"-3" }}</span>
-        {% endif %}
-      </div>
-      {% endif %}
     </div>
   </a>
+  {% if project.tags %}
+  <div class="flex flex-wrap gap-1.5 px-4 pb-4 sm:px-5 sm:pb-5" data-testid="project-card-tags">
+    {% for tag in project.tags|slice:":3" %}
+    <a href="{% tag_add_url project_tag_base selected_tags tag %}{% if current_difficulty %}&amp;difficulty={{ current_difficulty|urlencode }}{% endif %}"
+       class="inline-flex max-w-full items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+       data-testid="project-card-tag-link">{{ tag }}</a>
+    {% endfor %}
+    {% if project.tags|length > 3 %}
+    <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ project.tags|length|add:'-3' }} more project tags">+{{ project.tags|length|add:"-3" }}</span>
+    {% endif %}
+  </div>
+  {% endif %}
 </article>

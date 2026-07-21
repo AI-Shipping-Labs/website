@@ -179,7 +179,10 @@ class PublicTaxonomyCopy1184Test(TierSetupMixin, TestCase):
         calendar_response = self.client.get('/events/calendar')
 
         self.assertContains(events_response, 'Live community events')
-        self.assertContains(events_response, 'scheduled live sessions')
+        self.assertContains(
+            events_response,
+            'live workshops, group coding sessions, and community calls',
+        )
         self.assertContains(events_response, 'Past event recordings')
         self.assertContains(
             events_response,
@@ -199,7 +202,9 @@ class PublicTaxonomyCopy1184Test(TierSetupMixin, TestCase):
         response = self.client.get('/events?filter=past')
 
         self.assertContains(response, 'Past event recordings')
-        self.assertContains(response, 'Recordings from past events')
+        self.assertContains(response, 'Catch up on live sessions you missed')
+        self.assertNotContains(response, 'legacy discovery')
+        self.assertNotContains(response, 'canonical learning artifact')
         self.assertContains(response, self.standalone_recording.title)
         self.assertContains(response, self.standalone_recording.get_absolute_url())
         self.assertContains(response, self.workshop.title)
@@ -215,9 +220,13 @@ class PublicTaxonomyCopy1184Test(TierSetupMixin, TestCase):
         self.assertContains(workshops_response, 'Hands-on AI workshops')
         self.assertContains(
             workshops_response,
-            'durable hands-on learning artifacts',
+            'Workshops start as live sessions on the events calendar',
         )
-        self.assertContains(workshops_response, 'writeup, recording, materials')
+        self.assertContains(
+            workshops_response,
+            'the recording, tutorial pages, and materials move here',
+        )
+        self.assertNotContains(workshops_response, 'durable hands-on learning artifact')
 
         self.assertContains(resources_response, 'Curated links for AI builders')
         self.assertContains(

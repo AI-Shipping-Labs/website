@@ -254,7 +254,7 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Hands-on AI workshops')
         self.assertContains(response, 'Practical AI engineering sessions')
         self.assertContains(response, 'step-by-step writeups or tutorial pages')
-        self.assertContains(response, 'recording, materials, and project notes')
+        self.assertContains(response, 'the recording, tutorial pages, and materials move here')
         self.assertContains(response, 'Guided build flow')
         self.assertContains(response, 'Replay and writeups')
         self.assertContains(response, 'Project outcomes')

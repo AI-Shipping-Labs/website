@@ -350,9 +350,12 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertIn('data-testid="workshop-card-title"', card)
         self.assertIn('Visible Workshop', card)
         self.assertIn('data-testid="workshop-card-metadata"', card)
-        self.assertIn('Instructor', card)
+        # The meta row is icon + value; the literal field-name words
+        # "Instructor" and "Date" were removed. Assert the values and
+        # their identifying testids instead.
+        self.assertIn('data-testid="workshop-card-instructor"', card)
         self.assertIn('Alice', card)
-        self.assertIn('Date', card)
+        self.assertIn('data-testid="workshop-card-date"', card)
         self.assertIn('Apr 21, 2026', card)
         self.assertIn('data-testid="workshop-card-description"', card)
         self.assertIn('Description text.', card)

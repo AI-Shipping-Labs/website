@@ -3,7 +3,7 @@
 {% block title %}Create account | {{ site_name }}{% endblock %}
 
 {% block body %}
-  {% include "accounts/includes/_auth_card.html" with auth_title="Create account" auth_subtitle="Use email, Google, or GitHub. Main and Premium members can join Slack after activating membership." form_template="accounts/includes/_register_form.html" oauth_action="Sign up" oauth_divider_text="sign up with" legal_action="creating an account" %}
+  {% include "accounts/includes/_auth_card.html" with auth_title="Create account" auth_subtitle="Use email, Google, or GitHub." form_template="accounts/includes/_register_form.html" oauth_action="Sign up" email_divider_text="or sign up with email" legal_action="creating an account" %}
 {% endblock %}
 
 {% block extra_scripts %}

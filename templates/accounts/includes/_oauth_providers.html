@@ -1,5 +1,14 @@
 {% load accounts_extras %}
 {% if oauth_google_enabled or oauth_github_enabled or oauth_slack_enabled and oauth_action != "Sign up" %}
+{% comment %}
+The "or ..." divider only reads correctly when something is rendered
+ABOVE this partial for it to be an alternative to (the email form on
+/accounts/register/, /accounts/login/, and the gated-access card).
+Surfaces that render the OAuth row FIRST pass oauth_hide_divider=True
+and supply their own divider in the right place — otherwise the page
+opens with a dangling "or" that refers to nothing.
+{% endcomment %}
+{% if not oauth_hide_divider %}
 <div class="relative my-6" data-auth-oauth-divider>
   <div class="absolute inset-0 flex items-center">
     <div class="w-full border-t border-border"></div>
@@ -8,6 +17,7 @@
     <span class="bg-card px-4 text-muted-foreground">or {{ oauth_divider_text }}</span>
   </div>
 </div>
+{% endif %}
 
 <div class="space-y-4" data-auth-oauth-providers>
   {% if oauth_google_enabled %}

@@ -117,8 +117,12 @@ class PricingInlineRegisterCollapsedEmailTest(TestCase):
         return body[free_start:end]
 
     def test_anonymous_pricing_uses_collapsed_email_variant(self):
-        """The free-tier card on /pricing renders OAuth first and keeps
-        the email form hidden until the visitor expands it."""
+        """The free-tier card on /pricing renders OAuth first, then links
+        out to the register page for the email path.
+
+        The email form is deliberately NOT inlined here: expanding it in
+        place made the pricing page reflow awkwardly, so the email CTA
+        navigates to /accounts/register/ instead."""
         app = SocialApp.objects.create(
             provider='google', name='Google',
             client_id='google-cid', secret='google-secret',
@@ -130,20 +134,16 @@ class PricingInlineRegisterCollapsedEmailTest(TestCase):
         free_card = self._free_card_html(response)
         self.assertIn("Sign up with Google", free_card)
         self.assertIn(
-            'data-testid="inline-register-email-toggle"', free_card,
+            'data-testid="inline-register-email-link"', free_card,
         )
         self.assertIn("Sign up with your email", free_card)
         self.assertNotIn(
             'data-testid="inline-register-oauth-toggle"', free_card,
         )
-        # Email wrapper is hidden by default.
-        self.assertIn('id="inline-register-email-block"', free_card)
-        block_segment = free_card.split(
-            'id="inline-register-email-block"', 1,
-        )[1]
-        opening_tag = block_segment.split('>', 1)[0]
-        self.assertIn('hidden', opening_tag)
-        self.assertIn('id="register-email"', free_card)
+        # No inline disclosure machinery, and no inline email form —
+        # an inline form here would be the regression.
+        self.assertNotIn('id="inline-register-email-block"', free_card)
+        self.assertNotIn('id="register-email"', free_card)
 
     def test_anonymous_pricing_collapsed_email_with_no_oauth_expands_form(self):
         """No SocialApp configured → no dead-end disclosure on /pricing.
@@ -165,7 +165,7 @@ class PricingInlineRegisterCollapsedEmailTest(TestCase):
             'data-testid="inline-register-oauth-disclosure"', free_card,
         )
         self.assertNotIn(
-            'data-testid="inline-register-email-toggle"', free_card,
+            'data-testid="inline-register-email-link"', free_card,
         )
         self.assertNotIn(
             'id="inline-register-email-block"', free_card,

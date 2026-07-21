@@ -122,9 +122,21 @@ Standard horizontal frame:
 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8
 mx-auto max-w-5xl px-4 sm:px-6 lg:px-8
 mx-auto max-w-3xl px-4 sm:px-6 lg:px-8
+mx-auto max-w-2xl px-4 sm:px-6 lg:px-8
 ```
 
-Use `max-w-7xl` for marketing and listing pages, `max-w-5xl` for detail pages with richer layout, and `max-w-3xl` for reader or long-form prose pages. Studio pages use their own admin layout.
+Four tiers, chosen by content shape rather than per-page taste. These are the only sanctioned outer page widths; Studio pages use their own admin layout.
+
+| Tier | Class | Use for |
+|---|---|---|
+| Frame | `max-w-7xl` | Index, grid, and listing pages; marketing pages; the member dashboard; sidebar-plus-content layouts. Matches the header and footer chrome. |
+| Detail | `max-w-5xl` | Detail pages with mixed layout: media embed plus metadata plus cards or CTAs (event, course, workshop, sprint, plan, poll detail; account; notifications). |
+| Reader | `max-w-3xl` | Long-form `.prose` bodies and multi-step single-column forms. 48rem keeps the measure near the 65-75ch readable band while leaving code blocks usable width. |
+| Narrow | `max-w-2xl` | Terminal status and confirmation interstitials, and single-purpose forms (subscribe, join-state, cancel registration, verify/unsubscribe result, peer review). |
+
+The outer frame always sets the tier; narrower inner columns (a `max-w-3xl` intro inside a 7xl index, a `max-w-md` auth card) are normal and live inside it. An index page must never be narrower than the chrome above it: content that is inset from the header reads as a layout bug.
+
+Enforced by `content/tests/test_container_widths.py`. Rationale, the full route table, and the 2026-07-21 remediation are in [`width-audit.md`](width-audit.md).
 
 Common vertical rhythm:
 

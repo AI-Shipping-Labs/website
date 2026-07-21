@@ -29,10 +29,10 @@
     <div id="checkout-success-banner" class="mb-6 hidden rounded-xl border border-green-500/30 bg-green-500/10 p-4" role="alert">
       <div class="flex items-center justify-between gap-4">
         <div class="flex min-w-0 items-center gap-3">
-          <i data-lucide="check-circle" class="h-5 w-5 shrink-0 text-green-400"></i>
-          <p class="text-sm font-medium text-green-300">Payment successful! Welcome to AI Shipping Labs.</p>
+          <i data-lucide="check-circle" class="h-5 w-5 shrink-0 text-green-700 dark:text-green-400"></i>
+          <p class="text-sm font-medium text-green-800 dark:text-green-300">Payment successful! Welcome to AI Shipping Labs.</p>
         </div>
-        <button type="button" id="dismiss-success-banner" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-green-400 transition-colors hover:bg-green-500/10 hover:text-green-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background" aria-label="Dismiss">
+        <button type="button" id="dismiss-success-banner" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-green-700 transition-colors hover:bg-green-500/10 hover:text-green-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:text-green-400 dark:hover:text-green-300" aria-label="Dismiss">
           <i data-lucide="x" class="h-4 w-4"></i>
         </button>
       </div>
@@ -45,9 +45,11 @@
         </h1>
       </div>
       <div class="flex items-center">
-        <span class="inline-flex min-h-[44px] items-center rounded-full border border-accent/40 bg-accent/10 px-4 text-sm font-medium text-accent" data-testid="dashboard-tier-pill">
-          {% if dashboard_tier_is_override %}{{ dashboard_tier_label }} trial{% else %}{{ dashboard_tier_label }}{% endif %}
-        </span>
+        {% if dashboard_tier_is_override %}
+        {% member_label_badge dashboard_tier_label|add:" trial" tone="accent_outline_strong" size="md" testid="dashboard-tier-pill" %}
+        {% else %}
+        {% member_label_badge dashboard_tier_label tone="accent_outline_strong" size="md" testid="dashboard-tier-pill" %}
+        {% endif %}
       </div>
     </header>
 
@@ -59,8 +61,8 @@
     <!-- Free activation checklist (issue #1161). -->
     <section class="mb-8" data-testid="free-activation-checklist">
       <div class="mb-4">
-          <p class="text-sm font-medium uppercase tracking-wide text-accent">Getting started</p>
-          <h2 class="mt-1 text-2xl font-semibold tracking-tight text-foreground">Start building with your Free account</h2>
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">Getting started</p>
+          <h2 class="mt-1 text-xl font-semibold tracking-tight text-foreground">Start building with your Free account</h2>
         <p class="mt-2 max-w-xl text-sm text-muted-foreground">Start with open courses and live events, then learn how sprints and plans work.</p>
       </div>
       <div class="grid gap-3 md:grid-cols-3">
@@ -69,7 +71,7 @@
                  data-testid="free-activation-item-{{ item.key }}"
                  data-complete="{{ item.completed|yesno:'true,false' }}">
           <div class="flex items-start gap-3">
-            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {% if item.completed %}bg-emerald-500/15 text-emerald-300{% else %}bg-secondary text-accent{% endif %}">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {% if item.completed %}bg-emerald-500/15 text-emerald-800 dark:text-emerald-300{% else %}bg-secondary text-accent{% endif %}">
               <i data-lucide="{% if item.completed %}check-circle{% else %}{{ item.icon }}{% endif %}" class="h-5 w-5"></i>
             </span>
             <div class="min-w-0">
@@ -80,7 +82,7 @@
           <div class="mt-auto pt-4">
             {% if item.completed %}
             <div class="flex items-center justify-between gap-3">
-              <span class="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-300"
+              <span class="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-800 dark:text-emerald-300"
                     data-testid="free-activation-complete-{{ item.key }}">
                 <i data-lucide="check" class="h-3.5 w-3.5"></i>
                 Done
@@ -443,8 +445,14 @@
         {% endif %}
 
         {% if active_sprint_opportunities or not plan %}
-        <!-- Active Sprints -->
-        <section>
+        {% comment %}
+          Issue #1310: this section is the tallest child of the guidance grid.
+          When it lands in an odd position as the last child it would otherwise
+          sit alone in its row and leave half the page blank at lg+, so it
+          spans both columns in exactly that case. When it is an even last
+          child it already shares a row with a sibling and stays half-width.
+        {% endcomment %}
+        <section class="lg:odd:last:col-span-2">
           <div class="mb-4">
             <h2 class="flex min-w-0 items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
               <i data-lucide="users" class="h-5 w-5 shrink-0 text-accent"></i>
@@ -453,7 +461,13 @@
             <a href="{{ active_sprint_discovery_url }}" class="inline-flex min-h-[44px] items-center rounded-md px-2 text-sm text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Activities</a>
           </div>
           {% if active_sprint_opportunities %}
-          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-1" data-testid="dashboard-active-sprints">
+          {% comment %}
+            Issue #1310: the card track sizes off the section's own width, so
+            the cards stay stacked while the section is half-width and go
+            two-up once it spans the full guidance grid. Column-count utility
+            classes cannot express that because they key off the viewport.
+          {% endcomment %}
+          <div class="grid gap-3 grid-cols-[repeat(auto-fit,minmax(min(100%,17rem),1fr))]" data-testid="dashboard-active-sprints">
             {% for item in active_sprint_opportunities %}
             <a href="{{ item.url }}" class="block min-h-[112px] rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-active-sprint">
               <div class="flex h-full flex-col gap-3">
@@ -464,9 +478,7 @@
                       {% sprint_date_range item.sprint compact=True %}
                     </p>
                   </div>
-                  <span class="inline-flex min-h-[28px] shrink-0 items-center rounded-full bg-secondary px-2 text-xs font-medium text-accent" data-testid="dashboard-active-sprint-tier">
-                    {% if item.is_free_open %}Free/open{% else %}{{ item.required_tier_label }}{% endif %}
-                  </span>
+                  {% if item.is_free_open %}{% member_label_badge "Free/open" testid="dashboard-active-sprint-tier" %}{% else %}{% member_label_badge item.required_tier_label testid="dashboard-active-sprint-tier" %}{% endif %}
                 </div>
                 <div class="mt-auto flex items-center justify-between gap-3">
                   <p class="text-xs text-muted-foreground">
@@ -482,13 +494,8 @@
             {% endfor %}
           </div>
           {% else %}
-          <div class="rounded-lg border border-border bg-card p-5">
-            <p class="text-sm text-muted-foreground">No active sprint openings for your tier right now.</p>
-            <a href="{{ active_sprint_discovery_url }}" class="mt-3 inline-flex min-h-[44px] items-center gap-2 rounded-md px-2 text-sm font-medium text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-              Browse activities
-              <i data-lucide="arrow-right" class="h-4 w-4"></i>
-            </a>
-          </div>
+          {% button_classes 'secondary' as secondary_cta_classes %}
+          {% member_empty_state title='No active sprint openings for your tier right now' body='New sprints open regularly. Browse activities to see what is coming up.' icon='users' kind='fresh' primary_cta_label='Browse activities' primary_cta_url=active_sprint_discovery_url primary_cta_icon='arrow-right' primary_cta_class=secondary_cta_classes %}
           {% endif %}
         </section>
         {% endif %}
@@ -551,11 +558,8 @@
             {% endfor %}
           </div>
           {% else %}
-          <div class="rounded-lg border border-border bg-card p-6 text-center">
-            <i data-lucide="bar-chart-3" class="mx-auto h-8 w-8 text-muted-foreground"></i>
-            <p class="mt-2 text-sm text-muted-foreground">No active polls right now</p>
-            <a href="/vote" class="mt-3 inline-flex min-h-[44px] items-center rounded-md px-2 text-sm font-medium text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">View past polls</a>
-          </div>
+          {% button_classes 'secondary' as secondary_cta_classes %}
+          {% member_empty_state title='No active polls right now' body='Community polls appear here while they are open for voting.' icon='bar-chart-3' kind='fresh' primary_cta_label='View past polls' primary_cta_url='/vote' primary_cta_icon='arrow-right' primary_cta_class=secondary_cta_classes %}
           {% endif %}
         </section>
       </div>

@@ -17,6 +17,25 @@ Read this page before acting on any finding in the reports below.
 
 Nothing in these reports is implemented. They are proposals.
 
+## The screenshots were taken against a stale server
+
+Discovered after the audits completed, 2026-07-21.
+
+Port 8766 was held by a `runserver --noreload` process started at 18:17:26 and left over from an earlier session. A second `runserver` aimed at 8766 fails to bind and exits, but a health check against the port still returns 200 — from the old process. `scripts/capture_screenshots.py` is designed to detect and reuse a server already on 8766, so every agent reused the stale one.
+
+Because the process ran with `--noreload`, its templates were frozen at 18:17:26. The screenshots therefore do not include:
+
+- the container width and gutter fixes (committed 18:55 onward), so `/sprints` renders at its old `max-w-5xl` in every capture
+- the concurrent session's commits from the same window: `bc413d15` unifying series and solo event cards, `1532547b` normalising arrow icons, `39405dba` dropping the duplicate About menu entry
+
+Consequences:
+
+- Any finding about event card alignment on `/events` is suspect. The workshops/events audit reported single and series cards misaligning, and independently noticed that the on-disk templates disagreed with the rendered page. That discrepancy was the stale server, and `bc413d15` may already have fixed the underlying issue. Re-verify before acting.
+- Any finding about gutters or the `/sprints` container width describes the pre-fix state.
+- The courses/sprints/activities audit is the exception: it detected the staleness, applied the new class to the live DOM through Playwright, and captured both versions. Its `/sprints` conclusions are sound.
+
+The server was restarted at 19:20 and now serves current templates. Before any future audit run, verify freshness rather than trusting a 200: check the listening process start time (`ps -eo pid,lstart,cmd | grep runserver`) against the last template edit, or curl a string you know you just changed.
+
 ## The local dev database is not representative of production
 
 Screenshots were taken against a local environment whose content differs from production in three ways that directly affect visual findings. Verified 2026-07-21.

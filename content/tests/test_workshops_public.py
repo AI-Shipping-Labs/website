@@ -337,8 +337,9 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         card = _workshop_card_html(response, 'one')
 
         self.assertIn('data-testid="workshop-card-primary-signals"', card)
-        self.assertIn('data-testid="workshop-card-type"', card)
-        self.assertIn('Workshop', card)
+        # No "Workshop" type badge: the partial only renders on
+        # workshop-only surfaces, so the badge restated the page.
+        self.assertNotIn('data-testid="workshop-card-type"', card)
         self.assertNotIn('data-testid="workshop-card-access"', card)
         self.assertNotIn('>Access<', card)
         self.assertIn('data-testid="workshop-tier-badge"', card)

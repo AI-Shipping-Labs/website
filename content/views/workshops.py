@@ -551,6 +551,11 @@ def _build_workshops_catalog_context(
         or selected_access != CATALOG_ACCESS_ALL
         or bool(selected_skill_level)
     )
+    # Access and skill level are pill rows that already contain their own
+    # "All" option, so a separate reset control is redundant when one of
+    # them is the only thing filtering. Topic/technology/tag selections
+    # have no such affordance, so they still need the reset.
+    has_resettable_filters = bool(selected_tags) or bool(selected_tools)
     selected_topic_tags = [
         tag for tag in selected_tags
         if tag in tags_by_facet[FACET_TOPIC]
@@ -630,6 +635,7 @@ def _build_workshops_catalog_context(
         'skill_filter_options': skill_filter_options,
         'selected_tool_filters': selected_tool_filters,
         'has_active_filters': has_active_filters,
+        'has_resettable_filters': has_resettable_filters,
         'catalog_extra_params': catalog_extra_params,
         'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
         'base_path': base_path,

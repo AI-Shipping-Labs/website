@@ -43,9 +43,9 @@
           {% endfor %}
         </div>
         {% endif %}
-        {% if has_published_workshops and has_active_filters %}
+        {% if has_published_workshops and has_resettable_filters %}
         <a href="{{ clear_filters_url }}" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="clear-workshop-filter">
-          View all workshops
+          Clear filters
         </a>
         {% endif %}
       </div>
@@ -159,8 +159,10 @@
           {% include "content/_content_preview.html" with preview_cover_url=workshop.card_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label=workshop.pages_required_level|required_tier_label preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|member_short_date preview_tags=workshop.tags preview_image_loading="lazy" %}
           {% endif %}
           <div class="min-w-0 p-4 sm:p-5">
+            {# No "Workshop" type badge here: this partial only ever renders #}
+            {# on workshop-only surfaces (/workshops and /workshops/catalog), #}
+            {# so labelling every card "Workshop" restated the page it was on. #}
             <div class="mb-3 flex flex-wrap items-center gap-2" data-testid="workshop-card-primary-signals">
-              {% member_label_badge "Workshop" tone="muted" icon="graduation-cap" testid="workshop-card-type" %}
               {% if workshop.pages_required_level >= 10 %}
               {% member_access_badge workshop.pages_required_level testid="workshop-tier-badge" %}
               {% else %}

@@ -2,7 +2,7 @@
 name: software-engineer
 description: Implements a GitHub issue assigned by the orchestrator. Writes code and tests. Does NOT commit until tester passes.
 tools: Read, Edit, Write, Bash, Glob, Grep
-model: opus-4.8
+model: opus
 ---
 
 # Software Engineer Agent

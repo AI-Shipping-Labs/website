@@ -2,7 +2,7 @@
 name: designer
 description: Audits public UI surfaces against the design system and produces screenshot-backed findings and recommended class diffs. Does NOT implement, commit, or push code.
 tools: Read, Bash, Glob, Grep
-model: opus-4.8
+model: fable
 ---
 
 # Designer Agent

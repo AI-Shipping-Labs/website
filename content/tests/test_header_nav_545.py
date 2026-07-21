@@ -19,8 +19,7 @@ User = get_user_model()
 
 
 ABOUT_LINKS = [
-    ('About', '/about'),
-    ('Team', '/about#team'),
+    ('Team', '/about'),
     ('FAQ', '/faq'),
 ]
 
@@ -115,7 +114,10 @@ class HeaderTextNavigationIssue580Test(TestCase):
         about_link_ids = re.findall(r'data-testid="(nav-about-link-[^"]+)"', about_panel)
         self.assertEqual(
             about_link_ids,
-            ['nav-about-link-about', 'nav-about-link-team', 'nav-about-link-faq'],
+            # "About" was dropped from the menu: it pointed at /about and
+            # "Team" points at /about#team, so the two entries were the
+            # same destination. Team wins because it is the specific one.
+            ['nav-about-link-team', 'nav-about-link-faq'],
         )
         for label, href in ABOUT_LINKS:
             self.assertIn(f'href="{href}"', about_panel)

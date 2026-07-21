@@ -671,8 +671,13 @@ class ResourcesSectionOrderIssue524Test(TestCase):
         self.assertNotIn(f'<h2 {h2_class}>Models</h2>', content)
 
 
-class ResourcesLegacyCategoriesIgnoredIssue1015Test(TestCase):
-    """Legacy `tools` and `models` rows no longer render on /resources."""
+class ResourcesToolsModelsVisibleTest(TestCase):
+    """`tools` and `models` links render under their own sections.
+
+    Regression test for the ddd61abd defect where the display-order list
+    doubled as a `category__in` visibility filter and silently hid every
+    published `tools` and `models` link (22 of 41 links disappeared).
+    """
 
     def setUp(self):
         self.client = Client()
@@ -692,24 +697,83 @@ class ResourcesLegacyCategoriesIgnoredIssue1015Test(TestCase):
             sort_order=3, published=True,
         )
 
-    def test_other_section_contains_only_canonical_other_links(self):
-        response = self.client.get('/resources')
-        grouped = response.context['grouped_categories']
-        other_section = next(g for g in grouped if g['key'] == 'other')
-        titles = [a['link'].title for a in other_section['links']]
-        self.assertNotIn('ripgrep', titles)
-        self.assertNotIn('Llama 3', titles)
-        self.assertIn('Common Crawl', titles)
-
-    def test_only_other_section_present(self):
+    def test_tools_and_models_sections_present(self):
         response = self.client.get('/resources')
         keys = [g['key'] for g in response.context['grouped_categories']]
-        self.assertEqual(keys, ['other'])
+        self.assertEqual(keys, ['tools', 'models', 'other'])
 
-    def test_legacy_links_not_rendered(self):
+    def test_tools_and_models_links_rendered(self):
         response = self.client.get('/resources')
-        self.assertNotContains(response, 'ripgrep')
-        self.assertNotContains(response, 'Llama 3')
+        self.assertContains(response, 'ripgrep')
+        self.assertContains(response, 'Llama 3')
+        self.assertContains(response, 'Common Crawl')
+
+    def test_tools_and_models_headings_rendered(self):
+        response = self.client.get('/resources')
+        content = response.content.decode()
+        h2_class = 'class="text-xl font-semibold text-foreground"'
+        self.assertIn(f'<h2 {h2_class}>Tools</h2>', content)
+        self.assertIn(f'<h2 {h2_class}>Models</h2>', content)
+
+    def test_tools_and_models_section_icons(self):
+        response = self.client.get('/resources')
+        grouped = {
+            g['key']: g for g in response.context['grouped_categories']
+        }
+        self.assertEqual(grouped['tools']['icon'], 'wrench')
+        self.assertEqual(grouped['models']['icon'], 'cpu')
+
+
+class ResourcesEveryCategoryVisibleTest(TestCase):
+    """Every category defined on the model renders when it has links.
+
+    Structural guard: iterates `CuratedLink.CATEGORY_CHOICES` instead of a
+    hardcoded category list, so adding a new category to the model without
+    surfacing it on /resources fails this test. Prevents the ordering list
+    from ever becoming a visibility filter again.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        for key, _label in CuratedLink.CATEGORY_CHOICES:
+            CuratedLink.objects.create(
+                item_id=f'vis-{key}', title=f'Visible {key} link',
+                url=f'https://example.com/{key}', category=key,
+                sort_order=1, published=True,
+            )
+
+    def test_every_model_category_with_links_is_reachable(self):
+        response = self.client.get('/resources')
+        rendered_keys = {
+            g['key'] for g in response.context['grouped_categories']
+        }
+        for key, _label in CuratedLink.CATEGORY_CHOICES:
+            with self.subTest(category=key):
+                self.assertIn(key, rendered_keys)
+                self.assertContains(response, f'Visible {key} link')
+
+    def test_display_order_is_canonical(self):
+        response = self.client.get('/resources')
+        keys = [g['key'] for g in response.context['grouped_categories']]
+        self.assertEqual(
+            keys,
+            ['workshops', 'courses', 'articles', 'tools', 'models', 'other'],
+        )
+
+    def test_category_missing_from_display_order_still_renders(self):
+        """A category value outside the view's display order is appended,
+        not dropped — the property that prevents the ddd61abd recurrence."""
+        CuratedLink.objects.create(
+            item_id='vis-stray', title='Stray category link',
+            url='https://example.com/stray', category='datasets',
+            sort_order=1, published=True,
+        )
+        response = self.client.get('/resources')
+        keys = [g['key'] for g in response.context['grouped_categories']]
+        self.assertIn('datasets', keys)
+        # Appended after every known category, in a defined position.
+        self.assertEqual(keys[-1], 'datasets')
+        self.assertContains(response, 'Stray category link')
 
 
 class ResourcesEmptySectionsHiddenIssue524Test(TestCase):
@@ -755,7 +819,16 @@ class ResourcesHeadingCopyIssue524Test(TestCase):
         response = self.client.get('/resources')
         self.assertContains(response, 'workshops')
         self.assertContains(response, 'articles')
-        self.assertContains(response, 'community activity or recording')
+
+    def test_intro_has_no_internal_ia_note(self):
+        """The subhead is visitor copy; the internal maintainer note about
+        what the page must not become never ships again."""
+        response = self.client.get('/resources')
+        self.assertNotContains(
+            response,
+            'without treating this page as the home',
+        )
+        self.assertNotContains(response, 'community activity or recording')
 
 
 class ResourcesWorkshopBadgeIconIssue524Test(TestCase):
@@ -787,3 +860,104 @@ class ResourcesWorkshopBadgeIconIssue524Test(TestCase):
         ar_section = next(g for g in grouped if g['key'] == 'articles')
         self.assertEqual(ar_section['icon'], 'file-text')
         self.assertEqual(ar_section['label'], 'Articles')
+
+
+# --- Tag filter UI ---
+
+
+class ResourcesTagFilterControlTest(TestCase):
+    """The tag filter pill row renders and drives ?tag= filtering.
+
+    Regression test for the defect where the view computed `all_tags` /
+    `selected_tags` but the template rendered no filter control at all.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        CuratedLink.objects.create(
+            item_id='ui-py', title='Python Workshop',
+            url='https://example.com/python',
+            category='workshops', tags=['python'],
+            published=True,
+        )
+        CuratedLink.objects.create(
+            item_id='ui-go', title='Go Toolkit',
+            url='https://example.com/go',
+            category='tools', tags=['go'],
+            published=True,
+        )
+
+    def test_filter_control_renders_with_tag_pills(self):
+        response = self.client.get('/resources')
+        filter_row = self._filter_row(response)
+        self.assertIn('href="/resources?tag=python"', filter_row)
+        self.assertIn('href="/resources?tag=go"', filter_row)
+
+    def _filter_row(self, response):
+        """Return the filter-row markup, scoped so header/nav links to
+        /resources cannot satisfy the assertions."""
+        content = response.content.decode()
+        marker = 'data-testid="resources-tag-filter"'
+        self.assertIn(marker, content)
+        start = content.index(marker)
+        return content[start:content.index('</div>', start)]
+
+    def test_filter_control_has_clear_option(self):
+        """The All pill clears the active filter."""
+        response = self.client.get('/resources?tag=python')
+        self.assertIn('href="/resources"', self._filter_row(response))
+
+    def test_active_pill_marked_current(self):
+        response = self.client.get('/resources?tag=python')
+        self.assertIn('aria-current="page"', self._filter_row(response))
+
+    def test_filter_narrows_result_set(self):
+        response = self.client.get('/resources?tag=go')
+        self.assertContains(response, 'Go Toolkit')
+        self.assertNotContains(response, 'Python Workshop')
+
+    def test_card_tag_chips_link_to_filtered_view(self):
+        response = self.client.get('/resources')
+        content = response.content.decode()
+        # The chip inside the card links to the filtered view rather than
+        # rendering as an inert span. Scope the assertion to the card tags
+        # container so a match in the top filter row cannot mask a broken chip.
+        marker = 'data-testid="curated-link-card-tags"'
+        self.assertIn(marker, content)
+        chunk = content[content.index(marker):content.index(marker) + 1000]
+        self.assertIn('href="/resources?tag=', chunk)
+
+    def test_no_filter_control_without_tags(self):
+        CuratedLink.objects.all().update(tags=[])
+        response = self.client.get('/resources')
+        self.assertNotContains(
+            response, 'data-testid="resources-tag-filter"',
+        )
+
+
+# --- Gated CTA label ---
+
+
+class ResourcesGatedCtaLabelTest(TierSetupMixin, TestCase):
+    """The gated-card CTA reads `View membership tiers`, never `View Plans`.
+
+    `Plan` is reserved for member sprint plans in the product glossary; the
+    button links to /pricing, which sells membership tiers.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        CuratedLink.objects.create(
+            item_id='cta-gated', title='Gated CTA Link',
+            url='https://example.com/gated-cta',
+            category='workshops', published=True,
+            required_level=LEVEL_BASIC,
+        )
+
+    def test_cta_says_view_membership_tiers(self):
+        response = self.client.get('/resources')
+        self.assertContains(response, 'View membership tiers')
+
+    def test_cta_never_says_view_plans(self):
+        response = self.client.get('/resources')
+        self.assertNotContains(response, 'View Plans')

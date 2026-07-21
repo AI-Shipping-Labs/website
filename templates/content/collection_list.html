@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load accounts_extras %}
 {% load member_empty_state %}
 {% load tag_filters %}
 {% load teaser_tags %}
@@ -21,9 +22,18 @@
           Curated links for AI builders
         </h1>
         <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
-          External links and references selected for builders shipping AI projects. Browse workshops, courses, articles, and focused references without treating this page as the home for every community activity or recording.
+          Hand-picked external workshops, courses, articles, and tools for builders shipping AI projects. Browse by category or filter by topic to find what you need.
         </p>
       </div>
+
+      {% if all_tags %}
+      <div class="mb-8 flex flex-wrap gap-2" aria-label="Filter curated links by topic" data-testid="resources-tag-filter">
+        <a href="/resources" class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if not selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}" {% if not selected_tags %}aria-current="page"{% endif %}>All</a>
+        {% for tag in all_tags %}
+        <a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if tag in selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}" {% if tag in selected_tags %}aria-current="page"{% endif %}>{{ tag }}</a>
+        {% endfor %}
+      </div>
+      {% endif %}
 
       <!-- Links grouped by category -->
       {% if grouped_categories %}
@@ -41,11 +51,13 @@
           <div class="grid items-start gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {% for item in category.links %}
             {% if item.has_access %}
-            {# Accessible link: opens in new tab #}
-            {# Issue #523 — keyboard-focus ring on the curated-link card wrapper. #}
-            <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer"
-               class="{% include 'content/_clickable_card_classes.html' %} self-start overflow-hidden rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 sm:p-5">
-              <div>
+            {# Accessible link: opens in new tab. Tag chips live outside the #}
+            {# card anchor (nested anchors are invalid HTML) and link to the #}
+            {# tag-filtered view — same structure as the downloads catalog. #}
+            {# Issue #523 — keyboard-focus ring on the curated-link card anchor. #}
+            <article class="group self-start overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50">
+              <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer"
+                 class="{% include 'content/_clickable_card_classes.html' %} p-4 sm:p-5">
                 <div class="flex items-start gap-3">
                   <h3 class="min-w-0 flex-1 text-lg font-semibold text-foreground transition-colors group-hover:text-accent">
                     {{ item.link.title }}
@@ -55,21 +67,21 @@
                 {% if item.link.description %}
                 <p class="mt-2 line-clamp-3 text-sm text-muted-foreground">{{ item.link.description|strip_markdown }}</p>
                 {% endif %}
-                {% if item.link.tags %}
-                <div class="mt-3 flex flex-wrap gap-1.5">
-                  {% for tag in item.link.tags|slice:":3" %}
-                  <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">{{ tag }}</span>
-                  {% endfor %}
-                  {% if item.link.tags|length > 3 %}
-                  <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ item.link.tags|length|add:'-3' }} more resource tags">+{{ item.link.tags|length|add:"-3" }}</span>
-                  {% endif %}
-                </div>
-                {% endif %}
                 {% if item.link.source %}
                 <p class="mt-3 text-xs text-muted-foreground">{{ item.link.source }}</p>
                 {% endif %}
+              </a>
+              {% if item.link.tags %}
+              <div class="flex flex-wrap gap-1.5 px-4 pb-4 sm:px-5 sm:pb-5" data-testid="curated-link-card-tags">
+                {% for tag in item.link.tags|slice:":3" %}
+                <a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ tag }}</a>
+                {% endfor %}
+                {% if item.link.tags|length > 3 %}
+                <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ item.link.tags|length|add:'-3' }} more resource tags">+{{ item.link.tags|length|add:"-3" }}</span>
+                {% endif %}
               </div>
-            </a>
+              {% endif %}
+            </article>
             {% else %}
             {# Gated link: no URL exposed, shows lock icon and CTA #}
             <div class="gated-link group self-start overflow-hidden rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:p-5"
@@ -90,9 +102,11 @@
                 <p class="mt-2 line-clamp-3 text-sm text-muted-foreground">{{ item.link.description|strip_markdown }}</p>
                 {% endif %}
                 {% if item.link.tags %}
-                <div class="mt-3 flex flex-wrap gap-1.5">
+                {# Chips stop propagation so following a tag link does not #}
+                {# also toggle the surrounding gated-card disclosure. #}
+                <div class="mt-3 flex flex-wrap gap-1.5" data-testid="curated-link-card-tags">
                   {% for tag in item.link.tags|slice:":3" %}
-                  <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">{{ tag }}</span>
+                  <a href="{% tag_add_url base_path selected_tags tag %}" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ tag }}</a>
                   {% endfor %}
                   {% if item.link.tags|length > 3 %}
                   <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ item.link.tags|length|add:'-3' }} more resource tags">+{{ item.link.tags|length|add:"-3" }}</span>
@@ -105,8 +119,8 @@
               </div>
               <div class="gated-cta mt-4 hidden rounded-lg border border-accent/30 bg-accent/5 p-3 sm:p-4 text-center overflow-hidden">
                 <p class="text-sm font-medium text-foreground break-words">{{ item.cta_message }}</p>
-                <a href="/pricing" class="mt-2 inline-flex min-h-[44px] items-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80">
-                  View Plans
+                <a href="/pricing" class="{% button_classes 'secondary' extra='mt-2' %}">
+                  View membership tiers
                   <i data-lucide="arrow-right" class="h-4 w-4"></i>
                 </a>
               </div>

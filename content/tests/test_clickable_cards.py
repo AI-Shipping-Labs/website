@@ -321,11 +321,18 @@ class CatalogTagDensityTest(TestCase):
         )
         response = self.client.get('/resources')
         body = response.content.decode()
-        resource_card = body.split('Many Resource Tags', 1)[1].split('</a>', 1)[0]
-        self.assertIn('one', resource_card)
-        self.assertIn('three', resource_card)
-        self.assertIn('+1', resource_card)
-        self.assertNotIn('four', resource_card)
+        # Chips render in a dedicated container below the card anchor (the
+        # tag-filter defect fix made them clickable links), so scope to the
+        # card's tags block rather than the card anchor.
+        tags_block = (
+            body.split('Many Resource Tags', 1)[1]
+            .split('data-testid="curated-link-card-tags"', 1)[1]
+            .split('</div>', 1)[0]
+        )
+        self.assertIn('one', tags_block)
+        self.assertIn('three', tags_block)
+        self.assertIn('+1', tags_block)
+        self.assertNotIn('four', tags_block)
 
     def test_past_event_recording_tags_are_capped_and_not_nested(self):
         Event.objects.create(

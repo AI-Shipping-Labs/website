@@ -1,4 +1,5 @@
 {% load access_tags %}
+{% load accounts_extras %}
 {% load member_badges %}
 {% load member_empty_state %}
 {% load tag_filters %}
@@ -8,9 +9,21 @@
     <div class="mb-8">
       <div class="max-w-2xl">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">{{ catalog_eyebrow }}</p>
+        {% comment %}
+        /workshops/catalog is a standalone page and had no h1 at all —
+        this partial hard-coded h2 for both its consumers. The standalone
+        route passes catalog_heading_tag="h1"; the /workshops embed keeps
+        h2, since that page's hero already owns the h1.
+        {% endcomment %}
+        {% if catalog_heading_tag == "h1" %}
+        <h1 class="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+          {{ catalog_heading }}
+        </h1>
+        {% else %}
         <h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
           {{ catalog_heading }}
         </h2>
+        {% endif %}
         <p class="mt-3 max-w-2xl text-base leading-7 text-muted-foreground">
           {{ catalog_intro }}
         </p>
@@ -236,7 +249,11 @@
     {% if not has_published_workshops %}
     {% member_empty_state title='No workshops published yet' body='Check back soon.' icon='graduation-cap' kind='fresh' testid='workshops-empty-state' %}
     {% elif show_catalog_filters and has_active_filters %}
-    {% member_empty_state title='No workshops found' body='No workshops match the selected filters.' icon='graduation-cap' kind='filter' primary_cta_label='View all workshops' primary_cta_url=clear_filters_url testid='workshops-empty-state' %}
+    {# member_empty_state does not style its CTA — the contract is to #}
+    {# compute classes with button_classes and pass them in, otherwise #}
+    {# the CTA renders as a bare accent link. #}
+    {% button_classes 'secondary' as clear_filters_cta_class %}
+    {% member_empty_state title='No workshops found' body='No workshops match the selected filters.' icon='graduation-cap' kind='filter' primary_cta_label='View all workshops' primary_cta_url=clear_filters_url primary_cta_class=clear_filters_cta_class testid='workshops-empty-state' %}
     {% else %}
     {% member_empty_state title='No workshops published yet' body='Check back soon.' icon='graduation-cap' kind='fresh' testid='workshops-empty-state' %}
     {% endif %}

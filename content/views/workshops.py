@@ -705,6 +705,9 @@ def workshops_catalog(request):
         catalog_testid='workshop-catalog',
     )
     context.update({
+        # Standalone page: the catalog heading is the page h1. The
+        # /workshops embed leaves this unset and keeps h2 under its hero.
+        'catalog_heading_tag': 'h1',
         'page_title': 'All Workshops | AI Shipping Labs',
         'page_meta_description': (
             'Browse the full AI Shipping Labs workshop catalog and archive, '

@@ -84,6 +84,12 @@ class HomepageMobileLayoutTest(TestCase):
         grid_match = re.search(r'class="[^"]*lg:grid-cols-3[^"]*"', content[tiers_pos:])
         self.assertIsNotNone(grid_match, "Pricing grid with lg:grid-cols-3 not found")
 
+    def test_free_tier_is_not_in_membership_carousel(self):
+        """The separate Join free section is the homepage's only free CTA."""
+        content = self._get_homepage_content()
+        self.assertNotIn('data-tier-card="free"', content)
+        self.assertIn('id="join-free"', content)
+
     def test_highlighted_card_scale_only_on_large_screens(self):
         """The highlighted pricing card should only scale on lg+ screens (lg:scale-105)."""
         content = self._get_homepage_content()

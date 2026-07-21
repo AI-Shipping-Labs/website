@@ -30,20 +30,25 @@ HOME_DISCOVERY = {
         '/activities#access-by-tier',
         'Compare activities by tier',
     ),
+    # Sprint story is an explainer section (3 steps + one featured card),
+    # not a collection of content cards, so its CTA is a discovery link
+    # like activities — not a header/action-row button like
+    # events/blog/workshops.
     'home-sprints-index-link': (
-        'Plan -&gt; Sprint -&gt; Ship',
+        'Plan &rarr; Sprint &rarr; Ship',
         '/sprints',
         'Explore sprints',
     ),
 }
 
-HOME_UNTESTED_DISCOVERY = (
-    ('Publish and share our thinking', '/blog', 'View all posts'),
-)
-
 HOME_COLLECTION_ACTIONS = (
     ('home-upcoming-events-link', '/events?filter=upcoming'),
     ('home-workshops-link', '/workshops'),
+    # Blog shows post cards and links to the full list, so it is a
+    # collection section like events/workshops — not a narrative
+    # discovery link. It rendered as a bare accent link until this was
+    # aligned; see the header/action-row rule in _docs/design-system.md.
+    ('home-blog-link', '/blog'),
 )
 
 
@@ -83,13 +88,6 @@ class PublicStackedHeaderStaticTest(TestCase):
                     r'aria-hidden="true"',
                 )
 
-        for heading, href, label in HOME_UNTESTED_DISCOVERY:
-            with self.subTest(href=href):
-                anchor = _opening_anchor(source, href=href)
-                self.assertIn(f'class="{DISCOVERY_CLASSES}"', anchor)
-                self.assertLess(source.index(heading), source.index(anchor))
-                self.assertIn(label, source[source.index(anchor):source.index(anchor) + 500])
-
         for testid, href in HOME_COLLECTION_ACTIONS:
             with self.subTest(testid=testid):
                 anchor = _opening_anchor(source, testid=testid)
@@ -97,7 +95,7 @@ class PublicStackedHeaderStaticTest(TestCase):
                 self.assertIn('button_classes', anchor)
                 self.assertIn("extra='shrink-0'", anchor)
 
-        self.assertGreaterEqual(source.count('sm:items-end sm:justify-between'), 2)
+        self.assertGreaterEqual(source.count('sm:items-end sm:justify-between'), 3)
 
     def test_activities_two_headers_share_discovery_treatment(self):
         source = _source(ACTIVITIES)

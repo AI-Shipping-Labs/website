@@ -88,9 +88,9 @@
         </p>
       </div>
 
-      <div class="mx-auto mt-10 grid max-w-5xl gap-6 sm:mt-16 sm:grid-cols-2 sm:gap-8">
+      <div class="mx-auto mt-10 grid max-w-5xl gap-6 sm:mt-16 sm:grid-cols-2">
         {% for feature in features %}
-        <div class="group rounded-lg border border-border bg-card p-8 transition-colors hover:border-accent/50">
+        <div class="group rounded-xl border border-border bg-card p-6 transition-colors hover:border-accent/50">
           <div class="mb-4 inline-flex rounded-lg bg-secondary p-3">
             <i data-lucide="{{ feature.icon }}" class="h-6 w-6 text-accent"></i>
           </div>
@@ -142,17 +142,12 @@
   <section id="sprint-story" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28" data-testid="home-sprint-story-section">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="max-w-3xl">
-          <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
-            <i data-lucide="route" class="h-4 w-4"></i>
-            Main-tier workflow
-          </p>
-          <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
-            Plan -&gt; Sprint -&gt; Ship
-          </h2>
-          <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
-            Community sprints turn good intentions into shipping windows. Members set a concrete goal,
-            work inside a shared sprint cadence, and leave with a project milestone they can show.
-          </p>
+        <h2 class="text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          Plan &rarr; Sprint &rarr; Ship
+        </h2>
+        <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
+          Community sprints turn good intentions into shipping windows.
+        </p>
         <a href="/sprints" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="home-sprints-index-link">
           Explore sprints
           <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
@@ -160,23 +155,23 @@
       </div>
 
       <div class="mt-10">
-        <div class="grid gap-4 sm:grid-cols-3" data-testid="home-sprint-story-steps">
+        <div class="grid gap-6 sm:grid-cols-3" data-testid="home-sprint-story-steps">
           <article class="rounded-xl border border-border bg-card p-6">
-            <div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-foreground">1</div>
+            <div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-sm font-semibold text-accent">1</div>
             <h3 class="text-lg font-semibold text-foreground">Plan</h3>
             <p class="mt-2 text-sm leading-6 text-muted-foreground">
               Pick one project outcome that matters enough to finish inside a defined window.
             </p>
           </article>
           <article class="rounded-xl border border-border bg-card p-6">
-            <div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-foreground">2</div>
+            <div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-sm font-semibold text-accent">2</div>
             <h3 class="text-lg font-semibold text-foreground">Sprint</h3>
             <p class="mt-2 text-sm leading-6 text-muted-foreground">
               Work alongside other builders with a live cadence, check-ins, and visible progress.
             </p>
           </article>
           <article class="rounded-xl border border-border bg-card p-6">
-            <div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-foreground">3</div>
+            <div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-sm font-semibold text-accent">3</div>
             <h3 class="text-lg font-semibold text-foreground">Ship</h3>
             <p class="mt-2 text-sm leading-6 text-muted-foreground">
               End the sprint with a project milestone, demo, or public artifact you can build on.
@@ -184,39 +179,41 @@
           </article>
         </div>
 
-        <aside class="mx-auto mt-6 max-w-2xl rounded-xl border border-border bg-card p-6 text-center sm:mt-8 sm:p-8" data-testid="home-featured-sprint-card">
+        <aside class="mt-6 rounded-xl border border-border bg-card p-6 sm:mt-8 sm:p-8" data-testid="home-featured-sprint-card">
           {% if featured_sprint %}
-          <p class="text-sm font-medium uppercase tracking-widest text-accent">Current or next sprint</p>
-          <h3 class="mt-3 text-2xl font-semibold text-foreground" data-testid="home-featured-sprint-name">{{ featured_sprint.name }}</h3>
-          <p class="mt-2 text-sm text-muted-foreground" data-testid="home-featured-sprint-range">{% sprint_date_range featured_sprint %}</p>
-          <div class="mt-5 space-y-3 text-sm text-muted-foreground">
-            <div class="flex items-center justify-center gap-2">
-              <i data-lucide="calendar-range" class="h-4 w-4 shrink-0 text-accent"></i>
-              <span>Visible public sprint window</span>
+          <div class="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+            <div class="min-w-0">
+              <p class="text-sm font-medium uppercase tracking-widest text-accent">Current or next sprint</p>
+              <h3 class="mt-3 text-2xl font-semibold tracking-tight text-foreground" data-testid="home-featured-sprint-name">{{ featured_sprint.name }}</h3>
+              <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                <span class="inline-flex items-center gap-1.5" data-testid="home-featured-sprint-range">
+                  <i data-lucide="calendar-range" class="h-4 w-4 shrink-0" aria-hidden="true"></i>
+                  {% sprint_date_range featured_sprint %}
+                </span>
+                <span data-testid="home-featured-sprint-tier">
+                  {% member_access_badge featured_sprint.min_tier_level testid="home-sprint-access-badge" %}
+                </span>
+              </div>
             </div>
-            <div class="flex items-center justify-center gap-2" data-testid="home-featured-sprint-tier">
-              {% member_access_badge featured_sprint.min_tier_level testid="home-sprint-access-badge" %}
-            </div>
-          </div>
-          <div class="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-            <a href="{{ featured_sprint.get_absolute_url }}" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-4 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" data-testid="home-featured-sprint-link">
+            <a href="{{ featured_sprint.get_absolute_url }}" class="{% button_classes 'primary' size='lg' extra='shrink-0' %}" data-testid="home-featured-sprint-link">
               View this sprint
-              <i data-lucide="arrow-right" class="h-4 w-4"></i>
-            </a>
-            <a href="/sprints" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
-              All sprint windows
+              <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
             </a>
           </div>
           {% else %}
-          <p class="text-sm font-medium uppercase tracking-widest text-accent">Sprints run throughout the year</p>
-          <h3 class="mt-3 text-2xl font-semibold text-foreground" data-testid="home-featured-sprint-empty-heading">Next sprint coming soon</h3>
-          <p class="mt-3 text-sm leading-6 text-muted-foreground" data-testid="home-featured-sprint-empty-copy">
-            Browse the sprint calendar to see what is active now, what is opening next, and which membership level each sprint requires.
-          </p>
-          <a href="/sprints" class="mt-6 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-4 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" data-testid="home-featured-sprint-empty-link">
-            Explore sprints
-            <i data-lucide="arrow-right" class="h-4 w-4"></i>
-          </a>
+          <div class="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+            <div class="min-w-0">
+              <p class="text-sm font-medium uppercase tracking-widest text-accent">Sprints run throughout the year</p>
+              <h3 class="mt-3 text-2xl font-semibold tracking-tight text-foreground" data-testid="home-featured-sprint-empty-heading">Next sprint coming soon</h3>
+              <p class="mt-2 text-sm leading-6 text-muted-foreground" data-testid="home-featured-sprint-empty-copy">
+                Browse the sprint calendar to see what is opening next and which membership level each sprint requires.
+              </p>
+            </div>
+            <a href="/sprints" class="{% button_classes 'primary' size='lg' extra='shrink-0' %}" data-testid="home-featured-sprint-empty-link">
+              View the sprint calendar
+              <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
+            </a>
+          </div>
           {% endif %}
         </aside>
       </div>
@@ -327,7 +324,7 @@
           <div class="absolute -top-3 left-1/2 z-10 -translate-x-1/2">
             <span class="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
               <i data-lucide="star" class="h-3 w-3"></i>
-              Most Popular
+              Most popular
             </span>
           </div>
           {% endif %}
@@ -364,7 +361,7 @@
           <div class="mt-auto space-y-4 max-lg:space-y-3">
             <p class="text-xs text-muted-foreground {% if not tier.highlighted %}max-lg:hidden{% endif %}">{{ tier.positioning }}</p>
             <a href="{{ tier.payment_link_monthly }}"
-               class="tier-cta-link flex min-h-[44px] w-full items-center justify-center rounded-md px-4 py-3 text-center text-sm font-medium transition-colors cursor-pointer sm:py-2.5 {% if tier.highlighted %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
+               class="tier-cta-link {% if tier.highlighted %}{% button_classes 'primary' size='lg' extra='w-full' %}{% else %}{% button_classes 'secondary' size='lg' extra='w-full' %}{% endif %}"
                data-link-annual="{{ tier.payment_link_annual }}" data-link-monthly="{{ tier.payment_link_monthly }}"
                style="{% if tier.highlighted %}box-shadow: 0 10px 25px -5px hsl(75 100% 50% / 0.2);{% endif %}">
               Join
@@ -377,17 +374,18 @@
   </section>
 
   <section id="join-free" class="scroll-mt-24 border-t border-border bg-background py-12 sm:py-20 lg:py-28" data-testid="home-join-free-section" aria-labelledby="home-join-free-heading">
-    <div class="mx-auto grid max-w-6xl gap-10 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,28rem)] lg:items-center lg:gap-16 lg:px-8">
+    <div class="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,28rem)] lg:items-center lg:gap-16 lg:px-8">
       <div class="max-w-2xl">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Start free</p>
         <h2 id="home-join-free-heading" class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl" style="text-wrap: balance;">Create your free account</h2>
         <p class="mt-5 text-lg leading-8 text-muted-foreground">
-          Get community updates, browse open resources, and register for free and open events. Paid community activities remain clearly labeled in the membership comparison above.
+          Get community updates, browse open resources, and register for free events.
         </p>
-        <ul class="mt-8 space-y-3 text-sm text-foreground" aria-label="Free account includes">
+        <ul class="mt-8 space-y-3 text-sm text-foreground" aria-label="What a free account includes">
           <li class="flex items-start gap-3"><i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true"></i><span>Community news and practical shipping resources</span></li>
           <li class="flex items-start gap-3"><i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true"></i><span>Open tutorials, recordings, and project ideas</span></li>
           <li class="flex items-start gap-3"><i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true"></i><span>Registration for events marked Free or open</span></li>
+          <li class="flex items-start gap-3" data-testid="home-join-free-upgrade-note"><i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true"></i><span>Join Slack any time you upgrade to Main or Premium</span></li>
         </ul>
       </div>
       <div class="w-full max-w-md justify-self-center lg:justify-self-end" data-testid="home-join-free-form">
@@ -400,7 +398,8 @@
   <!-- Blog Section -->
   <section id="blog" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div>
+      <div class="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div class="max-w-3xl">
           <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
             <i data-lucide="pen-line" class="h-4 w-4"></i>
             From the blog
@@ -411,7 +410,8 @@
           <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
             Long-form notes, walkthroughs, and experiments. Stay close to how we build and reason.
           </p>
-        <a href="/blog" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+        </div>
+        <a href="/blog" class="{% button_classes 'secondary' size='lg' extra='shrink-0' %}" data-testid="home-blog-link">
           View all posts
           <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
         </a>
@@ -452,7 +452,7 @@
             </div>
             <span class="mt-6 inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors group-hover:text-accent/80">
               Read article
-              <i data-lucide="arrow-right" class="h-4 w-4 transition-transform group-hover:translate-x-1"></i>
+              <i data-lucide="arrow-right" class="h-4 w-4"></i>
             </span>
           </a>
         </article>

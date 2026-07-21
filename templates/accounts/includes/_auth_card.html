@@ -17,9 +17,18 @@
           divider is placed here (not inside _oauth_providers.html) so
           its label sits between the two options instead of above both.
           {% endcomment %}
+          {% comment %}
+          The divider must be gated on the SAME provider condition as
+          _oauth_providers.html itself (that partial renders nothing when
+          no provider is enabled). Gating only on hide_oauth left a
+          stray "or ..." rule above the form with nothing above it —
+          the exact dangling-divider bug this reorder set out to fix.
+          {% endcomment %}
           {% if not hide_oauth %}
             {% include "accounts/includes/_oauth_providers.html" with oauth_hide_divider=True %}
-            {% include "accounts/includes/_auth_divider.html" with divider_text=email_divider_text %}
+            {% if oauth_google_enabled or oauth_github_enabled or oauth_slack_enabled and oauth_action != "Sign up" %}
+              {% include "accounts/includes/_auth_divider.html" with divider_text=email_divider_text %}
+            {% endif %}
           {% endif %}
           {% include form_template %}
           {% if not hide_legal %}

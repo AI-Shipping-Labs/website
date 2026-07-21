@@ -1338,9 +1338,27 @@ class LoginPageEmailPasswordTest(TestCase):
         self.assertIn("Sign in with GitHub", content)
 
     def test_login_page_contains_divider(self):
+        """The OAuth row now renders ABOVE the email form, so the divider
+        separates the two options rather than introducing the OAuth
+        block. It only renders when a provider is actually enabled —
+        otherwise it would be a rule labelled "or" with nothing above
+        it."""
+        SocialApp.objects.all().delete()
         resp = self.client.get("/accounts/login/")
-        content = resp.content.decode()
-        self.assertIn("or continue with", content)
+        self.assertNotIn("data-auth-oauth-divider", resp.content.decode())
+
+        app = SocialApp.objects.create(
+            provider="google", name="Google",
+            client_id="divider-cid", secret="divider-secret",
+        )
+        app.sites.add(Site.objects.get_current())
+        content = self.client.get("/accounts/login/").content.decode()
+        self.assertIn("or sign in with email", content)
+        oauth_idx = content.index("Sign in with Google")
+        divider_idx = content.index("data-auth-oauth-divider")
+        form_idx = content.index('id="login-email"')
+        self.assertLess(oauth_idx, divider_idx)
+        self.assertLess(divider_idx, form_idx)
 
     def test_login_page_contains_submit_feedback_hooks(self):
         resp = self.client.get("/accounts/login/")

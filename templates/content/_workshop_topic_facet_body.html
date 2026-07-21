@@ -1,0 +1,25 @@
+{% comment %}
+Topic pill row for the workshop catalog, extracted so it can render
+inside includes/_accordion.html. Pills are unchanged from when they sat
+in an always-expanded facet box; only the wrapper moved.
+{% endcomment %}
+{% if selected_topic_summary %}
+<p class="mb-3 text-sm text-muted-foreground" data-testid="workshop-topic-summary">{{ selected_topic_summary }}</p>
+{% endif %}
+<div class="flex flex-wrap gap-2" aria-label="Workshop topic filters">
+  {% for topic in topic_options %}
+  <a
+    href="{{ topic.url }}"
+    class="inline-flex min-h-[44px] max-w-full items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if topic.is_active %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
+    data-testid="workshop-topic-option-{{ topic.slug }}"
+    data-facet="topic"
+    data-topic="{{ topic.slug }}"
+    {% if topic.is_active %}aria-current="page" aria-label="Remove {{ topic.label }} topic filter"{% else %}aria-label="Browse {{ topic.label }} workshops"{% endif %}
+  >
+    {{ topic.label }}
+    {% if topic.is_active %}
+    <i data-lucide="x" class="ml-1.5 h-3.5 w-3.5"></i>
+    {% endif %}
+  </a>
+  {% endfor %}
+</div>

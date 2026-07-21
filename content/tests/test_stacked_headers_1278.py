@@ -14,6 +14,12 @@ BASE_DIR = Path(settings.BASE_DIR)
 HOME = BASE_DIR / 'templates' / 'home.html'
 ACTIVITIES = BASE_DIR / 'templates' / 'content' / 'activities.html'
 WORKSHOPS = BASE_DIR / 'templates' / 'content' / '_workshops_catalog.html'
+TOPIC_FACET_BODY = (
+    BASE_DIR / 'templates' / 'content' / '_workshop_topic_facet_body.html'
+)
+TECHNOLOGY_FACET_BODY = (
+    BASE_DIR / 'templates' / 'content' / '_workshop_technology_facet_body.html'
+)
 DASHBOARD = BASE_DIR / 'templates' / 'content' / 'dashboard.html'
 NOTIFICATIONS = BASE_DIR / 'templates' / 'notifications' / 'notification_list.html'
 
@@ -126,9 +132,7 @@ class PublicStackedHeaderStaticTest(TestCase):
         self.assertNotIn('lg:justify-between', source)
         self.assertNotIn('sm:items-end', source)
         self.assertIn('class="mt-4 flex flex-col items-start gap-3"', source)
-        self.assertIn('class="mb-3 flex flex-col gap-1"', source)
         self.assertLess(source.index('{{ catalog_intro }}'), source.index('{% if show_catalog_filters %}'))
-        self.assertLess(source.index('>Topics</h3>'), source.index('{{ selected_topic_summary }}'))
 
         for testid in (
             'workshop-access-filters',
@@ -137,8 +141,20 @@ class PublicStackedHeaderStaticTest(TestCase):
             'view-all-workshops-preview-cta',
         ):
             self.assertIn(f'data-testid="{testid}"', source)
-        self.assertEqual(source.count('min-h-[44px]'), 6)
-        self.assertEqual(source.count('focus-visible:ring-2'), 7)
+        # The Topics and Technologies pill rows moved into
+        # includes/_accordion.html bodies (37 expanded pills pushed the
+        # first card ~1.7 screens down on mobile), so their heading
+        # markup and pill classes now live in the facet body partials.
+        # The accordion supplies its own 44px summary and focus ring.
+        self.assertIn('includes/_accordion.html', source)
+        self.assertEqual(source.count('min-h-[44px]'), 4)
+        self.assertEqual(source.count('focus-visible:ring-2'), 5)
+
+        for body in (TOPIC_FACET_BODY, TECHNOLOGY_FACET_BODY):
+            body_source = _source(body)
+            self.assertIn('min-h-[44px]', body_source)
+            self.assertIn('focus-visible:ring-2', body_source)
+        self.assertIn('{{ selected_topic_summary }}', _source(TOPIC_FACET_BODY))
 
     def test_dashboard_five_headers_are_stacked_and_h1_is_unchanged(self):
         source = _source(DASHBOARD)

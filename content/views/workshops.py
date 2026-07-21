@@ -606,11 +606,29 @@ def _build_workshops_catalog_context(
         selected_tools=selected_tools,
     )
 
+    # The facet pill rows are collapsed by default (37 pills pushed the
+    # first card ~1.7 screens down on mobile), so the summary line has to
+    # carry the active-selection count — otherwise a filtered catalog
+    # looks unfiltered while the evidence is hidden inside the accordion.
+    topic_active_count = sum(1 for option in topic_options if option['is_active'])
+    technology_active_count = sum(
+        1 for option in technology_options if option['is_active']
+    )
     context = {
         'workshops': workshops,
         'all_tags': all_tags,
         'topic_options': topic_options,
         'technology_options': technology_options,
+        'topic_facet_label': (
+            f'Topics ({topic_active_count} selected)'
+            if topic_active_count else 'Topics'
+        ),
+        'technology_facet_label': (
+            f'Technologies ({technology_active_count} selected)'
+            if technology_active_count else 'Technologies'
+        ),
+        'topic_facet_open': bool(topic_active_count),
+        'technology_facet_open': bool(technology_active_count),
         'all_tools': all_tools,
         'selected_tags': selected_tags,
         'selected_tag_filters': _build_selected_tag_filters(

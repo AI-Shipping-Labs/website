@@ -57,55 +57,20 @@
       {% endif %}
     </div>
 
+    {% comment %}
+    Topics (24 pills) and Technologies (13) used to render fully
+    expanded, pushing the first card ~1428px down on a 390px screen —
+    roughly 1.7 screens of filter chrome before any content. They are
+    collapsed into the shared native details/summary accordion, and
+    auto-open when that facet has an active selection so a filtered
+    catalog never hides why it is filtered.
+    {% endcomment %}
     {% if show_catalog_filters and topic_options %}
-    <div class="mb-6 rounded-lg border border-border bg-secondary/20 px-4 py-4 sm:px-5" data-testid="workshop-facet-topic">
-      <div class="mb-3 flex flex-col gap-1">
-        <h3 class="text-sm font-semibold text-foreground">Topics</h3>
-        {% if selected_topic_summary %}
-        <p class="text-sm text-muted-foreground" data-testid="workshop-topic-summary">{{ selected_topic_summary }}</p>
-        {% endif %}
-      </div>
-      <div class="flex flex-wrap gap-2" aria-label="Workshop topic filters">
-        {% for topic in topic_options %}
-        <a
-          href="{{ topic.url }}"
-          class="inline-flex min-h-[44px] max-w-full items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if topic.is_active %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
-          data-testid="workshop-topic-option-{{ topic.slug }}"
-          data-facet="topic"
-          data-topic="{{ topic.slug }}"
-          {% if topic.is_active %}aria-current="page" aria-label="Remove {{ topic.label }} topic filter"{% else %}aria-label="Browse {{ topic.label }} workshops"{% endif %}
-        >
-          {{ topic.label }}
-          {% if topic.is_active %}
-          <i data-lucide="x" class="ml-1.5 h-3.5 w-3.5"></i>
-          {% endif %}
-        </a>
-        {% endfor %}
-      </div>
-    </div>
+    {% include "includes/_accordion.html" with summary=topic_facet_label body_template="content/_workshop_topic_facet_body.html" testid="workshop-facet-topic" open=topic_facet_open details_extra_class="mb-6" %}
     {% endif %}
 
     {% if show_catalog_filters and technology_options %}
-    <div class="mb-6 rounded-lg border border-border bg-secondary/20 px-4 py-4 sm:px-5" data-testid="workshop-facet-technology">
-      <h3 class="mb-3 text-sm font-semibold text-foreground">Technologies</h3>
-      <div class="flex flex-wrap gap-2" aria-label="Workshop technology filters">
-        {% for technology in technology_options %}
-        <a
-          href="{{ technology.url }}"
-          class="inline-flex min-h-[44px] max-w-full items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if technology.is_active %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
-          data-testid="workshop-technology-option-{{ technology.slug }}"
-          data-facet="technology"
-          {% if technology.source == "tool" %}data-tool="{{ technology.label }}"{% else %}data-topic="{{ technology.slug }}"{% endif %}
-          {% if technology.is_active %}aria-current="page" aria-label="Remove {{ technology.label }} technology filter"{% else %}aria-label="Filter by {{ technology.label }}"{% endif %}
-        >
-          {{ technology.label }}
-          {% if technology.is_active %}
-          <i data-lucide="x" class="ml-1.5 h-3.5 w-3.5"></i>
-          {% endif %}
-        </a>
-        {% endfor %}
-      </div>
-    </div>
+    {% include "includes/_accordion.html" with summary=technology_facet_label body_template="content/_workshop_technology_facet_body.html" testid="workshop-facet-technology" open=technology_facet_open details_extra_class="mb-6" %}
     {% endif %}
 
     {% if show_catalog_filters and has_published_workshops and has_active_filters %}

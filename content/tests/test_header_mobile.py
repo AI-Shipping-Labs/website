@@ -106,8 +106,11 @@ class HeaderMobileMenuTest(TestCase):
         """Mobile exposes the groomed public IA and grouped links."""
         response = self.client.get("/")
         content = response.content.decode()
+        # The About menu had both "About" (/about) and "Team"
+        # (/about#team) — the same destination. Team survived, pointed
+        # at /about.
         self.assertIn('href="/about"', content)
-        self.assertIn('href="/about#team"', content)
+        self.assertNotIn('href="/about#team"', content)
         self.assertNotIn('href="/community"', content)
         self.assertIn('href="/pricing"', content)
         self.assertIn('href="/faq"', content)

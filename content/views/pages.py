@@ -458,12 +458,19 @@ def collection_list(request):
 
     Links are grouped by category and sorted by sort_order within each group.
     Gated links have their URL hidden from anonymous/insufficient-tier users.
+
+    Visibility is decided by `published` alone. The display order below is
+    presentation-only and must never be reused as a queryset filter: an
+    earlier version filtered with `category__in=<order list>`, so dropping a
+    category from the order list silently hid its links (22 of 41 published
+    links disappeared when `tools`/`models` left the list).
     """
-    category_order = ['workshops', 'courses', 'articles', 'other']
-    links = CuratedLink.objects.filter(
-        published=True,
-        category__in=category_order,
-    )
+    # Preferred section order. Categories missing from this list still
+    # render — they are appended after it, never dropped.
+    category_display_order = [
+        'workshops', 'courses', 'articles', 'tools', 'models', 'other',
+    ]
+    links = CuratedLink.objects.filter(published=True)
     selected_tags = _get_selected_tags(request)
 
     # Collect all tags from published links for the tag filter UI
@@ -496,18 +503,22 @@ def collection_list(request):
             ),
         })
 
-    # Map visible canonical section keys to icon names. Keys here drive
-    # both the rendered section order and the badge icon shown on each card.
-    category_icons = {
-        'workshops': 'graduation-cap',
-        'courses': 'book-open',
-        'articles': 'file-text',
-        'other': 'folder-open',
-    }
+    # Group by category. Every category that has published links renders:
+    # start from the explicit display order, append model-defined categories
+    # missing from it (in CATEGORY_CHOICES order), then any stray values
+    # present only in the data (sorted). A category absent from the display
+    # order is demoted to the end, never hidden.
+    model_categories = [key for key, _label in CuratedLink.CATEGORY_CHOICES]
+    present_categories = {a['link'].category for a in annotated_links}
+    ordered_categories = list(category_display_order)
+    for cat_key in model_categories:
+        if cat_key not in ordered_categories:
+            ordered_categories.append(cat_key)
+    for cat_key in sorted(present_categories - set(ordered_categories)):
+        ordered_categories.append(cat_key)
 
-    # Group by canonical category, preserving the canonical visible order.
     grouped = []
-    for cat_key in category_order:
+    for cat_key in ordered_categories:
         cat_links = [
             a for a in annotated_links
             if a['link'].category == cat_key
@@ -517,7 +528,9 @@ def collection_list(request):
                 'key': cat_key,
                 'label': CuratedLink.CATEGORY_LABELS.get(cat_key, cat_key),
                 'description': CuratedLink.CATEGORY_DESCRIPTIONS.get(cat_key, ''),
-                'icon': category_icons.get(cat_key, 'folder-open'),
+                # Section icon comes from the model's per-category icon map
+                # so new categories pick up their icon without view edits.
+                'icon': cat_links[0]['link'].category_icon_name,
                 'links': cat_links,
             })
 

@@ -171,22 +171,34 @@ class CatalogTagPresentationTest(TestCase):
                 self.assertEqual(chip['attrs'].get('href'), expected_href)
 
     @tag('visual_regression')
-    def test_tutorial_and_both_resource_states_keep_static_tag_semantics(self):
-        for path, text in (
-            ('/tutorials', 'tutorial-static-1228'),
-            ('/resources', 'accessible-static-1228'),
-            ('/resources', 'gated-static-1228'),
-        ):
-            with self.subTest(path=path, text=text):
-                parser = _parse(self.client.get(path))
-                matches = _elements_with_text(parser, text)
-                static_chip = next(item for item in matches if item['tag'] == 'span')
-                self.assertEqual(
-                    static_chip['attrs'].get('class'), STATIC_CHIP_CLASSES,
-                )
-                self.assertFalse(any(item['tag'] == 'a' for item in matches))
+    def test_tutorial_keeps_static_tag_semantics(self):
+        parser = _parse(self.client.get('/tutorials'))
+        matches = _elements_with_text(parser, 'tutorial-static-1228')
+        static_chip = next(item for item in matches if item['tag'] == 'span')
+        self.assertEqual(
+            static_chip['attrs'].get('class'), STATIC_CHIP_CLASSES,
+        )
+        self.assertFalse(any(item['tag'] == 'a' for item in matches))
 
+    @tag('visual_regression')
+    def test_resource_chips_are_clickable_on_both_card_states(self):
+        """Curated-link card chips link to the tag-filtered view for both
+        accessible and gated cards, and never nest inside the card anchor.
+        Chips were inert spans until the /resources tag-filter defect fix."""
         resources = _parse(self.client.get('/resources'))
+        for text in ('accessible-static-1228', 'gated-static-1228'):
+            with self.subTest(text=text):
+                chip = next(
+                    item for item in _elements_with_text(resources, text)
+                    if item['tag'] == 'a'
+                    and item['attrs'].get('class') == CLICKABLE_CHIP_CLASSES
+                )
+                self.assertEqual(
+                    chip['attrs'].get('href'), f'/resources?tag={text}',
+                )
+                self.assertEqual(chip['anchor_ancestors'], [])
+        self.assertEqual(resources.nested_anchor_hrefs, [])
+
         gated_card = next(
             element for element in resources.elements
             if element['attrs'].get('aria-label')
@@ -214,10 +226,10 @@ class CatalogTagPresentationTest(TestCase):
                 self.assertEqual(overflow['tag'], 'span')
                 self.assertEqual(overflow['attrs'].get('class'), STATIC_CHIP_CLASSES)
                 self.assertEqual(overflow['text'].strip(), text)
-                # Downloads expose every available topic in the separate
-                # 44px filter row, so the hidden fourth *card* tag can still
-                # legitimately appear elsewhere on the page.
-                if path != '/downloads':
+                # Downloads and resources expose every available topic in
+                # the separate 44px filter row, so the hidden fourth *card*
+                # tag can still legitimately appear elsewhere on the page.
+                if path not in ('/downloads', '/resources'):
                     self.assertNotIn(
                         f'>{hidden_tag}<',
                         response.content.decode(),

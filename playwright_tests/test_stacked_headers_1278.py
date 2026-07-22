@@ -399,6 +399,7 @@ def test_both_workshop_branches_and_filters_keep_behavior(
     page.get_by_test_id('workshop-skill-filter-advanced').click()
     page.wait_for_url('**access=paid**skill_level=advanced**')
     expect(page.get_by_test_id('workshop-skill-filter-advanced')).to_have_attribute('aria-current', 'page')
+    page.get_by_test_id('workshop-facet-topic').locator('summary').click()
     page.get_by_test_id('workshop-topic-option-rag').click()
     page.wait_for_url('**tag=rag**')
     expect(page.get_by_test_id('workshop-topic-option-rag')).to_have_attribute('aria-current', 'page')

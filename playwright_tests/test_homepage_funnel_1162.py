@@ -148,7 +148,7 @@ def test_homepage_billing_toggle_changes_all_three_paid_links(
     page.locator("#billing-toggle").click()
     for slug, cta in tier_ctas.items():
         expect(cta).to_have_attribute("href", links[slug][1])
-    expect(page.locator('[data-tier-card="main"]')).to_contain_text("Most Popular")
+    expect(page.locator('[data-tier-card="main"]')).to_contain_text("Most popular")
 
     page.locator("#billing-toggle").click()
     for slug, cta in tier_ctas.items():
@@ -185,7 +185,7 @@ def test_homepage_mobile_all_paid_tiers_and_separate_free_path_are_reachable(
         arg=carousel.element_handle(),
     )
     assert main_delta.json_value() < 60
-    expect(main).to_contain_text("Most Popular")
+    expect(main).to_contain_text("Most popular")
 
     for slug in ("basic", "main", "premium"):
         card = carousel.locator(f'[data-tier-card="{slug}"]')
@@ -220,7 +220,7 @@ def test_homepage_sprint_story_links_to_active_sprint_detail(
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
     section = page.locator('[data-testid="home-sprint-story-section"]')
     section.scroll_into_view_if_needed()
-    expect(section).to_contain_text("Plan -> Sprint -> Ship")
+    expect(section).to_contain_text("Plan → Sprint → Ship")
     expect(section.locator('[data-testid="home-featured-sprint-name"]')).to_contain_text(
         "July Sprint"
     )

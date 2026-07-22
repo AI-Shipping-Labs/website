@@ -194,7 +194,9 @@ def test_anonymous_event_list_cards_show_times_and_match_series_format(
             has_text=expected_grouped,
         )
     ).to_be_visible()
-    expect(page.get_by_test_id("series-card-badge")).to_be_visible()
+    expect(
+        page.get_by_test_id("event-series-card").get_by_test_id("series-card-badge")
+    ).to_be_visible()
     expect(page.get_by_test_id("series-card-meta")).to_contain_text(
         "2 upcoming sessions",
     )

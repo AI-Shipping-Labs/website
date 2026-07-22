@@ -69,7 +69,6 @@ def test_anonymous_keyboard_about_menu_reaches_faq(django_server, page):
         page,
         "about",
         [
-            "nav-about-link-about",
             "nav-about-link-team",
             "nav-about-link-faq",
         ],
@@ -221,7 +220,7 @@ def test_pointer_hover_still_opens_about_menu_and_team_link(
     page.locator('[data-testid="nav-about-trigger"]').hover()
     _assert_open(page, "about")
     page.locator('[data-testid="nav-about-link-team"]').click()
-    page.wait_for_url(f"{django_server}/about#team", timeout=5000)
+    page.wait_for_url(f"{django_server}/about", timeout=5000)
 
 
 def test_mobile_public_nav_accordions_keep_existing_aria_and_links(
@@ -237,7 +236,7 @@ def test_mobile_public_nav_accordions_keep_existing_aria_and_links(
         )
 
         expected = {
-            "about": ["About", "Team", "FAQ"],
+            "about": ["Team", "FAQ"],
             "community": [
                 "Membership",
                 "Activities",

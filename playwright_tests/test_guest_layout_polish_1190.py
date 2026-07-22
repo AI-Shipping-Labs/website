@@ -211,7 +211,9 @@ def test_resources_cards_drop_category_pills_and_keep_gated_cta(
     )
     expect(gated_card.locator('[data-lucide="book-open"]')).to_have_count(0)
     gated_card.click()
-    expect(gated_card.get_by_role("link", name="View Plans")).to_be_visible()
+    expect(
+        gated_card.get_by_role("link", name="View membership tiers")
+    ).to_be_visible()
     _shot(page, "resources-compact-gated")
 
 

@@ -177,8 +177,8 @@ def test_anonymous_mobile_menu_targets_and_navigation(django_server, browser):
         about = _expand_mobile_section(page, "about")
         assert [
             about.locator(f'[data-testid="mobile-nav-about-link-{name}"]').get_attribute("href")
-            for name in ("about", "team", "faq")
-        ] == ["/about", "/about#team", "/faq"]
+            for name in ("team", "faq")
+        ] == ["/about", "/faq"]
 
         _expand_mobile_section(page, "community")
         resources = _expand_mobile_section(page, "resources")

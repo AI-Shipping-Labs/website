@@ -249,8 +249,8 @@ class TestScenario3FreeUserSeesGatedLink:
         cta_text = cta.inner_text()
         assert "Upgrade to Basic to access this resource" in cta_text
 
-        # "View Plans" link pointing to /pricing
-        view_plans_link = cta.locator('a:has-text("View Plans")')
+        # Membership tiers link pointing to /pricing
+        view_plans_link = cta.locator('a:has-text("View membership tiers")')
         assert view_plans_link.count() >= 1
         href = view_plans_link.first.get_attribute("href")
         assert "/pricing" in href

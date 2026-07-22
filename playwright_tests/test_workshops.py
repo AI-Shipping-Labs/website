@@ -366,6 +366,7 @@ class TestVisitorBrowsesCatalog:
         assert page.locator('[data-testid="workshop-catalog"]').is_visible()
         topics = page.locator('[data-testid="workshop-facet-topic"]')
         assert topics.is_visible()
+        topics.locator('summary').click()
         topic_text = topics.inner_text()
         assert 'Topics' in topic_text
         assert 'agents' in topic_text
@@ -547,9 +548,7 @@ class TestVisitorBrowsesCatalog:
 
         scan_card = page.locator('article[data-workshop-slug="scan-workshop"]')
         assert scan_card.is_visible()
-        assert scan_card.locator('[data-testid="workshop-card-type"]').inner_text() == (
-            'Workshop'
-        )
+        assert scan_card.locator('[data-testid="workshop-card-type"]').count() == 0
 
         access = scan_card.locator('[data-testid="workshop-tier-badge"]')
         assert access.get_attribute('data-required-level') == '10'
@@ -560,10 +559,12 @@ class TestVisitorBrowsesCatalog:
 
         metadata = scan_card.locator('[data-testid="workshop-card-metadata"]')
         metadata_text = metadata.inner_text()
-        assert 'Instructor' in metadata_text
+        assert 'Instructor' not in metadata_text
         assert 'Alexey Grigorev' in metadata_text
-        assert 'Date' in metadata_text
+        assert 'Date' not in metadata_text
         assert 'Apr 21, 2026' in metadata_text
+        assert metadata.locator('[data-lucide="user"]').count() == 1
+        assert metadata.locator('[data-lucide="calendar"]').count() == 1
 
         tools = scan_card.locator('[data-testid="workshop-card-tools"]')
         tools_text = tools.inner_text()
@@ -763,6 +764,7 @@ class TestVisitorBrowsesCatalog:
         )
         assert no_tools_card.locator('[data-testid="workshop-card-tools"]').count() == 0
 
+        page.locator('[data-testid="workshop-facet-technology"] summary').click()
         page.locator(
             '[data-testid="workshop-technology-option-claude-code"]',
         ).click()

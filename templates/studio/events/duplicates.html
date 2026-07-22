@@ -42,6 +42,7 @@
     <li>Registrations de-duped: {{ result.registrations_deduped }}</li>
     <li>Fields filled on canonical: {{ result.fields_filled|join:", "|default:"none" }}</li>
     <li>Workshop relinked: {{ result.workshop_relinked|yesno:"yes,no" }}</li>
+    <li>Source articles relinked: {{ result.source_articles_relinked }}</li>
     <li>Duplicate retired (cancelled + unpublished): {{ result.duplicate_retired|yesno:"yes,no" }}</li>
   </ul>
   {% endif %}
@@ -93,6 +94,7 @@
     <li>Registrations to de-dup (kept on canonical): {{ plan.registrations_deduped }}</li>
     <li>Empty canonical fields to fill: {{ plan.fields_filled|join:", "|default:"none" }}</li>
     <li>Workshop will relink: {{ plan.workshop_relinked|yesno:"yes,no" }}</li>
+    <li>Source articles to relink: {{ plan.source_articles_relinked }}</li>
     <li>Duplicate will be cancelled &amp; unpublished (not deleted)</li>
   </ul>
 

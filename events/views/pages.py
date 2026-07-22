@@ -31,7 +31,7 @@ from events.models import (
     EventSeries,
     SeriesRegistration,
 )
-from events.models.event import HIDDEN_FROM_PUBLIC_STATUSES
+from events.models.event import HIDDEN_FROM_PUBLIC_STATUSES, PUBLIC_EVENT_STATUSES
 from events.services.calendar_feed import (
     build_subscribe_urls,
     feed_events_queryset,
@@ -747,6 +747,14 @@ def event_detail(request, event_id, slug):
         event,
         has_access=has_access,
     )
+    source_articles = []
+    if event.published and event.status in PUBLIC_EVENT_STATUSES:
+        source_articles = list(
+            event.source_articles.filter(
+                published=True,
+                page_type='blog',
+            ).order_by('-date', 'pk')
+        )
     show_no_recording_closure = (
         event.is_past
         and not event.has_recording
@@ -809,6 +817,7 @@ def event_detail(request, event_id, slug):
         # not viewer-visible resources, so tier gating cannot produce a false
         # "No recording" message. Recaps and Workshop handoffs stay canonical.
         'show_no_recording_closure': show_no_recording_closure,
+        'source_articles': source_articles,
         'related_content': (
             build_related_content_rail(event)
             if event.published and event.status not in HIDDEN_FROM_PUBLIC_STATUSES

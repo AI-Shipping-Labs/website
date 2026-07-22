@@ -1,0 +1,28 @@
+{% load member_badges %}
+{% if source_articles %}
+<section class="mt-12 border-t border-border pt-8 sm:pt-10" data-testid="event-source-articles" aria-labelledby="event-source-articles-heading">
+  <div class="mb-5 flex items-center gap-2">
+    <i data-lucide="newspaper" class="h-5 w-5 text-accent" aria-hidden="true"></i>
+    <h2 id="event-source-articles-heading" class="text-xl font-semibold tracking-tight sm:text-2xl">Articles from this event</h2>
+  </div>
+  <div class="grid gap-6 sm:grid-cols-2">
+    {% for article in source_articles %}
+    <a href="{{ article.get_absolute_url }}"
+       class="{% include 'content/_clickable_card_classes.html' %} rounded-lg p-5"
+       data-testid="event-source-article-card">
+      <div class="flex items-start justify-between gap-3">
+        <h3 class="text-base font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">{{ article.title }}</h3>
+        {% member_access_badge article.required_level testid='event-source-article-access' %}
+      </div>
+      {% if article.description %}
+      <p class="mt-3 line-clamp-3 text-sm leading-6 text-muted-foreground">{{ article.description }}</p>
+      {% endif %}
+      <p class="mt-4 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+        <i data-lucide="calendar" class="h-3.5 w-3.5" aria-hidden="true"></i>
+        {{ article.short_date }}
+      </p>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}

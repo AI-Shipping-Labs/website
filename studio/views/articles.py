@@ -42,7 +42,10 @@ def article_list(request):
 @staff_required
 def article_edit(request, article_id):
     """Edit an existing article (read-only for synced items)."""
-    article = get_object_or_404(Article, pk=article_id)
+    article = get_object_or_404(
+        Article.objects.select_related('source_event'),
+        pk=article_id,
+    )
     synced = is_synced(article)
 
     if request.method == 'POST':

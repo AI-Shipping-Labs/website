@@ -259,6 +259,9 @@ def _event_form_context(event, default_tz):
                 '-last_attempt_at',
             )
         )
+        context['source_articles'] = list(
+            event.source_articles.all().order_by('-date', 'pk')
+        )
     return context
 
 

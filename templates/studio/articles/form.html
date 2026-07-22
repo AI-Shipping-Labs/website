@@ -101,6 +101,17 @@
         <dt class="text-muted-foreground">Author</dt>
         <dd class="text-foreground">{{ article.author|default:"Not set" }}</dd>
       </div>
+      <div data-testid="article-source-event-row">
+        <dt class="text-muted-foreground">Source event</dt>
+        {% if article.source_event %}
+        <dd class="text-foreground">
+          <a href="{{ article.source_event.get_absolute_url }}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ article.source_event.title }}</a>
+          <a href="{% url 'studio_event_edit' event_id=article.source_event.pk %}" class="ml-2 text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Edit in Studio</a>
+        </dd>
+        {% else %}
+        <dd class="text-foreground">No source event</dd>
+        {% endif %}
+      </div>
     </dl>
   </div>
 

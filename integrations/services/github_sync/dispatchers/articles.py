@@ -37,6 +37,62 @@ def _published_from_article_status(metadata, rel_path):
     return status == 'published'
 
 
+def _resolve_article_source_event(metadata, rel_path):
+    """Resolve an explicit article ``event_id`` / ``event_slug`` reference.
+
+    References are intentionally opt-in: without either key the relationship
+    is cleared.  ``event_id`` wins whenever it is present, including when its
+    value is malformed, so a conflicting slug can never mask a bad primary
+    reference.  Resolution is read-only and never creates or updates an Event.
+    """
+    from events.models import Event
+
+    if 'event_id' in metadata:
+        raw_event_id = metadata['event_id']
+        if isinstance(raw_event_id, bool):
+            event_id = None
+        else:
+            try:
+                event_id = int(str(raw_event_id).strip())
+            except (TypeError, ValueError):
+                event_id = None
+        if event_id is None or event_id <= 0:
+            raise ValueError(
+                f"Invalid event_id {raw_event_id!r} in {rel_path}: expected "
+                "an existing positive Event id. Article was not synced."
+            )
+        event = Event.objects.filter(pk=event_id).first()
+        if event is None:
+            raise ValueError(
+                f"Unresolved event_id {raw_event_id!r} in {rel_path}: no "
+                "matching Event exists. Article was not synced."
+            )
+        return event
+
+    if 'event_slug' in metadata:
+        raw_event_slug = metadata['event_slug']
+        if not isinstance(raw_event_slug, str):
+            raise ValueError(
+                f"Invalid event_slug {raw_event_slug!r} in {rel_path}: "
+                "expected a non-blank Event slug. Article was not synced."
+            )
+        event_slug = raw_event_slug.strip()
+        if not event_slug:
+            raise ValueError(
+                f"Invalid event_slug {raw_event_slug!r} in {rel_path}: "
+                "expected a non-blank Event slug. Article was not synced."
+            )
+        event = Event.objects.filter(slug=event_slug).first()
+        if event is None:
+            raise ValueError(
+                f"Unresolved event_slug {raw_event_slug!r} in {rel_path}: no "
+                "matching Event exists. Article was not synced."
+            )
+        return event
+
+    return None
+
+
 def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
                        known_images=None):
     """Walker dispatch handler: process article markdown files.
@@ -112,6 +168,7 @@ def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
             page_type = metadata.get('page_type', 'blog')
             data = metadata.get('data', {})
             published = _published_from_article_status(metadata, rel_path)
+            source_event = _resolve_article_source_event(metadata, rel_path)
 
             defaults = {
                 'title': metadata.get('title', current_slug),
@@ -132,6 +189,7 @@ def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
                 'page_type': page_type,
                 'data_json': data,
                 'content_id': content_id,
+                'source_event': source_event,
             }
 
             # Parse date

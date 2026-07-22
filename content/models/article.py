@@ -85,6 +85,17 @@ class Article(
     published = models.BooleanField(default=True)
     published_at = models.DateTimeField(null=True, blank=True)
     preview_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    source_event = models.ForeignKey(
+        'events.Event',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='source_articles',
+        help_text=(
+            'Event that produced this article. Managed by article '
+            'frontmatter during content sync.'
+        ),
+    )
 
     class Meta:
         ordering = ['-date']

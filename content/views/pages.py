@@ -22,8 +22,21 @@ from content.models import (
 )
 from content.services.related_content import build_related_content_rail
 from content.tier_config import get_curated_activities
+from events.models.event import PUBLIC_EVENT_STATUSES
 from events.services.time_windows import upcoming_events_queryset
 from plans.models import Plan, Sprint, SprintEnrollment
+
+
+def _public_article_source_event(article):
+    """Return a discoverable source event, without leaking private rows."""
+    event = article.source_event
+    if (
+        event is not None
+        and event.published
+        and event.status in PUBLIC_EVENT_STATUSES
+    ):
+        return event
+    return None
 
 
 def _record_resource_view_if_accessible(
@@ -355,7 +368,11 @@ def blog_list(request):
 
 def blog_detail(request, slug):
     """Blog post detail page with related articles."""
-    article = get_object_or_404(Article, slug=slug, published=True)
+    article = get_object_or_404(
+        Article.objects.select_related('source_event'),
+        slug=slug,
+        published=True,
+    )
 
     tag_rules = _get_tag_rules_for_tags(article.tags)
     context = {
@@ -363,6 +380,7 @@ def blog_detail(request, slug):
         'related_content': build_related_content_rail(article),
         'tag_rules': tag_rules,
         'learning_stages': article.data_json.get('learning_stages', []),
+        'source_event': _public_article_source_event(article),
     }
     context.update(build_gating_context(request.user, article, 'article'))
     _record_resource_view_if_accessible(
@@ -373,7 +391,10 @@ def blog_detail(request, slug):
 
 def blog_preview(request, preview_token):
     """Private draft article preview by high-entropy token."""
-    article = get_object_or_404(Article, preview_token=preview_token)
+    article = get_object_or_404(
+        Article.objects.select_related('source_event'),
+        preview_token=preview_token,
+    )
     if article.published:
         return redirect(article.get_absolute_url())
 
@@ -386,6 +407,7 @@ def blog_preview(request, preview_token):
             'tag_rules': _get_tag_rules_for_tags(article.tags),
             'is_gated': False,
             'draft_preview': True,
+            'source_event': _public_article_source_event(article),
         },
     )
     response['X-Robots-Tag'] = 'noindex, nofollow, noarchive'

@@ -110,6 +110,7 @@ author: Alexey Grigorev
 date: '2025-12-15'
 description: ...
 tags: [...]
+event_slug: mock-interviews-for-ai-engineering-roles  # optional source event
 data: {...}        # optional structured payload for rich pages
 ---
 markdown body
@@ -150,6 +151,31 @@ date: '2026-07-03'
 ---
 published body
 ```
+
+#### Source event attribution
+
+An article produced from a live session can declare one existing Event with
+either `event_id` or `event_slug` at the top level of its frontmatter:
+
+```yaml
+event_slug: mock-interviews-for-ai-engineering-roles
+```
+
+Use `event_slug` for portable, human-readable links to Studio-authored events.
+The known rollout above links article content id
+`2f8d02cb-ad72-4923-bb9e-a7b5592776ac` to the Studio event without relying on
+an environment-specific database id. `event_id` is also supported when the
+database id is deliberately known. If both keys are present, `event_id` takes
+precedence.
+
+Resolution is explicit: sync never guesses from an article title or date. A
+blank, malformed, or unresolved supplied reference records an error naming the
+source file and reference, and skips that article so its last-known-good row
+and source-event link remain unchanged. Removing both keys explicitly clears a
+previous link on the next successful sync. Repeating the same reference is
+idempotent and only assigns the article foreign key; it never changes Event
+ownership, scheduling, registration, recording, source metadata, or Workshop
+links.
 
 Explicit published example:
 

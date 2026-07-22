@@ -12,6 +12,7 @@ from django.contrib.auth import get_user_model
 from django.core import signing
 from django.test import Client, TestCase
 
+from content.models import Article
 from events.models import Event, EventRegistration
 
 User = get_user_model()
@@ -92,6 +93,23 @@ class PreviewIsNoOpTest(TestCase):
             EventRegistration.objects.filter(event=duplicate).exists())
         self.assertFalse(
             EventRegistration.objects.filter(event=canonical).exists())
+
+    def test_preview_reports_source_articles_to_relink(self):
+        canonical = _studio_event()
+        duplicate = _github_event()
+        Article.objects.create(
+            slug='preview-source-article',
+            title='Preview Source Article',
+            date=dt.date(2026, 5, 20),
+            source_event=duplicate,
+        )
+
+        response = self.client.post(
+            "/studio/events/duplicates/preview",
+            {"canonical_id": canonical.pk, "duplicate_id": duplicate.pk},
+        )
+
+        self.assertContains(response, 'Source articles to relink: 1')
 
 
 class ConfirmTokenGuardTest(TestCase):

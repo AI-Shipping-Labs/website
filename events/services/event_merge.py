@@ -20,6 +20,8 @@ rules are event-specific:
   ``zoom_*`` fields from the duplicate onto the canonical event ONLY where the
   canonical field is empty. Operator-entered values are never clobbered.
 - Workshop link: repoint ``Workshop.event`` (OneToOne) at the canonical event.
+- Article provenance: repoint every ``Article.source_event`` from the duplicate
+  to the canonical event and report the affected article ids/titles.
 - Retire the duplicate WITHOUT a hard delete (#864 no-deletes policy): set
   ``status='cancelled'``, ``published=False``, and unlink any workshop reference.
   The retired duplicate disappears from public ``/events`` listings and detail
@@ -109,6 +111,8 @@ class EventMergePlan:
         # field -> value filled from the duplicate
         self.fields_filled = {}
         self.workshop_relinked = False
+        self.source_articles = []
+        self.source_articles_relinked = 0
         self.duplicate_retired = False
 
     def to_dict(self):
@@ -124,6 +128,8 @@ class EventMergePlan:
             "registrations_deduped": self.registrations_deduped,
             "fields_filled": sorted(self.fields_filled.keys()),
             "workshop_relinked": self.workshop_relinked,
+            "source_articles": self.source_articles,
+            "source_articles_relinked": self.source_articles_relinked,
             "duplicate_retired": self.duplicate_retired,
         }
 
@@ -184,16 +190,24 @@ def find_duplicate_event_pairs():
 def _is_already_merged(canonical, duplicate):
     """Return True when the pair is already merged.
 
-    The duplicate is retired (cancelled + unpublished) and no workshop points at
-    it. Re-running the merge on such a pair is a no-op.
+    The duplicate is retired (cancelled + unpublished), no workshop points at
+    it, and no source article still points at it. Re-running the merge on such a
+    pair is a no-op; a partially completed older merge is repaired.
     """
-    from content.models import Workshop
+    from content.models import Article, Workshop
 
     duplicate_retired = (
         duplicate.status == "cancelled" and not duplicate.published
     )
     workshop_on_duplicate = Workshop.objects.filter(event=duplicate).exists()
-    return duplicate_retired and not workshop_on_duplicate
+    articles_on_duplicate = Article.objects.filter(
+        source_event=duplicate,
+    ).exists()
+    return (
+        duplicate_retired
+        and not workshop_on_duplicate
+        and not articles_on_duplicate
+    )
 
 
 def merge_duplicate_events(
@@ -223,6 +237,7 @@ def merge_duplicate_events(
         _carry_registrations(canonical, duplicate, plan)
         _carry_content(canonical, duplicate, plan)
         _relink_workshop(canonical, duplicate, plan)
+        _relink_source_articles(canonical, duplicate, plan)
         _retire_duplicate(duplicate, plan)
 
         if dry_run:
@@ -310,6 +325,25 @@ def _relink_workshop(canonical, duplicate, plan):
     if count:
         workshops.update(event=canonical)
         plan.workshop_relinked = True
+
+
+def _relink_source_articles(canonical, duplicate, plan):
+    """Repoint factual article provenance before retiring the duplicate."""
+    from content.models import Article
+
+    articles = list(
+        Article.objects.filter(source_event=duplicate).order_by('pk')
+    )
+    if not articles:
+        return
+    plan.source_articles = [
+        {'id': article.pk, 'title': article.title}
+        for article in articles
+    ]
+    plan.source_articles_relinked = Article.objects.filter(
+        pk__in=[article.pk for article in articles],
+        source_event=duplicate,
+    ).update(source_event=canonical)
 
 
 def _retire_duplicate(duplicate, plan):

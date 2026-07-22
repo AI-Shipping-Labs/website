@@ -126,7 +126,8 @@ class Command(BaseCommand):
                 f"(moved={plan.registrations_moved}, "
                 f"deduped={plan.registrations_deduped}, "
                 f"filled={sorted(plan.fields_filled.keys()) or 'none'}, "
-                f"workshop_relinked={plan.workshop_relinked})"
+                f"workshop_relinked={plan.workshop_relinked}, "
+                f"source_articles_relinked={plan.source_articles_relinked})"
             )
 
         summary = (

@@ -8,6 +8,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 
+from content.models import Article
 from events.models import Event, EventRegistration
 
 User = get_user_model()
@@ -45,6 +46,12 @@ class MergeCommandDryRunTest(TestCase):
         canonical, duplicate = _pair()
         member = User.objects.create_user(email="m@test.com", password="x")
         EventRegistration.objects.create(event=duplicate, user=member)
+        article = Article.objects.create(
+            slug='merge-command-source-article',
+            title='Merge Command Source Article',
+            date=dt.date(2026, 5, 20),
+            source_event=duplicate,
+        )
 
         out = StringIO()
         call_command("merge_duplicate_events", "--all", stdout=out)
@@ -52,12 +59,15 @@ class MergeCommandDryRunTest(TestCase):
         # Plan printed.
         self.assertIn("DRY-RUN", out.getvalue())
         self.assertIn("would merge", out.getvalue())
+        self.assertIn("source_articles_relinked=1", out.getvalue())
         # Nothing written.
         duplicate.refresh_from_db()
         self.assertEqual(duplicate.status, "completed")
         self.assertTrue(duplicate.published)
         self.assertTrue(
             EventRegistration.objects.filter(event=duplicate).exists())
+        article.refresh_from_db()
+        self.assertEqual(article.source_event, duplicate)
 
 
 class MergeCommandCommitTest(TestCase):

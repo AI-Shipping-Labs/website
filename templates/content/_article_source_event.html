@@ -1,0 +1,17 @@
+{% load accounts_extras %}
+{% if source_event %}
+<aside class="mt-12 rounded-lg border border-accent/30 bg-accent/5 p-5" data-testid="article-source-event" aria-labelledby="article-source-event-title">
+  <div class="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div class="min-w-0">
+      <p class="text-sm font-medium text-accent">From the event</p>
+      <h2 id="article-source-event-title" class="mt-1 text-lg font-semibold text-foreground">{{ source_event.title }}</h2>
+    </div>
+    <a href="{{ source_event.get_absolute_url }}"
+       class="{% button_classes 'primary' size='md' extra='shrink-0' %}"
+       data-testid="article-source-event-link">
+      View source event
+      <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
+    </a>
+  </div>
+</aside>
+{% endif %}

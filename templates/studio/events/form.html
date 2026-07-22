@@ -108,6 +108,26 @@
     </div>
     {% endif %}
 
+    <section data-testid="event-source-articles">
+      <h2 class="text-sm font-medium text-foreground">Source articles</h2>
+      {% if source_articles %}
+      <div class="mt-3 space-y-3">
+        {% for article in source_articles %}
+        <div class="rounded-lg border border-border bg-secondary px-4 py-3 text-sm" data-testid="event-source-article-row">
+          <p class="font-medium text-foreground">{{ article.title }}</p>
+          <p class="mt-1 text-xs text-muted-foreground">{% if article.published %}Published{% else %}Draft{% endif %}</p>
+          <div class="mt-2 flex flex-wrap gap-3">
+            <a href="{% if article.published %}{{ article.get_absolute_url }}{% else %}{{ article.get_preview_url }}{% endif %}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{% if article.published %}View article{% else %}Preview draft{% endif %}</a>
+            <a href="{{ article.get_studio_edit_url }}" class="text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Edit in Studio</a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="mt-2 text-sm text-muted-foreground">No source articles</p>
+      {% endif %}
+    </section>
+
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Status</label>

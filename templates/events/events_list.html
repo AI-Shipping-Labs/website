@@ -187,10 +187,10 @@
             {% if event.tags %}
             <div class="mt-3 flex flex-wrap gap-1.5" data-testid="event-card-tags">
               {% for tag in event.tags|slice:":3" %}
-              <a href="/events?filter=past&amp;tag={{ tag }}" class="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary/80" onclick="event.stopPropagation();">{{ tag }}</a>
+              <a href="/events?filter=past&amp;tag={{ tag }}" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" onclick="event.stopPropagation();">{{ tag }}</a>
               {% endfor %}
               {% if event.tags|length > 3 %}
-              <span class="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground" aria-label="{{ event.tags|length|add:'-3' }} more event tags">+{{ event.tags|length|add:"-3" }}</span>
+              <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ event.tags|length|add:'-3' }} more event tags">+{{ event.tags|length|add:"-3" }}</span>
               {% endif %}
             </div>
             {% endif %}

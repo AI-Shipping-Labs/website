@@ -3,6 +3,7 @@
 Verifies that:
 - /accounts/signup/ redirects to /accounts/register/ (styled page)
 - Blog tag metadata uses the compact canonical clickable-chip treatment
+- Past-event tag metadata uses the compact canonical clickable-chip treatment
 - Social icon links on about page are at least 44px
 - Course unit links have adequate touch target sizing
 """
@@ -56,33 +57,33 @@ class BlogTagTouchTargetTest(TestCase):
         self.assertNotIn("min-h-[44px]", tag_link_match.group(1))
 
 
-class RecordingsTagTouchTargetTest(TestCase):
-    """Past-recording tag chips on /events?filter=past have min-h-[44px]
-    for touch targets (folded into events/events_list.html as of #294).
-    """
+class PastEventTagChipTest(TestCase):
+    """Past-recording tags follow the compact metadata contract."""
 
-    def test_past_recording_tag_links_have_min_height(self):
-        """Tag links on the past-recordings section include min-h-[44px]."""
+    @classmethod
+    def setUpTestData(cls):
         from datetime import timedelta
 
         from django.utils import timezone
 
         from events.models import Event
 
-        Event.objects.create(
+        cls.event = Event.objects.create(
             title='Tagged Recording',
             slug='tagged-recording',
             start_datetime=timezone.now() - timedelta(days=7),
             status='completed',
             recording_url='https://youtube.com/watch?v=test',
-            tags=['python'],
+            tags=['python', 'django', 'ai', 'ml'],
             published=True,
         )
+
+    @tag("visual_regression")
+    def test_past_recording_tag_links_use_compact_clickable_treatment(self):
+        """Past-recording tags remain native links with canonical classes."""
         response = self.client.get('/events?filter=past')
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        # The tag chip href is used to identify the link, then we check that
-        # its class contains the min-h-[44px] tap target.
         tag_link_match = re.search(
             r'<a[^>]*href="/events\?filter=past&amp;tag=python"[^>]*class="([^"]*)"',
             content,
@@ -91,7 +92,37 @@ class RecordingsTagTouchTargetTest(TestCase):
             tag_link_match,
             "Past-recording tag link not found in events_list.html",
         )
-        self.assertIn("min-h-[44px]", tag_link_match.group(1))
+        self.assertEqual(
+            tag_link_match.group(1),
+            "inline-flex items-center gap-1 rounded-full bg-secondary "
+            "px-2.5 py-0.5 text-xs font-medium text-muted-foreground "
+            "transition-colors hover:bg-secondary/80 "
+            "focus-visible:outline-none focus-visible:ring-2 "
+            "focus-visible:ring-accent focus-visible:ring-offset-2 "
+            "focus-visible:ring-offset-background",
+        )
+        self.assertNotIn("min-h-[44px]", tag_link_match.group(1))
+
+    @tag("visual_regression")
+    def test_past_recording_tag_overflow_uses_compact_static_treatment(self):
+        """The overflow count uses the canonical static tag-chip classes."""
+        response = self.client.get('/events?filter=past')
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        overflow_match = re.search(
+            r'<span class="([^"]*)" aria-label="1 more event tags">',
+            content,
+        )
+        self.assertIsNotNone(
+            overflow_match,
+            "Past-recording tag overflow not found in events_list.html",
+        )
+        self.assertEqual(
+            overflow_match.group(1),
+            "inline-flex items-center gap-1 rounded-full bg-secondary "
+            "px-2.5 py-0.5 text-xs font-medium text-muted-foreground",
+        )
+        self.assertNotIn("min-h-[44px]", overflow_match.group(1))
 
 
 class AboutPageSocialIconTest(TestCase):

@@ -84,11 +84,21 @@ class CalendlyWebhookCaptureTest(TestCase):
     def _post(self, payload):
         """POST a provider-authenticated payload."""
         body = json.dumps(payload).encode()
+        return self._post_signed(body, _signature_header(body))
+
+    def _post_signed(self, body, signature):
+        """POST a raw body with an exact signature header.
+
+        Replay tests must reuse one header: the deduplication key hashes the
+        header (which carries a whole-second ``t=``) together with the body,
+        so re-signing per call makes two POSTs distinct deliveries whenever
+        they straddle a second boundary.
+        """
         return self.client.post(
             WEBHOOK_URL,
             data=body,
             content_type='application/json',
-            HTTP_CALENDLY_WEBHOOK_SIGNATURE=_signature_header(body),
+            HTTP_CALENDLY_WEBHOOK_SIGNATURE=signature,
         )
 
     def test_invitee_created_records_booked_call_for_member(self):
@@ -281,9 +291,10 @@ class CalendlyWebhookCaptureTest(TestCase):
         self.assertEqual(log.attempts, 2)
 
     def test_identical_signed_replay_does_not_process_twice(self):
-        payload = _payload('invitee.created', email='alice@test.com')
-        self._post(payload)
-        self._post(payload)
+        body = json.dumps(_payload('invitee.created', email='alice@test.com')).encode()
+        signature = _signature_header(body)
+        self._post_signed(body, signature)
+        self._post_signed(body, signature)
         self.assertEqual(WebhookLog.objects.filter(service='calendly').count(), 1)
 
     def test_webhook_is_logged(self):

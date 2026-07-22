@@ -15,7 +15,9 @@ Read this page before acting on any finding in the reports below.
 | `landing-copy.md` | `/blog`, `/resources`, `/downloads`, `/courses`, `/sprints`, `/activities` | Copy |
 | `landing-copy-2.md` | `/projects`, `/interview`, `/workshops`, `/workshops/catalog`, `/events` | Copy |
 
-Nothing in these reports is implemented. They are proposals.
+These reports are proposals, not a record of shipped work.
+
+Status, re-verified against the tree on 2026-07-21 after the 19:20-19:56 commit burst: a narrow slice landed. The `/resources` category-visibility bug, the `/resources` and `/projects` tag filters, the workshop catalog facet accordions and chip scale, and the three internal IA notes are done. Roughly 20 of about 110 findings. Everything else in these files is still open and is tracked in issues #1325 (CTAs and empty states), #1326 (copy), #1327 (design-system conformance) and #1330 (product decisions). Do not read a finding here as unfixed without checking the code first — `/resources` in particular is done.
 
 ## The screenshots were taken against a stale server
 

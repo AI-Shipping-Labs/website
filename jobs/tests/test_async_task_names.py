@@ -25,7 +25,12 @@ Out of scope (explicitly excluded with documented rationale):
   a literal keyword and is therefore covered by the assertion (no
   exclusion needed; it's listed here for clarity).
 - Files under ``tests/`` or named ``test_*.py`` — test scaffolding.
-- Files under ``.venv/`` and other vendored dirs.
+- Everything under a dot-directory (``.venv/``, ``.git/``, ``.tmp/``,
+  ``.claude/``, ...). Agent scratch copies of the whole repo land there,
+  and a duplicate of an ``EXEMPT_FILES`` module at
+  ``.tmp/<scratch>/jobs/tasks/helpers.py`` does not match the
+  repo-relative exemption key. See issue #1313.
+- Vendored and generated dirs named in ``SKIP_DIR_NAMES``.
 - Docstring-only ``async_task(...)`` references inside ``\"\"\"`` blocks
   — these are not ``ast.Call`` nodes and are skipped naturally by AST
   parsing.
@@ -33,6 +38,7 @@ Out of scope (explicitly excluded with documented rationale):
 
 import ast
 import pathlib
+import tempfile
 from collections.abc import Iterable
 
 from django.test import SimpleTestCase
@@ -55,18 +61,16 @@ EXEMPT_FILES = frozenset({
 })
 
 
+# Non-dot directories to skip. Dot-directories (``.venv``, ``.git``,
+# ``.tmp``, ``.claude``, ``.tox``, ``.mypy_cache``, ``.pytest_cache``, ...)
+# are skipped wholesale by the rule in ``_iter_python_files`` and must not
+# be listed here.
 SKIP_DIR_NAMES = frozenset({
-    '.venv',
-    '.git',
     'node_modules',
     '__pycache__',
-    '.tox',
-    '.mypy_cache',
-    '.pytest_cache',
     'static',
     'staticfiles',
     'media',
-    '.claude',
 })
 
 
@@ -78,6 +82,17 @@ def _iter_python_files(root: pathlib.Path) -> Iterable[pathlib.Path]:
         # an orchestrator worktree at ``.../.claude/worktrees/<id>/`` —
         # making the test pass vacuously. See issue #745.
         rel_parts = path.relative_to(root).parts
+        # Skip every dot-directory. Agent scratch copies of the whole repo
+        # have lived under ``.tmp/worktrees/``, plain ``.tmp/<name>/``
+        # clones and ``.claude/worktrees/``; a duplicate of an
+        # EXEMPT_FILES module at ``.tmp/<scratch>/jobs/tasks/helpers.py``
+        # does not match the repo-relative exemption key and was reported
+        # as a violation, failing the full suite. Naming each scratch dir
+        # individually just moves the trap to the next convention. No
+        # production Python lives in a dot-directory, so this cannot hide
+        # a real call site. See issue #1313.
+        if any(part.startswith('.') for part in rel_parts):
+            continue
         if any(part in SKIP_DIR_NAMES for part in rel_parts):
             continue
         # Skip test scaffolding.
@@ -209,6 +224,40 @@ class AsyncTaskTaskNameStaticAnalysisTest(SimpleTestCase):
                 "walk filter is excluding everything. See issue #745."
             ),
         )
+
+    def test_scratch_copies_under_dot_directories_are_not_walked(self):
+        """A copy of the repo under a dot-directory is excluded from the walk.
+
+        Issue #1313: agent scratch has landed under ``.tmp/worktrees/``,
+        plain ``.tmp/<name>/`` clones and ``.claude/worktrees/``. A
+        duplicate of an EXEMPT_FILES module at
+        ``.tmp/<scratch>/jobs/tasks/helpers.py`` does not match the
+        repo-relative exemption key, so the walk flagged it and the full
+        suite failed with offenders nobody could fix.
+
+        Builds a synthetic tree rather than asserting against the real
+        ``.tmp/``, which may or may not exist on a given machine. The
+        second scratch dir is deliberately named something other than
+        ``.tmp`` to pin the general dot-directory rule instead of one
+        hardcoded name.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            for rel in (
+                'jobs/tasks/real.py',
+                '.tmp/scratch/jobs/tasks/real.py',
+                '.workspace/copy/jobs/tasks/real.py',
+            ):
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("async_task('some.task')\n", encoding='utf-8')
+
+            walked = sorted(
+                path.relative_to(root).as_posix()
+                for path in _iter_python_files(root)
+            )
+
+        self.assertEqual(walked, ['jobs/tasks/real.py'])
 
     def test_aliased_async_task_import_is_audited(self):
         """A ``from ... import async_task as <alias>`` call is still checked.

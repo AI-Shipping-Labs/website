@@ -107,8 +107,14 @@ class EventListRegisteredBadgeInlineTest(TierSetupMixin, TestCase):
 
 
 class EventListPastRecordingTapTargetTest(TestCase):
-    """The past-recordings cards on /events?filter=past should have a
-    tap-friendly tag chip (min-h-[44px]).
+    """Past-recording tag chips follow the tag-chip recipe, not the pill one.
+
+    ``_docs/design-system.md`` ("Tap Targets") exempts tag chips and
+    metadata pills from the 44px minimum even when they are links, and
+    its tie-breaker gives the target to page-level controls only. These
+    chips are incidental metadata on a card whose whole surface is
+    already clickable, so a 44px minimum would inflate a ``text-xs`` chip
+    to three times its line height.
     """
 
     @classmethod
@@ -123,17 +129,19 @@ class EventListPastRecordingTapTargetTest(TestCase):
             published=True,
         )
 
-    def test_past_tag_chip_has_min_height(self):
+    def test_past_tag_chip_uses_the_tag_chip_recipe(self):
         response = self.client.get("/events?filter=past")
         content = response.content.decode()
-        # Tag chip links must be tap-target-sized on mobile.
         import re
         match = re.search(
             r'<a[^>]*href="/events\?filter=past&amp;tag=python"[^>]*>',
             content,
         )
         self.assertIsNotNone(match, "Past tag chip not found")
-        self.assertIn("min-h-[44px]", match.group(0))
+        chip = match.group(0)
+        self.assertNotIn("min-h-[44px]", chip)
+        self.assertIn("bg-secondary", chip)
+        self.assertIn("text-xs", chip)
 
 
 class EventDetailRegisterButtonFullWidthMobileTest(TestCase):

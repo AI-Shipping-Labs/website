@@ -14,12 +14,12 @@ can tell at a glance which is which.
 
 Examples of filenames that belong here (taken from the files already in this folder, all in the canonical `YYYY-MM-DD-<topic>.md` form):
 
-- `2026-03-21-test-remediation-plan.md`
-- `2026-03-27-content-images-s3.md`
 - `2026-04-20-audit.md`
 - `2026-05-12-code-smell-audit.md`
 - `2026-05-12-test-suite-audit.md`
 - `2026-05-13-lint-advisory.md`
+- `2026-06-26-datamailer-port-analysis.md`
+- `2026-07-09-guest-ui-design-audit.md`
 
 ## What does NOT go here
 

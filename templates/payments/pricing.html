@@ -188,20 +188,13 @@
               {{ item.state.action_label }}
             </span>
             {% elif item.state.action_kind == 'signup' %}
-            {% comment %}
-              Issue #652: replace the "Create an account" button with the
-              inline register card so anonymous visitors can register
-              without leaving /pricing. The form/OAuth/legal partials are
-              shared with the standalone register page.
-
-              Issue #1188: reuse the course-page collapse_email=True
-              variant so OAuth providers are visible first and the email
-              form expands only when requested. With no OAuth configured,
-              the shared partial renders the email form expanded.
-            {% endcomment %}
-            <div class="pricing-inline-register-embed">
-              {% include "accounts/includes/_inline_register_card.html" with collapse_email=True %}
-            </div>
+            {# Free tier: a single Join button that sends the visitor to the
+               register page (the inline register form was removed here). #}
+            <a href="{% url 'account_register' %}?next=/pricing"
+               class="{% button_classes 'secondary' size='lg' extra='w-full' %}"
+               data-testid="pricing-free-signup-cta">
+              {{ item.state.action_label }}
+            </a>
             {% elif item.state.action_kind == 'portal' %}
             <a href="{{ stripe_customer_portal_url }}"
                class="block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors bg-secondary text-foreground hover:bg-secondary/80 min-h-[44px] flex items-center justify-center"

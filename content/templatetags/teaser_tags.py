@@ -17,11 +17,54 @@ Chain ``truncatechars``/``truncatewords`` AFTER ``strip_markdown`` so the
 per-surface truncation length is preserved.
 """
 
+import re
+
 from django import template
+from django.utils.safestring import mark_safe
 
 from content.utils.markdown import markdown_to_plain_text
 
 register = template.Library()
+
+# A run of one or more consecutive code blocks (optionally separated by
+# whitespace), collapsed to a single "Code hidden" placeholder so a gated
+# teaser shows a clear locked-code affordance instead of a bare rectangle.
+#
+# The teaser truncator (``content.utils.teaser``) deliberately drops the
+# contents of ``<pre>`` blocks, but code is wrapped in
+# ``<div class="codehilite"><pre>...</pre></div>`` — so what survives into
+# the teaser is an EMPTY ``<div class="codehilite"></div>`` that the syntax
+# CSS styles as an empty code rectangle. We match that wrapper as well as any
+# bare ``<pre>`` block.
+_CODE_UNIT = r'<div class="codehilite"[^>]*>.*?</div>|<pre\b[^>]*>.*?</pre>'
+_CODE_BLOCK_RUN_RE = re.compile(
+    rf'(?:{_CODE_UNIT})(?:\s*(?:{_CODE_UNIT}))*',
+    re.DOTALL | re.IGNORECASE,
+)
+
+_CODE_HIDDEN_PLACEHOLDER = (
+    '<div class="teaser-code-hidden not-prose my-6 flex items-center gap-2 '
+    'rounded-lg border border-dashed border-border bg-muted/30 px-4 py-3 '
+    'text-sm text-muted-foreground" data-testid="teaser-code-hidden">'
+    '<i data-lucide="lock" class="h-4 w-4 flex-shrink-0"></i>'
+    '<span>Code hidden — unlock to view</span>'
+    '</div>'
+)
+
+
+@register.filter
+def hide_code_blocks(value):
+    """Replace ``<pre>`` code blocks in gated teaser HTML with a placeholder.
+
+    Gated teasers keep truncated body HTML; code blocks in that fragment
+    render as bare rectangles with no useful content. This swaps each run of
+    consecutive code blocks for a single "Code hidden — unlock to view"
+    card. Returns safe HTML (the input is already-rendered, trusted body
+    HTML); empty/falsy input returns ``''``.
+    """
+    if not value:
+        return ''
+    return mark_safe(_CODE_BLOCK_RUN_RE.sub(_CODE_HIDDEN_PLACEHOLDER, value))
 
 @register.filter
 def strip_markdown(value):

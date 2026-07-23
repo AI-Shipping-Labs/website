@@ -84,7 +84,7 @@
           {% elif teaser_body_html %}
           <div class="relative mb-8" data-testid="teaser-body-wrapper">
             <div class="prose teaser-body max-w-full overflow-x-auto" data-testid="teaser-body">
-              {{ teaser_body_html|safe }}
+              {{ teaser_body_html|hide_code_blocks }}
             </div>
             <!-- Fade-out gradient over the bottom of the teaser body. Sits
                  above the prose but below the CTA so the eye is led down. -->

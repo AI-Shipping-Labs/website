@@ -84,7 +84,7 @@
 
       <div class="relative mb-8" data-testid="teaser-body-wrapper">
         <div class="prose teaser-body" data-testid="teaser-body">
-          {{ teaser_body_html|safe }}
+          {{ teaser_body_html|hide_code_blocks }}
         </div>
         <div class="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-background"></div>
       </div>

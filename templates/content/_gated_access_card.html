@@ -9,77 +9,122 @@ workshop per-level helpers, which share the same copy builder).
 Access decisions stay in the views/models; this partial only standardizes
 the visible hierarchy.
 
+Layout: a two-zone "value manifest" card — a clean icon badge on the
+left, and on the right the requirement pill, heading, description, an
+optional list of what unlocking includes (``gated_value_items``), the
+action CTA, the current-access line, and the sign-up / sign-in companions.
+
 Expected context:
   gated_card_testid, gated_icon, gated_heading, gated_description,
-  required_tier_name, current_user_state, gated_extra_partial,
-  gated_cta_url, gated_cta_label, gated_cta_testid, signup_cta_url,
-  signup_cta_label, signup_cta_testid, signin_cta_url, signin_cta_label,
-  signin_cta_testid
+  required_tier_name, current_user_state, gated_value_items,
+  gated_extra_partial, gated_cta_url, gated_cta_label, gated_cta_testid,
+  signup_cta_url, signup_cta_label, signup_cta_testid, signin_cta_url,
+  signin_cta_label, signin_cta_testid, signup_inline
 
-Issue #481 / #1335: ``required_tier_name`` carries the bare tier name
-(Basic / Main / Premium / Free) and the ``tier_public_label`` filter turns
-it into the public label so the pill reads "Basic or above required" /
-"Main or above required" / "Premium required" — never "Premium+" or
-"Premium or above" (Premium has no higher public tier). The template never
-branches on tier name; the mapping lives in ``content.access``.
+``required_tier_name`` carries the bare tier name (Basic / Main / Premium)
+and the ``tier_public_label`` filter renders the public label so the pill
+reads "Basic or above required" / "Main or above required" / "Premium
+required". The template never branches on tier name; the mapping lives in
+``content.access``. When it is empty the gate is free-with-sign-in and a
+"Free with an account" chip renders instead.
 
-Issue #652: when ``signup_inline=True`` and the visitor is anonymous,
-the secondary "Create free account" link is replaced by the inline
-register card so the visitor can sign up without leaving the page. The
-parent template/view is responsible for loading the inline-register JS
-in the extra_scripts block.
+``gated_value_items`` is an optional list of ``{icon, label}`` describing
+what access unlocks (e.g. workshop overview / page list / tutorial). Absent
+on surfaces that do not supply it.
+
+Issue #652: when ``signup_inline=True`` and the visitor is anonymous, the
+"Create free account" link is replaced by the inline register card. The
+parent template/view loads the inline-register JS in extra_scripts.
 {% endcomment %}
-<div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center" data-testid="{{ gated_card_testid }}">
-  <div class="mb-4">
-    <i data-lucide="{{ gated_icon|default:'lock' }}" class="mx-auto h-10 w-10 text-accent"></i>
-  </div>
-  <p class="text-lg font-semibold text-foreground">{{ gated_heading }}</p>
-  {% if gated_description %}
-  <p class="mt-2 text-sm text-muted-foreground">{{ gated_description }}</p>
-  {% endif %}
-  {% if required_tier_name %}
-  <p class="mt-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-background px-3 py-1 text-sm font-medium text-foreground" data-testid="gated-required-tier">
-    <i data-lucide="badge-check" class="h-4 w-4 text-accent"></i>
-    {{ required_tier_name|tier_public_label }} required
-  </p>
-  {% endif %}
-  {% if current_user_state %}
-  <p class="mt-3 text-sm text-muted-foreground" data-testid="gated-current-state">{{ current_user_state }}</p>
-  {% endif %}
-  {% if gated_extra_partial %}
-  <div class="mt-5">
-    {% include gated_extra_partial %}
-  </div>
-  {% endif %}
-  <a href="{{ gated_cta_url }}"
-     class="mt-6 inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-     data-testid="{{ gated_cta_testid }}">
-    <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
-    {{ gated_cta_label }}
-  </a>
-  {% if signup_cta_url %}
-    {% if signup_inline %}
-    <div class="mt-6" data-testid="{{ signup_cta_testid|default:'teaser-signup-cta' }}">
-      {% include "accounts/includes/_inline_register_card.html" %}
+<div class="overflow-hidden rounded-lg border border-accent/30 bg-accent/5" data-testid="{{ gated_card_testid }}">
+  <div class="flex flex-col items-center gap-6 p-6 text-center sm:flex-row sm:items-start sm:gap-8 sm:p-8 sm:text-left">
+
+    {# Icon zone — clean badge, no glow #}
+    <div class="flex-shrink-0">
+      <div class="inline-flex items-center justify-center rounded-2xl border border-accent/30 bg-accent/10 p-5">
+        <i data-lucide="{{ gated_icon|default:'lock' }}" class="h-10 w-10 text-accent"></i>
+      </div>
     </div>
-    {% else %}
-    <div class="mt-4">
-      <a href="{{ signup_cta_url }}"
-         class="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-         data-testid="{{ signup_cta_testid|default:'teaser-signup-cta' }}">
-        <i data-lucide="user-plus" class="h-4 w-4"></i>
-        {{ signup_cta_label }}
-      </a>
+
+    {# Content zone #}
+    <div class="min-w-0 flex-1">
+      {% if required_tier_name %}
+      <span class="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent" data-testid="gated-required-tier">
+        <i data-lucide="badge-check" class="h-3.5 w-3.5"></i>
+        {{ required_tier_name|tier_public_label }} required
+      </span>
+      {% elif signup_cta_url %}
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-green-500/15 px-2.5 py-1 text-xs font-medium text-green-500" data-testid="gated-free-badge">
+        <i data-lucide="circle-check" class="h-3.5 w-3.5"></i>
+        Free with an account
+      </span>
+      {% endif %}
+
+      <p class="mt-3 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">{{ gated_heading }}</p>
+      {% if gated_description %}
+      <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{{ gated_description }}</p>
+      {% endif %}
+
+      {% if gated_value_items %}
+      <ul class="mt-5 flex flex-col flex-wrap items-center gap-x-6 gap-y-2.5 sm:flex-row sm:items-start" data-testid="gated-value-items">
+        {% for item in gated_value_items %}
+        <li class="inline-flex items-center gap-2 text-sm font-medium text-foreground">
+          <i data-lucide="{{ item.icon|default:'circle-check' }}" class="h-4 w-4 flex-shrink-0 text-accent"></i>
+          {{ item.label }}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+
+      {% if gated_extra_partial %}
+      <div class="mt-5">
+        {% include gated_extra_partial %}
+      </div>
+      {% endif %}
+
+      {# Decision row: current access (context) on the left, action CTA on the right — one line #}
+      <div class="mt-6 flex flex-col gap-4 border-t border-border/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
+        {% if current_user_state %}
+        <p class="inline-flex items-center gap-2 text-sm text-muted-foreground" data-testid="gated-current-state">
+          <i data-lucide="circle-user" class="h-4 w-4"></i>
+          {{ current_user_state }}
+        </p>
+        {% else %}
+        <span class="hidden sm:block"></span>
+        {% endif %}
+        <a href="{{ gated_cta_url }}"
+           class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+           data-testid="{{ gated_cta_testid }}">
+          {{ gated_cta_label }}
+          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+        </a>
+      </div>
+
+      {% if signup_cta_url %}
+        {% if signup_inline %}
+        <div class="mt-6 sm:max-w-md" data-testid="{{ signup_cta_testid|default:'teaser-signup-cta' }}">
+          {% include "accounts/includes/_inline_register_card.html" %}
+        </div>
+        {% else %}
+        <div class="mt-4">
+          <a href="{{ signup_cta_url }}"
+             class="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+             data-testid="{{ signup_cta_testid|default:'teaser-signup-cta' }}">
+            <i data-lucide="user-plus" class="h-4 w-4"></i>
+            {{ signup_cta_label }}
+          </a>
+        </div>
+        {% endif %}
+      {% endif %}
+      {% if signin_cta_url %}
+      <div class="mt-3">
+        <a href="{{ signin_cta_url }}"
+           class="text-sm text-muted-foreground transition-colors hover:text-foreground hover:underline"
+           data-testid="{{ signin_cta_testid|default:'teaser-signin-cta' }}">
+          {{ signin_cta_label }}
+        </a>
+      </div>
+      {% endif %}
     </div>
-    {% endif %}
-  {% endif %}
-  {% if signin_cta_url %}
-  <div class="mt-3">
-    <a href="{{ signin_cta_url }}"
-       class="text-sm text-muted-foreground transition-colors hover:text-foreground hover:underline"
-       data-testid="{{ signin_cta_testid|default:'teaser-signin-cta' }}">
-      {{ signin_cta_label }}
-    </a>
   </div>
-  {% endif %}
 </div>

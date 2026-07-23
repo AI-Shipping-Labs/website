@@ -448,10 +448,11 @@ def build_gated_access_copy(
             f'Current access: {get_required_tier_name(get_user_level(user))} member'
         )
     else:
-        # Anonymous on a paid wall: keep the upgrade path but offer a
-        # no-cost account first and a sign-in link for existing members.
-        signup_cta_url = signup_url
-        signup_cta_label = 'Create a free account'
+        # Anonymous on a paid wall: the path forward is to upgrade (View
+        # Pricing). We do NOT offer "Create a free account" here — a free
+        # account grants no access to paid content, so a free-signup CTA on
+        # a paid surface reads as misleading. Existing members still get a
+        # sign-in link when the caller opts in.
         if show_signin_on_paid_guest:
             signin_cta_url = login_url
             signin_cta_label = 'Already a member? Sign in'
@@ -462,7 +463,7 @@ def build_gated_access_copy(
         'required_tier_name': tier_name,
         'current_user_state': current_user_state,
         'gated_cta_url': '/pricing',
-        'gated_cta_label': 'View Pricing',
+        'gated_cta_label': 'Upgrade',
         'signup_cta_url': signup_cta_url,
         'signup_cta_label': signup_cta_label,
         'signin_cta_url': signin_cta_url,

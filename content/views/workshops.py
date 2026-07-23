@@ -921,6 +921,12 @@ def _build_landing_context(workshop, user):
         'pages_required_tier_name': pages_required_tier_name,
         'pages_signup_cta_url': pages_signup_cta_url,
         'pages_signup_cta_label': pages_signup_cta_label,
+        'pages_value_items': [
+            {'icon': 'book-open', 'label': 'Full workshop overview'},
+            {'icon': 'list', 'label': 'Complete page list'},
+            {'icon': 'square-check', 'label': 'Step-by-step tutorial'},
+            {'icon': 'shield-check', 'label': 'Cancel anytime'},
+        ],
         'recording_cta_message': recording_cta_message,
         'recording_cta_url': recording_cta_url,
         'current_user_state': current_user_state,

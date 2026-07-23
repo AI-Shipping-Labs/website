@@ -165,10 +165,10 @@ RULE_BY_ID = {rule.rule_id: rule for rule in RULES}
 # Initial frozen allowances seeded and inspected under #1240. Any later new or
 # increased entry needs a separate issue-number rationale adjacent to the entry.
 BASELINE: dict[str, dict[str, int]] = {
-    "deprecated_content_gated_include": {  # Initial legacy debt: #1240.
-        "templates/content/blog_detail.html": 1,
-        "templates/content/tutorial_detail.html": 1,
-    },
+    # #1335 migrated blog_detail and tutorial_detail onto the canonical
+    # gated card and deleted templates/includes/content_gated.html. The rule
+    # stays as a guard so no template can reintroduce the deprecated include.
+    "deprecated_content_gated_include": {},
     "grid_gap5": {},
     "handrolled_empty_state_signature": {  # Initial legacy debt: #1240.
         "templates/content/peer_review/certificate.html": 2,

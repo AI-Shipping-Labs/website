@@ -440,7 +440,7 @@ class TestScenario3FreePreviewUnit:
         body = page.content()
 
         # Gated message with correct tier name
-        assert "Upgrade to Premium to access this lesson" in body
+        assert "Upgrade to Premium to read this lesson" in body
         # "View Pricing" link
         pricing_link = page.locator(
             'a:has-text("View Pricing")'
@@ -488,7 +488,7 @@ class TestScenario4FreePaywall:
         body = page.content()
 
         # Gated message mentions correct tier
-        assert "Upgrade to Main to access this lesson" in body
+        assert "Upgrade to Main to read this lesson" in body
 
         # "View Pricing" link is visible
         pricing_link = page.locator(
@@ -566,15 +566,15 @@ class TestScenario5AnonymousSyllabus:
         assert "/courses/anonymous-test-course/module-1/lesson-a" in page.url
         assert page.locator('[data-testid="teaser-title"]').inner_text() == "Lesson A"
         assert page.locator('[data-testid="teaser-cta"]').count() == 1
-        assert "Sign in to access this lesson" in page.content()
+        assert "Upgrade to Basic to read this lesson" in page.content()
 
-        # "View Pricing" sends anonymous visitors to login so they can
-        # authenticate before choosing a paid tier.
+        # Issue #1335: the anonymous primary CTA now routes to /pricing,
+        # with sign-up / sign-in companions offering the account path.
         pricing_link = page.locator('[data-testid="teaser-upgrade-cta"]')
         assert pricing_link.count() == 1
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/accounts/login" in page.url
+        assert "/pricing" in page.url
 # ---------------------------------------------------------------
 # Scenario 6: Member marks a unit completed and then undoes it
 # ---------------------------------------------------------------

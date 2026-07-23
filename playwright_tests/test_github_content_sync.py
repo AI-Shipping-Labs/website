@@ -1091,10 +1091,10 @@ class TestScenario11AnonymousReadsOpenSyncedArticle:
         # Then: No paywall or login prompt
         assert "Upgrade to" not in body
 
-        # No gating overlay (the gating overlay uses filter:blur
-        # and specific CTA text)
+        # No gating overlay (the canonical gated card renders the upgrade
+        # heading; an accessible article must not show it).
         gating_overlay = page.locator(
-            'text="Create a free account or choose Basic to read this article"'
+            'text="Upgrade to Basic to read this article"'
         )
         assert gating_overlay.count() == 0
 # ---------------------------------------------------------------------------

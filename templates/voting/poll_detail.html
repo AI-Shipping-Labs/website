@@ -43,7 +43,7 @@
 
       {% if is_gated %}
       <!-- Access gated -->
-      {% include "content/_gated_access_card.html" with gated_card_testid="poll-gated" gated_icon="lock" gated_heading=cta_message required_tier_name=required_tier_name gated_cta_url=pricing_url gated_cta_label="View Pricing" gated_cta_testid="poll-pricing-cta" %}
+      {% include "content/_gated_access_card.html" %}
       {% else %}
 
       <!-- Vote info bar -->

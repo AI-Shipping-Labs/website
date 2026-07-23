@@ -21,6 +21,7 @@ from django import template
 
 from content.access import (
     can_access,
+    get_public_label_for_tier_name,
     get_required_tier_label,
     get_required_tier_name,
 )
@@ -71,6 +72,21 @@ def required_tier_label(required_level):
         {{ event.required_level|required_tier_label }}
     """
     return get_required_tier_label(required_level)
+
+
+@register.filter
+def tier_public_label(tier_name):
+    """Return the public access label for a bare tier NAME.
+
+    Issue #1335: the gated-card partial carries ``required_tier_name`` and
+    renders "{label} required". This filter maps the name to its label
+    ("Basic or above", "Main or above", "Premium") so the mapping stays in
+    Python and the template does not branch on tier name.
+
+    Usage:
+        {{ required_tier_name|tier_public_label }} required
+    """
+    return get_public_label_for_tier_name(tier_name)
 
 
 @register.filter

@@ -257,9 +257,11 @@ The documented owner is mandatory for every instance of its named role, subject 
 
 ### Deprecated
 
-- `templates/includes/content_gated.html` is deprecated and must never be included by a new or edited template.
-- #1225 owns the project-detail migration only. Blog and tutorial detail remain legacy callers after that issue and require a separately scoped migration before the partial can be deleted.
-- Delete the deprecated partial only after repository search proves no includes remain. This documentation issue does not perform those migrations or deletion.
+- `templates/includes/content_gated.html` was deleted in #1335. Every gated
+  surface now renders `templates/content/_gated_access_card.html`, and all
+  banner copy is assembled once in `content.access.build_gating_context` /
+  `content.access.build_gated_access_copy`. Do not reintroduce a second
+  gated-card dialect or hand-assemble gated headings/CTAs at a call site.
 
 ## Buttons
 

@@ -19,13 +19,59 @@ SCREENSHOT_DIR = Path(".tmp/screenshots/issue-1225")
 def _reset_content():
     from django.db import connection
 
-    from content.models import Course, Project
+    from content.models import Article, Course, Project, Tutorial
     from voting.models import Poll
 
     Poll.objects.all().delete()
     Course.objects.all().delete()
     Project.objects.all().delete()
+    Article.objects.all().delete()
+    Tutorial.objects.all().delete()
     connection.close()
+
+
+# LEVEL_REGISTERED = 5 (free with a sign-in). See content/access.py.
+LEVEL_REGISTERED = 5
+
+
+def _article(slug="reg-article-1335", required_level=LEVEL_REGISTERED):
+    import datetime
+
+    from django.db import connection
+
+    from content.models import Article
+
+    article = Article.objects.create(
+        title="Registered Article 1335",
+        slug=slug,
+        description="Public article metadata.",
+        content_html="<p>SECRET ARTICLE BODY 1335</p>",
+        date=datetime.date(2026, 7, 20),
+        required_level=required_level,
+        published=True,
+    )
+    connection.close()
+    return article
+
+
+def _tutorial(slug="reg-tutorial-1335", required_level=LEVEL_REGISTERED):
+    import datetime
+
+    from django.db import connection
+
+    from content.models import Tutorial
+
+    tutorial = Tutorial.objects.create(
+        title="Registered Tutorial 1335",
+        slug=slug,
+        description="Public tutorial metadata.",
+        content_html="<p>SECRET TUTORIAL BODY 1335</p>",
+        date=datetime.date(2026, 7, 20),
+        required_level=required_level,
+        published=True,
+    )
+    connection.close()
+    return tutorial
 
 
 def _course(slug, required_level):
@@ -205,6 +251,123 @@ def test_main_member_reads_course_and_module_without_paywalls(
 
 
 @pytest.mark.core
+def test_anonymous_registered_article_shows_account_path(django_server, page):
+    # Issue #1335: a free-with-sign-in article must offer the account path,
+    # not a paid Pricing banner.
+    _reset_content()
+    article = _article()
+    _prepare_page(page, theme="light")
+
+    page.goto(
+        f"{django_server}{article.get_absolute_url()}",
+        wait_until="domcontentloaded",
+    )
+
+    body = page.content()
+    assert "SECRET ARTICLE BODY 1335" not in body
+    gate = page.get_by_test_id("gated-access-card")
+    expect(gate).to_contain_text("Sign in to read this article")
+    expect(gate).to_contain_text("This article is free")
+    signin = gate.get_by_role("link", name="Sign In", exact=True)
+    signup = gate.get_by_role("link", name="Create a free account", exact=True)
+    expect(signin).to_be_visible()
+    expect(signup).to_be_visible()
+    # No paid framing: no Pricing button, no tier pill.
+    expect(gate.get_by_role("link", name="View Pricing")).to_have_count(0)
+    expect(page.get_by_test_id("gated-required-tier")).to_have_count(0)
+    assert "View Pricing" not in gate.inner_text()
+    # The primary CTA is the sign-in path back to the article.
+    expect(signin).to_have_attribute(
+        "href", f"/accounts/login/?next={article.get_absolute_url()}"
+    )
+    _capture(page, "registered-article-desktop-light")
+
+    # Spec: the signup link points at /accounts/signup/?next=<article>, which
+    # redirects to the registration page carrying the same next target.
+    expect(signup).to_have_attribute(
+        "href", f"/accounts/signup/?next={article.get_absolute_url()}"
+    )
+    signup.click()
+    page.wait_for_url("**/accounts/register/**")
+
+
+@pytest.mark.core
+def test_anonymous_registered_tutorial_shows_account_path(django_server, page):
+    _reset_content()
+    tutorial = _tutorial()
+    _prepare_page(page, theme="dark")
+
+    page.goto(
+        f"{django_server}{tutorial.get_absolute_url()}",
+        wait_until="domcontentloaded",
+    )
+
+    body = page.content()
+    assert "SECRET TUTORIAL BODY 1335" not in body
+    gate = page.get_by_test_id("gated-access-card")
+    expect(gate).to_contain_text("Sign in to read this tutorial")
+    expect(gate.get_by_role("link", name="Sign In", exact=True)).to_be_visible()
+    expect(
+        gate.get_by_role("link", name="Create a free account", exact=True)
+    ).to_be_visible()
+    expect(gate.get_by_role("link", name="View Pricing")).to_have_count(0)
+    expect(page.get_by_test_id("gated-required-tier")).to_have_count(0)
+    _capture(page, "registered-tutorial-desktop-dark")
+
+
+@pytest.mark.core
+def test_anonymous_paid_article_shows_upgrade_and_account_paths(
+    django_server, page,
+):
+    # Issue #1335: an anonymous visitor on a Basic-gated article keeps the
+    # upgrade path plus a free-account companion and a sign-in link.
+    _reset_content()
+    article = _article("paid-article-1335", required_level=10)
+    _prepare_page(page, theme="light")
+
+    page.goto(
+        f"{django_server}{article.get_absolute_url()}",
+        wait_until="domcontentloaded",
+    )
+
+    gate = page.get_by_test_id("gated-access-card")
+    expect(gate).to_contain_text("Upgrade to Basic to read this article")
+    expect(gate).to_contain_text("Basic or above required")
+    expect(page.get_by_test_id("gated-pricing-link")).to_be_visible()
+    expect(
+        gate.get_by_role("link", name="Create a free account", exact=True)
+    ).to_be_visible()
+    expect(
+        gate.get_by_role("link", name="Already a member? Sign in", exact=True)
+    ).to_be_visible()
+
+
+@pytest.mark.core
+def test_free_member_paid_article_shows_upgrade_only(django_server, browser):
+    _reset_content()
+    article = _article("member-article-1335", required_level=10)
+    ensure_tiers()
+    create_user("article-free-1335@example.com", tier_slug="free")
+    context = auth_context(browser, "article-free-1335@example.com")
+    page = context.new_page()
+    _prepare_page(page)
+    try:
+        page.goto(
+            f"{django_server}{article.get_absolute_url()}",
+            wait_until="domcontentloaded",
+        )
+        gate = page.get_by_test_id("gated-access-card")
+        expect(gate).to_contain_text("Upgrade to Basic to read this article")
+        expect(gate).to_contain_text("Current access: Free member")
+        expect(page.get_by_test_id("gated-pricing-link")).to_be_visible()
+        expect(
+            gate.get_by_role("link", name="Create a free account", exact=True)
+        ).to_have_count(0)
+    finally:
+        context.close()
+
+
+@pytest.mark.core
 def test_guest_project_keeps_free_and_paid_next_steps(django_server, page):
     _reset_content()
     project = _project()
@@ -225,10 +388,13 @@ def test_guest_project_keeps_free_and_paid_next_steps(django_server, page):
     page.set_viewport_size({"width": 390, "height": 844})
     _assert_no_horizontal_overflow(page)
     _capture(page, "project-mobile-light")
-    page.get_by_test_id("gated-create-free-account-link").click()
-    page.wait_for_url(
-        f"{django_server}/accounts/register/?next={project.get_absolute_url()}"
+    # Issue #1335: the signup companion now routes through /accounts/signup/
+    # (which redirects to the registration page) carrying the next target.
+    expect(page.get_by_test_id("gated-create-free-account-link")).to_have_attribute(
+        "href", f"/accounts/signup/?next={project.get_absolute_url()}"
     )
+    page.get_by_test_id("gated-create-free-account-link").click()
+    page.wait_for_url("**/accounts/register/**")
 
 
 @pytest.mark.core

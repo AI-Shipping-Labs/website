@@ -181,12 +181,19 @@ class BuildGatingContextRegisteredTest(TierSetupMixin, TestCase):
         )
 
     def test_anonymous_gets_sign_in_cta(self):
-        ctx = build_gating_context(AnonymousUser(), self.unit, 'unit')
+        ctx = build_gating_context(
+            AnonymousUser(), self.unit, 'unit', resource_url='/x',
+        )
         self.assertTrue(ctx['is_gated'])
         self.assertEqual(ctx['gated_reason'], 'authentication_required')
-        self.assertEqual(ctx['cta_message'], 'Sign in to read this lesson')
-        self.assertEqual(ctx['login_url'], '/accounts/login/')
-        self.assertEqual(ctx['signup_url'], '/accounts/signup/')
+        # Issue #1335: canonical free-with-sign-in copy — Sign In primary,
+        # Create a free account companion, no tier pill, no Pricing.
+        self.assertEqual(ctx['gated_heading'], 'Sign in to read this lesson')
+        self.assertEqual(ctx['gated_cta_label'], 'Sign In')
+        self.assertEqual(ctx['gated_cta_url'], '/accounts/login/?next=/x')
+        self.assertEqual(ctx['signup_cta_url'], '/accounts/signup/?next=/x')
+        self.assertEqual(ctx['signup_cta_label'], 'Create a free account')
+        self.assertEqual(ctx['required_tier_name'], '')
 
     def test_free_unverified_gets_verify_email_cta(self):
         user = User.objects.create_user(

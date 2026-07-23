@@ -1336,8 +1336,10 @@ class TestScenario6AnonymousGatedArticleViaSharedLink:
             not in body
         )
 
-        # Anonymous guest CTA
-        assert "Create a free account or choose Premium to read this article" in body
+        # Issue #1335: anonymous guest keeps the upgrade heading plus a
+        # no-cost account companion.
+        assert "Upgrade to Premium to read this article" in body
+        assert "Create a free account" in body
 
         # View Pricing link
         pricing_link = page.locator('a:has-text("View Pricing")')
@@ -1469,13 +1471,15 @@ class TestScenario8AnonymousEvaluatesGatedCourseSyllabus:
         assert "/courses/main-gated-course/module-1/lesson-one" in page.url
         assert page.locator('[data-testid="teaser-title"]').inner_text() == "Lesson One"
         assert page.locator('[data-testid="teaser-cta"]').count() == 1
-        assert "Sign in to access this lesson" in page.content()
+        # Issue #1335: anonymous on a paid course now sees the unified
+        # upgrade card with a Pricing CTA.
+        assert "Upgrade to Main to read this lesson" in page.content()
 
         pricing_link = page.locator('[data-testid="teaser-upgrade-cta"]')
         assert pricing_link.count() == 1
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/accounts/login" in page.url
+        assert "/pricing" in page.url
 # ---------------------------------------------------------------
 # Scenario 9: Main member navigates a course, reads a unit, marks complete
 # ---------------------------------------------------------------
@@ -1597,7 +1601,8 @@ class TestScenario10StaffChangesVisibilityInStudio:
 
         body = anon_page.content()
         assert "Visibility Test Article" in body
-        assert "Create a free account or choose Basic to read this article" in body
+        assert "Upgrade to Basic to read this article" in body
+        assert "Create a free account" in body
         assert (
             "Full body content that should be gated after change"
             not in body

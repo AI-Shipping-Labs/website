@@ -34,7 +34,7 @@
 {% elif event.is_upcoming and not user.is_authenticated and event.required_level > 0 %}
 {% with event_next=event.get_absolute_url|urlencode %}
 {% with gated_heading="This event is for "|add:required_tier_name|add:" members" signin_url="/accounts/login/?next="|add:event_next %}
-  {% include "content/_gated_access_card.html" with gated_card_testid="event-anonymous-cta" gated_icon="lock" gated_heading=gated_heading gated_description="Membership is required before you can register for this event." required_tier_name=required_tier_name gated_extra_partial="events/_event_freestyle_evidence.html" gated_cta_url="/pricing" gated_cta_label="View membership options" gated_cta_testid="event-anonymous-pricing-cta" signup_cta_url=signin_url signup_cta_label="Sign in" signup_cta_testid="event-anonymous-signin-cta" %}
+  {% include "content/_gated_access_card.html" with gated_card_testid="event-anonymous-cta" gated_icon="lock" gated_heading=gated_heading gated_description="Membership is required before you can register for this event." required_tier_name=required_tier_name gated_extra_partial="events/_event_freestyle_evidence.html" gated_cta_url="/pricing" gated_cta_label="View membership options" gated_cta_testid="event-anonymous-pricing-cta" signup_cta_url=signin_url signup_cta_label="Sign in" signup_cta_testid="event-anonymous-signin-cta" signin_cta_url="" %}
 {% endwith %}
 {% endwith %}
 {% elif event.is_upcoming and user.is_authenticated and not has_access and gated_reason != "unverified_email" %}

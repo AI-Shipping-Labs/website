@@ -1,4 +1,5 @@
 {% load access_tags %}
+{% load accounts_extras %}
 {% comment %}
 Canonical gated-content card. This is the ONE partial every paid /
 tier-gated / free-with-sign-in content block renders (issue #1335). The
@@ -9,32 +10,28 @@ workshop per-level helpers, which share the same copy builder).
 Access decisions stay in the views/models; this partial only standardizes
 the visible hierarchy.
 
-Layout: a two-zone "value manifest" card — a clean icon badge on the
-left, and on the right the requirement pill, heading, description, an
-optional list of what unlocking includes (``gated_value_items``), the
-action CTA, the current-access line, and the sign-up / sign-in companions.
+Layout: a two-zone card — a clean icon badge on the left, and on the right
+the access badge, heading, description, and the action area. The action
+area has two shapes:
+
+- Paid (``required_tier_name`` set): a "value manifest" of what unlocking
+  includes (``gated_value_items``), then a decision row with the current
+  access line and the Upgrade CTA.
+- Free-with-sign-in (``required_tier_name`` empty, ``signup_cta_url`` set):
+  OAuth-first sign-up buttons (from ``_oauth_providers.html``), a "Create a
+  free account" button, and a "Sign in" link. No inline register form.
 
 Expected context:
   gated_card_testid, gated_icon, gated_heading, gated_description,
   required_tier_name, current_user_state, gated_value_items,
   gated_extra_partial, gated_cta_url, gated_cta_label, gated_cta_testid,
-  signup_cta_url, signup_cta_label, signup_cta_testid, signin_cta_url,
-  signin_cta_label, signin_cta_testid, signup_inline
+  signup_cta_url, signup_cta_label, signup_cta_testid, signin_cta_testid.
+  For the free branch OAuth buttons, the view must also supply
+  ``oauth_google_enabled`` / ``oauth_github_enabled`` / ``next_url``.
 
-``required_tier_name`` carries the bare tier name (Basic / Main / Premium)
-and the ``tier_public_label`` filter renders the public label so the pill
-reads "Basic or above required" / "Main or above required" / "Premium
-required". The template never branches on tier name; the mapping lives in
-``content.access``. When it is empty the gate is free-with-sign-in and a
-"Free with an account" chip renders instead.
-
-``gated_value_items`` is an optional list of ``{icon, label}`` describing
-what access unlocks (e.g. workshop overview / page list / tutorial). Absent
-on surfaces that do not supply it.
-
-Issue #652: when ``signup_inline=True`` and the visitor is anonymous, the
-"Create free account" link is replaced by the inline register card. The
-parent template/view loads the inline-register JS in extra_scripts.
+``required_tier_name`` carries the bare tier name (Basic / Main / Premium);
+``tier_public_label`` renders the pill ("Basic or above required"). Empty
+means free-with-sign-in and a "Free with sign-in" chip renders instead.
 {% endcomment %}
 <div class="overflow-hidden rounded-lg border border-accent/30 bg-accent/5" data-testid="{{ gated_card_testid }}">
   <div class="flex flex-col items-center gap-6 p-6 text-center sm:flex-row sm:items-start sm:gap-8 sm:p-8 sm:text-left">
@@ -55,8 +52,8 @@ parent template/view loads the inline-register JS in extra_scripts.
       </span>
       {% elif signup_cta_url %}
       <span class="inline-flex items-center gap-1.5 rounded-full bg-green-500/15 px-2.5 py-1 text-xs font-medium text-green-500" data-testid="gated-free-badge">
-        <i data-lucide="circle-check" class="h-3.5 w-3.5"></i>
-        Free with an account
+        <i data-lucide="badge-check" class="h-3.5 w-3.5"></i>
+        Free with sign-in
       </span>
       {% endif %}
 
@@ -65,6 +62,14 @@ parent template/view loads the inline-register JS in extra_scripts.
       <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{{ gated_description }}</p>
       {% endif %}
 
+      {% if gated_extra_partial %}
+      <div class="mt-5">
+        {% include gated_extra_partial %}
+      </div>
+      {% endif %}
+
+      {% if required_tier_name %}
+      {# ---- PAID: value manifest + decision row ---- #}
       {% if gated_value_items %}
       <ul class="mt-5 flex flex-col flex-wrap items-center gap-x-6 gap-y-2.5 sm:flex-row sm:items-start" data-testid="gated-value-items">
         {% for item in gated_value_items %}
@@ -75,14 +80,6 @@ parent template/view loads the inline-register JS in extra_scripts.
         {% endfor %}
       </ul>
       {% endif %}
-
-      {% if gated_extra_partial %}
-      <div class="mt-5">
-        {% include gated_extra_partial %}
-      </div>
-      {% endif %}
-
-      {# Decision row: current access (context) on the left, action CTA on the right — one line #}
       <div class="mt-6 flex flex-col gap-4 border-t border-border/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
         {% if current_user_state %}
         <p class="inline-flex items-center gap-2 text-sm text-muted-foreground" data-testid="gated-current-state">
@@ -100,28 +97,20 @@ parent template/view loads the inline-register JS in extra_scripts.
         </a>
       </div>
 
-      {% if signup_cta_url %}
-        {% if signup_inline %}
-        <div class="mt-6 sm:max-w-md" data-testid="{{ signup_cta_testid|default:'teaser-signup-cta' }}">
-          {% include "accounts/includes/_inline_register_card.html" %}
-        </div>
-        {% else %}
-        <div class="mt-4">
-          <a href="{{ signup_cta_url }}"
-             class="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-             data-testid="{{ signup_cta_testid|default:'teaser-signup-cta' }}">
-            <i data-lucide="user-plus" class="h-4 w-4"></i>
-            {{ signup_cta_label }}
-          </a>
-        </div>
-        {% endif %}
-      {% endif %}
-      {% if signin_cta_url %}
-      <div class="mt-3">
-        <a href="{{ signin_cta_url }}"
-           class="text-sm text-muted-foreground transition-colors hover:text-foreground hover:underline"
+      {% elif signup_cta_url %}
+      {# ---- FREE with sign-in: OAuth-first sign-up buttons, then email sign-up, then sign-in link ---- #}
+      <div class="mt-6 flex flex-col gap-3 border-t border-border/60 pt-6 sm:max-w-sm">
+        {% include "accounts/includes/_oauth_providers.html" with oauth_action="Sign up" oauth_divider_text="sign up with" oauth_hide_divider=True %}
+        <a href="{{ signup_cta_url }}"
+           class="{% button_classes 'primary' size='md' extra='w-full' %}"
+           data-testid="{{ signup_cta_testid|default:'teaser-signup-cta' }}">
+          <i data-lucide="user-plus" class="h-4 w-4"></i>
+          {{ signup_cta_label|default:'Create a free account' }}
+        </a>
+        <a href="{{ gated_cta_url }}"
+           class="text-center text-sm text-muted-foreground transition-colors hover:text-foreground hover:underline"
            data-testid="{{ signin_cta_testid|default:'teaser-signin-cta' }}">
-          {{ signin_cta_label }}
+          Already have an account? Sign in
         </a>
       </div>
       {% endif %}

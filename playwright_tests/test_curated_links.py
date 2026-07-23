@@ -390,8 +390,8 @@ class TestScenario5BasicMemberGatedFromMainLinks:
         cta_text = cta.inner_text()
         assert "Upgrade to Main to access this resource" in cta_text
 
-        # "View Plans" link present
-        view_plans_link = cta.locator('a:has-text("View Plans")')
+        # "View membership tiers" link present
+        view_plans_link = cta.locator('a:has-text("View membership tiers")')
         assert view_plans_link.count() >= 1
 # ---------------------------------------------------------------
 # Scenario 6: Visitor filters links by tag

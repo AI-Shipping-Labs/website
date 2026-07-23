@@ -212,9 +212,13 @@ def test_mobile_tutorial_keeps_static_tags_and_whole_card_navigation(
 
 
 @pytest.mark.django_db(transaction=True)
-def test_accessible_curated_link_static_tag_keeps_external_card_action(
+def test_accessible_curated_link_tag_chip_filters_and_keeps_card_action(
     django_server, page,
 ):
+    """Commit bc89c683 made curated-link chips clickable links to the
+    tag-filtered view (they were inert spans). The chips live outside the
+    card anchor so the card body still opens the external URL in a new tab.
+    """
     _clear_catalogs()
     _curated_link(
         'accessible-resource-1228',
@@ -223,21 +227,27 @@ def test_accessible_curated_link_static_tag_keeps_external_card_action(
     )
 
     page.goto(f'{django_server}/resources', wait_until='domcontentloaded')
-    card = page.locator('a[target="_blank"]', has_text='Accessible Resource 1228')
-    expect(card.get_by_role('link', name='python', exact=True)).to_have_count(0)
-    expect(card.locator('[aria-label="1 more resource tags"]')).to_have_text('+1')
-    with page.expect_popup() as popup_info:
-        card.get_by_text('python', exact=True).click()
-    popup = popup_info.value
-    popup.wait_for_url(re.compile(r'.*/accessible-resource-1228$'))
-    assert popup.url == 'https://example.com/accessible-resource-1228'
-    popup.close()
+    article = page.locator('article', has_text='Accessible Resource 1228')
+    # The card body still opens the external URL in a new tab.
+    expect(article.locator('a[target="_blank"]')).to_have_attribute(
+        'href', 'https://example.com/accessible-resource-1228',
+    )
+    # Tag chips live outside the card anchor and link to the filtered view.
+    chips = article.get_by_test_id('curated-link-card-tags')
+    expect(chips.locator('[aria-label="1 more resource tags"]')).to_have_text('+1')
+    chip = chips.get_by_role('link', name='python', exact=True)
+    expect(chip).to_have_attribute('href', '/resources?tag=python')
+    chip.click()
+    expect(page).to_have_url(re.compile(r'.*/resources\?tag=python$'))
 
 
 @pytest.mark.django_db(transaction=True)
-def test_gated_curated_link_static_tag_reveals_existing_access_options(
+def test_gated_curated_link_tag_chip_links_and_card_reveals_access_options(
     django_server, page,
 ):
+    """Gated curated-link chips are also links (bc89c683). Clicking the
+    card body — not a chip — reveals the access-options disclosure whose
+    CTA reads "View membership tiers" and points at /pricing."""
     _clear_catalogs()
     _curated_link(
         'gated-resource-1228',
@@ -250,13 +260,17 @@ def test_gated_curated_link_static_tag_reveals_existing_access_options(
     card = page.get_by_role(
         'button', name='Show access options for Gated Resource 1228',
     )
-    expect(card.get_by_role('link', name='python', exact=True)).to_have_count(0)
-    card.get_by_text('python', exact=True).click()
-    expect(card).to_have_attribute('aria-expanded', 'true')
-    expect(card.get_by_role('link', name='View Plans')).to_be_visible()
-    expect(card.get_by_role('link', name='View Plans')).to_have_attribute(
-        'href', '/pricing',
+    # Chips are links to the tag-filtered view (they stop propagation so
+    # they do not toggle the disclosure).
+    expect(card.get_by_role('link', name='python', exact=True)).to_have_attribute(
+        'href', '/resources?tag=python',
     )
+    # Clicking the card body reveals the access options.
+    card.get_by_text('Gated Resource 1228 description.').click()
+    expect(card).to_have_attribute('aria-expanded', 'true')
+    cta = card.get_by_role('link', name='View membership tiers')
+    expect(cta).to_be_visible()
+    expect(cta).to_have_attribute('href', '/pricing')
 
 
 @pytest.mark.django_db(transaction=True)

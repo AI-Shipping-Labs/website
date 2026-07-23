@@ -15,12 +15,11 @@ The scenarios assert what the visitor sees:
 """
 
 import os
-import uuid
 from urllib.parse import quote
 
 import pytest
 
-from playwright_tests.conftest import DEFAULT_PASSWORD, ensure_tiers
+from playwright_tests.conftest import ensure_tiers
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -28,10 +27,6 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 # session-cookie injection, etc.) and cannot run against the
 # deployed dev environment. See _docs/testing-guidelines.md.
 pytestmark = pytest.mark.local_only
-
-
-def _new_email(prefix):
-    return f"{prefix}-{uuid.uuid4().hex[:8]}@test.com"
 
 
 def _reset_state():
@@ -99,11 +94,11 @@ def _configure_oauth(*providers):
 class TestPricingInlineRegisterVariant:
     """Six BDD scenarios pinned by the issue body."""
 
-    def test_pricing_free_card_renders_oauth_first_with_email_hidden(
+    def test_pricing_free_card_renders_oauth_first_with_email_link(
         self, django_server, page, django_db_blocker,
     ):
-        """Visitor on /pricing sees OAuth first, with email hidden
-        behind the disclosure."""
+        """Visitor on /pricing sees OAuth first, with the email path as a
+        link out to /accounts/register/ (not an inline form)."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
@@ -116,26 +111,28 @@ class TestPricingInlineRegisterVariant:
             "link", name="Sign up with Google", exact=True,
         )
         assert google_button.is_visible()
-        toggle = free_card.locator(
-            '[data-testid="inline-register-email-toggle"]',
+        email_link = free_card.locator(
+            '[data-testid="inline-register-email-link"]',
         )
-        assert toggle.is_visible()
-        assert toggle.get_attribute("aria-expanded") == "false"
-        assert free_card.locator("#register-email").count() == 1
-        assert free_card.locator("#register-email").is_visible() is False
-        assert free_card.locator("#register-password").is_visible() is False
-        assert free_card.locator("#register-password-confirm").is_visible() is False
+        assert email_link.is_visible()
+        # No inline email form and no legacy toggles on this surface.
+        assert free_card.locator("#register-email").count() == 0
+        assert (
+            free_card.locator(
+                '[data-testid="inline-register-email-toggle"]',
+            ).count() == 0
+        )
         assert (
             free_card.locator(
                 '[data-testid="inline-register-oauth-toggle"]',
             ).count() == 0
         )
 
-    def test_pricing_toggle_expands_and_collapses_email(
+    def test_pricing_email_link_navigates_to_register_form(
         self, django_server, page, django_db_blocker,
     ):
-        """Clicking the toggle reveals the email form and flips
-        aria-expanded; clicking again hides it."""
+        """Clicking the email link lands on /accounts/register/ where the
+        email form is rendered."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
@@ -143,18 +140,12 @@ class TestPricingInlineRegisterVariant:
 
         page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
         free_card = page.locator('[data-tier-card="free"]')
-        toggle = free_card.locator(
-            '[data-testid="inline-register-email-toggle"]',
-        )
-        # Expand.
-        toggle.click()
-        free_card.locator("#register-email").wait_for(state="visible")
-        assert toggle.get_attribute("aria-expanded") == "true"
-        assert page.evaluate("document.activeElement.id") == "register-email"
-        # Collapse again.
-        toggle.click()
-        free_card.locator("#register-email").wait_for(state="hidden")
-        assert toggle.get_attribute("aria-expanded") == "false"
+        free_card.locator(
+            '[data-testid="inline-register-email-link"]',
+        ).click()
+        page.wait_for_url("**/accounts/register/**")
+        page.locator("#register-email").wait_for(state="visible")
+        assert page.locator("#register-email").is_visible()
 
     def test_pricing_google_href_carries_next_url(
         self, django_server, page, django_db_blocker,
@@ -183,13 +174,13 @@ class TestPricingInlineRegisterVariant:
         assert ("next=/pricing" in href
                 or f"next={quote('/pricing', safe='')}" in href)
 
-    def test_free_course_collapses_email_with_visible_oauth(
+    def test_free_course_leads_with_oauth_and_email_link(
         self, django_server, page, django_db_blocker,
     ):
-        """Course detail surfaces now collapse the email form behind a
-        "Sign up with your email" toggle (#687). OAuth provider buttons
-        are visible immediately; the compact "More sign-in options"
-        toggle (#654) is still absent on this surface."""
+        """Course detail surfaces lead with OAuth and offer a "Sign up with
+        your email" link out (#687 as refined by the social-first pass).
+        Neither the legacy compact toggle (#654) nor an inline email form
+        renders on this surface."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
@@ -202,27 +193,29 @@ class TestPricingInlineRegisterVariant:
         )
         card = page.locator('[data-testid="inline-register-card"]')
         assert card.is_visible()
-        # Issue #687 inverted this surface: the email input is in the
-        # DOM but inside the ``hidden`` block, so it is NOT visible
-        # until the toggle is clicked.
-        assert card.locator("#register-email").is_visible() is False
         # OAuth button visible without clicking anything.
         google_button = card.get_by_role(
             "link", name="Sign up with Google", exact=True,
         )
         assert google_button.is_visible()
-        # No compact (#654) toggle on this surface — that one belongs
-        # to /pricing.
+        # The email path is a link out, not an inline form.
+        assert (
+            card.locator(
+                '[data-testid="inline-register-email-link"]',
+            ).count() == 1
+        )
+        assert card.locator("#register-email").count() == 0
+        # No compact (#654) OAuth toggle on this surface.
         assert (
             card.locator(
                 '[data-testid="inline-register-oauth-toggle"]',
             ).count() == 0
         )
-        # The new (#687) email toggle IS on this surface.
+        # No inline email toggle either — the email path links out.
         assert (
             card.locator(
                 '[data-testid="inline-register-email-toggle"]',
-            ).count() == 1
+            ).count() == 0
         )
 
     def test_pricing_with_no_oauth_shows_no_toggle(
@@ -260,35 +253,29 @@ class TestPricingInlineRegisterVariant:
             free_card.locator("[data-auth-oauth-providers]").count() == 0
         )
 
-    def test_pricing_inline_form_submits_regardless_of_disclosure(
+    def test_pricing_email_link_leads_to_register_and_carries_next(
         self, django_server, page, django_db_blocker,
     ):
-        """After the visitor expands the email path, the pricing form
-        submits and keeps the return link on /pricing."""
+        """The pricing email link routes to /accounts/register/ carrying
+        ?next=/pricing so the visitor lands back on pricing afterwards."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
             _configure_oauth("google")
-        email = _new_email("compact-signup")
 
         page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
         free_card = page.locator('[data-tier-card="free"]')
-        free_card.locator(
-            '[data-testid="inline-register-email-toggle"]',
-        ).click()
-        free_card.locator("#register-email").wait_for(state="visible")
-        free_card.locator("#register-email").fill(email)
-        free_card.locator("#register-password").fill(DEFAULT_PASSWORD)
-        free_card.locator("#register-password-confirm").fill(DEFAULT_PASSWORD)
-        free_card.locator("#register-submit").click()
-
-        page.locator('[data-testid="account-menu-trigger"]').wait_for(
-            state="visible",
+        email_link = free_card.locator(
+            '[data-testid="inline-register-email-link"]',
         )
-        assert page.url.endswith("/pricing")
-        # User row exists, unverified.
-        with django_db_blocker.unblock():
-            from accounts.models import User
-
-            user = User.objects.get(email=email)
-            assert user.email_verified is False
+        href = email_link.get_attribute("href")
+        assert href is not None
+        assert href.startswith("/accounts/register/")
+        assert (
+            "next=/pricing" in href
+            or f"next={quote('/pricing', safe='')}" in href
+        )
+        email_link.click()
+        page.wait_for_url("**/accounts/register/**")
+        page.locator("#register-email").wait_for(state="visible")
+        assert page.locator("#register-email").is_visible()

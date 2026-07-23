@@ -222,15 +222,18 @@ class TestScenario3ArticleInArticlesSection:
 
 
 # ---------------------------------------------------------------
-# Scenario 4: Legacy tools and models do not render
+# Scenario 4: All published links render, including tools and models
 # ---------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestScenario4LegacyToolsModelsIgnored:
-    """Legacy tools and models curated links are ignored by /resources."""
+class TestScenario4ToolsAndModelsRemainVisible:
+    """Every published curated link renders (commit bc89c683 fixed the
+    defect that silently hid the tools and models categories). Tools and
+    Models sections render after Workshops/Courses/Articles in the
+    canonical order."""
 
-    def test_legacy_links_do_not_appear_in_resources(
+    def test_tools_and_models_links_appear_in_resources(
         self, django_server, page
     ):
         _clear_curated_links()
@@ -261,15 +264,15 @@ class TestScenario4LegacyToolsModelsIgnored:
             wait_until="domcontentloaded",
         )
 
-        # Only the Other section heading is rendered
+        # Tools, Models, Other headings all render, in canonical order.
         headings = page.locator(SECTION_HEADING_SELECTOR)
         rendered = [headings.nth(i).inner_text() for i in range(headings.count())]
-        assert rendered == ["Other"]
+        assert rendered == ["Tools", "Models", "Other"]
 
-        # Only the canonical Other card is present.
+        # Every published card is present.
         body = page.content()
-        assert "ripgrep" not in body
-        assert "Llama 3" not in body
+        assert "ripgrep" in body
+        assert "Llama 3" in body
         assert "Common Crawl" in body
 
 
@@ -313,7 +316,7 @@ class TestScenario5EmptyCategoriesNotRendered:
 @pytest.mark.django_db(transaction=True)
 class TestScenario6FreeUserGatedWorkshopUpgradeCTA:
     """A free member sees a lock + upgrade CTA on a Basic-gated workshop
-    and `View Plans` lands on /pricing."""
+    and `View membership tiers` lands on /pricing."""
 
     def test_gated_workshop_shows_upgrade_cta(
         self, django_server, browser
@@ -355,8 +358,8 @@ class TestScenario6FreeUserGatedWorkshopUpgradeCTA:
         cta.wait_for(state="visible", timeout=3000)
         assert "Upgrade to Basic to access this resource" in cta.inner_text()
 
-        # `View Plans` link
-        view_plans = cta.locator('a:has-text("View Plans")')
+        # `View membership tiers` link ("plan" is reserved for sprint plans)
+        view_plans = cta.locator('a:has-text("View membership tiers")')
         assert view_plans.count() >= 1
         view_plans.first.click()
         page.wait_for_load_state("domcontentloaded")
@@ -460,11 +463,14 @@ class TestScenario8HeaderCopyReflectsNewGrouping:
         assert "Tools, Models & Courses" not in h1_text
 
         # Intro paragraph mentions workshops and articles while staying scoped
-        # to curated links.
+        # to curated links with visitor-facing copy (commit bc89c683 replaced
+        # the internal IA maintainer note).
         body = page.content()
         assert "workshops" in body
         assert "articles" in body
-        assert "community activity or recording" in body
+        assert "Browse by category or filter by topic" in body
+        # The internal IA note that used to leak into the subhead is gone.
+        assert "community activity or recording" not in body
         # Old "GitHub repos, model hubs, and learning resources" copy is gone.
         assert (
             "Curated links to GitHub repos, model hubs, and learning resources."

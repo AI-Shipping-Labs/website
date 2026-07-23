@@ -160,8 +160,9 @@ class TestMobileMenuTextNavAccordion:
         _open_mobile_menu(page)
 
         expected = {
+            # Commit 39430dba dropped the duplicate "About" entry (same /about
+            # destination as the section trigger); Team leads to /about.
             "about": [
-                "About",
                 "Team",
                 "FAQ",
             ],

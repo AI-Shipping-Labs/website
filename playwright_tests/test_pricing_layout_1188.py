@@ -1,13 +1,12 @@
 """Issue #1188 pricing layout and mobile carousel coverage."""
 
 import os
-import uuid
+from urllib.parse import quote
 
 import pytest
 from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
-    DEFAULT_PASSWORD,
     SETTLE_TIMEOUT_MS,
     auth_context,
     create_user,
@@ -82,10 +81,6 @@ PRICING_TIERS = [
 ]
 
 
-def _new_email(prefix):
-    return f"{prefix}-{uuid.uuid4().hex[:8]}@test.com"
-
-
 def _seed_pricing(oauth=True):
     from allauth.socialaccount.models import SocialApp
     from django.contrib.sites.models import Site
@@ -152,7 +147,7 @@ def _body_overflow(page):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_pricing_desktop_cards_keep_intrinsic_heights_after_email_expand(
+def test_pricing_desktop_cards_share_a_stretched_baseline(
     django_server, page, django_db_blocker
 ):
     with django_db_blocker.unblock():
@@ -161,23 +156,27 @@ def test_pricing_desktop_cards_keep_intrinsic_heights_after_email_expand(
     page.set_viewport_size(DESKTOP)
     page.goto(f"{django_server}/pricing", wait_until="networkidle")
     free_card = page.locator('[data-tier-card="free"]')
+    # The Free card leads with OAuth; the email path links out to
+    # /accounts/register/ (no inline email form) after the social-first
+    # pass, so the card no longer expands in place.
     expect(free_card.get_by_role("link", name="Sign up with Google")).to_be_visible()
-    assert free_card.locator("#register-email").is_visible() is False
+    assert free_card.locator("#register-email").count() == 0
+    expect(
+        free_card.locator('[data-testid="inline-register-email-link"]')
+    ).to_be_visible()
 
-    before = {slug: _card_metrics(page, slug) for slug in ("free", "basic", "main", "premium")}
-    free_card.locator('[data-testid="inline-register-email-toggle"]').click()
-    free_card.locator("#register-email").wait_for(state="visible")
-    after = {slug: _card_metrics(page, slug) for slug in ("free", "basic", "main", "premium")}
-
-    assert after["free"]["height"] > before["free"]["height"]
-    # Issue #1281 intentionally stretches the desktop grid row after the
-    # expanded Free signup card becomes the tallest item. All cards retain
-    # a shared top/bottom baseline rather than keeping their old heights.
+    metrics = {
+        slug: _card_metrics(page, slug)
+        for slug in ("free", "basic", "main", "premium")
+    }
+    # The desktop grid uses lg:items-stretch, so every card shares a single
+    # top/bottom baseline instead of each keeping an intrinsic height.
     for slug in ("basic", "main", "premium"):
-        assert abs(after[slug]["top"] - after["free"]["top"]) <= 2
-        assert abs(after[slug]["bottom"] - after["free"]["bottom"]) <= 2
+        assert abs(metrics[slug]["top"] - metrics["free"]["top"]) <= 2, metrics
+        assert abs(metrics[slug]["bottom"] - metrics["free"]["bottom"]) <= 2, metrics
 
-    paid_cta_tops = [after[slug]["ctaTop"] for slug in ("basic", "main", "premium")]
+    # Paid-tier CTAs (mt-auto) settle on a shared bottom row.
+    paid_cta_tops = [metrics[slug]["ctaTop"] for slug in ("basic", "main", "premium")]
     assert max(paid_cta_tops) - min(paid_cta_tops) <= 2
 
 
@@ -232,35 +231,33 @@ def test_pricing_mobile_indicator_controls_scroll_without_overflow(
         timeout=SETTLE_TIMEOUT_MS,
     )
     assert premium_indicator.get_attribute("aria-current") == "true"
-    expect(page.locator('[data-tier-card="main"]')).to_contain_text("Most Popular")
+    expect(page.locator('[data-tier-card="main"]')).to_contain_text("Most popular")
     assert _body_overflow(page) <= 1
 
 
 @pytest.mark.django_db(transaction=True)
-def test_pricing_email_disclosure_submits_with_pricing_return_url(
+def test_pricing_email_link_carries_pricing_return_url(
     django_server, page, django_db_blocker
 ):
     with django_db_blocker.unblock():
         _seed_pricing(oauth=True)
-    email = _new_email("pricing-1188")
 
     page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
     free_card = page.locator('[data-tier-card="free"]')
-    toggle = free_card.locator('[data-testid="inline-register-email-toggle"]')
-    toggle.click()
-    free_card.locator("#register-email").wait_for(state="visible")
-    assert toggle.get_attribute("aria-expanded") == "true"
-    assert page.evaluate("document.activeElement.id") == "register-email"
-
-    free_card.locator("#register-email").fill(email)
-    free_card.locator("#register-password").fill(DEFAULT_PASSWORD)
-    free_card.locator("#register-password-confirm").fill(DEFAULT_PASSWORD)
-    free_card.locator("#register-submit").click()
-
-    page.locator('[data-testid="account-menu-trigger"]').wait_for(
-        state="visible",
+    email_link = free_card.locator('[data-testid="inline-register-email-link"]')
+    href = email_link.get_attribute("href")
+    assert href is not None
+    assert href.startswith("/accounts/register/")
+    # The email path routes to the standalone register page carrying
+    # next=/pricing so the visitor lands back on pricing afterwards.
+    assert (
+        "next=/pricing" in href
+        or f"next={quote('/pricing', safe='')}" in href
     )
-    assert page.url.endswith("/pricing")
+    email_link.click()
+    page.wait_for_url("**/accounts/register/**")
+    page.locator("#register-email").wait_for(state="visible")
+    assert page.locator("#register-email").is_visible()
 
 
 @pytest.mark.django_db(transaction=True)

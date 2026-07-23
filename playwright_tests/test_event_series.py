@@ -949,7 +949,18 @@ class TestScenario9ListingShowsSeriesLink:
         series_link = page.locator('[data-testid="event-card-series-link"]')
         assert series_link.count() == 1
         assert "Listed Public Series" in series_link.first.inner_text()
-        series_link.first.locator("a").click()
+        # Issue #857: a series occurrence routes the whole card to the series
+        # screen, so the series label is plain text (no nested anchor). Follow
+        # the card's own link instead.
+        card_link = page.locator(
+            '[data-testid="event-card-link"]',
+            has=page.locator('[data-testid="event-card-series-link"]'),
+        )
+        assert re.search(
+            r"/events/series/\d+/listed-public-series$",
+            card_link.get_attribute("href"),
+        )
+        card_link.click()
         page.wait_for_url(
             re.compile(r".*/events/series/\d+/listed-public-series$")
         )

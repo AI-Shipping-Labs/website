@@ -84,7 +84,7 @@ def test_desktop_cards_use_intrinsic_heights_and_preserve_billing(
     expect(carousel.locator('[data-tier-card="free"]')).to_have_count(0)
     expect(page.locator('#join-free #register-form')).to_be_attached()
     expect(carousel.locator('[data-tier-card="main"]')).to_contain_text(
-        'Most Popular'
+        'Most popular'
     )
 
     monthly_link = basic_cta.get_attribute('data-link-monthly')
@@ -125,7 +125,7 @@ def test_mobile_carousel_still_centers_main_and_reaches_every_tier(
     )
     assert main_delta < 60
     expect(carousel.locator('[data-tier-card="main"]')).to_contain_text(
-        'Most Popular'
+        'Most popular'
     )
 
     for slug in ('basic', 'main', 'premium'):

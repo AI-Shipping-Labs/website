@@ -166,19 +166,20 @@ def test_about_dropdown_contains_about_team_faq(django_server, page):
             .map(a => a.getAttribute('data-testid'))
         """
     )
+    # Commit 39430dba dropped the duplicate "About" entry (it pointed at the
+    # same /about destination as the trigger); Team now leads to /about.
     assert link_ids == [
-        "nav-about-link-about",
         "nav-about-link-team",
         "nav-about-link-faq",
     ]
     assert (
         page.get_by_test_id("nav-about-link-team").get_attribute("href")
-        == "/about#team"
+        == "/about"
     )
 
     page.get_by_test_id("nav-about-link-team").click()
-    page.wait_for_url("**/about#team")
-    # Team anchor must exist on the about page.
+    page.wait_for_url("**/about")
+    # The Team section anchor still exists on the about page.
     assert page.locator("#team").count() == 1
     _shot(page, "02-about-team-anchor")
 
@@ -374,8 +375,8 @@ def test_mobile_about_accordion_exposes_team_and_faq(django_server, browser):
             .map(a => a.getAttribute('data-testid'))
         """
     )
+    # Commit 39430dba dropped the duplicate "About" entry from the accordion.
     assert link_ids == [
-        "mobile-nav-about-link-about",
         "mobile-nav-about-link-team",
         "mobile-nav-about-link-faq",
     ]

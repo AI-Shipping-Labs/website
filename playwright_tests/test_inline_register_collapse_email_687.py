@@ -1,23 +1,29 @@
 """Playwright coverage for the collapse-email inline-register variant (#687).
 
-Issue #687 follows up on #652/#654: on free course detail pages, the
-inline register card now hides the email/password/confirm form behind
-a "Sign up with your email" toggle so OAuth becomes the visible-first
-CTA. Other surfaces (pricing, gated articles) are unaffected.
+Issue #687 introduced ``collapse_email`` so free course detail pages lead
+with OAuth. Issue #8d80cf13 ("Lead auth surfaces with social sign-in")
+then refined the pattern: expanding the email form in place made the
+embedding page (course detail, pricing, homepage free section) reflow, so
+the email path now links out to /accounts/register/ instead of expanding
+inline. The current contract on a ``collapse_email=True`` surface with at
+least one OAuth provider enabled is:
 
-Scenarios — pinned by the issue body:
+  - the OAuth provider buttons render first and are visible immediately
+  - a "Sign up with your email" LINK (not a toggle) follows the divider
+  - the email/password inputs are NOT rendered inline (no dead form in DOM)
+  - the link carries ?next=<originating page>
 
-  - anon visitor on /courses/<slug> sees OAuth + collapsed email toggle
-  - clicking the toggle expands the form and focuses #register-email
-  - clicking again collapses the form
-  - keyboard (Space) activates the toggle the same as a mouse click
-  - /pricing also uses collapse_email=True (#1188)
-  - no-OAuth fallback renders the email form expanded (no dead-end)
-  - the expanded email form still registers a user via /api/register
+When no OAuth provider is configured the email form renders expanded, so
+the card is never a dead end.
+
+These scenarios pin that visitor-facing contract on both /courses/<slug>
+and /pricing. The partial-level HTML shape is additionally covered by
+``accounts/tests/test_inline_register.py``.
 """
 
 import os
 import uuid
+from urllib.parse import quote
 
 import pytest
 
@@ -98,14 +104,14 @@ def _configure_oauth(*providers):
 
 @pytest.mark.django_db(transaction=True)
 class TestInlineRegisterCollapseEmailVariant:
-    """Seven BDD scenarios pinned by the issue body."""
+    """Scenarios pinning the OAuth-first, link-out collapse-email pattern."""
 
-    def test_course_detail_renders_collapsed_email_form_with_oauth_visible(
+    def test_course_detail_leads_with_oauth_and_email_link(
         self, django_server, page, django_db_blocker,
     ):
-        """Anon visitor lands on /courses/<slug> and sees OAuth + a
-        "Sign up with your email" toggle. The email/password/confirm
-        inputs are in the DOM but inside the hidden block."""
+        """Anon visitor on /courses/<slug> sees OAuth first and a
+        "Sign up with your email" link. The email inputs are NOT rendered
+        inline; the email path links out to /accounts/register/."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
@@ -123,23 +129,25 @@ class TestInlineRegisterCollapseEmailVariant:
             "link", name="Sign up with Google", exact=True,
         )
         assert google_button.is_visible()
-        # The new email toggle is present and starts collapsed.
-        toggle = card.locator(
-            '[data-testid="inline-register-email-toggle"]',
+        # The email path is a link out, not an inline toggle or form.
+        email_link = card.locator(
+            '[data-testid="inline-register-email-link"]',
         )
-        assert toggle.is_visible()
-        assert toggle.get_attribute("aria-expanded") == "false"
-        # Form fields exist in DOM but are hidden inside the [hidden] block.
-        assert card.locator("#register-email").count() == 1
-        assert card.locator("#register-email").is_visible() is False
-        assert card.locator("#register-password").is_visible() is False
-        assert card.locator("#register-password-confirm").is_visible() is False
+        assert email_link.is_visible()
+        assert (
+            card.locator(
+                '[data-testid="inline-register-email-toggle"]',
+            ).count() == 0
+        )
+        # The email/password inputs are not rendered inline on this surface.
+        assert card.locator("#register-email").count() == 0
+        assert card.locator("#register-password").count() == 0
 
-    def test_toggle_expands_and_focuses_email_input(
+    def test_email_link_targets_register_with_next(
         self, django_server, page, django_db_blocker,
     ):
-        """Clicking the toggle expands the email block; focus jumps to
-        #register-email and aria-expanded flips to "true"."""
+        """The "Sign up with your email" link points at /accounts/register/
+        and carries ?next=<course detail> so the visitor lands back here."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
@@ -151,23 +159,22 @@ class TestInlineRegisterCollapseEmailVariant:
             wait_until="domcontentloaded",
         )
         card = page.locator('[data-testid="inline-register-card"]')
-        toggle = card.locator(
-            '[data-testid="inline-register-email-toggle"]',
+        email_link = card.locator(
+            '[data-testid="inline-register-email-link"]',
         )
-        toggle.click()
-        # Wait for the email input to become visible.
-        card.locator("#register-email").wait_for(state="visible")
-        assert toggle.get_attribute("aria-expanded") == "true"
-        # Focus management requirement: keyboard / screen-reader users
-        # land directly in the email field.
-        active_id = page.evaluate("document.activeElement.id")
-        assert active_id == "register-email"
+        href = email_link.get_attribute("href")
+        assert href is not None
+        assert href.startswith("/accounts/register/")
+        assert (
+            "next=/courses/collapse-687-demo" in href
+            or f"next={quote('/courses/collapse-687-demo', safe='')}" in href
+        )
 
-    def test_toggle_collapses_email_block_on_second_click(
+    def test_email_link_navigates_to_register_form(
         self, django_server, page, django_db_blocker,
     ):
-        """A second click hides the email block again and flips
-        aria-expanded back to "false"."""
+        """Clicking the email link lands on the standalone register page
+        where the email/password form is rendered."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
@@ -179,44 +186,18 @@ class TestInlineRegisterCollapseEmailVariant:
             wait_until="domcontentloaded",
         )
         card = page.locator('[data-testid="inline-register-card"]')
-        toggle = card.locator(
-            '[data-testid="inline-register-email-toggle"]',
-        )
-        toggle.click()
-        card.locator("#register-email").wait_for(state="visible")
-        toggle.click()
-        card.locator("#register-email").wait_for(state="hidden")
-        assert toggle.get_attribute("aria-expanded") == "false"
-
-    def test_keyboard_space_activates_toggle(
-        self, django_server, page, django_db_blocker,
-    ):
-        """Pressing Space on the focused toggle button expands the form
-        identically to a mouse click — native <button> keyboard support.
-        """
-        with django_db_blocker.unblock():
-            _reset_state()
-            ensure_tiers()
-            _seed_free_course()
-            _configure_oauth("google")
-
-        page.goto(
-            f"{django_server}/courses/collapse-687-demo",
-            wait_until="domcontentloaded",
-        )
-        card = page.locator('[data-testid="inline-register-card"]')
-        toggle = card.locator(
-            '[data-testid="inline-register-email-toggle"]',
-        )
-        toggle.focus()
-        page.keyboard.press("Space")
-        card.locator("#register-email").wait_for(state="visible")
-        assert toggle.get_attribute("aria-expanded") == "true"
+        card.locator(
+            '[data-testid="inline-register-email-link"]',
+        ).click()
+        page.wait_for_url("**/accounts/register/**")
+        page.locator("#register-email").wait_for(state="visible")
+        assert page.locator("#register-email").is_visible()
 
     def test_pricing_page_uses_collapse_email_pattern(
         self, django_server, page, django_db_blocker,
     ):
-        """/pricing uses the same social-first collapsed email pattern."""
+        """/pricing uses the same social-first, email-link-out pattern
+        as of #1188."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
@@ -228,12 +209,17 @@ class TestInlineRegisterCollapseEmailVariant:
             "link", name="Sign up with Google", exact=True,
         )
         assert google_button.is_visible()
-        assert free_card.locator("#register-email").is_visible() is False
-        # The #687 email toggle is present on pricing as of #1188.
+        # Email path is a link out; no inline email inputs, no toggle.
+        assert (
+            free_card.locator(
+                '[data-testid="inline-register-email-link"]',
+            ).count() == 1
+        )
+        assert free_card.locator("#register-email").count() == 0
         assert (
             free_card.locator(
                 '[data-testid="inline-register-email-toggle"]',
-            ).count() == 1
+            ).count() == 0
         )
         # The old #654 OAuth toggle is not used on pricing anymore.
         assert (
@@ -246,7 +232,7 @@ class TestInlineRegisterCollapseEmailVariant:
         self, django_server, page, django_db_blocker,
     ):
         """When no SocialApp is configured, the dead-end guard kicks in:
-        the email form is rendered expanded and no toggle is rendered.
+        the email form is rendered expanded and no email link is rendered.
         """
         with django_db_blocker.unblock():
             _reset_state()
@@ -261,23 +247,28 @@ class TestInlineRegisterCollapseEmailVariant:
         card = page.locator('[data-testid="inline-register-card"]')
         # Email form is visible right away.
         assert card.locator("#register-email").is_visible()
-        # No toggle, because there is nothing else to choose.
+        # No email link, because OAuth is not offered here.
+        assert (
+            card.locator(
+                '[data-testid="inline-register-email-link"]',
+            ).count() == 0
+        )
         assert (
             card.locator(
                 '[data-testid="inline-register-email-toggle"]',
             ).count() == 0
         )
 
-    def test_expanded_email_form_registers_user_successfully(
+    def test_no_oauth_email_form_registers_user_successfully(
         self, django_server, page, django_db_blocker,
     ):
-        """After expanding the email block, the form submits and redirects
-        back to /courses/collapse-687-demo as an authenticated user."""
+        """With no OAuth configured the inline email form submits and
+        redirects back to the course as an authenticated user."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
             _seed_free_course()
-            _configure_oauth("google")
+            # No OAuth configured — the email form renders expanded.
         email = _new_email("collapse-signup")
 
         page.goto(
@@ -285,9 +276,6 @@ class TestInlineRegisterCollapseEmailVariant:
             wait_until="domcontentloaded",
         )
         card = page.locator('[data-testid="inline-register-card"]')
-        card.locator(
-            '[data-testid="inline-register-email-toggle"]',
-        ).click()
         card.locator("#register-email").wait_for(state="visible")
         card.locator("#register-email").fill(email)
         card.locator("#register-password").fill(DEFAULT_PASSWORD)

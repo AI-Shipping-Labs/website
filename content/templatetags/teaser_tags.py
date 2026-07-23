@@ -44,10 +44,10 @@ _CODE_BLOCK_RUN_RE = re.compile(
 
 _CODE_HIDDEN_PLACEHOLDER = (
     '<div class="teaser-code-hidden not-prose my-6 flex items-center gap-2 '
-    'rounded-lg border border-dashed border-border bg-muted/30 px-4 py-3 '
+    'rounded-lg border border-border bg-card px-4 py-3 '
     'text-sm text-muted-foreground" data-testid="teaser-code-hidden">'
     '<i data-lucide="lock" class="h-4 w-4 flex-shrink-0"></i>'
-    '<span>Code hidden — unlock to view</span>'
+    '<span>Code block hidden</span>'
     '</div>'
 )
 

@@ -153,6 +153,19 @@ Why no PRs: the team's review pipeline is the agent flow (PM groom → SWE → t
 - Agents post issue comments via `gh`, not the orchestrator. Launch the relevant agent (PM for acceptance, tester for verdicts) and let it write the comment
 - After push, always run oncall-engineer agent to monitor CI — do not just check manually or wait on CI as the orchestrator's main task
 
+### Red CI is never "chronically red" — always fix it
+
+There is no such thing as an acceptable red pipeline. If CI is red — including the scheduled full Playwright suite (`.github/workflows/scheduled-playwright.yml`) — it is red because a change we made broke it, and the standing response is always to fix it. Never label a failing suite "flaky", "chronic", or "pre-existing" and move on.
+
+When any run is red:
+
+1. Find when it turned red. Compare the last green run's commit to the first red run's commit (`gh run list --workflow <wf> --json headSha,conclusion,createdAt`). The regression is in that commit range — bisect it; the full suite runs only every 3 hours, so the range may hold many commits.
+2. Read the actual failures, not just the summary. Pull `--log-failed` and enumerate every failing test across every shard. Deterministic assertion failures (missing text, wrong counts) are real contract drift; `Locator.click` timeouts are usually a secondary symptom of the same contract change (clicking an element the page no longer renders).
+3. Fix the root cause. Where the code regressed (a refactor dropped a badge, copy, or control), restore the intended behavior. Where the contract legitimately changed, update the stale test. Remember the core Playwright gate deselects shared-UI tests, so design-system/shared-template changes can leave full-suite tests red while core stays green — shared-UI diffs must run `make test-playwright` (full) or the relevant `local_only` tests before merge.
+4. Drive it back to green through the normal pipeline (issue → SWE → tester runs the full suite to confirm 0 failures → merge), and verify the next scheduled run is green.
+
+A failure may only be set aside as unrelated after you have proven it is unrelated to the current change AND filed a tracked issue to fix it. "Pre-existing" is a reason to open a fix issue, never a reason to stop.
+
 ### Engineering Conventions
 
 - Configurable settings go through the IntegrationSetting framework, never raw `os.environ` / `settings.X`. Read values with `get_config(key, default)` / `is_enabled(key)` from `integrations/config.py` (resolves DB override set in Studio settings -> env -> default) and register every key in `integrations/settings_registry.py` so it appears as a Studio-editable field with the Source badge. This keeps every setting changeable with no redeploy. Canonical example: the `#plan-sprints` channel keys in `integrations/settings_registry.py` read via `get_slack_plan_sprints_channel_id()` in `community/slack_config.py`.

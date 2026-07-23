@@ -268,7 +268,7 @@ class TestRelatedContentRecommendations:
         page.goto(f"{django_server}/blog/gated-agents", wait_until="domcontentloaded")
 
         assert (
-            "Create a free account or choose Basic to read this article"
+            "Upgrade to Basic to read this article"
             in page.content()
         )
         assert "SECRET PAID BODY" not in page.content()

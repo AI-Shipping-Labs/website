@@ -1,7 +1,7 @@
 from django.db.models import Count
 from django.shortcuts import get_object_or_404, render
 
-from content.access import get_required_tier_name, get_user_level
+from content.access import build_gating_context, get_user_level
 from voting.models import Poll
 
 
@@ -40,13 +40,20 @@ def poll_detail(request, poll_id):
 
     # Check access
     if poll.required_level > user_level:
-        tier_name = get_required_tier_name(poll.required_level)
+        # Issue #1335: share the canonical gated-banner copy builder so the
+        # poll paywall reads "Upgrade to {tier} to vote in this poll" with
+        # the tier pill and Pricing CTA like every other gated surface.
         context = {
             'poll': poll,
-            'is_gated': True,
-            'required_tier_name': tier_name,
-            'cta_message': f'Upgrade to {tier_name} to participate in this poll',
-            'pricing_url': '/pricing',
+            **build_gating_context(
+                request.user,
+                poll,
+                'poll',
+                resource_url=f'/vote/{poll.id}',
+                gated_card_testid='poll-gated',
+                gated_icon='lock',
+                gated_cta_testid='poll-pricing-cta',
+            ),
         }
         return render(request, 'voting/poll_detail.html', context)
 

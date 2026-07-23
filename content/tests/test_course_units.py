@@ -239,7 +239,11 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
 
     def test_anonymous_user_sees_gated_message(self):
         response = self.client.get('/courses/test-course/module-1/lesson-1')
-        self.assertContains(response, 'Sign in to access this lesson', status_code=403)
+        # Issue #1335: anonymous on a paid course now sees the unified
+        # upgrade card.
+        self.assertContains(
+            response, 'Upgrade to Main to read this lesson', status_code=403,
+        )
 
     def test_basic_user_sees_upgrade_message(self):
         self._login_tier_user('basic2@test.com', self.basic_tier)
@@ -306,16 +310,16 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
         )
         response = self.client.get('/courses/free-course-cta/m1/free-lesson')
         self.assertEqual(response.status_code, 403)
+        # Issue #1335: the free-course anonymous nudge is an authentication
+        # gate — Sign In primary + Create a free account companion, no
+        # upgrade/pricing route.
         self.assertContains(
-            response,
-            'Create a free account to access this course.',
-            status_code=403,
+            response, 'Sign in to read this lesson', status_code=403,
+        )
+        self.assertContains(
+            response, 'Create a free account', status_code=403,
         )
         self.assertContains(response, '/accounts/signup/', status_code=403)
-        self.assertContains(response, 'Sign Up', status_code=403)
-        # The gated CTA on a free course should not invite the visitor to
-        # upgrade. (Issue #238 added /pricing links to the global header
-        # and footer, so we only assert on the gated CTA copy here.)
         self.assertNotContains(response, 'View Pricing', status_code=403)
 
     def test_anonymous_paid_course_sees_pricing_cta(self):
@@ -333,7 +337,7 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
         self.assertContains(response, '/accounts/signup/', status_code=403)
         self.assertContains(
             response,
-            'Sign in or create a free account',
+            'Create a free account',
             status_code=403,
         )
 

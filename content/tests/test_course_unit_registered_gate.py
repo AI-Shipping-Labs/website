@@ -213,17 +213,16 @@ class LegacyIsPreviewStillWorksTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Legacy preview body.')
 
     def test_anonymous_blocked_from_gated_unit_with_signin_cta(self):
-        # Pre-#465 behavior for an anonymous user on a paid course:
-        # "Sign in to access this lesson" (the existing copy), not the
-        # new "Sign in to read this lesson" registered-wall CTA.
+        # Issue #1335: an anonymous visitor on a paid course now sees the
+        # unified upgrade card ("Upgrade to {tier} to read this lesson")
+        # with a no-cost account companion, not a bespoke sign-in nudge.
         response = self.client.get('/courses/legacy/m/gated')
         self.assertEqual(response.status_code, 403)
         self.assertContains(
-            response, 'Sign in to access this lesson', status_code=403,
+            response, 'Upgrade to Basic to read this lesson', status_code=403,
         )
-        # Critically, must NOT use the new registered-wall copy.
-        self.assertNotContains(
-            response, 'Sign in to read this lesson', status_code=403,
+        self.assertContains(
+            response, 'Create a free account', status_code=403,
         )
 
     def test_basic_user_reads_gated_unit(self):
@@ -305,5 +304,5 @@ class FreeIntroOnPaidCourseStillWorksTest(TierSetupMixin, TestCase):
         paid_resp = self.client.get('/courses/paid-with-intro/m/paid')
         self.assertEqual(paid_resp.status_code, 403)
         self.assertContains(
-            paid_resp, 'Sign in to access this lesson', status_code=403,
+            paid_resp, 'Upgrade to Main to read this lesson', status_code=403,
         )

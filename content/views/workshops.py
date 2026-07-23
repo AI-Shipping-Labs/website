@@ -44,6 +44,7 @@ from content.access import (
     LEVEL_BASIC,
     LEVEL_OPEN,
     LEVEL_REGISTERED,
+    build_gated_access_copy,
     build_verify_email_context,
     get_required_tier_name,
     get_user_level,
@@ -835,34 +836,47 @@ def _build_landing_context(workshop, user):
         pages_gated_reason = _gated_reason_for_level(
             user, workshop.pages_required_level,
         )
-        if pages_gated_reason == 'authentication_required':
-            landing_url = workshop.get_absolute_url()
-            next_qs = urlencode({'next': landing_url})
-            pages_cta_message = 'Sign in to access this workshop'
-            pages_gated_description = (
-                'This workshop is free — you just need an account. Sign in '
-                'or create one in seconds.'
+        if pages_gated_reason != 'unverified_email':
+            # Issue #1335: share the one gated-banner copy builder. The
+            # authentication_required branch keeps the Sign-In-shaped copy;
+            # the insufficient_tier branch keeps the "Upgrade to {tier}"
+            # copy plus the page-list-visible description.
+            pages_copy = build_gated_access_copy(
+                gated_reason=pages_gated_reason,
+                verb='access this workshop',
+                noun='workshop',
+                required_level=workshop.pages_required_level,
+                user=user,
+                resource_url=workshop.get_absolute_url(),
+                upgrade_description=pages_gated_description,
+                show_signin_on_paid_guest=False,
             )
-            pages_cta_url = f'/accounts/login/?{next_qs}'
-            pages_cta_label = 'Sign In'
-            pages_signup_cta_url = f'/accounts/signup/?{next_qs}'
-            pages_signup_cta_label = 'Create a free account'
-            # Blank the pill — there's no "tier" to display when the
-            # visitor just needs to authenticate.
-            pages_required_tier_name = ''
-        else:
-            pages_cta_message = (
-                f'Upgrade to {pages_tier_name} to access this workshop'
-            )
-            pages_cta_url = '/pricing'
+            pages_cta_message = pages_copy['gated_heading']
+            pages_gated_description = pages_copy['gated_description']
+            pages_cta_url = pages_copy['gated_cta_url']
+            pages_cta_label = pages_copy['gated_cta_label']
+            pages_required_tier_name = pages_copy['required_tier_name']
+            # Only the registration wall surfaces the inline signup companion
+            # (issue #652). Anonymous visitors on a paid-tier pages gate keep
+            # the upgrade-only card so the inline register form does not leak
+            # onto paid workshops.
+            if pages_gated_reason == 'authentication_required':
+                pages_signup_cta_url = pages_copy['signup_cta_url']
+                pages_signup_cta_label = pages_copy['signup_cta_label']
 
     recording_cta_message = ''
     recording_cta_url = ''
     if not can_access_recording:
-        recording_cta_message = (
-            f'Upgrade to {recording_tier_name} to watch the recording'
+        recording_copy = build_gated_access_copy(
+            gated_reason='insufficient_tier',
+            verb='watch the recording',
+            noun='recording',
+            required_level=workshop.recording_required_level,
+            user=user,
+            show_signin_on_paid_guest=False,
         )
-        recording_cta_url = '/pricing'
+        recording_cta_message = recording_copy['gated_heading']
+        recording_cta_url = recording_copy['gated_cta_url']
 
     landing_cta_message = ''
     landing_cta_url = ''
@@ -872,10 +886,17 @@ def _build_landing_context(workshop, user):
             user, workshop.landing_required_level,
         )
         if landing_gated_reason != 'unverified_email':
-            landing_cta_message = (
-                f'Upgrade to {landing_tier_name} to view this workshop'
+            landing_copy = build_gated_access_copy(
+                gated_reason=landing_gated_reason,
+                verb='view this workshop',
+                noun='workshop',
+                required_level=workshop.landing_required_level,
+                user=user,
+                resource_url=workshop.get_absolute_url(),
+                show_signin_on_paid_guest=False,
             )
-            landing_cta_url = '/pricing'
+            landing_cta_message = landing_copy['gated_heading']
+            landing_cta_url = landing_copy['gated_cta_url']
 
     verify_email_context = {}
     if 'unverified_email' in {landing_gated_reason, pages_gated_reason}:
@@ -1246,44 +1267,24 @@ def _build_video_gated_context(request, workshop, event):
             if label:
                 teaser_timestamps.append(label)
 
-    recording_tier_name = get_required_tier_name(
-        workshop.recording_required_level,
-    )
-    next_qs = urlencode({'next': video_url})
-
-    if gated_reason == 'authentication_required':
-        gated_heading = 'Sign in to watch this recording'
-        gated_description = (
-            'This recording is free — you just need an account. Sign in '
-            'or create one in seconds.'
-        )
-        gated_cta_url = f'/accounts/login/?{next_qs}'
-        gated_cta_label = 'Sign In'
-        signup_cta_url = f'/accounts/signup/?{next_qs}'
-        signup_cta_label = 'Create a free account'
-        required_tier_name = ''
-        current_user_state = ''
-    else:
-        gated_heading = (
-            f'Upgrade to {recording_tier_name} to watch the recording'
-        )
-        gated_description = (
+    # Issue #1335: one gated-banner copy builder for both branches. The
+    # registration wall keeps "watch this recording"; the paid wall keeps
+    # the legacy "watch the recording" heading and its recording-specific
+    # upgrade description.
+    is_auth_gate = gated_reason == 'authentication_required'
+    copy = build_gated_access_copy(
+        gated_reason=gated_reason,
+        verb='watch this recording' if is_auth_gate else 'watch the recording',
+        noun='recording',
+        required_level=workshop.recording_required_level,
+        user=user,
+        resource_url=video_url,
+        upgrade_description=(
             'Unlock the full recording, timestamps, and downloadable '
             'materials with a membership.'
-        )
-        gated_cta_url = '/pricing'
-        gated_cta_label = 'View Pricing'
-        required_tier_name = recording_tier_name
-        current_user_state = ''
-        if user.is_authenticated:
-            current_user_state = (
-                f'Current access: {get_required_tier_name(get_user_level(user))} member'
-            )
-        signup_cta_url = ''
-        signup_cta_label = ''
-        if not user.is_authenticated:
-            signup_cta_url = f'/accounts/signup/?{next_qs}'
-            signup_cta_label = 'Create a free account'
+        ),
+        show_signin_on_paid_guest=False,
+    )
 
     return (
         {
@@ -1292,16 +1293,16 @@ def _build_video_gated_context(request, workshop, event):
             'video_thumbnail_url': video_thumbnail_url,
             'has_video': has_video,
             'teaser_timestamps': teaser_timestamps,
-            'signup_cta_url': signup_cta_url,
-            'signup_cta_label': signup_cta_label,
+            'signup_cta_url': copy['signup_cta_url'],
+            'signup_cta_label': copy['signup_cta_label'],
             'gated_card_testid': 'video-paywall',
             'gated_icon': 'play',
-            'gated_heading': gated_heading,
-            'gated_description': gated_description,
-            'required_tier_name': required_tier_name,
-            'current_user_state': current_user_state,
-            'gated_cta_url': gated_cta_url,
-            'gated_cta_label': gated_cta_label,
+            'gated_heading': copy['gated_heading'],
+            'gated_description': copy['gated_description'],
+            'required_tier_name': copy['required_tier_name'],
+            'current_user_state': copy['current_user_state'],
+            'gated_cta_url': copy['gated_cta_url'],
+            'gated_cta_label': copy['gated_cta_label'],
             'gated_cta_testid': 'video-upgrade-cta',
             'freestyle_evidence': _freestyle_evidence_for_workshop(
                 workshop, gated_reason,
@@ -1478,47 +1479,25 @@ def _build_page_gated_context(request, workshop, page):
             has_video = True
             video_thumbnail_url = thumb
 
-    pages_tier_name = get_required_tier_name(effective_level)
-    next_qs = urlencode({'next': page_url})
-
-    if gated_reason == 'authentication_required':
-        gated_heading = 'Sign in to keep reading this tutorial'
-        gated_description = (
-            'This tutorial is free — you just need an account. Sign in or '
-            'create one in seconds.'
-        )
-        gated_cta_url = f'/accounts/login/?{next_qs}'
-        gated_cta_label = 'Sign In'
-        signup_cta_url = f'/accounts/signup/?{next_qs}'
-        signup_cta_label = 'Create a free account'
-        required_tier_name = ''
-        current_user_state = ''
-    else:
-        # Insufficient-tier path: anonymous on a paid workshop or signed-in
-        # user below ``pages_required_level``.
-        gated_heading = (
-            f'Upgrade to {pages_tier_name} to access this workshop'
-        )
-        gated_description = (
+    # Issue #1335: one gated-banner copy builder. The registration wall
+    # keeps "keep reading this tutorial"; the paid wall keeps the
+    # "access this workshop" heading plus the tutorial-body upgrade copy.
+    # Anonymous visitors on a paid-tier wall keep the "Create a free
+    # account" companion the copy builder emits.
+    is_auth_gate = gated_reason == 'authentication_required'
+    copy = build_gated_access_copy(
+        gated_reason=gated_reason,
+        verb='keep reading this tutorial' if is_auth_gate else 'access this workshop',
+        noun='tutorial',
+        required_level=effective_level,
+        user=user,
+        resource_url=page_url,
+        upgrade_description=(
             'The page title and workshop navigation are visible now; '
             'membership unlocks the tutorial body.'
-        )
-        gated_cta_url = '/pricing'
-        gated_cta_label = 'View Pricing'
-        required_tier_name = pages_tier_name
-        current_user_state = ''
-        if user.is_authenticated:
-            current_user_state = (
-                f'Current access: {get_required_tier_name(get_user_level(user))} member'
-            )
-        signup_cta_url = ''
-        signup_cta_label = ''
-        if not user.is_authenticated:
-            # Anonymous on a paid-tier wall: surface a "create a free
-            # account" companion to the upgrade button so the visitor
-            # has a no-cost path to start the funnel.
-            signup_cta_url = f'/accounts/signup/?{next_qs}'
-            signup_cta_label = 'Create a free account'
+        ),
+        show_signin_on_paid_guest=False,
+    )
 
     return (
         {
@@ -1526,16 +1505,16 @@ def _build_page_gated_context(request, workshop, page):
             'teaser_body_html': teaser_body_html,
             'video_thumbnail_url': video_thumbnail_url,
             'has_video': has_video,
-            'signup_cta_url': signup_cta_url,
-            'signup_cta_label': signup_cta_label,
+            'signup_cta_url': copy['signup_cta_url'],
+            'signup_cta_label': copy['signup_cta_label'],
             'gated_card_testid': 'page-paywall',
             'gated_icon': 'book-open',
-            'gated_heading': gated_heading,
-            'gated_description': gated_description,
-            'required_tier_name': required_tier_name,
-            'current_user_state': current_user_state,
-            'gated_cta_url': gated_cta_url,
-            'gated_cta_label': gated_cta_label,
+            'gated_heading': copy['gated_heading'],
+            'gated_description': copy['gated_description'],
+            'required_tier_name': copy['required_tier_name'],
+            'current_user_state': copy['current_user_state'],
+            'gated_cta_url': copy['gated_cta_url'],
+            'gated_cta_label': copy['gated_cta_label'],
             'gated_cta_testid': 'page-upgrade-cta',
             'freestyle_evidence': _freestyle_evidence_for_workshop(
                 workshop, gated_reason,

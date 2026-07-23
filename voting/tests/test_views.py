@@ -124,7 +124,7 @@ class PollDetailViewTest(TierSetupMixin, TestCase):
     def test_gated_for_anonymous(self):
         response = self.client.get(f'/vote/{self.poll.id}')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Upgrade to Main to participate in this poll')
+        self.assertContains(response, 'Upgrade to Main to vote in this poll')
 
     def test_gated_for_basic_user(self):
         user = User.objects.create_user(email='basic@test.com', password='testpass')
@@ -268,7 +268,7 @@ class PollGatingTest(TierSetupMixin, TestCase):
         self.assertEqual(response.context['required_tier_name'], 'Main')
         self.assertContains(
             response,
-            'Upgrade to Main to participate in this poll',
+            'Upgrade to Main to vote in this poll',
         )
 
     def test_free_user_detail_has_view_pricing_link(self):
@@ -327,7 +327,7 @@ class CoursePollGatingTest(TierSetupMixin, TestCase):
         self.assertEqual(response.context['required_tier_name'], 'Premium')
         self.assertContains(
             response,
-            'Upgrade to Premium to participate in this poll',
+            'Upgrade to Premium to vote in this poll',
         )
 
     def test_course_poll_detail_has_view_pricing_link(self):
@@ -454,6 +454,6 @@ class AnonymousVotePromptTest(TierSetupMixin, TestCase):
         # Anon users see the same Upgrade-to-Main path as Free users
         self.assertContains(
             response,
-            'Upgrade to Main to participate in this poll',
+            'Upgrade to Main to vote in this poll',
         )
         self.assertContains(response, 'View Pricing')

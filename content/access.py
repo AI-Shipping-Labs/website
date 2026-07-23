@@ -66,6 +66,45 @@ LEVEL_TO_PUBLIC_LABEL = {
     LEVEL_PREMIUM: 'Premium',
 }
 
+# Public-facing access label keyed by the bare tier NAME (not level). Used
+# by the gated-card partial to render the tier pill ("Basic or above
+# required" / "Main or above required" / "Premium required") from the one
+# ``required_tier_name`` value the view supplies, so the template never
+# branches on tier name. Premium is terminal and takes no "or above".
+NAME_TO_PUBLIC_LABEL = {
+    'Free': 'Free',
+    'Basic': 'Basic or above',
+    'Main': 'Main or above',
+    'Premium': 'Premium',
+}
+
+# Issue #1335: single source of the gated-banner verb/noun copy, keyed by
+# content type. ``verb`` fills "Sign in to {verb}" / "Upgrade to {tier} to
+# {verb}"; ``noun`` fills "This {noun} is free — you just need an account."
+# Replaces the two duplicated ``action_verbs`` dicts that used to live
+# inside ``build_gating_context`` and the hand-written strings scattered
+# across the workshop / course-unit / poll call sites.
+CONTENT_TYPE_COPY = {
+    'article': ('read this article', 'article'),
+    'tutorial': ('read this tutorial', 'tutorial'),
+    'recording': ('watch this recording', 'recording'),
+    'unit': ('read this lesson', 'lesson'),
+    'project': ('view this project', 'project'),
+    'download': ('download this resource', 'download'),
+    'event': ('register for this event', 'event'),
+    'course': ('access this course', 'course'),
+    'curated_link': ('access this resource', 'resource'),
+    'poll': ('vote in this poll', 'poll'),
+}
+DEFAULT_CONTENT_TYPE_COPY = ('access this content', 'content')
+
+# Default upgrade-path description for the ``insufficient_tier`` branch.
+# Individual surfaces may pass a more specific ``upgrade_description``
+# (e.g. the project write-up copy) without re-inventing the CTA labels.
+DEFAULT_UPGRADE_DESCRIPTION = (
+    'Get full access to this content and more with a membership.'
+)
+
 # Sentinel to distinguish "caller didn't pass active_override" from "caller passed None"
 _SENTINEL = object()
 
@@ -274,6 +313,22 @@ def get_required_tier_name(required_level):
     return LEVEL_TO_TIER_NAME.get(required_level, 'Premium')
 
 
+def get_public_label_for_tier_name(tier_name):
+    """Return the public access label for a bare tier NAME.
+
+    Issue #1335: the gated-card partial carries ``required_tier_name``
+    (Basic / Main / Premium / Free) and renders "{label} required". This
+    maps that name to its public label so the mapping stays in Python and
+    the template does not branch on tier name.
+    """
+    return NAME_TO_PUBLIC_LABEL.get(tier_name, tier_name)
+
+
+def get_content_type_copy(content_type):
+    """Return the ``(verb, noun)`` gated-banner copy for a content type."""
+    return CONTENT_TYPE_COPY.get(content_type, DEFAULT_CONTENT_TYPE_COPY)
+
+
 def get_required_tier_label(required_level):
     """Return the public-facing access label for a ``required_level``.
 
@@ -315,19 +370,137 @@ def get_teaser_text(content, max_chars=200):
     return ''
 
 
-def build_gating_context(user, content, content_type='article'):
+def build_gated_access_copy(
+    *,
+    gated_reason,
+    verb,
+    noun,
+    required_level,
+    user=None,
+    resource_url='',
+    upgrade_description=None,
+    show_signin_on_paid_guest=True,
+    encode_next=True,
+):
+    """Return the canonical ``_gated_access_card.html`` copy for a gate.
+
+    Issue #1335: this is the single source of gated-banner copy. It is
+    keyed by ``gated_reason`` and by the content-type ``verb`` / ``noun``
+    so every surface (article, tutorial, recording, unit, project,
+    download, event, course, resource, poll) reads the same wording. Both
+    the content-instance entry point (:func:`build_gating_context`) and
+    the workshop per-level helpers call this so no call site hand-assembles
+    headings or CTA labels.
+
+    ``resource_url`` is the path the visitor should return to after
+    authenticating; it feeds the ``?next=`` query string on the sign-in and
+    sign-up URLs. Only the ``authentication_required`` and
+    ``insufficient_tier`` reasons are handled here — ``unverified_email``
+    renders ``content/_verify_email_required.html`` instead.
+    """
+    from urllib.parse import urlencode
+
+    is_authenticated = bool(
+        user is not None and getattr(user, 'is_authenticated', False)
+    )
+    # ``encode_next=True`` percent-encodes the path (workshop/course-unit
+    # behavior). ``encode_next=False`` keeps slashes readable, matching the
+    # article/project/poll surfaces that historically rendered an unencoded
+    # ``?next=`` (Django's ``urlencode`` filter treats ``/`` as safe).
+    if not resource_url:
+        next_qs = ''
+    elif encode_next:
+        next_qs = urlencode({'next': resource_url})
+    else:
+        next_qs = f'next={resource_url}'
+    login_url = f'/accounts/login/?{next_qs}' if next_qs else '/accounts/login/'
+    signup_url = f'/accounts/signup/?{next_qs}' if next_qs else '/accounts/signup/'
+
+    if gated_reason == 'authentication_required':
+        # Free-with-sign-in content for an anonymous visitor. No tier pill,
+        # no Pricing route — the primary CTA is Sign In and the companion
+        # is Create a free account (workshop-recording wording, #465/#571).
+        return {
+            'gated_heading': f'Sign in to {verb}',
+            'gated_description': (
+                f'This {noun} is free — you just need an account. '
+                'Sign in or create one in seconds.'
+            ),
+            'required_tier_name': '',
+            'current_user_state': '',
+            'gated_cta_url': login_url,
+            'gated_cta_label': 'Sign In',
+            'signup_cta_url': signup_url,
+            'signup_cta_label': 'Create a free account',
+            'signin_cta_url': '',
+            'signin_cta_label': '',
+        }
+
+    # insufficient_tier: signed-in below tier, or anonymous on paid content.
+    tier_name = get_required_tier_name(required_level)
+    current_user_state = ''
+    signup_cta_url = ''
+    signup_cta_label = ''
+    signin_cta_url = ''
+    signin_cta_label = ''
+    if is_authenticated:
+        current_user_state = (
+            f'Current access: {get_required_tier_name(get_user_level(user))} member'
+        )
+    else:
+        # Anonymous on a paid wall: keep the upgrade path but offer a
+        # no-cost account first and a sign-in link for existing members.
+        signup_cta_url = signup_url
+        signup_cta_label = 'Create a free account'
+        if show_signin_on_paid_guest:
+            signin_cta_url = login_url
+            signin_cta_label = 'Already a member? Sign in'
+
+    return {
+        'gated_heading': f'Upgrade to {tier_name} to {verb}',
+        'gated_description': upgrade_description or DEFAULT_UPGRADE_DESCRIPTION,
+        'required_tier_name': tier_name,
+        'current_user_state': current_user_state,
+        'gated_cta_url': '/pricing',
+        'gated_cta_label': 'View Pricing',
+        'signup_cta_url': signup_cta_url,
+        'signup_cta_label': signup_cta_label,
+        'signin_cta_url': signin_cta_url,
+        'signin_cta_label': signin_cta_label,
+    }
+
+
+def build_gating_context(
+    user,
+    content,
+    content_type='article',
+    *,
+    resource_url=None,
+    upgrade_description=None,
+    gated_card_testid='gated-access-card',
+    gated_icon='lock',
+    gated_cta_testid='gated-pricing-link',
+    show_signin_on_paid_guest=True,
+):
     """Build template context for gated content display.
+
+    Issue #1335: emits the full ``content/_gated_access_card.html`` variable
+    set (headings, description, CTA labels/URLs, tier pill, current-access
+    line, sign-up / sign-in companions) so every surface renders the one
+    canonical partial with the one canonical copy. Per-surface differences
+    (testid, icon, upgrade description) are arguments, not new copy.
 
     Args:
         user: The request user.
         content: The content model instance.
-        content_type: A string like 'article', 'recording', 'project', etc.
-            Used to build the CTA message.
+        content_type: 'article', 'tutorial', 'recording', 'project', etc.
+            Selects the verb/noun copy from :data:`CONTENT_TYPE_COPY`.
+        resource_url: Path to return to after auth (for ``?next=``). Falls
+            back to ``content.get_absolute_url()`` when available.
 
     Returns:
-        A dict with gating information to merge into the template context.
-        If the user has access, ``is_gated`` will be False and other keys
-        will be absent.
+        A dict to merge into the template context. When the user has access,
+        ``is_gated`` is False and no other card keys are present.
     """
     gated_reason = get_gated_reason(user, content)
 
@@ -340,60 +513,30 @@ def build_gating_context(user, content, content_type='article'):
             **build_verify_email_context(user),
         }
 
-    if gated_reason == 'authentication_required':
-        # Issue #465: registered-only content for an anonymous visitor
-        # uses a sign-in CTA, not the upgrade-to-paid CTA. The view
-        # builds the actual ``next=`` URL; this context just supplies
-        # the human-facing copy and the auth URLs.
-        action_verbs = {
-            'article': 'read this article',
-            'recording': 'watch this recording',
-            'project': 'view this project',
-            'tutorial': 'read this tutorial',
-            'curated_link': 'access this resource',
-            'download': 'download this resource',
-            'event': 'join this event',
-            'unit': 'read this lesson',
-            'course': 'access this course',
-        }
-        action = action_verbs.get(content_type, 'access this content')
-        return {
-            'is_gated': True,
-            'gated_reason': 'authentication_required',
-            'teaser': get_teaser_text(content),
-            'cta_message': f'Sign in to {action}',
-            'required_tier_name': 'Free',
-            'login_url': '/accounts/login/',
-            'signup_url': '/accounts/signup/',
-            'pricing_url': '/pricing',
-        }
+    if resource_url is None:
+        get_url = getattr(content, 'get_absolute_url', None)
+        resource_url = get_url() if callable(get_url) else ''
 
-    tier_name = get_required_tier_name(_resolve_required_level(content))
-    teaser = get_teaser_text(content)
-
-    # Build CTA message based on content type
-    action_verbs = {
-        'article': 'read this article',
-        'recording': 'watch this recording',
-        'project': 'view this project',
-        'tutorial': 'read this tutorial',
-        'curated_link': 'access this resource',
-        'download': 'download this resource',
-        'event': 'join this event',
-    }
-    action = action_verbs.get(content_type, 'access this content')
-    is_guest_paywall = user is None or not user.is_authenticated
-    if is_guest_paywall:
-        cta_message = f'Create a free account or choose {tier_name} to {action}'
-    else:
-        cta_message = f'Upgrade to {tier_name} to {action}'
+    verb, noun = get_content_type_copy(content_type)
+    copy = build_gated_access_copy(
+        gated_reason=gated_reason,
+        verb=verb,
+        noun=noun,
+        required_level=_resolve_required_level(content),
+        user=user,
+        resource_url=resource_url,
+        upgrade_description=upgrade_description,
+        show_signin_on_paid_guest=show_signin_on_paid_guest,
+        encode_next=False,
+    )
 
     return {
         'is_gated': True,
-        'gated_reason': 'insufficient_tier',
-        'teaser': teaser,
-        'cta_message': cta_message,
-        'required_tier_name': tier_name,
-        'is_guest_paywall': is_guest_paywall,
+        'gated_reason': gated_reason,
+        'teaser': get_teaser_text(content),
+        'gated_card_testid': gated_card_testid,
+        'gated_icon': gated_icon,
+        'gated_cta_testid': gated_cta_testid,
         'pricing_url': '/pricing',
+        **copy,
     }

@@ -2043,23 +2043,28 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
 
 
 class PublicGatedContentCopyRegressionTest(SimpleTestCase):
-    def test_legacy_gated_partial_remains_for_blog_and_tutorials(self):
+    def test_blog_and_tutorials_use_canonical_gated_card(self):
+        # Issue #1335: blog_detail and tutorial_detail migrated off the
+        # deprecated includes/content_gated.html onto the canonical
+        # content/_gated_access_card.html; the legacy partial was deleted.
         repo_root = Path(__file__).resolve().parents[2]
         legacy_partial = (
             repo_root / 'templates' / 'includes' / 'content_gated.html'
         )
 
-        self.assertTrue(legacy_partial.is_file())
+        self.assertFalse(legacy_partial.exists())
         for template_name in ('blog_detail.html', 'tutorial_detail.html'):
             template_source = (
                 repo_root / 'templates' / 'content' / template_name
             ).read_text()
-            self.assertIn('includes/content_gated.html', template_source)
+            self.assertNotIn('includes/content_gated.html', template_source)
+            self.assertIn(
+                'content/_gated_access_card.html', template_source,
+            )
 
     def test_public_gated_templates_do_not_use_public_metadata_jargon(self):
         repo_root = Path(__file__).resolve().parents[2]
         template_paths = [
-            repo_root / 'templates' / 'includes' / 'content_gated.html',
             *(repo_root / 'templates' / 'content').glob('*.html'),
             *(repo_root / 'templates' / 'content').glob('*/*.html'),
         ]

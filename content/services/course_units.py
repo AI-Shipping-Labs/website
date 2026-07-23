@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass
-from urllib.parse import urlencode
 
 from django.utils import timezone
 from django.utils.html import strip_tags
@@ -20,10 +19,10 @@ from accounts.utils.user_checks import is_authenticated_user
 from content.access import (
     LEVEL_MAIN,
     LEVEL_OPEN,
+    build_gated_access_copy,
     build_gating_context,
     can_access,
     get_gated_reason,
-    get_required_tier_name,
     get_user_level,
 )
 from content.models import CohortEnrollment, Unit, UserCourseProgress
@@ -148,57 +147,54 @@ def decide_course_unit_drip_lock(
 
 
 def build_gated_course_unit_context(user, course, module, unit, decision):
-    """Build template context for a denied course-unit request."""
+    """Build template context for a denied course-unit request.
+
+    Issue #1335: the banner copy comes from the one canonical copy builder
+    (:func:`content.access.build_gated_access_copy`) so a gated lesson reads
+    the same "Sign in to read this lesson" / "Upgrade to {tier} to read this
+    lesson" wording as every other surface. The legacy free-course
+    anonymous nudge is an authentication wall too (an account is needed for
+    completion tracking), so it shares the sign-in copy. The drip-lock
+    clock copy stays in :func:`build_drip_locked_course_unit_context`.
+    """
     gating = build_gating_context(user, unit, 'unit')
     is_unverified_gate = decision.gated_reason == ACCESS_DENIED_UNVERIFIED_EMAIL
     is_auth_required_gate = decision.gated_reason == ACCESS_DENIED_AUTHENTICATION
+    unit_url = unit.get_absolute_url()
 
-    if is_auth_required_gate:
-        unit_url = unit.get_absolute_url()
-        login_qs = urlencode({'next': unit_url})
-        tier_name = None
-        cta_message = 'Sign in to read this lesson'
-        pricing_url = f'/accounts/login/?{login_qs}'
-        cta_label = 'Sign In'
-        cta_description = (
-            'This lesson is free with a sign-in. Create a free '
-            'account in seconds to keep reading.'
-        )
-    elif not is_authenticated_user(user):
-        if course.required_level == 0:
-            cta_message = 'Sign in to access this lesson'
-            tier_name = None
-            pricing_url = (
-                f'/accounts/signup/?'
-                f'{urlencode({"next": unit.get_absolute_url()})}'
-            )
-            cta_label = 'Sign Up'
-            cta_description = 'Create a free account to access this course.'
-        else:
-            cta_message = 'Sign in to access this lesson'
-            tier_name = get_required_tier_name(course.required_level)
-            pricing_url = (
-                f'/accounts/login/?'
-                f'{urlencode({"next": unit.get_absolute_url()})}'
-            )
-            cta_label = 'View Pricing'
-            cta_description = (
-                'Get full access to this course and more with a membership.'
-            )
+    if is_unverified_gate:
+        copy = {
+            'gated_heading': '',
+            'gated_description': '',
+            'gated_cta_url': '/pricing',
+            'gated_cta_label': '',
+            'required_tier_name': None,
+            'current_user_state': '',
+            'signup_cta_url': '',
+            'signup_cta_label': '',
+        }
     else:
-        tier_name = get_required_tier_name(course.required_level)
-        if is_unverified_gate:
-            cta_message = ''
-            pricing_url = '/pricing'
-            cta_label = ''
-            cta_description = ''
+        # A registered wall, or an anonymous visitor on a free course, is an
+        # authentication gate. Everything else (anonymous on a paid course,
+        # or a signed-in member below the tier) is an upgrade gate.
+        is_free_course_signin = (
+            not is_authenticated_user(user) and course.required_level == 0
+        )
+        if is_auth_required_gate or is_free_course_signin:
+            reason = 'authentication_required'
         else:
-            cta_message = f'Upgrade to {tier_name} to access this lesson'
-            pricing_url = '/pricing'
-            cta_label = 'View Pricing'
-            cta_description = (
+            reason = 'insufficient_tier'
+        copy = build_gated_access_copy(
+            gated_reason=reason,
+            verb='read this lesson',
+            noun='lesson',
+            required_level=course.required_level,
+            user=user,
+            resource_url=unit_url,
+            upgrade_description=(
                 'Get full access to this course and more with a membership.'
-            )
+            ),
+        )
 
     teaser_body_html = None
     if unit.body_html:
@@ -209,44 +205,32 @@ def build_gated_course_unit_context(user, course, module, unit, decision):
         homework_text = strip_tags(unit.homework_html).strip()
         homework_teaser = first_sentence(homework_text)
 
-    signup_cta_url = ''
-    signup_cta_label = ''
-    if not is_authenticated_user(user) and (
-        course.required_level > 0 or is_auth_required_gate
-    ):
-        unit_url = unit.get_absolute_url()
-        signup_qs = urlencode({'next': unit_url})
-        signup_cta_url = f'/accounts/signup/?{signup_qs}'
-        signup_cta_label = (
-            'Create a free account'
-            if is_auth_required_gate
-            else 'Sign in or create a free account'
-        )
-
     context = {
         'course': course,
         'module': module,
         'unit': unit,
         'is_gated': True,
-        'required_tier_name': tier_name,
-        'cta_message': cta_message,
-        'pricing_url': pricing_url,
-        'cta_label': cta_label,
-        'cta_description': cta_description,
+        'required_tier_name': copy['required_tier_name'],
+        # Legacy aliases kept for callers/tests that still read the pre-#1335
+        # key names; they mirror the canonical gated-card values.
+        'cta_message': copy['gated_heading'],
+        'pricing_url': copy['gated_cta_url'],
+        'cta_label': copy['gated_cta_label'],
+        'cta_description': copy['gated_description'],
         'teaser_body_html': teaser_body_html,
         'homework_teaser': homework_teaser,
         'video_thumbnail_url': get_video_thumbnail_url(unit.video_url),
         'has_video': bool(unit.video_url),
-        'signup_cta_url': signup_cta_url,
-        'signup_cta_label': signup_cta_label,
+        'signup_cta_url': copy['signup_cta_url'],
+        'signup_cta_label': copy['signup_cta_label'],
         'user_authenticated': is_authenticated_user(user),
-        'current_user_state': _current_access_state(user, course.required_level),
+        'current_user_state': copy['current_user_state'],
         'gated_card_testid': 'teaser-cta',
         'gated_icon': 'lock',
-        'gated_heading': cta_message,
-        'gated_description': cta_description,
-        'gated_cta_url': pricing_url,
-        'gated_cta_label': cta_label,
+        'gated_heading': copy['gated_heading'],
+        'gated_description': copy['gated_description'],
+        'gated_cta_url': copy['gated_cta_url'],
+        'gated_cta_label': copy['gated_cta_label'],
         'gated_cta_testid': 'teaser-upgrade-cta',
     }
     if is_unverified_gate:
@@ -376,13 +360,3 @@ def get_prev_unit(course, current_unit):
         if unit.pk == current_unit.pk and i > 0:
             return all_units[i - 1]
     return None
-
-
-def _current_access_state(user, required_level):
-    """Return signed-in user access copy for gated cards only."""
-    if not is_authenticated_user(user):
-        return ''
-    user_level = get_user_level(user)
-    if user_level >= required_level:
-        return ''
-    return f'Current access: {get_required_tier_name(user_level)} member'

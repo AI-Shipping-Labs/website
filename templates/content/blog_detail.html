@@ -74,7 +74,11 @@
       </header>
 
       {% if is_gated %}
-        {% include "includes/content_gated.html" %}
+        {% if gated_reason == "unverified_email" %}
+          {% include "content/_verify_email_required.html" %}
+        {% else %}
+          {% include "content/_gated_access_card.html" with signup_cta_testid="gated-create-free-account-link" signin_cta_testid="gated-sign-in-link" %}
+        {% endif %}
       {% else %}
       <div class="prose min-w-0 max-w-full">
         {{ article.content_html|render_download_shortcodes:request|safe }}

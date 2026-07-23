@@ -1,7 +1,13 @@
+{% load access_tags %}
 {% comment %}
-Presentation-only gated content card for course/workshop surfaces.
+Canonical gated-content card. This is the ONE partial every paid /
+tier-gated / free-with-sign-in content block renders (issue #1335). The
+deprecated ``templates/includes/content_gated.html`` was deleted; all
+banner copy now comes from ``content.access.build_gating_context`` (or the
+workshop per-level helpers, which share the same copy builder).
+
 Access decisions stay in the views/models; this partial only standardizes
-the visible hierarchy for issue #402 and can be reverted independently.
+the visible hierarchy.
 
 Expected context:
   gated_card_testid, gated_icon, gated_heading, gated_description,
@@ -10,11 +16,12 @@ Expected context:
   signup_cta_label, signup_cta_testid, signin_cta_url, signin_cta_label,
   signin_cta_testid
 
-Issue #481: ``required_tier_name`` carries the bare tier name (Basic /
-Main / Premium / Free) and we render the public-facing label here so the
-copy reads "Basic or above required" / "Main or above required" /
-"Premium required" — never "Premium+" or "Premium or above" (Premium has
-no higher public tier to upgrade to).
+Issue #481 / #1335: ``required_tier_name`` carries the bare tier name
+(Basic / Main / Premium / Free) and the ``tier_public_label`` filter turns
+it into the public label so the pill reads "Basic or above required" /
+"Main or above required" / "Premium required" — never "Premium+" or
+"Premium or above" (Premium has no higher public tier). The template never
+branches on tier name; the mapping lives in ``content.access``.
 
 Issue #652: when ``signup_inline=True`` and the visitor is anonymous,
 the secondary "Create free account" link is replaced by the inline
@@ -33,15 +40,7 @@ in the extra_scripts block.
   {% if required_tier_name %}
   <p class="mt-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-background px-3 py-1 text-sm font-medium text-foreground" data-testid="gated-required-tier">
     <i data-lucide="badge-check" class="h-4 w-4 text-accent"></i>
-    {% if required_tier_name == "Premium" %}
-    Premium required
-    {% elif required_tier_name == "Main" %}
-    Main or above required
-    {% elif required_tier_name == "Basic" %}
-    Basic or above required
-    {% else %}
-    {{ required_tier_name }} required
-    {% endif %}
+    {{ required_tier_name|tier_public_label }} required
   </p>
   {% endif %}
   {% if current_user_state %}

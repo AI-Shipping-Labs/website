@@ -126,8 +126,12 @@ class CourseUnitAccessDecisionTest(TierSetupMixin, TestCase):
         self.assertEqual(decision.reason, ACCESS_DENIED_LEGACY_SIGNIN)
         self.assertEqual(decision.gated_reason, '')
         self.assertEqual(decision.status_code, 403)
-        self.assertEqual(context['cta_label'], 'Sign Up')
-        self.assertEqual(context['gated_cta_label'], 'Sign Up')
+        # Issue #1335: the legacy free-course anonymous nudge is an
+        # authentication gate too and now shares the canonical sign-in copy.
+        self.assertEqual(context['cta_label'], 'Sign In')
+        self.assertEqual(context['gated_cta_label'], 'Sign In')
+        self.assertIn('/accounts/login/?next=', context['gated_cta_url'])
+        self.assertEqual(context['signup_cta_label'], 'Create a free account')
 
     def test_registered_unit_denies_anonymous_with_authentication_reason(self):
         course = Course.objects.create(
@@ -204,7 +208,7 @@ class CourseUnitAccessDecisionTest(TierSetupMixin, TestCase):
         self.assertEqual(decision.reason, ACCESS_DENIED_INSUFFICIENT_TIER)
         self.assertEqual(decision.effective_level, LEVEL_MAIN)
         self.assertEqual(decision.status_code, 403)
-        self.assertEqual(context['cta_message'], 'Upgrade to Main to access this lesson')
+        self.assertEqual(context['cta_message'], 'Upgrade to Main to read this lesson')
         self.assertEqual(context['current_user_state'], 'Current access: Basic member')
 
     def test_course_access_grant_allows_paid_unit(self):

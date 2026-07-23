@@ -136,7 +136,7 @@ class NonEligibleUserTeaserTest(CourseUnitTeaserSetupMixin, TestCase):
 
     def test_renders_upgrade_cta(self):
         response = self.client.get(self.unit_url)
-        self.assertContains(response, 'Upgrade to Main to access this lesson', status_code=403)
+        self.assertContains(response, 'Upgrade to Main to read this lesson', status_code=403)
         # Issue #481: paywall pill reads "Main or above required".
         self.assertContains(response, 'Main or above required', status_code=403)
         self.assertNotContains(response, 'Main+ required', status_code=403)
@@ -213,8 +213,9 @@ class AnonymousUserTeaserTest(CourseUnitTeaserSetupMixin, TestCase):
             response, 'data-testid="teaser-signup-cta"', status_code=403,
             count=1,
         )
+        # Issue #1335: unified companion copy across every gated surface.
         self.assertContains(
-            response, 'Sign in or create a free account', status_code=403,
+            response, 'Create a free account', status_code=403,
         )
         self.assertContains(response, '/accounts/signup/', status_code=403)
 
@@ -318,7 +319,7 @@ class EmptyBodyFallbackTest(CourseUnitTeaserSetupMixin, TestCase):
 
     def test_still_shows_upgrade_cta(self):
         response = self.client.get(self.empty_url)
-        self.assertContains(response, 'Upgrade to Main to access this lesson', status_code=403)
+        self.assertContains(response, 'Upgrade to Main to read this lesson', status_code=403)
         self.assertContains(response, 'View Pricing', status_code=403)
 
 

@@ -138,12 +138,10 @@ class TestGuestFunnel1159:
             )
             body = guest_page.content()
             assert "SECRET PAID ARTICLE BODY" not in body
-            assert (
-                "Create a free account or choose Basic to read this article"
-                in body
-            )
-            assert "Upgrade to Basic to read this article" not in body
-            assert f'href="/accounts/register/?next={article_path}"' in body
+            # Issue #1335: unified upgrade card — upgrade heading + Pricing
+            # plus a no-cost account path and a sign-in link.
+            assert "Upgrade to Basic to read this article" in body
+            assert f'href="/accounts/signup/?next={article_path}"' in body
             assert f'href="/accounts/login/?next={article_path}"' in body
             expect(guest_page.get_by_test_id("gated-pricing-link")).to_be_visible()
             _screenshot(guest_page, "guest-paid-article-paywall")
@@ -159,7 +157,6 @@ class TestGuestFunnel1159:
             )
             body = member_page.content()
             assert "Upgrade to Basic to read this article" in body
-            assert "Create a free account or choose Basic" not in body
             assert "Create a free account" not in body
         finally:
             member_context.close()
@@ -174,10 +171,9 @@ class TestGuestFunnel1159:
 
         page.goto(f"{django_server}{article_path}", wait_until="domcontentloaded")
         page.get_by_test_id("gated-create-free-account-link").click()
-        page.wait_for_url(
-            f"{django_server}/accounts/register/?next={article_path}",
-            timeout=5000,
-        )
+        # Issue #1335: signup routes through /accounts/signup/ which redirects
+        # to the registration page carrying the same next target.
+        page.wait_for_url("**/accounts/register/**", timeout=5000)
 
         page.fill("#register-email", email)
         page.fill("#register-password", DEFAULT_PASSWORD)
@@ -188,7 +184,6 @@ class TestGuestFunnel1159:
         expect(page.get_by_test_id("account-menu-trigger")).to_be_visible()
         body = page.content()
         assert "Upgrade to Basic to read this article" in body
-        assert "Create a free account or choose Basic" not in body
 
         with django_db_blocker.unblock():
             from accounts.models import User

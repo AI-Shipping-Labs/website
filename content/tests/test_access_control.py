@@ -285,18 +285,42 @@ class CanAccessEmailVerifiedTest(TierSetupMixin, TestCase):
         ctx = build_gating_context(user, self.basic_article, 'article')
         self.assertTrue(ctx['is_gated'])
         self.assertEqual(ctx['gated_reason'], 'insufficient_tier')
-        self.assertEqual(ctx['cta_message'], 'Upgrade to Basic to read this article')
-        self.assertFalse(ctx['is_guest_paywall'])
+        # Issue #1335: canonical gated-card copy — signed-in below-tier user
+        # sees the upgrade heading, the tier pill, and their current access.
+        self.assertEqual(
+            ctx['gated_heading'], 'Upgrade to Basic to read this article',
+        )
+        self.assertEqual(ctx['required_tier_name'], 'Basic')
+        self.assertEqual(ctx['gated_cta_url'], '/pricing')
+        self.assertEqual(ctx['current_user_state'], 'Current access: Free member')
+        self.assertEqual(ctx['signup_cta_url'], '')
+        self.assertEqual(ctx['signin_cta_url'], '')
+        self.assertNotIn('is_guest_paywall', ctx)
 
     def test_build_gating_context_guest_insufficient_tier(self):
-        ctx = build_gating_context(AnonymousUser(), self.basic_article, 'article')
+        ctx = build_gating_context(
+            AnonymousUser(),
+            self.basic_article,
+            'article',
+            resource_url='/blog/basic-article',
+        )
         self.assertTrue(ctx['is_gated'])
         self.assertEqual(ctx['gated_reason'], 'insufficient_tier')
-        self.assertTrue(ctx['is_guest_paywall'])
+        # Issue #1335: an anonymous visitor on a paid wall keeps the upgrade
+        # heading + Pricing CTA, plus a no-cost account path and a sign-in
+        # link (no more "Create a free account or choose ..." heading).
         self.assertEqual(
-            ctx['cta_message'],
-            'Create a free account or choose Basic to read this article',
+            ctx['gated_heading'], 'Upgrade to Basic to read this article',
         )
+        self.assertEqual(ctx['gated_cta_url'], '/pricing')
+        self.assertEqual(
+            ctx['signup_cta_url'], '/accounts/signup/?next=/blog/basic-article',
+        )
+        self.assertEqual(ctx['signup_cta_label'], 'Create a free account')
+        self.assertEqual(
+            ctx['signin_cta_url'], '/accounts/login/?next=/blog/basic-article',
+        )
+        self.assertEqual(ctx['signin_cta_label'], 'Already a member? Sign in')
 
     def test_course_access_row_bypasses_email_check(self):
         user = self._user('course-access', self.free_tier, False)
@@ -472,10 +496,10 @@ class BuildGatingContextTest(TierSetupMixin, TestCase):
         ctx = build_gating_context(AnonymousUser(), self.article, 'article')
         self.assertTrue(ctx['is_gated'])
         self.assertEqual(
-            ctx['cta_message'],
-            'Create a free account or choose Basic to read this article',
+            ctx['gated_heading'], 'Upgrade to Basic to read this article',
         )
-        self.assertTrue(ctx['is_guest_paywall'])
+        self.assertEqual(ctx['gated_cta_url'], '/pricing')
+        self.assertEqual(ctx['signup_cta_label'], 'Create a free account')
         self.assertEqual(ctx['required_tier_name'], 'Basic')
         self.assertEqual(ctx['pricing_url'], '/pricing')
         self.assertIn('This is the description', ctx['teaser'])
@@ -511,9 +535,9 @@ class BuildGatingContextTest(TierSetupMixin, TestCase):
         from django.contrib.auth.models import AnonymousUser
         ctx = build_gating_context(AnonymousUser(), recording, 'recording')
         self.assertEqual(
-            ctx['cta_message'],
-            'Create a free account or choose Main to watch this recording',
+            ctx['gated_heading'], 'Upgrade to Main to watch this recording',
         )
+        self.assertEqual(ctx['signup_cta_label'], 'Create a free account')
 
 
 # --- Model field tests ---
@@ -611,22 +635,20 @@ class BlogDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/blog/basic-article')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Full basic content')
-        self.assertContains(
-            response,
-            'Create a free account or choose Basic to read this article',
-        )
+        # Issue #1335: anonymous visitor on a paid article gets the upgrade
+        # heading + Pricing, plus a no-cost account path and a sign-in link.
+        self.assertContains(response, 'Upgrade to Basic to read this article')
         self.assertContains(response, 'View Pricing')
         self.assertContains(response, 'Create a free account')
         self.assertContains(response, 'Already a member? Sign in')
         self.assertContains(
             response,
-            'href="/accounts/register/?next=/blog/basic-article"',
+            'href="/accounts/signup/?next=/blog/basic-article"',
         )
         self.assertContains(
             response,
             'href="/accounts/login/?next=/blog/basic-article"',
         )
-        self.assertNotContains(response, 'Upgrade to Basic to read this article')
 
     def test_free_user_sees_gated_basic_article(self):
         self.client.force_login(self.free_user)
@@ -712,11 +734,11 @@ class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Secret project content')
         self.assertContains(
             response,
-            'Create a free account or choose Basic to view this project',
+            'Upgrade to Basic to view this project',
         )
         self.assertContains(
             response,
-            'href="/accounts/register/?next=/projects/gated-project"',
+            'href="/accounts/signup/?next=/projects/gated-project"',
         )
         self.assertContains(
             response,
@@ -803,21 +825,18 @@ class TutorialDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/tutorials/gated-tutorial')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Secret tutorial content')
+        # Issue #1335: anonymous visitor on a paid tutorial gets the upgrade
+        # heading + Pricing, plus a no-cost account path and a sign-in link.
+        self.assertContains(response, 'Upgrade to Premium to read this tutorial')
         self.assertContains(
             response,
-            'Create a free account or choose Premium to read this tutorial',
-        )
-        self.assertContains(
-            response,
-            'href="/accounts/register/?next=/tutorials/gated-tutorial"',
+            'href="/accounts/signup/?next=/tutorials/gated-tutorial"',
         )
         self.assertContains(
             response,
             'href="/accounts/login/?next=/tutorials/gated-tutorial"',
         )
-        self.assertNotContains(
-            response, 'Upgrade to Premium to read this tutorial',
-        )
+        self.assertContains(response, 'Create a free account')
 
     def test_free_user_sees_gated_tutorial_upgrade_copy(self):
         user = User.objects.create_user(email='free-tutorial@test.com')
@@ -829,7 +848,8 @@ class TutorialDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Secret tutorial content')
         self.assertContains(response, 'Upgrade to Premium to read this tutorial')
-        self.assertNotContains(response, 'Create a free account or choose Premium')
+        # Signed-in below-tier user gets no signup/signin companions.
+        self.assertNotContains(response, 'Create a free account')
 
 
 @tag('core')

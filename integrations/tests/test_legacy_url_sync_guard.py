@@ -216,3 +216,169 @@ class WorkshopPageLegacyUrlGuardTest(TestCase):
         page_path = '2026-01-15-coding-agents/01-overview.md'
         warnings = _legacy_warnings_for(sync_log, page_path)
         self.assertEqual(len(warnings), 1, f'got {sync_log.errors!r}')
+
+
+# --- Issue #1342: content-repo-relative-link guard -------------------------
+
+# The href shape from the reported bug: climbs out of the workshop folder
+# into a sibling date-slug directory. Meaningless as a site route.
+_RELATIVE_LINK_BODY = (
+    'See [selecting a portfolio project]'
+    '(../../06/2026-06-29-selecting-a-portfolio-project/) for context.\n'
+)
+_CANONICAL_LINK_BODY = (
+    'See [selecting a portfolio project]'
+    '(/workshops/selecting-a-portfolio-project) for context.\n'
+)
+
+
+def _relative_warnings_for(sync_log, source_path):
+    """Return error records that mention ``source_path`` and a relative href."""
+    return [
+        record for record in (sync_log.errors or [])
+        if record.get('file') == source_path
+        and 'Relative content-repo link' in (record.get('error') or '')
+    ]
+
+
+class WorkshopDescriptionRelativeLinkGuardTest(TestCase):
+    """Workshop README (description_html): relative link -> one warning."""
+
+    def setUp(self):
+        self.source, self.repo = make_sync_repo(
+            self,
+            repo_name='AI-Shipping-Labs/workshops',
+            prefix='relative-workshop-sync-',
+        )
+
+    def _build_workshop(self, readme_body):
+        self.repo.write_yaml(
+            '2026-07-08-tailor-cv/workshop.yaml',
+            {
+                'title': 'Tailor CV',
+                'slug': 'tailor-cv',
+                'date': '2026-07-08',
+                'pages_required_level': 0,
+                'instructors': [],
+            },
+            ensure_content_id=True,
+        )
+        self.repo.write_text(
+            '2026-07-08-tailor-cv/README.md',
+            readme_body,
+        )
+        self.repo.write_markdown(
+            '2026-07-08-tailor-cv/01-overview.md',
+            {'title': 'Overview'},
+            'Overview page copy.\n',
+        )
+
+    def test_relative_link_in_readme_emits_warning_and_still_syncs(self):
+        self._build_workshop(_RELATIVE_LINK_BODY)
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertIn(sync_log.status, ('success', 'partial'))
+        workshop = Workshop.objects.get(slug='tailor-cv')
+        # No auto-rewrite — the relative href survives verbatim.
+        self.assertIn(
+            'href="../../06/2026-06-29-selecting-a-portfolio-project/"',
+            workshop.description_html,
+        )
+        # The workshop landing description is attributed to the workshop
+        # folder path (matching the existing detect_legacy_urls call site).
+        wk_path = '2026-07-08-tailor-cv'
+        warnings = _relative_warnings_for(sync_log, wk_path)
+        self.assertEqual(len(warnings), 1, f'got {sync_log.errors!r}')
+        message = warnings[0]['error']
+        self.assertIn(wk_path, message)
+        self.assertIn(
+            '../../06/2026-06-29-selecting-a-portfolio-project/', message,
+        )
+
+    def test_canonical_link_in_readme_emits_no_warning(self):
+        self._build_workshop(_CANONICAL_LINK_BODY)
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertIn(sync_log.status, ('success', 'partial'))
+        workshop = Workshop.objects.get(slug='tailor-cv')
+        self.assertIn(
+            'href="/workshops/selecting-a-portfolio-project"',
+            workshop.description_html,
+        )
+        wk_path = '2026-07-08-tailor-cv'
+        self.assertEqual(_relative_warnings_for(sync_log, wk_path), [])
+
+
+class WorkshopPageRelativeLinkGuardTest(TestCase):
+    """Workshop page body_html is scanned for relative links too."""
+
+    def setUp(self):
+        self.source, self.repo = make_sync_repo(
+            self,
+            repo_name='AI-Shipping-Labs/workshops',
+            prefix='relative-workshop-page-sync-',
+        )
+
+    def _build_workshop(self, page_body):
+        self.repo.write_yaml(
+            '2026-07-08-tailor-cv/workshop.yaml',
+            {
+                'title': 'Tailor CV',
+                'slug': 'tailor-cv',
+                'date': '2026-07-08',
+                'pages_required_level': 0,
+                'instructors': [],
+            },
+            ensure_content_id=True,
+        )
+        self.repo.write_text(
+            '2026-07-08-tailor-cv/README.md',
+            'Workshop landing copy.\n',
+        )
+        self.repo.write_markdown(
+            '2026-07-08-tailor-cv/05-tailor-to-domain.md',
+            {'title': 'Tailor to domain'},
+            page_body,
+        )
+
+    def test_relative_link_in_page_emits_warning_and_still_syncs(self):
+        self._build_workshop(_RELATIVE_LINK_BODY)
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertIn(sync_log.status, ('success', 'partial'))
+        workshop = Workshop.objects.get(slug='tailor-cv')
+        page = WorkshopPage.objects.get(
+            workshop=workshop, slug='tailor-to-domain',
+        )
+        self.assertIn(
+            'href="../../06/2026-06-29-selecting-a-portfolio-project/"',
+            page.body_html,
+        )
+        page_path = '2026-07-08-tailor-cv/05-tailor-to-domain.md'
+        warnings = _relative_warnings_for(sync_log, page_path)
+        self.assertEqual(len(warnings), 1, f'got {sync_log.errors!r}')
+
+
+class ArticleRelativeLinkGuardTest(TestCase):
+    """The relative-link guard runs in the article dispatcher too."""
+
+    def setUp(self):
+        self.source, self.repo = make_sync_repo(
+            self,
+            repo_name='AI-Shipping-Labs/blog',
+            prefix='relative-article-sync-',
+        )
+
+    def test_relative_link_in_article_emits_warning_and_still_syncs(self):
+        self.repo.write_markdown(
+            'rel.md',
+            {
+                'title': 'Relative',
+                'slug': 'relative-article',
+                'date': '2026-01-15',
+            },
+            _RELATIVE_LINK_BODY,
+        )
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertIn(sync_log.status, ('success', 'partial'))
+        article = Article.objects.get(slug='relative-article')
+        self.assertTrue(article.published)
+        warnings = _relative_warnings_for(sync_log, 'rel.md')
+        self.assertEqual(len(warnings), 1, f'got {sync_log.errors!r}')

@@ -10,6 +10,7 @@ from content.access import (
     get_gated_reason,
     get_required_tier_name,
     get_user_level,
+    requires_free_download_verification,
 )
 from content.models import (
     Article,
@@ -634,9 +635,13 @@ def downloads_list(request):
     for download in downloads:
         has_access = can_access(request.user, download)
         is_lead_magnet = download.required_level == 0
-        gated_reason = get_gated_reason(request.user, download)
-        requires_email_verification = gated_reason == 'unverified_email'
-        if gated_reason == 'unverified_email':
+        # Issue #1318: the verified-mailbox delivery gate for free downloads
+        # is computed explicitly, not via get_gated_reason (which no longer
+        # gates LEVEL_OPEN content).
+        requires_email_verification = requires_free_download_verification(
+            request.user, download,
+        )
+        if requires_email_verification:
             has_access = False
             verify_downloads_email = True
 
@@ -678,9 +683,16 @@ def download_detail(request, slug):
     download_surface = normalize_download_surface(request.GET.get('surface'))
     is_anonymous = not request.user.is_authenticated
     is_free = download.required_level == 0
-    gated_reason = get_gated_reason(request.user, download)
     has_access = can_access(request.user, download)
+    # Issue #1318: the verified-mailbox delivery gate for free downloads is
+    # computed explicitly, not via get_gated_reason (which no longer gates
+    # LEVEL_OPEN content).
+    requires_email_verification = requires_free_download_verification(
+        request.user, download,
+    )
     if is_free and is_anonymous:
+        has_access = False
+    if requires_email_verification:
         has_access = False
 
     context = {
@@ -688,7 +700,7 @@ def download_detail(request, slug):
         'download_surface': download_surface,
         'has_access': has_access,
         'show_request_form': is_free and is_anonymous,
-        'requires_email_verification': gated_reason == 'unverified_email',
+        'requires_email_verification': requires_email_verification,
         'required_tier_name': get_required_tier_name(download.required_level),
         'is_paid_gate': download.required_level > 0 and not has_access,
         'hide_footer_newsletter': is_free and is_anonymous,
@@ -713,7 +725,7 @@ def download_detail(request, slug):
             and not has_access
         ),
     }
-    if gated_reason == 'unverified_email':
+    if requires_email_verification:
         from content.access import build_verify_email_context
         context.update(build_verify_email_context(request.user))
     return render(request, 'content/download_detail.html', context)

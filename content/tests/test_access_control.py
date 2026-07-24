@@ -254,7 +254,10 @@ class CanAccessEmailVerifiedTest(TierSetupMixin, TestCase):
 
         cases = [
             ('anonymous', self.anon, True, False),
-            ('free unverified', free_unverified, False, False),
+            # Issue #1318: open content is now readable by an unverified free
+            # user (True, was False) — signing up must never reduce access
+            # below anonymous. Basic (paid) access stays False.
+            ('free unverified', free_unverified, True, False),
             ('free verified', free_verified, True, False),
             ('basic unverified', basic_unverified, True, True),
             ('basic verified', basic_verified, True, True),
@@ -272,9 +275,32 @@ class CanAccessEmailVerifiedTest(TierSetupMixin, TestCase):
             with self.subTest(user=label, level=LEVEL_BASIC):
                 self.assertEqual(can_access(user, self.basic_article), expected_basic)
 
-    def test_build_gating_context_unverified_free(self):
+    def test_build_gating_context_unverified_free_open_not_gated(self):
+        # Issue #1318: an unverified free user is NOT gated on a LEVEL_OPEN
+        # article — open content is readable by everyone.
         user = self._user('ctx-free', self.free_tier, False)
         ctx = build_gating_context(user, self.open_article, 'article')
+        self.assertFalse(ctx['is_gated'])
+        self.assertNotIn('gated_reason', ctx)
+
+    def test_build_gating_context_unverified_free_registered_unit(self):
+        # Issue #1318: the verify-email content nudge now lives on
+        # LEVEL_REGISTERED content, where an account is legitimately required
+        # (anonymous is already denied). Repointed here from the old
+        # LEVEL_OPEN article assertion.
+        user = self._user('ctx-free-reg', self.free_tier, False)
+        course = Course.objects.create(
+            title='Registered Course', slug='registered-course-ctx',
+            required_level=LEVEL_OPEN, status='published',
+            default_unit_required_level=LEVEL_REGISTERED,
+        )
+        module = Module.objects.create(
+            course=course, title='M1', slug='m1-ctx',
+        )
+        unit = Unit.objects.create(
+            module=module, title='Registered Unit', slug='registered-unit-ctx',
+        )
+        ctx = build_gating_context(user, unit, 'unit')
         self.assertTrue(ctx['is_gated'])
         self.assertEqual(ctx['gated_reason'], 'unverified_email')
         self.assertEqual(ctx['verify_email_address'], user.email)
@@ -848,7 +874,15 @@ class TutorialDetailAccessControlTest(TierSetupMixin, TestCase):
 
 @tag('core')
 class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
-    """Each content detail surface renders the verify-email gate for free users."""
+    """Open content is readable by unverified free users (issue #1318).
+
+    Signing up must never reduce read access below anonymous, so every
+    LEVEL_OPEN detail surface renders the content and does NOT show the
+    verify-email card. The verify-email nudge is retained on
+    LEVEL_REGISTERED content (where an account is legitimately required)
+    and on free-download delivery (verified mailbox is inherent to
+    delivery).
+    """
 
     def setUp(self):
         self.client = Client()
@@ -868,40 +902,42 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Resend verification email')
         self.assertNotContains(response, 'data-testid="gated-access-card"')
 
-    def test_blog_detail_renders_verify_gate(self):
+    def assert_no_verify_gate(self, response):
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-testid="verify-email-required-card"')
+
+    def test_blog_detail_renders_for_unverified_free(self):
         Article.objects.create(
             title='Free Blog Gate', slug='free-blog-gate',
             content_html='<p>Free blog body</p>',
             date=date(2025, 1, 1), published=True, required_level=LEVEL_OPEN,
         )
         response = self.client.get('/blog/free-blog-gate')
-        self.assert_verify_gate(response)
-        self.assertNotContains(response, 'Free blog body')
+        self.assert_no_verify_gate(response)
+        self.assertContains(response, 'Free blog body')
 
-    def test_tutorial_detail_renders_verify_gate(self):
+    def test_tutorial_detail_renders_for_unverified_free(self):
         Tutorial.objects.create(
             title='Free Tutorial Gate', slug='free-tutorial-gate',
             content_html='<p>Free tutorial body</p>',
             date=date(2025, 1, 1), published=True, required_level=LEVEL_OPEN,
         )
         response = self.client.get('/tutorials/free-tutorial-gate')
-        self.assert_verify_gate(response)
-        self.assertNotContains(response, 'Free tutorial body')
+        self.assert_no_verify_gate(response)
+        self.assertContains(response, 'Free tutorial body')
 
-    def test_project_detail_renders_verify_gate(self):
+    def test_project_detail_renders_for_unverified_free(self):
         Project.objects.create(
             title='Free Project Gate', slug='free-project-gate',
             content_html='<p>Free project body</p>',
             date=date(2025, 1, 1), published=True, required_level=LEVEL_OPEN,
         )
         response = self.client.get('/projects/free-project-gate')
-        self.assert_verify_gate(response)
-        self.assertNotContains(response, 'Free project body')
+        self.assert_no_verify_gate(response)
+        self.assertContains(response, 'Free project body')
         self.assertNotContains(response, 'data-testid="project-paywall"')
-        self.assertNotContains(response, 'data-testid="gated-required-tier"')
-        self.assertNotContains(response, 'data-testid="project-upgrade-cta"')
 
-    def test_event_recording_detail_renders_verify_gate(self):
+    def test_event_recording_detail_renders_for_unverified_free(self):
         event = Event.objects.create(
             title='Free Recording Gate',
             slug='free-recording-gate',
@@ -913,11 +949,10 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
             recording_url='https://youtube.com/watch?v=free',
         )
         response = self.client.get(event.get_absolute_url())
-        self.assert_verify_gate(response)
-        self.assertNotContains(response, 'Upgrade to Free')
-        self.assertNotContains(response, 'Free required')
+        self.assert_no_verify_gate(response)
+        self.assertContains(response, 'Recording description')
 
-    def test_event_detail_renders_verify_gate(self):
+    def test_event_detail_renders_for_unverified_free(self):
         event = Event.objects.create(
             title='Free Event Gate', slug='free-event-gate',
             description='Event description',
@@ -925,18 +960,20 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
             status='upcoming', published=True, required_level=LEVEL_OPEN,
         )
         response = self.client.get(event.get_absolute_url())
-        self.assert_verify_gate(response)
+        self.assert_no_verify_gate(response)
+        self.assertContains(response, 'Event description')
 
-    def test_course_detail_renders_verify_gate(self):
+    def test_course_detail_renders_for_unverified_free(self):
         Course.objects.create(
             title='Free Course Gate', slug='free-course-gate',
             description='Free course description',
             status='published', required_level=LEVEL_OPEN,
         )
         response = self.client.get('/courses/free-course-gate')
-        self.assert_verify_gate(response)
+        self.assert_no_verify_gate(response)
+        self.assertContains(response, 'Free course description')
 
-    def test_course_unit_detail_renders_verify_gate(self):
+    def test_open_course_unit_detail_renders_for_unverified_free(self):
         course = Course.objects.create(
             title='Free Unit Course Gate', slug='free-unit-course-gate',
             status='published', required_level=LEVEL_OPEN,
@@ -947,10 +984,28 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
             body='<p>Free unit body</p>', is_preview=False,
         )
         response = self.client.get('/courses/free-unit-course-gate/module-1/unit-1')
-        self.assert_verify_gate(response)
-        self.assertNotContains(response, 'data-testid="teaser-cta"')
+        self.assert_no_verify_gate(response)
+        self.assertContains(response, 'Free unit body')
 
-    def test_curated_link_click_through_renders_verify_gate(self):
+    def test_registered_course_unit_detail_renders_verify_gate(self):
+        # Issue #1318: the verify-email content gate is retained on a
+        # LEVEL_REGISTERED unit, where an account is legitimately required
+        # (anonymous is already denied). Repointed from the old LEVEL_OPEN
+        # unit test to keep verify-gate coverage.
+        course = Course.objects.create(
+            title='Registered Unit Course', slug='registered-unit-course',
+            status='published', required_level=LEVEL_OPEN,
+            default_unit_required_level=LEVEL_REGISTERED,
+        )
+        module = Module.objects.create(course=course, title='Module 1', slug='module-1')
+        Unit.objects.create(
+            module=module, title='Unit 1', slug='unit-1',
+            body='<p>Registered unit body</p>', is_preview=False,
+        )
+        response = self.client.get('/courses/registered-unit-course/module-1/unit-1')
+        self.assert_verify_gate(response)
+
+    def test_curated_link_click_through_redirects_for_unverified_free(self):
         link = CuratedLink.objects.create(
             item_id='free-link-gate',
             title='Free Link Gate',
@@ -960,7 +1015,10 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
             required_level=LEVEL_OPEN,
         )
         response = self.client.get(f'/resources/{link.pk}/go')
-        self.assert_verify_gate(response)
+        self.assertRedirects(
+            response, 'https://example.com/free-link',
+            fetch_redirect_response=False,
+        )
 
     def test_downloads_list_renders_verify_gate(self):
         Download.objects.create(
@@ -1032,36 +1090,32 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
         )
         return workshop
 
-    def test_workshop_landing_renders_verify_gate(self):
+    def test_workshop_landing_renders_for_unverified_free(self):
         workshop = self._create_workshop('free-workshop-landing-gate')
 
         response = self.client.get(workshop.get_absolute_url())
 
-        self.assert_verify_gate(response)
+        self.assert_no_verify_gate(response)
+        self.assertContains(response, 'Workshop description')
         self.assertNotContains(response, 'data-testid="workshop-landing-paywall"')
-        self.assertNotContains(response, 'Upgrade to Free')
-        self.assertNotContains(response, 'Free required')
 
-    def test_workshop_page_detail_renders_verify_gate(self):
+    def test_workshop_page_detail_renders_for_unverified_free(self):
         workshop = self._create_workshop('free-workshop-page-gate')
         page = workshop.pages.get(slug='intro')
 
         response = self.client.get(page.get_absolute_url())
 
-        self.assert_verify_gate(response)
+        self.assert_no_verify_gate(response)
+        self.assertContains(response, 'Workshop page body')
         self.assertNotContains(response, 'data-testid="workshop-pages-paywall"')
-        self.assertNotContains(response, 'Upgrade to Free')
-        self.assertNotContains(response, 'Free required')
 
-    def test_workshop_video_renders_verify_gate(self):
+    def test_workshop_video_renders_for_unverified_free(self):
         workshop = self._create_workshop('free-workshop-video-gate')
 
         response = self.client.get(f'{workshop.get_absolute_url()}/video')
 
-        self.assert_verify_gate(response)
+        self.assert_no_verify_gate(response)
         self.assertNotContains(response, 'data-testid="video-paywall"')
-        self.assertNotContains(response, 'Upgrade to Free')
-        self.assertNotContains(response, 'Free required')
 
     def test_free_listings_still_render_normally(self):
         Article.objects.create(

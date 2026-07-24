@@ -409,15 +409,20 @@ def _clear_all_content():
 
 
 # ---------------------------------------------------------------
-# Scenario 449: Newly signed-up reader hits a free article
+# Scenario 449 / 1318: Newly signed-up reader hits a free article
 # ---------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
 class TestScenario449UnverifiedSignupFreeArticle:
-    """New email/password signups must verify before reading free details."""
+    """Issue #1318: signing up must never reduce read access below anonymous.
+
+    A newly registered (unverified) reader can read an open (level 0)
+    article immediately — the verify-email nudge is carried by the global
+    banner, not by a content gate.
+    """
 
     @pytest.mark.core
-    def test_new_signup_gets_verify_email_gate_for_free_article(
+    def test_new_signup_reads_free_article_immediately(
         self, django_server, page
     ):
         _clear_all_content()
@@ -467,22 +472,19 @@ class TestScenario449UnverifiedSignupFreeArticle:
 
         page.locator('text="Free Article Requires Verification"').first.click()
         page.wait_for_load_state("domcontentloaded")
-        verify_card = page.get_by_test_id("verify-email-required-card")
-        assert verify_card.is_visible()
+        # Issue #1318: the open article renders immediately — no content-level
+        # verify card, no paywall. The reader is not worse off than anonymous.
         body = page.content()
-        assert "unverified@test.com" in body
-        assert "Full article body after verification" not in body
+        assert 'data-testid="verify-email-required-card"' not in body
         assert 'data-testid="gated-access-card"' not in body
-        # Scope to the verify-email card: the global banner (issue #698) also
-        # renders a "Resend verification email" button on every authenticated
-        # page, so an unscoped get_by_role would match two elements.
-        assert verify_card.get_by_role(
-            "button", name="Resend verification email"
-        ).is_visible()
-        assert page.locator('a[href="/pricing"]').count() > 0
+        assert "Full article body after verification" in body
+        # The verify-email nudge is carried by the global banner instead.
+        banner = page.locator("#email-verification-banner")
+        assert banner.is_visible()
 
+        # The resend flow is exercised via the global banner.
         article_url = page.url
-        verify_card.get_by_role("button", name="Resend verification email").click()
+        page.locator("#resend-verification-btn").click()
         page.wait_for_load_state("domcontentloaded")
         assert page.url == article_url
         assert "Verification email sent." in page.content()
@@ -592,12 +594,14 @@ class TestScenario1160VerifyEmailReturnToContent:
             wait_until="domcontentloaded",
         )
         body = page.content()
-        assert 'data-testid="verify-email-required-card"' in body
-        assert "return-reader@test.com" in body
+        # Issue #1318: the open article is readable immediately for the
+        # unverified reader — no content-level verify card. The verification
+        # link still carries a safe return path back to this content.
+        assert 'data-testid="verify-email-required-card"' not in body
         assert 'data-testid="gated-access-card"' not in body
         assert "Upgrade to Free" not in body
         assert "Free required" not in body
-        assert "Return article body" not in body
+        assert "Return article body" in body
 
         verify_path = self._verification_path(
             sent_contexts[-1]["context"]["verify_url"]
@@ -642,17 +646,17 @@ class TestScenario1160VerifyEmailReturnToContent:
             wait_until="domcontentloaded",
         )
         article_url = page.url
-        verify_card = page.get_by_test_id("verify-email-required-card")
-        assert verify_card.is_visible()
+        # Issue #1318: the open article renders with no content verify card;
+        # the verify-email resend is exercised via the global banner instead.
+        assert page.get_by_test_id("verify-email-required-card").count() == 0
+        assert page.locator("#email-verification-banner").is_visible()
 
         sent_contexts = []
         with patch(
             "email_app.services.email_service.EmailService.send",
             side_effect=self._capture_send(sent_contexts),
         ):
-            verify_card.get_by_role(
-                "button", name="Resend verification email"
-            ).click()
+            page.locator("#resend-verification-btn").click()
             page.wait_for_load_state("domcontentloaded")
 
         assert page.url == article_url
@@ -671,7 +675,7 @@ class TestScenario1160VerifyEmailReturnToContent:
         context.close()
 
     @pytest.mark.core
-    def test_unverified_free_surface_sweep_uses_verify_card(
+    def test_unverified_free_surface_sweep_reads_open_content(
         self, django_server, browser
     ):
         _clear_all_content()
@@ -775,7 +779,10 @@ class TestScenario1160VerifyEmailReturnToContent:
 
         context = _auth_context(browser, "surface-sweep@test.com")
         page = context.new_page()
-        paths = [
+        # Issue #1318: every open (level 0) content surface renders for the
+        # unverified free user — no content-level verify card, no paywall.
+        # The verify-email nudge is carried by the global banner instead.
+        content_paths = [
             "/blog/sweep-article",
             "/tutorials/sweep-tutorial",
             "/projects/sweep-project",
@@ -783,21 +790,38 @@ class TestScenario1160VerifyEmailReturnToContent:
             past_recording.get_absolute_url(),
             "/courses/sweep-course",
             "/courses/sweep-course/intro/lesson",
-            f"/resources/{curated.pk}/go",
-            download.get_absolute_url(),
             workshop.get_absolute_url(),
             workshop_page.get_absolute_url(),
             f"{workshop.get_absolute_url()}/video",
         ]
 
-        for path in paths:
+        for path in content_paths:
             page.goto(f"{django_server}{path}", wait_until="domcontentloaded")
             body = page.content()
-            assert 'data-testid="verify-email-required-card"' in body, path
-            assert "surface-sweep@test.com" in body, path
+            assert 'data-testid="verify-email-required-card"' not in body, path
             assert 'data-testid="gated-access-card"' not in body, path
             assert "Upgrade to Free" not in body, path
             assert "Free required" not in body, path
+            # The global banner still nudges verification on every page.
+            assert 'id="email-verification-banner"' in body, path
+
+        # Curated-link click-through redirects straight to the resource — the
+        # open link is not gated for the unverified free user.
+        go_response = page.request.get(
+            f"{django_server}/resources/{curated.pk}/go",
+            max_redirects=0,
+        )
+        assert go_response.status in (301, 302)
+        assert go_response.headers["location"] == "https://example.com/sweep"
+
+        # Downloads keep the verified-mailbox delivery gate: the detail page
+        # still shows the verify-email gate and the file API still 403s.
+        page.goto(
+            f"{django_server}{download.get_absolute_url()}",
+            wait_until="domcontentloaded",
+        )
+        download_body = page.content()
+        assert 'data-testid="verify-email-required-card"' in download_body
 
         api_response = page.request.get(
             f"{django_server}/api/downloads/{download.slug}/file"

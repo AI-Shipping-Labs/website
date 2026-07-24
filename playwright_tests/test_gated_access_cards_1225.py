@@ -421,9 +421,13 @@ def test_free_member_project_has_upgrade_without_signup(django_server, browser):
 
 
 @pytest.mark.core
-def test_unverified_project_member_gets_verification_not_pricing(
+def test_unverified_project_member_reads_open_project_no_verify_card(
     django_server, browser,
 ):
+    # Issue #1318: an open (level 0) project is readable by an unverified
+    # free user — signing up must never reduce access below anonymous. The
+    # verify-email nudge is carried by the global banner, not a content
+    # gate. Flipped from asserting a content-level verify card.
     _reset_content()
     project = _project("verify-project-1225", required_level=0)
     ensure_tiers()
@@ -440,10 +444,12 @@ def test_unverified_project_member_gets_verification_not_pricing(
             f"{django_server}{project.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
-        expect(page.get_by_test_id("verify-email-required-card")).to_be_visible()
+        expect(page.get_by_test_id("verify-email-required-card")).to_have_count(0)
         expect(page.get_by_test_id("project-paywall")).to_have_count(0)
         expect(page.get_by_test_id("gated-required-tier")).to_have_count(0)
         expect(page.get_by_test_id("project-upgrade-cta")).to_have_count(0)
+        # The global banner still nudges verification.
+        expect(page.locator("#email-verification-banner")).to_be_visible()
     finally:
         context.close()
 

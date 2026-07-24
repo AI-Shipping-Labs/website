@@ -9,7 +9,11 @@ from django.utils import timezone
 from django.utils.text import slugify
 from django.views.decorators.http import require_GET, require_POST
 
-from content.access import build_gating_context, can_access
+from content.access import (
+    build_gating_context,
+    can_access,
+    requires_free_download_verification,
+)
 from content.models import Download, Project
 
 logger = logging.getLogger(__name__)
@@ -251,6 +255,29 @@ def download_file(request, slug):
                 'download_slug': slug,
             },
             status=401,
+        ))
+
+    # Free-download verified-mailbox delivery gate (issue #1318). can_access
+    # now grants LEVEL_OPEN content to everyone, so the verified-mailbox
+    # requirement for free-download delivery is enforced explicitly here: a
+    # signed-in unverified free user must verify before the file is handed
+    # over (parity with anonymous, who must click the emailed link). Grant
+    # paths already require grant.user.email_verified above.
+    if requires_free_download_verification(acting_user, download):
+        logger.info(
+            'download_delivery_denied slug=%s required_level=%s surface=%s reason=unverified_email',
+            slug,
+            download.required_level,
+            surface,
+        )
+        return _no_store(JsonResponse(
+            {
+                'error': 'Email verification required',
+                'requires_email_verification': True,
+                'gated_reason': 'unverified_email',
+                'download_slug': slug,
+            },
+            status=403,
         ))
 
     # Gated download: user does not have sufficient access level

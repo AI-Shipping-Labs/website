@@ -213,3 +213,44 @@ class DetectRelativeLinksTest(SimpleTestCase):
         errors = []
         detect_relative_links(html, 'wk/x.md', errors)
         self.assertIn('href="../../06/foo/"', html)
+
+    def test_skips_link_already_flagged_by_prior_warning(self):
+        # Issue #1342 Part B: when a prior sync step (the workshop
+        # cross-workshop rewriter) has already quoted the target folder in a
+        # warning, the detector must NOT add a second warning for the same
+        # single-level ``../<folder>/`` link.
+        errors = [{
+            'file': 'wk/01-overview.md',
+            'error': (
+                'Cross-workshop link "2099-12-31-deleted-workshop" in '
+                'wk/01-overview.md: target folder '
+                '"2099-12-31-deleted-workshop" not found in synced workshops.'
+            ),
+        }]
+        html = '<a href="../2099-12-31-deleted-workshop/">gone</a>'
+        found = detect_relative_links(html, 'wk/01-overview.md', errors)
+        # The href is still reported as "found"...
+        self.assertEqual(found, ['../2099-12-31-deleted-workshop/'])
+        # ...but no NEW warning was appended (only the pre-existing one stays).
+        self.assertEqual(len(errors), 1)
+        self.assertIn('Cross-workshop link', errors[0]['error'])
+
+    def test_deeper_link_still_warns_when_prior_warning_is_unrelated(self):
+        # A deeper ``../../<month>/<workshop>/`` link the rewriter never
+        # processes must still warn even though an unrelated prior warning
+        # exists — its month-folder token ("06") is not quoted upstream.
+        errors = [{
+            'file': 'wk/01-overview.md',
+            'error': (
+                'Cross-workshop link "2099-12-31-deleted-workshop" in '
+                'wk/01-overview.md: target folder '
+                '"2099-12-31-deleted-workshop" not found in synced workshops.'
+            ),
+        }]
+        href = '../../06/2026-06-29-tailor-cv/'
+        html = f'<a href="{href}">x</a>'
+        found = detect_relative_links(html, 'wk/01-overview.md', errors)
+        self.assertEqual(found, [href])
+        self.assertEqual(len(errors), 2)
+        self.assertIn('Relative content-repo link', errors[1]['error'])
+        self.assertIn(href, errors[1]['error'])

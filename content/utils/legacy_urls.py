@@ -149,6 +149,52 @@ _RELATIVE_HREF_RE = re.compile(
 )
 
 
+def _relative_href_target_token(href):
+    """Return the first meaningful path segment of a ``../``/``./`` href.
+
+    Strips the leading run of ``../`` and ``./`` segments plus any trailing
+    slash, fragment, or query, then returns the first remaining path segment.
+    For ``../2099-12-31-deleted-workshop/`` this is
+    ``2099-12-31-deleted-workshop`` — the folder name the workshop
+    cross-workshop rewriter quotes in its "not found" warning. For a deeper
+    ``../../06/2026-06-29-tailor-cv/`` link it is ``06`` — the month folder,
+    which the cross-workshop rewriter never processes and never quotes.
+
+    Returns ``''`` when no meaningful segment remains.
+    """
+    # Drop fragment and query so they don't leak into the segment.
+    path = href.split('#', 1)[0].split('?', 1)[0]
+    segments = [seg for seg in path.split('/') if seg not in ('', '.', '..')]
+    return segments[0] if segments else ''
+
+
+def _relative_href_already_reported(href, existing_messages):
+    """True when the workshop cross-workshop rewriter already flagged ``href``.
+
+    Issue #1342 Part B. The workshop dispatcher runs an existing cross-workshop
+    link rewriter (``rewrite_cross_workshop_md_links``, issues #301/#526) BEFORE
+    this detector. That rewriter handles single-level ``../<folder>/`` links: it
+    either rewrites a resolvable target to a ``/workshops/...`` URL (so no ``../``
+    survives for us to see) or, for an unresolvable target, leaves the link
+    verbatim and records exactly one "target folder ... not found" warning that
+    quotes the folder name. To avoid a duplicate warning on that same link, we
+    skip an ``href`` whose first path segment is already quoted in a prior
+    warning message.
+
+    Deeper ``../../<month>/<workshop>/`` links (the original #1342 bug) are NOT
+    processed by the rewriter and produce no prior warning, so their token (the
+    month folder) is never quoted upstream — they still warn here, preserving
+    #1342 Part B's unique value. Other dispatchers (articles/projects/events)
+    have no rewriter, so ``existing_messages`` never quotes the token and nothing
+    is ever skipped.
+    """
+    token = _relative_href_target_token(href)
+    if not token:
+        return False
+    quoted = f'"{token}"'
+    return any(quoted in message for message in existing_messages)
+
+
 def detect_relative_links(html, source_path, sync_errors):
     """Scan ``html`` for content-repo-relative ``<a href>`` links and warn.
 
@@ -188,11 +234,25 @@ def detect_relative_links(html, source_path, sync_errors):
     if not html:
         return []
 
+    # Snapshot the messages already present so we can dedup against warnings a
+    # prior sync step (the workshop cross-workshop link rewriter) emitted for
+    # the same link — see :func:`_relative_href_already_reported`. Captured once
+    # up front so repeated relative links in this same body still each warn.
+    existing_messages = (
+        [entry.get('error', '') for entry in sync_errors]
+        if sync_errors else []
+    )
+
     found = []
     for match in _RELATIVE_HREF_RE.finditer(html):
         href = match.group('href')
         found.append(href)
         if sync_errors is None:
+            continue
+
+        # Don't double-warn on a relative link the cross-workshop rewriter
+        # already flagged for the same target (issue #1342 Part B).
+        if _relative_href_already_reported(href, existing_messages):
             continue
 
         message = (

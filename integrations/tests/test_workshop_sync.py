@@ -2152,6 +2152,64 @@ class WorkshopSyncCrossWorkshopLinkRewriteTest(_WorkshopSyncFixtureBase):
         # The error is attributed to the source page that contained the link.
         self.assertIn('01-overview.md', broken[0]['file'])
 
+    def test_unresolvable_single_level_link_does_not_double_warn(self):
+        """Issue #1342 Part B: the sync-time relative-link detector must NOT
+        add a second warning for a single-level ``../<folder>/`` link that the
+        cross-workshop rewriter already flagged. The rewriter's "not found"
+        warning is the single source of truth for these links."""
+        body = '[gone](../2099-12-31-deleted-workshop/)\n'
+        self._write_two_workshops(source_body=body)
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        # The cross-workshop rewriter emits exactly one warning...
+        cross = [
+            e for e in sync_log.errors
+            if 'Cross-workshop link' in e.get('error', '')
+            and '2099-12-31-deleted-workshop' in e.get('error', '')
+        ]
+        self.assertEqual(len(cross), 1, f'got: {sync_log.errors}')
+        # ...and the detect_relative_links guard adds NONE for the same link.
+        relative = [
+            e for e in sync_log.errors
+            if 'Relative content-repo link' in e.get('error', '')
+        ]
+        self.assertEqual(
+            relative, [],
+            f'Detector must not double-warn on a rewriter-handled link, '
+            f'got: {relative}',
+        )
+
+    def test_deeper_two_level_relative_link_still_warns(self):
+        """Issue #1342 Part B's unique value: a DEEPER ``../../<month>/
+        <workshop>/`` link is NOT processed by the cross-workshop rewriter
+        (it 404s silently) — the relative-link detector must still catch it."""
+        body = '[gone](../../2099/2099-12-31-deleted-workshop/)\n'
+        self._write_two_workshops(source_body=body)
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        source = Workshop.objects.get(slug='lambda-agent-deployment')
+        page = WorkshopPage.objects.get(workshop=source, slug='overview')
+        # The rewriter leaves the deeper link verbatim (out of its scope).
+        self.assertIn(
+            'href="../../2099/2099-12-31-deleted-workshop/"',
+            page.body_html,
+        )
+        # The cross-workshop rewriter emits NO warning for a two-level link.
+        cross = [
+            e for e in sync_log.errors
+            if 'Cross-workshop' in e.get('error', '')
+        ]
+        self.assertEqual(cross, [], f'got: {cross}')
+        # But the relative-link detector must warn exactly once.
+        relative = [
+            e for e in sync_log.errors
+            if 'Relative content-repo link' in e.get('error', '')
+            and '../../2099/2099-12-31-deleted-workshop/' in e.get('error', '')
+        ]
+        self.assertEqual(len(relative), 1, f'got: {sync_log.errors}')
+
     def test_workshop_landing_description_cross_workshop_link_rewrites(self):
         """The README -> Workshop.description path is also rewritten."""
         # Target workshop (linked TO).

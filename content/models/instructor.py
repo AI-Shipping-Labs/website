@@ -15,6 +15,7 @@ path is soft-delete (``status='draft'``) handled by the sync layer when an
 instructor's yaml is removed.
 """
 
+from django.conf import settings
 from django.db import models
 
 from content.models.mixins import SourceMetadataMixin, TimestampedModelMixin
@@ -70,6 +71,19 @@ class Instructor(SourceMetadataMixin, TimestampedModelMixin, models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default='draft',
     )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='instructor_profiles',
+        help_text=(
+            'Platform account that receives in-app notifications for '
+            "comments on this instructor's content. Operator-set; survives "
+            'content re-sync.'
+        ),
+    )
+
     class Meta:
         ordering = ['name']
 

@@ -23,6 +23,10 @@ NOTIFICATION_TYPE_CHOICES = [
     ('sprint_week_start', 'Sprint Week Start'),
     ('week_note_prompt', 'Week Note Prompt'),
     ('slack_progress', 'Slack Progress'),
+    # Issue #1341: fired when a member posts a comment/reply on a course
+    # unit lesson or workshop tutorial page. One notification per distinct
+    # linked content-author (Instructor.user), excluding the commenter.
+    ('content_comment', 'Content Comment'),
 ]
 
 

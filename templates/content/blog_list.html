@@ -23,6 +23,42 @@
         </p>
       </div>
 
+      {% if all_tags %}
+      <div class="mb-8" data-testid="blog-tag-filter">
+        <p class="mb-2 text-sm font-medium text-muted-foreground">Filter by topic</p>
+        <div class="flex flex-wrap gap-2" aria-label="Filter articles by topic">
+          <a href="/blog"
+             class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if not selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
+             data-testid="blog-tag-all"
+             {% if not selected_tags %}aria-current="page"{% endif %}>All</a>
+          {% for tag in all_tags|slice:":12" %}
+          <a href="{% tag_add_url base_path selected_tags tag %}"
+             class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if tag in selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
+             data-testid="blog-tag-{{ tag }}"
+             {% if tag in selected_tags %}aria-current="page"{% endif %}>{{ tag }}</a>
+          {% endfor %}
+        </div>
+        {% if all_tags|length > 12 %}
+        {% with hidden_tags=all_tags|slice:"12:" %}
+        <details class="mt-2" {% if selected_tags|has_common:hidden_tags %}open{% endif %} data-testid="blog-tag-more">
+          <summary class="inline-flex min-h-[44px] cursor-pointer list-none items-center justify-center rounded-full bg-secondary px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background [&::-webkit-details-marker]:hidden"
+                   data-testid="blog-tag-more-toggle">
+            More topics (+{{ all_tags|length|add:"-12" }})
+          </summary>
+          <div class="mt-2 flex flex-wrap gap-2">
+            {% for tag in hidden_tags %}
+            <a href="{% tag_add_url base_path selected_tags tag %}"
+               class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if tag in selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
+               data-testid="blog-tag-{{ tag }}"
+               {% if tag in selected_tags %}aria-current="page"{% endif %}>{{ tag }}</a>
+            {% endfor %}
+          </div>
+        </details>
+        {% endwith %}
+        {% endif %}
+      </div>
+      {% endif %}
+
       {% if articles %}
       <div class="space-y-8">
         {% for article in articles %}

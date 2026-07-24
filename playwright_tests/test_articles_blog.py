@@ -277,3 +277,167 @@ class TestBlogBrowserSmoke:
         body = page.content()
         assert "Getting Started with LLMs" in body
         assert "published" in body.lower()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestBlogTagFilterRow:
+    """Page-level "Filter by topic" pill row on /blog (issue #1319)."""
+
+    def _seed_two_topics(self):
+        _clear_articles()
+        _create_article(
+            title="RAG in Production",
+            slug="rag-in-production",
+            description="Retrieval augmented generation patterns.",
+            tags=["rag"],
+            date=datetime.date(2026, 3, 3),
+        )
+        _create_article(
+            title="MLOps Foundations",
+            slug="mlops-foundations",
+            description="Operationalising ML systems.",
+            tags=["mlops"],
+            date=datetime.date(2026, 3, 2),
+        )
+
+    @pytest.mark.core
+    def test_filter_row_visible_with_all_and_topic_pills(self, django_server, page):
+        """Anonymous reader sees a filter row with an active All pill + topic pills."""
+        self._seed_two_topics()
+        page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
+
+        row = page.get_by_test_id("blog-tag-filter")
+        assert row.is_visible()
+        assert page.get_by_text("Filter by topic").is_visible()
+
+        all_pill = page.get_by_test_id("blog-tag-all")
+        assert all_pill.get_attribute("aria-current") == "page"
+        assert "bg-accent" in all_pill.get_attribute("class")
+
+        assert page.get_by_test_id("blog-tag-rag").is_visible()
+        assert page.get_by_test_id("blog-tag-mlops").is_visible()
+
+    @pytest.mark.core
+    def test_selecting_topic_narrows_list_and_marks_active(self, django_server, page):
+        """Clicking a topic pill filters the list and flips the active state."""
+        self._seed_two_topics()
+        page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
+
+        page.get_by_test_id("blog-tag-rag").click()
+        page.wait_for_load_state("domcontentloaded")
+
+        assert "tag=rag" in page.url
+        assert page.locator('h2:has-text("RAG in Production")').count() == 1
+        assert page.locator('h2:has-text("MLOps Foundations")').count() == 0
+
+        rag_pill = page.get_by_test_id("blog-tag-rag")
+        assert rag_pill.get_attribute("aria-current") == "page"
+        assert "bg-accent" in rag_pill.get_attribute("class")
+        all_pill = page.get_by_test_id("blog-tag-all")
+        assert all_pill.get_attribute("aria-current") is None
+
+    @pytest.mark.core
+    def test_all_pill_clears_active_filter(self, django_server, page):
+        """The All pill returns a filtered view to the full listing."""
+        self._seed_two_topics()
+        page.goto(f"{django_server}/blog?tag=rag", wait_until="domcontentloaded")
+        assert page.locator('h2:has-text("MLOps Foundations")').count() == 0
+
+        page.get_by_test_id("blog-tag-all").click()
+        page.wait_for_load_state("domcontentloaded")
+
+        assert page.url.rstrip("/").endswith("/blog")
+        assert page.locator('h2:has-text("RAG in Production")').count() == 1
+        assert page.locator('h2:has-text("MLOps Foundations")').count() == 1
+        all_pill = page.get_by_test_id("blog-tag-all")
+        assert all_pill.get_attribute("aria-current") == "page"
+
+    @pytest.mark.core
+    def test_card_chip_filters_and_marks_matching_pill(self, django_server, page):
+        """A per-card tag chip narrows the list and activates the row pill."""
+        self._seed_two_topics()
+        page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
+
+        card = page.locator('article:has-text("RAG in Production")')
+        card.locator('[data-testid="blog-card-tags"] a:has-text("rag")').first.click()
+        page.wait_for_load_state("domcontentloaded")
+
+        assert "tag=rag" in page.url
+        assert page.locator('h2:has-text("MLOps Foundations")').count() == 0
+        assert page.get_by_test_id("blog-tag-rag").get_attribute("aria-current") == "page"
+
+    @pytest.mark.core
+    def test_no_match_shows_empty_state_with_view_all_cta(self, django_server, page):
+        """Filtering to a tag with no articles shows the filter empty state."""
+        self._seed_two_topics()
+        # rag and mlops never co-occur, so the intersection is empty.
+        page.goto(
+            f"{django_server}/blog?tag=rag&tag=mlops",
+            wait_until="domcontentloaded",
+        )
+
+        assert page.locator("article").count() == 0
+        empty = page.get_by_test_id("member-empty-state")
+        assert empty.is_visible()
+        cta = empty.locator('a:has-text("View all articles")')
+        assert cta.count() == 1
+        assert cta.first.get_attribute("href") == "/blog"
+
+    def test_long_tag_list_uses_disclosure(self, django_server, page):
+        """More than 12 tags collapse the tail into a closed disclosure."""
+        _clear_articles()
+        tags = [f"topic-{i:02d}" for i in range(15)]
+        for i, t in enumerate(tags):
+            _create_article(
+                title=f"Long Tail {i}",
+                slug=f"long-tail-{i}",
+                tags=[t],
+                date=datetime.date(2026, 3, 1),
+            )
+        page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
+
+        more = page.get_by_test_id("blog-tag-more")
+        assert more.count() == 1
+        assert "More topics (+3)" in more.inner_text()
+        # Closed by default: a hidden-tail pill is not visible until opened.
+        hidden_pill = page.get_by_test_id("blog-tag-topic-14")
+        assert not hidden_pill.is_visible()
+
+        page.get_by_test_id("blog-tag-more-toggle").click()
+        assert hidden_pill.is_visible()
+
+    def test_active_hidden_tag_opens_disclosure(self, django_server, page):
+        """An active tag in the hidden tail auto-opens the disclosure."""
+        _clear_articles()
+        tags = [f"topic-{i:02d}" for i in range(15)]
+        for i, t in enumerate(tags):
+            _create_article(
+                title=f"Long Tail {i}",
+                slug=f"long-tail-{i}",
+                tags=[t],
+                date=datetime.date(2026, 3, 1),
+            )
+        page.goto(
+            f"{django_server}/blog?tag=topic-14",
+            wait_until="domcontentloaded",
+        )
+
+        hidden_pill = page.get_by_test_id("blog-tag-topic-14")
+        assert hidden_pill.is_visible()
+        assert hidden_pill.get_attribute("aria-current") == "page"
+
+    def test_untagged_blog_hides_filter_row(self, django_server, page):
+        """No published article has tags -> no filter row is rendered."""
+        _clear_articles()
+        _create_article(
+            title="Plain Article",
+            slug="plain-article",
+            description="No tags here.",
+            tags=[],
+            date=datetime.date(2026, 3, 1),
+        )
+        page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
+
+        assert page.locator('h2:has-text("Plain Article")').count() == 1
+        assert page.get_by_test_id("blog-tag-filter").count() == 0
+        assert page.get_by_text("Filter by topic").count() == 0

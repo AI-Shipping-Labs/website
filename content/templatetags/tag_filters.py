@@ -37,6 +37,21 @@ def paren_count(value):
     return f" ({n})"
 
 
+@register.filter
+def has_common(seq_a, seq_b):
+    """Return True if the two sequences share at least one element.
+
+    Used to auto-open the "More topics" disclosure on listing pages only
+    when an active tag filter lives in the hidden long-tail (issue #1319),
+    so the active pill is never rendered invisible.
+
+    Usage: {% if selected_tags|has_common:hidden_tags %}open{% endif %}
+    """
+    if not seq_a or not seq_b:
+        return False
+    return bool(set(seq_a) & set(seq_b))
+
+
 @register.simple_tag
 def tag_add_url(base_path, selected_tags, tag, extra_params=None):
     """Build URL that adds a tag to the current selection.

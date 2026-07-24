@@ -17,6 +17,11 @@ for the author to clean up the source markdown.
 To extend: add a new prefix (with trailing slash) to
 :data:`LEGACY_URL_PATTERNS` and the matching ``replacement_hint`` in
 :data:`LEGACY_URL_REPLACEMENTS`. The helper picks them up automatically.
+
+This module also provides :func:`detect_relative_links` (issue #1342), which
+follows the same warn-never-block-never-rewrite philosophy but catches a
+different class of bad link: content-repo filesystem-relative hrefs (``../``,
+``./``) that are valid inside the content folder tree but 404 as site routes.
 """
 
 import re
@@ -122,6 +127,79 @@ def detect_legacy_urls(html, source_path, sync_errors):
                 f'Legacy URL pattern {matched_prefix}... in {source_path}: '
                 f'link "{href}" should be updated.'
             )
+        sync_errors.append({
+            'file': source_path,
+            'error': message,
+        })
+
+    return found
+
+
+# Match ``<a ... href="../..">`` and ``<a ... href="./..">`` — content-repo
+# filesystem-relative links (issue #1342). ``\.{1,2}/`` matches exactly a
+# ``./`` or ``../`` prefix anchored to the start of the href value (right
+# after the opening quote), so root-relative (``/x``), external
+# (``https://``), anchor (``#``), ``mailto:`` and ``tel:`` links never match.
+_RELATIVE_HREF_RE = re.compile(
+    r'<a\b[^>]*?\bhref\s*=\s*'      # opening <a ... href=
+    r'(?P<quote>["\'])'             # opening quote
+    r'(?P<href>\.{1,2}/[^"\']*)'    # ./... or ../...
+    r'(?P=quote)',                  # matching closing quote
+    re.IGNORECASE,
+)
+
+
+def detect_relative_links(html, source_path, sync_errors):
+    """Scan ``html`` for content-repo-relative ``<a href>`` links and warn.
+
+    Content authors sometimes write filesystem-relative markdown links such
+    as ``[x](../../06/2026-06-29-selecting-a-portfolio-project/)``. These are
+    valid paths inside the content-repo folder tree but meaningless as site
+    routes — the markdown pipeline passes them through verbatim, the browser
+    resolves them against the page URL, and the result is a 404 (issue #1342).
+    A valid site route is always root-relative (``/...``) or an absolute URL,
+    never ``../`` or ``./``.
+
+    For each ``<a href="../...">`` or ``<a href="./...">`` match, appends one
+    warning record to ``sync_errors`` of shape
+    ``{'file': source_path, 'error': '...'}`` so the dispatcher surfaces it
+    through the existing ``SyncLog.errors`` pipeline and the
+    ``/studio/sync/`` dashboard.
+
+    Follows the same warn-never-block-never-rewrite philosophy as
+    :func:`detect_legacy_urls`: the function never raises and never modifies
+    ``html``. Sync continues normally; the warning is purely advisory so the
+    author can rewrite the source link to a canonical ``/...`` site URL.
+
+    Args:
+        html: Rendered article/page HTML. ``None``/empty is a no-op.
+        source_path: Repo-relative path of the file being synced. Echoed in
+            the warning so authors can find the offending file.
+        sync_errors: The dispatcher's running list of warnings/errors,
+            ultimately persisted to ``SyncLog.errors``. Pass ``None`` to
+            disable side effects entirely (the helper still returns the
+            list of detected hrefs in that case).
+
+    Returns:
+        list[str]: The relative hrefs found, in document order. Duplicates
+        are preserved — every match emits its own warning so a page that
+        repeats the same broken link surfaces both occurrences.
+    """
+    if not html:
+        return []
+
+    found = []
+    for match in _RELATIVE_HREF_RE.finditer(html):
+        href = match.group('href')
+        found.append(href)
+        if sync_errors is None:
+            continue
+
+        message = (
+            f'Relative content-repo link "{href}" in {source_path}: '
+            f'relative links (../, ./) are not valid site routes and 404 in '
+            f'the browser — rewrite it to a canonical /... site URL.'
+        )
         sync_errors.append({
             'file': source_path,
             'error': message,

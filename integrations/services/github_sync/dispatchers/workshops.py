@@ -474,9 +474,18 @@ def _sync_single_workshop(
         # landing description still links to a retired URL prefix
         # (e.g. /event-recordings/...). Only check on a write — unchanged
         # rows already passed this gate during their own sync.
+        # Issue #1342: also warn (don't block) when the description links
+        # to a content-repo-relative path (../, ./) — valid in the content
+        # folder tree but a 404 as a site route.
         if result.changed:
-            from content.utils.legacy_urls import detect_legacy_urls
+            from content.utils.legacy_urls import (
+                detect_legacy_urls,
+                detect_relative_links,
+            )
             detect_legacy_urls(
+                workshop.description_html, rel_path, stats['errors'],
+            )
+            detect_relative_links(
                 workshop.description_html, rel_path, stats['errors'],
             )
 
@@ -1155,8 +1164,15 @@ def _sync_workshop_pages(
             # Only check on a write — unchanged rows already passed this
             # gate during their own sync.
             if page_result.changed:
-                from content.utils.legacy_urls import detect_legacy_urls
+                from content.utils.legacy_urls import (
+                    detect_legacy_urls,
+                    detect_relative_links,
+                )
                 detect_legacy_urls(
+                    page_result.instance.body_html, rel_path, stats['errors'],
+                )
+                # Issue #1342: also warn on content-repo-relative links.
+                detect_relative_links(
                     page_result.instance.body_html, rel_path, stats['errors'],
                 )
 

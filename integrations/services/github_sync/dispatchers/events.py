@@ -668,11 +668,21 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
             # sync. Both ``description_html`` and ``recap_html`` are
             # author-supplied markdown so both are scanned.
             if result.changed:
-                from content.utils.legacy_urls import detect_legacy_urls
+                from content.utils.legacy_urls import (
+                    detect_legacy_urls,
+                    detect_relative_links,
+                )
                 detect_legacy_urls(
                     event.description_html, rel_path, stats['errors'],
                 )
                 detect_legacy_urls(
+                    event.recap_html, rel_path, stats['errors'],
+                )
+                # Issue #1342: also warn on content-repo-relative links.
+                detect_relative_links(
+                    event.description_html, rel_path, stats['errors'],
+                )
+                detect_relative_links(
                     event.recap_html, rel_path, stats['errors'],
                 )
 

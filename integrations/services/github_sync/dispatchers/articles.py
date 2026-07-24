@@ -274,8 +274,15 @@ def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
                 # Only check on a write — unchanged rows already passed this
                 # gate during their own sync.
                 if changed:
-                    from content.utils.legacy_urls import detect_legacy_urls
+                    from content.utils.legacy_urls import (
+                        detect_legacy_urls,
+                        detect_relative_links,
+                    )
                     detect_legacy_urls(
+                        article.content_html, rel_path, stats['errors'],
+                    )
+                    # Issue #1342: also warn on content-repo-relative links.
+                    detect_relative_links(
                         article.content_html, rel_path, stats['errors'],
                     )
 

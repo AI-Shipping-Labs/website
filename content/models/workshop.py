@@ -109,18 +109,15 @@ def _can_access_level(user, required_level):
     Mirrors :func:`content.access.can_access` semantics for the three
     workshop gate fields without going through a Content instance:
 
-    - ``LEVEL_OPEN``: anonymous + paid tier allowed; free verified
-      allowed; free unverified blocked.
+    - ``LEVEL_OPEN``: readable by everyone (issue #1318). Signing up must
+      never reduce access below anonymous, so there is no email-verification
+      gate on open workshop surfaces.
     - ``LEVEL_REGISTERED``: anonymous denied; any tier allowed when
       email is verified or the user is already on a paid tier.
     - Numeric ``>= LEVEL_BASIC`` gates: pure level comparison.
     """
     if required_level == LEVEL_OPEN:
-        if user is None or not user.is_authenticated:
-            return True
-        if get_user_level(user) >= LEVEL_BASIC:
-            return True
-        return bool(user.email_verified)
+        return True
     if required_level == LEVEL_REGISTERED:
         if user is None or not user.is_authenticated:
             return False

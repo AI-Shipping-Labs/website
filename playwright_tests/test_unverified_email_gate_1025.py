@@ -114,30 +114,14 @@ def _assert_no_horizontal_overflow(page):
     assert not has_overflow
 
 
-def _assert_verify_gate(page, email):
-    gate = page.locator('[data-testid="verify-email-required-card"]')
-    expect(gate).to_be_visible()
-    expect(gate).to_contain_text("Verify your email")
-    expect(gate).to_contain_text(email)
-    expect(gate).to_contain_text("included with your Free account")
-    expect(gate.get_by_role("button", name="Resend verification email")).to_be_visible()
-    forbidden = [
-        "Upgrade to Free",
-        "Free required",
-        "Free or above required",
-        "public metadata",
-        "Current access: Free member",
-    ]
-    body = page.locator("body").inner_text()
-    for text in forbidden:
-        assert text not in body
-    assert page.locator('[data-testid="gated-required-tier"]').count() == 0
-
-
 class TestIssue1025UnverifiedEmailUX:
-    def test_free_unverified_member_sees_verification_gate_and_resends(
+    def test_free_unverified_member_reads_open_workshop_and_resends_via_banner(
         self, django_server, browser, django_db_blocker
     ):
+        # Issue #1318: an open (level 0) workshop is readable by an
+        # unverified free user — signing up must never reduce access below
+        # anonymous. The verify-email nudge is carried by the global banner,
+        # not by a content-level gate. Flipped from asserting a content gate.
         with django_db_blocker.unblock():
             free_workshop, _ = _seed_workshops()
             _seed_users()
@@ -147,36 +131,26 @@ class TestIssue1025UnverifiedEmailUX:
         url = f"{django_server}{free_workshop.get_absolute_url()}"
         page.goto(url, wait_until="domcontentloaded")
 
-        _assert_verify_gate(page, email)
+        # The content renders — no verify-email card, no paywall.
+        expect(page.locator('[data-testid="verify-email-required-card"]')).to_have_count(0)
+        expect(page.locator('[data-testid="workshop-description"]')).to_be_visible()
+        expect(page.locator('[data-testid="workshop-pages-list"]')).to_be_visible()
         expect(page.locator('[data-testid="workshop-landing-paywall"]')).to_have_count(0)
-        page.screenshot(path=_screenshot_path("gate-desktop-light"), full_page=True)
+        # The verify-email nudge is present via the global banner.
+        expect(page.locator("#email-verification-banner")).to_be_visible()
+        page.screenshot(path=_screenshot_path("open-desktop-light"), full_page=True)
 
-        for viewport, theme, name in [
-            (DESKTOP, "dark", "gate-desktop-dark"),
-            (MOBILE, "light", "gate-mobile-light"),
-        ]:
-            shot_context, shot_page = _open_as(
-                browser, email, viewport=viewport, theme=theme,
-            )
-            shot_page.goto(url, wait_until="domcontentloaded")
-            _assert_verify_gate(shot_page, email)
-            _assert_no_horizontal_overflow(shot_page)
-            shot_page.screenshot(path=_screenshot_path(name), full_page=True)
-            shot_context.close()
-
-        gate = page.locator('[data-testid="verify-email-required-card"]')
-        gate.get_by_role("button", name="Resend verification email").click()
+        # The resend flow is exercised via the global banner.
+        page.locator("#resend-verification-btn").click()
         page.wait_for_load_state("domcontentloaded")
         assert page.url == url
         expect(page.locator("body")).to_contain_text("Verification email sent")
-        _assert_verify_gate(page, email)
+        expect(page.locator('[data-testid="verify-email-required-card"]')).to_have_count(0)
 
-        gate = page.locator('[data-testid="verify-email-required-card"]')
-        gate.get_by_role("button", name="Resend verification email").click()
+        page.locator("#resend-verification-btn").click()
         page.wait_for_load_state("domcontentloaded")
         assert page.url == url
         expect(page.locator("body")).to_contain_text("minute")
-        _assert_verify_gate(page, email)
         context.close()
 
     def test_free_verified_member_can_read_same_free_workshop(
@@ -197,9 +171,12 @@ class TestIssue1025UnverifiedEmailUX:
         expect(page.locator('[data-testid="workshop-pages-list"]')).to_be_visible()
         context.close()
 
-    def test_tutorial_and_recording_free_gates_use_verification_copy(
+    def test_tutorial_and_recording_free_surfaces_render_for_unverified(
         self, django_server, browser, django_db_blocker
     ):
+        # Issue #1318: the open (level 0) tutorial page and video render for
+        # an unverified free user — no content-level verify card. Flipped
+        # from asserting the verify gate.
         with django_db_blocker.unblock():
             free_workshop, _ = _seed_workshops()
             _seed_users()
@@ -210,15 +187,16 @@ class TestIssue1025UnverifiedEmailUX:
             f"{django_server}{free_workshop.get_absolute_url()}/tutorial/intro",
             wait_until="domcontentloaded",
         )
-        _assert_verify_gate(page, email)
+        expect(page.locator('[data-testid="verify-email-required-card"]')).to_have_count(0)
+        expect(page.locator("#email-verification-banner")).to_be_visible()
         _assert_no_horizontal_overflow(page)
-        page.screenshot(path=_screenshot_path("gate-mobile-dark"), full_page=True)
+        page.screenshot(path=_screenshot_path("open-mobile-dark"), full_page=True)
 
         page.goto(
             f"{django_server}{free_workshop.get_absolute_url()}/video",
             wait_until="domcontentloaded",
         )
-        _assert_verify_gate(page, email)
+        expect(page.locator('[data-testid="verify-email-required-card"]')).to_have_count(0)
         _assert_no_horizontal_overflow(page)
         context.close()
 

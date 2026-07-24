@@ -42,7 +42,6 @@ from django.views.decorators.http import require_POST
 from accounts.oauth_context import get_oauth_provider_context
 from content.access import (
     LEVEL_BASIC,
-    LEVEL_OPEN,
     LEVEL_REGISTERED,
     build_gated_access_copy,
     build_verify_email_context,
@@ -131,9 +130,11 @@ def _gated_reason_for_level(user, required_level):
         and (user is None or not user.is_authenticated)
     ):
         return 'authentication_required'
-    # Free authenticated user blocked by email verification.
+    # Free authenticated user blocked by email verification. Issue #1318:
+    # only LEVEL_REGISTERED gates on verification now — LEVEL_OPEN workshop
+    # surfaces are readable by everyone, so signup never reduces access.
     if (
-        required_level in (LEVEL_OPEN, LEVEL_REGISTERED)
+        required_level == LEVEL_REGISTERED
         and user is not None
         and user.is_authenticated
         and not getattr(user, 'email_verified', False)

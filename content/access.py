@@ -227,11 +227,14 @@ def can_access(user, content):
     required = _resolve_required_level(content)
 
     if required == LEVEL_OPEN:
-        if user is None or not user.is_authenticated:
-            return True
-        if get_user_level(user) >= LEVEL_BASIC:
-            return True
-        return bool(user.email_verified)
+        # Issue #1318: open content is readable by everyone. Signing up must
+        # never REDUCE read access below what an anonymous visitor already
+        # has, so there is no email-verification content gate here. The
+        # verify-email nudge lives on the always-on global banner
+        # (#698/#448) and the unverified-account purge lifecycle (#452),
+        # not on level-0 content. Download delivery keeps a verified-mailbox
+        # requirement, computed explicitly in the download surfaces.
+        return True
 
     if required == LEVEL_REGISTERED:
         # Issue #465: registration wall. Anonymous denied, any tier
@@ -267,10 +270,14 @@ def get_gated_reason(user, content):
     if can_access(user, content):
         return ''
     required = _resolve_required_level(content)
-    # Free authenticated users on free content (LEVEL_OPEN or
-    # LEVEL_REGISTERED) are blocked by email verification, not by tier.
+    # Issue #1318: LEVEL_OPEN can no longer reach this body — open content
+    # is always accessible, so ``can_access`` returned True above. Only
+    # LEVEL_REGISTERED still gates an unverified free user on email
+    # verification (anonymous is already denied there, so this is
+    # parity-with-anonymous, not a signup penalty). This is the correct
+    # home for the verify-email content nudge.
     if (
-        required in (LEVEL_OPEN, LEVEL_REGISTERED)
+        required == LEVEL_REGISTERED
         and user is not None
         and user.is_authenticated
         and get_user_level(user) < LEVEL_BASIC
@@ -283,6 +290,31 @@ def get_gated_reason(user, content):
     ):
         return 'authentication_required'
     return 'insufficient_tier'
+
+
+def requires_free_download_verification(user, download):
+    """Return True when a free download must gate on email verification.
+
+    Issue #1318: ``can_access`` now grants LEVEL_OPEN content (including
+    level-0 lead-magnet downloads) to everyone, so the download surfaces
+    can no longer derive the verified-mailbox delivery gate from
+    ``can_access`` / ``get_gated_reason``. This helper computes it
+    explicitly: a signed-in free user (tier level < LEVEL_BASIC) with an
+    unverified email must verify before a free download is delivered.
+
+    A verified mailbox is inherent to delivery — an anonymous visitor must
+    also click the emailed verification link — so requiring a signed-in
+    free user to verify is parity-with-anonymous, not a signup penalty.
+    Paid downloads (required_level > 0) are gated by tier, not by this
+    check; verified free and Basic+ members are unaffected.
+    """
+    return bool(
+        getattr(download, 'required_level', LEVEL_OPEN) == LEVEL_OPEN
+        and user is not None
+        and user.is_authenticated
+        and get_user_level(user) < LEVEL_BASIC
+        and not user.email_verified
+    )
 
 
 def build_verify_email_context(user):

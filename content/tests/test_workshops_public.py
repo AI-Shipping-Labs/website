@@ -1541,7 +1541,10 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
             response, 'data-testid="gated-required-tier"',
         )
 
-    def test_landing_free_unverified_pages_gate_uses_verify_email_gate(self):
+    def test_landing_free_unverified_open_pages_render_no_verify_gate(self):
+        # Issue #1318: an open (level 0) workshop landing + pages render for
+        # an unverified free user — signing up must never reduce access
+        # below anonymous. Flipped from asserting the verify-email gate.
         ws = _make_workshop(
             slug='free-unverified-pages',
             title='Free Unverified Pages Workshop',
@@ -1561,22 +1564,17 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         response = self.client.get(ws.get_absolute_url())
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="verify-email-required-card"')
-        self.assertContains(response, 'free-unverified-pages@example.com')
-        self.assertContains(
-            response,
-            'This content is included with your Free account.',
-        )
-        self.assertContains(response, 'Resend verification email')
+        self.assertNotContains(response, 'data-testid="verify-email-required-card"')
         self.assertNotContains(response, 'data-testid="workshop-pages-paywall"')
-        self.assertNotContains(response, 'data-testid="gated-required-tier"')
         self.assertNotContains(response, 'Upgrade to Free')
-        self.assertNotContains(response, 'Free required')
-        self.assertNotContains(response, 'Free or above required')
-        self.assertNotContains(response, 'public metadata')
-        self.assertNotContains(response, 'View Pricing')
+        # The open pages list renders — the user has full access.
+        self.assertContains(response, 'Intro')
 
-    def test_landing_free_unverified_landing_gate_uses_verify_email_gate(self):
+    def test_landing_free_unverified_open_landing_paid_pages_paywall(self):
+        # Issue #1318: with an open (level 0) landing and Basic-gated pages,
+        # an unverified free user sees the landing (no verify card) and the
+        # tier paywall on the pages section — verification is not the
+        # blocker, tier is.
         ws = _make_workshop(
             slug='free-unverified-landing',
             title='Free Unverified Landing Workshop',
@@ -1595,11 +1593,9 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         response = self.client.get(ws.get_absolute_url())
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="verify-email-required-card"')
-        self.assertContains(response, 'free-unverified-landing@example.com')
-        self.assertNotContains(response, 'data-testid="workshop-landing-paywall"')
-        self.assertNotContains(response, 'public metadata')
-        self.assertNotContains(response, 'Upgrade to Free')
+        self.assertNotContains(response, 'data-testid="verify-email-required-card"')
+        self.assertContains(response, 'data-testid="workshop-pages-paywall"')
+        self.assertContains(response, 'Upgrade to Basic to access this workshop')
 
     def test_landing_basic_user_does_not_see_pages_paywall(self):
         self.client.force_login(self.user_basic)

@@ -132,6 +132,12 @@ from api.views.sprints import (
     sprint_roster_activity,
     sprints_collection,
 )
+from api.views.stripe_webhooks import (
+    stripe_webhooks_deliveries,
+    stripe_webhooks_replay,
+    stripe_webhooks_status,
+    stripe_webhooks_verify,
+)
 from api.views.sync_sources import (
     sync_history_collection,
     sync_history_detail,
@@ -838,6 +844,29 @@ urlpatterns = [
         "payments/tier-reconcile",
         tier_reconcile_apply,
         name="api_tier_reconcile_apply",
+    ),
+    # ---- Stripe webhook observability (issue #1314) -------------------
+    # Staff-token verify/status/deliveries/replay. The literal
+    # ``stripe-webhooks/<verb>`` paths do not collide with each other.
+    path(
+        "payments/stripe-webhooks/verify",
+        stripe_webhooks_verify,
+        name="api_stripe_webhooks_verify",
+    ),
+    path(
+        "payments/stripe-webhooks/status",
+        stripe_webhooks_status,
+        name="api_stripe_webhooks_status",
+    ),
+    path(
+        "payments/stripe-webhooks/deliveries",
+        stripe_webhooks_deliveries,
+        name="api_stripe_webhooks_deliveries",
+    ),
+    path(
+        "payments/stripe-webhooks/replay",
+        stripe_webhooks_replay,
+        name="api_stripe_webhooks_replay",
     ),
     # ---- Cleanup-gate diagnostics (issue #1087) -----------------------
     # Staff-token read-only counts the blocked cleanups (#1016 / #1018 /

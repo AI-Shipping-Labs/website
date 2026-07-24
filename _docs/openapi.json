@@ -6274,6 +6274,154 @@
         ]
       }
     },
+    "/api/payments/stripe-webhooks/deliveries": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "event_type",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "outcome",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stripe_event_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "subscription_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cancellation",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Delivery attempts page."
+          }
+        },
+        "summary": "Paginated, filterable delivery attempts",
+        "tags": [
+          "Payments"
+        ]
+      }
+    },
+    "/api/payments/stripe-webhooks/replay": {
+      "post": {
+        "description": "Defaults to ``dry_run=true``. A write requires ``dry_run=false`` and ``confirm=replay_cancellation_event`` and only same-mode customer.subscription.updated/deleted events resolving to exactly one target can write.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "dry_run": true,
+                "event_id": "evt_123"
+              },
+              "schema": {
+                "properties": {
+                  "confirm": {
+                    "type": "string"
+                  },
+                  "dry_run": {
+                    "type": "boolean"
+                  },
+                  "event_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "event_id"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Preview or replay result."
+          }
+        },
+        "summary": "Dry-run preview (default) or confirmed replay",
+        "tags": [
+          "Payments"
+        ]
+      }
+    },
+    "/api/payments/stripe-webhooks/status": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Status snapshot."
+          }
+        },
+        "summary": "Latest persisted check + aggregates (no Stripe call)",
+        "tags": [
+          "Payments"
+        ]
+      }
+    },
+    "/api/payments/stripe-webhooks/verify": {
+      "post": {
+        "description": "Inspects Stripe webhook endpoints in the same mode as the configured key and persists the result. Never modifies Stripe configuration and never returns keys or signing secrets.",
+        "responses": {
+          "200": {
+            "description": "Persisted endpoint check."
+          }
+        },
+        "summary": "Run and persist a read-only Stripe endpoint check",
+        "tags": [
+          "Payments"
+        ]
+      }
+    },
     "/api/payments/tier-reconcile": {
       "post": {
         "description": "All body fields are optional. When ``emails`` is omitted the endpoint processes every user with a non-empty ``stripe_customer_id`` (capped at ``MAX_USERS_PER_REQUEST``).",

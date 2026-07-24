@@ -5,6 +5,10 @@
 
 {% block studio_content %}
 {% studio_header_actions title="Payment mismatches" subtitle="Stripe checkout identity conflicts that need operator review." %}
+  <a href="{% url 'studio_stripe_webhooks' %}" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+    <i data-lucide="webhook" class="h-4 w-4"></i>
+    <span>Stripe webhooks</span>
+  </a>
   <a href="{% url 'studio_user_list' %}" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
     <i data-lucide="users" class="h-4 w-4"></i>
     <span>Users</span>

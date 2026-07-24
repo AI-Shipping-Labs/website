@@ -263,6 +263,66 @@ Test vs live: n/a. The account ID is the same in test and live mode for
 a given Stripe account — Stripe's `/test/` URL prefix only swaps which
 data set the dashboard shows.
 
+## STRIPE_WEBHOOK_EXPECTED_URL
+
+Purpose: The exact webhook callback URL the endpoint verifier (issue #1314)
+expects Stripe to target. The default is the production URL
+`https://aishippinglabs.com/api/webhooks/payments`. Override it on
+non-production environments so the verifier checks that environment's own host
+instead of production.
+
+Where it is used: Studio > Payments > `Stripe webhooks`
+(`/studio/payments/stripe-webhooks/`) and the staff-token API
+`POST /api/payments/stripe-webhooks/verify`. The verifier reads Stripe webhook
+endpoints in the same mode as `STRIPE_SECRET_KEY` and confirms exactly one
+enabled snapshot endpoint targets this URL with the five required events.
+
+Test vs live: n/a to the value itself; the mode comes from the configured key.
+The verifier reports `key_mode` (test/live) separately from the URL check.
+
+## Cancellation webhook verification and replay runbook
+
+This runbook is the safe procedure for confirming and repairing Stripe
+cancellation callbacks. Cohort-wide reconciliation of cancellations whose event
+ID is unknown is issue #1308, not this procedure.
+
+1. In the live-mode Stripe Dashboard, create or open the endpoint for
+   `https://aishippinglabs.com/api/webhooks/payments`. Choose "Your account",
+   Snapshot (classic) payloads, and enable exactly the five documented events
+   (`checkout.session.completed`, `customer.subscription.updated`,
+   `customer.subscription.deleted`, `invoice.payment_failed`,
+   `customer.updated`). Copy that endpoint's live `whsec_...` into Studio's
+   `STRIPE_WEBHOOK_SECRET`, and confirm the configured `sk_live_...` belongs to
+   the same account/mode.
+2. Open Studio > Payments > `Stripe webhooks` and click
+   `Verify Stripe configuration`. Resolve any URL, status, mode, missing-event,
+   duplicate-endpoint, or API-permission finding. Treat `Configured` and
+   `Verified by delivery` as separate signing-secret signals — the website can
+   never claim the signing secret matches from endpoint metadata alone; only a
+   real signature-verified delivery proves it.
+3. Use Stripe's "Send test webhook" only to prove transport and signature
+   capture. A synthetic cancellation event with a dummy subscription id must not
+   change any member; it appears as an `unmatched_user` attempt, which is
+   expected.
+4. Test real membership state transitions end-to-end only in Stripe test mode,
+   against a non-production/test member and a test-mode endpoint. Never cancel a
+   live member just to test the callback.
+5. For an existing live event, inspect its event ID first (Studio `Inspect
+   event`, read-only). Use Stripe Dashboard "Resend" only when there is no
+   processed terminal local event; a processed event is idempotently ignored.
+6. For missed or `failed_permanent` cancellation evidence, fix the
+   identity/configuration cause first, then call
+   `POST /api/payments/stripe-webhooks/replay` in dry-run mode (the default) and
+   verify the exact member and proposed transition. Only when the preview is
+   unambiguous, repeat with `dry_run=false` and
+   `confirm=replay_cancellation_event`. Record the operator decision. Repeating
+   the confirmed request is idempotent. Reconciliation issue #1308 remains the
+   safety net for events whose Stripe event ID is unknown.
+7. Rollback: disable only the broken endpoint or restore the prior signing
+   secret/configuration; never disable Stripe billing. Repair member tiers only
+   through confirmed replay or reconciliation — never by hand-editing a raw
+   webhook or attempt row.
+
 ## AUTHENTICATED_CHECKOUT_BINDING_ENABLED
 
 Purpose: Emergency kill switch for authenticated membership checkout.

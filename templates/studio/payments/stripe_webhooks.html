@@ -1,0 +1,242 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Stripe webhooks{% endblock %}
+
+{% block studio_content %}
+{% studio_header_actions title="Stripe cancellation webhooks" subtitle="Prove whether Stripe cancellation callbacks are configured, received, processed, retried, or rejected." %}
+  <a href="{% url 'studio_payment_mismatch_list' %}" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+    <i data-lucide="alert-triangle" class="h-4 w-4"></i>
+    <span>Payment mismatches</span>
+  </a>
+{% endstudio_header_actions %}
+
+{# ---- Configuration health ------------------------------------------------ #}
+<section class="bg-card border border-border rounded-lg p-5 mb-6" data-testid="stripe-webhook-config-card">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h2 class="text-lg font-semibold text-foreground">Endpoint configuration</h2>
+      <p class="text-sm text-muted-foreground mt-1">Read-only Stripe check. Running it never changes Stripe or any member.</p>
+    </div>
+    <form method="post" action="{% url 'studio_stripe_webhooks_verify' %}">
+      {% csrf_token %}
+      <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2" data-testid="stripe-webhook-verify">
+        <i data-lucide="refresh-cw" class="h-4 w-4"></i>
+        <span>Verify Stripe configuration</span>
+      </button>
+    </form>
+  </div>
+
+  <div class="mt-4 grid gap-4 md:grid-cols-2">
+    {# Endpoint URL / status #}
+    <div class="border border-border rounded-lg p-4" data-testid="indicator-endpoint">
+      <p class="text-xs uppercase tracking-wide text-muted-foreground">Endpoint URL and status</p>
+      {% if latest_check %}
+        {% if latest_check.status == 'pass' %}
+        <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-700 dark:text-green-300 border border-green-500/30 mt-2">Pass</span>
+        {% elif latest_check.status == 'warning' %}
+        <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 mt-2">Warning</span>
+        {% else %}
+        <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-700 dark:text-red-300 border border-red-500/30 mt-2">Fail</span>
+        {% endif %}
+        {% if latest_check.endpoint_status %}<p class="text-xs text-muted-foreground mt-2">Stripe status: {{ latest_check.endpoint_status }}</p>{% endif %}
+        {% if latest_check.error_message %}<p class="text-xs text-foreground mt-2" data-testid="endpoint-error">{{ latest_check.error_message }}</p>{% endif %}
+        <p class="text-xs text-muted-foreground mt-2">Checked {{ latest_check.checked_at|operator_datetime }} UTC</p>
+      {% else %}
+        <p class="text-sm text-muted-foreground mt-2" data-testid="no-check">Not checked yet. Run the read-only verification above.</p>
+      {% endif %}
+      <p class="text-xs font-mono text-muted-foreground mt-2 break-all">Expected: {{ expected_url }}</p>
+    </div>
+
+    {# Required events #}
+    <div class="border border-border rounded-lg p-4" data-testid="indicator-events">
+      <p class="text-xs uppercase tracking-wide text-muted-foreground">Required events</p>
+      <ul class="mt-2 space-y-1">
+        {% for ev in required_events %}
+        <li class="text-xs font-mono flex items-center gap-2">
+          {% if latest_check and ev in latest_check.missing_events %}
+          <i data-lucide="x-circle" class="h-3.5 w-3.5 text-red-600 dark:text-red-400"></i>
+          <span class="text-red-700 dark:text-red-300">{{ ev }} (missing)</span>
+          {% elif latest_check %}
+          <i data-lucide="check-circle" class="h-3.5 w-3.5 text-green-600 dark:text-green-400"></i>
+          <span class="text-foreground">{{ ev }}</span>
+          {% else %}
+          <i data-lucide="circle" class="h-3.5 w-3.5 text-muted-foreground"></i>
+          <span class="text-muted-foreground">{{ ev }}</span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% if latest_check.unexpected_events %}
+      <p class="text-xs text-amber-700 dark:text-amber-300 mt-2">Extra enabled events (ignored): {{ latest_check.unexpected_events|join:", " }}</p>
+      {% endif %}
+    </div>
+
+    {# Key mode #}
+    <div class="border border-border rounded-lg p-4" data-testid="indicator-key-mode">
+      <p class="text-xs uppercase tracking-wide text-muted-foreground">Key mode</p>
+      {% if latest_check %}
+      <p class="text-sm text-foreground mt-2">{{ latest_check.get_key_mode_display }}</p>
+      {% else %}
+      <p class="text-sm text-muted-foreground mt-2">Unknown until verified.</p>
+      {% endif %}
+    </div>
+
+    {# Signing secret #}
+    <div class="border border-border rounded-lg p-4" data-testid="indicator-signing-secret">
+      <p class="text-xs uppercase tracking-wide text-muted-foreground">Signing secret</p>
+      {% if secret_evidence.configured %}
+      <p class="text-sm text-foreground mt-2">Configured</p>
+      {% else %}
+      <p class="text-sm text-red-700 dark:text-red-300 mt-2">Not configured</p>
+      {% endif %}
+      {% if secret_evidence.verified_by_delivery %}
+      <p class="text-xs text-green-700 dark:text-green-300 mt-1" data-testid="secret-verified">Verified by delivery ({{ secret_evidence.latest_verified_at|operator_datetime }} UTC)</p>
+      {% else %}
+      <p class="text-xs text-muted-foreground mt-1" data-testid="secret-unverified">No signature-verified delivery yet. Configuration alone cannot prove the secret matches.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{# ---- Read-only event inspector ------------------------------------------- #}
+<section class="bg-card border border-border rounded-lg p-5 mb-6" data-testid="stripe-webhook-inspect-card">
+  <h2 class="text-lg font-semibold text-foreground">Inspect event</h2>
+  <p class="text-sm text-muted-foreground mt-1">Read-only preview of a Stripe event id. Studio does not execute replays; use the API for a confirmed replay.</p>
+  <form method="get" class="mt-3 flex flex-wrap gap-2">
+    <input type="text" name="inspect_event_id" value="{{ inspect_event_id }}" placeholder="evt_..." class="flex-1 min-w-[220px] bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="inspect-event-input">
+    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity" data-testid="inspect-event-submit">Inspect</button>
+  </form>
+
+  {% if inspect_error %}
+  <div class="mt-4 border border-red-500/30 bg-red-500/10 rounded-lg p-4" data-testid="inspect-error">
+    <p class="text-sm text-red-700 dark:text-red-300">{{ inspect_error.message }}</p>
+    <p class="text-xs text-muted-foreground mt-1">Code: {{ inspect_error.code }}</p>
+  </div>
+  {% elif inspect_result %}
+  <div class="mt-4 border border-border rounded-lg p-4 space-y-2" data-testid="inspect-result">
+    <p class="text-sm text-foreground">Event <span class="font-mono">{{ inspect_result.event_type }}</span> ({% if inspect_result.livemode %}live{% else %}test{% endif %} mode)</p>
+    <p class="text-xs text-muted-foreground">Resolution: <span class="font-medium text-foreground" data-testid="inspect-resolution">{{ inspect_result.resolution }}</span></p>
+    {% if inspect_result.local_history.terminal_status %}
+    <p class="text-xs text-muted-foreground">Local terminal record: {{ inspect_result.local_history.terminal_status }}</p>
+    {% else %}
+    <p class="text-xs text-muted-foreground">No local terminal record.</p>
+    {% endif %}
+    <p class="text-xs text-muted-foreground">Prior attempts: {{ inspect_result.local_history.attempts|length }}</p>
+    {% if inspect_result.target %}
+    <p class="text-sm text-foreground" data-testid="inspect-target">Target member: <a href="{% url 'studio_user_detail' inspect_result.target.user_id %}" class="text-accent hover:underline">{{ inspect_result.target.email }}</a> (tier {{ inspect_result.target.tier }})</p>
+    {% endif %}
+    {% if inspect_result.transition %}
+    <p class="text-sm text-foreground" data-testid="inspect-transition">Proposed transition: tier {{ inspect_result.transition.current.tier }} &rarr; {{ inspect_result.transition.proposed.tier }}, pending {{ inspect_result.transition.current.pending_tier|default:"none" }} &rarr; {{ inspect_result.transition.proposed.pending_tier|default:"none" }}</p>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+
+{# ---- Delivery attempt history -------------------------------------------- #}
+<section data-testid="stripe-webhook-deliveries">
+  <div class="flex flex-wrap items-center gap-2 mb-4">
+    {% with chip_base="px-4 py-1.5 rounded-full text-sm border transition-colors" chip_active="bg-accent text-accent-foreground border-accent" chip_idle="bg-secondary text-muted-foreground border-border hover:text-foreground hover:bg-muted" %}
+    <a href="?scope=all" class="{{ chip_base }} {% if active_scope != cancellation_filter %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}" data-testid="scope-all">All handled events</a>
+    <a href="?scope={{ cancellation_filter }}" class="{{ chip_base }} {% if active_scope == cancellation_filter %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}" data-testid="scope-cancellation">Cancellation callbacks</a>
+    {% endwith %}
+  </div>
+
+  <form method="get" class="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+    <input type="hidden" name="scope" value="{{ active_scope }}">
+    <select name="outcome" class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="filter-outcome">
+      <option value="">All outcomes</option>
+      {% for value, label in outcome_choices %}
+      <option value="{{ value }}" {% if value == active_outcome %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <input type="text" name="event_id" value="{{ search_event_id }}" placeholder="Event id" class="bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="filter-event-id">
+    <input type="text" name="customer_id" value="{{ search_customer_id }}" placeholder="Customer id" class="bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="filter-customer-id">
+    <div class="flex gap-2">
+      <input type="text" name="subscription_id" value="{{ search_subscription_id }}" placeholder="Subscription id" class="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="filter-subscription-id">
+      <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">Filter</button>
+    </div>
+  </form>
+
+  {% if not has_any_attempt %}
+  <div class="bg-card border border-border rounded-lg p-6" data-testid="no-deliveries">
+    <p class="text-sm text-foreground">No delivery has arrived yet. You can still run the read-only configuration check above.</p>
+    <p class="text-sm text-muted-foreground mt-1">No recent cancellation callback is neutral, not proof of failure. Follow the test-mode runbook rather than cancelling a live member.</p>
+  </div>
+  {% else %}
+  <div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto">
+    <table class="w-full table-fixed">
+      <colgroup>
+        <col class="w-[18%]">
+        <col class="w-[26%]">
+        <col class="w-[26%]">
+        <col class="w-[15%]">
+        <col class="w-[15%]">
+      </colgroup>
+      <thead class="border-b border-border">
+        <tr class="text-left text-xs uppercase tracking-wide text-muted-foreground">
+          <th class="px-4 py-3 font-medium">Received</th>
+          <th class="px-4 py-3 font-medium">Event</th>
+          <th class="px-4 py-3 font-medium">Stripe</th>
+          <th class="px-4 py-3 font-medium">Source</th>
+          <th class="px-4 py-3 font-medium">Outcome</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% if rows %}
+        {% for row in rows %}
+        {% with attempt=row.attempt %}
+        <tr data-testid="delivery-row">
+          <td class="px-4 py-3 align-top text-xs text-muted-foreground" data-label="Received">
+            {{ attempt.received_at|operator_datetime }} UTC
+            <p class="mt-1">Attempt #{{ attempt.attempt_number }}</p>
+          </td>
+          <td class="px-4 py-3 align-top text-sm" data-label="Event">
+            <p class="text-foreground break-all">{{ attempt.event_type }}</p>
+            {% if row.event_url %}
+            <a href="{{ row.event_url }}" target="_blank" rel="noopener" class="font-mono text-xs text-accent break-all hover:underline">{{ attempt.stripe_event_id }}</a>
+            {% else %}
+            <p class="font-mono text-xs text-muted-foreground break-all">{{ attempt.stripe_event_id }}</p>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3 align-top text-xs" data-label="Stripe">
+            {% if row.customer_url %}
+            <a href="{{ row.customer_url }}" target="_blank" rel="noopener" class="block font-mono text-accent break-all hover:underline">Customer: {{ attempt.stripe_customer_id }}</a>
+            {% elif attempt.stripe_customer_id %}
+            <p class="font-mono text-muted-foreground break-all">Customer: {{ attempt.stripe_customer_id }}</p>
+            {% endif %}
+            {% if row.subscription_url %}
+            <a href="{{ row.subscription_url }}" target="_blank" rel="noopener" class="block font-mono text-accent break-all hover:underline">Subscription: {{ attempt.stripe_subscription_id }}</a>
+            {% elif attempt.stripe_subscription_id %}
+            <p class="font-mono text-muted-foreground break-all">Subscription: {{ attempt.stripe_subscription_id }}</p>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3 align-top text-xs text-muted-foreground" data-label="Source">{{ attempt.get_source_display }}</td>
+          <td class="px-4 py-3 align-top" data-label="Outcome">
+            {% if attempt.outcome == 'processed' %}
+            <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-700 dark:text-green-300 border border-green-500/30">Processed</span>
+            {% elif attempt.outcome == 'ambiguous_user' or attempt.outcome == 'failed_permanent' or attempt.outcome == 'failed_transient' %}
+            <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-700 dark:text-red-300 border border-red-500/30">{{ attempt.get_outcome_display }}</span>
+            {% else %}
+            <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-secondary text-muted-foreground border border-border">{{ attempt.get_outcome_display }}</span>
+            {% endif %}
+            <p class="text-xs text-muted-foreground mt-1">HTTP {{ attempt.http_status }}</p>
+            {% if attempt.error_message %}
+            <p class="text-xs text-foreground mt-1 break-words" data-testid="delivery-error">{{ attempt.error_message|truncatechars:160 }}</p>
+            {% endif %}
+          </td>
+        </tr>
+        {% endwith %}
+        {% endfor %}
+        {% elif filters_active %}
+        {% studio_empty_state 'filter' entity_label='delivery attempt' entity_label_plural='delivery attempts' clear_url=clear_url colspan=5 testid_suffix='deliveries' %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  {% if show_pager %}
+    {% include "studio/includes/list_pager.html" with pager_testid_prefix="stripe-webhook-deliveries-pager" %}
+  {% endif %}
+  {% endif %}
+</section>
+{% endblock %}

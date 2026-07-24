@@ -794,7 +794,7 @@ class PaymentNotificationEmailTest(TestCase):
                 HTTP_STRIPE_SIGNATURE=sig,
             )
             self.assertEqual(r1.status_code, 200)
-            self.assertEqual(r1.json()["status"], "ok")
+            self.assertEqual(r1.json()["status"], "processed")
             self.assertEqual(
                 len(mail.outbox), 1,
                 "First delivery must send exactly one notification email.",

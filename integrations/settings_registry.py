@@ -73,6 +73,19 @@ INTEGRATION_GROUPS = [
                 'docs_url': '_docs/integrations/stripe.md#stripe_dashboard_account_id',
             },
             {
+                'key': 'STRIPE_WEBHOOK_EXPECTED_URL',
+                'is_secret': False,
+                'optional': True,
+                'default': 'https://aishippinglabs.com/api/webhooks/payments',
+                'description': (
+                    'Exact webhook callback URL the endpoint verifier expects '
+                    'Stripe to target. Defaults to the production URL; override '
+                    'it on non-production environments so the verifier checks '
+                    'the local host.'
+                ),
+                'docs_url': '_docs/integrations/stripe.md#stripe_webhook_expected_url',
+            },
+            {
                 'key': 'AUTHENTICATED_CHECKOUT_BINDING_ENABLED',
                 'is_secret': False,
                 'is_boolean': True,

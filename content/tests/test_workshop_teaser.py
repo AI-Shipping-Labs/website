@@ -728,3 +728,51 @@ class FreeBadgeOnRegisteredWorkshopsTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/paid-ws')
         self.assertContains(response, 'data-testid="workshop-tier-badge"')
         self.assertNotContains(response, 'data-testid="workshop-free-badge"')
+
+
+class LandingRecordingTeaserGateTest(TierSetupMixin, TestCase):
+    """The workshop landing recording teaser shows the tier requirement via
+    ``required_tier_label`` and renders no orphaned ``Upgrade to {tier}``
+    recording button.
+
+    Issue #1336 removed the dead ``recording_cta_message`` /
+    ``recording_cta_url`` / ``recording_cta_label`` context keys from
+    ``_build_landing_context``. Those keys were never rendered; the teaser
+    already communicates the requirement through
+    ``recording_required_level|required_tier_label``. This test locks in
+    that the teaser is unchanged and the removed literal never resurfaces.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # Landing + pages open, recording gated at Main, with a recording
+        # on the linked event so the "Watch the recording" card renders.
+        cls.workshop = _make_workshop(
+            'rec-teaser', pages=LEVEL_OPEN, recording=LEVEL_MAIN,
+        )
+        cls.user = User.objects.create_user(
+            email='free-rec@x.com', password='pw',
+            tier=cls.free_tier, email_verified=True,
+        )
+
+    def setUp(self):
+        self.client.login(email='free-rec@x.com', password='pw')
+
+    def test_teaser_shows_tier_label_and_no_orphaned_upgrade_button(self):
+        response = self.client.get('/workshops/rec-teaser')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['can_access_recording'])
+        # The teaser exposes its locked state and the public tier label.
+        self.assertContains(response, 'data-testid="workshop-video-locked"')
+        self.assertContains(response, 'Main or above')
+        # The removed dead recording CTA keys must be absent from context.
+        for dead_key in (
+            'recording_cta_message',
+            'recording_cta_url',
+            'recording_cta_label',
+        ):
+            self.assertNotIn(dead_key, response.context)
+        # No orphaned "Upgrade to Main" recording button on the landing page
+        # (pages are open, so no pages paywall renders either).
+        self.assertNotContains(response, 'Upgrade to Main')

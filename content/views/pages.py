@@ -5,8 +5,10 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 
 from content.access import (
     LEVEL_TO_TIER_NAME,
+    build_gated_access_copy,
     build_gating_context,
     can_access,
+    get_content_type_copy,
     get_gated_reason,
     get_required_tier_name,
     get_user_level,
@@ -514,7 +516,11 @@ def collection_list(request):
     # Filter by tags if provided (AND logic)
     links = _filter_by_tags(links, selected_tags)
 
-    # Build per-link access info and strip URLs from gated links
+    # Build per-link access info and strip URLs from gated links. The
+    # upgrade message verb comes from the shared curated-link copy source
+    # (issue #1336) so it can never drift from the canonical wording; the
+    # visible sentence stays "Upgrade to {tier} to access this resource".
+    curated_verb, curated_noun = get_content_type_copy('curated_link')
     annotated_links = []
     for link in links:
         link.title = _clean_guest_surface_text(link.title)
@@ -524,14 +530,19 @@ def collection_list(request):
         url = link.url if not gated_reason else None
         if gated_reason == 'unverified_email':
             url = f'/resources/{link.pk}/go'
+        cta_message = ''
+        if gated_reason == 'insufficient_tier':
+            cta_message = build_gated_access_copy(
+                gated_reason='insufficient_tier',
+                verb=curated_verb,
+                noun=curated_noun,
+                required_level=link.required_level,
+            )['gated_heading']
         annotated_links.append({
             'link': link,
             'has_access': has_access,
             'url': url,
-            'cta_message': (
-                f'Upgrade to {link.required_level_tier_name} to access this resource'
-                if gated_reason == 'insufficient_tier' else ''
-            ),
+            'cta_message': cta_message,
         })
 
     # Group by category. Every category that has published links renders:
@@ -657,14 +668,6 @@ def downloads_list(request):
             'is_lead_magnet': is_lead_magnet,
             'show_email_form': False,
             'requires_email_verification': requires_email_verification,
-            'cta_message': (
-                f'Upgrade to {get_required_tier_name(download.required_level)} to download'
-                if (
-                    not has_access
-                    and not is_lead_magnet
-                    and not requires_email_verification
-                ) else ''
-            ),
         })
 
     context = {

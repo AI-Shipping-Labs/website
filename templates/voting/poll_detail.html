@@ -43,7 +43,11 @@
 
       {% if is_gated %}
       <!-- Access gated -->
+      {% if gated_reason == "unverified_email" %}
+      {% include "content/_verify_email_required.html" %}
+      {% else %}
       {% include "content/_gated_access_card.html" %}
+      {% endif %}
       {% else %}
 
       <!-- Vote info bar -->

@@ -163,10 +163,16 @@ def _build_sprint_summaries(
         cta_url = detail_url
         cta_label = 'View sprint'
         enrolled = False
+        # An ended sprint can no longer be joined -- the join endpoint and the
+        # detail page both gate on ``has_ended()`` -- so suppress the join and
+        # upgrade CTAs for non-enrolled viewers and leave the neutral
+        # ``View sprint`` link pointing at the detail page (issue #1315).
+        ended = sprint.has_ended()
 
         if not user.is_authenticated:
-            cta_url = f'{reverse("account_login")}?next={detail_url}'
-            cta_label = 'Log in to join'
+            if not ended:
+                cta_url = f'{reverse("account_login")}?next={detail_url}'
+                cta_label = 'Log in to join'
         else:
             viewer_plan = plans_by_sprint.get(sprint.pk)
             enrolled = sprint.pk in enrolled_sprint_ids
@@ -186,7 +192,7 @@ def _build_sprint_summaries(
                     'cohort_board', kwargs={'sprint_slug': sprint.slug},
                 )
                 cta_label = 'Open cohort board'
-            elif not eligible:
+            elif not eligible and not ended:
                 cta_url = reverse('pricing')
                 cta_label = f'Upgrade to {required_tier_name}'
             else:

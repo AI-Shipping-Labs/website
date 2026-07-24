@@ -468,3 +468,241 @@ class SprintsIndexTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self._membership_queries(queries), [])
         self.assertContains(response, 'data-testid="sprints-empty"')
+
+
+class EndedSprintCtaTest(TestCase):
+    """Issue #1315: ended sprints must not advertise join/upgrade CTAs."""
+
+    @staticmethod
+    def _past_start(duration_weeks=4, days_after_end=14):
+        """Start date for a sprint whose window ended ``days_after_end`` ago."""
+        return (
+            timezone.localdate()
+            - datetime.timedelta(weeks=duration_weeks)
+            - datetime.timedelta(days=days_after_end)
+        )
+
+    def _detail_href(self, slug):
+        return (
+            f'href="{reverse("sprint_detail", kwargs={"sprint_slug": slug})}"'
+        )
+
+    @staticmethod
+    def _card_markup(response, slug):
+        """Return the single sprint card article markup for ``slug``."""
+        content = response.content.decode()
+        needle = f'href="/sprints/{slug}"'
+        anchor = content.index(needle)
+        start = content.rindex('<article', 0, anchor)
+        end = content.index('</article>', anchor) + len('</article>')
+        return content[start:end]
+
+    def test_ended_sprint_anonymous_shows_view_sprint_not_login(self):
+        sprint = _create_sprint(
+            'Ended Anon Sprint',
+            'ended-anon-sprint',
+            start_date=self._past_start(),
+            status='completed',
+            min_tier_level=20,
+        )
+
+        response = self.client.get('/sprints')
+        card = self._card_markup(response, sprint.slug)
+
+        self.assertIn(sprint.name, card)
+        self.assertIn('View sprint', card)
+        self.assertIn(self._detail_href(sprint.slug), card)
+        self.assertNotIn('Log in to join', card)
+        self.assertNotIn(
+            f'href="{reverse("account_login")}?next=/sprints/{sprint.slug}"',
+            card,
+        )
+
+    def test_ended_sprint_below_tier_member_shows_view_sprint_not_upgrade(self):
+        sprint = _create_sprint(
+            'Ended Premium Sprint',
+            'ended-premium-sprint',
+            start_date=self._past_start(),
+            status='completed',
+            min_tier_level=30,
+        )
+        member = User.objects.create_user(
+            email='free1315@example.com', password='pw',
+        )
+        member.tier = Tier.objects.get(slug='free')
+        member.save(update_fields=['tier'])
+
+        self.client.force_login(member)
+        response = self.client.get('/sprints')
+        card = self._card_markup(response, sprint.slug)
+
+        self.assertIn(sprint.name, card)
+        self.assertIn('View sprint', card)
+        self.assertIn(self._detail_href(sprint.slug), card)
+        self.assertNotIn('Upgrade to', card)
+        self.assertNotIn(f'href="{reverse("pricing")}"', card)
+
+    def test_ended_sprint_eligible_nonenrolled_member_shows_view_sprint(self):
+        sprint = _create_sprint(
+            'Ended Eligible Sprint',
+            'ended-eligible-sprint',
+            start_date=self._past_start(),
+            status='completed',
+            min_tier_level=20,
+        )
+        member = User.objects.create_user(
+            email='main1315@example.com', password='pw',
+        )
+        member.tier = Tier.objects.get(slug='main')
+        member.save(update_fields=['tier'])
+
+        self.client.force_login(member)
+        response = self.client.get('/sprints')
+        card = self._card_markup(response, sprint.slug)
+
+        self.assertIn(sprint.name, card)
+        self.assertIn('View sprint', card)
+        self.assertIn(self._detail_href(sprint.slug), card)
+        self.assertNotIn('Log in to join', card)
+        self.assertNotIn('Upgrade to', card)
+
+    def test_ended_sprint_enrolled_with_plan_keeps_open_my_plan(self):
+        sprint = _create_sprint(
+            'Ended Enrolled Plan Sprint',
+            'ended-enrolled-plan-sprint',
+            start_date=self._past_start(),
+            status='completed',
+            min_tier_level=20,
+        )
+        member = User.objects.create_user(
+            email='plan1315@example.com', password='pw',
+        )
+        member.tier = Tier.objects.get(slug='main')
+        member.save(update_fields=['tier'])
+        SprintEnrollment.objects.create(sprint=sprint, user=member)
+        plan = Plan.objects.create(
+            member=member, sprint=sprint, visibility='cohort',
+        )
+
+        self.client.force_login(member)
+        response = self.client.get('/sprints')
+        card = self._card_markup(response, sprint.slug)
+
+        self.assertIn('Open my plan', card)
+        self.assertNotIn('View sprint', card)
+        self.assertIn(
+            reverse(
+                'my_plan_detail',
+                kwargs={'sprint_slug': sprint.slug, 'plan_id': plan.pk},
+            ),
+            card,
+        )
+
+    def test_ended_sprint_enrolled_without_plan_keeps_open_cohort_board(self):
+        sprint = _create_sprint(
+            'Ended Enrolled Board Sprint',
+            'ended-enrolled-board-sprint',
+            start_date=self._past_start(),
+            status='completed',
+            min_tier_level=20,
+        )
+        member = User.objects.create_user(
+            email='board1315@example.com', password='pw',
+        )
+        member.tier = Tier.objects.get(slug='main')
+        member.save(update_fields=['tier'])
+        SprintEnrollment.objects.create(sprint=sprint, user=member)
+
+        self.client.force_login(member)
+        response = self.client.get('/sprints')
+        card = self._card_markup(response, sprint.slug)
+
+        self.assertIn('Open cohort board', card)
+        self.assertNotIn('View sprint', card)
+        self.assertIn(
+            reverse('cohort_board', kwargs={'sprint_slug': sprint.slug}),
+            card,
+        )
+
+    def test_active_sprint_anonymous_still_shows_login_to_join(self):
+        sprint = _create_sprint(
+            'Active Join Sprint',
+            'active-join-sprint',
+            start_date=_active_sprint_start(),
+            status='active',
+            min_tier_level=20,
+        )
+
+        response = self.client.get('/sprints')
+        card = self._card_markup(response, sprint.slug)
+
+        self.assertIn('Log in to join', card)
+        self.assertIn(
+            f'href="{reverse("account_login")}?next=/sprints/{sprint.slug}"',
+            card,
+        )
+        self.assertNotIn('View sprint', card)
+
+    def test_active_sprint_below_tier_member_still_shows_upgrade(self):
+        sprint = _create_sprint(
+            'Active Premium Sprint',
+            'active-premium-sprint',
+            start_date=_active_sprint_start(),
+            status='active',
+            min_tier_level=30,
+        )
+        member = User.objects.create_user(
+            email='freeactive1315@example.com', password='pw',
+        )
+        member.tier = Tier.objects.get(slug='free')
+        member.save(update_fields=['tier'])
+
+        self.client.force_login(member)
+        response = self.client.get('/sprints')
+        card = self._card_markup(response, sprint.slug)
+
+        self.assertIn('Upgrade to Premium', card)
+        self.assertIn(f'href="{reverse("pricing")}"', card)
+        self.assertNotIn('View sprint', card)
+
+    def test_exact_end_date_boundary_shows_view_sprint_not_login(self):
+        # end_date == today: still grouped in the Current section, but
+        # has_ended() is already True and joins are already rejected.
+        today = timezone.localdate()
+        sprint = _create_sprint(
+            'Ending Today Sprint',
+            'ending-today-sprint',
+            start_date=today - datetime.timedelta(weeks=4),
+            duration_weeks=4,
+            status='active',
+            min_tier_level=20,
+        )
+        self.assertTrue(sprint.has_ended(today))
+
+        response = self.client.get('/sprints')
+        # The sprint stays in the Current section on its exact end date.
+        self.assertIn(sprint.name, _section_markup(response, 'current'))
+        card = self._card_markup(response, sprint.slug)
+
+        self.assertIn('View sprint', card)
+        self.assertIn(self._detail_href(sprint.slug), card)
+        self.assertNotIn('Log in to join', card)
+
+    def test_past_section_has_no_join_or_upgrade_anchor(self):
+        for index, tier_level in enumerate((0, 20, 30)):
+            _create_sprint(
+                f'Past Tier {tier_level}',
+                f'past-tier-{index}',
+                start_date=self._past_start(days_after_end=14 + index * 7),
+                status='completed',
+                min_tier_level=tier_level,
+            )
+
+        response = self.client.get('/sprints')
+        past = _section_markup(response, 'past')
+
+        self.assertIn('data-testid="sprints-section-past"', past)
+        self.assertNotIn('Log in to join', past)
+        self.assertNotIn('Upgrade to', past)
+        self.assertNotIn('>Upgrade to', past)
+        self.assertEqual(past.count('View sprint'), 3)

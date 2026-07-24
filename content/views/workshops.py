@@ -865,20 +865,6 @@ def _build_landing_context(workshop, user):
                 pages_signup_cta_url = pages_copy['signup_cta_url']
                 pages_signup_cta_label = pages_copy['signup_cta_label']
 
-    recording_cta_message = ''
-    recording_cta_url = ''
-    if not can_access_recording:
-        recording_copy = build_gated_access_copy(
-            gated_reason='insufficient_tier',
-            verb='watch the recording',
-            noun='recording',
-            required_level=workshop.recording_required_level,
-            user=user,
-            show_signin_on_paid_guest=False,
-        )
-        recording_cta_message = recording_copy['gated_heading']
-        recording_cta_url = recording_copy['gated_cta_url']
-
     landing_cta_message = ''
     landing_cta_url = ''
     landing_gated_reason = ''
@@ -928,11 +914,8 @@ def _build_landing_context(workshop, user):
             {'icon': 'square-check', 'label': 'Step-by-step tutorial'},
             {'icon': 'shield-check', 'label': 'Cancel anytime'},
         ],
-        'recording_cta_message': recording_cta_message,
-        'recording_cta_url': recording_cta_url,
         'current_user_state': current_user_state,
         'landing_cta_label': 'Upgrade',
-        'recording_cta_label': f'Upgrade to {recording_tier_name}',
         'freestyle_evidence': _freestyle_evidence_for_workshop(
             workshop, landing_gated_reason, pages_gated_reason,
         ),

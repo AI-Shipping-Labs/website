@@ -19,7 +19,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 
-from content.access import LEVEL_BASIC, LEVEL_OPEN, LEVEL_PREMIUM
+from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from content.models import Download
 from tests.fixtures import TierSetupMixin
 
@@ -949,6 +949,30 @@ class DownloadsGatingTest(TierSetupMixin, TestCase):
             'href="/api/downloads/basic-toolkit/file"',
             body,
         )
+
+    def test_gated_download_card_uses_tier_badge_not_dead_upgrade_text(self):
+        # Issue #1336: the dead ``cta_message`` context key was removed from
+        # downloads_list. The gated card communicates access via the tier
+        # badge + lock icon, and the removed ``Upgrade to {tier} to
+        # download`` literal must never render.
+        Download.objects.create(
+            title='Main Playbook',
+            slug='main-playbook',
+            description='A playbook for Main members.',
+            file_url='https://example.com/main-playbook.pdf',
+            file_type='pdf',
+            required_level=LEVEL_MAIN,
+            published=True,
+        )
+        response = self.client.get('/downloads')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Main Playbook')
+        # Tier badge (public access vocabulary) + lock icon are present.
+        self.assertContains(response, 'Main or above')
+        self.assertContains(response, 'data-lucide="lock"')
+        # The removed dead upgrade literal must not appear anywhere.
+        self.assertNotContains(response, 'Upgrade to Main to download')
+        self.assertNotContains(response, 'Upgrade to Basic to download')
 
 
 class DownloadsFileEndpointTest(TierSetupMixin, TestCase):

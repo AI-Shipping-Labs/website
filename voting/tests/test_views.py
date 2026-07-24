@@ -457,3 +457,57 @@ class AnonymousVotePromptTest(TierSetupMixin, TestCase):
             'Upgrade to Main to vote in this poll',
         )
         self.assertContains(response, 'Upgrade')
+
+
+class PollUnverifiedEmailGateTest(TierSetupMixin, TestCase):
+    """The poll detail template renders the verify-email partial (not an
+    empty upgrade card) when the gate reason is ``unverified_email``.
+
+    This branch is unreachable through the normal UI because
+    ``Poll.save()`` auto-maps ``required_level`` to Main (20) or Premium
+    (30), so a poll can never sit at ``LEVEL_REGISTERED`` (5). The test
+    forces a registered-level poll via ``.update()`` (bypassing ``save()``)
+    to exercise the defensive template branch added for issue #1336.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        poll = Poll.objects.create(
+            title='Registration-Gated Poll',
+            poll_type='topic',
+            status='open',
+        )
+        PollOption.objects.create(poll=poll, title='Option 1')
+        # Bypass Poll.save()'s auto-map so the poll gates at
+        # LEVEL_REGISTERED (5) instead of Main (20).
+        Poll.objects.filter(pk=poll.pk).update(required_level=5)
+        self.poll = Poll.objects.get(pk=poll.pk)
+
+        # A signed-in Free member whose email is NOT verified triggers the
+        # unverified_email gate reason on registered-level content.
+        self.unverified_user = User.objects.create_user(
+            email='unverified@test.com', password='testpass',
+        )
+        self.unverified_user.tier = self.free_tier
+        self.unverified_user.email_verified = False
+        self.unverified_user.save()
+        self.client.login(email='unverified@test.com', password='testpass')
+
+    def test_unverified_email_renders_verify_partial_not_empty_card(self):
+        response = self.client.get(f'/vote/{self.poll.id}')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['is_gated'])
+        self.assertEqual(
+            response.context['gated_reason'], 'unverified_email',
+        )
+        # The verify-email partial is rendered with the member's email and
+        # the resend link.
+        self.assertContains(
+            response, 'data-testid="verify-email-required-card"',
+        )
+        self.assertContains(response, 'unverified@test.com')
+        self.assertContains(response, 'data-verification-resend-form')
+        # The empty gated upgrade card must NOT be rendered — no poll-gated
+        # card, no orphaned "Upgrade to" heading with an empty tier.
+        self.assertNotContains(response, 'data-testid="poll-gated"')
+        self.assertNotContains(response, 'to vote in this poll')

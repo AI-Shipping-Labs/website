@@ -48,6 +48,10 @@ class AccessibleActionClassContractTest(SimpleTestCase):
             'data-testid="project-difficulty-clear"',
             'data-testid="project-difficulty-{{ diff }}"',
         ),
+        'content/blog_list.html': (
+            'data-testid="blog-tag-all"',
+            'data-testid="blog-tag-{{ tag }}"',
+        ),
         'content/peer_review/certificate.html': (
             'data-testid="certificate-pdf-link"',
         ),

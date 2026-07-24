@@ -380,6 +380,131 @@ class BlogListTagFilteringTest(TestCase):
         self.assertEqual(response.context['selected_tags'], ['python'])
 
 
+# --- Page-level tag filter row tests (issue #1319) ---
+
+
+def _opening_anchor(content, testid):
+    """Return the full opening <a ...> tag carrying the given data-testid."""
+    marker = f'data-testid="{testid}"'
+    idx = content.index(marker)
+    start = content.rindex('<a ', 0, idx)
+    end = content.index('>', idx)
+    return content[start:end + 1]
+
+
+@tag('core')
+class BlogTagFilterRowTest(TestCase):
+    """The /blog page renders a page-level "Filter by topic" pill row."""
+
+    def setUp(self):
+        self.client = Client()
+        self.python_article = Article.objects.create(
+            title='Python Tutorial', slug='python-tutorial-row',
+            date=date(2025, 6, 15), tags=['python', 'tutorial'],
+            published=True,
+        )
+        self.ai_article = Article.objects.create(
+            title='AI Engineering', slug='ai-engineering-row',
+            date=date(2025, 6, 14), tags=['ai'], published=True,
+        )
+
+    def test_filter_row_rendered_with_all_and_tag_pills(self):
+        response = self.client.get('/blog')
+        self.assertContains(response, 'data-testid="blog-tag-filter"')
+        self.assertContains(response, 'Filter by topic')
+        self.assertContains(response, 'data-testid="blog-tag-all"')
+        # One pill per distinct tag.
+        self.assertContains(response, 'data-testid="blog-tag-python"')
+        self.assertContains(response, 'data-testid="blog-tag-ai"')
+        self.assertContains(response, 'data-testid="blog-tag-tutorial"')
+
+    def test_all_pill_active_when_no_tag_selected(self):
+        response = self.client.get('/blog')
+        all_pill = _opening_anchor(response.content.decode(), 'blog-tag-all')
+        self.assertIn('aria-current="page"', all_pill)
+        self.assertIn('bg-accent', all_pill)
+
+    def test_selected_tag_pill_active_and_all_inactive(self):
+        response = self.client.get('/blog?tag=python')
+        content = response.content.decode()
+        # The python pill is active.
+        python_pill = _opening_anchor(content, 'blog-tag-python')
+        self.assertIn('aria-current="page"', python_pill)
+        self.assertIn('bg-accent', python_pill)
+        # The All pill is no longer active.
+        all_pill = _opening_anchor(content, 'blog-tag-all')
+        self.assertNotIn('aria-current="page"', all_pill)
+        self.assertNotIn('bg-accent', all_pill)
+
+    def test_all_pill_links_to_unfiltered_blog(self):
+        response = self.client.get('/blog?tag=python')
+        all_pill = _opening_anchor(response.content.decode(), 'blog-tag-all')
+        self.assertIn('href="/blog"', all_pill)
+
+    def test_pills_use_accessible_focus_and_target_classes(self):
+        response = self.client.get('/blog')
+        all_pill = _opening_anchor(response.content.decode(), 'blog-tag-all')
+        for css in (
+            'min-h-[44px]',
+            'focus-visible:ring-accent',
+            'focus-visible:ring-offset-background',
+        ):
+            self.assertIn(css, all_pill)
+
+    def test_filter_row_hidden_when_no_tags(self):
+        Article.objects.all().delete()
+        Article.objects.create(
+            title='Untagged', slug='untagged-row',
+            date=date(2025, 6, 15), tags=[], published=True,
+        )
+        response = self.client.get('/blog')
+        self.assertNotContains(response, 'data-testid="blog-tag-filter"')
+        self.assertNotContains(response, 'Filter by topic')
+
+
+@tag('core')
+class BlogTagFilterDisclosureTest(TestCase):
+    """The long-tail (>12 tags) disclosure behaviour on /blog."""
+
+    def setUp(self):
+        self.client = Client()
+        # 15 distinct tags => 12 pills + 3 in the disclosure.
+        self.tags = [f'tag-{i:02d}' for i in range(15)]
+        for i, t in enumerate(self.tags):
+            Article.objects.create(
+                title=f'Article {i}', slug=f'disclosure-article-{i}',
+                date=date(2025, 6, 15), tags=[t], published=True,
+            )
+
+    def test_disclosure_present_and_closed_without_active_hidden_tag(self):
+        response = self.client.get('/blog')
+        content = response.content.decode()
+        self.assertIn('data-testid="blog-tag-more"', content)
+        self.assertIn('More topics (+3)', content)
+        details = content[content.index('<details', content.index('data-testid="blog-tag-more"') - 200):]
+        details = details[:details.index('>')]
+        # The <details> tag must not carry the open attribute.
+        self.assertNotIn(' open', details)
+
+    def test_disclosure_open_when_hidden_tag_active(self):
+        # tag-14 is alphabetically last, so it lives in the hidden tail.
+        hidden_tag = self.tags[-1]
+        response = self.client.get(f'/blog?tag={hidden_tag}')
+        content = response.content.decode()
+        details = content[content.index('<details', content.index('data-testid="blog-tag-more"') - 200):]
+        details = details[:details.index('>')]
+        self.assertIn(' open', details)
+
+    def test_disclosure_closed_when_visible_tag_active(self):
+        # tag-00 is in the first 12, so the disclosure stays closed.
+        visible_tag = self.tags[0]
+        response = self.client.get(f'/blog?tag={visible_tag}')
+        content = response.content.decode()
+        details = content[content.index('<details', content.index('data-testid="blog-tag-more"') - 200):]
+        details = details[:details.index('>')]
+        self.assertNotIn(' open', details)
+
+
 # --- Related articles tests ---
 
 

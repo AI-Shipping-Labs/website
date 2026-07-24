@@ -24,7 +24,7 @@ from accounts.models import EmailAlias, User
 from community.models import CommunityAuditLog
 from payments.exceptions import WebhookPermanentError
 from payments.services import handle_customer_updated
-from payments.views.webhooks import EVENT_HANDLERS
+from payments.services.webhook_dispatch import EVENT_HANDLERS
 
 
 def _make_customer_payload(

@@ -258,6 +258,10 @@ from studio.views.sprints import (
     sprint_unenroll,
 )
 from studio.views.sprints_enroll import sprint_bulk_enroll
+from studio.views.stripe_webhooks import (
+    stripe_webhooks_dashboard,
+    stripe_webhooks_verify,
+)
 from studio.views.sync import (
     content_sources_export,
     content_sources_import,
@@ -789,6 +793,18 @@ urlpatterns = [
         'users/payment-mismatches/<int:mismatch_id>/<str:action>',
         payment_mismatch_mark,
         name='studio_payment_mismatch_mark',
+    ),
+
+    # Stripe webhook cancellation diagnostics (issue #1314)
+    path(
+        'payments/stripe-webhooks/',
+        stripe_webhooks_dashboard,
+        name='studio_stripe_webhooks',
+    ),
+    path(
+        'payments/stripe-webhooks/verify',
+        stripe_webhooks_verify,
+        name='studio_stripe_webhooks_verify',
     ),
 
     # External user-import pipeline (issue #317)

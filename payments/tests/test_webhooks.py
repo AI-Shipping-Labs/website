@@ -215,7 +215,7 @@ class WebhookSignatureValidationTest(QuietSubscriptionLookupMixin, TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["status"], "ok")
+        self.assertEqual(response.json()["status"], "processed")
         user.refresh_from_db()
         self.assertEqual(user.tier, basic_tier)
         self.assertEqual(user.stripe_customer_id, "cus_payment_link")
@@ -1421,8 +1421,15 @@ class SubscriptionUpdatedHandlerTest(TestCase):
         self.assertEqual(user.tier, basic_tier)
         self.assertEqual(user.subscription_id, "sub_reactivate")
 
-    def test_no_error_when_user_not_found(self):
-        """Handler does not crash when no user matches the subscription."""
+    def test_unmatched_user_raises_retryable(self):
+        """Zero-match subscription update is a retryable unmatched_user error.
+
+        Issue #1314: webhook ordering may deliver the subscription event before
+        local checkout fulfillment, so a missing user is retryable, not a
+        silent success.
+        """
+        from payments.exceptions import WebhookUnmatchedUserError
+
         subscription_data = {
             "id": "sub_nobody",
             "customer": "cus_nobody",
@@ -1432,8 +1439,8 @@ class SubscriptionUpdatedHandlerTest(TestCase):
             "items": {"data": [{"price": {"id": "price_test"}}]},
         }
 
-        # Should not raise
-        handle_subscription_updated(subscription_data)
+        with self.assertRaises(WebhookUnmatchedUserError):
+            handle_subscription_updated(subscription_data)
 
 
 @tag('core')
@@ -1543,15 +1550,17 @@ class SubscriptionDeletedHandlerTest(TestCase):
             ).exists()
         )
 
-    def test_no_error_when_user_not_found(self):
-        """Handler does not crash when no user matches the subscription."""
+    def test_unmatched_user_raises_retryable(self):
+        """Zero-match subscription deletion is a retryable unmatched_user error."""
+        from payments.exceptions import WebhookUnmatchedUserError
+
         subscription_data = {
             "id": "sub_ghost",
             "customer": "cus_ghost",
         }
 
-        # Should not raise
-        handle_subscription_deleted(subscription_data)
+        with self.assertRaises(WebhookUnmatchedUserError):
+            handle_subscription_deleted(subscription_data)
 
 
 @tag('core')
@@ -1998,7 +2007,7 @@ class WebhookIdempotencyTest(QuietSubscriptionLookupMixin, TestCase):
             HTTP_STRIPE_SIGNATURE=sig,
         )
         self.assertEqual(response1.status_code, 200)
-        self.assertEqual(response1.json()["status"], "ok")
+        self.assertEqual(response1.json()["status"], "processed")
         # After the first POST, exactly one WebhookEvent row exists for
         # evt_dupe_1 — confirm before we re-post.
         self.assertEqual(
@@ -2078,7 +2087,7 @@ class WebhookIdempotencyTest(QuietSubscriptionLookupMixin, TestCase):
             HTTP_STRIPE_SIGNATURE=sig,
         )
         self.assertEqual(response1.status_code, 200)
-        self.assertEqual(response1.json()["status"], "ok")
+        self.assertEqual(response1.json()["status"], "processed")
         self.assertEqual(
             mock_send_mail.call_count, 1,
             "First invoice.payment_failed delivery must send exactly one email.",
@@ -2180,15 +2189,15 @@ class WebhookHandlerFailureTest(TestCase):
             return handle_checkout_completed(obj_dict)
 
         with patch.dict(
-            "payments.views.webhooks.EVENT_HANDLERS",
+            "payments.services.webhook_dispatch.EVENT_HANDLERS",
             {"checkout.session.completed": flaky_handler},
         ):
             # First delivery: transient failure.
-            with self.assertLogs("payments.views.webhooks", level="ERROR") as logs:
+            with self.assertLogs("payments.services.webhook_dispatch", level="ERROR") as logs:
                 response1 = self._post_checkout_event(event_id, user)
             self.assertEqual(response1.status_code, 500)
             self.assertIn(
-                "Error processing webhook event evt_retry_1 "
+                "Transient error processing webhook evt_retry_1 "
                 "(checkout.session.completed)",
                 logs.output[0],
             )
@@ -2207,7 +2216,7 @@ class WebhookHandlerFailureTest(TestCase):
             response2 = self._post_checkout_event(event_id, user)
 
         self.assertEqual(response2.status_code, 200)
-        self.assertEqual(response2.json()["status"], "ok")
+        self.assertEqual(response2.json()["status"], "processed")
         self.assertEqual(
             WebhookEvent.objects.filter(
                 stripe_event_id=event_id,
@@ -2250,18 +2259,18 @@ class WebhookHandlerFailureTest(TestCase):
             raise WebhookPermanentError("malformed metadata")
 
         with patch.dict(
-            "payments.views.webhooks.EVENT_HANDLERS",
+            "payments.services.webhook_dispatch.EVENT_HANDLERS",
             {"checkout.session.completed": perm_failing_handler},
         ):
             # First delivery: permanent failure.
-            with self.assertLogs("payments.views.webhooks", level="WARNING") as logs:
+            with self.assertLogs("payments.services.webhook_dispatch", level="WARNING") as logs:
                 response1 = self._post_checkout_event(event_id, user)
             self.assertEqual(
                 response1.status_code, 200,
                 "Permanent failure must return 200 so Stripe stops retrying.",
             )
             self.assertIn(
-                "Webhook handler raised WebhookPermanentError: "
+                "Webhook handler permanent failure: "
                 "evt_perm_1 (checkout.session.completed): malformed metadata",
                 logs.output[0],
             )
@@ -2304,13 +2313,13 @@ class WebhookHandlerFailureTest(TestCase):
             raise WebhookPermanentError("malformed metadata: missing tier_slug")
 
         with patch.dict(
-            "payments.views.webhooks.EVENT_HANDLERS",
+            "payments.services.webhook_dispatch.EVENT_HANDLERS",
             {"checkout.session.completed": perm_failing_handler},
         ):
-            with self.assertLogs("payments.views.webhooks", level="WARNING") as logs:
+            with self.assertLogs("payments.services.webhook_dispatch", level="WARNING") as logs:
                 self._post_checkout_event(event_id, user)
         self.assertIn(
-            "Webhook handler raised WebhookPermanentError: "
+            "Webhook handler permanent failure: "
             "evt_perm_msg_1 (checkout.session.completed): malformed metadata",
             logs.output[0],
         )
@@ -2335,7 +2344,7 @@ class WebhookHandlerFailureTest(TestCase):
         response = self._post_checkout_event("evt_happy_1", user)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["status"], "ok")
+        self.assertEqual(response.json()["status"], "processed")
         rows = WebhookEvent.objects.filter(stripe_event_id="evt_happy_1")
         self.assertEqual(rows.count(), 1)
         self.assertEqual(rows.first().status, WebhookEvent.STATUS_PROCESSED)
@@ -2358,10 +2367,10 @@ class WebhookHandlerFailureTest(TestCase):
             raise RuntimeError("boom")
 
         with patch.dict(
-            "payments.views.webhooks.EVENT_HANDLERS",
+            "payments.services.webhook_dispatch.EVENT_HANDLERS",
             {"checkout.session.completed": failing_handler},
         ):
-            with self.assertLogs("payments.views.webhooks", level="ERROR") as captured:
+            with self.assertLogs("payments.services.webhook_dispatch", level="ERROR") as captured:
                 response = self._post_checkout_event(event_id, user)
 
         self.assertEqual(response.status_code, 500)

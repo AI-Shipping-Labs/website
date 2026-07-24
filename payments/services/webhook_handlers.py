@@ -40,6 +40,7 @@ from payments.models import (
     CheckoutAccountBinding,
     CheckoutFulfillment,
     PaymentAccountMismatch,
+    StripeWebhookDeliveryAttempt,
     Tier,
 )
 from payments.services.import_stripe import (
@@ -48,8 +49,22 @@ from payments.services.import_stripe import (
     _subscription_price_id,
 )
 from payments.services.stripe_tags import reconcile_stripe_status_tags
+from payments.services.subscription_resolution import resolve_subscription_user
 
 LEGACY_NUMERIC_REFERENCE_CUTOFF_DEFAULT = "2026-08-01T00:00:00Z"
+
+# Machine-readable handler outcomes (issue #1314). Subscription handlers return
+# one of these so the dispatcher/attempt/API/Studio never describe a clean
+# handler return as a membership update when no user was changed.
+OUTCOME_PROCESSED = StripeWebhookDeliveryAttempt.OUTCOME_PROCESSED
+OUTCOME_IGNORED_STALE = StripeWebhookDeliveryAttempt.OUTCOME_IGNORED_STALE
+
+# Stripe subscription statuses that are dunning/review states, never
+# cancellation. A prior scheduled cancellation is NOT cleared merely because
+# the subscription is in one of these states.
+DUNNING_STATUSES = frozenset({
+    "past_due", "unpaid", "incomplete", "incomplete_expired",
+})
 
 
 def _legacy_numeric_reference_allowed():
@@ -1062,17 +1077,45 @@ def _handle_course_purchase(session_data, course_id):
     )
 
 
+def _future_cancel_at(cancel_at):
+    """Return a tz-aware datetime iff ``cancel_at`` is a future unix timestamp."""
+    if not cancel_at:
+        return None
+    try:
+        when = datetime.fromtimestamp(cancel_at, tz=timezone.utc)
+    except (TypeError, ValueError, OSError):
+        return None
+    if when <= django_timezone.now():
+        return None
+    return when
+
+
 def handle_subscription_updated(subscription_data):
     """Process a customer.subscription.updated event.
 
-    Updates the user's tier if the plan changed and updates billing_period_end.
-    If a pending downgrade is scheduled (schedule change at period end),
-    sets pending_tier instead of changing tier immediately.
+    Cancellation-state contract (issue #1314):
+
+    - ``cancel_at_period_end=true`` is a scheduled end-of-period cancellation:
+      keep the paid tier + ``subscription_id``, set ``pending_tier=free``,
+      store ``current_period_end`` as the access-ending date, keep
+      ``stripe:active`` + the current plan tag, and schedule (not execute)
+      community removal.
+    - A future ``cancel_at`` with ``cancel_at_period_end=false`` is a
+      scheduled future cancellation: keep paid access, set ``pending_tier=
+      free``, and use ``cancel_at`` as the access-ending date.
+    - A prior scheduled cancellation is cleared ONLY when ``cancel_at_period_
+      end=false`` AND there is no future ``cancel_at`` — and never merely
+      because the subscription is ``past_due``/``unpaid``.
+
+    Returns a machine-readable outcome (``processed`` / ``ignored_stale``).
+    Zero/duplicate user resolution raise from
+    :func:`resolve_subscription_user`.
     """
     subscription_id = subscription_data.get("id", "")
     customer_id = subscription_data.get("customer", "")
     status = subscription_data.get("status", "")
-    cancel_at_period_end = subscription_data.get("cancel_at_period_end", False)
+    cancel_at_period_end = bool(subscription_data.get("cancel_at_period_end", False))
+    future_cancel_at = _future_cancel_at(subscription_data.get("cancel_at"))
 
     # Get the current price from subscription items
     items = subscription_data.get("items", {}).get("data", [])
@@ -1080,137 +1123,120 @@ def handle_subscription_updated(subscription_data):
     if items:
         price_id = items[0].get("price", {}).get("id", "")
 
-    # Find the user by subscription_id or customer_id
-    user = User.objects.filter(subscription_id=subscription_id).first()
-    if user is None and customer_id:
-        customer_user = User.objects.filter(stripe_customer_id=customer_id).first()
-        if (
-            customer_user is not None
-            and customer_user.subscription_id
-            and customer_user.subscription_id != subscription_id
-        ):
-            _ignore_stale_subscription_event(
-                user=customer_user,
-                event_type="customer.subscription.updated",
-                event_subscription_id=subscription_id,
+    resolution = resolve_subscription_user(subscription_id, customer_id)
+    if resolution.stale_customer_user is not None:
+        _ignore_stale_subscription_event(
+            user=resolution.stale_customer_user,
+            event_type="customer.subscription.updated",
+            event_subscription_id=subscription_id,
+        )
+        return OUTCOME_IGNORED_STALE
+    user = resolution.user
+
+    with transaction.atomic():
+        user = User.objects.select_for_update().get(pk=user.pk)
+
+        # Issue #970 (R3): a live ``current_period_end`` sets the field; when
+        # the payload carries none we must not LEAVE a stale prior value if the
+        # resulting state has no active paid subscription.
+        current_period_end = subscription_data.get("current_period_end")
+        if current_period_end:
+            user.billing_period_end = datetime.fromtimestamp(
+                current_period_end, tz=timezone.utc
             )
-            return
-        user = customer_user
 
-    if user is None:
-        _services.logger.error(
-            "customer.subscription.updated: Could not find user. "
-            "subscription_id=%s, customer_id=%s",
-            subscription_id,
-            customer_id,
-        )
-        return
+        # Scheduled cancellation: end-of-period OR a future custom cancel_at.
+        if cancel_at_period_end or future_cancel_at is not None:
+            # Issue #968/#1314: record the scheduled cancellation by setting
+            # pending_tier=free so the "Access ending" UI fires from real data.
+            # Keep the paid tier and subscription_id until
+            # customer.subscription.deleted, which stays the authority that
+            # flips the user to free at the scheduled end.
+            user.pending_tier = Tier.objects.filter(slug="free").first()
+            if not cancel_at_period_end and future_cancel_at is not None:
+                # A custom future cancel date drives the access-ending date.
+                user.billing_period_end = future_cancel_at
+            user.subscription_id = subscription_id
+            user.save(update_fields=[
+                "billing_period_end", "pending_tier", "subscription_id",
+            ])
+            _services.logger.info(
+                "customer.subscription.updated: scheduled cancellation for "
+                "user=%s (cancel_at_period_end=%s cancel_at=%s)",
+                user.email, cancel_at_period_end,
+                future_cancel_at.isoformat() if future_cancel_at else None,
+            )
+            # Issue #969: a scheduled cancellation keeps the subscription
+            # active until the end, so the user stays ``stripe:active`` on
+            # their current plan — do NOT churn the tags yet.
+            reconcile_stripe_status_tags(user, active=True, tier=user.tier)
+            # Schedule community removal from the stored paid subscription. A
+            # future deletion still re-checks effective access before removing.
+            if user.tier and user.tier.level >= 20 and user.billing_period_end:
+                _services._community_schedule_removal(user)
+            return OUTCOME_PROCESSED
 
-    # Update billing_period_end.
-    # Issue #970 (R3): a live ``current_period_end`` sets the field; when the
-    # payload carries none we must not LEAVE a stale prior value if the
-    # resulting state has no active paid subscription. The free-tier /
-    # no-period-end clear happens below once the resulting base tier is known
-    # (a cancel_at_period_end update keeps a paid tier and a period end).
-    current_period_end = subscription_data.get("current_period_end")
-    if current_period_end:
-        user.billing_period_end = datetime.fromtimestamp(
-            current_period_end, tz=timezone.utc
+        # Not a scheduled cancellation. Clear a prior scheduled cancellation
+        # ONLY on an explicit no-cancellation update — never merely because the
+        # subscription is in a dunning/review state (issue #1314).
+        if status not in DUNNING_STATUSES:
+            user.pending_tier = None
+
+        # Look up the new tier from price_id. Subscription movement compares
+        # stored Stripe tiers, not temporary effective access.
+        old_tier_level = user.tier.level if user.tier else 0
+        tier_changed_to = None
+        if price_id:
+            new_tier = _services._tier_for_price_id(price_id)
+            if new_tier and new_tier != user.tier:
+                if status == "active":
+                    user.tier = new_tier
+                    tier_changed_to = new_tier
+                    _services.logger.info(
+                        "customer.subscription.updated: user=%s new_tier=%s",
+                        user.email,
+                        new_tier.slug,
+                    )
+
+        # Issue #970 (R3): if the resulting base tier is free and the payload
+        # carried no live ``current_period_end``, do not retain a stale prior
+        # billing date — the user has no active paid subscription cycle.
+        resulting_free = user.tier is None or user.tier.level == 0
+        if resulting_free and not current_period_end:
+            user.billing_period_end = None
+
+        user.subscription_id = subscription_id
+        user.save(
+            update_fields=[
+                "tier",
+                "subscription_id",
+                "billing_period_end",
+                "pending_tier",
+            ]
         )
 
-    # Check if this is a scheduled change (Stripe schedule or pending items)
-    # If cancel_at_period_end is True, user is cancelling - don't change tier
-    if cancel_at_period_end:
-        # Issue #968: record the scheduled cancellation by setting
-        # pending_tier=free so the "Access ending" UI fires from real data.
-        # Keep tier paid and subscription_id set until
-        # customer.subscription.deleted, which stays the authority that
-        # flips the user to free at period end.
-        user.pending_tier = Tier.objects.filter(slug="free").first()
-        user.save(update_fields=["billing_period_end", "pending_tier"])
-        _services.logger.info(
-            "customer.subscription.updated: cancel_at_period_end for user=%s",
-            user.email,
-        )
-        # Issue #969: a scheduled cancellation keeps the subscription active
-        # until period end, so the user stays ``stripe:active`` on their
-        # current plan — do NOT churn the tags yet.
+        # Issue #970 (R1): when an active update moves the base tier UP to (or
+        # above) an existing override, the override is now redundant.
+        if tier_changed_to is not None and tier_changed_to.level > 0:
+            _retire_redundant_override(user, tier_changed_to)
+
+        # Issue #969: an active subscription update is still "active on tier",
+        # so resync the stripe:* status tags.
         reconcile_stripe_status_tags(user, active=True, tier=user.tier)
-        # Schedule community removal from the stored paid subscription. A
-        # future deletion still re-checks effective access before removing.
-        if user.tier and user.tier.level >= 20 and user.billing_period_end:
-            _services._community_schedule_removal(user)
-        return
 
-    # Issue #968: cancel_at_period_end is False here, so any previously
-    # scheduled cancellation has been un-done (the user re-activated in the
-    # portal). Clear pending_tier back to None so the "Access ending" UI
-    # stops rendering. This also covers the no-tier-change case where the
-    # tier-update branch below would not otherwise reset pending_tier.
-    user.pending_tier = None
+        # Community integration: transition detection uses stored Stripe tiers,
+        # while removal is guarded by effective access so surviving Main+
+        # overrides keep community access.
+        new_tier_level = user.tier.level if user.tier else 0
+        if new_tier_level >= 20 and old_tier_level < 20:
+            _services._community_reactivate(user)
+        elif new_tier_level < 20 and old_tier_level >= 20:
+            from content.access import LEVEL_MAIN, get_user_level
 
-    # Look up the new tier from price_id
-    # Subscription movement compares stored Stripe tiers, not temporary
-    # effective access.
-    old_tier_level = user.tier.level if user.tier else 0
-    tier_changed_to = None
-    if price_id:
-        new_tier = _services._tier_for_price_id(price_id)
-        if new_tier and new_tier != user.tier:
-            # Check if this is an active subscription update
-            if status == "active":
-                user.tier = new_tier
-                tier_changed_to = new_tier
-                _services.logger.info(
-                    "customer.subscription.updated: user=%s new_tier=%s",
-                    user.email,
-                    new_tier.slug,
-                )
+            if get_user_level(user) < LEVEL_MAIN:
+                _services._community_remove(user)
 
-    # Issue #970 (R3): if the resulting base tier is free and the payload
-    # carried no live ``current_period_end``, do not retain a stale prior
-    # billing date — the user has no active paid subscription cycle.
-    # ``resulting_free`` is billing/base-tier state: no paid subscription.
-    resulting_free = user.tier is None or user.tier.level == 0
-    if resulting_free and not current_period_end:
-        user.billing_period_end = None
-
-    user.subscription_id = subscription_id
-    user.save(
-        update_fields=[
-            "tier",
-            "subscription_id",
-            "billing_period_end",
-            "pending_tier",
-        ]
-    )
-
-    # Issue #970 (R1): when an active update moves the base tier UP to (or
-    # above) an existing override, the override is now redundant — retire the
-    # one whose ``override_tier`` matches the new base tier. A higher override
-    # survives (Option A).
-    if tier_changed_to is not None and tier_changed_to.level > 0:
-        _retire_redundant_override(user, tier_changed_to)
-
-    # Issue #969: an active subscription update is still "active on tier",
-    # so resync the stripe:* status tags — the ``stripe:plan-*`` tag follows
-    # the (possibly changed) ``user.tier`` and a stale ``stripe:churned`` is
-    # dropped.
-    reconcile_stripe_status_tags(user, active=True, tier=user.tier)
-
-    # Community integration: transition detection uses stored Stripe tiers,
-    # while removal is guarded by effective access so surviving Main+ overrides
-    # keep community access.
-    new_tier_level = user.tier.level if user.tier else 0
-    if new_tier_level >= 20 and old_tier_level < 20:
-        # Re-subscribe: user upgraded back to community-eligible tier
-        _services._community_reactivate(user)
-    elif new_tier_level < 20 and old_tier_level >= 20:
-        # Immediate downgrade below Main: remove from community now
-        from content.access import LEVEL_MAIN, get_user_level
-
-        if get_user_level(user) < LEVEL_MAIN:
-            _services._community_remove(user)
+    return OUTCOME_PROCESSED
 
 
 def handle_customer_updated(customer_data):
@@ -1357,75 +1383,68 @@ def handle_customer_updated(customer_data):
 def handle_subscription_deleted(subscription_data):
     """Process a customer.subscription.deleted event.
 
-    Sets user's tier to 'free' and clears subscription fields.
+    ``customer.subscription.deleted`` is the authority that a cancellation is
+    EFFECTIVE (immediate or a previously scheduled end date). Reverts the base
+    tier to Free, clears ``subscription_id`` / ``billing_period_end`` /
+    ``pending_tier``, churns the Stripe status tags, and removes the user from
+    the community only when EFFECTIVE access falls below Main (a surviving
+    admin override keeps them).
+
+    Returns a machine-readable outcome (``processed`` / ``ignored_stale``).
+    Zero/duplicate user resolution raise from
+    :func:`resolve_subscription_user`.
     """
     subscription_id = subscription_data.get("id", "")
     customer_id = subscription_data.get("customer", "")
 
-    user = User.objects.filter(subscription_id=subscription_id).first()
-    if user is None and customer_id:
-        customer_user = User.objects.filter(stripe_customer_id=customer_id).first()
-        if (
-            customer_user is not None
-            and customer_user.subscription_id
-            and customer_user.subscription_id != subscription_id
-        ):
-            _ignore_stale_subscription_event(
-                user=customer_user,
-                event_type="customer.subscription.deleted",
-                event_subscription_id=subscription_id,
-            )
-            return
-        user = customer_user
-
-    if user is None:
-        _services.logger.error(
-            "customer.subscription.deleted: Could not find user. "
-            "subscription_id=%s",
-            subscription_id,
+    resolution = resolve_subscription_user(subscription_id, customer_id)
+    if resolution.stale_customer_user is not None:
+        _ignore_stale_subscription_event(
+            user=resolution.stale_customer_user,
+            event_type="customer.subscription.deleted",
+            event_subscription_id=subscription_id,
         )
-        return
+        return OUTCOME_IGNORED_STALE
+    user = resolution.user
 
-    # Whether the user held community access on their BASE paid tier before
-    # the revert. Combined below with the surviving-override check so we only
-    # call ``_community_remove`` for users who actually had access AND whose
-    # EFFECTIVE level now drops below Main (issue #970, R2).
-    had_community = bool(user.tier and user.tier.level >= 20)
+    with transaction.atomic():
+        user = User.objects.select_for_update().get(pk=user.pk)
 
-    free_tier = Tier.objects.filter(slug="free").first()
-    user.tier = free_tier
-    user.subscription_id = ""
-    user.billing_period_end = None
-    user.pending_tier = None
-    user.save(
-        update_fields=[
-            "tier",
-            "subscription_id",
-            "billing_period_end",
-            "pending_tier",
-        ]
-    )
-    _services.logger.info(
-        "customer.subscription.deleted: user=%s reverted to free", user.email,
-    )
+        # Whether the user held community access on their BASE paid tier before
+        # the revert. Combined below with the surviving-override check so we
+        # only call ``_community_remove`` for users who actually had access AND
+        # whose EFFECTIVE level now drops below Main (issue #970, R2).
+        had_community = bool(user.tier and user.tier.level >= 20)
 
-    # Issue #969: the subscription is gone — mark the user churned. Remove
-    # ``stripe:active`` and every ``stripe:plan-*`` tag, add ``stripe:churned``.
-    # This tracks the Stripe subscription, NOT the override — the tags churn
-    # even when an admin-granted override survives (issue #970, R2).
-    reconcile_stripe_status_tags(user, active=False, tier=None)
+        free_tier = Tier.objects.filter(slug="free").first()
+        user.tier = free_tier
+        user.subscription_id = ""
+        user.billing_period_end = None
+        user.pending_tier = None
+        user.save(
+            update_fields=[
+                "tier",
+                "subscription_id",
+                "billing_period_end",
+                "pending_tier",
+            ]
+        )
+        _services.logger.info(
+            "customer.subscription.deleted: user=%s reverted to free",
+            user.email,
+        )
 
-    # Issue #970 (R2): community access follows the EFFECTIVE tier, not just
-    # the base. A paid subscription ending does NOT revoke an admin-granted
-    # courtesy override, so the override is left active. Compute the effective
-    # level via the shared override-aware resolver and only remove the user
-    # from the community when the effective level is below Main — if a still
-    # active, unexpired Main+ override keeps them at level >= 20, they keep
-    # community/Slack access.
-    from content.access import LEVEL_MAIN, get_user_level
+        # Issue #969: the subscription is gone — mark the user churned.
+        reconcile_stripe_status_tags(user, active=False, tier=None)
 
-    if had_community and get_user_level(user) < LEVEL_MAIN:
-        _services._community_remove(user)
+        # Issue #970 (R2): community access follows the EFFECTIVE tier. A paid
+        # subscription ending does NOT revoke an admin-granted override.
+        from content.access import LEVEL_MAIN, get_user_level
+
+        if had_community and get_user_level(user) < LEVEL_MAIN:
+            _services._community_remove(user)
+
+    return OUTCOME_PROCESSED
 
 
 def _ignore_stale_subscription_event(*, user, event_type, event_subscription_id):

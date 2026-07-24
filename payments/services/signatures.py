@@ -59,8 +59,11 @@ def record_processed_event(
 
     Idempotent via ``get_or_create``: if a concurrent retry beats us to
     the row, the existing row stays and we don't overwrite its status.
+
+    Returns ``(WebhookEvent, created)`` so callers can send a one-shot
+    operator alert only when the terminal row is genuinely new (issue #1314).
     """
-    WebhookEvent.objects.get_or_create(
+    obj, created = WebhookEvent.objects.get_or_create(
         stripe_event_id=event_id,
         defaults={
             "event_type": event_type,
@@ -69,3 +72,4 @@ def record_processed_event(
             "error_message": error_message,
         },
     )
+    return obj, created

@@ -725,7 +725,7 @@ class NotifyPaidSignupEndToEndTest(TestCase):
                 HTTP_STRIPE_SIGNATURE=sig,
             )
             self.assertEqual(r1.status_code, 200)
-            self.assertEqual(r1.json()["status"], "ok")
+            self.assertEqual(r1.json()["status"], "processed")
 
             # Replay: same event id. Must short-circuit at the
             # WebhookEvent dispatch layer.

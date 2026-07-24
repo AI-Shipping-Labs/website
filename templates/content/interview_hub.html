@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load member_empty_state %}
 
 {% block title %}AI Engineer Interview Questions | AI Shipping Labs{% endblock %}
 {% block meta_description %}Prepare for AI engineer interviews with theory, coding, system design, behavioral, and project deep dive questions.{% endblock %}
@@ -22,6 +23,7 @@
         </p>
       </div>
 
+      {% if categories %}
       <div class="grid gap-6 sm:grid-cols-2">
         {% for cat in categories %}
         {% if cat.status == "coming-soon" %}
@@ -57,6 +59,9 @@
         {% endif %}
         {% endfor %}
       </div>
+      {% else %}
+      {% member_empty_state title='No interview questions yet' body='Check back soon for interview prep across theory, coding, system design, behavioral, and more.' icon='help-circle' kind='fresh' %}
+      {% endif %}
     </div>
   </section>
 </main>

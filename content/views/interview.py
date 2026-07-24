@@ -80,9 +80,6 @@ def interview_hub(request):
     """Hub page listing all interview question categories."""
     categories = _get_categories_from_db()
 
-    if not categories:
-        raise Http404("Interview questions content not available.")
-
     context = {
         'categories': categories,
     }

@@ -49,10 +49,35 @@ class InterviewHubDbViewTest(TestCase):
         response = self.client.get('/interview')
         self.assertTemplateUsed(response, 'content/interview_hub.html')
 
-    def test_hub_returns_404_when_no_categories(self):
+    def test_hub_returns_200_with_empty_state_when_no_categories(self):
         InterviewCategory.objects.all().delete()
         response = self.client.get('/interview')
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'content/interview_hub.html')
+        content = response.content.decode()
+        self.assertIn('data-testid="member-empty-state"', content)
+        self.assertIn('No interview questions yet', content)
+        # Hub chrome still renders in the empty case.
+        self.assertIn('Interview Prep', content)
+        self.assertIn('AI Engineer Interview Questions', content)
+        self.assertIn('Back to home', content)
+        # The category grid does not render when there are no categories.
+        self.assertNotIn('Theory Interview Questions', content)
+
+    def test_hub_shows_grid_not_empty_state_when_categories_exist(self):
+        response = self.client.get('/interview')
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertNotIn('data-testid="member-empty-state"', content)
+        self.assertNotIn('No interview questions yet', content)
+
+    def test_hub_renders_grid_with_single_category(self):
+        self.coding.delete()
+        response = self.client.get('/interview')
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn('Theory Interview Questions', content)
+        self.assertNotIn('data-testid="member-empty-state"', content)
 
 
 class InterviewDetailDbViewTest(TestCase):

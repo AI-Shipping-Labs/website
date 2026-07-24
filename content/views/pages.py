@@ -700,7 +700,7 @@ def download_detail(request, slug):
             'required to download this resource.'
         ),
         'gated_cta_url': '/pricing',
-        'gated_cta_label': 'View pricing',
+        'gated_cta_label': 'Upgrade',
         'gated_cta_testid': 'download-pricing-cta',
         'signin_cta_url': (
             f'/accounts/login/?next={download.get_absolute_url()}'

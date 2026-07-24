@@ -554,7 +554,7 @@ def change_email_confirm_view(request):
         cta_label = (
             "Continue to Account"
             if request.user.is_authenticated
-            else "Sign In"
+            else "Sign in"
         )
         status_code = 200
     else:

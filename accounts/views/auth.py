@@ -237,11 +237,11 @@ def _render_verify_email_result(request, *, success, message, status=200):
         cta_label = (
             "Continue to Account"
             if request.user.is_authenticated
-            else "Sign In"
+            else "Sign in"
         )
     else:
         cta_url = "/accounts/login/"
-        cta_label = "Sign In"
+        cta_label = "Sign in"
 
     return _private_no_store(
         render(

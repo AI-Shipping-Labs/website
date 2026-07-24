@@ -98,21 +98,8 @@ means free-with-sign-in and a "Free with sign-in" chip renders instead.
       </div>
 
       {% elif signup_cta_url %}
-      {# ---- FREE with sign-in: OAuth-first sign-up buttons, then email sign-up, then sign-in link ---- #}
-      <div class="mt-6 flex flex-col gap-3 border-t border-border/60 pt-6 sm:max-w-sm">
-        {% include "accounts/includes/_oauth_providers.html" with oauth_action="Sign up" oauth_divider_text="sign up with" oauth_hide_divider=True %}
-        <a href="{{ signup_cta_url }}"
-           class="{% button_classes 'primary' size='md' extra='w-full' %}"
-           data-testid="{{ signup_cta_testid|default:'teaser-signup-cta' }}">
-          <i data-lucide="user-plus" class="h-4 w-4"></i>
-          {{ signup_cta_label|default:'Create a free account' }}
-        </a>
-        <a href="{{ gated_cta_url }}"
-           class="text-center text-sm text-muted-foreground transition-colors hover:text-foreground hover:underline"
-           data-testid="{{ signin_cta_testid|default:'teaser-signin-cta' }}">
-          Already have an account? Sign in
-        </a>
-      </div>
+      {# ---- FREE with sign-in: shared OAuth-first sign-up action stack (accounts/includes/_signup_actions.html) ---- #}
+      {% include "accounts/includes/_signup_actions.html" with signup_url=signup_cta_url signin_url=gated_cta_url signup_label=signup_cta_label signup_testid=signup_cta_testid signin_testid=signin_cta_testid actions_class="mt-6 border-t border-border/60 pt-6 sm:max-w-sm" %}
       {% endif %}
     </div>
   </div>

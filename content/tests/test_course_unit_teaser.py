@@ -199,7 +199,7 @@ class AnonymousUserTeaserTest(CourseUnitTeaserSetupMixin, TestCase):
         response = self.client.get(self.unit_url)
         self.assertContains(response, 'TEASERINTROMARKER', status_code=403)
 
-    def test_renders_pricing_and_signup_ctas(self):
+    def test_renders_upgrade_cta(self):
         response = self.client.get(self.unit_url)
         self.assertContains(
             response, 'data-testid="teaser-upgrade-cta"', status_code=403,
@@ -208,16 +208,14 @@ class AnonymousUserTeaserTest(CourseUnitTeaserSetupMixin, TestCase):
         # Issue #481: paywall pill reads "Main or above required".
         self.assertContains(response, 'Main or above required', status_code=403)
         self.assertNotContains(response, 'Main+ required', status_code=403)
-        self.assertContains(response, 'View Pricing', status_code=403)
-        self.assertContains(
+        # Unified upgrade CTA label + /pricing target.
+        self.assertContains(response, 'Upgrade', status_code=403)
+        self.assertContains(response, 'href="/pricing"', status_code=403)
+        # Paid wall: no free-signup CTA — a free account grants no paid
+        # access, so a free-signup CTA here would be misleading.
+        self.assertNotContains(
             response, 'data-testid="teaser-signup-cta"', status_code=403,
-            count=1,
         )
-        # Issue #1335: unified companion copy across every gated surface.
-        self.assertContains(
-            response, 'Create a free account', status_code=403,
-        )
-        self.assertContains(response, '/accounts/signup/', status_code=403)
 
 
 # ------------------------------------------------------------
@@ -320,7 +318,7 @@ class EmptyBodyFallbackTest(CourseUnitTeaserSetupMixin, TestCase):
     def test_still_shows_upgrade_cta(self):
         response = self.client.get(self.empty_url)
         self.assertContains(response, 'Upgrade to Main to read this lesson', status_code=403)
-        self.assertContains(response, 'View Pricing', status_code=403)
+        self.assertContains(response, 'href="/pricing"', status_code=403)
 
 
 # ------------------------------------------------------------

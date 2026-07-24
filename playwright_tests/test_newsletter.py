@@ -1140,12 +1140,10 @@ class TestScenario12DiscoverSubscribeFromPricing:
         1. Navigate to /pricing
         2. Find the Free tier card
 
-        Issue #652 replaced the Free-tier "Create an account" button
-        with an inline registration card; signing up no longer requires
-        leaving /pricing. The free-tier signup grants implicit
-        newsletter access (see opt-in disclosure rendered by the
-        inline-register partial), so this scenario now verifies the
-        inline CTA is present and discoverable.
+        The Free-tier CTA is a single Join button that links to the
+        register page; creating a free account grants implicit newsletter
+        access. This scenario verifies the Join CTA is present, points at
+        the register page, and rounds ?next= back to /pricing.
         """
         _ensure_tiers()
 
@@ -1172,20 +1170,15 @@ class TestScenario12DiscoverSubscribeFromPricing:
 
         assert free_card is not None, "Free tier card not found"
 
-        # Then: Free tier surfaces the inline-register card (no nav).
-        inline_card = free_card.locator(
-            "[data-testid='inline-register-card']"
+        # Then: Free tier surfaces a single Join CTA to the register page.
+        signup_cta = free_card.locator(
+            "[data-testid='pricing-free-signup-cta']"
         )
-        assert inline_card.count() == 1, (
-            "Free tier should render the inline-register card "
-            "(#652) so visitors can sign up without leaving /pricing"
+        assert signup_cta.count() == 1, (
+            "Free tier should render a Join button so visitors can create "
+            "a free account"
         )
-        # And it surfaces the implicit newsletter opt-in disclosure
-        # (#653) so the newsletter-subscription side-effect is explicit.
-        opt_in = inline_card.locator(
-            "[data-testid='inline-register-opt-in']"
-        )
-        assert opt_in.count() == 1
-        assert "newsletter" in opt_in.inner_text().lower() or (
-            "community updates" in opt_in.inner_text().lower()
+        assert (
+            signup_cta.get_attribute("href")
+            == "/accounts/register/?next=/pricing"
         )

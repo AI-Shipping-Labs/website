@@ -62,15 +62,11 @@ class PricingFreeTierCTATest(TierSetupMixin, TestCase):
 
     def test_anonymous_user_sees_free_tier_signup_cta(self):
         response = self.client.get("/pricing")
-        # Post-CTA-swap + #652 inline-form: the free tier embeds the
-        # registration form directly on /pricing. The form's testid +
-        # email input id are the stable hooks.
-        self.assertContains(
-            response,
-            'data-testid="inline-register-card"',
-            msg_prefix="Free tier should render the inline register form",
-        )
-        self.assertContains(response, 'id="register-email"')
+        # The free tier is a single Join button linking to the standalone
+        # register page (the inline register form was retired).
+        self.assertContains(response, 'data-testid="pricing-free-signup-cta"')
+        self.assertContains(response, 'href="/accounts/register/?next=/pricing"')
+        self.assertNotContains(response, 'data-testid="inline-register-card"')
         self.assertNotContains(response, 'href="/#newsletter"')
 
     def test_authenticated_user_does_not_see_free_tier_subscribe_button(self):

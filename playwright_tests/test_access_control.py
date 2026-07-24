@@ -998,8 +998,8 @@ class TestScenario2FreeMemberHitsBasicGatedArticle:
         assert 'href="/accounts/register/?next=/blog/basic-gated-article"' not in body
         assert 'href="/accounts/login/?next=/blog/basic-gated-article"' not in body
 
-        # Click View Pricing
-        pricing_link = page.locator('a:has-text("View Pricing")')
+        # Click Upgrade (paid wall -> Pricing)
+        pricing_link = page.get_by_test_id("gated-pricing-link")
         assert pricing_link.count() >= 1
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
@@ -1085,7 +1085,7 @@ class TestScenario3BasicMemberReadsBasicBlockedOnMain:
         assert "Upgrade to Main to read this article" in body
 
         # Pricing link
-        pricing_link = page.locator('a:has-text("View Pricing")')
+        pricing_link = page.get_by_test_id("gated-pricing-link")
         assert pricing_link.count() >= 1
         href = pricing_link.first.get_attribute("href")
         assert "/pricing" in href
@@ -1186,8 +1186,8 @@ class TestScenario4MainMemberReadsUpToLevelBlockedOnPremium:
         # CTA
         assert "Upgrade to Premium to read this article" in body
 
-        # View Pricing link
-        pricing_link = page.locator('a:has-text("View Pricing")')
+        # Upgrade link (paid wall -> Pricing)
+        pricing_link = page.get_by_test_id("gated-pricing-link")
         assert pricing_link.count() >= 1
 # ---------------------------------------------------------------
 # Scenario 5: Premium member has unrestricted access
@@ -1336,13 +1336,14 @@ class TestScenario6AnonymousGatedArticleViaSharedLink:
             not in body
         )
 
-        # Issue #1335: anonymous guest keeps the upgrade heading plus a
-        # no-cost account companion.
+        # Anonymous guest on a paid (Premium) wall sees the upgrade path
+        # only — a free account grants no paid access, so there is no
+        # "Create a free account" companion.
         assert "Upgrade to Premium to read this article" in body
-        assert "Create a free account" in body
+        assert "Create a free account" not in body
 
-        # View Pricing link
-        pricing_link = page.locator('a:has-text("View Pricing")')
+        # Upgrade link (paid wall -> Pricing)
+        pricing_link = page.get_by_test_id("gated-pricing-link")
         assert pricing_link.count() >= 1
 # ---------------------------------------------------------------
 # Scenario 7: Basic member blocked from Main-gated recording,
@@ -1602,7 +1603,9 @@ class TestScenario10StaffChangesVisibilityInStudio:
         body = anon_page.content()
         assert "Visibility Test Article" in body
         assert "Upgrade to Basic to read this article" in body
-        assert "Create a free account" in body
+        # Basic-gated (paid) wall: no "Create a free account" companion —
+        # a free account grants no paid access.
+        assert "Create a free account" not in body
         assert (
             "Full body content that should be gated after change"
             not in body

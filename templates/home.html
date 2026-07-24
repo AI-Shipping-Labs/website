@@ -389,7 +389,9 @@
         </ul>
       </div>
       <div class="w-full max-w-md justify-self-center lg:justify-self-end" data-testid="home-join-free-form">
-        {% include "accounts/includes/_inline_register_card.html" with collapse_email=True %}
+        <div class="rounded-lg border border-border bg-card p-5 sm:p-6">
+          {% include "accounts/includes/_signup_actions.html" %}
+        </div>
       </div>
     </div>
   </section>
@@ -526,9 +528,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="/static/js/accounts/auth-helpers.js"></script>
-{{ next_url|json_script:"auth-next-url" }}
-<script src="/static/js/accounts/inline-register.js"></script>
 <script>
 function toggleFaq(btn) {
   var content = btn.nextElementSibling;

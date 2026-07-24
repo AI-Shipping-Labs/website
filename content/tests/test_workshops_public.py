@@ -1474,10 +1474,9 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/ws')
         self.assertContains(response, 'data-testid="workshop-pages-paywall"')
         self.assertContains(response, 'Upgrade to Basic to access this workshop')
-        self.assertContains(
-            response,
-            'membership unlocks the step-by-step tutorial.',
-        )
+        # The paywall renders a value manifest of what membership unlocks.
+        self.assertContains(response, 'data-testid="gated-value-items"')
+        self.assertContains(response, 'Step-by-step tutorial')
         self.assertNotContains(response, 'public metadata')
         # Issue #481: paywall pill reads "Basic or above required".
         self.assertContains(response, 'Basic or above required')
@@ -1501,45 +1500,37 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'data-testid="workshop-pages-paywall"')
         # Sign-In-shaped heading and CTAs.
         self.assertContains(response, 'Sign in to access this workshop')
+        # Free-with-sign-in badge, no tier pill.
+        self.assertContains(response, 'data-testid="gated-free-badge"')
+        self.assertNotContains(response, 'data-testid="gated-required-tier"')
+        # Sign-in companion link with next= preserved.
         self.assertContains(
             response,
             '/accounts/login/?next=%2Fworkshops%2Freg-ws',
         )
-        self.assertContains(response, 'Sign In')
-        # Issue #652: the legacy "Create a free account" secondary
-        # button was replaced by the inline register card. The wrapper
-        # testid (`teaser-signup-cta`) is retained but now scopes the
-        # inline card instead of a link button. The signup URL still
-        # lives in the view context for back-compat but no longer
-        # renders as a button on this surface.
+        self.assertContains(response, 'Sign in')
+        # The signup action stack renders a "Create a free account" button
+        # (no inline register form/card) pointing at the register/signup page.
         self.assertContains(response, 'data-testid="teaser-signup-cta"')
-        self.assertContains(response, 'data-testid="inline-register-card"')
-        # The inline card's login link still carries the workshop next
-        # URL (un-encoded slashes are fine — Django's urlencode filter
-        # only encodes the special chars allauth's view will normalize).
+        self.assertContains(response, 'Create a free account')
+        self.assertNotContains(response, 'data-testid="inline-register-card"')
         self.assertContains(
             response,
-            '/accounts/login/?next=/workshops/reg-ws',
+            '/accounts/signup/?next=%2Fworkshops%2Freg-ws',
         )
         # The broken "Upgrade to Free" copy and the /pricing CTA must be
-        # gone on this surface (the regression the PM rejected). The
-        # tier pill is also dropped — there's no tier to display when
-        # the visitor just needs to authenticate. The /pricing href on
-        # the header chrome is unrelated; the assertion below scopes to
-        # the paywall card's upgrade CTA by data-testid.
+        # gone on this surface — the visitor just needs to authenticate.
         self.assertNotContains(response, 'Upgrade to Free')
         body = response.content.decode()
-        # Locate the paywall CTA and assert the primary CTA is NOT a
-        # /pricing link (it must be /accounts/login/). Scope tightly
-        # around the CTA itself to avoid matching unrelated header/footer
-        # pricing links.
+        # Scope to the paywall card and assert its actions point at auth
+        # (login/signup), never /pricing.
         card_start = body.index('data-testid="workshop-pages-paywall"')
-        cta_index = body.index(
-            'data-testid="workshop-pages-upgrade-cta"', card_start,
-        )
-        card_slice = body[max(card_start, cta_index - 400):cta_index + 200]
-        self.assertIn('data-testid="workshop-pages-upgrade-cta"', card_slice)
+        card_end = body.index('</div>', body.index(
+            'data-testid="signup-actions"', card_start,
+        ))
+        card_slice = body[card_start:card_end + 6]
         self.assertIn('/accounts/login/?next=', card_slice)
+        self.assertNotIn('href="/pricing"', card_slice)
         self.assertNotIn(
             'href="/pricing"', card_slice,
             'pages paywall must not link to /pricing for anonymous '
@@ -2218,7 +2209,7 @@ class WorkshopPagePerPageOverrideViewTest(TierSetupMixin, TestCase):
         self.assertContains(
             response, 'data-testid="page-paywall"', status_code=403,
         )
-        self.assertContains(response, 'Sign In', status_code=403)
+        self.assertContains(response, 'Sign in', status_code=403)
         # CTA preserves the return URL (URL-encoded in href).
         self.assertContains(
             response,
@@ -2469,32 +2460,25 @@ class WorkshopPagesPaywallInlineRegisterTest(TierSetupMixin, TestCase):
         )
         _make_page(cls.workshop, 'intro', 'Intro', 1)
 
-    def test_anonymous_pages_paywall_shows_inline_form(self):
+    def test_anonymous_pages_paywall_shows_signup_actions(self):
         response = self.client.get('/workshops/anon-pages')
         self.assertEqual(response.status_code, 200)
         # Paywall card is rendered.
         self.assertContains(response, 'data-testid="workshop-pages-paywall"')
-        # Inline register card replaces the "Create a free account" button.
-        self.assertContains(response, 'data-testid="inline-register-card"')
-        self.assertContains(response, 'id="register-email"')
-        # Login link inside the inline card carries ?next=workshop URL.
+        # The free-with-sign-in branch renders the shared signup-actions stack
+        # (OAuth-first buttons + a "Create a free account" button + a sign-in
+        # link), not an inline register form.
+        self.assertContains(response, 'data-testid="signup-actions"')
+        self.assertContains(response, 'data-testid="teaser-signup-cta"')
+        self.assertContains(response, 'data-testid="teaser-signin-cta"')
+        self.assertContains(response, 'Create a free account')
+        # The retired inline register card / email input are gone.
+        self.assertNotContains(response, 'data-testid="inline-register-card"')
+        self.assertNotContains(response, 'id="register-email"')
+        # Sign-in link carries the workshop ?next= (URL-encoded in href).
         self.assertContains(
             response,
-            '/accounts/login/?next=/workshops/anon-pages',
-        )
-        # The legacy secondary button must NOT be rendered when signup_inline
-        # is True.
-        body = response.content.decode()
-        paywall_start = body.index('data-testid="workshop-pages-paywall"')
-        # Scan a generous window past the start so we capture the full
-        # card markup including OAuth/legal partials inside the inline
-        # register card.
-        paywall_window = body[paywall_start:paywall_start + 6000]
-        # The user-plus icon button used to live inside the card; it
-        # must be gone when signup_inline replaces the link.
-        self.assertNotIn(
-            '<i data-lucide="user-plus" class="h-4 w-4"></i>',
-            paywall_window,
+            '/accounts/login/?next=%2Fworkshops%2Fanon-pages',
         )
 
     def test_anonymous_pages_paywall_loads_inline_register_js(self):

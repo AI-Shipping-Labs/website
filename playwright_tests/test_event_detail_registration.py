@@ -317,26 +317,15 @@ class TestAnonymousPaidEventCopy:
         assert "free account" not in card_text.lower()
         assert "create a free account" not in card_text.lower()
 
-        # Primary CTA: "View membership options" -> /pricing
+        # Primary CTA: "View membership options" -> /pricing. The paid
+        # (tier-gated) card renders the single Upgrade path; a free account
+        # grants no paid access, so there is no signup/sign-in companion.
         pricing_cta = card.locator(
             '[data-testid="event-anonymous-pricing-cta"]'
         )
         assert pricing_cta.count() == 1
         assert pricing_cta.get_attribute("href") == "/pricing"
         assert "View membership options" in pricing_cta.inner_text()
-
-        # Secondary CTA: "Sign in" preserving ?next= to event URL.
-        signin_cta = card.locator(
-            '[data-testid="event-anonymous-signin-cta"]'
-        )
-        assert signin_cta.count() == 1
-        signin_href = signin_cta.get_attribute("href")
-        assert signin_href.startswith("/accounts/login/?next=")
-        assert (
-            "solving-a-real-ai-engineer-take-home-assignment-live-fixture"
-            in signin_href
-        )
-        assert signin_cta.inner_text().strip() == "Sign in"
 
     def test_clicking_view_membership_options_lands_on_pricing(
         self, django_server, page

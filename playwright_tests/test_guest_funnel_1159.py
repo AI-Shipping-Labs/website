@@ -56,6 +56,31 @@ def _seed_basic_article(slug="guest-funnel-basic-article"):
     return article.get_absolute_url()
 
 
+def _seed_registered_article(slug="guest-funnel-registered-article"):
+    """Seed a free-with-sign-in article (LEVEL_REGISTERED) whose gated
+    card offers the "Create a free account" path to anonymous visitors."""
+    from django.db import connection
+
+    from content.models import Article
+
+    ensure_tiers()
+    article, _ = Article.objects.update_or_create(
+        slug=slug,
+        defaults={
+            "title": "Guest Funnel Registered Article",
+            "description": "A free-with-sign-in article teaser.",
+            "content_markdown": "# Registered\n\nSECRET REGISTERED ARTICLE BODY",
+            "content_html": "<h1>Registered</h1><p>SECRET REGISTERED ARTICLE BODY</p>",
+            "date": date(2026, 7, 1),
+            "published": True,
+            "page_type": "blog",
+            "required_level": 5,
+        },
+    )
+    connection.close()
+    return article.get_absolute_url()
+
+
 def _seed_free_user(email):
     create_user(
         email=email,
@@ -138,12 +163,15 @@ class TestGuestFunnel1159:
             )
             body = guest_page.content()
             assert "SECRET PAID ARTICLE BODY" not in body
-            # Issue #1335: unified upgrade card — upgrade heading + Pricing
-            # plus a no-cost account path and a sign-in link.
+            # Paid (Basic) wall: a single Upgrade card to Pricing. A free
+            # account grants no paid access, so no free-signup CTA is
+            # offered here.
             assert "Upgrade to Basic to read this article" in body
-            assert f'href="/accounts/signup/?next={article_path}"' in body
-            assert f'href="/accounts/login/?next={article_path}"' in body
             expect(guest_page.get_by_test_id("gated-pricing-link")).to_be_visible()
+            expect(
+                guest_page.get_by_test_id("gated-create-free-account-link")
+            ).to_have_count(0)
+            assert f'href="/accounts/signup/?next={article_path}"' not in body
             _screenshot(guest_page, "guest-paid-article-paywall")
         finally:
             guest_context.close()
@@ -165,14 +193,18 @@ class TestGuestFunnel1159:
     def test_gated_article_signup_returns_as_authenticated_free_member(
         self, django_server, page, django_db_blocker
     ):
+        # A free-with-sign-in (registered) article offers the "Create a
+        # free account" path to anonymous visitors. Signing up returns the
+        # visitor to the article as an authenticated (but unverified) free
+        # member, who then sees the verify-email gate.
         with django_db_blocker.unblock():
-            article_path = _seed_basic_article("signup-return-1159")
+            article_path = _seed_registered_article("signup-return-1159")
         email = _email("signup-return-1159")
 
         page.goto(f"{django_server}{article_path}", wait_until="domcontentloaded")
         page.get_by_test_id("gated-create-free-account-link").click()
-        # Issue #1335: signup routes through /accounts/signup/ which redirects
-        # to the registration page carrying the same next target.
+        # Signup routes through /accounts/signup/ which redirects to the
+        # registration page carrying the same next target.
         page.wait_for_url("**/accounts/register/**", timeout=5000)
 
         page.fill("#register-email", email)
@@ -182,8 +214,9 @@ class TestGuestFunnel1159:
 
         page.wait_for_url(f"{django_server}{article_path}", timeout=10000)
         expect(page.get_by_test_id("account-menu-trigger")).to_be_visible()
-        body = page.content()
-        assert "Upgrade to Basic to read this article" in body
+        # Unverified free member: the article now shows the verify-email
+        # gate (free content, but the email is not verified yet).
+        expect(page.get_by_test_id("verify-email-required-card")).to_be_visible()
 
         with django_db_blocker.unblock():
             from accounts.models import User

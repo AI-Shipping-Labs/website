@@ -465,9 +465,7 @@ class TestScenario4FreeMemberCannotEnroll:
         assert enroll_btn.count() == 0
 
         # Then: Upgrade CTA links to /pricing
-        pricing_link = page.locator(
-            'a:has-text("View Pricing")'
-        )
+        pricing_link = page.get_by_test_id("course-gated-cta-button")
         assert pricing_link.count() >= 1
         href = pricing_link.first.get_attribute("href")
         assert "/pricing" in href
@@ -524,13 +522,11 @@ class TestScenario5AnonymousVisitorSeesCohortAndPricing:
         )
         assert enroll_btn.count() == 0
 
-        # Then: A "View Pricing" CTA is visible
-        pricing_link = page.locator(
-            'a:has-text("View Pricing")'
-        )
+        # Then: An Upgrade CTA is visible
+        pricing_link = page.get_by_test_id("course-gated-cta-button")
         assert pricing_link.count() >= 1
 
-        # Step 2: Click the "View Pricing" link
+        # Step 2: Click the Upgrade CTA
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 

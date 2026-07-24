@@ -33,10 +33,6 @@ from playwright_tests.conftest import (
 )
 
 FOOTER_HEADING = 'Build AI in public, with a group.'
-INLINE_OPT_IN_COPY = (
-    "Sign up for free to receive community updates. "
-    "You can unsubscribe at any time."
-)
 
 
 def _reset_state():
@@ -132,9 +128,9 @@ class TestFooterNewsletterSuppression:
             f'{django_server}/courses/supp-653-course',
             wait_until='domcontentloaded',
         )
-        # Inline register card is the visible signup form.
+        # The shared signup-actions stack is the visible signup surface.
         assert page.locator(
-            "[data-testid='inline-register-card']",
+            "[data-testid='signup-actions']",
         ).is_visible()
         # Footer newsletter heading is absent — count returns 0.
         assert page.get_by_role(
@@ -200,9 +196,9 @@ class TestFooterNewsletterSuppression:
             f'{django_server}/workshops/supp-653-workshop',
             wait_until='domcontentloaded',
         )
-        # Inline register card renders (pages paywall + signup CTA).
+        # The shared signup-actions stack renders (pages paywall + signup CTA).
         assert page.locator(
-            "[data-testid='inline-register-card']",
+            "[data-testid='signup-actions']",
         ).is_visible()
         # Footer newsletter is gone.
         assert page.get_by_role(
@@ -256,29 +252,6 @@ class TestFooterNewsletterSuppression:
     # ----------------------------------------------------------------
     # Inline opt-in disclosure copy
     # ----------------------------------------------------------------
-
-    def test_inline_form_discloses_implicit_newsletter_opt_in(
-        self, django_server, page, django_db_blocker,
-    ):
-        """The inline register card on /courses/<slug> renders the new
-        opt-in disclosure line near the submit button."""
-        with django_db_blocker.unblock():
-            _reset_state()
-            ensure_tiers()
-            _seed_free_course()
-
-        page.goto(
-            f'{django_server}/courses/supp-653-course',
-            wait_until='domcontentloaded',
-        )
-        # The disclosure is located inside the inline register card.
-        inline_card = page.locator("[data-testid='inline-register-card']")
-        assert inline_card.is_visible()
-        disclosure = inline_card.locator(
-            "[data-testid='inline-register-opt-in']",
-        )
-        assert disclosure.is_visible()
-        assert INLINE_OPT_IN_COPY in disclosure.inner_text()
 
     def test_standalone_register_page_does_not_show_opt_in_disclosure(
         self, django_server, page, django_db_blocker,

@@ -74,7 +74,7 @@ def test_capture_homepage_ia_review_matrix(
             expect(tiers.locator('[data-testid="home-tier-card"]')).to_have_count(3)
             expect(tiers.locator('[data-tier-card="free"]')).to_have_count(0)
             expect(tiers.locator("form, input, [data-auth-oauth-providers]")).to_have_count(0)
-            expect(join.locator("#register-form")).to_have_count(1)
+            expect(join.locator("[data-testid='signup-actions']")).to_have_count(1)
             assert join.evaluate("el => !el.closest('[data-tier-carousel]')")
             if width == 393:
                 carousel = page.get_by_test_id("home-tier-carousel")
@@ -92,15 +92,6 @@ def test_capture_homepage_ia_review_matrix(
                     arg=carousel.element_handle(),
                 )
                 assert centered_delta.json_value() < 60
-                expect(page.get_by_test_id("header-join-free-link")).to_be_visible()
-                if theme == "dark":
-                    page.locator("#register-email").fill("visual-error@example.com")
-                    page.locator("#register-password").fill("Password123!")
-                    page.locator("#register-password-confirm").fill("Different123!")
-                    page.locator("#register-submit").click()
-                    expect(page.locator("#register-error")).to_have_text(
-                        "Passwords do not match"
-                    )
         else:
             expect(page.get_by_role("heading", name="Recent content", exact=True)).to_be_visible()
             expect(page.locator("#join-free, #register-form")).to_have_count(0)

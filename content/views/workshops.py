@@ -823,7 +823,7 @@ def _build_landing_context(workshop, user):
     # Sign-In-shaped copy to match _build_page_gated_context.
     pages_cta_message = ''
     pages_cta_url = ''
-    pages_cta_label = 'View Pricing'
+    pages_cta_label = 'Upgrade'
     pages_gated_description = (
         'The workshop overview and page list are visible now; '
         'membership unlocks the step-by-step tutorial.'
@@ -930,7 +930,7 @@ def _build_landing_context(workshop, user):
         'recording_cta_message': recording_cta_message,
         'recording_cta_url': recording_cta_url,
         'current_user_state': current_user_state,
-        'landing_cta_label': 'View Pricing',
+        'landing_cta_label': 'Upgrade',
         'recording_cta_label': f'Upgrade to {recording_tier_name}',
         'freestyle_evidence': _freestyle_evidence_for_workshop(
             workshop, landing_gated_reason, pages_gated_reason,

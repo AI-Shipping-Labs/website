@@ -187,7 +187,7 @@ def test_visitor_can_still_start_free_course_inline(django_server, page):
     page.goto(f"{django_server}/courses/free-1225", wait_until="domcontentloaded")
 
     expect(page.locator("article header")).to_contain_text("Free")
-    expect(page.get_by_test_id("inline-register-card")).to_be_visible()
+    expect(page.get_by_test_id("signup-actions")).to_be_visible()
     expect(page.get_by_test_id("course-gated-cta")).to_have_count(0)
     expect(page.get_by_test_id("gated-required-tier")).to_have_count(0)
     _assert_no_horizontal_overflow(page)
@@ -268,7 +268,7 @@ def test_anonymous_registered_article_shows_account_path(django_server, page):
     gate = page.get_by_test_id("gated-access-card")
     expect(gate).to_contain_text("Sign in to read this article")
     expect(gate).to_contain_text("This article is free")
-    signin = gate.get_by_role("link", name="Sign In", exact=True)
+    signin = gate.get_by_test_id("gated-sign-in-link")
     signup = gate.get_by_role("link", name="Create a free account", exact=True)
     expect(signin).to_be_visible()
     expect(signup).to_be_visible()
@@ -306,7 +306,7 @@ def test_anonymous_registered_tutorial_shows_account_path(django_server, page):
     assert "SECRET TUTORIAL BODY 1335" not in body
     gate = page.get_by_test_id("gated-access-card")
     expect(gate).to_contain_text("Sign in to read this tutorial")
-    expect(gate.get_by_role("link", name="Sign In", exact=True)).to_be_visible()
+    expect(gate.get_by_test_id("gated-sign-in-link")).to_be_visible()
     expect(
         gate.get_by_role("link", name="Create a free account", exact=True)
     ).to_be_visible()
@@ -316,11 +316,13 @@ def test_anonymous_registered_tutorial_shows_account_path(django_server, page):
 
 
 @pytest.mark.core
-def test_anonymous_paid_article_shows_upgrade_and_account_paths(
+def test_anonymous_paid_article_shows_upgrade_only(
     django_server, page,
 ):
-    # Issue #1335: an anonymous visitor on a Basic-gated article keeps the
-    # upgrade path plus a free-account companion and a sign-in link.
+    # An anonymous visitor on a Basic-gated (paid) article sees the
+    # two-zone upgrade card: an "Upgrade" CTA to Pricing and the tier
+    # pill. A free account grants no paid access, so no "Create a free
+    # account" CTA is offered on a paid wall.
     _reset_content()
     article = _article("paid-article-1335", required_level=10)
     _prepare_page(page, theme="light")
@@ -336,10 +338,8 @@ def test_anonymous_paid_article_shows_upgrade_and_account_paths(
     expect(page.get_by_test_id("gated-pricing-link")).to_be_visible()
     expect(
         gate.get_by_role("link", name="Create a free account", exact=True)
-    ).to_be_visible()
-    expect(
-        gate.get_by_role("link", name="Already a member? Sign in", exact=True)
-    ).to_be_visible()
+    ).to_have_count(0)
+    expect(page.get_by_test_id("gated-create-free-account-link")).to_have_count(0)
 
 
 @pytest.mark.core
@@ -368,7 +368,7 @@ def test_free_member_paid_article_shows_upgrade_only(django_server, browser):
 
 
 @pytest.mark.core
-def test_guest_project_keeps_free_and_paid_next_steps(django_server, page):
+def test_guest_project_shows_upgrade_only(django_server, page):
     _reset_content()
     project = _project()
     _prepare_page(page, theme="light")
@@ -380,21 +380,19 @@ def test_guest_project_keeps_free_and_paid_next_steps(django_server, page):
     assert "filter: blur(8px)" not in body
     gate = page.get_by_test_id("project-paywall")
     expect(gate).to_contain_text("Basic or above required")
+    # Paid wall: a single "Upgrade" CTA to Pricing, no free-account CTA
+    # (a free account grants no paid access).
     expect(page.get_by_test_id("project-upgrade-cta")).to_be_visible()
-    expect(page.get_by_test_id("gated-create-free-account-link")).to_be_visible()
-    expect(page.get_by_test_id("gated-sign-in-link")).to_be_visible()
+    expect(page.get_by_test_id("gated-create-free-account-link")).to_have_count(0)
+    expect(page.get_by_test_id("gated-sign-in-link")).to_have_count(0)
     _assert_no_horizontal_overflow(page)
     _capture(page, "project-desktop-light")
     page.set_viewport_size({"width": 390, "height": 844})
     _assert_no_horizontal_overflow(page)
     _capture(page, "project-mobile-light")
-    # Issue #1335: the signup companion now routes through /accounts/signup/
-    # (which redirects to the registration page) carrying the next target.
-    expect(page.get_by_test_id("gated-create-free-account-link")).to_have_attribute(
-        "href", f"/accounts/signup/?next={project.get_absolute_url()}"
-    )
-    page.get_by_test_id("gated-create-free-account-link").click()
-    page.wait_for_url("**/accounts/register/**")
+    # The upgrade CTA routes to Pricing.
+    page.get_by_test_id("project-upgrade-cta").click()
+    page.wait_for_url(f"{django_server}/pricing")
 
 
 @pytest.mark.core

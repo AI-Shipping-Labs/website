@@ -350,8 +350,11 @@ def test_gated_workshop_table_stays_local_and_gate_stays_intact(django_server, p
     _assert_table_scrolls_locally(teaser.locator("table"))
     expect(page.get_by_test_id("teaser-body-wrapper")).to_be_visible()
     expect(page.get_by_test_id("page-body")).to_have_count(0)
-    expect(page.get_by_role("link", name="View Pricing")).to_be_visible()
-    expect(page.get_by_role("link", name="Create a free account")).to_be_visible()
+    # Basic-gated (paid) workshop page: a single Upgrade CTA, no
+    # "Create a free account" companion (a free account grants no paid
+    # access).
+    expect(page.get_by_test_id("page-upgrade-cta")).to_be_visible()
+    expect(page.get_by_role("link", name="Create a free account")).to_have_count(0)
     _assert_document_fits(page)
 
 

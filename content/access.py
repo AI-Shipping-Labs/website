@@ -429,7 +429,7 @@ def build_gated_access_copy(
             'required_tier_name': '',
             'current_user_state': '',
             'gated_cta_url': login_url,
-            'gated_cta_label': 'Sign In',
+            'gated_cta_label': 'Sign in',
             'signup_cta_url': signup_url,
             'signup_cta_label': 'Create a free account',
             'signin_cta_url': '',

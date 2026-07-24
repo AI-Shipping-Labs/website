@@ -165,7 +165,7 @@ class TestBlogBrowserSmoke:
         assert "Upgrade to Basic to read this article" in body
         assert "Create a free account" not in body
 
-        pricing_link = page.locator('a:has-text("View Pricing")')
+        pricing_link = page.get_by_test_id("gated-pricing-link")
         assert pricing_link.count() >= 1
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")

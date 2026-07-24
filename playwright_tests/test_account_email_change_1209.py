@@ -239,7 +239,7 @@ class TestMemberConfirmsEmailChange:
             "Your account email was changed successfully."
         )
         expect(page.locator("[data-testid='email-change-result-cta']")).to_contain_text(
-            "Sign In"
+            "Sign in"
         )
         expect(page.locator("[data-testid='email-change-result-cta']")).to_have_attribute(
             "href", "/accounts/login/"

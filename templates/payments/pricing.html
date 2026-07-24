@@ -8,36 +8,6 @@
 <main class="min-h-screen">
   {% include "includes/header.html" %}
 
-  <style>
-    @media (max-width: 1023px) {
-      #pricing-section .pricing-free-tier-card .pricing-inline-register-embed > div {
-        max-width: none;
-        border-width: 0;
-        background: transparent;
-        padding: 0;
-      }
-
-      #pricing-section .pricing-free-tier-card .pricing-inline-register-embed [data-auth-oauth-divider] {
-        margin-bottom: 1rem;
-        margin-top: 1rem;
-      }
-
-      #pricing-section .pricing-free-tier-card .pricing-inline-register-embed [data-auth-oauth-providers] a,
-      #pricing-section .pricing-free-tier-card .pricing-inline-register-embed button[aria-controls="inline-register-email-block"] {
-        padding-bottom: 0.625rem;
-        padding-top: 0.625rem;
-      }
-
-      #pricing-section .pricing-free-tier-card .pricing-inline-register-embed > div > .mt-6 {
-        margin-top: 1rem;
-      }
-
-      #pricing-section .pricing-free-tier-card .pricing-inline-register-embed > div > .mt-3 {
-        margin-top: 0.5rem;
-      }
-    }
-  </style>
-
   {# Issue #510: tighten mobile vertical spacing on the pricing tier section #}
   <section class="overflow-x-hidden max-lg:pb-6 pt-32 sm:pb-24 lg:pb-32" id="pricing-section">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -188,8 +158,8 @@
               {{ item.state.action_label }}
             </span>
             {% elif item.state.action_kind == 'signup' %}
-            {# Free tier: a single Join button that sends the visitor to the
-               register page (the inline register form was removed here). #}
+            {% comment %}Free tier: a single Join button that sends the visitor to the
+               register page (the inline register form was removed here).{% endcomment %}
             <a href="{% url 'account_register' %}?next=/pricing"
                class="{% button_classes 'secondary' size='lg' extra='w-full' %}"
                data-testid="pricing-free-signup-cta">
@@ -249,15 +219,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-{% comment %}
-  Issue #652: load the inline register handler for the free-tier card
-  when an anonymous visitor sees the signup CTA.
-{% endcomment %}
-{% if not user.is_authenticated %}
-<script src="/static/js/accounts/auth-helpers.js"></script>
-{{ next_url|json_script:"auth-next-url" }}
-<script src="/static/js/accounts/inline-register.js"></script>
-{% endif %}
 <script>
 // Checkout cancelled feedback from Stripe Payment Links.
 (function() {

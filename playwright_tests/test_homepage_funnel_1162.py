@@ -1,6 +1,5 @@
 import os
 from datetime import date, timedelta
-from uuid import uuid4
 
 import pytest
 from django.utils import timezone
@@ -22,10 +21,6 @@ pytestmark = [
 ]
 
 
-def _email(prefix):
-    return f"{prefix}-{uuid4().hex[:8]}@example.com"
-
-
 def _seed_homepage_tiers(django_db_blocker):
     with django_db_blocker.unblock():
         from allauth.socialaccount.models import SocialApp
@@ -35,11 +30,10 @@ def _seed_homepage_tiers(django_db_blocker):
         ensure_site_config_tiers()
 
 
-def test_homepage_separate_free_section_creates_account(
+def test_homepage_separate_free_section_links_to_register(
     django_server, page, django_db_blocker
 ):
     _seed_homepage_tiers(django_db_blocker)
-    email = _email("home-1162")
 
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
     tiers = page.locator("#tiers")
@@ -48,22 +42,23 @@ def test_homepage_separate_free_section_creates_account(
     page.goto(f"{django_server}/#join-free", wait_until="domcontentloaded")
     join_section = page.locator("#join-free")
     expect(join_section).to_be_visible()
-    expect(join_section.locator("#register-form")).to_be_visible()
+    # The join-free section renders the shared signup-actions stack
+    # (no inline register form) and sits outside the tier carousel.
+    actions = join_section.locator("[data-testid='signup-actions']")
+    expect(actions).to_be_visible()
+    expect(join_section.locator("#register-form")).to_have_count(0)
     assert join_section.evaluate("el => !el.closest('[data-tier-carousel]')")
-    expect(
-        page.get_by_text(
-            "Sign up for free to receive community updates. "
-            "You can unsubscribe at any time."
-        )
-    ).to_be_visible()
-    page.locator("#register-email").fill(email)
-    page.locator("#register-password").fill("Password123!")
-    page.locator("#register-password-confirm").fill("Password123!")
-    page.locator("#register-submit").click()
-
-    page.wait_for_url(f"{django_server}/", timeout=10000)
-    expect(page.locator('[data-testid="account-menu-trigger"]')).to_be_visible()
-    expect(page.locator('[data-testid="header-join-free-link"]')).to_have_count(0)
+    # The primary CTA sends the visitor to the register page.
+    signup_cta = actions.locator("[data-testid='teaser-signup-cta']")
+    expect(signup_cta).to_be_visible()
+    href = signup_cta.get_attribute("href")
+    assert href is not None
+    assert href.startswith("/accounts/register/")
+    # And a "Sign in" companion link routes to the login page.
+    signin_cta = actions.locator("[data-testid='teaser-signin-cta']")
+    href_signin = signin_cta.get_attribute("href")
+    assert href_signin is not None
+    assert href_signin.startswith("/accounts/login/")
 
 
 def test_homepage_free_handoff_keeps_oauth_on_dedicated_page_only(
@@ -94,7 +89,7 @@ def test_homepage_free_handoff_keeps_oauth_on_dedicated_page_only(
     expect(page.locator("#tiers").get_by_role("link", name="Sign up with Google")).to_have_count(0)
 
 
-def test_homepage_slack_only_signup_keeps_email_expanded(
+def test_homepage_slack_only_signup_keeps_register_link_usable(
     django_server, page, django_db_blocker
 ):
     with django_db_blocker.unblock():
@@ -113,14 +108,19 @@ def test_homepage_slack_only_signup_keeps_email_expanded(
         app.sites.add(Site.objects.get_current())
         connection.close()
 
+    # Slack is not offered as a sign-up provider, so the OAuth row renders
+    # nothing. The signup-actions stack must never become a dead end: the
+    # "Create a free account" and "Sign in" links stay usable.
     page.goto(f"{django_server}/#join-free", wait_until="domcontentloaded")
     join_section = page.locator("#join-free")
-    expect(join_section.locator("#register-email")).to_be_visible()
+    expect(
+        join_section.locator("[data-testid='teaser-signup-cta']")
+    ).to_be_visible()
+    expect(
+        join_section.locator("[data-testid='teaser-signin-cta']")
+    ).to_be_visible()
     expect(join_section.locator("[data-auth-oauth-divider]")).to_have_count(0)
     expect(join_section.locator("[data-auth-oauth-providers]")).to_have_count(0)
-    expect(
-        join_section.locator('[data-testid="inline-register-email-toggle"]')
-    ).to_have_count(0)
     expect(join_section.get_by_role("link", name="Sign up with Slack")).to_have_count(0)
 
 
@@ -194,7 +194,7 @@ def test_homepage_mobile_all_paid_tiers_and_separate_free_path_are_reachable(
     page.goto(f"{django_server}/#join-free", wait_until="domcontentloaded")
     join_section = page.locator("#join-free")
     expect(join_section).to_be_visible()
-    expect(join_section.locator("#register-form")).to_be_visible()
+    expect(join_section.locator("[data-testid='signup-actions']")).to_be_visible()
     assert page.evaluate(
         "() => document.documentElement.scrollWidth - window.innerWidth"
     ) <= 1

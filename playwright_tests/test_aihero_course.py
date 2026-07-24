@@ -263,19 +263,17 @@ class TestScenario2AnonymousLandingPageSignupCTA:
         assert "Day 6: Publish Your Agent" in body
         assert "Day 7: Share Results and Peer Review" in body
 
-        # Sign up free CTA — issue #652 replaced the "Sign Up Free"
-        # anchor with an inline-register card on free-anon course pages.
-        # The cta_message text "Sign up free to start this course" still
-        # appears above the card; assert the card is rendered and ready.
+        # Sign up free CTA — the free-anon course CTA now renders the
+        # shared signup-actions partial ("Create a free account" +
+        # "Sign in" link + OAuth buttons). The cta_message text
+        # "Sign up free to start this course" still appears above it.
         assert "sign up free" in body.lower()
-        inline_card = page.locator(
-            "[data-testid='inline-register-card']"
-        )
-        assert inline_card.count() == 1
-        assert inline_card.locator("#register-email").count() == 1
-        # The card's Sign-in link carries next= back to this course page
-        # so existing users land back here after auth.
-        login_link = inline_card.locator("#login-link")
+        actions = page.locator("[data-testid='signup-actions']")
+        assert actions.count() == 1
+        assert actions.locator("[data-testid='teaser-signup-cta']").count() == 1
+        # The Sign-in link carries next= back to this course page so
+        # existing users land back here after auth.
+        login_link = actions.locator("[data-testid='teaser-signin-cta']")
         href = login_link.get_attribute("href")
         assert href is not None
         assert href.startswith("/accounts/login/")

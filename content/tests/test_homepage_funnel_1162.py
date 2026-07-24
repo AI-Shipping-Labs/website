@@ -175,33 +175,30 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
         self.assertNotIn('Join free', tiers)
         self.assertLess(body.index('id="tiers"'), body.index('id="join-free"'))
         self.assertLess(body.index('id="join-free"'), body.index('id="blog"'))
-        self.assertNotIn('id="register-form"', tiers)
         self.assertIn('data-testid="home-join-free-form"', join)
-        self.assertEqual(join.count('id="register-form"'), 1)
-        self.assertEqual(body.count('id="register-form"'), 1)
+        # The shared signup-actions stack lives only in the join-free
+        # section — there is no inline register form on the homepage.
+        self.assertIn('data-testid="teaser-signup-cta"', join)
+        self.assertEqual(body.count('data-testid="teaser-signup-cta"'), 1)
+        self.assertNotIn('id="register-form"', body)
         self.assertIn('Start free', join)
         self.assertIn('Create your free account', join)
         self.assertIn('Already have an account?', join)
         self.assertIn('Sign in', join)
 
-    def test_home_form_uses_shared_accessible_registration_assets(self):
+    def test_home_join_free_uses_shared_signup_actions(self):
         response = self.client.get('/')
         join = self._section(response, 'join-free')
-        for expected in [
-            'autocomplete="email"',
-            'autocomplete="new-password"',
-            'role="alert"',
-            'aria-live="assertive"',
-            'aria-busy="false"',
-            'min-h-[44px]',
-            'creating an account',
-            'inline-register-opt-in',
-        ]:
-            self.assertIn(expected, join)
+        # Shared signup-actions stack: create-account + sign-in links.
+        self.assertIn('data-testid="teaser-signup-cta"', join)
+        self.assertIn('data-testid="teaser-signin-cta"', join)
+        self.assertIn('Create a free account', join)
+        # The retired inline register form + its JS must be gone.
+        self.assertNotIn('id="register-email"', join)
+        self.assertNotIn('inline-register-opt-in', join)
         body = self._body(response)
-        self.assertEqual(body.count('/static/js/accounts/auth-helpers.js'), 1)
-        self.assertEqual(body.count('/static/js/accounts/inline-register.js'), 1)
-        self.assertEqual(body.count('id="auth-next-url"'), 1)
+        self.assertEqual(body.count('/static/js/accounts/inline-register.js'), 0)
+        self.assertEqual(body.count('id="auth-next-url"'), 0)
         self.assertIn('scroll-mt-24', join)
 
     def test_oauth_provider_is_only_in_separate_conversion_section(self):
@@ -212,16 +209,20 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         self.assertIn('Sign up with Google', self._section(response, 'join-free'))
         self.assertNotIn('Sign up with Google', self._section(response, 'tiers'))
-        # The email path now navigates to /accounts/register/ instead of
-        # expanding an inline form, which made the page reflow.
-        self.assertContains(response, 'data-testid="inline-register-email-link"')
+        # The email path is now the Create-a-free-account button (the
+        # inline email form/disclosure was retired).
+        self.assertContains(response, 'data-testid="teaser-signup-cta"')
+        self.assertNotContains(response, 'data-testid="inline-register-email-link"')
 
-    def test_no_oauth_provider_expands_email_form(self):
+    def test_no_oauth_provider_shows_create_account_without_oauth_row(self):
         SocialApp.objects.all().delete()
         response = self.client.get('/')
         join = self._section(response, 'join-free')
-        self.assertIn('id="register-email"', join)
-        self.assertNotIn('inline-register-email-block" hidden', join)
+        # No OAuth provider: the create-account + sign-in links still
+        # render (never a dead-end), and no empty OAuth row appears.
+        self.assertIn('data-testid="teaser-signup-cta"', join)
+        self.assertIn('data-testid="teaser-signin-cta"', join)
+        self.assertNotIn('id="register-email"', join)
         self.assertNotIn('data-auth-oauth-providers', join)
 
     def test_paid_tiers_and_pricing_page_remain_independent(self):
@@ -236,8 +237,8 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
         self.assertIn('Most popular', self._card(response, 'main'))
 
         pricing = self.client.get('/pricing')
-        self.assertContains(pricing, 'pricing-inline-register-embed')
-        self.assertContains(pricing, 'data-testid="inline-register-card"')
+        self.assertContains(pricing, 'data-testid="pricing-free-signup-cta"')
+        self.assertNotContains(pricing, 'data-testid="inline-register-card"')
         self.assertNotContains(pricing, 'data-testid="home-join-free-section"')
 
     def test_upcoming_section_is_live_schedule_and_omitted_when_empty(self):

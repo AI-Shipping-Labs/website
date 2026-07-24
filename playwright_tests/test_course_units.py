@@ -441,10 +441,8 @@ class TestScenario3FreePreviewUnit:
 
         # Gated message with correct tier name
         assert "Upgrade to Premium to read this lesson" in body
-        # "View Pricing" link
-        pricing_link = page.locator(
-            'a:has-text("View Pricing")'
-        )
+        # Upgrade CTA (paid wall -> Pricing)
+        pricing_link = page.get_by_test_id("teaser-upgrade-cta")
         assert pricing_link.count() >= 1
 
         context.close()
@@ -490,13 +488,11 @@ class TestScenario4FreePaywall:
         # Gated message mentions correct tier
         assert "Upgrade to Main to read this lesson" in body
 
-        # "View Pricing" link is visible
-        pricing_link = page.locator(
-            'a:has-text("View Pricing")'
-        )
+        # Upgrade CTA is visible (paid wall -> Pricing)
+        pricing_link = page.get_by_test_id("teaser-upgrade-cta")
         assert pricing_link.count() >= 1
 
-        # Step 2: Click "View Pricing"
+        # Step 2: Click the Upgrade CTA
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 

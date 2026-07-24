@@ -88,12 +88,13 @@ def test_guest_events_use_canonical_tier_badges_and_gated_card(
     expect(page.get_by_test_id("gated-required-tier")).to_contain_text(
         "Main or above required",
     )
+    # The tier-gated (paid) event card renders a single Upgrade path to
+    # Pricing — a free account grants no paid access, so there is no
+    # signup/sign-in companion on the paid card.
     expect(page.get_by_test_id("event-anonymous-pricing-cta")).to_have_attribute(
         "href", "/pricing",
     )
-    expect(page.get_by_test_id("event-anonymous-signin-cta")).to_have_attribute(
-        "href", f"/accounts/login/?next={main_event.get_absolute_url()}",
-    )
+    expect(page.get_by_test_id("event-anonymous-signin-cta")).to_have_count(0)
 
 
 @pytest.mark.core

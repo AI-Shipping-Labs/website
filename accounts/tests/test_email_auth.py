@@ -324,7 +324,7 @@ class VerifyEmailAPITest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assert_html_result(resp, heading="Email Verified")
         self.assertContains(resp, 'href="/accounts/login/"')
-        self.assertContains(resp, "Sign In")
+        self.assertContains(resp, "Sign in")
 
         user.refresh_from_db()
         self.assertTrue(user.email_verified)

@@ -186,10 +186,10 @@ class BuildGatingContextRegisteredTest(TierSetupMixin, TestCase):
         )
         self.assertTrue(ctx['is_gated'])
         self.assertEqual(ctx['gated_reason'], 'authentication_required')
-        # Issue #1335: canonical free-with-sign-in copy — Sign In primary,
-        # Create a free account companion, no tier pill, no Pricing.
+        # Canonical free-with-sign-in copy — Sign in primary, Create a free
+        # account companion, no tier pill, no Pricing.
         self.assertEqual(ctx['gated_heading'], 'Sign in to read this lesson')
-        self.assertEqual(ctx['gated_cta_label'], 'Sign In')
+        self.assertEqual(ctx['gated_cta_label'], 'Sign in')
         self.assertEqual(ctx['gated_cta_url'], '/accounts/login/?next=/x')
         self.assertEqual(ctx['signup_cta_url'], '/accounts/signup/?next=/x')
         self.assertEqual(ctx['signup_cta_label'], 'Create a free account')

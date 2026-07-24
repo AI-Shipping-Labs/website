@@ -279,6 +279,6 @@ class TestIssue1025UnverifiedEmailUX:
         expect(paywall).to_be_visible()
         expect(paywall).to_contain_text("Upgrade to Basic")
         expect(paywall).to_contain_text("Basic or above required")
-        expect(paywall.get_by_role("link", name="View Pricing")).to_be_visible()
+        expect(paywall.get_by_test_id("workshop-landing-upgrade-cta")).to_be_visible()
         expect(page.locator('[data-testid="verify-email-required-card"]')).to_have_count(0)
         context.close()

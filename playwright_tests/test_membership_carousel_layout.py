@@ -130,7 +130,7 @@ def test_home_membership_mobile_carousel_and_desktop_grid(django_server, page):
     assert carousel.evaluate("el => getComputedStyle(el).display") == "grid"
     assert page.locator('[data-testid="home-tier-card"]').count() == 3
     expect(page.locator('[data-tier-card="free"]')).to_have_count(0)
-    expect(page.locator('#join-free #register-form')).to_be_visible()
+    expect(page.locator("#join-free [data-testid='signup-actions']")).to_be_visible()
     _assert_no_body_overflow(page)
     _screenshot(page, '[data-testid="home-tier-carousel"]', "home-desktop-tiers")
 
@@ -145,10 +145,11 @@ def test_pricing_mobile_carousel_free_copy_and_desktop_grid(django_server, page)
     _assert_main_centered(page, '[data-testid="pricing-tier-carousel"]')
     free_card = page.locator('[data-tier-card="free"]')
     expect(free_card).to_contain_text("Newsletter and open resources")
-    # Issue #652: the Free tier CTA is now the inline-register card,
-    # not a navigational "Create an account" anchor.
-    expect(free_card.locator('[data-testid="inline-register-card"]')).to_be_visible()
-    expect(free_card.locator("#register-email")).to_be_visible()
+    # The Free tier CTA is a single Join button that links to the register
+    # page (the inline register form was removed).
+    expect(
+        free_card.locator('[data-testid="pricing-free-signup-cta"]')
+    ).to_be_visible()
     _screenshot(page, '[data-testid="pricing-tier-carousel"]', "pricing-mobile-anon")
 
     page.set_viewport_size(DESKTOP)

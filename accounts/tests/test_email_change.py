@@ -214,10 +214,10 @@ class EmailChangeConfirmationViewTest(TestCase):
             "Your account email was changed successfully.",
         )
         self.assertContains(anonymous, 'href="/accounts/login/"')
-        self.assertContains(anonymous, "Sign In")
+        self.assertContains(anonymous, "Sign in")
         self.assertContains(anonymous, 'data-lucide="arrow-right"')
         self.assertEqual(anonymous.context["cta_url"], "/accounts/login/")
-        self.assertEqual(anonymous.context["cta_label"], "Sign In")
+        self.assertEqual(anonymous.context["cta_label"], "Sign in")
 
         authenticated_user = User.objects.create_user(
             email="view-auth-old@test.com",

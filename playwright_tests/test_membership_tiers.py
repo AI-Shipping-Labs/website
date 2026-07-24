@@ -192,8 +192,8 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
     def test_free_tier_shows_zero_price_and_subscribe_button(self, django_server, page):
         """
         Read the Free tier card -- verify it shows currency 0 with /forever
-        and the inline-register card (issue #652 replaced the Create an
-        account button with an inline form).
+        and a single Join CTA that links to the register page (the inline
+        register form was removed).
         """
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
@@ -212,15 +212,13 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
         ).filter(has_text="/forever").inner_text()
         assert "/forever" in period_text
 
-        # Free-tier CTA is now the inline-register card (issue #652).
-        # It exposes a register-email field + register-submit button,
-        # not a navigation anchor.
-        inline_card = free_card.locator(
-            "[data-testid='inline-register-card']"
+        # Free-tier CTA is now a single Join button that links to the
+        # register page (no inline form).
+        signup_cta = free_card.locator(
+            "[data-testid='pricing-free-signup-cta']"
         )
-        assert inline_card.count() == 1
-        assert free_card.locator("#register-email").count() == 1
-        assert free_card.locator("#register-submit").count() == 1
+        assert signup_cta.count() == 1
+        assert signup_cta.get_attribute("href") == "/accounts/register/?next=/pricing"
         # Paid-tier Join button must NOT exist on the Free card.
         assert free_card.locator("a.tier-cta-link").count() == 0
     def test_free_tier_features_include_newsletter_and_open_content(
@@ -234,29 +232,21 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
         features_text = free_card.locator("ul").inner_text()
         assert "Newsletter emails" in features_text
         assert "Access to open content" in features_text
-    def test_free_subscribe_button_navigates_to_newsletter(self, django_server, page):
-        """The Free tier CTA is the inline-register card (issue #652).
-        Registration happens in-place on /pricing; the only navigational
-        anchor it exposes is the "Sign in" link that round-trips next=
-        back here. Assert that, since the original "navigate to register"
-        behavior is now an inline form submission covered by
-        test_inline_register_652.py.
+    def test_free_subscribe_button_navigates_to_register(self, django_server, page):
+        """The Free tier CTA is a single Join button that links to the
+        register page with next=/pricing so users land back here after
+        creating an account. The inline register form was removed.
         """
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
         free_card = _get_tier_card_by_name(page, "Free")
 
-        # The inline-register card is the CTA.
-        inline_card = free_card.locator(
-            "[data-testid='inline-register-card']"
+        signup_cta = free_card.locator(
+            "[data-testid='pricing-free-signup-cta']"
         )
-        assert inline_card.count() == 1
-
-        # The "Sign in" link inside the card carries next=/pricing so
-        # users who already have an account land back here after auth.
-        login_link = inline_card.locator("#login-link")
-        assert login_link.get_attribute("href") == "/accounts/login/?next=/pricing"
+        assert signup_cta.count() == 1
+        assert signup_cta.get_attribute("href") == "/accounts/register/?next=/pricing"
 @pytest.mark.django_db(transaction=True)
 class TestScenario2CompareAllFourTiers:
     """
@@ -350,19 +340,19 @@ class TestScenario2CompareAllFourTiers:
             badge = card.locator("text=Most popular")
             assert badge.count() == 0
     def test_paid_tiers_show_join_free_shows_subscribe(self, django_server, page):
-        """Verify paid tiers show Join, Free shows the inline-register card.
+        """Verify paid tiers show Join, Free shows a single Join CTA.
 
-        Issue #652 replaced the "Create an account" button on the Free
-        tier with the inline registration form. Paid tiers continue to
-        use the Join button (Stripe Payment Link or portal).
+        The Free tier renders a single Join button that links to the
+        register page (the inline register form was removed). Paid tiers
+        continue to use the Join button (Stripe Payment Link or portal).
         """
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
-        # Free -> inline-register card, no tier-cta-link anchor.
+        # Free -> single signup CTA, no tier-cta-link anchor.
         free_card = _get_tier_card_by_name(page, "Free")
         assert free_card.locator(
-            "[data-testid='inline-register-card']"
+            "[data-testid='pricing-free-signup-cta']"
         ).count() == 1
         assert free_card.locator("a.tier-cta-link").count() == 0
 
@@ -674,22 +664,21 @@ class TestScenario7FreeSubscribeFlow:
         free_card = _get_tier_card_by_name(page, "Free")
         join_buttons = free_card.locator("a.tier-cta-link")
         assert join_buttons.count() == 0
-    def test_free_subscribe_links_to_newsletter(self, django_server, page):
-        """Issue #652: the Free tier CTA is now the inline-register
-        card. Assert the card and its key form fields are present
-        rather than chasing an anchor that no longer exists.
+    def test_free_subscribe_links_to_register(self, django_server, page):
+        """The Free tier CTA is now a single Join button linking to the
+        register page. Assert the button is present and points at the
+        register page rather than chasing an inline form that no longer
+        exists.
         """
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
         free_card = _get_tier_card_by_name(page, "Free")
-        inline_card = free_card.locator(
-            "[data-testid='inline-register-card']"
+        signup_cta = free_card.locator(
+            "[data-testid='pricing-free-signup-cta']"
         )
-        assert inline_card.count() == 1
-        assert inline_card.locator("#register-email").count() == 1
-        assert inline_card.locator("#register-password").count() == 1
-        assert inline_card.locator("#register-submit").count() == 1
+        assert signup_cta.count() == 1
+        assert signup_cta.get_attribute("href") == "/accounts/register/?next=/pricing"
     def test_free_tier_shows_zero_forever(self, django_server, page):
         """Verify the Free tier card shows 0 with /forever."""
         page.goto(
@@ -703,34 +692,27 @@ class TestScenario7FreeSubscribeFlow:
             "span.text-muted-foreground"
         ).filter(has_text="/forever")
         assert forever.count() == 1
-    def test_subscribe_click_navigates_to_newsletter_section(
+    def test_subscribe_click_navigates_to_register(
         self, django_server
     , page):
-        """Issue #652: the Free tier CTA is now an inline form that
-        submits via fetch and does not navigate the page. Assert that
-        clicking the submit button (with valid input) keeps the user on
-        /pricing and surfaces the inline success card. The full
-        end-to-end signup is covered in test_inline_register_652.py;
-        here we only verify the inline-CTA contract — no page redirect.
+        """The Free tier CTA is a single Join button. Clicking it
+        navigates to the register page with next=/pricing so the visitor
+        can create an account and land back on /pricing.
         """
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
         free_card = _get_tier_card_by_name(page, "Free")
-        inline_card = free_card.locator(
-            "[data-testid='inline-register-card']"
+        signup_cta = free_card.locator(
+            "[data-testid='pricing-free-signup-cta']"
         )
-        assert inline_card.count() == 1
-        # Clicking submit on the inline form should NOT navigate to
-        # /accounts/register/ — registration is in-place via fetch.
-        # We only need to confirm the page URL stays on /pricing.
-        # (We don't actually fill+submit here to avoid creating a real
-        # user; that flow is exercised in test_inline_register_652.py.)
-        assert page.url.endswith("/pricing")
-        # The form is on the page and ready to submit (visible & enabled).
-        submit_btn = inline_card.locator("#register-submit")
-        assert submit_btn.is_visible()
-        assert submit_btn.is_enabled()
+        assert signup_cta.count() == 1
+        assert signup_cta.is_visible()
+        signup_cta.click()
+        page.wait_for_url(
+            f"{django_server}/accounts/register/?next=/pricing",
+            timeout=10000,
+        )
 @pytest.mark.django_db(transaction=True)
 class TestScenario8MainTierVisualDistinction:
     """

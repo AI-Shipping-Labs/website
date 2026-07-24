@@ -128,7 +128,11 @@ class TestAuthReturnContext:
             wait_until="domcontentloaded",
         )
         assert "Sign in to read this lesson" in page.content()
-        page.click('[data-testid="teaser-upgrade-cta"]')
+        # The free-with-sign-in lesson gate renders the shared
+        # signup-actions stack; the "Sign in" link routes to the login
+        # page carrying ?next=<lesson>.
+        page.click('[data-testid="teaser-signin-cta"]')
+        page.wait_for_url("**/accounts/login/**", timeout=10000)
         _login(page)
 
         page.wait_for_url(
@@ -145,14 +149,11 @@ class TestAuthReturnContext:
         # bounce (``[data-tier="main"]`` -> ``?tier=...&billing=...``) and
         # the query params it carried no longer exist; ``/pricing`` now
         # round-trips its own path as the post-auth return target
-        # (``next_url = request.path`` in ``payments/views/pricing.py``,
-        # surfaced via the ``auth-next-url`` json_script for the inline
-        # register card). The return-context behavior that still exists is
-        # the generic one this module protects (#485): logging in from a
-        # ``?next=/pricing`` link returns the user to /pricing. The inline
-        # register card's own ``?next=/pricing`` round-trip is covered by
-        # ``test_inline_register_652.py``; here we assert the login round
-        # trip the auth-return-context module owns.
+        # (``next_url = request.path`` in ``payments/views/pricing.py``).
+        # The return-context behavior that still exists is the generic one
+        # this module protects (#485): logging in from a ``?next=/pricing``
+        # link returns the user to /pricing. Here we assert that login
+        # round trip the auth-return-context module owns.
         with django_db_blocker.unblock():
             _reset_fixtures()
             _seed_user()

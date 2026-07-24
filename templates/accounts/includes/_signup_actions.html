@@ -1,0 +1,49 @@
+{% load accounts_extras %}
+{% comment %}
+Shared free-account sign-up action stack. This is the ONE partial that
+renders the "OAuth-first buttons + Create-a-free-account + Sign-in link"
+block, so every free-with-sign-in surface (the gated-access card, the
+homepage Start-free card, and the free course-detail CTA) stays visually
+identical. Superseded the per-surface inline register form/card, which
+made embedding pages reflow awkwardly.
+
+Renders, in order:
+  1. OAuth provider buttons (from _oauth_providers.html, divider hidden)
+  2. A primary "Create a free account" button -> register page
+  3. A muted "Already have an account? Sign in" link -> login page
+
+When no OAuth provider is configured the OAuth block renders nothing
+(guarded inside _oauth_providers.html), leaving the two links — never a
+dead-end card.
+
+Expected context:
+  oauth_google_enabled / oauth_github_enabled / oauth_slack_enabled
+                        — provider flags (from get_oauth_provider_context)
+  next_url              — return path; feeds ?next= on OAuth + the two links
+  actions_class         — optional extra classes on the outer wrapper
+                          (callers that need a divider/border pass it here)
+  signup_url            — optional pre-built register URL. When omitted the
+                          partial builds {% url 'account_register' %} + next.
+  signin_url            — optional pre-built login URL. When omitted the
+                          partial builds {% url 'account_login' %} + next.
+  signup_label          — optional (default "Create a free account")
+  signin_text           — optional (default "Already have an account? Sign in")
+  signup_testid         — optional (default "teaser-signup-cta")
+  signin_testid         — optional (default "teaser-signin-cta")
+
+No JavaScript is required: every action is a plain link.
+{% endcomment %}
+<div class="flex flex-col gap-3 {{ actions_class }}" data-testid="{{ signup_actions_testid|default:'signup-actions' }}">
+  {% include "accounts/includes/_oauth_providers.html" with oauth_action="Sign up" oauth_divider_text="sign up with" oauth_hide_divider=True %}
+  <a href="{% if signup_url %}{{ signup_url }}{% else %}{% url 'account_register' %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}{% endif %}"
+     class="{% button_classes 'primary' size='md' extra='w-full' %}"
+     data-testid="{{ signup_testid|default:'teaser-signup-cta' }}">
+    <i data-lucide="user-plus" class="h-4 w-4"></i>
+    {{ signup_label|default:'Create a free account' }}
+  </a>
+  <a href="{% if signin_url %}{{ signin_url }}{% else %}{% url 'account_login' %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}{% endif %}"
+     class="text-center text-sm text-muted-foreground transition-colors hover:text-foreground hover:underline"
+     data-testid="{{ signin_testid|default:'teaser-signin-cta' }}">
+    {{ signin_text|default:'Already have an account? Sign in' }}
+  </a>
+</div>

@@ -294,15 +294,12 @@
         "Return to where you left off." link points back here.
       {% endcomment %}
       <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center">
-        <div class="mb-4">
-          <i data-lucide="user-plus" class="mx-auto h-10 w-10 text-accent"></i>
-        </div>
         <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
         <p class="mt-2 mb-6 text-sm text-muted-foreground">Create a free account to access all lessons in this course.</p>
-        {% include "accounts/includes/_inline_register_card.html" with collapse_email=True %}
+        {% include "accounts/includes/_signup_actions.html" with actions_class="sm:max-w-sm sm:mx-auto" %}
       </div>
       {% elif cta_message %}
-      {% include "content/_gated_access_card.html" with gated_card_testid="course-gated-cta" gated_icon="lock" gated_heading=cta_message gated_description="Get full access to this course and more with a membership." required_tier_name=required_tier_name gated_cta_url=cta_url gated_cta_label="View Pricing" gated_cta_testid="course-gated-cta-button" %}
+      {% include "content/_gated_access_card.html" with gated_card_testid="course-gated-cta" gated_icon="lock" gated_heading=cta_message gated_description="Get full access to this course and more with a membership." required_tier_name=required_tier_name gated_cta_url=cta_url gated_cta_label="Upgrade" gated_cta_testid="course-gated-cta-button" %}
       {% endif %}
     </div>
   </article>
@@ -313,17 +310,6 @@
 {% block extra_scripts %}
 {{ block.super }}
 {% include "_partials/mermaid_script.html" %}
-{% comment %}
-  Issue #652: inline register card on free-anon course detail. The two
-  scripts and the json_script payload feed the shared inline-register.js
-  handler. Rendered for every visitor (cost is negligible — empty body
-  on logged-in / paid-course pages where the card isn't shown).
-{% endcomment %}
-{% if is_free_course and not user_authenticated %}
-<script src="/static/js/accounts/auth-helpers.js"></script>
-{{ next_url|json_script:"auth-next-url" }}
-<script src="/static/js/accounts/inline-register.js"></script>
-{% endif %}
 <script>
   function getCsrfToken() {
     var cookies = document.cookie.split(';');

@@ -813,14 +813,19 @@ class TestScenario9FreeCourseAnonymousSignupCTA:
         # CTA block shows "Sign up free to start this course"
         assert "Sign up free to start this course" in body
 
-        # Issue #652 replaced the "Sign Up Free" anchor with the inline
-        # register card on free-anon course pages. Assert the card is
-        # rendered and its sign-in link carries next= back here.
-        inline_card = page.locator(
-            "[data-testid='inline-register-card']"
-        )
-        assert inline_card.count() == 1
-        login_link = inline_card.locator("#login-link")
+        # The free-anon course CTA now renders the shared signup-actions
+        # partial (OAuth buttons + "Create a free account" + a "Sign in"
+        # link). Assert the stack is rendered and its links carry next=
+        # back here.
+        actions = page.locator("[data-testid='signup-actions']")
+        assert actions.count() == 1
+        signup_cta = actions.locator("[data-testid='teaser-signup-cta']")
+        assert signup_cta.count() == 1
+        signup_href = signup_cta.get_attribute("href")
+        assert signup_href is not None
+        assert signup_href.startswith("/accounts/register/")
+        assert "courses/python-basics" in signup_href
+        login_link = actions.locator("[data-testid='teaser-signin-cta']")
         href = login_link.get_attribute("href")
         assert href is not None
         assert href.startswith("/accounts/login/")
@@ -857,3 +862,47 @@ class TestScenario9FreeCourseAnonymousSignupCTA:
 #   (ApiCourseUnitCompleteTest.test_toggle_off_deletes_progress,
 #    test_toggle_on_again, CourseUnitProgressTest)
 # ---------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestPaidCourseAnonymousUpgradeCTA:
+    """Anonymous visitor on a paid course sees the Upgrade CTA -> /pricing.
+
+    Migrated from the retired test_inline_register_652 suite: a paid
+    (required_level > 0) course must NOT offer a free-signup form to an
+    anonymous visitor — a free account grants no paid access. The gated
+    card renders a single "Upgrade" CTA that links to /pricing.
+    """
+
+    def test_anonymous_on_paid_course_sees_upgrade_cta_to_pricing(
+        self, django_server, page
+    ):
+        _clear_courses()
+        _ensure_tiers()
+
+        course = _create_course(
+            title="Premium Course",
+            slug="premium-course",
+            description="A premium-gated course.",
+            required_level=30,
+        )
+        _create_module(course, "Module", sort_order=1)
+
+        page.goto(
+            f"{django_server}/courses/premium-course",
+            wait_until="domcontentloaded",
+        )
+
+        # No inline signup form and no free-signup CTA on a paid wall.
+        assert page.locator("[data-testid='signup-actions']").count() == 0
+
+        upgrade = page.locator(
+            "[data-testid='course-gated-cta-button']"
+        )
+        assert upgrade.count() == 1
+        assert "Upgrade" in upgrade.inner_text()
+        assert upgrade.get_attribute("href") == "/pricing"
+
+        # Clicking it lands on /pricing.
+        upgrade.click()
+        page.wait_for_url(f"{django_server}/pricing", timeout=10000)

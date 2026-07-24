@@ -178,13 +178,12 @@ class TestAnonRegisteredTutorial:
         assert 'TUTORIALHIDDENMARKER' not in body
         # Fade wrapper is present.
         assert 'data-testid="teaser-body-wrapper"' in body
-        # Sign-in card with both buttons.
-        assert 'Sign In' in body
+        # Sign-in card with both buttons (shared signup-actions stack).
+        assert 'Sign in' in body
         assert 'Create a free account' in body
 
-        # Hover over the Sign In primary button — should link to login
-        # with next= preserved.
-        login = page.locator('[data-testid="page-upgrade-cta"]')
+        # The "Sign in" link routes to login with next= preserved.
+        login = page.locator('[data-testid="teaser-signin-cta"]')
         href = login.get_attribute('href')
         assert href is not None
         assert href.startswith('/accounts/login/')
@@ -317,11 +316,13 @@ class TestAnonOnPaidRecording:
         # Description teaser with early marker, late marker hidden.
         assert 'WORKSHOPVIDEODESCMARKER' in body
         assert 'WORKSHOPVIDEODESCHIDDEN' not in body
-        # Anonymous gets a "Create a free account" companion link.
+        # The recording is Basic-gated (paid): the path forward is Upgrade
+        # to Pricing. A free account grants no paid access, so there is no
+        # "Create a free account" companion on this paid wall.
+        upgrade = page.locator('[data-testid="video-upgrade-cta"]')
+        assert upgrade.get_attribute('href') == '/pricing'
         signup = page.locator('[data-testid="teaser-signup-cta"]')
-        assert signup.count() == 1
-        signup_href = signup.get_attribute('href')
-        assert 'next=%2Fworkshops%2Freg-vid%2Fvideo' in signup_href
+        assert signup.count() == 0
 
 
 # ---------------------------------------------------------------------
@@ -467,7 +468,7 @@ class TestSignInReturnsToTutorial:
             f'{django_server}/workshops/return-tut/tutorial/intro',
             wait_until='domcontentloaded',
         )
-        page.locator('[data-testid="page-upgrade-cta"]').click()
+        page.locator('[data-testid="teaser-signin-cta"]').click()
         page.wait_for_load_state('domcontentloaded')
         assert '/accounts/login/' in page.url
         assert 'next=' in page.url

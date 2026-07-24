@@ -254,7 +254,7 @@ class RegisteredTutorialAnonymousTest(TierSetupMixin, TestCase):
             'href="/accounts/login/?next=%2Fworkshops%2Freg-tut%2Ftutorial%2Fintro"',
             status_code=403,
         )
-        self.assertContains(response, 'Sign In', status_code=403)
+        self.assertContains(response, 'Sign in', status_code=403)
         # Create-a-free-account (secondary) link with next= preserved.
         self.assertContains(
             response,
@@ -333,8 +333,9 @@ class FreeUserOnPaidTierTutorialTest(TierSetupMixin, TestCase):
     def test_renders_view_pricing_cta_only(self):
         response = self.client.get(self.url)
         self.assertContains(
-            response, 'View Pricing', status_code=403,
+            response, 'Upgrade', status_code=403,
         )
+        self.assertContains(response, 'href="/pricing"', status_code=403)
         # Signed-in users do NOT get a "Create a free account" companion.
         self.assertNotContains(
             response, 'data-testid="teaser-signup-cta"', status_code=403,
@@ -426,7 +427,8 @@ class EmptyBodyTutorialFallbackTest(TierSetupMixin, TestCase):
         self.assertContains(
             response, 'data-testid="page-paywall"', status_code=403,
         )
-        self.assertContains(response, 'View Pricing', status_code=403)
+        self.assertContains(response, 'Upgrade', status_code=403)
+        self.assertContains(response, 'href="/pricing"', status_code=403)
 
 
 class UnverifiedEmailTutorialTest(TierSetupMixin, TestCase):
@@ -461,8 +463,10 @@ class UnverifiedEmailTutorialTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'data-testid="page-paywall"')
 
 
-class TutorialWithVideoStartShowsThumbnailTest(TierSetupMixin, TestCase):
-    """Pages anchored to the recording show a locked-video thumbnail."""
+class TutorialWithVideoStartNoThumbnailTest(TierSetupMixin, TestCase):
+    """Gated tutorial pages render the teaser + paywall, no locked-video
+    thumbnail (the locked-video block was dropped from tutorial pages in
+    favor of the sidebar + reader chrome)."""
 
     @classmethod
     def setUpTestData(cls):
@@ -475,17 +479,17 @@ class TutorialWithVideoStartShowsThumbnailTest(TierSetupMixin, TestCase):
             sort_order=1, body=_LONG_BODY, video_start='02:30',
         )
 
-    def test_anonymous_sees_locked_thumbnail(self):
+    def test_anonymous_sees_no_locked_thumbnail(self):
         response = self.client.get('/workshops/thumb-tut/tutorial/step')
         self.assertEqual(response.status_code, 403)
+        # Teaser body still renders...
         self.assertContains(
-            response, 'data-testid="teaser-video-thumbnail"',
-            status_code=403,
+            response, 'data-testid="teaser-body"', status_code=403,
         )
-        # YouTube hqdefault for the workshop's recording_url.
-        self.assertContains(
-            response,
-            'img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+        # ...but the locked-video thumbnail is no longer shown on tutorial
+        # pages.
+        self.assertNotContains(
+            response, 'data-testid="teaser-video-thumbnail"',
             status_code=403,
         )
 
@@ -541,17 +545,19 @@ class AnonymousPaidRecordingVideoTest(TierSetupMixin, TestCase):
             response, 'data-testid="video-player"', status_code=403,
         )
 
-    def test_anonymous_gets_signup_companion_link(self):
-        # Anonymous on a paid recording: primary "View Pricing" CTA with
-        # a "Create a free account" companion (next= preserved).
+    def test_anonymous_gets_no_signup_companion_link(self):
+        # Anonymous on a paid (Basic) recording: primary Upgrade CTA to
+        # Pricing, no "Create a free account" companion — a free account
+        # grants no paid access.
         response = self.client.get('/workshops/reg-vid/video')
-        self.assertContains(response, 'View Pricing', status_code=403)
-        self.assertContains(
+        self.assertContains(response, 'Upgrade', status_code=403)
+        self.assertContains(response, 'href="/pricing"', status_code=403)
+        self.assertNotContains(
             response,
             'href="/accounts/signup/?next=%2Fworkshops%2Freg-vid%2Fvideo"',
             status_code=403,
         )
-        self.assertContains(
+        self.assertNotContains(
             response, 'Create a free account', status_code=403,
         )
 
@@ -607,8 +613,9 @@ class FreeUserOnPaidRecordingTest(TierSetupMixin, TestCase):
     def test_renders_view_pricing_with_main_tier_badge(self):
         response = self.client.get('/workshops/paid-vid/video')
         self.assertContains(
-            response, 'View Pricing', status_code=403,
+            response, 'Upgrade', status_code=403,
         )
+        self.assertContains(response, 'href="/pricing"', status_code=403)
         self.assertContains(
             response, 'data-testid="gated-required-tier"', status_code=403,
         )

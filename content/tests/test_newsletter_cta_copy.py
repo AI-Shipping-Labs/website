@@ -171,11 +171,11 @@ class PricingFreeTierPostLaunchCTATest(TierSetupMixin, TestCase):
 
     def test_free_tier_cta_links_to_signup(self):
         response = self.client.get("/pricing")
-        # The free-tier card now embeds the inline registration form
-        # (issue #652) instead of a bare link to the standalone register
-        # page. The form's testid + email input id are the stable hooks.
-        self.assertContains(response, 'data-testid="inline-register-card"')
-        self.assertContains(response, 'id="register-email"')
+        # The free-tier card is a single Join button linking to the
+        # standalone register page (the inline form was retired).
+        self.assertContains(response, 'data-testid="pricing-free-signup-cta"')
+        self.assertContains(response, 'href="/accounts/register/?next=/pricing"')
+        self.assertNotContains(response, 'data-testid="inline-register-card"')
         # Old newsletter CTA must be gone.
         self.assertNotContains(response, 'href="/#newsletter"')
         self.assertNotContains(response, "Get the newsletter")

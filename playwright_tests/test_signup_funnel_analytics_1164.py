@@ -184,7 +184,10 @@ class TestSignupFunnelAnalytics:
         page = context.new_page()
 
         email = f'inline-register-{uuid.uuid4().hex[:8]}@test.com'
-        page.goto(f'{django_server}/pricing', wait_until='domcontentloaded')
+        # Email signup now lives on the dedicated register page (the inline
+        # form on /pricing was removed). The signup_start / sign_up events
+        # fire from the register form and carry its entry_path.
+        page.goto(f'{django_server}/accounts/register/', wait_until='domcontentloaded')
         page.evaluate(
             """() => {
                 sessionStorage.removeItem('email-signup-events');
@@ -227,7 +230,7 @@ class TestSignupFunnelAnalytics:
         assert signup_start == {
             'method': 'email',
             'signup_kind': 'account',
-            'entry_path': '/pricing',
+            'entry_path': '/accounts/register/',
             'login_state': 'anonymous',
         }
         assert sign_up == signup_start
@@ -252,7 +255,9 @@ class TestSignupFunnelAnalytics:
             ),
         )
 
-        page.goto(f'{django_server}/pricing', wait_until='domcontentloaded')
+        # The OAuth-first signup buttons live on the home join-free
+        # section (the /pricing free tier is now a single Join button).
+        page.goto(f'{django_server}/', wait_until='domcontentloaded')
         page.evaluate(
             """() => {
                 sessionStorage.removeItem('oauth-signup-start');
@@ -274,7 +279,9 @@ class TestSignupFunnelAnalytics:
                 };
             }"""
         )
-        google_link = page.get_by_role('link', name='Sign up with Google')
+        google_link = page.locator(
+            "#join-free"
+        ).get_by_role('link', name='Sign up with Google')
         google_link.click(no_wait_after=True)
         page.wait_for_url('**/accounts/google/login/**', timeout=2500)
         signup_start = page.evaluate(
@@ -284,7 +291,7 @@ class TestSignupFunnelAnalytics:
             'method': 'oauth',
             'provider': 'google',
             'signup_kind': 'account',
-            'entry_path': '/pricing',
+            'entry_path': '/',
             'login_state': 'anonymous',
         }
 

@@ -494,7 +494,7 @@ def test_home_tiers_section_height_under_threshold(django_server, page):
             f'[data-testid="home-tier-carousel"] [data-tier-card="{slug}"]'
         ).count() == 1
     assert page.locator('[data-tier-card="free"]').count() == 0
-    assert page.locator('#join-free #register-form').count() == 1
+    assert page.locator("#join-free [data-testid='signup-actions']").count() == 1
 
 
 # ---------------------------------------------------------------------------

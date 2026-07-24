@@ -116,7 +116,7 @@ def test_paid_pricing_actions_share_desktop_baseline(
     bottoms = [box["y"] + box["height"] for box in boxes]
     assert max(bottoms) - min(bottoms) <= 1
     expect(
-        page.locator('[data-tier-card="free"] [data-testid="inline-register-card"]')
+        page.locator('[data-tier-card="free"] [data-testid="pricing-free-signup-cta"]')
     ).to_be_visible()
 
     if width == 1440:

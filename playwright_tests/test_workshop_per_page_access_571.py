@@ -175,14 +175,16 @@ class TestAnonymousPreviewsPageOne:
         assert 'data-testid="page-title"' in body2
         # Paywall card present.
         assert 'data-testid="page-paywall"' in body2
-        # CTA reads "Sign In" and preserves the return URL.
-        cta = page.locator('[data-testid="page-upgrade-cta"]')
+        # Registered (free-with-sign-in) wall renders the shared
+        # signup-actions stack: a "Sign in" link that preserves the return
+        # URL, plus a "Create a free account" primary.
+        cta = page.locator('[data-testid="teaser-signin-cta"]')
         assert cta.count() == 1
         cta_href = cta.get_attribute('href')
         assert cta_href.startswith('/accounts/login/')
         assert 'next=' in cta_href
         assert 'page-two' in cta_href
-        # Secondary "Create a free account" link.
+        # "Create a free account" primary link.
         signup = page.locator('[data-testid="teaser-signup-cta"]')
         assert signup.count() == 1
 
@@ -268,9 +270,10 @@ class TestAnonymousOnPaidWorkshopUpgradeWall:
         # CTA points to /pricing.
         cta = page.locator('[data-testid="page-upgrade-cta"]')
         assert cta.get_attribute('href') == '/pricing'
-        # Anonymous on a paid wall sees a "Create a free account" companion.
+        # Paid wall: no "Create a free account" companion (a free account
+        # grants no paid access).
         signup = page.locator('[data-testid="teaser-signup-cta"]')
-        assert signup.count() == 1
+        assert signup.count() == 0
 
 
 # ---------------------------------------------------------------------
@@ -379,8 +382,8 @@ class TestSignInRoundTrip:
             f'{django_server}{gated_path}',
             wait_until='domcontentloaded',
         )
-        # Click Sign In CTA.
-        page.locator('[data-testid="page-upgrade-cta"]').click()
+        # Click Sign in CTA.
+        page.locator('[data-testid="teaser-signin-cta"]').click()
         page.wait_for_load_state('domcontentloaded')
         assert '/accounts/login/' in page.url
         assert 'next=' in page.url

@@ -118,6 +118,34 @@ class InstructorSyncHappyPathTest(_SyncFixture):
         self.assertEqual(log2.items_updated, 0)
         self.assertEqual(Instructor.objects.count(), 2)
 
+    def test_re_sync_preserves_operator_set_user_link(self):
+        """Issue #1341: the operator-set ``Instructor.user`` FK is not part of
+        the git yaml and must survive a content re-sync that carries no user
+        data (also when the sync updates other fields).
+        """
+        from django.contrib.auth import get_user_model
+
+        user = get_user_model().objects.create_user(
+            email='instructor@test.com', password='pw',
+        )
+        self._write('ada.yaml', 'id: ada\nname: Ada\n')
+        source = self._instructor_source()
+        sync_content_source(source, repo_dir=self.temp_dir)
+
+        # Operator links the account after the first sync.
+        ada = Instructor.objects.get(instructor_id='ada')
+        ada.user = user
+        ada.save(update_fields=['user'])
+
+        # A later sync changes an unrelated field (name) — the user link
+        # must remain untouched.
+        self._write('ada.yaml', 'id: ada\nname: Ada Lovelace\n')
+        sync_content_source(source, repo_dir=self.temp_dir)
+
+        ada.refresh_from_db()
+        self.assertEqual(ada.name, 'Ada Lovelace')
+        self.assertEqual(ada.user, user)
+
     def test_stale_yaml_deletion_soft_deletes_instructor(self):
         self._write('alexey-grigorev.yaml', (
             'id: alexey-grigorev\nname: Alexey Grigorev\n'

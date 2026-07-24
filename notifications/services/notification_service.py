@@ -259,6 +259,52 @@ def _send_email_channel(email_template, content_type, content):
     return sent
 
 
+def _resolve_commented_content(content_id):
+    """Resolve a comment ``content_id`` to its content object and title.
+
+    The comment composer is embedded on exactly two content surfaces: course
+    unit lessons (``Unit.content_id``) and workshop tutorial pages
+    (``WorkshopPage.content_id``). Sprint plan threads
+    (``Plan.comment_content_id``) and unknown UUIDs are intentionally
+    unresolved -- they carry no content author to notify.
+
+    Returns ``(content, content_title)`` or ``(None, None)`` when the
+    ``content_id`` matches neither a ``Unit`` nor a ``WorkshopPage``.
+    """
+    from content.models import Unit, WorkshopPage
+
+    unit = (
+        Unit.objects
+        .filter(content_id=content_id)
+        .select_related('module__course')
+        .first()
+    )
+    if unit is not None:
+        return unit, unit.title
+
+    page = (
+        WorkshopPage.objects
+        .filter(content_id=content_id)
+        .select_related('workshop')
+        .first()
+    )
+    if page is not None:
+        return page, page.title
+
+    return None, None
+
+
+def _content_instructors(content):
+    """Return the instructor queryset for a resolved content object."""
+    from content.models import Unit, WorkshopPage
+
+    if isinstance(content, Unit):
+        return content.module.course.instructors.all()
+    if isinstance(content, WorkshopPage):
+        return content.workshop.instructors.all()
+    return []
+
+
 class NotificationService:
     """Service for creating notifications and dispatching to channels."""
 
@@ -400,6 +446,75 @@ class NotificationService:
                 'Created %d series notifications for %s',
                 len(notifications), series.slug,
             )
+        return {"notified": len(notifications)}
+
+    @staticmethod
+    def notify_content_comment(comment):
+        """Notify content authors when a comment/reply is posted (issue #1341).
+
+        Resolves the comment's ``content_id`` to its content object (a course
+        ``Unit`` or a workshop ``WorkshopPage``), collects the distinct set of
+        linked ``Instructor.user`` accounts for that content's instructors,
+        excludes the commenter (no self-notify), and creates one
+        ``content_comment`` notification per remaining distinct recipient.
+
+        A ``content_id`` that matches neither a ``Unit`` nor a ``WorkshopPage``
+        (e.g. a ``Plan.comment_content_id`` thread or an unknown UUID) resolves
+        to no content and notifies nobody.
+
+        The deep link targets the content page's Q&A section
+        (``content.get_absolute_url() + '#qa-section'``).
+
+        Args:
+            comment: the ``Comment`` that was just created (top-level or reply).
+
+        Returns:
+            ``{"notified": int}`` -- the number of notifications created.
+        """
+        from accounts.utils.display import display_name
+
+        content, content_title = _resolve_commented_content(comment.content_id)
+        if content is None:
+            return {"notified": 0}
+
+        instructors = _content_instructors(content)
+        recipients = {
+            instructor.user
+            for instructor in instructors
+            if instructor.user_id is not None
+        }
+        # No self-notify: an author commenting on their own content is skipped.
+        recipients.discard(comment.user)
+        if not recipients:
+            return {"notified": 0}
+
+        is_reply = comment.parent_id is not None
+        verb = 'reply' if is_reply else 'comment'
+        title = f'New {verb} on {content_title}'
+
+        commenter = display_name(comment.user)
+        excerpt = (comment.body or '').strip()
+        if len(excerpt) > 200:
+            excerpt = excerpt[:200].rstrip() + '…'
+        body = f'{commenter}: {excerpt}' if excerpt else commenter
+
+        url = content.get_absolute_url() + '#qa-section'
+
+        notifications = [
+            Notification(
+                user=recipient,
+                title=title,
+                body=body,
+                url=url,
+                notification_type='content_comment',
+            )
+            for recipient in recipients
+        ]
+        Notification.objects.bulk_create(notifications)
+        logger.info(
+            'Created %d content_comment notifications for comment %s',
+            len(notifications), comment.pk,
+        )
         return {"notified": len(notifications)}
 
     @staticmethod

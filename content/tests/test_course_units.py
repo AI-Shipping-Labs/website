@@ -249,7 +249,7 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
         self._login_tier_user('basic2@test.com', self.basic_tier)
         response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'Upgrade to Main', status_code=403)
-        self.assertContains(response, 'View Pricing', status_code=403)
+        self.assertContains(response, 'Upgrade', status_code=403)
 
     def test_basic_user_gets_403_for_main_course(self):
         self._login_tier_user('basic@test.com', self.basic_tier)
@@ -330,12 +330,12 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
             'Get full access to this course and more with a membership.',
             status_code=403,
         )
-        self.assertContains(response, 'View Pricing', status_code=403)
-        # Issue #248: anonymous visitors on a paid course also see a
-        # secondary signup CTA so they can create an account first and
-        # have the course in their dashboard once they upgrade.
-        self.assertContains(response, '/accounts/signup/', status_code=403)
-        self.assertContains(
+        self.assertContains(response, 'Upgrade', status_code=403)
+        self.assertContains(response, 'href="/pricing"', status_code=403)
+        # A free account grants no access to paid content, so the paid wall
+        # no longer offers a "Create a free account" signup CTA — the only
+        # forward path is Upgrade.
+        self.assertNotContains(
             response,
             'Create a free account',
             status_code=403,

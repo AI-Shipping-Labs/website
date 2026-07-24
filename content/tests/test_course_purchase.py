@@ -208,7 +208,7 @@ class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
 
     def test_anonymous_user_sees_membership_cta_without_buy_button(self):
         response = self.client.get('/courses/buyable-course')
-        self.assertContains(response, 'View Pricing')
+        self.assertContains(response, 'Upgrade')
         self.assertNotContains(response, 'buy-course-btn')
         self.assertNotContains(response, 'Buy this course')
 
@@ -216,7 +216,7 @@ class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
         User.objects.create_user(email='free@test.com', password='testpass')
         self.client.login(email='free@test.com', password='testpass')
         response = self.client.get('/courses/buyable-course')
-        self.assertContains(response, 'View Pricing')
+        self.assertContains(response, 'Upgrade')
         self.assertNotContains(response, 'buy-course-btn')
         self.assertNotContains(response, 'Buy this course')
 
@@ -257,7 +257,7 @@ class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
         User.objects.create_user(email='both@test.com', password='testpass')
         self.client.login(email='both@test.com', password='testpass')
         response = self.client.get('/courses/buyable-course')
-        self.assertContains(response, 'View Pricing')
+        self.assertContains(response, 'Upgrade')
         self.assertNotContains(response, 'Buy this course')
 
 

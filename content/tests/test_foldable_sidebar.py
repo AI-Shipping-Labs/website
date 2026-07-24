@@ -212,8 +212,9 @@ class FoldableSidebarMarkupTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'data-testid="sidebar-completed-page"')
         self.assertContains(response, 'check-circle-2')
 
-    def test_gated_workshop_page_does_not_render_reader_controls(self):
-        """Workshop paywalls hide body, Q&A, completion, and reader controls."""
+    def test_gated_workshop_page_renders_reader_chrome_but_hides_body(self):
+        """Gated workshop pages keep the reader sidebar/chrome and Q&A, but
+        still hide the full body and the completion button behind the paywall."""
         gated = Workshop.objects.create(
             title="Gated Workshop",
             slug="gated-workshop",
@@ -232,10 +233,10 @@ class FoldableSidebarMarkupTest(TierSetupMixin, TestCase):
             content_id="11111111-1111-1111-1111-111111111111",
         )
         response = self.client.get(page.get_absolute_url())
-        # Issue #515: gated workshop pages return 403 with the teaser
-        # layout (locked-video thumbnail + first ~150 words + paywall
-        # card). The full ``page-body`` block is still hidden — the
-        # teaser uses ``teaser-body`` instead.
+        # Gated workshop pages return 403 with the teaser layout and the
+        # paywall card. The reader sidebar/chrome now renders on the gated
+        # page so the tutorial navigation stays available; the full
+        # ``page-body`` block and the completion control stay hidden.
         self.assertEqual(response.status_code, 403)
         self.assertContains(
             response, 'data-testid="page-paywall"', status_code=403,
@@ -243,15 +244,17 @@ class FoldableSidebarMarkupTest(TierSetupMixin, TestCase):
         self.assertNotContains(
             response, 'data-testid="page-body"', status_code=403,
         )
-        self.assertNotContains(
+        # Reader chrome is present on the gated page.
+        self.assertContains(
             response, 'id="content-sidebar-collapse-btn"', status_code=403,
         )
-        self.assertNotContains(
+        self.assertContains(
             response, 'id="content-sidebar-floating-toggle"', status_code=403,
         )
+        self.assertContains(
+            response, 'data-testid="workshop-sidebar"', status_code=403,
+        )
+        # Completion control stays hidden — a gated visitor cannot complete.
         self.assertNotContains(
             response, 'data-testid="mark-page-complete-btn"', status_code=403,
-        )
-        self.assertNotContains(
-            response, 'data-testid="qa-section"', status_code=403,
         )

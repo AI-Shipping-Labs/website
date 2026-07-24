@@ -631,23 +631,20 @@ class ProjectDetailGatingTest(TestCase):
         self.assertContains(response, 'Gated description')
         # Full content NOT served to anonymous viewer
         self.assertNotContains(response, 'Secret gated project content')
-        # Issue #1335: unified upgrade card — upgrade heading + Pricing plus
-        # a no-cost account path and a sign-in link.
+        # Unified upgrade card — a paid wall offers only the Upgrade path.
+        # A free account grants no access to a Basic project, so the card no
+        # longer renders a "Create a free account" signup CTA.
         self.assertContains(
             response,
             'Upgrade to Basic to view this project',
         )
-        self.assertContains(response, '/pricing')
-        self.assertContains(
-            response,
-            'href="/accounts/signup/?next=/projects/gated-project"',
-        )
-        self.assertContains(response, 'Create a free account')
+        self.assertContains(response, 'href="/pricing"')
+        self.assertNotContains(response, 'Create a free account')
         # The canonical access card replaces the old blurred skeleton.
         self.assertNotContains(response, 'filter: blur(8px)')
         self.assertContains(response, 'data-lucide="lock"')
-        # The "View Pricing" button text from the gated CTA
-        self.assertContains(response, 'View Pricing')
+        # The "Upgrade" button text from the gated CTA
+        self.assertContains(response, 'Upgrade')
 
 # --- Community submission tests ---
 

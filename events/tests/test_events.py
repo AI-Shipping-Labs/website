@@ -2339,14 +2339,14 @@ class EventAnonymousPaidCopyTest(TestCase):
     def test_anonymous_paid_cta_has_signin_link_preserving_next(self):
         resp = self.client.get(self.main_event.get_absolute_url())
         html = resp.content.decode()
-        # Secondary CTA: "Sign in" preserving ?next= to the event URL.
-        # Issue #673: ``next`` carries the canonical id+slug URL.
+        # A paid wall now offers only the Upgrade path — a free account grants
+        # no access to a paid event, so the card no longer renders a secondary
+        # "Sign in" CTA. The anonymous-paid card shows just the pricing CTA.
         self.assertIn(
-            'data-testid="event-anonymous-signin-cta"', html,
+            'data-testid="event-anonymous-pricing-cta"', html,
         )
-        self.assertIn(
-            f'/accounts/login/?next={self.main_event.get_absolute_url()}',
-            html,
+        self.assertNotIn(
+            'data-testid="event-anonymous-signin-cta"', html,
         )
 
     def test_anonymous_paid_cta_does_not_offer_signup(self):

@@ -501,7 +501,11 @@ class DownloadDelivery1264Test(TestCase):
             'data-testid="download-access-required-notice"',
         )
         self.assertContains(recovery, 'data-testid="download-pricing-cta"')
-        self.assertContains(recovery, 'Already a member? Sign in')
+        # A paid download recovery card offers only the Upgrade path — the
+        # under-tier requester is already a member, so a free account would
+        # not help and the card no longer renders a "Sign in" link.
+        self.assertContains(recovery, 'href="/pricing"')
+        self.assertNotContains(recovery, 'Already a member? Sign in')
         self.assertNotContains(recovery, user.email)
         self.assertEqual(
             redemption['Cache-Control'],

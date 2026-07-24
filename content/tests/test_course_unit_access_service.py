@@ -128,8 +128,8 @@ class CourseUnitAccessDecisionTest(TierSetupMixin, TestCase):
         self.assertEqual(decision.status_code, 403)
         # Issue #1335: the legacy free-course anonymous nudge is an
         # authentication gate too and now shares the canonical sign-in copy.
-        self.assertEqual(context['cta_label'], 'Sign In')
-        self.assertEqual(context['gated_cta_label'], 'Sign In')
+        self.assertEqual(context['cta_label'], 'Sign in')
+        self.assertEqual(context['gated_cta_label'], 'Sign in')
         self.assertIn('/accounts/login/?next=', context['gated_cta_url'])
         self.assertEqual(context['signup_cta_label'], 'Create a free account')
 
@@ -162,7 +162,7 @@ class CourseUnitAccessDecisionTest(TierSetupMixin, TestCase):
         self.assertFalse(decision.has_access)
         self.assertEqual(decision.reason, ACCESS_DENIED_AUTHENTICATION)
         self.assertEqual(decision.gated_reason, ACCESS_DENIED_AUTHENTICATION)
-        self.assertEqual(context['cta_label'], 'Sign In')
+        self.assertEqual(context['cta_label'], 'Sign in')
         self.assertEqual(context['signup_cta_label'], 'Create a free account')
         self.assertIn('/accounts/login/?next=', context['gated_cta_url'])
 

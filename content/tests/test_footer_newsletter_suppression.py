@@ -175,16 +175,18 @@ class FooterNewsletterSuppressionTest(TierSetupMixin, TestCase):
     # ----------------------------------------------------------------
 
     def test_inline_form_shows_opt_in_disclosure(self):
-        """The inline register card on an in-scope surface (course
-        detail free-anon branch) carries the new opt-in disclosure
-        line so the implicit "free signup = newsletter opt-in"
-        becomes explicit."""
+        """The inline register form was retired in favor of the shared
+        signup-actions stack (OAuth + Create-a-free-account + Sign-in). That
+        stack carries no inline opt-in disclosure line, so the free-anon
+        course-detail surface renders the signup actions without it."""
         response = self.client.get('/courses/free-101')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, INLINE_OPT_IN_DISCLOSURE)
-        # The disclosure is wrapped in a labeled element for the
-        # Playwright suite to locate.
-        self.assertContains(
+        # The shared signup-actions stack renders on the free-anon surface.
+        self.assertContains(response, 'data-testid="signup-actions"')
+        self.assertContains(response, 'Create a free account')
+        # The old inline-only opt-in disclosure is gone.
+        self.assertNotContains(response, INLINE_OPT_IN_DISCLOSURE)
+        self.assertNotContains(
             response, 'data-testid="inline-register-opt-in"',
         )
 

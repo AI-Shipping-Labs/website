@@ -115,7 +115,7 @@ Orchestrator picks groomed issue
 - If PM rejects: relay UX feedback to software engineer, fix, then re-launch PM
 - If PM accepts: tell software engineer to commit on the worktree branch (no push, no PR)
 - After SWE commits, the orchestrator merges the worktree branch into local `main` and pushes `main` to origin (see "Merging — local only, no PRs" below)
-- After pushing, run oncall-engineer to check CI/CD. Do not watch CI manually as a blocking activity; let the on-call agent monitor and report failures while the orchestrator continues grooming or launching independent work.
+- After pushing, dispatch the oncall-engineer agent asynchronously and continue with other work or end the turn. The orchestrator is never the CI observer: it must not invoke `scripts/watch-ci.py`, run `gh run watch`, `sleep`, repeatedly call `gh run list`/`gh run view`, or remain idle across agent turns solely to await CI. Only on-call observes the `Deploy Dev` run. On-call invokes the blocking watcher once (see below) and interprets its single verdict; the orchestrator may receive on-call's final report but never shadow-polls, runs a second watcher, or waits on CI itself.
 - When a role agent reports a failure, assign the fix to the right role agent. For code/test failures, send the concrete tester or on-call findings back to a software-engineer agent; for deployment/CI infrastructure failures, let the on-call agent fix when it can.
 - After committing, pick the next two issues (never stop until all issues are done)
 
@@ -151,7 +151,7 @@ Why no PRs: the team's review pipeline is the agent flow (PM groom → SWE → t
 - Never commit directly without tester review, even for "simple" changes
 - Never use `gh pr create` or `gh pr merge` — see "Merging — local only, no PRs"
 - Agents post issue comments via `gh`, not the orchestrator. Launch the relevant agent (PM for acceptance, tester for verdicts) and let it write the comment
-- After push, always run oncall-engineer agent to monitor CI — do not just check manually or wait on CI as the orchestrator's main task
+- After push, always dispatch the oncall-engineer agent asynchronously to observe CI via the single blocking watcher (`scripts/watch-ci.py`). The orchestrator does not check CI manually, run a second watcher, or wait on CI as its main task — on-call is the sole observer
 
 ### Red CI is never "chronically red" — always fix it
 

@@ -152,7 +152,9 @@ class MemberBadgeTemplateUsageTest(SimpleTestCase):
             'templates/accounts/account.html',
             'templates/content/blog_list.html',
             'templates/content/courses_list.html',
-            'templates/content/_project_card.html',
+            # Issue #1339 — the project card rebased onto _content_card.html; its
+            # member badges now live in the dedicated badge partial.
+            'templates/content/_project_card_badges.html',
             'templates/content/activities.html',
             'templates/content/_workshops_catalog.html',
             'templates/content/workshop_detail.html',
@@ -160,7 +162,9 @@ class MemberBadgeTemplateUsageTest(SimpleTestCase):
             'templates/home.html',
             'templates/plans/sprint_detail.html',
             'templates/events/_event_header.html',
-            'templates/events/_upcoming_event_card.html',
+            # Issue #1339 — the upcoming event card rebased onto _content_card.html;
+            # its member badges now live in the dedicated badge partial.
+            'templates/events/_upcoming_event_card_badges.html',
             'templates/events/events_calendar.html',
             'templates/events/events_list.html',
             'templates/events/event_series.html',

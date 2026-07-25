@@ -220,12 +220,18 @@ def test_mixed_event_cards_share_compact_padding_and_16px_stack_rhythm(django_se
     stack_cards = stack.locator(":scope > article")
     expect(stack_cards.nth(1)).to_have_css("margin-top", "16px")
     assert _vertical_spacing(stack_cards) == pytest.approx(16)
+    # Issue #1339 — the upcoming and series cards rebased onto the shared
+    # content/_content_card.html container, which puts the compact catalog
+    # padding (p-4 sm:p-5 -> 20px at this viewport) on the inner navigable body
+    # div rather than the <article> shell (mirroring the project card). The
+    # past-event card is not yet rebased (Phase 2) and keeps padding on its
+    # <article>. All three still render the same 20px compact padding.
     for card in (
-        page.locator('[data-testid="upcoming-event-card"]'),
-        page.locator('[data-testid="event-series-card"]'),
-        page.locator('[data-testid="past-event-card"]'),
+        page.locator('[data-testid="upcoming-event-card"] a > div').first,
+        page.locator('[data-testid="event-series-card"] a > div').first,
+        page.locator('[data-testid="past-event-card"]').first,
     ):
-        expect(card.first).to_have_css("padding-top", "20px")
+        expect(card).to_have_css("padding-top", "20px")
     standalone_link = page.locator(f'a[href="{standalone.get_absolute_url()}"]').first
     expect(standalone_link).to_be_visible()
     standalone_link.click()

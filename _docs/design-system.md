@@ -146,13 +146,17 @@ Common vertical rhythm:
 - Repeated card grids use `gap-6`; tight operational rows use `gap-4`. Do not use `gap-5`, `gap-8`, or another gap size on a repeated card grid. Purpose-specific page-layout gaps that are not card grids may use the spacing their layout requires.
 - Common stack jumps: `mt-1`, `mt-2`, `mt-4`, `mt-6`, `mt-10`, `mt-16`.
 
-Common card padding:
+Common card padding is bound to the card role, not to the page (see [Cards](#cards)):
 
-- Tier/hero cards: `p-5 sm:p-8`.
-- Default content/testimonial cards: `p-6`.
-- Compact catalog cards: `p-4 sm:p-5`.
+- Tier/hero and callout-spotlight cards: `p-5 sm:p-8`.
+- Info / static and default testimonial cards: `p-6`.
+- Content-catalog cards: `p-4 sm:p-5`; compact-rail cards: `p-4`.
 - List rows: `px-3 py-2` with `min-h-[44px]`.
 - Studio table cells: `px-4 py-3`.
+
+Card padding is a role decision, not a per-page taste. There is no `p-4 sm:p-6`
+card padding: a repeated content card is `p-4 sm:p-5` and a static/testimonial
+card is `p-6`.
 
 Public/member page headers use a title-first stack. Marketing collection
 sections with one clear destination CTA use a responsive header/action row:
@@ -189,6 +193,44 @@ Comparison and progress lists:
 Page heroes are single-column and use this order: eyebrow, H1, lead, CTA row.
 
 Do not use arbitrary-fraction or two-column heroes for decorative value-point stacks or feature bullets. Move that content into its own full-width section below the hero. A side column is allowed only for a functional artifact the visitor can act on immediately, such as a registration form, video embed, or event-registration card.
+
+## Cards
+
+Cards are a system of five roles. Bind radius, surface, padding, hover, and shadow to the card's ROLE, never to the page it sits on. The same content type must render as the same card on its home preview and its catalog page.
+
+Three principles:
+
+1. Radius drift is role drift. `rounded-lg` is anything repeated in a grid or list; `rounded-xl` is a singular spotlight surface only (the spotlight exception below); `rounded-2xl` is full-page focus panels (out of scope here).
+2. Surface is a band-contrast rule. A card's surface must contrast its section band. Default `bg-card`; pass `bg-background` on bands that are themselves `bg-card`. This generalizes `_project_card.html`'s original `project_card_surface_class`.
+3. Hover affordance is reserved for clickable cards. A static card with `hover:border-accent/50` promises navigation that does not exist. Static cards get no `group`, no hover, and no arrow.
+
+### Role contract table
+
+| Role | Radius | Surface | Padding | Hover / group | Shadow | Title | Interactive |
+|---|---|---|---|---|---|---|---|
+| Content-catalog (clickable; media optional; badges; chips; one CTA) | `rounded-lg` | `bg-card` default / `bg-background` on card bands | `p-4 sm:p-5` | `hover:border-accent/50` + `group`, `group-hover:text-accent` title | none | `text-lg font-semibold` | whole-card anchor |
+| Compact rail (related-content, dense grids) | `rounded-lg` | per band | `p-4` | same as catalog | none | `text-base font-semibold` | whole-card anchor |
+| Info / static (feature bullets, activity blurbs, sprint-story, testimonials) | `rounded-lg` | per band | `p-6` | none | none | `text-lg font-semibold` | not a link, no CTA inside |
+| Callout / action (featured sprint, dashboard next-step, gated card, starting-soon; accent variant `border-accent/30 bg-accent/5`) | `rounded-lg` (spotlight exception) | `bg-card` / `bg-accent/5` | `p-6`; spotlight `p-5 sm:p-8` | none on container | none | `text-lg` / spotlight `text-2xl` | CTA is an explicit `{% button_classes %}` button |
+| Tier / pricing | `rounded-xl` | `bg-background` | `p-5 sm:p-8` | none | `shadow-xl` on the highlighted tier only | `text-lg font-semibold` | `Join` button, full width, no arrow |
+
+Spotlight exception: only tier/pricing cards and the home featured-sprint card keep `rounded-xl` (hero-scale, singular). Everything repeated in a grid is `rounded-lg`.
+
+Shadow rule: repeated cards never carry a shadow. Do not add `shadow-sm` to grid cards (testimonials, sprint cards, etc.); `shadow-xl` is reserved for the highlighted tier card.
+
+### CTA affordance (three affordances, not seven)
+
+| Affordance | Meaning | Owner |
+|---|---|---|
+| Top-right translating arrow | This whole card navigates | `templates/content/_content_card.html` renders it; never hand-place it at a call site |
+| `{% button_classes %}` button | Explicit action on a callout / tier / dashboard / gated card | `{% button_classes %}` from `accounts_extras` |
+| None | Info / static card | — |
+
+The canonical arrow markup, owned by `_content_card.html`, is `<i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent">`; badges cluster to its left in the header row, and `hidden sm:block` keeps the mobile arrow-count contract. Eliminated affordances: trailing "Read article ->" / "View download ->" text spans, the `pointer-events-none` fake-button span inside a clickable card, `arrow-up-right` on the gated CTA, and no-affordance clickable cards (they gain the top-right arrow).
+
+### Owners
+
+Clickable cards render through `templates/content/_content_card.html` (the container: `<article>` shell, wrapping anchor, optional media band, header row with badge cluster + arrow, and post-anchor tag row). Static cards use the `templates/content/_info_card_classes.html` class string. Both are layered on the existing `templates/content/_clickable_card_classes.html` anchor a11y contract. See the [Partials and Component Index](#partials-and-component-index) for the canonical usage.
 
 ## Card Media Slots
 
@@ -245,6 +287,8 @@ The documented owner is mandatory for every instance of its named role, subject 
 | `{% button_classes %}` from `accounts_extras` | Every non-Studio product/public/member/marketing CTA. | `{% load accounts_extras %}` then `class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}"` |
 | `templates/content/_content_preview.html` | Every rendered catalog media band for a content type whose contract includes media. Workshop cards use it only for explicit cover/custom media; coverless and auto-only workshops omit the slot entirely. | `{% if workshop.card_image_url %}{% include "content/_content_preview.html" with preview_cover_url=workshop.card_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" %}{% endif %}` |
 | `templates/content/_clickable_card_classes.html` | Every fully clickable catalog/preview card anchor. | `class="{% include 'content/_clickable_card_classes.html' %} rounded-lg"` |
+| `templates/content/_content_card.html` | Every fully clickable content-catalog / compact-rail card container (the `<article>` shell, wrapping anchor, optional media band, header row with badge cluster + top-right arrow, and post-anchor tag row). Pass the per-type chrome as `card_*` partial paths. | `{% include "content/_content_card.html" with card_url=item.get_absolute_url card_testid="item-card" card_body_template="content/_item_card_body.html" card_badge_template="content/_item_card_badges.html" card_surface_class="bg-background" %}` |
+| `templates/content/_info_card_classes.html` | Every static / info card class string (`rounded-lg border border-border p-6`). The caller appends the band-contrast surface token; never combine with `group`, hover, or an anchor. | `class="{% include 'content/_info_card_classes.html' %} bg-card"` |
 | `templates/includes/_list_row.html` | Every reader, drawer, or numbered navigation row. | `{% include "includes/_list_row.html" with href=item.get_absolute_url title=item.title is_current=False marker_kind="circle" %}` |
 | `templates/accounts/includes/_auth_card.html` | Every standard full-page authentication form. Titles use sentence case; pass the subtitle, form partial, OAuth copy, and legal-action input. | `{% include "accounts/includes/_auth_card.html" with auth_title="Create account" auth_subtitle="Join AI Shipping Labs and start building" form_template="accounts/includes/_register_form.html" oauth_action="Sign up" oauth_divider_text="sign up with" legal_action="creating an account" %}` |
 | `templates/includes/_accordion.html` | Every section-header accordion. | `{% include "includes/_accordion.html" with summary="Show details" body=details_html %}` or `{% include "includes/_accordion.html" with summary="Show transcript" body_template="events/_recording_transcript_body.html" %}` |

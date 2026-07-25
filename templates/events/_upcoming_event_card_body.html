@@ -1,0 +1,45 @@
+{% comment %}
+Issue #1339 — upcoming event card body (title onward). Rendered inside the
+shared content/_content_card.html anchor, after the header row, via
+card_body_template. The series name is plain text, not a link: the card's own
+anchor already routes to the series page, so a nested <a> here would be invalid
+HTML and a duplicate click target.
+{% endcomment %}
+<h3 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
+  {{ event.title }}
+</h3>
+{% if event.event_series %}
+<p class="mt-2 text-sm text-muted-foreground" data-testid="event-card-series-link">
+  Series: {{ event.event_series.name }}
+</p>
+{% endif %}
+{% if event.description_html %}
+<p class="mt-2 text-muted-foreground line-clamp-2">{{ event.description_html|striptags|truncatechars:200 }}</p>
+{% endif %}
+<div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground" data-testid="event-card-date">
+  <span class="flex items-center gap-1.5">
+    <i data-lucide="calendar" class="h-4 w-4"></i>
+    {% include "events/_event_list_datetime.html" with event=event %}
+  </span>
+  {% if event.location %}
+  <span class="flex items-center gap-1.5">
+    <i data-lucide="map-pin" class="h-4 w-4"></i>
+    {{ event.location }}
+  </span>
+  {% endif %}
+</div>
+{% if event.attendee_count >= 5 %}
+<div class="mt-3 flex flex-wrap items-center gap-2">
+  {% include "events/_event_attendee_count.html" %}
+</div>
+{% endif %}
+{% if event.tags %}
+<div class="mt-3 flex flex-wrap gap-1.5" data-testid="event-card-tags">
+  {% for tag in event.tags|slice:":3" %}
+  <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
+  {% endfor %}
+  {% if event.tags|length > 3 %}
+  <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ event.tags|length|add:'-3' }} more event tags">+{{ event.tags|length|add:"-3" }}</span>
+  {% endif %}
+</div>
+{% endif %}

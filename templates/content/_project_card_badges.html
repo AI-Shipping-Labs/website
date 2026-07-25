@@ -1,0 +1,13 @@
+{% load member_badges %}
+{% comment %}
+Issue #1339 — project card header badge cluster. Rendered in the shared
+content/_content_card.html header row via card_badge_template.
+{% endcomment %}
+{% if project.difficulty %}
+<span class="rounded-full px-2.5 py-0.5 text-xs font-medium {{ project.difficulty_color }}">{{ project.difficulty }}</span>
+{% endif %}
+{% if project.required_level >= 10 %}
+{% member_access_badge project.required_level testid="project-tier-badge" %}
+{% else %}
+{% member_access_badge project.required_level testid="project-free-badge" %}
+{% endif %}

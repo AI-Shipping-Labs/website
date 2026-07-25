@@ -1,0 +1,5 @@
+{% comment %}
+Issue #1339 — project card media band. Rendered inside the shared
+content/_content_card.html anchor via card_media_template.
+{% endcomment %}
+{% include "content/_content_preview.html" with preview_cover_url=project.display_image_url preview_title=project.title preview_label="Project" preview_icon="rocket" preview_testid="project-card-preview" preview_image_loading="lazy" preview_decorative_fallback=True %}

@@ -1,0 +1,26 @@
+{% comment %}
+Issue #1339 — home blog preview card body. Rendered inside the shared
+content/_content_card.html anchor via card_body_template. Tags are static
+spans (the whole card is the single navigation anchor), so no nested links.
+{% endcomment %}
+<h3 class="text-lg font-semibold text-foreground transition-colors group-hover:text-accent">{{ article.title }}</h3>
+<p class="mt-2 line-clamp-3 text-sm text-muted-foreground">{{ article.description }}</p>
+<div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+  <span class="inline-flex items-center gap-1.5">
+    <i data-lucide="calendar" class="h-4 w-4"></i>
+    {{ article.short_date }}
+  </span>
+  {% if article.reading_time %}
+  <span class="inline-flex items-center gap-1.5">
+    <i data-lucide="clock" class="h-4 w-4"></i>
+    {{ article.reading_time }}
+  </span>
+  {% endif %}
+</div>
+{% if article.tags %}
+<div class="mt-3 flex flex-wrap gap-2">
+  {% for tag in article.tags %}
+  <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
+  {% endfor %}
+</div>
+{% endif %}

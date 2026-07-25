@@ -1,0 +1,20 @@
+{% comment %}
+Issue #1339 — static info-card class STRING (mirrors the
+content/_clickable_card_classes.html pattern for the static role).
+
+Outputs exactly: rounded-lg border border-border p-6
+
+The caller appends the band-contrast surface token (bg-card default, or
+bg-background on a bg-card band) plus any layout classes. This is the info /
+static card role: feature bullets, activity blurbs, sprint-story steps,
+testimonials, and other non-navigating cards. It is NEVER combined with
+`group`, a hover state, an arrow, or an anchor — a static card that promises
+navigation it does not deliver is a defect.
+
+Usage: render the partial inside a class attribute of your <div>/<article>:
+
+    <div class="{# {% include 'content/_info_card_classes.html' %} #} bg-card ...">
+
+The literal example tag above is escaped so this comment cannot self-recurse
+(a bare {# #} comment is single-line only; see feedback_django_comment_leak.md).
+{% endcomment %}rounded-lg border border-border p-6

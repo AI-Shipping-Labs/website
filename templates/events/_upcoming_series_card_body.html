@@ -1,0 +1,36 @@
+{% comment %}
+Issue #1339 — grouped series card body (title onward). Rendered inside the
+shared content/_content_card.html anchor via card_body_template. The whole card
+navigates to the series page (see the container anchor), so the title and the
+"See more" summary are plain text/spans here — a nested <a> would be invalid
+HTML and duplicate the card's click target. ``row`` carries the ``series``, the
+``next_occurrence`` to display, and remaining/count metadata.
+{% endcomment %}
+<h3 class="text-lg font-semibold text-foreground transition-colors group-hover:text-accent" data-testid="series-card-title">
+  {{ row.next_occurrence.title }}
+</h3>
+<p class="mt-2 text-sm text-muted-foreground" data-testid="series-card-series-name">
+  Series: {{ row.series.name }}
+</p>
+<p class="mt-2 text-sm text-muted-foreground" data-testid="series-card-meta">
+  {% if row.series.schedule_label %}{{ row.series.schedule_label }} · {% endif %}{{ row.count }} upcoming session{{ row.count|pluralize }}
+</p>
+<div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground" data-testid="series-card-date">
+  <span class="flex items-center gap-1.5">
+    <i data-lucide="calendar" class="h-4 w-4"></i>
+    {% include "events/_event_list_datetime.html" with event=row.next_occurrence %}
+  </span>
+  {% if row.next_occurrence.location %}
+  <span class="flex items-center gap-1.5">
+    <i data-lucide="map-pin" class="h-4 w-4"></i>
+    {{ row.next_occurrence.location }}
+  </span>
+  {% endif %}
+</div>
+{% if row.remaining_count > 0 %}
+<span class="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-accent" data-testid="series-card-see-more">
+  See more
+  <span class="text-muted-foreground">({{ row.remaining_count }} more)</span>
+  <i data-lucide="arrow-right" class="h-4 w-4"></i>
+</span>
+{% endif %}

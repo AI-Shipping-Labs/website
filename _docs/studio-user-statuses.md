@@ -146,3 +146,22 @@ bounce. `State` reflects the SES delivery status. See bounce handling
 
 The card also shows when the bounce was recorded and the raw SES
 diagnostic string when available.
+
+## Subscription reconciliation (report, not a per-user badge)
+
+`/studio/payments/subscription-reconciliation/` compares live Stripe
+subscription status against website access for the whole Stripe cohort. It is
+read-only and distinct from Payment mismatches (checkout identity conflicts).
+
+Key member-facing distinctions the report surfaces:
+
+- Scheduled cancellation keeps the paid tier and shows the future access-ending
+  date — it is not churn and never revokes access early.
+- An ended (`canceled`) subscription that is still paid locally is actionable
+  (`Revert to Free`); a surviving admin override keeps effective access.
+- A failed payment shows the exact live Stripe status (`Dunning / grace`) and
+  never offers `Revert to Free` — access is retained until Stripe ends the
+  subscription.
+
+See `_docs/integrations/stripe.md#subscription-reconciliation-live-stripe-vs-website-access`
+for the full state contract, cadence, and the confirmed apply API.

@@ -119,6 +119,14 @@ INTEGRATION_GROUPS = [
                 'description': 'Hard UTC cutoff after which numeric checkout references are quarantined even if the compatibility switch remains enabled.',
                 'docs_url': '_docs/integrations/stripe.md#legacy_numeric_checkout_reference_cutoff',
             },
+            {
+                'key': 'STRIPE_RECONCILIATION_STALE_MINUTES',
+                'is_secret': False,
+                'optional': True,
+                'default': '120',
+                'description': 'Minutes after which a stuck running subscription-reconciliation run is marked failed so the next daily run can start.',
+                'docs_url': '_docs/integrations/stripe.md#stripe_reconciliation_stale_minutes',
+            },
         ],
     },
     {

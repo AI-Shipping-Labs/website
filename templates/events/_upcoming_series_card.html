@@ -1,57 +1,17 @@
-{% load access_tags %}
-{% load member_badges %}
 {% comment %}
-Issue #1028: grouped "series card" shown in the Upcoming section when a
-series has 2+ upcoming live occurrences. ``row`` carries the ``series``, the
-``next_occurrence`` to display, and remaining/count metadata. Links route to
-the series page, where visitors can inspect and register for all sessions.
+Issue #1028: grouped "series card" shown in the Upcoming section when a series
+has 2+ upcoming live occurrences. ``row`` carries the ``series``, the
+``next_occurrence`` to display, and remaining/count metadata. The whole card
+routes to the series page, where visitors can inspect and register for all
+sessions.
 
-Card anatomy is kept in lockstep with ``_upcoming_event_card.html`` — same
-badge row (access badge first, then the series pill), same ``text-lg``
-title, same muted "Series: <name>" line. The two card types sit next to
-each other in the Upcoming list, so any divergence reads as a bug.
+Issue #1339 — rebased onto the shared content/_content_card.html container so
+this card stays in lockstep with _upcoming_event_card.html: same badge row
+(access badge first, then the series pill), same top-right navigation arrow,
+same ``text-lg`` title. The card is now a single anchor to the series page, so
+the title and the "See more" summary are plain text/spans in the body partial.
+Every data-testid is preserved.
 {% endcomment %}
-<article class="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 sm:p-5" data-testid="event-series-card" data-series-slug="{{ row.series.slug }}">
-  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-    <div class="min-w-0 flex-1">
-      <div class="mb-2 flex flex-wrap items-center gap-2">
-        {% member_access_badge row.next_occurrence.required_level testid="event-tier-badge" %}
-        <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="series-card-badge">
-          <i data-lucide="repeat" class="h-3 w-3"></i>
-          Event series
-        </span>
-      </div>
-      <h3 class="text-lg font-semibold text-foreground transition-colors group-hover:text-accent" data-testid="series-card-title">
-        <a href="{{ row.series.get_absolute_url }}" class="focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background" data-testid="series-card-link">
-          {{ row.next_occurrence.title }}
-        </a>
-      </h3>
-      <p class="mt-2 text-sm text-muted-foreground" data-testid="series-card-series-name">
-        Series: {{ row.series.name }}
-      </p>
-      <p class="mt-2 text-sm text-muted-foreground" data-testid="series-card-meta">
-        {% if row.series.schedule_label %}{{ row.series.schedule_label }} · {% endif %}{{ row.count }} upcoming session{{ row.count|pluralize }}
-      </p>
-      <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground" data-testid="series-card-date">
-        <span class="flex items-center gap-1.5">
-          <i data-lucide="calendar" class="h-4 w-4"></i>
-          {% include "events/_event_list_datetime.html" with event=row.next_occurrence %}
-        </span>
-        {% if row.next_occurrence.location %}
-        <span class="flex items-center gap-1.5">
-          <i data-lucide="map-pin" class="h-4 w-4"></i>
-          {{ row.next_occurrence.location }}
-        </span>
-        {% endif %}
-      </div>
-      {% if row.remaining_count > 0 %}
-      <a href="{{ row.series.get_absolute_url }}" class="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:underline" data-testid="series-card-see-more">
-        See more
-        <span class="text-muted-foreground">({{ row.remaining_count }} more)</span>
-        <i data-lucide="arrow-right" class="h-4 w-4"></i>
-      </a>
-      {% endif %}
-    </div>
-    <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
-  </div>
-</article>
+{% with series_slug_attr='data-series-slug="'|add:row.series.slug|add:'"' %}
+{% include "content/_content_card.html" with card_url=row.series.get_absolute_url card_testid="event-series-card" card_extra_attrs=series_slug_attr card_anchor_testid="series-card-link" card_badge_template="events/_upcoming_series_card_badges.html" card_body_template="events/_upcoming_series_card_body.html" %}
+{% endwith %}

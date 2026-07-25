@@ -23,7 +23,9 @@ CANONICAL = {
 IN_SCOPE = {
     'I1': (
         'content/models/project.py',
-        'templates/content/_project_card.html',
+        # Issue #1339 — the project card rebased onto _content_card.html; the
+        # difficulty color/label rendering now lives in the badge partial.
+        'templates/content/_project_card_badges.html',
         'templates/content/project_detail.html',
     ),
     'I2': ('content/templatetags/member_badges.py',),

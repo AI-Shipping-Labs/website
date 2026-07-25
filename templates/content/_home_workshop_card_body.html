@@ -1,0 +1,14 @@
+{% comment %}
+Issue #1339 — home workshop preview card body. Rendered inside the shared
+content/_content_card.html anchor via card_body_template.
+{% endcomment %}
+<h3 class="text-lg font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">{{ workshop.title }}</h3>
+{% if workshop.description_html %}
+<p class="mt-3 line-clamp-3 text-sm leading-6 text-muted-foreground">{{ workshop.description_html|striptags|truncatechars:180 }}</p>
+{% endif %}
+<div class="mt-auto pt-6">
+  <p class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+    <i data-lucide="calendar" class="h-3.5 w-3.5" aria-hidden="true"></i>
+    {{ workshop.date|member_short_date }}
+  </p>
+</div>

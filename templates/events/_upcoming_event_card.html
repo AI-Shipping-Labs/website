@@ -1,84 +1,15 @@
-{% load access_tags %}
-{% load member_badges %}
 {% comment %}
-Issue #866: single upcoming event card, extracted from events_list.html so
-the Upcoming loop can render either an event row or a grouped series row.
-``event`` is the Event in scope; ``registered_event_ids`` is the set of
-event ids the current user is registered for. Behaviour is unchanged from
-the inline card it replaced (#523 / #673 / #857 / #572).
+Issue #866: single upcoming event card, used by events_list.html and the home
+upcoming-events grid. ``event`` is the Event in scope; ``registered_event_ids``
+is the set of event ids the current user is registered for.
+
+Issue #1339 — rebased onto the shared content/_content_card.html container. The
+whole card is one anchor (#523 focus ring), the badge cluster and the top-right
+navigation arrow live in the shared header row, and the body/badges are supplied
+via the _upcoming_event_card_{badges,body}.html partials. A series occurrence
+routes the whole card to the series screen (#857) so the user lands where they
+can register for all upcoming sessions or any single one (#673 keeps the
+event.get_absolute_url source of truth). Every data-testid is preserved.
 {% endcomment %}
-<article class="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 sm:p-5" data-testid="upcoming-event-card">
-  {# Issue #523 — keyboard-focus ring on the wrapping <a>. #}
-  {# Issue #673 — single source of truth for the event URL is event.get_absolute_url. #}
-  {# Issue #857 — a series occurrence routes the whole card to the #}
-  {# series screen so the user lands where they can register for #}
-  {# all upcoming sessions or any single one. #}
-  <a href="{% if event.event_series %}{{ event.event_series.get_absolute_url }}{% else %}{{ event.get_absolute_url }}{% endif %}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="event-card-link">
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2 mb-2 flex-wrap">
-          {% member_access_badge event.required_level testid="event-tier-badge" %}
-          {% if event.event_series %}
-          {# Same pill as _upcoming_series_card.html so a series occurrence #}
-          {# is marked identically whether it renders grouped or standalone. #}
-          <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="series-card-badge">
-            <i data-lucide="repeat" class="h-3 w-3"></i>
-            Event series
-          </span>
-          {% endif %}
-          {% if event.id in registered_event_ids %}
-          {% member_status_badge "Registered" status="registered" icon="check" %}
-          {% endif %}
-          {% if event.is_external %}
-          {# Issue #572 — pill marking a third-party-hosted event so the user knows registration happens off-platform. #}
-          {% with external_host_label="Hosted on "|add:event.external_host %}
-          {% member_label_badge external_host_label tone="accent_outline_strong" icon="external-link" testid="event-card-external-badge" %}
-          {% endwith %}
-          {% endif %}
-        </div>
-        <h3 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
-          {{ event.title }}
-        </h3>
-        {% if event.event_series %}
-        {# Plain text, not a link: the card's own anchor already routes to #}
-        {# the series page (see href above), so a nested <a> here would be #}
-        {# both invalid HTML and a duplicate of the card's click target. #}
-        <p class="mt-2 text-sm text-muted-foreground" data-testid="event-card-series-link">
-          Series: {{ event.event_series.name }}
-        </p>
-        {% endif %}
-        {% if event.description_html %}
-        <p class="mt-2 text-muted-foreground line-clamp-2">{{ event.description_html|striptags|truncatechars:200 }}</p>
-        {% endif %}
-        <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground" data-testid="event-card-date">
-          <span class="flex items-center gap-1.5">
-            <i data-lucide="calendar" class="h-4 w-4"></i>
-            {% include "events/_event_list_datetime.html" with event=event %}
-          </span>
-          {% if event.location %}
-          <span class="flex items-center gap-1.5">
-            <i data-lucide="map-pin" class="h-4 w-4"></i>
-            {{ event.location }}
-          </span>
-          {% endif %}
-        </div>
-        {% if event.attendee_count >= 5 %}
-        <div class="mt-3 flex flex-wrap items-center gap-2">
-          {% include "events/_event_attendee_count.html" %}
-        </div>
-        {% endif %}
-        {% if event.tags %}
-        <div class="mt-3 flex flex-wrap gap-1.5" data-testid="event-card-tags">
-          {% for tag in event.tags|slice:":3" %}
-          <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
-          {% endfor %}
-          {% if event.tags|length > 3 %}
-          <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ event.tags|length|add:'-3' }} more event tags">+{{ event.tags|length|add:"-3" }}</span>
-          {% endif %}
-        </div>
-        {% endif %}
-      </div>
-      <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
-    </div>
-  </a>
-</article>
+{% firstof event.event_series.get_absolute_url event.get_absolute_url as event_card_href %}
+{% include "content/_content_card.html" with card_url=event_card_href card_testid="upcoming-event-card" card_anchor_testid="event-card-link" card_badge_template="events/_upcoming_event_card_badges.html" card_body_template="events/_upcoming_event_card_body.html" %}

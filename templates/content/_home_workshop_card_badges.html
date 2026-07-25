@@ -1,0 +1,7 @@
+{% load member_badges %}
+{% comment %}
+Issue #1339 — home workshop preview card header badge cluster. Rendered in the
+shared content/_content_card.html header row via card_badge_template.
+{% endcomment %}
+{% member_label_badge "Workshop" tone="muted" icon="graduation-cap" testid="home-workshop-type-badge" %}
+{% member_access_badge workshop.pages_required_level testid="home-workshop-access-badge" %}

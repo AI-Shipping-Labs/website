@@ -1,0 +1,26 @@
+{% load member_badges %}
+{% comment %}
+Issue #1339 — upcoming event card header badge cluster. Rendered in the shared
+content/_content_card.html header row via card_badge_template. Access badge
+first, then the series pill, registered, and external-host pills (#523 / #572 /
+#857). ``registered_event_ids`` is the set of event ids the current user is
+registered for.
+{% endcomment %}
+{% member_access_badge event.required_level testid="event-tier-badge" %}
+{% if event.event_series %}
+{# Same pill as _upcoming_series_card.html so a series occurrence is marked #}
+{# identically whether it renders grouped or standalone. #}
+<span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="series-card-badge">
+  <i data-lucide="repeat" class="h-3 w-3"></i>
+  Event series
+</span>
+{% endif %}
+{% if event.id in registered_event_ids %}
+{% member_status_badge "Registered" status="registered" icon="check" %}
+{% endif %}
+{% if event.is_external %}
+{# Issue #572 — pill marking a third-party-hosted event so the user knows registration happens off-platform. #}
+{% with external_host_label="Hosted on "|add:event.external_host %}
+{% member_label_badge external_host_label tone="accent_outline_strong" icon="external-link" testid="event-card-external-badge" %}
+{% endwith %}
+{% endif %}

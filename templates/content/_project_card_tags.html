@@ -1,0 +1,20 @@
+{% load tag_filters %}
+{% comment %}
+Issue #1339 — project card post-anchor tag-chip row. Rendered by the shared
+content/_content_card.html OUTSIDE the wrapping anchor via card_tag_row_template
+so each chip can link to the tag-filtered listing without producing nested
+anchors. Chip URLs honour base_path/selected_tags/current_difficulty when the
+including page provides them, and fall back to /projects otherwise.
+{% endcomment %}
+{% if project.tags %}
+<div class="flex flex-wrap gap-1.5 px-4 pb-4 sm:px-5 sm:pb-5" data-testid="project-card-tags">
+  {% for tag in project.tags|slice:":3" %}
+  <a href="{% tag_add_url project_tag_base selected_tags tag %}{% if current_difficulty %}&amp;difficulty={{ current_difficulty|urlencode }}{% endif %}"
+     class="inline-flex max-w-full items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+     data-testid="project-card-tag-link">{{ tag }}</a>
+  {% endfor %}
+  {% if project.tags|length > 3 %}
+  <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ project.tags|length|add:'-3' }} more project tags">+{{ project.tags|length|add:"-3" }}</span>
+  {% endif %}
+</div>
+{% endif %}

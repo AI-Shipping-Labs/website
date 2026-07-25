@@ -147,13 +147,20 @@ class EventsPresentationClassTest(TestCase):
             self.assertIn(expected, tag_match.group(1))
 
     def test_event_card_partials_and_all_stacks_use_compact_rhythm(self):
+        # Issue #1339 — the event/series cards now render through the shared
+        # content/_content_card.html container, so the compact catalog padding
+        # (p-4 sm:p-5) is owned by that container rather than hand-rolled in
+        # each partial. Assert the container owns the rhythm, and that the
+        # event/series partials no longer hand-roll the old bg-card p-6 chrome.
+        container = (ROOT / "templates/content/_content_card.html").read_text()
         single = (ROOT / "templates/events/_upcoming_event_card.html").read_text()
         series = (ROOT / "templates/events/_upcoming_series_card.html").read_text()
         listing = (ROOT / "templates/events/events_list.html").read_text()
 
+        self.assertIn("p-4", container)
+        self.assertIn("sm:p-5", container)
         for source in (single, series):
-            self.assertIn("p-4", source)
-            self.assertIn("sm:p-5", source)
+            self.assertIn("_content_card.html", source)
             self.assertNotIn("bg-card p-6", source)
         for testid in (
             "upcoming-events-stack",

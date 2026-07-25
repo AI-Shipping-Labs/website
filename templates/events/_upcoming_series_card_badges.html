@@ -1,0 +1,11 @@
+{% load member_badges %}
+{% comment %}
+Issue #1339 — grouped series card header badge cluster. Rendered in the shared
+content/_content_card.html header row via card_badge_template. Kept in lockstep
+with _upcoming_event_card_badges.html: access badge first, then the series pill.
+{% endcomment %}
+{% member_access_badge row.next_occurrence.required_level testid="event-tier-badge" %}
+<span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="series-card-badge">
+  <i data-lucide="repeat" class="h-3 w-3"></i>
+  Event series
+</span>

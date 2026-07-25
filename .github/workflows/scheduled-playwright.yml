@@ -170,6 +170,40 @@ jobs:
       - name: Run excluded Playwright marker suites
         run: uv run pytest -m "manual_visual or slow_platform" playwright_tests/ -v
 
+  django-visual-regression:
+    name: Django visual_regression suite
+    needs: changes
+    if: needs.changes.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    # The leg is ~2s (51 tests). 15 minutes covers checkout + uv sync with
+    # generous safety margin. No Playwright browser install is needed — this
+    # is a pure `manage.py test` Django leg.
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      # See the playwright-full job for why we use `--locked`.
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # Run ONLY the Django @tag('visual_regression') leg directly. We do NOT
+      # use `make test-visual-regression`, which additionally runs a Playwright
+      # `-m visual_regression` leg already covered by the playwright-full job
+      # above (its default markers include visual_regression) — reusing the make
+      # target would double-run that leg.
+      - name: Run Django visual_regression tests
+        run: uv run python manage.py test --tag=visual_regression --parallel
+
   notify:
     name: Scheduled Playwright Failure Issue
     needs: [changes, playwright-full, playwright-excluded-markers]
@@ -254,3 +288,79 @@ jobs:
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           gh issue close "${issue_number}" \
             --comment "Scheduled Playwright recovered on \`${GITHUB_REF_NAME}\`: ${run_url}"
+
+  notify-django-visual-regression:
+    name: Django visual_regression Failure Issue
+    needs: [changes, django-visual-regression]
+    if: always() && needs.changes.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+
+    steps:
+      # A DEDICATED failure-issue lineage for the Django visual_regression leg,
+      # distinct from the Playwright lineages. A Django failure must never post
+      # under a "Playwright" title — the notify job above keeps its own needs
+      # list, so it never reacts to this job's result.
+      - name: Open or update failure issue
+        if: needs.django-visual-regression.result == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_TITLE: "[CI] Scheduled Django visual_regression suite failing"
+        shell: bash
+        run: |
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          body_file="$(mktemp)"
+          cat > "${body_file}" <<EOF
+          The scheduled Django \`@tag('visual_regression')\` suite failed on \`${GITHUB_REF_NAME}\`.
+
+          Run: ${run_url}
+          Commit: ${GITHUB_SHA}
+          Event: ${GITHUB_EVENT_NAME}
+          Failed job: django-visual-regression
+
+          Open the run above and read the \`Run Django visual_regression tests\`
+          step: the Django test runner names each failing test by dotted path
+          (e.g. \`content.tests.test_catalog_tag_presentation_1228\`), which points
+          straight at the owning \`@tag('visual_regression')\` file — the
+          design-system contract that drifted.
+          EOF
+
+          issue_number=$(gh issue list \
+            --state open \
+            --search "${ISSUE_TITLE} in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == \"${ISSUE_TITLE}\") | .number" \
+            | head -n 1)
+
+          if [ -n "${issue_number}" ]; then
+            gh issue comment "${issue_number}" --body-file "${body_file}"
+          else
+            gh issue create --title "${ISSUE_TITLE}" --body-file "${body_file}"
+          fi
+
+      - name: Close recovered failure issue
+        if: needs.django-visual-regression.result == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_TITLE: "[CI] Scheduled Django visual_regression suite failing"
+        shell: bash
+        run: |
+          issue_number=$(gh issue list \
+            --state open \
+            --search "${ISSUE_TITLE} in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == \"${ISSUE_TITLE}\") | .number" \
+            | head -n 1)
+
+          if [ -z "${issue_number}" ]; then
+            exit 0
+          fi
+
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          gh issue close "${issue_number}" \
+            --comment "Scheduled Django visual_regression suite recovered on \`${GITHUB_REF_NAME}\`: ${run_url}"

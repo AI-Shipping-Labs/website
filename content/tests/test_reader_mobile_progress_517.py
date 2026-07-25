@@ -128,6 +128,9 @@ class WorkshopMobileProgressBarContextTest(TierSetupMixin, TestCase):
         self.assertContains(
             response, 'data-testid="reader-mobile-drawer-toggle"',
         )
+        # #1346: the drawer toggle carries the canonical accent
+        # focus-visible ring so keyboard focus is visible.
+        self.assertContains(response, 'focus-visible:ring-accent')
         # No fill bar for anonymous visitor.
         self.assertNotContains(
             response, 'data-testid="reader-mobile-progress-fill"',
@@ -248,6 +251,11 @@ class WorkshopMobileProgressBarHiddenWhenGatedTest(TierSetupMixin, TestCase):
         self.assertContains(
             response, 'data-testid="reader-mobile-nav-toggle-gated"',
             status_code=403,
+        )
+        # #1346: the gated toggle carries the canonical accent
+        # focus-visible ring so keyboard focus is visible.
+        self.assertContains(
+            response, 'focus-visible:ring-accent', status_code=403,
         )
 
     def test_main_user_on_paid_workshop_sees_progress_bar(self):

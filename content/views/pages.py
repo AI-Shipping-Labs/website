@@ -433,16 +433,22 @@ def projects_list(request):
     # Collect all tags and difficulties from published projects for the filter UI
     all_tags = set()
     all_difficulties = set()
+    has_unspecified_difficulty = False
     for project in projects:
         if project.tags:
             all_tags.update(project.tags)
         if project.difficulty:
             all_difficulties.add(project.difficulty)
+        else:
+            has_unspecified_difficulty = True
     all_tags = sorted(all_tags)
     all_difficulties = sorted(all_difficulties)
 
-    # Filter by difficulty if provided
-    if difficulty:
+    # Filter by difficulty if provided. The reserved sentinel 'unspecified'
+    # isolates the empty-difficulty cohort, which real choices cannot reach.
+    if difficulty == 'unspecified':
+        projects = projects.filter(difficulty='')
+    elif difficulty:
         projects = projects.filter(difficulty=difficulty)
 
     # Filter by tags if provided (AND logic)
@@ -453,6 +459,7 @@ def projects_list(request):
         'all_tags': all_tags,
         'all_difficulties': all_difficulties,
         'current_difficulty': difficulty,
+        'has_unspecified_difficulty': has_unspecified_difficulty,
         'selected_tags': selected_tags,
         'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
         'base_path': '/projects',

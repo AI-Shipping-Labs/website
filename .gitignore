@@ -37,3 +37,4 @@ playwright_tests/screenshots/
 # Claude Code local artifacts (agent worktrees, scheduler lock)
 .claude/worktrees/
 .claude/scheduled_tasks.lock
+*.sqlite3-journal

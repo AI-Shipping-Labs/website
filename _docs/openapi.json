@@ -4120,6 +4120,145 @@
         ]
       }
     },
+    "/api/instructors": {
+      "get": {
+        "description": "Lists instructors and whether each is linked to a platform account, plus the count of comment-bearing content items attributed to the instructor. Pass ``?linked=false`` to return only unlinked rows.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "linked",
+            "required": false,
+            "schema": {
+              "description": "When ``false``, return only instructors with no linked account.",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "instructors": [
+                    {
+                      "comment_content_count": 2,
+                      "email": "ada@test.com",
+                      "instructor_id": "ada",
+                      "linked": true,
+                      "linked_user_email": "ada@test.com",
+                      "name": "Ada"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Instructors with link state."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          }
+        },
+        "summary": "List instructors with account-link state",
+        "tags": [
+          "Instructors"
+        ]
+      }
+    },
+    "/api/instructors/reconcile": {
+      "post": {
+        "description": "Runs the same auto-link reconciliation as the ``link_instructors`` management command: fills every NULL link that has a verified email match, never overwriting an operator override. Returns summary counts.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "left_unlinked": 1,
+                  "newly_linked": 1,
+                  "scanned": 2
+                }
+              }
+            },
+            "description": "Reconciliation summary counts."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          }
+        },
+        "summary": "Reconcile instructor account links",
+        "tags": [
+          "Instructors"
+        ]
+      }
+    },
+    "/api/instructors/{instructor_id}/user": {
+      "put": {
+        "description": "Sets ``Instructor.user`` by ``email`` (verified accounts only) or ``user_id``, or clears it with ``{\"user\": null}``. An operator override set here is honored by the auto-link rule, which never overwrites a non-null link.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instructor_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "email": "ada@test.com"
+              },
+              "schema": {
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "user": {
+                    "type": "null"
+                  },
+                  "user_id": {
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "comment_content_count": 0,
+                  "email": "ada@test.com",
+                  "instructor_id": "ada",
+                  "linked": true,
+                  "linked_user_email": "ada@test.com",
+                  "name": "Ada"
+                }
+              }
+            },
+            "description": "Updated link state."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Instructor not found."
+          },
+          "422": {
+            "description": "No verified account matched, unknown user_id, or a malformed body."
+          }
+        },
+        "summary": "Set or clear an instructor account link",
+        "tags": [
+          "Instructors"
+        ]
+      }
+    },
     "/api/integrations/settings": {
       "get": {
         "description": "Returns one entry per registered key with its ``group``, ``label``, ``description``, ``is_secret``, ``is_boolean``, ``configured`` flag, ``source`` (``db`` / ``env`` / ``django_settings`` / ``default`` / ``null``), and a ``docs_url`` path. The actual stored or env value is NEVER included.",

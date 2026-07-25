@@ -381,6 +381,13 @@ double-rendering. See issue #347.
               </a>
             </li>
             <li>
+              <a href="{% url 'studio_instructor_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/studio/instructors' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="graduation-cap" class="w-4 h-4"></i>
+                <span>Instructors</span>
+              </a>
+            </li>
+            <li>
               <a href="{% url 'studio_tier_overrides_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'tier_override' in request.path or 'tier_overrides' in request.path or 'tier-override' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="shield" class="w-4 h-4"></i>

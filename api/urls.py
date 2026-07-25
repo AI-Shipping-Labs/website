@@ -70,6 +70,11 @@ from api.views.events import (
     events_collection,
 )
 from api.views.hosts import host_detail, hosts_collection
+from api.views.instructors import (
+    instructor_user,
+    instructors_collection,
+    instructors_reconcile,
+)
 from api.views.integration_settings import integration_settings
 from api.views.interview_notes import (
     interview_note_detail,
@@ -264,6 +269,22 @@ urlpatterns = [
         "courses/<slug:slug>/instructors",
         course_instructors,
         name="api_course_instructors",
+    ),
+    # ---- Instructor account linking (issue #1345) ---------------------
+    path(
+        "instructors",
+        instructors_collection,
+        name="api_instructors",
+    ),
+    path(
+        "instructors/reconcile",
+        instructors_reconcile,
+        name="api_instructors_reconcile",
+    ),
+    path(
+        "instructors/<slug:instructor_id>/user",
+        instructor_user,
+        name="api_instructor_user",
     ),
     path(
         "campaigns/<int:campaign_id>",

@@ -73,6 +73,8 @@ def _dispatch_instructors(source, repo_dir, file_list, commit_sha, stats):
             name = data.get('name', '').strip() or instructor_id
             bio = data.get('bio', '') or ''
             photo_url = data.get('photo_url', '') or ''
+            # Optional email: only the auto-match key, never blanks the link.
+            email = str(data.get('email', '') or '').strip()
 
             # Validate links shape: list of {label, url} dicts.
             raw_links = data.get('links', []) or []
@@ -94,6 +96,7 @@ def _dispatch_instructors(source, repo_dir, file_list, commit_sha, stats):
                 'name': name,
                 'bio': bio,
                 'photo_url': photo_url,
+                'email': email,
                 'links': links,
                 'status': 'published',
                 'source_repo': source.repo_name,
@@ -139,6 +142,23 @@ def _dispatch_instructors(source, repo_dir, file_list, commit_sha, stats):
                     })
                 else:
                     stats['unchanged'] += 1
+
+            # Best-effort auto-link (issue #1345): fill a NULL user FK from
+            # the verified platform account matching this email. Wrapped so a
+            # linking hiccup never fails the sync, consistent with the #1341
+            # notification path.
+            if email:
+                try:
+                    from content.services.instructor_linking import (
+                        auto_link_instructor,
+                    )
+
+                    auto_link_instructor(inst)
+                except Exception as link_err:
+                    logger.warning(
+                        'Auto-link failed for instructor %s: %s',
+                        instructor_id, link_err,
+                    )
 
         except Exception as e:
             try:

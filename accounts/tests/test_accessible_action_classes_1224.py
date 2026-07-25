@@ -59,6 +59,12 @@ class AccessibleActionClassContractTest(SimpleTestCase):
         'content/_gated_access_card.html': (
             'data-testid="{{ gated_cta_testid }}"',
         ),
+        'content/reader/_mobile_nav_toggle_gated.html': (
+            'id="sidebar-toggle-btn"',
+        ),
+        'content/reader/_mobile_progress_bar.html': (
+            'id="sidebar-toggle-btn"',
+        ),
         'events/event_series.html': (
             'data-testid="series-register-login-cta"',
             'data-testid="series-register-button"',

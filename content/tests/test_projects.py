@@ -349,6 +349,167 @@ class ProjectsListFilteringTest(TestCase):
         self.assertNotContains(response, 'Advanced Project')
 
 
+class ProjectsUnspecifiedDifficultyTest(TestCase):
+    """Test the Unspecified difficulty facet (#1317).
+
+    Empty-difficulty projects are reachable in the default list but had no
+    facet pill; the reserved ?difficulty=unspecified sentinel isolates them.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.beginner = Project.objects.create(
+            title='Rated Beginner',
+            slug='rated-beginner-1317',
+            description='Has a difficulty',
+            date=date(2025, 8, 10),
+            difficulty='beginner',
+            tags=['python'],
+            published=True,
+        )
+        cls.unrated = Project.objects.create(
+            title='Unrated Project',
+            slug='unrated-project-1317',
+            description='No difficulty assigned',
+            date=date(2025, 8, 9),
+            difficulty='',
+            tags=['python'],
+            published=True,
+        )
+        cls.unrated_other = Project.objects.create(
+            title='Unrated Other',
+            slug='unrated-other-1317',
+            description='No difficulty, different tag',
+            date=date(2025, 8, 8),
+            difficulty='',
+            tags=['ai'],
+            published=True,
+        )
+
+    def test_default_list_includes_empty_difficulty_project(self):
+        response = self.client.get('/projects')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(self.unrated, list(response.context['projects']))
+        self.assertContains(response, 'Unrated Project')
+
+    def test_sentinel_returns_only_empty_difficulty_projects(self):
+        response = self.client.get('/projects?difficulty=unspecified')
+        self.assertEqual(response.status_code, 200)
+        projects = list(response.context['projects'])
+        self.assertIn(self.unrated, projects)
+        self.assertIn(self.unrated_other, projects)
+        self.assertNotIn(self.beginner, projects)
+        self.assertContains(response, 'Unrated Project')
+        self.assertNotContains(response, 'Rated Beginner')
+
+    def test_has_unspecified_difficulty_true_in_mixed_fixture(self):
+        response = self.client.get('/projects')
+        self.assertTrue(response.context['has_unspecified_difficulty'])
+
+    def test_has_unspecified_difficulty_false_when_all_rated(self):
+        self.unrated.delete()
+        self.unrated_other.delete()
+        response = self.client.get('/projects')
+        self.assertFalse(response.context['has_unspecified_difficulty'])
+
+    def test_sentinel_and_tag_apply_both_filters(self):
+        response = self.client.get('/projects?difficulty=unspecified&tag=python')
+        self.assertEqual(response.status_code, 200)
+        projects = list(response.context['projects'])
+        self.assertIn(self.unrated, projects)
+        self.assertNotIn(self.unrated_other, projects)
+        self.assertNotIn(self.beginner, projects)
+
+    def test_pill_renders_in_mixed_fixture(self):
+        response = self.client.get('/projects')
+        self.assertContains(
+            response, 'data-testid="project-difficulty-unspecified"'
+        )
+        self.assertContains(response, 'href="/projects?difficulty=unspecified"')
+
+    def test_pill_absent_when_all_projects_rated(self):
+        self.unrated.delete()
+        self.unrated_other.delete()
+        response = self.client.get('/projects')
+        self.assertNotContains(
+            response, 'data-testid="project-difficulty-unspecified"'
+        )
+
+    def test_facet_absent_when_all_projects_unspecified(self):
+        # No real difficulty values -> the whole difficulty facet is hidden
+        # (existing {% if all_difficulties %} guard), and no lone pill.
+        self.beginner.delete()
+        response = self.client.get('/projects')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['all_difficulties'])
+        self.assertNotContains(
+            response, 'data-testid="project-difficulty-unspecified"'
+        )
+        # Both unrated projects still appear in the default list.
+        self.assertContains(response, 'Unrated Project')
+        self.assertContains(response, 'Unrated Other')
+
+    def test_pill_active_state_when_sentinel_selected(self):
+        response = self.client.get('/projects?difficulty=unspecified')
+        content = response.content.decode()
+        # Isolate the unspecified anchor and assert its selected chrome.
+        match = re.search(
+            r'<a[^>]*data-testid="project-difficulty-unspecified"[^>]*>',
+            content,
+            re.S,
+        )
+        self.assertIsNotNone(match)
+        anchor = match.group(0)
+        self.assertIn('bg-accent text-accent-foreground', anchor)
+        self.assertIn('aria-current="page"', anchor)
+        # A real-difficulty pill must NOT be selected in the unspecified view.
+        beginner_match = re.search(
+            r'<a[^>]*data-testid="project-difficulty-beginner"[^>]*>',
+            content,
+            re.S,
+        )
+        self.assertIsNotNone(beginner_match)
+        self.assertNotIn('aria-current="page"', beginner_match.group(0))
+
+    def test_pill_uses_accessible_action_focus_classes(self):
+        # #1224 contract: the pill must reuse the sibling ring-accent focus set,
+        # not the generic ring-ring design-system base.
+        response = self.client.get('/projects')
+        match = re.search(
+            r'<a[^>]*data-testid="project-difficulty-unspecified"[^>]*>',
+            response.content.decode(),
+            re.S,
+        )
+        self.assertIsNotNone(match)
+        classes = match.group(0)
+        self.assertIn('min-h-[44px]', classes)
+        self.assertIn('focus-visible:ring-accent', classes)
+        self.assertIn('focus-visible:ring-offset-background', classes)
+        self.assertNotIn('focus-visible:ring-ring', classes)
+
+    def test_pill_preserves_selected_tags_in_href(self):
+        response = self.client.get('/projects?tag=python')
+        self.assertContains(
+            response,
+            'href="/projects?difficulty=unspecified&tag=python"',
+        )
+
+    def test_zero_result_sentinel_shows_filter_empty_state(self):
+        # All-rated catalog, but the visitor lands on the sentinel URL directly.
+        self.unrated.delete()
+        self.unrated_other.delete()
+        response = self.client.get('/projects?difficulty=unspecified')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Rated Beginner')
+        self.assertContains(response, 'No projects match this difficulty')
+        self.assertContains(response, 'data-empty-kind="filter"')
+        self.assertContains(
+            response,
+            '<a href="/projects" class="text-accent hover:underline">View all projects</a>',
+            html=True,
+        )
+
+
 # --- Projects list display tests ---
 
 

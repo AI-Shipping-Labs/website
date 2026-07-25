@@ -12,8 +12,9 @@ Covers (Django HTML-rendering layer):
   course.
 - The progress fill bar renders only when the visitor is authenticated
   (anonymous gets the position text only).
-- A gated workshop page does NOT render the mobile progress bar — its
-  paywall is the only chrome shown alongside the H1 / breadcrumb.
+- A gated workshop page does NOT render the mobile progress bar, but it
+  DOES render the progress-free gated drawer toggle (#1338) so gated
+  visitors can open the page-navigation list on a phone.
 - ``reader_mobile_label``, ``reader_progress_*`` are present in the view
   context regardless of auth state (anonymous gets
   ``reader_progress_completed = 0``).
@@ -175,7 +176,15 @@ class WorkshopMobileProgressBarContextTest(TierSetupMixin, TestCase):
 
 
 class WorkshopMobileProgressBarHiddenWhenGatedTest(TierSetupMixin, TestCase):
-    """Gated workshop pages do NOT render the mobile progress bar."""
+    """Gated workshop pages do NOT render the mobile progress bar.
+
+    Issue #1338: a gated tutorial page now renders a progress-free mobile
+    drawer toggle (``reader-mobile-nav-toggle-gated``) so gated/anonymous
+    visitors can open the page-navigation list on a phone. The
+    progress-carrying bar (``reader-mobile-progress-bar`` with its
+    ``Page N of M`` text and completion fill) remains suppressed because
+    its progress semantics are misleading behind a paywall.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -199,13 +208,24 @@ class WorkshopMobileProgressBarHiddenWhenGatedTest(TierSetupMixin, TestCase):
         response = client.get('/workshops/main-only/tutorial/intro')
         self.assertEqual(response.status_code, 403)
         self.assertTrue(response.context['is_gated'])
-        # Mobile progress bar NOT rendered on the gated page.
+        # The progress-carrying bar is NOT rendered on the gated page.
         self.assertNotContains(
             response, 'data-testid="reader-mobile-progress-bar"',
             status_code=403,
         )
+        # ...but the progress-free gated drawer toggle IS rendered (#1338)
+        # so the visitor can open the page-navigation list on mobile.
+        self.assertContains(
+            response, 'data-testid="reader-mobile-nav-toggle-gated"',
+            status_code=403,
+        )
+        # No progress semantics on the gated toggle.
         self.assertNotContains(
-            response, 'data-testid="reader-mobile-drawer-toggle"',
+            response, 'data-testid="reader-mobile-progress-text"',
+            status_code=403,
+        )
+        self.assertNotContains(
+            response, 'data-testid="reader-mobile-progress-fill"',
             status_code=403,
         )
         # Title and breadcrumb still render so the page is SEO-indexable.
@@ -222,6 +242,11 @@ class WorkshopMobileProgressBarHiddenWhenGatedTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertNotContains(
             response, 'data-testid="reader-mobile-progress-bar"',
+            status_code=403,
+        )
+        # The gated drawer toggle renders for anonymous visitors too.
+        self.assertContains(
+            response, 'data-testid="reader-mobile-nav-toggle-gated"',
             status_code=403,
         )
 

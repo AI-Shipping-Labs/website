@@ -258,3 +258,143 @@ class FoldableSidebarMarkupTest(TierSetupMixin, TestCase):
         self.assertNotContains(
             response, 'data-testid="mark-page-complete-btn"', status_code=403,
         )
+
+
+class GatedWorkshopSidebarTeaserTest(TierSetupMixin, TestCase):
+    """Lock in the gated/anonymous page-navigation teaser (issue #1338).
+
+    Commit ``9210d2d7`` moved the reader sidebar outside the
+    ``{% if not is_gated %}`` guard so gated/anonymous visitors preview
+    the full tutorial page list. These tests assert the full teaser — the
+    complete page list, the current-page marker, and the absence of
+    completion checkmarks — plus the gated-safe mobile drawer toggle, so
+    the shipped behaviour cannot silently regress.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.workshop = Workshop.objects.create(
+            title="Gated Teaser Workshop",
+            slug="gated-teaser-workshop",
+            status="published",
+            date=date(2026, 4, 29),
+            landing_required_level=LEVEL_OPEN,
+            # Above LEVEL_OPEN so an anonymous visitor is gated on pages.
+            pages_required_level=30,
+            recording_required_level=30,
+        )
+        cls.page_1 = WorkshopPage.objects.create(
+            workshop=cls.workshop,
+            title="First Teaser Page",
+            slug="first-teaser-page",
+            sort_order=1,
+            body="First body",
+        )
+        cls.page_2 = WorkshopPage.objects.create(
+            workshop=cls.workshop,
+            title="Second Teaser Page",
+            slug="second-teaser-page",
+            sort_order=2,
+            body="Second body",
+        )
+        cls.page_3 = WorkshopPage.objects.create(
+            workshop=cls.workshop,
+            title="Third Teaser Page",
+            slug="third-teaser-page",
+            sort_order=3,
+            body="Third body",
+        )
+        cls.all_pages = [cls.page_1, cls.page_2, cls.page_3]
+
+    def setUp(self):
+        # Anonymous client — the reporter's exact logged-out scenario.
+        self.client = Client()
+
+    def test_gated_page_lists_every_tutorial_page_as_a_link(self):
+        """The teaser sidebar lists all tutorial pages as clickable rows."""
+        response = self.client.get(self.page_2.get_absolute_url())
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(
+            response, 'data-testid="workshop-sidebar"', status_code=403,
+        )
+        for page in self.all_pages:
+            # Every tutorial page title appears...
+            self.assertContains(response, page.title, status_code=403)
+            # ...as an anchor to its own tutorial route (clickable teaser
+            # link, not a disabled/lock row).
+            self.assertContains(
+                response,
+                f'href="{page.get_absolute_url()}"',
+                status_code=403,
+            )
+
+    def test_gated_page_marks_current_page(self):
+        """The current page's row is marked current with aria-current."""
+        response = self.client.get(self.page_2.get_absolute_url())
+        self.assertContains(
+            response, 'data-testid="sidebar-current-page"', status_code=403,
+        )
+        self.assertContains(
+            response, 'aria-current="page"', status_code=403,
+        )
+
+    def test_gated_page_has_no_completion_checkmarks(self):
+        """No completion checkmarks leak to a gated/anonymous visitor."""
+        response = self.client.get(self.page_2.get_absolute_url())
+        # ``sidebar-completed-page`` is the testid on the sidebar's green
+        # completion glyph; its absence proves no completion checkmarks
+        # render in the nav. (We can't assert on the bare ``check-circle-2``
+        # icon name because the completion-button JS in ``_scripts.html``
+        # references it as a string regardless of auth state.)
+        self.assertNotContains(
+            response, 'data-testid="sidebar-completed-page"', status_code=403,
+        )
+
+    def test_gated_page_body_stays_gated(self):
+        """The full body is hidden and the paywall renders below the teaser."""
+        response = self.client.get(self.page_2.get_absolute_url())
+        self.assertContains(
+            response, 'data-testid="page-paywall"', status_code=403,
+        )
+        self.assertNotContains(
+            response, 'data-testid="page-body"', status_code=403,
+        )
+
+    def test_gated_page_renders_progress_free_mobile_toggle(self):
+        """Gated visitors get a mobile drawer toggle wired to sidebar-nav,
+        with no progress text and no progress fill."""
+        response = self.client.get(self.page_2.get_absolute_url())
+        # The gated-safe mobile toggle renders and reuses the shared
+        # sidebar-toggle-btn / sidebar-nav contract.
+        self.assertContains(
+            response,
+            'data-testid="reader-mobile-nav-toggle-gated"',
+            status_code=403,
+        )
+        self.assertContains(
+            response, 'id="sidebar-toggle-btn"', status_code=403,
+        )
+        self.assertContains(
+            response, 'aria-controls="sidebar-nav"', status_code=403,
+        )
+        # No progress semantics on the gated toggle.
+        self.assertNotContains(
+            response, 'data-testid="reader-mobile-progress-text"',
+            status_code=403,
+        )
+        self.assertNotContains(
+            response, 'data-testid="reader-mobile-progress-fill"',
+            status_code=403,
+        )
+        # The member-only progress bar wrapper must not render either.
+        self.assertNotContains(
+            response, 'data-testid="reader-mobile-progress-bar"',
+            status_code=403,
+        )
+        # Regression guard: the toggle's explanatory template comment must
+        # be stripped (a multi-line ``{# #}`` would leak its text — and any
+        # ``<lg`` inside it — into the HTML and break DOM parsing).
+        self.assertNotContains(
+            response, "progress-free mobile drawer", status_code=403,
+        )

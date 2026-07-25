@@ -23,6 +23,7 @@ from studio.decorators import staff_required
 from studio.utils import studio_pagination_context
 
 _FILTERS = {"actionable", "scheduled", "warnings", "all"}
+_TIER_FILTERS = {"basic", "main", "premium"}
 
 _CLASSIFICATION_LABELS = {
     _recon.CLASSIFICATION_OK: "In sync",
@@ -71,6 +72,10 @@ def subscription_reconciliation_report(request):
     if active_filter not in _FILTERS:
         active_filter = "all"
 
+    active_tier = (request.GET.get("tier") or "").lower()
+    if active_tier not in _TIER_FILTERS:
+        active_tier = ""
+
     latest_run = Run.objects.order_by("-started_at", "-id").first()
 
     findings_qs = Finding.objects.none()
@@ -86,6 +91,8 @@ def subscription_reconciliation_report(request):
             )
         elif active_filter == "warnings":
             findings_qs = findings_qs.filter(outcome=Finding.OUTCOME_WARNING)
+        if active_tier:
+            findings_qs = findings_qs.filter(current_tier=active_tier)
         findings_qs = findings_qs.select_related("user").order_by(
             "classification", "email",
         )
@@ -121,6 +128,7 @@ def subscription_reconciliation_report(request):
             "latest_run": latest_run,
             "rows": rows,
             "active_filter": active_filter,
+            "active_tier": active_tier,
             "has_findings": findings_qs.exists() if latest_run else False,
             "evidence_processed": evidence_counts[Finding.WEBHOOK_PROCESSED],
             "evidence_failed": evidence_counts[Finding.WEBHOOK_FAILED_PERMANENT],

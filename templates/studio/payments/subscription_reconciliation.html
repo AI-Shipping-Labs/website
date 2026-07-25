@@ -37,14 +37,21 @@
 <p class="mb-4 text-xs text-muted-foreground" data-testid="reconciliation-run-meta">Latest run {{ latest_run.started_at|operator_datetime }} UTC — status {{ latest_run.status }}. Deletion webhook evidence: {{ evidence_processed }} processed, {{ evidence_failed }} failed, {{ evidence_missing }} missing.</p>
 {% endif %}
 
-<div class="mb-6 flex flex-wrap items-center gap-2">
-  {% with chip_base="px-4 py-1.5 rounded-full text-sm border transition-colors" chip_active="bg-accent text-accent-foreground border-accent" chip_idle="bg-secondary text-muted-foreground border-border hover:text-foreground hover:bg-muted" %}
-  <a href="?filter=all" class="{{ chip_base }} {% if active_filter == 'all' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">All</a>
-  <a href="?filter=actionable" class="{{ chip_base }} {% if active_filter == 'actionable' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Actionable</a>
-  <a href="?filter=scheduled" class="{{ chip_base }} {% if active_filter == 'scheduled' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Scheduled</a>
-  <a href="?filter=warnings" class="{{ chip_base }} {% if active_filter == 'warnings' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Warnings</a>
-  {% endwith %}
+{% with chip_base="px-4 py-1.5 rounded-full text-sm border transition-colors" chip_active="bg-accent text-accent-foreground border-accent" chip_idle="bg-secondary text-muted-foreground border-border hover:text-foreground hover:bg-muted" %}
+<div class="mb-4 flex flex-wrap items-center gap-2" data-testid="reconciliation-filters">
+  <a href="?filter=all&tier={{ active_tier }}" class="{{ chip_base }} {% if active_filter == 'all' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">All</a>
+  <a href="?filter=actionable&tier={{ active_tier }}" class="{{ chip_base }} {% if active_filter == 'actionable' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Actionable</a>
+  <a href="?filter=scheduled&tier={{ active_tier }}" class="{{ chip_base }} {% if active_filter == 'scheduled' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Scheduled</a>
+  <a href="?filter=warnings&tier={{ active_tier }}" class="{{ chip_base }} {% if active_filter == 'warnings' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Warnings</a>
 </div>
+<div class="mb-6 flex flex-wrap items-center gap-2" data-testid="reconciliation-tier-filters">
+  <span class="text-xs uppercase tracking-wide text-muted-foreground mr-1">Tier</span>
+  <a href="?filter={{ active_filter }}&tier=" class="{{ chip_base }} {% if not active_tier %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">All tiers</a>
+  <a href="?filter={{ active_filter }}&tier=basic" class="{{ chip_base }} {% if active_tier == 'basic' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Basic</a>
+  <a href="?filter={{ active_filter }}&tier=main" class="{{ chip_base }} {% if active_tier == 'main' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Main</a>
+  <a href="?filter={{ active_filter }}&tier=premium" class="{{ chip_base }} {% if active_tier == 'premium' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Premium</a>
+</div>
+{% endwith %}
 
 {% if rows %}
 <div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="reconciliation-list">

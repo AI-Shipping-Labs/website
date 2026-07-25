@@ -74,6 +74,39 @@ class ReportViewTest(TestCase):
         self.assertContains(resp, "sched@t.com")
         self.assertNotContains(resp, "ended@t.com")
 
+    def test_tier_filter_shows_only_that_tier(self):
+        self._seed()
+        self.client.force_login(self.staff)
+        resp = self.client.get(self.url, {"tier": "main"})
+        self.assertContains(resp, "ended@t.com")  # main
+        self.assertNotContains(resp, "sched@t.com")  # premium
+        resp2 = self.client.get(self.url, {"tier": "premium"})
+        self.assertContains(resp2, "sched@t.com")
+        self.assertNotContains(resp2, "ended@t.com")
+
+    def test_tier_and_view_filters_combine(self):
+        self._seed()
+        self.client.force_login(self.staff)
+        # Actionable view + Main tier -> only the ended Main row.
+        resp = self.client.get(self.url, {"filter": "actionable", "tier": "main"})
+        self.assertContains(resp, "ended@t.com")
+        self.assertNotContains(resp, "sched@t.com")
+        # Actionable view + Premium tier -> nothing (the premium row is scheduled).
+        resp2 = self.client.get(
+            self.url, {"filter": "actionable", "tier": "premium"}
+        )
+        self.assertNotContains(resp2, "ended@t.com")
+        self.assertNotContains(resp2, "sched@t.com")
+
+    def test_invalid_tier_is_ignored(self):
+        self._seed()
+        self.client.force_login(self.staff)
+        resp = self.client.get(self.url, {"tier": "gold"})
+        self.assertEqual(resp.status_code, 200)
+        # Unknown tier is ignored, so all rows still render.
+        self.assertContains(resp, "ended@t.com")
+        self.assertContains(resp, "sched@t.com")
+
     def test_empty_state_when_no_findings(self):
         self.client.force_login(self.staff)
         resp = self.client.get(self.url)

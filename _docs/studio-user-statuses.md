@@ -163,5 +163,24 @@ Key member-facing distinctions the report surfaces:
   never offers `Revert to Free` — access is retained until Stripe ends the
   subscription.
 
-See `_docs/integrations/stripe.md#subscription-reconciliation-live-stripe-vs-website-access`
+The report supports two independent chip rows: a view filter (All, Actionable,
+Scheduled, Warnings) and a paid-tier filter (All tiers, Basic, Main, Premium);
+they combine as AND so an operator can, for example, see only Main-tier
+actionable rows.
+
+The same run history and filtered findings are available on the staff-token API
+for automation:
+
+- `GET /api/payments/tier-reconcile/runs` — paginated run history (`page`,
+  `page_size`, `next_cursor`).
+- `GET /api/payments/tier-reconcile/runs/<uuid>` — one run plus findings,
+  filterable by `classification`, `tier`, and `filter`, with `next_cursor`
+  pagination. Unknown `tier`/`classification` values return 422 with the field
+  in `details.field`.
+- `POST /api/payments/tier-reconcile/runs` — enqueue a read-only run (`202`).
+
+`GET /api/payments/tier-reconcile/diagnostics` stays backward-compatible: it is
+the synchronous live check and only accepts `email` and `include=ok` (no tier or
+classification filters). See `_docs/api.md` for `curl` examples and
+`_docs/integrations/stripe.md#subscription-reconciliation-live-stripe-vs-website-access`
 for the full state contract, cadence, and the confirmed apply API.

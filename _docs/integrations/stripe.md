@@ -455,6 +455,29 @@ GET  /api/payments/tier-reconcile/runs/<id> # run detail + findings (filters)
 POST /api/payments/tier-reconcile           # omit dry_run -> preview only
 ```
 
+The `runs/<id>` detail endpoint filters findings by `classification`, `tier`
+(`basic|main|premium|free`), and `filter` (`actionable|scheduled|warnings|all`),
+and paginates via `page` / `page_size` / `next_cursor`:
+
+```
+# Main-tier ended subscriptions in one run
+curl -H "Authorization: Token $API_TOKEN" \
+  "$BASE/api/payments/tier-reconcile/runs/<id>?classification=ended_subscription_still_entitled&tier=main"
+
+# next page of findings
+curl -H "Authorization: Token $API_TOKEN" \
+  "$BASE/api/payments/tier-reconcile/runs/<id>?page=2"
+```
+
+An unknown `tier`/`classification` returns 422 with the field in
+`details.field`. All three `runs` endpoints (and the apply endpoint) are
+staff-token-only: a missing/non-staff token returns 401 before any Stripe call
+or task enqueue, and no run is created. The synchronous `GET
+/api/payments/tier-reconcile/diagnostics` endpoint stays backward-compatible and
+only accepts `email` and `include=ok` — the tier/classification/cursor filters
+live on the `runs` endpoints and the Studio report, not on `diagnostics`. All
+`runs` endpoints and their parameters are documented in `_docs/openapi.json`.
+
 A write requires BOTH `dry_run=false` AND `confirm="apply_stripe_truth"` and
 targets explicit emails:
 

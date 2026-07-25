@@ -24,6 +24,93 @@ _VALID_TIERS = {"basic", "main", "premium", "free"}
 DEFAULT_PAGE_SIZE = 100
 MAX_PAGE_SIZE = 500
 
+_ERROR_REF = {"$ref": "#/components/schemas/ErrorResponse"}
+
+_RUN_EXAMPLE = {
+    "id": "b0a1c2d3-4e5f-6071-8293-a4b5c6d7e8f9",
+    "status": "completed",
+    "mode": "diagnostic",
+    "source": "scheduled",
+    "started_at": "2026-07-25T04:30:00+00:00",
+    "finished_at": "2026-07-25T04:31:12+00:00",
+    "error_message": "",
+    "counts": {
+        "cohort": 42,
+        "ok": 37,
+        "scheduled_cancellation": 1,
+        "actionable": 2,
+        "warning": 2,
+        "changed": 0,
+    },
+}
+
+_FINDING_EXAMPLE = {
+    "email": "someone@example.com",
+    "user_id": 1234,
+    "current_tier": "main",
+    "current_subscription_id": "sub_old",
+    "stripe_customer_id": "cus_xyz",
+    "stripe_subscription_id": "sub_xyz",
+    "stripe_status": "canceled",
+    "cancel_at_period_end": False,
+    "stripe_period_end": None,
+    "stripe_tier": None,
+    "classification": "ended_subscription_still_entitled",
+    "action": "revert_to_free",
+    "outcome": "would_change",
+    "message": "Stripe subscription is canceled but the member is still Main locally.",
+    "conflicting_user_ids": [],
+    "webhook": {
+        "event_id": None,
+        "event_type": None,
+        "event_status": None,
+        "processed_at": None,
+        "evidence": "missing",
+    },
+}
+
+_RUNS_LIST_EXAMPLE = {
+    "count": 1,
+    "page": 1,
+    "next_cursor": None,
+    "runs": [_RUN_EXAMPLE],
+}
+
+_RUN_DETAIL_EXAMPLE = {
+    "run": _RUN_EXAMPLE,
+    "webhook_evidence_counts": {
+        "processed": 1,
+        "failed_permanent": 0,
+        "missing": 1,
+        "not_applicable": 0,
+    },
+    "count": 1,
+    "page": 1,
+    "next_cursor": None,
+    "findings": [_FINDING_EXAMPLE],
+}
+
+_ENQUEUE_EXAMPLE = {
+    "run_id": "b0a1c2d3-4e5f-6071-8293-a4b5c6d7e8f9",
+    "status": "queued",
+}
+
+_PAGE_QUERY = {
+    "page": {
+        "type": "integer",
+        "required": False,
+        "description": "1-based page number (default 1).",
+    },
+    "page_size": {
+        "type": "integer",
+        "required": False,
+        "description": (
+            f"Rows per page (default {DEFAULT_PAGE_SIZE}, "
+            f"max {MAX_PAGE_SIZE})."
+        ),
+    },
+}
+
 
 def _run_counts(run):
     return {
@@ -119,9 +206,60 @@ def _parse_page(request):
 @openapi_spec(
     tag="Tier Reconciliation",
     summary="List or enqueue subscription reconciliation runs",
+    description=(
+        "Persisted run history and diagnostic enqueue for the cohort-wide "
+        "Stripe-vs-website subscription reconciliation (issue #1308). "
+        "Staff-token-only; missing/non-staff tokens return 401 before any "
+        "query or task enqueue. These endpoints are read-only — apply "
+        "writes stay on ``POST /api/payments/tier-reconcile`` behind the "
+        "explicit ``confirm=apply_stripe_truth`` contract."
+    ),
     methods={
-        "GET": {"summary": "Paginated run history."},
-        "POST": {"summary": "Enqueue a read-only cohort run (202)."},
+        "GET": {
+            "summary": "Paginated run history.",
+            "description": (
+                "Returns completed, running, queued, and failed runs "
+                "newest-first with their summary counts. ``next_cursor`` "
+                "is the next page number when more rows remain, else "
+                "``null``."
+            ),
+            "query": dict(_PAGE_QUERY),
+            "responses": {
+                200: {
+                    "description": "Paginated run history.",
+                    "example": _RUNS_LIST_EXAMPLE,
+                },
+                401: {
+                    "description": "Missing or invalid staff token.",
+                    "schema": _ERROR_REF,
+                },
+                422: {
+                    "description": "Invalid ``page`` / ``page_size``.",
+                    "schema": _ERROR_REF,
+                },
+            },
+        },
+        "POST": {
+            "summary": "Enqueue a read-only cohort run (202).",
+            "description": (
+                "Enqueues a diagnostic (read-only) reconciliation run over "
+                "the full Stripe cohort and returns ``202`` with the new "
+                "run id and status. Accepts no apply mode and no body — a "
+                "run never changes member access."
+            ),
+            "responses": {
+                202: {
+                    "description": "Run queued.",
+                    "example": _ENQUEUE_EXAMPLE,
+                },
+                401: {
+                    "description": (
+                        "Missing or invalid staff token; no run is created."
+                    ),
+                    "schema": _ERROR_REF,
+                },
+            },
+        },
     },
 )
 def reconciliation_runs_dispatch(request):
@@ -154,7 +292,87 @@ def _reconciliation_runs(request):
 @openapi_spec(
     tag="Tier Reconciliation",
     summary="Get one subscription reconciliation run with findings",
-    methods={"GET": {"summary": "Run detail plus filtered findings."}},
+    description=(
+        "Read-only detail for a single reconciliation run plus its "
+        "findings. Staff-token-only (401 before any query). Supports the "
+        "same ``classification`` / ``tier`` / ``filter`` filters as the "
+        "Studio report and returns ``next_cursor`` for pagination. Invalid "
+        "filters return the project-standard 422 with the offending field "
+        "in ``details.field``."
+    ),
+    methods={
+        "GET": {
+            "summary": "Run detail plus filtered findings.",
+            "description": (
+                "Findings are filterable by ``classification`` (any stable "
+                "classification value), ``tier`` (the member's local base "
+                "tier), and ``filter`` (a saved view). ``tier`` and "
+                "``classification`` combine as AND. ``next_cursor`` is the "
+                "next page number when more rows remain, else ``null``."
+            ),
+            "query": {
+                "classification": {
+                    "type": "string",
+                    "required": False,
+                    "description": (
+                        "Filter findings to one stable classification "
+                        "value (e.g. ``scheduled_cancellation``, "
+                        "``ended_subscription_still_entitled``, "
+                        "``dunning_grace``). Unknown values return 422 "
+                        "with ``details.field = \"classification\"``."
+                    ),
+                },
+                "tier": {
+                    "type": "string",
+                    "enum": ["basic", "main", "premium", "free"],
+                    "required": False,
+                    "description": (
+                        "Filter findings to the member's local base tier. "
+                        "Unknown values return 422 with "
+                        "``details.field = \"tier\"``."
+                    ),
+                },
+                "filter": {
+                    "type": "string",
+                    "enum": ["actionable", "scheduled", "warnings", "all"],
+                    "required": False,
+                    "description": (
+                        "Saved view: ``actionable`` (entitlement drift that "
+                        "can be applied), ``scheduled`` (scheduled "
+                        "cancellations), ``warnings`` (review-only rows), or "
+                        "``all`` (default)."
+                    ),
+                },
+                **_PAGE_QUERY,
+            },
+            "responses": {
+                200: {
+                    "description": "Run detail plus filtered findings.",
+                    "example": _RUN_DETAIL_EXAMPLE,
+                },
+                401: {
+                    "description": "Missing or invalid staff token.",
+                    "schema": _ERROR_REF,
+                },
+                404: {
+                    "description": "Run not found.",
+                    "schema": _ERROR_REF,
+                },
+                422: {
+                    "description": (
+                        "Invalid ``classification``, ``tier``, ``filter``, "
+                        "or pagination value."
+                    ),
+                    "schema": _ERROR_REF,
+                    "example": {
+                        "error": "Unknown tier filter",
+                        "code": "validation_error",
+                        "details": {"field": "tier"},
+                    },
+                },
+            },
+        },
+    },
 )
 def reconciliation_run_detail(request, run_id):
     """``GET /api/payments/tier-reconcile/runs/<uuid>`` — detail + findings."""

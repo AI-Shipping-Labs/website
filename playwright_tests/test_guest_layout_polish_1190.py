@@ -152,7 +152,16 @@ def test_blog_cards_keep_thumbnail_column_and_tag_links(django_server, page):
     page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
     expect(page.get_by_test_id("blog-card-thumbnail")).to_have_count(2)
     expect(page.get_by_test_id("blog-card-thumbnail-fallback")).to_have_count(1)
-    expect(page.locator('a[href="/blog?tag=rag"]')).to_be_visible()
+    # The blog card tag chip links to the tag-filtered view (clickable since
+    # the #1228 catalog-tag unification). Scope to the card tag container so
+    # the assertion is not ambiguous with the top-of-page filter pill that
+    # shares the same /blog?tag=rag href.
+    card_tag_link = page.get_by_test_id("blog-card-tags").get_by_role(
+        "link", name="rag", exact=True,
+    )
+    expect(card_tag_link).to_have_count(1)
+    expect(card_tag_link).to_be_visible()
+    expect(card_tag_link).to_have_attribute("href", "/blog?tag=rag")
     _shot(page, "blog-thumbnail-fallback")
 
 

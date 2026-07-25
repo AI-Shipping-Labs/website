@@ -166,18 +166,20 @@ def test_about_dropdown_contains_about_team_faq(django_server, page):
             .map(a => a.getAttribute('data-testid'))
         """
     )
+    # "About" was dropped from the menu: it pointed at /about, the same
+    # destination as "Team", so the duplicate entry was removed (commit
+    # 39430dba). Team is the specific one that survives.
     assert link_ids == [
-        "nav-about-link-about",
         "nav-about-link-team",
         "nav-about-link-faq",
     ]
     assert (
         page.get_by_test_id("nav-about-link-team").get_attribute("href")
-        == "/about#team"
+        == "/about"
     )
 
     page.get_by_test_id("nav-about-link-team").click()
-    page.wait_for_url("**/about#team")
+    page.wait_for_url("**/about")
     # Team anchor must exist on the about page.
     assert page.locator("#team").count() == 1
     _shot(page, "02-about-team-anchor")
@@ -374,8 +376,9 @@ def test_mobile_about_accordion_exposes_team_and_faq(django_server, browser):
             .map(a => a.getAttribute('data-testid'))
         """
     )
+    # "About" dropped from the menu (commit 39430dba): it duplicated the
+    # /about destination of "Team".
     assert link_ids == [
-        "mobile-nav-about-link-about",
         "mobile-nav-about-link-team",
         "mobile-nav-about-link-faq",
     ]

@@ -599,11 +599,12 @@ class TestScenario6DripLockedUnit:
         video_iframe = page.locator("iframe")
         assert video_iframe.count() == 0
 
-        # Then: A "Back to Course" link is available
-        back_link = page.locator(
-            'a:has-text("Back to Course")'
-        )
+        # Then: A back-to-course link is available. Commit fc749335
+        # standardized the label to "Back to {course.title}" ("Back to Drip
+        # Course"); the stable data-testid is the durable handle.
+        back_link = page.get_by_test_id("teaser-back-link")
         assert back_link.count() >= 1
+        assert back_link.first.get_attribute("href") == "/courses/drip-course"
 
         # Step 2: Click "Back to Course"
         back_link.first.click()

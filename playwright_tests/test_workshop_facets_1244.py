@@ -45,6 +45,22 @@ def _open_catalog(page, django_server, query=""):
     expect(page.locator('[data-testid="workshop-catalog"]')).to_be_visible()
 
 
+def _ensure_facet_open(page, testid):
+    """Expand a facet accordion so its pills are visible/clickable.
+
+    Issue #1244 collapsed the Topics/Technologies pill walls into native
+    ``<details>/<summary>`` accordions (commit d651b353). They auto-open when
+    a selection is active, but start collapsed otherwise — so pill visibility
+    and clicks require opening the accordion first.
+    """
+    facet = page.locator(f'[data-testid="{testid}"]')
+    facet.wait_for(state="attached")
+    if not facet.evaluate("el => el.hasAttribute('open')"):
+        facet.locator("summary").click()
+    expect(facet.locator("summary")).to_be_visible()
+    return facet
+
+
 def test_visitor_sees_and_operates_separate_topic_and_technology_facets(
     page, django_server,
 ):
@@ -81,10 +97,13 @@ def test_visitor_sees_and_operates_separate_topic_and_technology_facets(
     technologies = page.locator('[data-testid="workshop-facet-technology"]')
     expect(topics).to_be_visible()
     expect(technologies).to_be_visible()
-    expect(topics.locator("h3")).to_have_text("Topics")
-    expect(technologies.locator("h3")).to_have_text("Technologies")
+    # Facet labels live in the accordion <summary>, not a removed <h3> (#1244).
+    expect(topics.locator("summary")).to_have_text("Topics")
+    expect(technologies.locator("summary")).to_have_text("Technologies")
     expect(topics.locator('[data-facet="topic"]')).to_have_count(4)
     expect(technologies.locator('[data-facet="technology"]')).to_have_count(2)
+    _ensure_facet_open(page, "workshop-facet-topic")
+    _ensure_facet_open(page, "workshop-facet-technology")
     expect(topics.get_by_text("rag", exact=True)).to_be_visible()
     expect(topics.get_by_text("django", exact=True)).to_have_count(0)
     expect(technologies.get_by_text("django", exact=True)).to_be_visible()
@@ -110,6 +129,7 @@ def test_visitor_sees_and_operates_separate_topic_and_technology_facets(
     page.wait_for_load_state("domcontentloaded")
     assert page.url.endswith("/workshops/catalog")
 
+    _ensure_facet_open(page, "workshop-facet-technology")
     page.locator('[data-testid="workshop-technology-option-django"]').click()
     page.wait_for_load_state("domcontentloaded")
     expect(page.locator('[data-workshop-slug="agents-django"]')).to_be_visible()
@@ -146,6 +166,7 @@ def test_visitor_composes_access_topic_and_technology_filters(page, django_serve
     _open_catalog(page, django_server)
     page.locator('[data-testid="workshop-access-filter-free"]').click()
     page.wait_for_load_state("domcontentloaded")
+    _ensure_facet_open(page, "workshop-facet-topic")
     page.locator('[data-testid="workshop-topic-option-rag"]').click()
     page.wait_for_load_state("domcontentloaded")
 
@@ -163,6 +184,7 @@ def test_visitor_composes_access_topic_and_technology_filters(page, django_serve
     page.wait_for_load_state("domcontentloaded")
     expect(page.locator('[data-workshop-slug="paid-rag-django"]')).to_be_visible()
 
+    _ensure_facet_open(page, "workshop-facet-technology")
     page.locator('[data-testid="workshop-technology-option-django"]').click()
     page.wait_for_load_state("domcontentloaded")
     expect(page.locator('[data-workshop-slug="free-rag-django"]')).to_be_visible()
@@ -271,6 +293,7 @@ def test_deep_links_card_tags_and_empty_state_keep_existing_journeys(
     _open_catalog(page, django_server)
     page.locator('[data-testid="workshop-access-filter-paid"]').click()
     page.wait_for_load_state("domcontentloaded")
+    _ensure_facet_open(page, "workshop-facet-topic")
     page.locator('[data-testid="workshop-topic-option-career"]').click()
     page.wait_for_load_state("domcontentloaded")
     expect(page.locator('[data-testid="workshops-empty-state"]')).to_be_visible()
@@ -300,6 +323,7 @@ def test_core_tool_collision_prefers_tool_and_empty_group_hides(page, django_ser
     expect(python).to_have_count(1)
     expect(python).to_have_attribute("data-tool", "Python")
     expect(python).not_to_have_attribute("data-topic", "python")
+    _ensure_facet_open(page, "workshop-facet-technology")
     python.click()
     page.wait_for_load_state("domcontentloaded")
     expect(page.locator('[data-workshop-slug="python-tool"]')).to_be_visible()

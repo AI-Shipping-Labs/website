@@ -228,7 +228,13 @@ class TestScenario3ArticleInArticlesSection:
 
 @pytest.mark.django_db(transaction=True)
 class TestScenario4LegacyToolsModelsIgnored:
-    """Legacy tools and models curated links are ignored by /resources."""
+    """Tools and Models curated links render in /resources.
+
+    Commit bc89c683: visibility is decided by ``published`` alone. An earlier
+    ``category__in=<order list>`` filter silently hid 22 of 41 published links
+    when ``tools``/``models`` were dropped from the order list. They now render
+    in canonical order (tools, models, other) after the leading sections.
+    """
 
     def test_legacy_links_do_not_appear_in_resources(
         self, django_server, page
@@ -261,15 +267,15 @@ class TestScenario4LegacyToolsModelsIgnored:
             wait_until="domcontentloaded",
         )
 
-        # Only the Other section heading is rendered
+        # Tools, Models and Other all render, in canonical display order.
         headings = page.locator(SECTION_HEADING_SELECTOR)
         rendered = [headings.nth(i).inner_text() for i in range(headings.count())]
-        assert rendered == ["Other"]
+        assert rendered == ["Tools", "Models", "Other"]
 
-        # Only the canonical Other card is present.
+        # Every published link is visible.
         body = page.content()
-        assert "ripgrep" not in body
-        assert "Llama 3" not in body
+        assert "ripgrep" in body
+        assert "Llama 3" in body
         assert "Common Crawl" in body
 
 
@@ -355,8 +361,9 @@ class TestScenario6FreeUserGatedWorkshopUpgradeCTA:
         cta.wait_for(state="visible", timeout=3000)
         assert "Upgrade to Basic to access this resource" in cta.inner_text()
 
-        # `View Plans` link
-        view_plans = cta.locator('a:has-text("View Plans")')
+        # `View membership tiers` link (renamed from `View Plans`, commit
+        # bc89c683) still lands on /pricing.
+        view_plans = cta.locator('a:has-text("View membership tiers")')
         assert view_plans.count() >= 1
         view_plans.first.click()
         page.wait_for_load_state("domcontentloaded")
@@ -464,7 +471,11 @@ class TestScenario8HeaderCopyReflectsNewGrouping:
         body = page.content()
         assert "workshops" in body
         assert "articles" in body
-        assert "community activity or recording" in body
+        # The subhead is visitor copy; the internal maintainer IA note never
+        # ships again (commit bc89c683 — mirrors Django test_intro_has_no_
+        # internal_ia_note).
+        assert "community activity or recording" not in body
+        assert "without treating this page as the home" not in body
         # Old "GitHub repos, model hubs, and learning resources" copy is gone.
         assert (
             "Curated links to GitHub repos, model hubs, and learning resources."

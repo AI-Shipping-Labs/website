@@ -713,9 +713,13 @@ class TestVisitorBrowsesCatalog:
 
         assert page.url.endswith('/workshops/catalog?access=paid')
 
-        clear_link = page.locator('[data-testid="clear-workshop-filter"]')
-        assert clear_link.get_attribute('href') == '/workshops/catalog'
-        clear_link.click()
+        # With access as the only active filter, the separate reset control is
+        # gone (commit c1d673a7) — the access row carries its own "All" option,
+        # so clear the access filter through that pill.
+        assert page.locator('[data-testid="clear-workshop-filter"]').count() == 0
+        all_access = page.locator('[data-testid="workshop-access-filter-all"]')
+        assert all_access.get_attribute('href') == '/workshops/catalog'
+        all_access.click()
         page.wait_for_load_state('domcontentloaded')
 
         assert page.url.endswith('/workshops/catalog')

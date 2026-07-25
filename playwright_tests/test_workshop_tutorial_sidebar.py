@@ -649,7 +649,11 @@ class TestWorkshopSidebarTopAlignment:
 
 @pytest.mark.django_db(transaction=True)
 class TestGatedTutorialNoOrphanColumn:
-    """Issue #1080: gated pages render single-column, no empty sidebar."""
+    """Commit 9210d2d7: gated workshop tutorial pages now mirror the paid
+    layout — the workshop navigation sidebar and reader chrome render for
+    gated visitors, only with the body cut to a teaser + paywall. The
+    gated-only "gigantic" locked-video thumbnail (which the paid view never
+    showed) is dropped."""
 
     def test_gated_tutorial_single_column_no_sidebar(
         self, browser, django_server,
@@ -674,9 +678,16 @@ class TestGatedTutorialNoOrphanColumn:
                 f'{django_server}/workshops/gated-1080-ws/tutorial/overview',
                 wait_until='domcontentloaded',
             )
-            # No sidebar aside is rendered on gated pages.
-            assert page.locator('#content-sidebar-aside').count() == 0
-            # The breadcrumb sits near the top of the single column.
+            # Gated pages mirror the paid layout: the navigation sidebar
+            # renders (no longer suppressed for gated visitors).
+            assert page.locator('#content-sidebar-aside').count() == 1
+            assert page.locator('[data-testid="workshop-sidebar"]').count() == 1
+            # The gated-only locked-video thumbnail is gone.
+            assert page.locator('[data-testid="teaser-video-thumbnail"]').count() == 0
+            # The paywall + teaser still render so the visitor knows what they
+            # would unlock.
+            assert page.locator('[data-testid="page-paywall"]').count() == 1
+            # The breadcrumb sits near the top of the content column.
             crumb = page.locator('[data-testid="page-breadcrumb"]')
             crumb.wait_for(state='visible')
             crumb_box = crumb.bounding_box()

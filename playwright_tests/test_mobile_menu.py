@@ -161,7 +161,7 @@ class TestMobileMenuTextNavAccordion:
 
         expected = {
             "about": [
-                "About",
+                # "About" dropped (commit 39430dba) — duplicated /about.
                 "Team",
                 "FAQ",
             ],

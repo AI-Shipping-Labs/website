@@ -600,6 +600,7 @@ class TestPlanningSection:
             "Tags",
             "Merge accounts",
             "Payment mismatches",
+            "Subscription reconciliation",
             "New user",
             "CRM",
             "AI Assistant",

@@ -227,13 +227,4 @@
 
 {% block extra_scripts %}
 {% include "_partials/mermaid_script.html" %}
-{% comment %}
-  Issue #652: inline register card on the workshop pages paywall when
-  the signup branch is active for an anonymous visitor.
-{% endcomment %}
-{% if pages_signup_cta_url and not user.is_authenticated %}
-<script src="/static/js/accounts/auth-helpers.js"></script>
-{{ next_url|json_script:"auth-next-url" }}
-<script src="/static/js/accounts/inline-register.js"></script>
-{% endif %}
 {% endblock %}

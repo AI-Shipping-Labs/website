@@ -128,7 +128,20 @@ class TierReconcileTestBase(TestCase):
         return self.client.get(DIAGNOSTICS_URL, params, **self._auth_header())
 
     def _post_apply(self, body=None, *, raw_body=None):
-        data = raw_body if raw_body is not None else json.dumps(body or {})
+        # Issue #1308: the apply endpoint is now read-only by default. These
+        # legacy tests exercise the WRITE path, so when a JSON-object body does
+        # not explicitly set ``dry_run`` we inject ``dry_run=false`` plus the
+        # required confirmation token to preserve their original write intent.
+        # Tests that pass ``dry_run`` explicitly (dry-run previews, type-error
+        # cases) are left untouched.
+        if raw_body is not None:
+            data = raw_body
+        else:
+            data_obj = dict(body or {})
+            if "dry_run" not in data_obj:
+                data_obj["dry_run"] = False
+                data_obj.setdefault("confirm", "apply_stripe_truth")
+            data = json.dumps(data_obj)
         return self.client.post(
             APPLY_URL,
             data=data,
@@ -513,7 +526,13 @@ class TierReconcileApplyTest(TierReconcileTestBase):
 
         body = response.json()
         self.assertEqual(body["processed"], 3)
-        self.assertEqual(stripe_list.call_count, 3)
+        # Issue #1308: the apply path now classifies each target against live
+        # Stripe (status=all) to catch cancellations that the active-only
+        # backfill query cannot see, then falls back to backfill for the
+        # active-repair case. That is one classify list call plus one backfill
+        # list call per user (2 x 3 = 6). The mock patches the shared
+        # ``stripe.Subscription.list`` so both passes are counted.
+        self.assertEqual(stripe_list.call_count, 6)
 
     def test_apply_with_unknown_email_returns_per_row_not_found_not_404(self):
         with patch_subscriptions({}):

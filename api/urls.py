@@ -138,6 +138,10 @@ from api.views.stripe_webhooks import (
     stripe_webhooks_status,
     stripe_webhooks_verify,
 )
+from api.views.subscription_reconciliation import (
+    reconciliation_run_detail,
+    reconciliation_runs_dispatch,
+)
 from api.views.sync_sources import (
     sync_history_collection,
     sync_history_detail,
@@ -839,6 +843,18 @@ urlpatterns = [
         "payments/tier-reconcile/diagnostics",
         tier_reconcile_diagnostics,
         name="api_tier_reconcile_diagnostics",
+    ),
+    # Run history / detail / enqueue (issue #1308). Registered before the
+    # bare apply route so the ``runs`` literal does not collide with it.
+    path(
+        "payments/tier-reconcile/runs/<uuid:run_id>",
+        reconciliation_run_detail,
+        name="api_reconciliation_run_detail",
+    ),
+    path(
+        "payments/tier-reconcile/runs",
+        reconciliation_runs_dispatch,
+        name="api_reconciliation_runs",
     ),
     path(
         "payments/tier-reconcile",

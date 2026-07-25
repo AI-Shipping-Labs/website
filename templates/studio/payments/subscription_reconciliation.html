@@ -1,0 +1,110 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Subscription reconciliation{% endblock %}
+
+{% block studio_content %}
+{% studio_header_actions title="Subscription reconciliation" subtitle="Compares live Stripe subscription status with website access. Different from checkout Payment mismatches." %}
+  <a href="{% url 'studio_payment_mismatch_list' %}" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+    <i data-lucide="triangle-alert" class="h-4 w-4"></i>
+    <span>Payment mismatches</span>
+  </a>
+  <form method="post" action="{% url 'studio_subscription_reconciliation_check' %}"
+        onsubmit="return confirm('This check is read-only and will not change member access.');">
+    {% csrf_token %}
+    <button type="submit" data-testid="reconciliation-check-button"
+            class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+      <i data-lucide="refresh-cw" class="h-4 w-4"></i>
+      <span>Check all Stripe subscriptions</span>
+    </button>
+  </form>
+{% endstudio_header_actions %}
+
+<p class="mb-4 text-sm text-muted-foreground">This report compares live Stripe subscription status against website access and links back to member and Stripe records. It is read-only; writes stay behind the confirmed staff API.</p>
+
+{% if latest_run %}
+<div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6" data-testid="reconciliation-summary">
+  {% with card="bg-card border border-border rounded-lg p-4" %}
+  <div class="{{ card }}"><p class="text-xs uppercase tracking-wide text-muted-foreground">Cohort</p><p class="mt-1 text-2xl text-foreground" data-testid="count-cohort">{{ latest_run.cohort_count }}</p></div>
+  <div class="{{ card }}"><p class="text-xs uppercase tracking-wide text-muted-foreground">In sync</p><p class="mt-1 text-2xl text-foreground">{{ latest_run.ok_count }}</p></div>
+  <div class="{{ card }}"><p class="text-xs uppercase tracking-wide text-muted-foreground">Scheduled</p><p class="mt-1 text-2xl text-foreground" data-testid="count-scheduled">{{ latest_run.scheduled_cancellation_count }}</p></div>
+  <div class="{{ card }}"><p class="text-xs uppercase tracking-wide text-muted-foreground">Actionable</p><p class="mt-1 text-2xl text-foreground" data-testid="count-actionable">{{ latest_run.actionable_count }}</p></div>
+  <div class="{{ card }}"><p class="text-xs uppercase tracking-wide text-muted-foreground">Warnings</p><p class="mt-1 text-2xl text-foreground">{{ latest_run.warning_count }}</p></div>
+  <div class="{{ card }}"><p class="text-xs uppercase tracking-wide text-muted-foreground">Changed</p><p class="mt-1 text-2xl text-foreground">{{ latest_run.changed_count }}</p></div>
+  {% endwith %}
+</div>
+
+<p class="mb-4 text-xs text-muted-foreground" data-testid="reconciliation-run-meta">Latest run {{ latest_run.started_at|operator_datetime }} UTC — status {{ latest_run.status }}. Deletion webhook evidence: {{ evidence_processed }} processed, {{ evidence_failed }} failed, {{ evidence_missing }} missing.</p>
+{% endif %}
+
+<div class="mb-6 flex flex-wrap items-center gap-2">
+  {% with chip_base="px-4 py-1.5 rounded-full text-sm border transition-colors" chip_active="bg-accent text-accent-foreground border-accent" chip_idle="bg-secondary text-muted-foreground border-border hover:text-foreground hover:bg-muted" %}
+  <a href="?filter=all" class="{{ chip_base }} {% if active_filter == 'all' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">All</a>
+  <a href="?filter=actionable" class="{{ chip_base }} {% if active_filter == 'actionable' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Actionable</a>
+  <a href="?filter=scheduled" class="{{ chip_base }} {% if active_filter == 'scheduled' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Scheduled</a>
+  <a href="?filter=warnings" class="{{ chip_base }} {% if active_filter == 'warnings' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Warnings</a>
+  {% endwith %}
+</div>
+
+{% if rows %}
+<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="reconciliation-list">
+  <table class="w-full table-fixed">
+    <colgroup>
+      <col class="w-[24%]"><col class="w-[16%]"><col class="w-[20%]"><col class="w-[22%]"><col class="w-[18%]">
+    </colgroup>
+    <thead class="border-b border-border">
+      <tr class="text-left text-xs uppercase tracking-wide text-muted-foreground">
+        <th class="px-4 py-3 font-medium">Member</th>
+        <th class="px-4 py-3 font-medium">Website tier</th>
+        <th class="px-4 py-3 font-medium">Stripe</th>
+        <th class="px-4 py-3 font-medium">Classification</th>
+        <th class="px-4 py-3 font-medium">Action</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for row in rows %}
+      {% with f=row.finding %}
+      <tr data-testid="reconciliation-row">
+        <td class="px-4 py-3 align-top" data-label="Member">
+          {% if f.user_id %}
+          <a href="{% url 'studio_user_detail' f.user_id %}" class="text-sm text-accent hover:underline break-all" data-testid="reconciliation-member-link">{{ f.email }}</a>
+          {% else %}
+          <span class="text-sm text-foreground break-all">{{ f.email }}</span>
+          {% endif %}
+          {% for peer_id in f.conflicting_user_ids %}
+          <a href="{% url 'studio_user_detail' peer_id %}" class="block text-xs text-accent hover:underline">Conflicting account #{{ peer_id }}</a>
+          {% endfor %}
+        </td>
+        <td class="px-4 py-3 align-top text-sm text-foreground" data-label="Website tier">{{ f.current_tier }}</td>
+        <td class="px-4 py-3 align-top" data-label="Stripe">
+          <p class="text-sm text-foreground">{{ f.stripe_status|default:"—" }}{% if f.cancel_at_period_end %} (cancels at period end){% endif %}</p>
+          {% if f.stripe_tier %}<p class="text-xs text-muted-foreground">Stripe tier: {{ f.stripe_tier }}</p>{% endif %}
+          {% if f.stripe_period_end %}<p class="text-xs text-muted-foreground" data-testid="reconciliation-period-end">Access ends {{ f.stripe_period_end|operator_datetime }} UTC</p>{% endif %}
+          {% if row.subscription_url %}
+          <a href="{{ row.subscription_url }}" target="_blank" rel="noopener" class="block font-mono text-xs text-accent break-all hover:underline">{{ f.stripe_subscription_id }}</a>
+          {% elif f.stripe_subscription_id %}
+          <p class="font-mono text-xs text-muted-foreground break-all">{{ f.stripe_subscription_id }}</p>
+          {% endif %}
+          {% if row.customer_url %}
+          <a href="{{ row.customer_url }}" target="_blank" rel="noopener" class="block font-mono text-xs text-accent break-all hover:underline">{{ f.stripe_customer_id }}</a>
+          {% endif %}
+          {% if row.evidence_label %}<p class="text-xs text-muted-foreground mt-1" data-testid="reconciliation-webhook-evidence">{{ row.evidence_label }}</p>{% endif %}
+        </td>
+        <td class="px-4 py-3 align-top" data-label="Classification">
+          <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-secondary text-foreground border border-border" data-testid="reconciliation-classification">{{ row.classification_label }}</span>
+          {% if f.message %}<p class="text-xs text-muted-foreground mt-2">{{ f.message }}</p>{% endif %}
+        </td>
+        <td class="px-4 py-3 align-top text-sm text-foreground" data-label="Action" data-testid="reconciliation-action">{{ row.action_label|default:"—" }}<p class="text-xs text-muted-foreground mt-1">{{ f.outcome }}</p></td>
+      </tr>
+      {% endwith %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="reconciliation-list-pager" %}
+{% endif %}
+{% else %}
+{% studio_empty_state 'fresh' entity_label='finding' entity_label_plural='findings' create_url=None empty_message='No subscription drift found. Start a read-only check or browse earlier runs.' testid_suffix='reconciliation' %}
+{% endif %}
+{% endblock %}

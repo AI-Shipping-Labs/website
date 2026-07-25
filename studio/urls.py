@@ -262,6 +262,10 @@ from studio.views.stripe_webhooks import (
     stripe_webhooks_dashboard,
     stripe_webhooks_verify,
 )
+from studio.views.subscription_reconciliation import (
+    subscription_reconciliation_check,
+    subscription_reconciliation_report,
+)
 from studio.views.sync import (
     content_sources_export,
     content_sources_import,
@@ -793,6 +797,18 @@ urlpatterns = [
         'users/payment-mismatches/<int:mismatch_id>/<str:action>',
         payment_mismatch_mark,
         name='studio_payment_mismatch_mark',
+    ),
+
+    # Live Stripe subscription reconciliation report + read-only check (#1308)
+    path(
+        'payments/subscription-reconciliation/',
+        subscription_reconciliation_report,
+        name='studio_subscription_reconciliation',
+    ),
+    path(
+        'payments/subscription-reconciliation/check',
+        subscription_reconciliation_check,
+        name='studio_subscription_reconciliation_check',
     ),
 
     # Stripe webhook cancellation diagnostics (issue #1314)

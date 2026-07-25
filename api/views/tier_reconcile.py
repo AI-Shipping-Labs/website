@@ -24,8 +24,14 @@ from accounts.models import TierOverride
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
+from payments.models import WebhookEvent
+from payments.services import subscription_reconciliation as _recon
 from payments.services.backfill_tiers import backfill_user_from_stripe
 from payments.services.import_stripe import _price_to_tier_map
+
+# Exact confirmation token required alongside ``dry_run=false`` before any
+# reconciliation write (issue #1308).
+APPLY_CONFIRMATION = "apply_stripe_truth"
 
 _DIAGNOSTIC_EXAMPLE = {
     "email": "alice@example.com",
@@ -420,12 +426,35 @@ def tier_reconcile_apply(request):
             details={"field": "emails", "expected": "list"},
         )
 
-    dry_run_raw = data.get("dry_run", False)
+    # Issue #1308: the apply endpoint is READ-ONLY by default. Omitting
+    # ``dry_run`` (or passing ``true``) previews without writes. A write
+    # requires BOTH ``dry_run=false`` AND the exact confirmation token.
+    dry_run_raw = data.get("dry_run", True)
     if not isinstance(dry_run_raw, bool):
         return error_response(
             "dry_run must be a boolean",
             "invalid_type",
             details={"field": "dry_run", "expected": "bool"},
+        )
+
+    confirm_raw = data.get("confirm", "")
+    if not isinstance(confirm_raw, str):
+        return error_response(
+            "confirm must be a string",
+            "invalid_type",
+            details={"field": "confirm", "expected": "string"},
+        )
+    if not dry_run_raw and confirm_raw != APPLY_CONFIRMATION:
+        # dry_run=false without the exact confirmation cannot partially apply
+        # a batch — reject before any write.
+        return error_response(
+            (
+                "A write requires dry_run=false and "
+                f'confirm="{APPLY_CONFIRMATION}".'
+            ),
+            "confirmation_required",
+            status=422,
+            details={"field": "confirm", "expected": APPLY_CONFIRMATION},
         )
 
     force_raw = data.get("force", False)
@@ -536,6 +565,11 @@ def tier_reconcile_apply(request):
 
     price_to_tier = _price_to_tier_map()
 
+    # Issue #1308: detect duplicate Stripe ownership across the target set
+    # BEFORE any Stripe-driven write so both conflicting rows are blocked.
+    target_users = [u for _, u in targets if u is not None]
+    duplicate_ids = _recon._duplicate_ownership_map(target_users)
+
     results = []
     processed = changed = skipped = warnings = 0
     for original_email, user in targets:
@@ -601,6 +635,27 @@ def tier_reconcile_apply(request):
                     )
                     user.refresh_from_db()
 
+        # Issue #1308: cancellation-aware reconciliation. Canceled/scheduled
+        # states cannot be repaired by ``backfill_user_from_stripe`` (which
+        # only queries active subscriptions). Classify first; take the
+        # deterministic reconcile action for ended/scheduled drift and block
+        # duplicate ownership. Everything else falls through to backfill,
+        # preserving the existing active-repair / warning behavior.
+        recon_row = _reconcile_apply_row(
+            user, price_to_tier, duplicate_ids,
+            dry_run=dry_run_raw,
+        )
+        if recon_row is not None:
+            results.append(recon_row["row"])
+            processed += 1
+            if recon_row["counter"] == "changed":
+                changed += 1
+            elif recon_row["counter"] == "warning":
+                warnings += 1
+            elif recon_row["counter"] == "skipped":
+                skipped += 1
+            continue
+
         record = backfill_user_from_stripe(
             user,
             dry_run=dry_run_raw,
@@ -639,3 +694,91 @@ def tier_reconcile_apply(request):
         },
         status=200,
     )
+
+
+# Reconciliation classifications this endpoint applies deterministically.
+_RECON_APPLY_CLASSIFICATIONS = frozenset({
+    _recon.CLASSIFICATION_ENDED,
+    _recon.CLASSIFICATION_SUSPECTED_MISSED_DELETE,
+    _recon.CLASSIFICATION_SCHEDULED,
+})
+
+
+def _reconcile_apply_row(user, price_to_tier, duplicate_ids, *, dry_run):
+    """Handle canceled/scheduled/duplicate targets via the reconciliation
+    service. Returns ``None`` for every other case so the caller falls back to
+    the existing backfill active-repair path.
+    """
+    try:
+        result = _recon.classify_user(
+            user, price_to_tier=price_to_tier, duplicate_ids=duplicate_ids,
+        )
+    except Exception:
+        # A classification failure must not break the batch — let backfill try.
+        return None
+
+    cls = result.classification
+    if cls == _recon.CLASSIFICATION_DUPLICATE_OWNERSHIP:
+        row = _reconcile_row_base(user)
+        row.update({
+            "status": "warning",
+            "message": (
+                "Duplicate Stripe ownership: this customer/subscription id is "
+                "shared by more than one local user. Resolve identity "
+                "ownership before applying."
+            ),
+        })
+        return {"row": row, "counter": "warning"}
+
+    if cls not in _RECON_APPLY_CLASSIFICATIONS:
+        return None
+
+    old_tier_slug = _current_tier_slug(user)
+    if cls == _recon.CLASSIFICATION_SCHEDULED:
+        proposed_to = old_tier_slug  # metadata-only repair keeps the tier
+    else:
+        proposed_to = "free"
+
+    audit_event_id = ""
+    if not dry_run:
+        _recon.apply_deterministic(result)
+        # apply_deterministic writes a WebhookEvent audit row; surface its id.
+        latest = WebhookEvent.objects.filter(
+            event_type="subscription_reconciliation_apply",
+            payload__user_id=user.pk,
+        ).order_by("-processed_at").first()
+        if latest is not None:
+            audit_event_id = latest.stripe_event_id
+        status = "changed"
+        message = f"{result.message} (applied)"
+    else:
+        status = "would_change"
+        message = f"{result.message} (dry run)"
+
+    row = _reconcile_row_base(user)
+    row.update({
+        "status": status,
+        "from": old_tier_slug,
+        "to": _current_tier_slug(user) if not dry_run else proposed_to,
+        "subscription_id": user.subscription_id or "",
+        "audit_event_id": audit_event_id,
+        "message": message,
+        "billing_period_end": _billing_period_end_iso(user),
+    })
+    return {"row": row, "counter": "changed"}
+
+
+def _reconcile_row_base(user):
+    return {
+        "email": user.email,
+        "status": "",
+        "from": _current_tier_slug(user),
+        "to": None,
+        "subscription_id": user.subscription_id or "",
+        "deactivated_override": False,
+        "saved_metadata": False,
+        "audit_event_id": "",
+        "message": "",
+        "billing_period_end": _billing_period_end_iso(user),
+        "stripe_customer_id": user.stripe_customer_id or "",
+    }

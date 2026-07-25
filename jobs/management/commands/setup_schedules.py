@@ -181,6 +181,19 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: import-stripe-daily (daily at 03:30 UTC)'))
 
+        # Daily read-only Stripe subscription reconciliation (issue #1308).
+        # Runs at 04:30 UTC, AFTER the 03:30 Stripe customer import, so the
+        # cohort reflects the latest import. Always diagnostic/read-only — it
+        # never changes member access; writes stay behind the confirmed API.
+        schedule(
+            'payments.tasks.subscription_reconciliation.run_scheduled_reconciliation',
+            cron='30 4 * * *',
+            name='stripe-subscription-reconciliation-daily',
+        )
+        self.stdout.write(self.style.SUCCESS(
+            'Registered: stripe-subscription-reconciliation-daily (daily at 04:30 UTC)'
+        ))
+
         # Issue #452: lifecycle of unverified email-signup accounts.
         # Reminder runs first (07:00 UTC) so users get a 24h heads-up
         # before the purge sweep (08:00 UTC) on the same calendar day.

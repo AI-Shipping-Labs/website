@@ -390,3 +390,90 @@ Recovery procedure:
 Rollback: the audit command never writes. If the evidence is incomplete, leave
 the alias and mismatch unchanged, keep fulfillment quarantined, and escalate
 with the printed Session, OAuth, and audit identifiers.
+
+## Subscription reconciliation (live Stripe vs website access)
+
+Recurring, cohort-wide reconciliation compares live Stripe subscription truth
+against local website membership for every current or former Stripe subscriber
+across Basic, Main, and Premium. It is separate from two neighbouring tools:
+
+- `/api/users/payment-mismatches` and Studio Payment mismatches report checkout
+  identity conflicts (who paid vs which account was entitled).
+- The daily 03:30 UTC Stripe customer import discovers wholly unlinked Stripe
+  customers. Reconciliation does not replace it; a Stripe customer with no
+  local Stripe identifiers and no paid local tier stays an import/identity job.
+
+### Cohort and source of truth
+
+The cohort is every local user with any Stripe-membership indicator: a
+non-empty `stripe_customer_id` or `subscription_id`, a paid base tier, or a
+`stripe:active` / `stripe:churned` / `stripe:plan-*` tag. Live truth is read by
+retrieving the stored `subscription_id` (or listing the customer's
+subscriptions with `status=all`) and resolving the tier through the shared
+metadata -> configured price -> amount/interval resolver. A missing lookup or
+the absence of an `active` result is never treated as a cancellation.
+
+### State contract
+
+- `active`/`trialing`, not cancelling: entitled now. In-sync rows are counted
+  but store no finding. Stale tier/subscription metadata is
+  `active_metadata_drift` with action `repair_active_metadata`.
+- `active`/`trialing` with `cancel_at_period_end=true`: `scheduled_cancellation`.
+  Keep the paid tier + `subscription_id` through the period end; the only apply
+  is repairing `pending_tier=free` and the access-ending date.
+- `canceled` while still paid locally: `ended_subscription_still_entitled` with
+  action `revert_to_free`. When no processed deletion webhook exists it is
+  `suspected_missed_subscription_deleted` (same action). Apply uses the shared
+  ended-subscription transition: base tier Free; subscription metadata and
+  pending tier cleared; Stripe tags churned; community removal follows
+  EFFECTIVE access, so an active `TierOverride` survives.
+- `past_due` / `unpaid`: `dunning_grace`. Access is retained (matching
+  `invoice.payment_failed`); these NEVER collapse into "no active subscription"
+  or count as churn.
+- `incomplete` / `incomplete_expired` / `paused`: `non_entitled_status_review`.
+- No subscription/history for a linked or paid user: `missing_stripe_subscription`.
+- Simultaneous `stripe:active` + `stripe:churned`: `inconsistent_stripe_status_tags`.
+- Two local users sharing a customer/subscription id: `duplicate_stripe_ownership`
+  — reported for identity cleanup, never eligible for apply.
+
+### Cadence
+
+The `stripe-subscription-reconciliation-daily` schedule runs at 04:30 UTC (after
+the 03:30 import). It is always diagnostic/read-only, prevents concurrent runs,
+and recovers a stuck `running` run after `STRIPE_RECONCILIATION_STALE_MINUTES`.
+Admins are alerted only for new/changed actionable findings and after three
+consecutive failed runs.
+
+### Read-only check and confirmed apply
+
+Diagnostic (read-only), no writes:
+
+```
+POST /api/payments/tier-reconcile/runs      # enqueue a full cohort run (202)
+GET  /api/payments/tier-reconcile/runs      # run history
+GET  /api/payments/tier-reconcile/runs/<id> # run detail + findings (filters)
+POST /api/payments/tier-reconcile           # omit dry_run -> preview only
+```
+
+A write requires BOTH `dry_run=false` AND `confirm="apply_stripe_truth"` and
+targets explicit emails:
+
+```
+POST /api/payments/tier-reconcile
+{ "emails": ["someone@example.com"], "dry_run": false,
+  "confirm": "apply_stripe_truth" }
+```
+
+Only deterministic drift is applied (active/trialing repair,
+scheduled-cancellation metadata, confirmed `canceled` reversion). Every
+warning/review/duplicate classification is skipped, apply is idempotent, and
+each actual change writes a secret-free audit event.
+
+Studio: `/studio/payments/subscription-reconciliation/` shows the latest run,
+summary counts, filters, and links to member and Stripe records. `Check all
+Stripe subscriptions` enqueues a read-only run; there is no Studio bulk-apply.
+
+## STRIPE_RECONCILIATION_STALE_MINUTES
+
+Minutes after which a stuck `running` reconciliation run is marked failed so the
+next daily run can start. Default 120, clamped to a 5-minute floor.

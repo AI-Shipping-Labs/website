@@ -170,8 +170,11 @@ class DeliveryAttemptTest(TestCase):
     def test_transient_failure_rolls_back_and_leaves_no_terminal_event(self):
         user = self._paid_user("trans@test.com", sub="sub_t", cus="cus_t")
         main = Tier.objects.get(slug="main")
+        # Issue #1308: the deleted path now churns tags through the shared
+        # ``subscription_transition.apply_ended_subscription``; inject the
+        # transient failure there so the rollback assertion still holds.
         with patch(
-            "payments.services.webhook_handlers.reconcile_stripe_status_tags",
+            "payments.services.subscription_transition.reconcile_stripe_status_tags",
             side_effect=RuntimeError("boom"),
         ):
             resp = _post(

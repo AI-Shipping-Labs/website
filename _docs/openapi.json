@@ -6591,6 +6591,54 @@
         ]
       }
     },
+    "/api/payments/tier-reconcile/runs": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Paginated run history.",
+        "tags": [
+          "Tier Reconciliation"
+        ]
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Enqueue a read-only cohort run (202).",
+        "tags": [
+          "Tier Reconciliation"
+        ]
+      }
+    },
+    "/api/payments/tier-reconcile/runs/{run_id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Run detail plus filtered findings.",
+        "tags": [
+          "Tier Reconciliation"
+        ]
+      }
+    },
     "/api/plans/{plan_id}": {
       "delete": {
         "parameters": [

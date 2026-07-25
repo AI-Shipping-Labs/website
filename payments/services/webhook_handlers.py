@@ -1410,39 +1410,21 @@ def handle_subscription_deleted(subscription_data):
     with transaction.atomic():
         user = User.objects.select_for_update().get(pk=user.pk)
 
-        # Whether the user held community access on their BASE paid tier before
-        # the revert. Combined below with the surviving-override check so we
-        # only call ``_community_remove`` for users who actually had access AND
-        # whose EFFECTIVE level now drops below Main (issue #970, R2).
-        had_community = bool(user.tier and user.tier.level >= 20)
-
-        free_tier = Tier.objects.filter(slug="free").first()
-        user.tier = free_tier
-        user.subscription_id = ""
-        user.billing_period_end = None
-        user.pending_tier = None
-        user.save(
-            update_fields=[
-                "tier",
-                "subscription_id",
-                "billing_period_end",
-                "pending_tier",
-            ]
+        # Issue #1308: the ended-subscription transition is a single shared
+        # write path used by BOTH this webhook and the confirmed reconcile
+        # apply so the two can never drift. It reverts to Free, clears
+        # subscription metadata + pending tier, churns the stripe:* tags, and
+        # removes the user from the community only when EFFECTIVE access falls
+        # below Main (a surviving admin override keeps a comped member).
+        from payments.services.subscription_transition import (
+            apply_ended_subscription,
         )
+
+        apply_ended_subscription(user)
         _services.logger.info(
             "customer.subscription.deleted: user=%s reverted to free",
             user.email,
         )
-
-        # Issue #969: the subscription is gone — mark the user churned.
-        reconcile_stripe_status_tags(user, active=False, tier=None)
-
-        # Issue #970 (R2): community access follows the EFFECTIVE tier. A paid
-        # subscription ending does NOT revoke an admin-granted override.
-        from content.access import LEVEL_MAIN, get_user_level
-
-        if had_community and get_user_level(user) < LEVEL_MAIN:
-            _services._community_remove(user)
 
     return OUTCOME_PROCESSED
 

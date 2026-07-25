@@ -62,6 +62,7 @@ class EntrypointRegistersSchedulesTest(TestCase):
             'slack-membership-refresh',
             'import-slack-daily',
             'import-stripe-daily',
+            'stripe-subscription-reconciliation-daily',
             'remind-unverified-users',
             'purge-unverified-users',
             'ingest-plan-sprints',

@@ -1,0 +1,34 @@
+{% comment %}
+  Issue #1338: Gated-safe mobile drawer toggle for workshop tutorial pages.
+
+  Renders above the breadcrumb on `<lg` viewports so a gated / anonymous
+  visitor on a phone can open the same shared `#sidebar-nav`
+  page-navigation drawer that desktop shows. It keeps the toggle contract
+  used by `content/reader/_scripts.html` (`id="sidebar-toggle-btn"` /
+  `aria-controls="sidebar-nav"`) so the existing handler works unchanged.
+
+  Unlike `content/reader/_mobile_progress_bar.html`, this control carries
+  NO progress semantics: there is no "Page N of M" text
+  (`reader-mobile-progress-text`) and no green completion fill
+  (`reader-mobile-progress-fill`), both of which would be misleading when
+  the body is paywalled. It shows only the drawer label and the chevron.
+
+  Required context:
+    reader_mobile_label   Drawer button text, e.g. "Workshop Navigation".
+{% endcomment %}
+<div class="lg:hidden mb-4" data-testid="reader-mobile-nav-toggle-gated">
+  <button
+    type="button"
+    id="sidebar-toggle-btn"
+    class="w-full flex items-center justify-between rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+    aria-expanded="false"
+    aria-controls="sidebar-nav"
+    data-testid="reader-mobile-drawer-toggle"
+  >
+    <span class="flex items-center gap-2">
+      <i data-lucide="list" class="h-4 w-4"></i>
+      {{ reader_mobile_label }}
+    </span>
+    <i data-lucide="chevron-down" class="h-4 w-4 transition-transform duration-200" id="sidebar-toggle-chevron"></i>
+  </button>
+</div>

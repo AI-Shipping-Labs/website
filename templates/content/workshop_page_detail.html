@@ -25,6 +25,14 @@
         <div class="flex-1 min-w-0 order-1 lg:order-2" id="content-sidebar-main">
           {% if not is_gated %}
           {% include "content/reader/_mobile_progress_bar.html" %}
+          {% else %}
+          {% comment %}
+            Issue #1338: gated visitors get a progress-free mobile drawer
+            toggle so they can open the page-navigation list on small
+            viewports. It reuses the shared sidebar-toggle-btn / sidebar-nav
+            contract but drops the misleading progress text and fill.
+          {% endcomment %}
+          {% include "content/reader/_mobile_nav_toggle_gated.html" %}
           {% endif %}
 
           <!-- Breadcrumb -->

@@ -47,6 +47,8 @@ infrastructure-facing tooling. Current root entries:
 - Worker (`/studio/worker/`)
 - SES events (`/studio/ses-events/` — read-only browser over
   `email_app.SesEvent`, see issue #763)
+- Email log (`/studio/email-log/`)
+- Maven events (`/studio/maven-events/`)
 - Redirects (`/studio/redirects/`)
 - Triggers, a nested group that keeps the existing trigger pages at their
   current URLs:

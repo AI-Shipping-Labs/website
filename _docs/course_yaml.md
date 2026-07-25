@@ -67,7 +67,7 @@ Studio writes nothing back to GitHub. Some operational fields therefore live onl
 | `required_level`, `default_unit_access` | YAML | Edit in GitHub, then re-sync. |
 | `instructors` | YAML | Order matters — first instructor is primary on cards. |
 | `discussion_url`, `testimonials` | YAML | Edit in GitHub, then re-sync. |
-| `status` | YAML (`published: true/false`) or DB | Source sets initial value; operators may flip it via admin without losing the source link. |
+| `status` | Always `published` (not sourced) | Source-synced courses are always written as `status='published'` on upsert; there is no `published:` source key. Admin status changes are overwritten on the next sync (a non-`published` row is marked dirty and forced back to `published`). |
 | `individual_price_eur` | DB only | Set in Django admin or via local-only migration. Not in `course.yaml`. |
 | `stripe_product_id`, `stripe_price_id` | DB only | Created via "Create Stripe Product" button after a price is set. |
 | `peer_review_*` | DB only | Configured per-course in Studio (admin) once. |

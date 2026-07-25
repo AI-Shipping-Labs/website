@@ -40,7 +40,7 @@ Set in the ECS task definition (plain environment variables):
 | `SITE_BASE_URL` | `https://dev.aishippinglabs.com` | Process-start baseline for absolute URLs. Runtime URL generation can be overridden in Studio > Settings > Site. |
 | `RUN_MIGRATIONS` | `true` on web, `false` on worker | Entrypoint dispatch flag. Only the web container runs `migrate`; the worker starts `qcluster`. Set automatically by `deploy/update_task_def.py`. |
 | `SES_ENABLED` | `true` in prod | Required to send transactional/campaign email. Defaults false and fails `manage.py check` when `DEBUG=False`. |
-| `S3_ENABLED` | `true` in prod | Required to upload content-sync images to S3. Defaults false; content sync skips image upload when missing. |
+| `S3_ENABLED` | `true` in prod | Uploads content-sync images to S3. Defaults true — a missing var resolves to true so uploads run; content sync only skips image upload when the flag is explicitly `false` (or under `TESTING`). Keep it `true` in prod so uploads never depend on the default drifting. |
 | `SLACK_ENABLED` | `true` where the Slack bot/imports should run | Startup gate. Studio also has Slack settings, but if this env var is false, Slack token/channel settings are blanked at import time. |
 | `SLACK_ENVIRONMENT` | `development` on dev, `production` on prod | Slack routing mode. Non-production modes ignore production Slack channel IDs and require dev/test channel overrides before posting. Can be managed in Studio for normal routing changes after the startup gate is enabled. |
 | `Q_WORKERS` | `2` | Optional django-q worker count. Defaults to 1 on SQLite, 2 on Postgres. |
@@ -307,8 +307,8 @@ Those ECS deploy credentials are not general production-admin
 credentials. In particular, they may not be able to list SES
 configuration sets, SNS topics, Secrets Manager values, or task
 definitions by wildcard. For SES/SNS wiring, inspect the
-`AI-Shipping-Labs/ai-shipping-labs-infra` repo and file/track infra
-issues there when permissions are missing.
+`DataTalksClub/aws-infra` repo (AISL resources under `main/aisl/`) and
+file/track infra issues there when permissions are missing.
 
 ## Database access
 
@@ -329,7 +329,7 @@ Host bastion-tunnel-aisl
 
 Find the values from Terraform outputs or the AWS console:
 - `BASTION_PUBLIC_IP` — EC2 console, instance named "bastion"
-- `RDS_ENDPOINT` — RDS console, instance `ai-shipping-labs` (or `terraform output db_endpoint` in `ai-shipping-labs-infra`)
+- `RDS_ENDPOINT` — RDS console, instance `ai-shipping-labs` (or `terraform output db_endpoint` in `DataTalksClub/aws-infra` under `main/aisl/`)
 
 1. Open an SSH tunnel:
 

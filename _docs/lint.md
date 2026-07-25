@@ -1,6 +1,8 @@
-# Advisory Linting Ramp
+# Linting
 
-Issue #610 adds expanded lint checks as advisory tooling. The existing blocking gate remains unchanged:
+The project runs two Ruff layers: a small mandatory blocking gate, and an
+expanded advisory report that stages candidate rules before they become
+blocking. The blocking gate is:
 
 ```bash
 make lint

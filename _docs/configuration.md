@@ -46,7 +46,7 @@ Test: `curl -I {SITE_BASE_URL}/ping` returns `200 OK`. Then visit `{SITE_BASE_UR
 3. Sign in at `{SITE_BASE_URL}/accounts/login/` with the superuser email + password.
 4. Open `{SITE_BASE_URL}/studio/settings/`. Every integration group from `INTEGRATION_GROUPS` is rendered there with a status badge (`configured`, `partial`, `not_configured`).
 
-Test: visit `/studio/settings/` and confirm 16 integration groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, Calendly, GitHub App, Slack, Site, Analytics, Auth, Banner Generator, LLM Provider, Observability, Maven, Event triggers).
+Test: visit `/studio/settings/` and confirm 17 integration groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, S3 Downloads, Calendly, GitHub App, Slack, Site, Analytics, Auth, Banner Generator, LLM Provider, Observability, Maven, Event triggers).
 
 ## 3. OAuth login providers
 
@@ -153,7 +153,7 @@ Keys to set in Studio:
 | `AWS_SES_REGION` | non-secret | e.g. `us-east-1`, `eu-west-1`. |
 | `SES_TRANSACTIONAL_FROM_EMAIL` | non-secret | Sender for required account/service email. Defaults to `noreply@aishippinglabs.com`; must be a verified sender (or be on a verified domain) in SES. |
 | `SES_PROMOTIONAL_FROM_EMAIL` | non-secret | Sender for campaigns/newsletters/marketing email. Defaults to `content@aishippinglabs.com`; must be a verified sender (or be on a verified domain) in SES. |
-| `SES_CONFIGURATION_SET_NAME` | non-secret | SES configuration set name for delivery, open, bounce, and click event publishing. Required in prod: set to `aishippinglabs` (matches `ai-shipping-labs-infra/email.tf`). When blank, SES publishes no events to SNS regardless of how the HTTPS subscription is wired — the bounce / complaint webhook never fires. |
+| `SES_CONFIGURATION_SET_NAME` | non-secret | SES configuration set name for delivery, open, bounce, and click event publishing. Required in prod: set to `aishippinglabs` (matches `DataTalksClub/aws-infra` at `main/aisl/email.tf`). When blank, SES publishes no events to SNS regardless of how the HTTPS subscription is wired — the bounce / complaint webhook never fires. |
 | `SES_WEBHOOK_VALIDATION_ENABLED` | non-secret | `true` in prod to validate incoming SNS webhook signatures. |
 | `SES_WEBHOOK_SHARED_SECRET` | secret | Optional shared secret enforced by the `/api/ses-events` webhook (`X-SES-Webhook-Secret` header). When set, requests missing the header or carrying the wrong value return 403 *before* SNS signature validation runs. Leave blank locally to keep `manage.py runserver` replay workflows working; set in prod and inject from the infra-side Lambda forwarder. |
 
@@ -161,7 +161,7 @@ Webhook endpoint (for SES bounce/complaint/open/click notifications via SNS): `{
 
 SES bounce / complaint webhook setup (issue #453):
 
-The AWS-side wiring (SES configuration set, SNS topics, CloudWatch alarms, subscriptions) is managed by Terraform in the [ai-shipping-labs-infra](https://github.com/AI-Shipping-Labs/ai-shipping-labs-infra) repo — primarily `email.tf` for SES + SNS resources and `email-best-practices.md` for the operator notes. Anything that touches AWS for email (SES domain, SNS topics, configuration sets, MX/DKIM/SPF/DMARC DNS, the inbound `email-forwarder.py` Lambda) lives there. Anything that touches our Django code (the `/api/ses-events` webhook, the `SesEvent` audit model, the bounce/complaint handlers, the User mutations) lives in this repo (`api/views/ses_events.py`, `email_app/models/ses_event.py`).
+The AWS-side wiring (SES configuration set, SNS topics, CloudWatch alarms, subscriptions) is managed by Terraform in the [DataTalksClub/aws-infra](https://github.com/DataTalksClub/aws-infra) repo (AISL resources under `main/aisl/`) — primarily `main/aisl/email.tf` for SES + SNS resources and `main/aisl/docs/email-best-practices.md` for the operator notes. Anything that touches AWS for email (SES domain, SNS topics, configuration sets, MX/DKIM/SPF/DMARC DNS, the inbound `email-forwarder.py` Lambda) lives there. Anything that touches our Django code (the `/api/ses-events` webhook, the `SesEvent` audit model, the bounce/complaint handlers, the User mutations) lives in this repo (`api/views/ses_events.py`, `email_app/models/ses_event.py`).
 
 End-to-end pipeline (when wired correctly):
 
@@ -169,20 +169,20 @@ End-to-end pipeline (when wired correctly):
 2. SES delivers the email or detects a bounce / complaint.
 3. SES publishes a notification to the SNS topic configured on the configuration set (`aws_ses_event_destination.bounces` / `.complaints` in `email.tf`).
 4. SNS fans out the notification to every subscriber on the topic.
-5. One of those subscribers is an HTTPS endpoint pointing at `{SITE_BASE_URL}/api/ses-events`. Our Django webhook validates the SNS signature, dedupes by `MessageId`, and runs `_handle_bounce` / `_handle_complaint` to mutate the User row + audit `SesEvent`.
+5. Each topic is subscribed by a Lambda forwarder (`ses_webhook.tf`) that POSTs the SNS payload to `{SITE_BASE_URL}/api/ses-events` with an `X-SES-Webhook-Secret` header. Our Django webhook validates the SNS signature, dedupes by `MessageId`, and runs `_handle_bounce` / `_handle_complaint` to mutate the User row + audit `SesEvent`. There is intentionally no direct HTTPS SNS subscription.
 
 Required state in the infra repo:
 
 - SNS topics `ses-bounces` and `ses-complaints` exist (already in `email.tf`).
 - SES configuration set `aishippinglabs` exists and is wired to both SNS topics via `aws_ses_event_destination.bounces` / `.complaints` (already in `email.tf`).
-- An `aws_sns_topic_subscription` of `protocol = "https"` and `endpoint = "https://aishippinglabs.com/api/ses-events"` exists for each of the two topics. This is the piece most likely to be missing — confirm in the SNS console that the topic shows a `Confirmed` HTTPS subscriber, not just the operator-email subscribers. If absent, file an infra repo issue.
-- (Defense-in-depth) Optional Lambda forwarder between SNS and the webhook that injects an `X-SES-Webhook-Secret` header from an AWS Secrets Manager value matched against `SES_WEBHOOK_SHARED_SECRET` on the Django side. Even though SNS signature verification already authenticates the caller, the shared secret blocks anyone from POSTing arbitrary `Bounce` JSON to `/api/ses-events` from outside AWS.
+- A Lambda forwarder (`ses_webhook.tf`) is subscribed to each of the two topics and POSTs the payload to `https://aishippinglabs.com/api/ses-events` with an `X-SES-Webhook-Secret` header. There is intentionally no direct `protocol = "https"` SNS subscription, so do not expect (or file an issue about) a `Confirmed` HTTPS subscriber — a topic showing only the Lambda and the operator-email subscribers is correct. To verify wiring, confirm the Lambda exists and is subscribed to both topics.
+- The Lambda forwarder is the required bridge (not optional defence-in-depth): it injects the `X-SES-Webhook-Secret` header from an AWS Secrets Manager value matched against `SES_WEBHOOK_SHARED_SECRET` on the Django side. The shared secret is a second auth layer on top of SNS signature verification, blocking anyone from POSTing arbitrary `Bounce` JSON to `/api/ses-events` from outside AWS.
 
 Required state in this repo:
 
 - `SES_CONFIGURATION_SET_NAME=aishippinglabs` in prod settings (Studio > Settings > Email (SES)). Without this, SES doesn't publish events.
 - `SES_WEBHOOK_VALIDATION_ENABLED=true` in prod (default everywhere except `DEBUG=True`).
-- (Defense-in-depth, paired with the Lambda above) `SES_WEBHOOK_SHARED_SECRET` set to the same value Secrets Manager hands the Lambda. The webhook then 403s any request missing or with a wrong header (`hmac.compare_digest`, constant-time). The check runs *before* SNS signature validation so an attacker without the secret never reaches the signature path, and rejected requests do not pollute the `SesEvent` audit log. Leave blank locally to keep `manage.py runserver` replay workflows working.
+- `SES_WEBHOOK_SHARED_SECRET` set to the same value Secrets Manager hands the required Lambda — this is the second auth layer paired with the Lambda forwarder, so set it in prod. The webhook then 403s any request missing or with a wrong header (`hmac.compare_digest`, constant-time). The check runs *before* SNS signature validation so an attacker without the secret never reaches the signature path, and rejected requests do not pollute the `SesEvent` audit log. Leave blank locally to keep `manage.py runserver` replay workflows working.
 
 Verify the pipeline is live:
 
@@ -190,9 +190,9 @@ Verify the pipeline is live:
 2. Wait ~30 seconds.
 3. Studio > Users > search `bounce@simulator.amazonses.com`. The row should show `unsubscribed=True` and a `bounced` tag.
 4. Django admin `/admin/email_app/sesevent/?recipient_email=bounce%40simulator.amazonses.com` should show a row with `event_type=bounce_permanent`.
-5. If neither shows, the SNS HTTPS subscription is missing or returning non-2xx (the latter shows up in CloudWatch logs on the Django side and on the SNS topic's delivery-status metric).
+5. If neither shows, the Lambda forwarder (`ses_webhook.tf`) is the failure point — check that it is subscribed to both topics, is not erroring, and is returning a 2xx from `/api/ses-events` (non-2xx and errors show up in the Lambda's CloudWatch logs, in the Django-side logs, and on the SNS topic's delivery-status metric).
 
-The MAILER-DAEMON email an operator receives at `alexey@aishippinglabs.com` is sent by the SNS `email` subscriber, not by the HTTPS subscriber. Receiving that email proves SES->SNS works but does NOT prove SNS->Django works. Always cross-check with the SesEvent row.
+The MAILER-DAEMON email an operator receives at `alexey@aishippinglabs.com` is sent by the SNS `email` subscriber, not by the Lambda forwarder. Receiving that email proves SES->SNS works but does NOT prove SNS->Lambda->Django works. Always cross-check with the SesEvent row.
 
 SES engagement tracking setup (issue #454):
 
@@ -298,9 +298,9 @@ Studio path: `Studio > Settings > S3 Content Images`.
 
 Provider console: AWS S3 + CloudFront. Bucket policy, CORS, and Origin Access Control details are in [`_docs/integrations/s3_content.md`](integrations/s3_content.md) — follow that document for the bucket and CloudFront setup before filling in the keys here.
 
-Production deploys MUST set the env var `S3_ENABLED=true` to actually upload images to S3 during content sync. The flag defaults to `false` everywhere — local dev, CI, Playwright, `manage.py test` — so `upload_images_to_s3` short-circuits before constructing any boto3 client and returns a no-op stats dict. Without `S3_ENABLED=true` in prod, content sync still runs but image uploads are skipped (the markdown still resolves to the configured `CONTENT_CDN_BASE`, so existing CDN images keep working). Issue #532.
+`S3_ENABLED` defaults to `true`, so production uploads images to S3 during content sync without any extra configuration (a fresh prod deploy that leaves it unset still uploads). It is a registered Studio setting in the `S3 Content Images` group. Local dev, CI, Playwright, and `manage.py test` do NOT upload images — but that skip comes from the `TESTING` short-circuit in `integrations/services/github_sync/media.py` (issue #532), not from the flag defaulting off. When uploads are disabled, `upload_images_to_s3` short-circuits before constructing any boto3 client and returns a no-op stats dict; the markdown still resolves to the configured `CONTENT_CDN_BASE`, so existing CDN images keep working. Explicitly setting `S3_ENABLED=false` (e.g. to pause uploads) is the only way to turn it off in prod.
 
-`S3_ENABLED` is a platform environment variable, not a Studio key.
+`S3_ENABLED` is a Studio setting (`s3_content` group, default `true`), resolved via `get_config` / `s3_content_upload_enabled()`. An environment variable is only an optional override in the DB override -> Django setting -> env -> default chain, not the primary source. Production should leave it on.
 
 Keys to set in Studio:
 
@@ -360,7 +360,7 @@ Run this checklist after configuring everything. Each item is one click, end to 
 - [ ] Trigger a content sync at `/studio/sync/`; new articles appear at `/blog/` and their images load from the CDN domain.
 - [ ] Create an event with platform=zoom in `/studio/events/`; the join URL points at zoom.us and the meeting exists in the Zoom account.
 - [ ] Upload a workshop recording to S3 via `/studio/recordings/<id>/edit`; confirm it plays in the in-app player on the recording surface.
-- [ ] Trigger a Slack announcement from `/studio/articles/<id>/announce-slack/`; the bot posts to the configured channel.
+- [ ] Trigger a Slack announcement from `/studio/articles/<id>/announce-slack`; the bot posts to the configured channel.
 - [ ] Send a test email campaign in `/studio/campaigns/`; confirm delivery to a verified SES recipient.
 
 ## 11.1. Signup attribution and the anonymous_id join key

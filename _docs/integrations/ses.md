@@ -254,7 +254,7 @@ Purpose: Reply-To address set on the welcome types (`welcome`,
 `welcome_imported`, `welcome_back`). A member who hits Reply on a welcome
 email reaches this monitored inbox instead of the send-only `welcome@` /
 `noreply@` mailbox. Default: `welcome@aishippinglabs.com`, which the inbound
-`email-forwarder` Lambda (see `ai-shipping-labs-infra/email.tf`) forwards
+`email-forwarder` Lambda (see `DataTalksClub/aws-infra` at `main/aisl/email.tf`) forwards
 to both founders, so welcome replies land in a human inbox.
 
 Paid checkout welcomes additionally hide-copy `STAFF_SIGNUP_NOTIFY_EMAIL`
@@ -289,15 +289,15 @@ Test vs live: n/a beyond per-environment override.
 ## SES_CONFIGURATION_SET_NAME
 
 Purpose: SES configuration-set name applied to every outbound email
-via the `X-SES-CONFIGURATION-SET` header. Read by
-`email_app/services/email_service.py:452`. A configuration set is
+via the boto3 `ConfigurationSetName` send argument. Read by
+`email_app/services/email_service.py:572-574`. A configuration set is
 the SES feature that publishes per-message delivery, open, bounce, and
 click events to SNS (and from there to the platform's webhook at
 `/api/ses-events`).
 
 Required in production: set to `aishippinglabs` to match the
 configuration set defined in
-`ai-shipping-labs-infra/email.tf`. When this value is blank, SES
+`DataTalksClub/aws-infra` at `main/aisl/email.tf`. When this value is blank, SES
 publishes no events to SNS regardless of how the HTTPS subscription
 is wired — the bounce / complaint webhook never fires and bounced
 users are never unsubscribed. The "Optional" label in older docs
@@ -394,7 +394,7 @@ is the today-shipping behaviour from issue #453.
 
 Where to find it: This setting is paired with the infra-side Lambda
 forwarder defined in
-`AI-Shipping-Labs/ai-shipping-labs-infra` (`email.tf`). The Lambda
+`DataTalksClub/aws-infra` (`main/aisl/ses_webhook.tf`). The Lambda
 pulls the secret from AWS Secrets Manager and injects it into the
 `X-SES-Webhook-Secret` header before forwarding the SNS payload to
 the Django webhook. The two values must match.
@@ -490,3 +490,39 @@ it does not affect who a real campaign send reaches.
 
 Test vs live: Safe to leave blank in tests and local dev. Set it in
 production with the team's shared QA/test inboxes.
+
+## RECORDING_AVAILABLE_SUBJECT_TEMPLATE
+
+Purpose: Default subject pre-filled into the "recording available"
+campaign draft an operator reaches from the host recording-ready email or
+the Studio event page (issue #1076). `{event_title}` is substituted with
+the event title. Pre-fill only — the operator reviews and edits the draft
+before sending, so a blank or odd setting can never auto-broadcast.
+
+Default: empty (no configured default); the draft form falls back to its
+built-in template when unset.
+
+Where to find it: Studio integration settings (Email (SES) group). Plain
+text with the `{event_title}` placeholder.
+
+Prereqs: None. It only seeds the campaign draft; it does not send anything.
+
+Test vs live: Safe to leave blank in tests and local dev.
+
+## RECORDING_AVAILABLE_BODY_TEMPLATE
+
+Purpose: Default markdown body pre-filled into the "recording available"
+campaign draft (issue #1076). Placeholders: `{event_title}`,
+`{recording_url}`, and `{workshop_writeup}` (the linked workshop write-up,
+or a short generic line when the event has no linked workshop). Pre-fill
+only — never auto-sent.
+
+Default: empty (no configured default); the draft form falls back to its
+built-in template when unset.
+
+Where to find it: Studio integration settings (Email (SES) group).
+Multiline markdown with the placeholders above.
+
+Prereqs: None. It only seeds the campaign draft body.
+
+Test vs live: Safe to leave blank in tests and local dev.

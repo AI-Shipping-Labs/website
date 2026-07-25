@@ -75,7 +75,7 @@ environment's public hostname.
 
 Purpose: Additional hostnames the platform recognises as "this
 deploy" so they do not trigger the host-mismatch banner. Read by
-`website/context_processors.py:104:host_mismatch_context`. Comma- or
+`website/context_processors.py:128:_build_env_mismatch_payload`. Comma- or
 whitespace-separated (newlines work too because the field is
 multiline).
 
@@ -247,3 +247,82 @@ the new value (no redeploy).
 
 Test vs live: n/a. Use per-environment values if a staging analyst
 job needs a different ceiling.
+
+## ONBOARDING_REMINDER_ENABLED
+
+Purpose: Master switch for the one-week onboarding reminder sweep (issue
+#1133). When on, a daily job emails paid members who received their
+onboarding-link welcome but have not completed onboarding after
+`ONBOARDING_REMINDER_DELAY_DAYS`. When off, the sweep is a no-op (no
+emails, no logs).
+
+Default: `true` (on).
+
+Without it: Defaults on; switchable without a redeploy.
+
+Where to find it: Studio integration settings (Site group). Boolean toggle.
+
+Prereqs: The daily reminder job must be scheduled; SES must be configured to
+send the reminder email.
+
+Rotation: Safe to flip at any time.
+
+Test vs live: Configure independently in each deployment.
+
+## ONBOARDING_REMINDER_DELAY_DAYS
+
+Purpose: Days after the onboarding-link welcome email before the reminder
+is due (issue #1133). A member whose earliest welcome is older than this and
+who has not onboarded is reminded once.
+
+Default: `7`.
+
+Without it: A blank, non-numeric, or non-positive override falls back to 7.
+
+Where to find it: Studio integration settings (Site group). Set a positive
+integer.
+
+Prereqs: `ONBOARDING_REMINDER_ENABLED` must be on for the delay to matter.
+
+Rotation: Safe to change; the next sweep uses the new window.
+
+Test vs live: Configure independently in each deployment.
+
+## SPRINT_BADGE_WINDOW_DAYS
+
+Purpose: Window in days around a sprint start / end that flips the
+date-derived sprint badge to "Starting soon" (within this many days before
+start) and "Ending soon" (within this many days of end). A larger window
+surfaces the soon-states earlier.
+
+Default: `7`.
+
+Without it: A blank, non-numeric, or non-positive override falls back to 7.
+
+Where to find it: Studio integration settings (Site group). Set a positive
+integer.
+
+Prereqs: None.
+
+Rotation: Safe to change; badge computation is per-request.
+
+Test vs live: Configure independently in each deployment.
+
+## SPRINT_END_AUTO_DISTRIBUTE_FEEDBACK_ENABLED
+
+Purpose: When on, the daily sprint-end recap job distributes attached
+sprint feedback requests before sending member recaps, so the recap can link
+to each member feedback form.
+
+Default: `false` (off).
+
+Without it: Defaults off for staff-controlled distribution.
+
+Where to find it: Studio integration settings (Site group). Boolean toggle.
+
+Prereqs: Sprint feedback requests must be attached to the sprint; the
+sprint-end recap job must be scheduled.
+
+Rotation: Safe to flip at any time.
+
+Test vs live: Configure independently in each deployment.

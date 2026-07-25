@@ -646,6 +646,15 @@ Playwright source files are not counted as uncovered Django coverage debt unless
 a future issue intentionally adds combined E2E coverage collection and combines
 the data deliberately.
 
+### Mutation testing (evaluated, not adopted)
+
+A mutation-testing pilot was run once (issue #550): 38 mutants across a
+representative slice, 97.4% killed by the existing suite. The conclusion was
+that the suite already catches nearly all injected faults, so a standing
+mutation-testing budget is not worth it. Do not re-propose a mutation-testing
+pilot without new evidence that the coverage/assertion gates are missing real
+regressions.
+
 ---
 
 ## Core test subset (`make test-core`)
@@ -819,7 +828,7 @@ test-core` and push CI. The attempt count and backoff are test-harness
 tuning constants (function kwargs in `conftest.py`), not runtime product
 settings, so they intentionally do NOT go through the `IntegrationSetting`
 framework. The infra root cause (why dev 5xxes during a deploy at all)
-is tracked separately in `ai-shipping-labs-infra` (ECS task count, ALB
+is tracked separately in `DataTalksClub/aws-infra` (ECS task count, ALB
 deregistration delay, health-check grace period).
 
 Failure-issue lineages are intentionally separate:

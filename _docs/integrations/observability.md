@@ -66,7 +66,7 @@ and the qcluster configure their own Logfire exporter), so there is no
 double-`configure()` within a single process.
 
 Out of scope here: collector/OTel endpoint configuration beyond Logfire's
-hosted endpoint (a follow-up for `ai-shipping-labs-infra`), and custom
+hosted endpoint (a follow-up for `DataTalksClub/aws-infra`), and custom
 spans inside business logic — this is bootstrap + auto-instrumentation
 only.
 

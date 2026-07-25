@@ -126,6 +126,64 @@ next render with no redeploy.
 Test vs live: The default is fine in all environments. Override only if
 a specific environment's Lambda is consistently slow to warm.
 
+## BANNER_UPLOAD_MAX_MB
+
+Purpose: Maximum size (in MB) for an operator-uploaded custom banner /
+social image in Studio.
+
+Default: `5`.
+
+Without it: A non-integer or non-positive override falls back to 5.
+
+Where to find it: Studio integration settings (Banner Generator group). Set
+a positive integer.
+
+Prereqs: None.
+
+Rotation: Safe to change; it applies on the next upload.
+
+Test vs live: The default is fine in all environments.
+
+## BANNER_UPLOAD_ALLOWED_TYPES
+
+Purpose: Comma-separated list of MIME types accepted for custom banner
+uploads. Only JPEG, PNG, and WebP are supported by the storage key builder;
+unknown types are ignored.
+
+Default: `image/jpeg,image/png,image/webp`.
+
+Without it: Falls back to the default JPEG / PNG / WebP list.
+
+Where to find it: Studio integration settings (Banner Generator group).
+Comma-separated MIME types.
+
+Prereqs: None.
+
+Rotation: Safe to change; it applies on the next upload.
+
+Test vs live: The default is fine in all environments.
+
+## BANNER_UPLOAD_KEY_PREFIX
+
+Purpose: CDN / S3 key prefix under which operator-uploaded custom banners
+are stored (e.g. `custom-banners/article/...`). The safe-delete cleanup is
+scoped to this prefix.
+
+Default: `custom-banners`.
+
+Without it: Falls back to `custom-banners`.
+
+Where to find it: Studio integration settings (Banner Generator group). A
+key-prefix string.
+
+Prereqs: The S3 / CDN bucket for banners must be configured.
+
+Rotation: Changing the prefix orphans previously-uploaded banners under the
+old prefix (the cleanup is scoped to the current prefix); change it only
+with that in mind.
+
+Test vs live: Use per-environment prefixes if environments share a bucket.
+
 ## Notes
 
 - Banner generation runs as a fire-and-forget `async_task` on
@@ -144,6 +202,6 @@ a specific environment's Lambda is consistently slow to warm.
   redacts it. The token never appears in log lines or rendered
   template output for any content edit page.
 - The Lambda's IAM `s3:PutObject` grant is configured in
-  `AI-Shipping-Labs/ai-shipping-labs-infra`. If you see HTTP 5xx
+  `DataTalksClub/aws-infra` (AISL resources under `main/aisl/`). If you see HTTP 5xx
   responses from the Lambda after wiring everything, the IAM policy
   is the first thing to check.

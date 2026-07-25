@@ -4,7 +4,7 @@ This is the authoritative UI contract for the Django template application. It is
 
 ## Document Scope
 
-This reference documents presentation contracts only. It does not introduce production API work, models, migrations, views, URLs, integrations, settings, agent definitions, lint rules, or template migrations. Implementation changes require their own scoped issues. #1239 and #1240 depend on this contract for workflow enforcement and lint ratchets, respectively.
+This reference documents presentation contracts only. It does not introduce production API work, models, migrations, views, URLs, integrations, settings, agent definitions, lint rules, or template migrations. Implementation changes require their own scoped issues. The workflow-enforcement and lint-ratchet work that built on this contract has shipped.
 
 ## Stack and Sources of Truth
 
@@ -136,7 +136,7 @@ Four tiers, chosen by content shape rather than per-page taste. These are the on
 
 The outer frame always sets the tier; narrower inner columns (a `max-w-3xl` intro inside a 7xl index, a `max-w-md` auth card) are normal and live inside it. An index page must never be narrower than the chrome above it: content that is inset from the header reads as a layout bug.
 
-Enforced by `content/tests/test_container_widths.py`. Rationale, the full route table, and the 2026-07-21 remediation are in [`width-audit.md`](width-audit.md).
+Enforced by `content/tests/test_container_widths.py`. Rationale, the full route table, and the 2026-07-21 remediation are in [`audits/2026-07-21-container-widths.md`](audits/2026-07-21-container-widths.md).
 
 Common vertical rhythm:
 
@@ -475,9 +475,9 @@ Canonical badge shape: `inline-flex items-center gap-1 rounded-full px-2.5 py-0.
 | Cancelled or error | Red |
 | Draft | Yellow |
 
-Green is reserved for success semantics. Access/Free and Past are never green. `STATUS_TONES['past']` must resolve to neutral; #1232 owns that code change and is not a dependency of this documentation issue.
+Green is reserved for success semantics. Access/Free and Past are never green. `STATUS_TONES['past']` resolves to neutral (`'muted'`) in `content/templatetags/member_badges.py`.
 
-#1226 owns named tier-badge migrations. This document defines the component contract but performs no implementation migration.
+This document defines the named tier-badge component contract; the badge migrations that adopted it have shipped.
 
 Gate vocabulary is `Basic or above required`, `Main or above required`, and terminal-tier `Premium required`. Never use `Basic tier required`, `Main tier required`, `Premium tier required`, or `Premium or above required`.
 
@@ -524,7 +524,7 @@ Tie-breaker: a page-level control the user came to operate gets the 44px target;
 - Views must expose `required_tier_name`; a paid/tier-gated card without its tier pill is incomplete.
 - Gated detail surfaces also expose the relevant shared tier badge above the fold, not only inside the paywall.
 - `templates/includes/content_gated.html` is deprecated as described in [Deprecated](#deprecated).
-- The shared partial itself must use `{% button_classes %}` for CTA chrome when an implementation issue next touches it. Callers must not work around its legacy `px-5 py-2.5` secondary action. #1225 owns the currently scoped partial/template migration work, not this documentation issue.
+- The shared partial itself must use `{% button_classes %}` for CTA chrome when an implementation issue next touches it. Callers must not work around its legacy `px-5 py-2.5` secondary action. The scoped partial/template migration that adopted this contract has shipped.
 - Keep non-tier gates, such as email-verification guidance, distinct when they do not represent a paid/tier access block.
 
 ## Focus, Hover, and Active States

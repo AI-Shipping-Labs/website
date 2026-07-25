@@ -18,11 +18,11 @@ via Django's `SocialApp` admin, not through this group. See
 
 Purpose: Number of days an email-signup account stays alive without
 verifying its email before the daily purge job hard-deletes it. Read
-by `accounts/services/verification.py:get_unverified_user_ttl_days`.
+by `accounts/services/verification.py:resolve_unverified_ttl_days`.
 
-Email-signup users get a `verification_token_expires_at` of
+Email-signup users get a `verification_expires_at` of
 `now + UNVERIFIED_USER_TTL_DAYS` (see
-`accounts/models/user.py:73`). A cron / scheduled task runs daily
+`accounts/models/user.py:120`). A cron / scheduled task runs daily
 and removes any account that:
 
 - Was created via email signup (not OAuth).
@@ -53,8 +53,8 @@ Prereqs:
   uv run python manage.py shell -c "from django_q.tasks import Schedule; print(Schedule.objects.all())"
   ```
 
-  The schedule should include the `accounts.services.verification.purge_unverified_users`
-  task (or whatever name the codebase wires up).
+  The schedule should include the `accounts.tasks.purge_unverified_users.purge_unverified_users`
+  task.
 
 Rotation: n/a. Adjust the value as the operational situation
 demands. The next purge run uses the new value.

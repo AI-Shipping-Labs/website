@@ -6,7 +6,9 @@ status card. It is the reference linked from the card's
 "What do these mean?" link.
 
 Each section lists what the field actually means and every value it can
-take. Fields are read-only on the detail page unless noted otherwise.
+take. The fields documented here are derived status displays; the detail
+page also carries editable controls and actions (e.g. tags, tier overrides,
+and verify / resend actions) that are not covered by this reference.
 
 ## Tier
 
@@ -71,12 +73,29 @@ signup attribution (#768/#770).
 - `Unknown (pre-existing row)` — the row predates signup tracking; the
   source was never recorded.
 - `Newsletter subscribe` — created by subscribing to the newsletter.
+- `Download request` — created by requesting a gated download
+  (`SIGNUP_SOURCE_DOWNLOAD`).
 - `Email + password signup` — created via the email/password signup flow.
 - `OAuth signup` — created via an OAuth provider (these are
   auto-verified).
 - `Bulk import (Stripe / CSV / course DB)` — created by a bulk import,
   not an interactive signup.
 - `Staff-created (Studio)` — created by a staff member in Studio.
+
+## Account lifecycle
+
+A derived bucket that classifies the row as a real platform account versus a
+newsletter-only contact versus an imported/unknown row. Derived by
+`derive_account_lifecycle` and labelled by `lifecycle_label`
+(`accounts/lifecycle.py`; shown on the detail page via
+`studio/views/users.py`).
+
+- `Newsletter-only` — signed up via the newsletter and has never activated
+  (no platform action taken).
+- `Full account` — has activated, or was created by an account-creating
+  signup source / path.
+- `Imported / unknown` — everything else (e.g. a bulk-imported row that has
+  not engaged).
 
 ## Activated
 

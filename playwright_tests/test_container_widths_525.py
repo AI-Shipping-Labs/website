@@ -306,7 +306,7 @@ LISTINGS_WIDE = [
     ('/events/calendar', 'max-w-7xl', None),
     # Absent from the original #525 sweep, which is exactly how it drifted to
     # max-w-5xl and shipped a listing page inset from the chrome. See
-    # _docs/width-audit.md (2026-07-21).
+    # _docs/audits/2026-07-21-container-widths.md (2026-07-21).
     ('/sprints', 'max-w-7xl', None),
     ('/vote', 'max-w-7xl', None),
     ('/tags', 'max-w-7xl', None),

@@ -59,16 +59,29 @@ BOOT_PROFILE_PHASE_A=1 make boot-profile             # also capture cold first-m
 
 ## What it measures
 
-The boot phases come straight from `scripts/entrypoint_init.py` (unmodified):
+The boot phases come straight from the `_timed(...)` / `_emit_timing(...)`
+calls in `scripts/entrypoint_init.py` (unmodified):
 
+- `smoke_check` — pre-Django deploy-critical env validation
+  (`_run_serving_boot_smoke_check`), always timed at the top of `main`
+  (`:542`) before `django.setup`. It short-circuits to a no-op unless
+  `SERVING_BOOT_SMOKE_CHECK_ENABLED=true`.
 - `django_setup` — settings import + app-registry population, including
   `integrations.apps.ready()` -> Logfire configure. This is the phase the
   Logfire on-vs-off delta settles (#1141 Phase 2B).
 - `migrate` — `manage.py migrate` (a no-op against the already-migrated warm DB;
-  Django still queries migration state and runs `check`).
-- `check` — `manage.py check --fail-level ERROR`.
+  Django still queries migration state).
+- `reconcile_r1_expand` — `reconcile_r1_expand` management command, run on the
+  `BOOT_MODE` serving path (`:453`).
+- `suppress_r1_schedules` — suppresses R1-incompatible django-q schedules, run
+  on the `BOOT_MODE` serving path (`:457`).
 - `setup_schedules` — django-q schedule registration.
 - `total` — process start -> just before the gunicorn handoff.
+
+Note on `check`: `manage.py check --fail-level ERROR` runs only in the legacy
+no-`BOOT_MODE` serving path, and even there it is gated behind
+`SERVING_BOOT_CHECK_ENABLED=true` (`:510-519`) and skipped by default, so the
+harness does NOT measure a `check` phase by default.
 
 ### Migration phases
 
@@ -99,14 +112,15 @@ NOTHING else:
 | `SES_ENABLED` | `true` (the real production web-task value) |
 
 No AWS credentials are passed. `SES_ENABLED=true` is set because it is exactly
-what the production web task sets: under `DEBUG=False`, the `check` phase raises
-`email_app.E001` and aborts the boot when `SES_ENABLED` is false, so a faithful
-boot must set it true. It only flips a settings flag — no
-boto3/SES/Secrets-Manager round trip happens at boot (those are send-time only),
-and because no AWS credentials are passed the keys stay blank, so nothing can
-authenticate against AWS. (The earlier "disable SES by omission" plan was
-corrected here after a real run showed `email_app.E001` crashing the `check`
-phase.)
+what the production web task sets: under `DEBUG=False`, the pre-Django
+`smoke_check` phase (`_run_serving_boot_smoke_check`) raises a `RuntimeError`
+("DEBUG=false but SES_ENABLED is not true") and aborts the boot before
+`django.setup` when `SES_ENABLED` is false, so a faithful boot must set it true.
+It only flips a settings flag — no boto3/SES/Secrets-Manager round trip happens
+at boot (those are send-time only), and because no AWS credentials are passed
+the keys stay blank, so nothing can authenticate against AWS. (The earlier
+"disable SES by omission" plan was corrected here after a real run showed the
+`smoke_check` `RuntimeError` aborting the boot.)
 
 ## Faithfulness caveats (READ THIS)
 

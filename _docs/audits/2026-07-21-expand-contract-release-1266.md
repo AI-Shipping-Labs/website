@@ -1,7 +1,13 @@
-# Expand/contract release checklist
+# Expand/contract release record — issue #1266
 
-Use this checklist for issue #1266 and any later rolling deployment where old
-and new web/worker images overlap. The current production baseline is exact SHA
+Point-in-time record of the #1266 rolling deployment (relocated to
+`_docs/audits/` on 2026-07-21). For the reusable, release-agnostic R1/R2/R3
+procedure and the work-vocabulary manifest, see
+[`_docs/expand-contract-releases.md`](../expand-contract-releases.md). This file
+retains the #1266-specific SHAs, migration inventory, and promotion-evidence
+record.
+
+The current production baseline is exact SHA
 `dc07564604f3b2e329a19ab4e11375e6c7813480`, immutable tag
 `20260716-162837-dc07564`. The post-R1 starting target was exact SHA
 `cb4eb3d36e496fdca2e0072cabb3849ff1f1f388`; its original migration bytes are

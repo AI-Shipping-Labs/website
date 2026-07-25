@@ -26,7 +26,9 @@ do not render as clickable links. Copy them into the browser.
 Purpose: Master switch for content-image uploads to S3 during content
 sync. Read by
 `integrations/services/github_sync/media.py:upload_images_to_s3` via
-`integrations.config.is_enabled('S3_ENABLED')`. When on, the sync
+`integrations.config.s3_content_upload_enabled()`, which calls
+`get_config('S3_ENABLED', 'true')` (default-ON). It intentionally does
+not use `is_enabled`, which would default the flag off. When on, the sync
 pipeline walks the content directory for image files and uploads them
 to the bucket (public-read). When off, image URLs are still rewritten
 to CDN paths in the synced markdown, but no S3 objects are uploaded.
@@ -56,10 +58,11 @@ Rotation: n/a — boolean toggle. Safe to flip at any time. When you
 turn it on, the next content sync uploads all images that are not
 already in the bucket (MD5/ETag deduplication skips unchanged files).
 
-Test vs live: Off by default everywhere (`default: 'false'`).
-Production MUST set it to true. Tests and local dev keep it off;
-`TESTING=True` is an unconditional short-circuit that prevents real
-boto3 calls regardless of the `S3_ENABLED` value (issue #532).
+Test vs live: On by default everywhere (`'default': 'true'` in the
+registry), so production uploads without extra configuration. Tests and
+local dev keep uploads off through the unconditional `TESTING=True`
+short-circuit in `media.py`, which prevents real boto3 calls regardless
+of the `S3_ENABLED` value (issue #532), not because the flag defaults off.
 
 ## AWS_S3_CONTENT_BUCKET
 

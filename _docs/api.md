@@ -8,7 +8,7 @@ This document focuses on the User Management API surface (issue #764).
 
 ## Authentication
 
-Every API endpoint accepts `Authorization: Token <key>` (not `Bearer`). The token must belong to a staff user. Mint tokens from Studio under `/studio/tokens/`.
+Every API endpoint accepts `Authorization: Token <key>` (not `Bearer`). The token must belong to a staff user. Mint tokens from Studio under `/studio/api-tokens/`.
 
 ```bash
 export API_TOKEN="<your-staff-token>"
@@ -96,6 +96,18 @@ curl -sL -X DELETE \
 
 Tags are normalised via `accounts.utils.tags.normalize_tag`; empty input after normalisation returns 422 `invalid_tag`.
 
+### Write: grant a tier override (bulk)
+
+```bash
+curl -sL -X POST \
+  -H "Authorization: Token $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"emails": ["a@example.com", "b@example.com"], "tier": "main"}' \
+  https://aishippinglabs.com/api/tier-overrides
+```
+
+Grants a long-lived `TierOverride` (10-year expiry) to each listed email, deactivating any existing active override for that user (issue #833). `tier` is optional and defaults to `main`. Staff token required. This mirrors the Studio contact-import override but is an explicitly-named endpoint so the privileged grant is discoverable and cannot be triggered by accident. Route: `api/urls.py` `tier-overrides` -> `api_tier_overrides_grant`.
+
 ## Not exposed (Studio-only)
 
 By design, the API does NOT expose:
@@ -103,7 +115,7 @@ By design, the API does NOT expose:
 - `DELETE /api/users/<email>` -- destructive; Studio only.
 - Email rename -- PII change with cascading effects on Stripe / Slack.
 - Password change or reset -- Studio reset flow only.
-- Tier change -- Stripe webhooks own this; manual upgrades go through `TierOverride` (separate audit trail in Studio).
+- Automatic tier change from payments -- Stripe webhooks own the paid-subscription lifecycle. Manual/bulk grants ARE exposed via `POST /api/tier-overrides` (see above), which writes an audited `TierOverride`.
 
 ## Audit trail
 

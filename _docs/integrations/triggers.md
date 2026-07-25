@@ -114,5 +114,5 @@ The content-embeddable claim widget is documented for authors in
 ## Out of scope (infra repo)
 
 The campaign fulfilment (code pool, SES send, per-partner dedup) lives in a
-separate AWS Lambda tracked in `ai-shipping-labs-infra#12`, not in this
-repo.
+separate AWS Lambda tracked in the infra repo `DataTalksClub/aws-infra`, not in
+this repo.

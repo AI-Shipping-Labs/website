@@ -19,7 +19,7 @@ container — ``.dockerignore`` excludes it (issue #664). Entries without
 ``docs_url`` keep working — the icon simply isn't rendered for them.
 
 NOTE: ``_docs/configuration.md`` references the count and names of these
-groups in the Studio sign-in section ("confirm 16 integration groups are
+groups in the Studio sign-in section ("confirm 17 integration groups are
 listed (...)"). When adding, removing, or renaming a group here, update
 that line of the doc in the same PR.
 """
@@ -209,7 +209,8 @@ INTEGRATION_GROUPS = [
                     'SES configuration set name that publishes delivery, '
                     'open, bounce, and click events to SNS. Required in '
                     'production: set to "aishippinglabs" (matches the '
-                    'configuration set in ai-shipping-labs-infra/email.tf). '
+                    'configuration set in DataTalksClub/aws-infra at '
+                    'main/aisl/email.tf). '
                     'When blank, SES publishes no events to SNS regardless '
                     'of the HTTPS subscription wiring, so the bounce / '
                     'complaint webhook never fires. Safe to leave blank '

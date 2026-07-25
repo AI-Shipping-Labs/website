@@ -118,3 +118,47 @@ create a bucket in the new region and follow the migration steps in
 
 Test vs live: n/a. Pair the region with whichever bucket each
 environment uses.
+
+## RECORDING_PRESIGNED_URL_TTL_SECONDS
+
+Purpose: Lifetime (in seconds) of the short-lived presigned S3 GetObject
+URL the access-controlled recording serving endpoint redirects to (issue
+#1134). Default 900 (15 minutes). The presigned URL is never rendered into
+HTML — the in-page video player points at the authenticated serving
+endpoint, which re-checks access and mints a fresh presigned URL on every
+request.
+
+Without it: Falls back to 900 seconds (15 minutes).
+
+Where to find it: Studio integration settings (`S3 Recordings` group). Set
+a positive integer. Keep it long enough that a member can watch / seek
+without the URL expiring mid-playback, but short enough that a leaked URL is
+quickly useless.
+
+Prereqs: The recordings bucket and serving endpoint must be configured.
+
+Rotation: Safe to change; the next serving request mints a URL with the new
+TTL.
+
+Test vs live: Configure independently in each deployment.
+
+## RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD
+
+Purpose: When on, a successful Zoom -> S3 recording upload auto-publishes
+the event so entitled members can watch the recording right away, and the
+host notification says the recording is available to watch with a link to
+the workshop video page (issue #1134, Phase B). On by default per the
+product decision that the recording should be watchable immediately.
+
+Without it: Defaults to `true` (auto-publish on upload).
+
+Where to find it: Studio integration settings (`S3 Recordings` group).
+Boolean toggle. Turn it off to keep the review-first flow: the event stays
+unpublished after upload and the host email keeps the "ready for
+review/publishing" framing with a Studio link.
+
+Prereqs: The Zoom -> S3 recording upload pipeline must be wired.
+
+Rotation: Safe to flip at any time; it affects the next upload.
+
+Test vs live: Configure independently in each deployment.

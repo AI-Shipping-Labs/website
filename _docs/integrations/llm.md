@@ -129,6 +129,48 @@ next client created without a redeploy.
 Test vs live: Keep retries low in deterministic tests. In production, balance
 transient-provider resilience against latency and duplicate request cost.
 
+## LLM_JUDGE_MODEL
+
+Purpose: Model used by the live LLM-judge test set (`tests/live_judge/`,
+`make test-judge`). Leave empty to fall back to `LLM_MODEL` (judge ==
+assistant model). Override to swap in a stronger / cheaper judge without
+changing the assistant model under test.
+
+Default: empty (falls back to `LLM_MODEL`).
+
+Without it: The judge uses the same model as the assistant (`LLM_MODEL`).
+
+Where to find it: Studio > Settings > LLM Provider, or the authenticated
+integration-settings API. A model identifier string.
+
+Prereqs: `LLM_API_KEY` / `LLM_BASE_URL` must be configured for the judge
+model's provider.
+
+Test vs live: Only relevant when running the live judge suite; leave blank
+otherwise.
+
+## NEXT_SPRINT_DRAFT_USE_PROFILE
+
+Purpose: Set true to feed the member onboarding profile (stated
+background / goals, persona, CRM summary and next-steps) into the LLM
+next-sprint plan draft, so the generated draft is informed by the profile and
+not just plan state and recent `#plan-sprints` updates. When off, the draft
+is assembled without the profile block (pre-#913 behaviour). Affects both the
+Studio "Draft next sprint plan" button and `POST
+/api/plans/<id>/draft-next-sprint`.
+
+Default: `true` (on).
+
+Without it: Defaults on; switchable without a redeploy.
+
+Where to find it: Studio > Settings > LLM Provider, or the authenticated
+integration-settings API. Boolean toggle.
+
+Prereqs: The onboarding profile pipeline must be populated for the profile
+block to add value.
+
+Test vs live: Configure independently in each deployment.
+
 ## ONBOARDING_AI_ENABLED
 
 Purpose: Toggles the conversational AI onboarding flow (issue #804) at
@@ -337,7 +379,7 @@ count, lease, and safe exception class never contain member content.
   pass-through. A correctly buffered response can arrive only at completion
   and cannot be detected as an error by the browser. Any nginx/CloudFront
   buffering config lives
-  in the infra repo (`AI-Shipping-Labs/ai-shipping-labs-infra`); file a
+  in the infra repo (`DataTalksClub/aws-infra`, under `main/aisl/`); file a
   follow-up there if buffering is observed in production. It is NOT
   provisioned from this repo.
 

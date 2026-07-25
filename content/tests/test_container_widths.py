@@ -1,6 +1,6 @@
 """Guard the container-width contract from ``_docs/design-system.md``.
 
-Audit and remediation: ``_docs/width-audit.md`` (2026-07-21).
+Audit and remediation: ``_docs/audits/2026-07-21-container-widths.md`` (2026-07-21).
 
 The site frames every user-facing page with one of four sanctioned widths.  Two
 guards run here:
@@ -43,7 +43,7 @@ NON_MEMBER_PREFIXES = (
 )
 
 # Site chrome intentionally uses a px-6 gutter while page bodies use px-4.
-# Reconciling the two is an open design-system question (_docs/width-audit.md ->
+# Reconciling the two is an open design-system question (_docs/audits/2026-07-21-container-widths.md ->
 # Open PM questions); until it is decided these two nav bars stay as they are.
 CHROME_GUTTER_EXEMPT = frozenset(
     {
@@ -163,7 +163,7 @@ class ContainerWidthContractTest(SimpleTestCase):
             offenders,
             [],
             "Unsanctioned page container widths (contract: _docs/design-system.md -> "
-            "Spacing and Layout; rationale: _docs/width-audit.md):\n" + "\n".join(offenders),
+            "Spacing and Layout; rationale: _docs/audits/2026-07-21-container-widths.md):\n" + "\n".join(offenders),
         )
 
     def test_audited_pages_keep_their_assigned_tier(self):
@@ -185,7 +185,7 @@ class ContainerWidthContractTest(SimpleTestCase):
             mismatches,
             [],
             "Audited pages drifted off their assigned width tier "
-            "(see _docs/width-audit.md, audit date 2026-07-21):\n" + "\n".join(mismatches),
+            "(see _docs/audits/2026-07-21-container-widths.md, audit date 2026-07-21):\n" + "\n".join(mismatches),
         )
 
     def test_page_containers_use_the_standard_horizontal_gutter(self):

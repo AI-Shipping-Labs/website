@@ -105,7 +105,7 @@ be changed with `PATCH status=...`); only the hard-`DELETE` is blocked.
 
 Current classification (issue #864, after the 2026-06-13 human decision, plus
 issue #1045's singleton week-note clear route and issue #1123's accountability
-partner assignment removal): 12 forbidden (405-protected) + 11 legitimate = 23
+partner assignment removal): 14 forbidden (405-protected) + 11 legitimate = 25
 `DELETE` handlers in `api/views/`.
 
 When you add or change a `DELETE` handler, update both this document and the

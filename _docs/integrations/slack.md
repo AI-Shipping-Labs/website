@@ -19,7 +19,7 @@ do not render as clickable links. Copy them into the browser.
 ## SLACK_ENABLED
 
 Purpose: Master kill-switch for the Slack integration. Read by
-`community/services/slack.py:slack_api_enabled` (via
+`community/slack_config.py:slack_api_enabled` (via
 `integrations/config.py:is_enabled`) before any outbound bot call.
 When false, the platform skips Slack posting entirely and falls back to
 email-only flows in `community/tasks/hooks.py` (e.g. invite send). Off
@@ -393,6 +393,24 @@ reversible from local data.
 
 Test vs live: Configure independently in each deployment.
 
+## PLAN_SPRINTS_FIRST_RUN_LOOKBACK_DAYS
+
+Purpose: How many days the `#plan-sprints` ingest reads back on its very
+first run, before the forward watermark takes over. Used only when no prior
+successful run exists and no explicit `since` / `oldest_ts` is given (e.g. the
+retroactive backfill command / API of issue #904). Defaults to 7.
+
+Without it: The 7-day default applies.
+
+Where to find it: Studio integration settings. Set a positive integer.
+
+Prereqs: `SLACK_PLAN_SPRINTS_USER_TOKEN` must be configured.
+
+Rotation: Safe to change; it only affects the first run of a channel with no
+prior watermark.
+
+Test vs live: Configure independently in each deployment.
+
 ## SLACK_DEV_PLAN_SPRINTS_CHANNEL_ID
 
 Purpose: Development-only `#plan-sprints` channel ID. Same shape and
@@ -506,10 +524,11 @@ Test vs live: This key is the test counterpart to
 
 Purpose: Public Slack workspace invite URL (the `https://join.slack.com/t/...`
 link). Shown to Main+ members on the dashboard so they can self-serve
-into the community workspace. Used by
-`community/services/slack.py:join_slack_via_email` and
+into the community workspace. Read by the dashboard Join-Slack flow
+`community/views.py:slack_join_redirect` (which 302-redirects the member
+to `SLACK_INVITE_URL` and records the click) and by
 `community/tasks/hooks.py` as a fallback when the API-driven invite is
-not available.
+not available. The enable check is `community/slack_config.py:slack_api_enabled`.
 
 Without it: The "Join Slack" CTA is hidden on the dashboard. The
 API-driven flow (where it exists) still works; only the public

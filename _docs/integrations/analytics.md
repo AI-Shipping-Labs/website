@@ -77,6 +77,28 @@ Local development and the CI test suite leave the setting blank by
 default; no test setup is required to suppress GA during
 `manage.py test`.
 
+## USER_ACTIVITY_RETENTION_DAYS
+
+Purpose: How many days of per-user CRM activity timeline rows
+(`analytics.UserActivity`) to keep before the daily `purge_old_user_activity`
+job deletes them (issue #853). Longer than the 90-day SES audit-log window
+because activity is a CRM signal staff use, but still bounded for storage /
+PII.
+
+Default: `365`.
+
+Without it: A non-integer or non-positive override falls back to 365.
+
+Where to find it: Studio integration settings (Analytics group). Set a
+positive integer.
+
+Prereqs: The daily `purge_old_user_activity` job must be scheduled.
+
+Rotation: Lowering the value takes effect on the next purge and deletes the
+now-out-of-window rows; it is not reversible from local data.
+
+Test vs live: Configure independently in each deployment.
+
 ## `aslab_aid`, `login_state`, and `member_tier`
 
 After analytics consent, the direct `gtag.js` bootstrap in

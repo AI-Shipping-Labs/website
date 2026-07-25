@@ -33,7 +33,7 @@ Accesses the Django admin at `/admin/` and the Studio interface at `/studio/`. C
 | Main | `main` | 20 | 50 EUR | 500 EUR | Everything in Basic + Slack community access, group coding sessions, guided project-based learning, community hackathons, career discussions, personal brand guidance, topic poll voting, content/events/downloads at level 20 |
 | Premium | `premium` | 30 | 100 EUR | 1000 EUR | Everything in Main + all mini-courses, course poll voting, resume/LinkedIn/GitHub teardowns, all content/events/downloads at level 30 |
 
-Access control logic: a user can access any content object where `user.tier.level >= content.required_level`. Anonymous users are treated as level 0. The mapping is defined in `content/access.py` with constants `LEVEL_OPEN = 0`, `LEVEL_BASIC = 10`, `LEVEL_MAIN = 20`, `LEVEL_PREMIUM = 30`.
+Access control logic: a user can access any content object where `user.tier.level >= content.required_level`. Anonymous users are treated as level 0. The mapping is defined in `content/access.py` with constants `LEVEL_OPEN = 0`, `LEVEL_REGISTERED = 5`, `LEVEL_BASIC = 10`, `LEVEL_MAIN = 20`, `LEVEL_PREMIUM = 30`. `LEVEL_REGISTERED = 5` is a content-side sentinel (issue #465) meaning "any authenticated user"; it is not a real `Tier` row and is valid only on per-unit course gating.
 
 ## Product Taxonomy Contract
 
@@ -65,10 +65,10 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 | Registration | `/accounts/register/` | Email + password registration (also accessible via `/register` redirect) | Everyone | Shipped |
 | Password reset | `/accounts/password/reset/` | Request password reset via email | Everyone | Shipped |
 | Email verification | `/api/verify-email` | API endpoint; verification link sent on registration | Everyone | Shipped |
-| Account page | `/account/` | Shows current tier and level, billing period end date, pending downgrade/cancellation notices; upgrade/downgrade/cancel modals (calls Stripe checkout/subscription APIs); newsletter toggle; change password form | Authenticated users | Shipped |
+| Account page | `/account/` | Shows current tier and level, billing period end date, pending downgrade/cancellation notices; paid members manage upgrade/downgrade/cancellation through the Stripe customer portal (`STRIPE_CUSTOMER_PORTAL_URL`); newsletter toggle; change password form | Authenticated users | Shipped |
 | Email preferences | `/account/api/email-preferences` | Toggle newsletter subscription on/off | Authenticated users | Shipped |
 | Change password | `/account/api/change-password` | Update password from account page | Authenticated users | Shipped |
-| Cancel subscription | `/account/api/cancel` | Schedule cancellation at end of billing period | Paid members | Shipped |
+| Manage / cancel subscription | Stripe customer portal (`STRIPE_CUSTOMER_PORTAL_URL`) | Upgrade, downgrade, or cancel at end of billing period via the hosted Stripe portal; no bespoke `/account/api/cancel` endpoint | Paid members | Shipped |
 
 ### Content -- Blog
 
@@ -193,9 +193,9 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
 | Studio dashboard | `/studio/` | Overview for staff with quick stats and links to manage content | Staff only | Shipped |
-| Article management | `/studio/articles/`, `/studio/articles/new`, `/studio/articles/<id>/edit` | List, create, edit articles | Staff only | Shipped |
-| Recording management | `/studio/recordings/`, `/studio/recordings/new`, `/studio/recordings/<id>/edit` | List, create, edit event recordings | Staff only | Shipped |
-| Course management | `/studio/courses/`, `/studio/courses/new`, `/studio/courses/<id>/edit` | List, create, edit courses with modules and units; reorder modules/units | Staff only | Shipped |
+| Article management | `/studio/articles/`, `/studio/articles/<id>/edit` | List and edit articles (creation is source-sync only) | Staff only | Shipped |
+| Recording management | `/studio/recordings/`, `/studio/recordings/<id>/edit` | List and edit event recordings (creation is source-sync only) | Staff only | Shipped |
+| Course management | `/studio/courses/`, `/studio/courses/<id>/edit` | List and edit courses with modules and units; reorder modules/units (creation is source-sync only) | Staff only | Shipped |
 | Event management | `/studio/events/`, `/studio/events/new`, `/studio/events/<id>/edit` | List, create, edit events | Staff only | Shipped |
 | Download management | `/studio/downloads/`, `/studio/downloads/<id>/edit` | List tier, size, readiness and counts; inspect/edit manual rows; synced rows are read-only and link to their canonical GitHub source. Creation is source-sync only. | Staff only | Shipped |
 | Project review | `/studio/projects/`, `/studio/projects/<id>/review` | List submitted projects; approve/reject | Staff only | Shipped |

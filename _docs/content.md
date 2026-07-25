@@ -4,23 +4,24 @@ How content is structured, synced, and gated. Companion to `setup.md` (which cov
 
 ## Architecture
 
-Content lives in GitHub repos. Each repo is registered as a `ContentSource` row. A push to a registered repo triggers a webhook at `/api/webhooks/github` which enqueues a background sync job. The sync clones (or pulls) the repo, walks the configured `content_path`, parses YAML/markdown frontmatter, uploads images to S3 (rewriting relative paths to the CDN), and upserts rows into the relevant content models.
+Content lives in GitHub repos. Each repo is registered as a `ContentSource` row. A push to a registered repo triggers a webhook at `/api/webhooks/github` which enqueues a background sync job. The sync clones (or pulls) the repo, walks the cloned repo tree, parses YAML/markdown frontmatter, uploads images to S3 (rewriting relative paths to the CDN), and upserts rows into the relevant content models. Each file is dispatched by filename, frontmatter, and location — there is no per-type sub-path configuration.
 
 Manual sync: `uv run python manage.py sync_content` (all sources) or `uv run python manage.py sync_content --from-disk <path>` (local clone, useful for previewing changes before they land in GitHub).
 
-Sync code: `integrations/services/github.py`. Per-type sync functions follow the pattern `_sync_<type>(source, repo_dir, commit_sha, sync_log, known_images)`.
+Sync code: `integrations/services/github_sync/orchestration.py` (contains `_sync_repo`) plus the per-type dispatchers in `integrations/services/github_sync/dispatchers/*.py`. `integrations/services/github.py` is now a compatibility facade that re-exports from `github_sync/`. The per-type dispatch functions follow the pattern `_dispatch_<type>(source, repo_dir, file_list, commit_sha, stats, ...)` — e.g. `_dispatch_articles`, `_dispatch_courses`, `_dispatch_events`.
 
 ## ContentSource
 
-Database-backed. One row per (repo, content_type, sub-path) combo. Multiple rows per repo are fine — the monorepo today registers one row per content type.
+Database-backed. One row per repo (`repo_name` is `unique=True`). The sync walker walks the cloned repo tree and dispatches per file by filename, frontmatter, and location, so there is no per-type or per-sub-path row (issue #310).
 
 | Field | Purpose |
 |-------|---------|
-| `repo_name` | e.g. `AI-Shipping-Labs/content` |
-| `content_type` | One of: `article`, `course`, `resource`, `project`, `interview_question`, `event` |
-| `content_path` | Sub-directory inside the repo (e.g. `courses/`). Empty string = repo root. |
+| `repo_name` | e.g. `AI-Shipping-Labs/content`. Unique — one row per repo. |
 | `is_private` | If true, sync uses the GitHub App token. Public repos clone over HTTPS without auth. |
-| `webhook_secret` | For validating incoming GitHub webhook signatures |
+| `webhook_secret` | Required (enforced by `clean()`); validates incoming GitHub webhook signatures. |
+| `max_files` | Safety cap on how many files a single sync run will process. |
+
+The model also carries sync-bookkeeping fields (`last_synced_at`, `last_sync_status`, `last_synced_commit`, `sync_locked_at`, etc.) used to skip no-op syncs and serialise concurrent runs.
 
 Register sources by editing `integrations/management/commands/seed_content_sources.py` and re-running it, or insert via Django admin (`/admin/integrations/contentsource/`).
 
@@ -36,7 +37,7 @@ All content carries a `content_id` (UUID or stable slug) used as the upsert key.
 
 ### Course (3-level: course → module → unit)
 
-Three-level hierarchy. Each course is a top-level directory under `content_path`. Each module is a subdirectory of the course. Each unit is a markdown file inside a module.
+Three-level hierarchy. Each course is a top-level directory in the repo (identified by its `course.yaml`). Each module is a subdirectory of the course. Each unit is a markdown file inside a module.
 
 ```yaml
 # courses/<course-slug>/course.yaml
@@ -410,7 +411,7 @@ Same steps regardless of which content type the repo holds.
 
 ### Single-course repos
 
-`_sync_courses` walks the configured directory and treats every child folder as a course (looking for `course.yaml` in each). For a standalone single-course repo (where `course.yaml` lives at the repo root), the sync needs to detect that shape — tracked in issue #197.
+`_dispatch_courses` walks the repo tree and treats every folder with a `course.yaml` as a course. Standalone single-course repos (where `course.yaml` lives at the repo root) are supported: the dispatcher detects that shape and syncs the root as a single course.
 
 ## Conventions and gotchas
 
@@ -426,12 +427,3 @@ Authors can drop a one-click event claim widget into synced markdown using
 the `eventwidget` shortcode (a markdown-render-time expansion, not a Django
 template tag). See `_docs/event-widgets.md` for the embed syntax and the
 list of available widgets and parameters.
-
-## Future enhancements
-
-Tracked as separate issues, not yet implemented:
-
-- #197 — single-course-at-root mode for `_sync_courses` and onboarding `python-course`
-- #199 — Studio dropdown of accessible repos when registering a new `ContentSource`
-- #200 — per-course/module `ignore:` globs (e.g. `*.template.md`) and `readme:` placement (hidden / first_unit / course_description)
-- #201 — drop redundant `is_free` flag on Course; derive from `required_level`

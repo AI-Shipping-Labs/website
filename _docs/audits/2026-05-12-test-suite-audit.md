@@ -1,5 +1,11 @@
 # Test Suite Audit and Runtime Optimization - 2026-05-12
 
+Note: slimmed on 2026-07-21. The claim that `playwright_tests/conftest.py`
+forces the legacy local-Stripe-Checkout flag on for the browser session was
+removed — that flag is no longer set in the file, and the local Stripe Checkout
+mode it described has been removed. The Playwright sharding item and the
+source-string-inspection test item are kept.
+
 This audit focuses on test quality, maintainability, and runtime. It combines local inspection with parallel sub-agent reviews of Django tests, Playwright tests, payments/integrations tests, and pruning opportunities.
 
 ## Summary
@@ -64,22 +70,10 @@ Keep or strengthen:
 
 Replacement tests to add:
 
-1. Signed `checkout.session.completed` webhook while `STRIPE_CHECKOUT_ENABLED=False`, asserting user tier/customer/subscription updates and `WebhookEvent` creation.
+1. Signed `checkout.session.completed` webhook while local Checkout is disabled (the current default), asserting user tier/customer/subscription updates and `WebhookEvent` creation.
 2. Payment Link rendering for every paid tier and billing period from `settings.STRIPE_PAYMENT_LINKS`.
 3. URL-encoded `prefilled_email`, including `+` and other special characters.
 4. Customer Portal link is shown for paid/member states that need billing management.
-
-### 3. Stop forcing legacy Stripe Checkout in Playwright
-
-Estimated save: indirect but important. Risk: medium.
-
-`playwright_tests/conftest.py` currently forces `settings.STRIPE_CHECKOUT_ENABLED = True` for the full browser session. That means browser tests exercise a non-default payment mode.
-
-Plan:
-
-1. Default Playwright to Payment Links mode.
-2. Add a `legacy_checkout` marker only if one or two legacy smoke tests are intentionally kept.
-3. Move `playwright_tests/test_pricing_account_state.py` and Stripe Checkout UI checks behind that marker or reduce them to payment-link/portal smoke coverage.
 
 ### 4. Collapse duplicated Django vs Playwright pricing/account state coverage
 
@@ -227,9 +221,8 @@ Plan:
 ## Suggested First Pull Requests
 
 1. Add pytest markers and exclude `manual_visual` from default Playwright CI.
-2. Stop forcing `STRIPE_CHECKOUT_ENABLED=True` globally in Playwright; mark any retained legacy tests.
-3. Delete or quarantine obsolete local Stripe checkout/subscription tests, keeping one disabled-guard smoke if needed.
-4. Add current-model Stripe webhook + Payment Link tests.
-5. Reduce `playwright_tests/test_pricing_account_state.py` to one or two browser smokes and rely on Django for the state matrix.
-6. Move obvious server-rendered blog/list/filter Playwright checks to Django or delete duplicates when equivalent Django coverage already exists.
+2. Delete or quarantine obsolete local Stripe checkout/subscription tests, keeping one disabled-guard smoke if needed.
+3. Add current-model Stripe webhook + Payment Link tests.
+4. Reduce `playwright_tests/test_pricing_account_state.py` to one or two browser smokes and rely on Django for the state matrix.
+5. Move obvious server-rendered blog/list/filter Playwright checks to Django or delete duplicates when equivalent Django coverage already exists.
 

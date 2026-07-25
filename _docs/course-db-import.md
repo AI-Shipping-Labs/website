@@ -22,7 +22,9 @@ preserving course slugs in first-seen CSV order. Each imported alumnus receives
 with `course_slugs`, optional `enrollment_dates_by_course`, and optional
 `course_db_user_ids`.
 
-The import requests permanent Main access through the tier override pipeline.
+The import grants a long-lived Main `TierOverride` (10-year expiry,
+`LONG_LIVED_OVERRIDE_DURATION = relativedelta(years=10)`) through the tier
+override pipeline.
 It does not mutate the user's stored Stripe/free tier, does not subscribe users
 to newsletters, and does not mark email addresses verified.
 

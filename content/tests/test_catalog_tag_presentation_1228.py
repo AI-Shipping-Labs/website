@@ -141,14 +141,16 @@ class CatalogTagPresentationTest(TestCase):
         for path, text, href in cases:
             with self.subTest(path=path):
                 parser = _parse(self.client.get(path))
+                # Scope to the CARD tag chip on every path. Templates are the
+                # source of truth: the page-level topic filter row (added to
+                # /blog in #1319) renders a 44px filter pill sharing the same
+                # href, so we must select on CLICKABLE_CHIP_CLASSES to land on
+                # the small card chip rather than the filter pill.
                 chip = next(
                     element for element in _elements_with_text(parser, text)
                     if element['tag'] == 'a'
                     and element['attrs'].get('href') == href
-                    and (
-                        path != '/downloads'
-                        or element['attrs'].get('class') == CLICKABLE_CHIP_CLASSES
-                    )
+                    and element['attrs'].get('class') == CLICKABLE_CHIP_CLASSES
                 )
                 self.assertEqual(chip['attrs'].get('class'), CLICKABLE_CHIP_CLASSES)
                 self.assertNotIn('min-h-[44px]', chip['attrs'].get('class', ''))
@@ -226,14 +228,19 @@ class CatalogTagPresentationTest(TestCase):
                 self.assertEqual(overflow['tag'], 'span')
                 self.assertEqual(overflow['attrs'].get('class'), STATIC_CHIP_CLASSES)
                 self.assertEqual(overflow['text'].strip(), text)
-                # Downloads and resources expose every available topic in
-                # the separate 44px filter row, so the hidden fourth *card*
-                # tag can still legitimately appear elsewhere on the page.
-                if path not in ('/downloads', '/resources'):
-                    self.assertNotIn(
-                        f'>{hidden_tag}<',
-                        response.content.decode(),
-                    )
+                # Assert the 3-tag cap on the CARD itself. The templates are
+                # the source of truth: /blog, /downloads, and /resources all
+                # expose every available topic in a separate 44px page-level
+                # filter row, so the hidden fourth tag can legitimately appear
+                # there. Scope the cap check to card chips (clickable or
+                # static) so it stays genuinely tested without a whole-page
+                # exemption.
+                capped_card_chips = [
+                    element for element in _elements_with_text(parser, hidden_tag)
+                    if element['attrs'].get('class')
+                    in (CLICKABLE_CHIP_CLASSES, STATIC_CHIP_CLASSES)
+                ]
+                self.assertEqual(capped_card_chips, [])
 
     def test_tag_detail_has_distinct_card_and_related_tag_anchors(self):
         parser = _parse(self.client.get('/tags/agents-1228'))

@@ -647,6 +647,7 @@ def studio_sidebar_state(path):
         or '/users/created' in p
         or '/crm' in p
         or '/studio/call-hosts' in p
+        or '/studio/instructors' in p
     )
     planning_active = (
         '/sprints' in p or '/plans' in p

@@ -55,6 +55,15 @@ class Instructor(SourceMetadataMixin, TimestampedModelMixin, models.Model):
         help_text="Stable, human-readable slug (e.g. 'alexey-grigorev').",
     )
     name = models.CharField(max_length=200)
+    email = models.EmailField(
+        max_length=254, blank=True, default='', db_default='',
+        help_text=(
+            'Optional instructor email synced from YAML. Used only as the '
+            'auto-match key to fill a NULL user link with the verified '
+            'platform account of the same email; never the notification '
+            'target itself (that is the user FK).'
+        ),
+    )
     bio = models.TextField(
         blank=True, default='',
         help_text='Markdown bio rendered to HTML on save.',

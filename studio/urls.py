@@ -141,6 +141,11 @@ from studio.views.events import (
 from studio.views.global_search import global_search
 from studio.views.hosts import host_create, host_edit, host_list
 from studio.views.impersonate import impersonate_user, stop_impersonation
+from studio.views.instructors import (
+    instructor_link,
+    instructor_list,
+    instructor_unlink,
+)
 from studio.views.marketing_pages import (
     marketing_page_edit,
     marketing_page_list,
@@ -745,6 +750,18 @@ urlpatterns = [
     # Call hosts (issue #870)
     path('call-hosts/', call_host_list, name='studio_call_host_list'),
     path('call-hosts/<int:host_id>/edit', call_host_edit, name='studio_call_host_edit'),
+    # Instructor account linking (issue #1345)
+    path('instructors/', instructor_list, name='studio_instructor_list'),
+    path(
+        'instructors/<slug:instructor_id>/link',
+        instructor_link,
+        name='studio_instructor_link',
+    ),
+    path(
+        'instructors/<slug:instructor_id>/unlink',
+        instructor_unlink,
+        name='studio_instructor_unlink',
+    ),
     # Calendly OAuth connect (issue #884)
     path(
         'integrations/calendly/connect',

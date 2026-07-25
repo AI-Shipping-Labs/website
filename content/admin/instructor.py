@@ -12,7 +12,7 @@ class InstructorAdmin(admin.ModelAdmin):
         'name', 'instructor_id', 'status', 'has_linked_account', 'updated_at',
     ]
     list_filter = ['status']
-    search_fields = ['name', 'instructor_id', 'bio']
+    search_fields = ['name', 'instructor_id', 'bio', 'email']
     prepopulated_fields = {'instructor_id': ('name',)}
     raw_id_fields = ['user']
     readonly_fields = [
@@ -30,7 +30,7 @@ class InstructorAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {
             'fields': (
-                'instructor_id', 'name', 'bio', 'photo_url', 'links',
+                'instructor_id', 'name', 'email', 'bio', 'photo_url', 'links',
                 'status', 'user',
             ),
         }),

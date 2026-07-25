@@ -1,0 +1,84 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Instructors{% endblock %}
+
+{% block studio_content %}
+{% studio_header_actions title="Instructors" subtitle="Link synced instructors to the platform account that receives comment notifications on their content." %}{% endstudio_header_actions %}
+
+{% comment %}
+Filter chips are bookmarkable anchor links (issue #1345). `needs_link` is the
+highest-value view: unlinked instructors that already have comment-bearing
+content, so linking them starts delivering #1341 notifications immediately.
+{% endcomment %}
+<div class="flex flex-wrap items-center gap-2 mb-6" data-testid="instructor-filter-chips">
+  {% with chip_base="px-4 py-1.5 rounded-full text-sm border transition-colors" chip_active="bg-accent text-accent-foreground border-accent" chip_idle="bg-secondary text-muted-foreground border-border hover:text-foreground hover:bg-muted" %}
+  <a href="?filter=all" data-filter="all"
+     class="{{ chip_base }} {% if active_filter == 'all' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">All</a>
+  <a href="?filter=unlinked" data-filter="unlinked"
+     class="{{ chip_base }} {% if active_filter == 'unlinked' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Unlinked</a>
+  <a href="?filter=needs_link" data-filter="needs_link"
+     class="{{ chip_base }} {% if active_filter == 'needs_link' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Needs link</a>
+  {% endwith %}
+</div>
+
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Instructor</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">ID</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Linked account</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Comment-bearing content</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for row in rows %}
+      {% with instructor=row.instructor %}
+      <tr class="hover:bg-secondary/50 transition-colors align-top"
+          data-testid="instructor-row"
+          data-instructor-id="{{ instructor.instructor_id }}">
+        <td class="px-6 py-4">
+          <span class="text-sm font-medium text-foreground">{{ instructor.name }}</span>
+          {% if instructor.email %}<p class="text-xs text-muted-foreground font-mono break-all mt-0.5">{{ instructor.email }}</p>{% endif %}
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground font-mono">{{ instructor.instructor_id }}</td>
+        <td class="px-6 py-4">
+          {% if instructor.user_id %}
+            <span class="text-sm text-foreground break-all" data-testid="instructor-linked-email">{{ instructor.user.email }}</span>
+          {% else %}
+            <span class="text-xs px-2 py-1 rounded-full bg-secondary text-muted-foreground" data-testid="instructor-not-linked">Not linked</span>
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="instructor-comment-count">{{ row.comment_count }}</td>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          {% if instructor.user_id %}
+            <form method="post" action="{% url 'studio_instructor_unlink' instructor.instructor_id %}">
+              {% csrf_token %}
+              <input type="hidden" name="filter" value="{{ active_filter }}">
+              <button type="submit"
+                      class="text-sm text-destructive hover:underline"
+                      data-testid="instructor-unlink">Unlink</button>
+            </form>
+          {% else %}
+            <form method="post" action="{% url 'studio_instructor_link' instructor.instructor_id %}"
+                  class="w-72 ml-auto text-left"
+                  data-testid="instructor-link-form">
+              {% csrf_token %}
+              <input type="hidden" name="filter" value="{{ active_filter }}">
+              {% with picker_prefix="link-"|add:instructor.instructor_id %}
+              {% include "studio/includes/_people_picker.html" with name="user_id" id_prefix=picker_prefix search_url="/studio/api/users/search/" label="Link account" placeholder="Search by name or email..." on_select_action="submit_form" %}
+              {% endwith %}
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endwith %}
+      {% empty %}
+        {% studio_empty_state 'filter' entity_label='instructor' entity_label_plural='instructors' clear_url='?filter=all' colspan=5 empty_message=empty_state %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

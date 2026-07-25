@@ -596,6 +596,7 @@ class TestPlanningSection:
             "Users",
             "Call hosts (scheduling)",
             "Imports",
+            "Instructors",
             "Tier overrides",
             "Tags",
             "Merge accounts",

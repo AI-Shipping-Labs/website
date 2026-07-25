@@ -70,6 +70,7 @@ PARTIAL_USERS = {
     'email_log/list.html',
     'call_hosts/list.html',
     'hosts/list.html',
+    'instructors/list.html',
     'marketing_pages/list.html',
     'maven_events/list.html',
     'tags/list.html',

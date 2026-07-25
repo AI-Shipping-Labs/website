@@ -2477,12 +2477,17 @@ class WorkshopPagesPaywallInlineRegisterTest(TierSetupMixin, TestCase):
             '/accounts/login/?next=%2Fworkshops%2Fanon-pages',
         )
 
-    def test_anonymous_pages_paywall_loads_inline_register_js(self):
-        """Surface template loads /static/js/accounts/inline-register.js
-        so the form's onsubmit handler resolves."""
+    def test_anonymous_pages_paywall_no_inline_register_js(self):
+        """Issue #1343 regression: the workshop pages paywall now renders
+        the shared ``_signup_actions.html`` stack (OAuth buttons + "Create a
+        free account" + "Sign in"), which has no ``id="register-form"`` for
+        ``inline-register.js`` to bind. The dead script block (and its
+        ``auth-next-url`` payload / ``auth-helpers.js``) must not come back."""
         response = self.client.get('/workshops/anon-pages')
-        self.assertContains(response, '/static/js/accounts/inline-register.js')
-        self.assertContains(response, 'auth-next-url')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, '/static/js/accounts/inline-register.js')
+        self.assertNotContains(response, '/static/js/accounts/auth-helpers.js')
+        self.assertNotContains(response, 'auth-next-url')
         # Guard against Django comment leaks — multi-line ``{# #}``
         # tags don't terminate so they leak into rendered HTML.
         self.assertNotContains(response, '{# ')

@@ -1204,6 +1204,18 @@ class RegisterPageTest(TestCase):
         content = resp.content.decode()
         self.assertIn("register-form", content)
 
+    def test_register_page_loads_inline_register_js(self):
+        """Issue #1343 guard: the standalone register page keeps its live
+        ``inline-register.js`` + ``auth-helpers.js`` + ``auth-next-url``
+        payload. The workshop-detail cleanup must not touch this surface —
+        the form still submits via the ``handleRegister`` handler."""
+        resp = self.client.get("/accounts/register/")
+        content = resp.content.decode()
+        self.assertIn("/static/js/accounts/inline-register.js", content)
+        self.assertIn("/static/js/accounts/auth-helpers.js", content)
+        self.assertIn("auth-next-url", content)
+        self.assertIn('onsubmit="return handleRegister(event)"', content)
+
     def test_register_page_contains_email_input(self):
         resp = self.client.get("/accounts/register/")
         content = resp.content.decode()

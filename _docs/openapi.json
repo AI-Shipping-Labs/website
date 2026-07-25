@@ -6593,9 +6593,78 @@
     },
     "/api/payments/tier-reconcile/runs": {
       "get": {
+        "description": "Returns completed, running, queued, and failed runs newest-first with their summary counts. ``next_cursor`` is the next page number when more rows remain, else ``null``.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "description": "1-based page number (default 1).",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "description": "Rows per page (default 100, max 500).",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Success"
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "next_cursor": null,
+                  "page": 1,
+                  "runs": [
+                    {
+                      "counts": {
+                        "actionable": 2,
+                        "changed": 0,
+                        "cohort": 42,
+                        "ok": 37,
+                        "scheduled_cancellation": 1,
+                        "warning": 2
+                      },
+                      "error_message": "",
+                      "finished_at": "2026-07-25T04:31:12+00:00",
+                      "id": "b0a1c2d3-4e5f-6071-8293-a4b5c6d7e8f9",
+                      "mode": "diagnostic",
+                      "source": "scheduled",
+                      "started_at": "2026-07-25T04:30:00+00:00",
+                      "status": "completed"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Paginated run history."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid staff token."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid ``page`` / ``page_size``."
           }
         },
         "summary": "Paginated run history.",
@@ -6604,9 +6673,28 @@
         ]
       },
       "post": {
+        "description": "Enqueues a diagnostic (read-only) reconciliation run over the full Stripe cohort and returns ``202`` with the new run id and status. Accepts no apply mode and no body \u2014 a run never changes member access.",
         "responses": {
-          "200": {
-            "description": "Success"
+          "202": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "run_id": "b0a1c2d3-4e5f-6071-8293-a4b5c6d7e8f9",
+                  "status": "queued"
+                }
+              }
+            },
+            "description": "Run queued."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid staff token; no run is created."
           }
         },
         "summary": "Enqueue a read-only cohort run (202).",
@@ -6617,6 +6705,7 @@
     },
     "/api/payments/tier-reconcile/runs/{run_id}": {
       "get": {
+        "description": "Findings are filterable by ``classification`` (any stable classification value), ``tier`` (the member's local base tier), and ``filter`` (a saved view). ``tier`` and ``classification`` combine as AND. ``next_cursor`` is the next page number when more rows remain, else ``null``.",
         "parameters": [
           {
             "in": "path",
@@ -6626,11 +6715,163 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "classification",
+            "required": false,
+            "schema": {
+              "description": "Filter findings to one stable classification value (e.g. ``scheduled_cancellation``, ``ended_subscription_still_entitled``, ``dunning_grace``). Unknown values return 422 with ``details.field = \"classification\"``.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tier",
+            "required": false,
+            "schema": {
+              "description": "Filter findings to the member's local base tier. Unknown values return 422 with ``details.field = \"tier\"``.",
+              "enum": [
+                "basic",
+                "main",
+                "premium",
+                "free"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "description": "Saved view: ``actionable`` (entitlement drift that can be applied), ``scheduled`` (scheduled cancellations), ``warnings`` (review-only rows), or ``all`` (default).",
+              "enum": [
+                "actionable",
+                "scheduled",
+                "warnings",
+                "all"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "description": "1-based page number (default 1).",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "description": "Rows per page (default 100, max 500).",
+              "type": "integer"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Success"
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "findings": [
+                    {
+                      "action": "revert_to_free",
+                      "cancel_at_period_end": false,
+                      "classification": "ended_subscription_still_entitled",
+                      "conflicting_user_ids": [],
+                      "current_subscription_id": "sub_old",
+                      "current_tier": "main",
+                      "email": "someone@example.com",
+                      "message": "Stripe subscription is canceled but the member is still Main locally.",
+                      "outcome": "would_change",
+                      "stripe_customer_id": "cus_xyz",
+                      "stripe_period_end": null,
+                      "stripe_status": "canceled",
+                      "stripe_subscription_id": "sub_xyz",
+                      "stripe_tier": null,
+                      "user_id": 1234,
+                      "webhook": {
+                        "event_id": null,
+                        "event_status": null,
+                        "event_type": null,
+                        "evidence": "missing",
+                        "processed_at": null
+                      }
+                    }
+                  ],
+                  "next_cursor": null,
+                  "page": 1,
+                  "run": {
+                    "counts": {
+                      "actionable": 2,
+                      "changed": 0,
+                      "cohort": 42,
+                      "ok": 37,
+                      "scheduled_cancellation": 1,
+                      "warning": 2
+                    },
+                    "error_message": "",
+                    "finished_at": "2026-07-25T04:31:12+00:00",
+                    "id": "b0a1c2d3-4e5f-6071-8293-a4b5c6d7e8f9",
+                    "mode": "diagnostic",
+                    "source": "scheduled",
+                    "started_at": "2026-07-25T04:30:00+00:00",
+                    "status": "completed"
+                  },
+                  "webhook_evidence_counts": {
+                    "failed_permanent": 0,
+                    "missing": 1,
+                    "not_applicable": 0,
+                    "processed": 1
+                  }
+                }
+              }
+            },
+            "description": "Run detail plus filtered findings."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Run not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "field": "tier"
+                  },
+                  "error": "Unknown tier filter"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid ``classification``, ``tier``, ``filter``, or pagination value."
           }
         },
         "summary": "Run detail plus filtered findings.",

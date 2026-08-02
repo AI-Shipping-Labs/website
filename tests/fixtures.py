@@ -1,6 +1,30 @@
+from datetime import UTC, datetime
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 
 from payments.models import Tier
+
+LEGACY_NUMERIC_CHECKOUT_TEST_TIME = datetime(2026, 7, 31, 23, 59, tzinfo=UTC)
+
+
+def call_checkout_in_legacy_numeric_compat_window(handler, payload):
+    """Run legacy numeric-reference fixtures before their production cutoff.
+
+    A large set of webhook tests predates opaque checkout bindings and uses a
+    numeric user id as ``client_reference_id``. Production correctly stopped
+    accepting that format on 2026-08-01. Keep those fixtures deterministic
+    without weakening the production cutoff; dedicated security tests call the
+    real handler directly and cover the cutoff/kill-switch behavior.
+    """
+    reference = str(payload.get("client_reference_id") or "")
+    if not reference.isdigit():
+        return handler(payload)
+    with patch(
+        "payments.services.webhook_handlers.django_timezone.now",
+        return_value=LEGACY_NUMERIC_CHECKOUT_TEST_TIME,
+    ):
+        return handler(payload)
 
 
 class TierSetupMixin:

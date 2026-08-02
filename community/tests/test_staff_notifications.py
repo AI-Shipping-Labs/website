@@ -25,6 +25,7 @@ from payments import services as payment_services
 from payments.models import Tier
 from payments.services import handle_checkout_completed as _handle_checkout_completed
 from plans.models import Sprint
+from tests.fixtures import call_checkout_in_legacy_numeric_compat_window
 
 
 def handle_checkout_completed(session_data):
@@ -36,7 +37,10 @@ def handle_checkout_completed(session_data):
         ),
     }
     payload.update(session_data)
-    return _handle_checkout_completed(payload)
+    return call_checkout_in_legacy_numeric_compat_window(
+        _handle_checkout_completed,
+        payload,
+    )
 
 
 @tag('core')

@@ -21,6 +21,7 @@ from django.test.runner import ParallelTestSuite
 from django.test.utils import iter_test_cases
 
 from website.test_runner import (
+    TEST_LEGACY_NUMERIC_REFERENCE_CUTOFF,
     PicklableTracebackRunner,
     _read_shard_env,
     _shard_for_test_id,
@@ -258,3 +259,48 @@ class ReadShardEnvTests(unittest.TestCase):
         with self._env(TEST_SHARD_COUNT="4", TEST_SHARD_INDEX="0"):
             with self.assertRaises(ValueError):
                 _read_shard_env()
+
+
+class LegacyCheckoutCutoffEnvironmentTests(unittest.TestCase):
+    KEY = "LEGACY_NUMERIC_CHECKOUT_REFERENCE_CUTOFF"
+
+    def _runner(self):
+        return PicklableTracebackRunner(verbosity=0)
+
+    def test_runner_sets_and_removes_test_cutoff(self):
+        with (
+            mock.patch.dict("os.environ", {}, clear=True),
+            mock.patch(
+                "django.test.runner.DiscoverRunner.setup_test_environment"
+            ),
+            mock.patch(
+                "django.test.runner.DiscoverRunner.teardown_test_environment"
+            ),
+        ):
+            runner = self._runner()
+            runner.setup_test_environment()
+            self.assertEqual(
+                os.environ[self.KEY],
+                TEST_LEGACY_NUMERIC_REFERENCE_CUTOFF,
+            )
+            runner.teardown_test_environment()
+            self.assertNotIn(self.KEY, os.environ)
+
+    def test_runner_restores_existing_cutoff(self):
+        with (
+            mock.patch.dict("os.environ", {self.KEY: "custom"}, clear=True),
+            mock.patch(
+                "django.test.runner.DiscoverRunner.setup_test_environment"
+            ),
+            mock.patch(
+                "django.test.runner.DiscoverRunner.teardown_test_environment"
+            ),
+        ):
+            runner = self._runner()
+            runner.setup_test_environment()
+            self.assertEqual(
+                os.environ[self.KEY],
+                TEST_LEGACY_NUMERIC_REFERENCE_CUTOFF,
+            )
+            runner.teardown_test_environment()
+            self.assertEqual(os.environ[self.KEY], "custom")

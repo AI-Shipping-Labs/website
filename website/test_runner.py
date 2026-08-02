@@ -36,6 +36,17 @@ from django.test.utils import iter_test_cases
 tblib.pickling_support.install()
 
 
+# The production compatibility window for legacy numeric Stripe checkout
+# references closed on 2026-08-01.  Many older webhook fixtures intentionally
+# still exercise that compatibility path, so running them against wall-clock
+# time made the suite turn red the day after the cutoff.  Give the test suite a
+# stable pre-cutoff configuration without weakening production behavior.
+# Dedicated security tests override the config/clock explicitly to verify the
+# real cutoff and kill-switch contracts.
+TEST_LEGACY_NUMERIC_REFERENCE_CUTOFF = "2099-01-01T00:00:00Z"
+_ENV_UNSET = object()
+
+
 # --- Deterministic test sharding (issue #888) -----------------------------
 #
 # The Django suite grew to ~9908 tests / ~1760s, creeping toward the CI
@@ -130,6 +141,30 @@ class PicklableTracebackRunner(DiscoverRunner):
     def __init__(self, *args, **kwargs):
         tblib.pickling_support.install()
         super().__init__(*args, **kwargs)
+
+    def setup_test_environment(self, **kwargs):
+        key = "LEGACY_NUMERIC_CHECKOUT_REFERENCE_CUTOFF"
+        self._legacy_checkout_cutoff_previous = os.environ.get(key, _ENV_UNSET)
+        os.environ[key] = TEST_LEGACY_NUMERIC_REFERENCE_CUTOFF
+        try:
+            super().setup_test_environment(**kwargs)
+        except Exception:
+            self._restore_legacy_checkout_cutoff_env()
+            raise
+
+    def teardown_test_environment(self, **kwargs):
+        try:
+            super().teardown_test_environment(**kwargs)
+        finally:
+            self._restore_legacy_checkout_cutoff_env()
+
+    def _restore_legacy_checkout_cutoff_env(self):
+        key = "LEGACY_NUMERIC_CHECKOUT_REFERENCE_CUTOFF"
+        previous = self._legacy_checkout_cutoff_previous
+        if previous is _ENV_UNSET:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = previous
 
     def build_suite(self, test_labels=None, **kwargs):
         suite = super().build_suite(test_labels=test_labels, **kwargs)

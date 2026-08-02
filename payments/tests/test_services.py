@@ -30,6 +30,7 @@ from payments.services import (
 from payments.services import (
     handle_checkout_completed as _handle_checkout_completed,
 )
+from tests.fixtures import call_checkout_in_legacy_numeric_compat_window
 
 
 def handle_checkout_completed(session_data):
@@ -41,7 +42,10 @@ def handle_checkout_completed(session_data):
         ),
     }
     payload.update(session_data)
-    return _handle_checkout_completed(payload)
+    return call_checkout_in_legacy_numeric_compat_window(
+        _handle_checkout_completed,
+        payload,
+    )
 
 
 class StripeMappingObject:

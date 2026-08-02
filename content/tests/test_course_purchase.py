@@ -22,7 +22,10 @@ from content.access import can_access
 from content.models import Course, CourseAccess, Module, Unit
 from payments import services as payment_services
 from payments.services import handle_checkout_completed as _handle_checkout_completed
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import (
+    TierSetupMixin,
+    call_checkout_in_legacy_numeric_compat_window,
+)
 
 User = get_user_model()
 
@@ -36,7 +39,10 @@ def handle_checkout_completed(session_data):
         ),
     }
     payload.update(session_data)
-    return _handle_checkout_completed(payload)
+    return call_checkout_in_legacy_numeric_compat_window(
+        _handle_checkout_completed,
+        payload,
+    )
 
 
 # ============================================================

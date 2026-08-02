@@ -36,6 +36,7 @@ from payments.services import (
 from payments.services import (
     handle_subscription_updated,
 )
+from tests.fixtures import call_checkout_in_legacy_numeric_compat_window
 
 WEBHOOK_URL = "/api/webhooks/payments"
 TEST_WEBHOOK_SECRET = "whsec_test_secret_key_for_testing"
@@ -54,7 +55,10 @@ def _completed_session(data):
 
 
 def handle_checkout_completed(session_data):
-    return _handle_checkout_completed(_completed_session(session_data))
+    return call_checkout_in_legacy_numeric_compat_window(
+        _handle_checkout_completed,
+        _completed_session(session_data),
+    )
 
 
 class QuietSubscriptionLookupMixin:

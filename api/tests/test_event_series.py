@@ -1206,7 +1206,20 @@ class EventSeriesIndirectZoomTitleSyncTest(EventSeriesApiTestBase):
         self.assertEqual(update_zoom.call_count, 2)
         self.assertEqual(
             response.json()["zoom_errors"],
-            [{"event_id": first.pk, "zoom_error": "Zoom title PATCH failed"}],
+            [{
+                "event_id": first.pk,
+                "zoom_error": {
+                    "message": (
+                        "Zoom meeting update failed. The local event was saved, "
+                        "but Zoom may be out of date. Retry with POST "
+                        f"/api/events/{first.slug}/sync-zoom. HTTP 503; "
+                        "Zoom title PATCH failed."
+                    ),
+                    "operation": "update_meeting",
+                    "http_status": 503,
+                    "provider_message": "Zoom title PATCH failed",
+                },
+            }],
         )
         first.refresh_from_db()
         second.refresh_from_db()

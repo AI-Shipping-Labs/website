@@ -277,3 +277,45 @@ Where it applies: same as `ZOOM_WAITING_ROOM` — `create_meeting` for new
 meetings and `apply_zoom_meeting_settings` (`update_meeting_settings`) for
 existing upcoming meetings, so the backfill turns auto-record on for older
 meetings too.
+
+## Meeting payload and transcription
+
+Meeting create, schedule-sync, and settings-backfill requests share these
+supported canonical settings: `auto_recording`, `join_before_host`,
+`mute_upon_entry`, and `waiting_room`.
+
+Automatic audio transcription is configured at the Zoom account or user level.
+It is deliberately not sent as `settings.auto_transcribing` in meeting POST or
+PATCH payloads because that field is not supported by Zoom's meeting request
+contract. Enable and lock transcription as needed in the authorized Zoom admin
+console under Account Management → Account Settings → Recording.
+
+## Reschedule failures and explicit retry
+
+Ordinary Studio/API event edits are fail-soft: a valid local reschedule stays
+saved and the existing attendee schedule-notification behavior still runs if
+Zoom rejects the in-place meeting PATCH. The caller receives a bounded warning
+with the operation and, when Zoom provides them, its HTTP status, provider code,
+and sanitized provider message. Logs carry the same fields plus the platform
+event ID/slug and Zoom meeting ID. Tokens, authorization headers, join URLs, raw
+response bodies, and unrelated provider fields are neither surfaced nor logged.
+
+To retry from the already-stored event state without making another edit or
+sending attendees another schedule notification, use:
+
+```bash
+uv run asl events sync-zoom <event-slug>
+```
+
+This calls staff-token `POST /api/events/{slug}/sync-zoom`. The action PATCHes
+the same stored meeting ID using the current event title, start/end datetimes,
+timezone, and canonical settings. It never creates a replacement meeting,
+saves the event, changes its meeting ID/join URL, regenerates a banner, or
+enqueues attendee notifications. Repeating the action is safe and convergent.
+Only future, non-cancelled, Studio/API-origin Zoom events with an existing
+meeting ID are eligible.
+
+A success returns `zoom_sync_status: "synced"` and `zoom_meeting_id` without a
+join URL. Provider/auth/network failure returns HTTP 502 with code
+`zoom_sync_failed` and sanitized structured diagnostics while leaving the local
+event unchanged.

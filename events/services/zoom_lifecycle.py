@@ -8,12 +8,77 @@ from integrations.services.zoom import (
     ZoomAPIError,
     build_meeting_payload,
     delete_meeting,
+    sanitize_provider_message,
     update_meeting,
 )
 
 logger = logging.getLogger(__name__)
 
 _SYNC_KEYS = ('topic', 'start_time', 'duration', 'timezone')
+
+
+class ZoomSyncFailure(dict):
+    """JSON-safe Zoom failure that renders as a concise Studio warning."""
+
+    def __str__(self):
+        return self['message']
+
+
+def _failure_details(exc, *, operation):
+    if isinstance(exc, ZoomAPIError):
+        details = exc.diagnostics(operation)
+        if 'provider_message' not in details:
+            message = sanitize_provider_message(str(exc))
+            if message:
+                details['provider_message'] = message
+        return details
+    message = sanitize_provider_message(str(exc))
+    details = {'operation': operation}
+    if message:
+        details['provider_message'] = message
+    return details
+
+
+def _sync_failure(event, exc, *, operation, local_saved):
+    details = _failure_details(exc, operation=operation)
+    logger.error(
+        'zoom_sync: operation=%s event_id=%s event_slug=%s '
+        'zoom_meeting_id=%s http_status=%s provider_code=%s '
+        'provider_message=%s',
+        operation,
+        event.pk,
+        event.slug,
+        event.zoom_meeting_id,
+        details.get('http_status'),
+        details.get('provider_code'),
+        details.get('provider_message'),
+    )
+
+    if local_saved and operation == 'update_meeting':
+        message = (
+            'Zoom meeting update failed. The local event was saved, but Zoom '
+            'may be out of date. Retry with POST '
+            f'/api/events/{event.slug}/sync-zoom.'
+        )
+    elif local_saved:
+        message = (
+            'Zoom meeting cancellation failed. The local event was saved, '
+            'but Zoom may be out of date.'
+        )
+    else:
+        message = 'Zoom meeting sync failed. The local event was not changed.'
+
+    diagnostic_parts = []
+    if details.get('http_status') is not None:
+        diagnostic_parts.append(f"HTTP {details['http_status']}")
+    if details.get('provider_code') is not None:
+        diagnostic_parts.append(f"provider code {details['provider_code']}")
+    if details.get('provider_message'):
+        diagnostic_parts.append(details['provider_message'])
+    if diagnostic_parts:
+        message += ' ' + '; '.join(diagnostic_parts) + '.'
+
+    return ZoomSyncFailure(message=message, **details)
 
 
 def _is_zoom_backed(event):
@@ -47,18 +112,32 @@ def maybe_sync_zoom_meeting(event, old_event):
 
     try:
         update_meeting(event)
-    except ZoomAPIError as exc:
-        logger.exception(
-            'zoom_sync: failed to patch meeting %s for event %s (%s)',
-            event.zoom_meeting_id, event.pk, event.slug,
-        )
-        return str(exc)
     except Exception as exc:  # noqa: BLE001 - fail soft by contract
-        logger.exception(
-            'zoom_sync: unexpected error patching meeting %s for event %s (%s)',
-            event.zoom_meeting_id, event.pk, event.slug,
+        return _sync_failure(
+            event,
+            exc,
+            operation='update_meeting',
+            local_saved=True,
         )
-        return str(exc) or 'Failed to update Zoom meeting.'
+    return None
+
+
+def force_sync_zoom_meeting(event):
+    """PATCH Zoom from stored event state, independent of change detection.
+
+    This deliberate retry never saves the event or changes its external
+    meeting identity. Repeating it converges the same meeting toward the same
+    local title/schedule/settings payload.
+    """
+    try:
+        update_meeting(event)
+    except Exception as exc:  # noqa: BLE001 - API must map provider/network errors
+        return _sync_failure(
+            event,
+            exc,
+            operation='update_meeting',
+            local_saved=False,
+        )
     return None
 
 
@@ -78,21 +157,15 @@ def maybe_delete_zoom_meeting_for_cancellation(event, old_status):
     if not should_delete_zoom_meeting_on_cancel(event, old_status):
         return None
 
-    meeting_id = event.zoom_meeting_id
     try:
         delete_meeting(event)
-    except ZoomAPIError as exc:
-        logger.exception(
-            'zoom_cancel: failed to delete meeting %s for event %s (%s)',
-            meeting_id, event.pk, event.slug,
-        )
-        return str(exc)
     except Exception as exc:  # noqa: BLE001 - fail soft by contract
-        logger.exception(
-            'zoom_cancel: unexpected error deleting meeting %s for event %s (%s)',
-            meeting_id, event.pk, event.slug,
+        return _sync_failure(
+            event,
+            exc,
+            operation='delete_meeting',
+            local_saved=True,
         )
-        return str(exc) or 'Failed to delete Zoom meeting.'
 
     event.zoom_meeting_id = ''
     event.zoom_join_url = ''

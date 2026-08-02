@@ -1391,20 +1391,49 @@ class EventsZoomLifecyclePatchTest(EventsApiTestBase):
 
     def test_patch_zoom_update_failure_returns_saved_event_with_zoom_error(self):
         event = self._make_zoom_backed()
+        new_start = event.start_datetime + timedelta(days=1)
+        new_end = new_start + timedelta(hours=2)
 
-        with patch(
-            "events.services.zoom_lifecycle.update_meeting",
-            side_effect=ZoomAPIError("Zoom PATCH failed", status_code=503),
+        with (
+            patch(
+                "events.services.zoom_lifecycle.update_meeting",
+                side_effect=ZoomAPIError(
+                    "Zoom PATCH failed",
+                    status_code=400,
+                    response_data={
+                        "code": 300,
+                        "message": "Unsupported auto_transcribing",
+                        "join_url": "https://zoom.us/j/private",
+                    },
+                ),
+            ),
+            patch("api.views.events.enqueue_schedule_update") as notify,
         ):
-            response = self._patch(event.slug, {"title": "Saved New Title"})
+            response = self._patch(event.slug, {
+                "title": "Saved New Title",
+                "start_datetime": new_start.isoformat(),
+                "end_datetime": new_end.isoformat(),
+            })
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["title"], "Saved New Title")
         self.assertIn("zoom_error", body)
-        self.assertIn("Zoom PATCH failed", body["zoom_error"])
+        self.assertEqual(body["zoom_error"]["operation"], "update_meeting")
+        self.assertEqual(body["zoom_error"]["http_status"], 400)
+        self.assertEqual(body["zoom_error"]["provider_code"], 300)
+        self.assertEqual(
+            body["zoom_error"]["provider_message"],
+            "Unsupported auto_transcribing",
+        )
+        self.assertIn("local event was saved", body["zoom_error"]["message"])
+        self.assertIn(f"/api/events/{event.slug}/sync-zoom", body["zoom_error"]["message"])
+        self.assertNotIn("zoom.us", str(body["zoom_error"]))
+        notify.assert_called_once()
         event.refresh_from_db()
         self.assertEqual(event.title, "Saved New Title")
+        self.assertEqual(event.start_datetime, new_start)
+        self.assertEqual(event.end_datetime, new_end)
         self.assertEqual(event.zoom_meeting_id, "zoom-123")
 
     def test_patch_cancel_future_zoom_event_deletes_and_clears_fields(self):

@@ -53,7 +53,10 @@ from events.services.workshop_ready_notification import (
     WorkshopReadyNotReady,
     notify_workshop_ready,
 )
-from events.services.zoom_lifecycle import sync_or_delete_zoom_meeting
+from events.services.zoom_lifecycle import (
+    force_sync_zoom_meeting,
+    sync_or_delete_zoom_meeting,
+)
 from integrations.services.banner_generator import (
     is_enabled as banner_generator_is_enabled,
 )
@@ -1187,6 +1190,147 @@ def event_detail(request, slug):
     elif generate_banner:
         body["banner_task_id"] = banner_task_id
     return JsonResponse(body, status=200)
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Events",
+    summary="Force-sync an event's stored state to its Zoom meeting",
+    methods={
+        "POST": {
+            "summary": "Force-sync an existing Zoom meeting",
+            "description": (
+                "PATCHes the same stored Zoom meeting from the event's current "
+                "title, start/end datetimes, timezone, and canonical meeting "
+                "settings. This action does not save the event, notify "
+                "attendees, regenerate a banner, create a meeting, or change "
+                "the stored meeting ID/join URL. Repeating it is safe and "
+                "convergent. Only future, non-cancelled, Studio/API-origin "
+                "Zoom events with an existing meeting ID are eligible."
+            ),
+            "responses": {
+                200: {
+                    "description": "Zoom accepted the meeting PATCH.",
+                    "example": {
+                        "zoom_sync_status": "synced",
+                        "zoom_meeting_id": "83220656366",
+                    },
+                },
+                401: {
+                    "description": "Missing, invalid, or non-staff token.",
+                },
+                404: {
+                    "description": "Event not found.",
+                    "example": {
+                        "error": "Event not found",
+                        "code": "unknown_event",
+                    },
+                },
+                409: {
+                    "description": "Synced/content-owned event is read-only.",
+                    "example": {
+                        "error": (
+                            "Synced GitHub events cannot be force-synced "
+                            "through this action"
+                        ),
+                        "code": "synced_event_read_only",
+                    },
+                },
+                422: {
+                    "description": (
+                        "Event is not an eligible active Zoom meeting."
+                    ),
+                    "example": {
+                        "error": "Event is not eligible for Zoom sync",
+                        "code": "zoom_sync_ineligible",
+                        "details": {"reason": "missing_meeting_id"},
+                    },
+                },
+                502: {
+                    "description": (
+                        "Zoom/auth/network sync failed; local event unchanged."
+                    ),
+                    "example": {
+                        "error": (
+                            "Zoom meeting sync failed. The local event was "
+                            "not changed."
+                        ),
+                        "code": "zoom_sync_failed",
+                        "details": {
+                            "operation": "update_meeting",
+                            "zoom_meeting_id": "83220656366",
+                            "http_status": 400,
+                            "provider_code": 300,
+                            "provider_message": "Invalid parameter.",
+                        },
+                    },
+                },
+            },
+        },
+    },
+)
+def event_sync_zoom(request, slug):
+    """POST ``/api/events/<slug>/sync-zoom`` deliberate idempotent retry."""
+    event = Event.objects.filter(slug=slug).first()
+    if event is None:
+        return error_response(
+            "Event not found",
+            "unknown_event",
+            status=404,
+        )
+
+    if event.origin == "github" or is_synced(event):
+        return error_response(
+            "Synced GitHub events cannot be force-synced through this action",
+            "synced_event_read_only",
+            status=409,
+        )
+
+    ineligible_reason = None
+    if event.platform != "zoom":
+        ineligible_reason = "custom_platform"
+    elif not event.zoom_meeting_id:
+        ineligible_reason = "missing_meeting_id"
+    elif event.status == "cancelled":
+        ineligible_reason = "cancelled"
+    elif (
+        event.status == "completed"
+        or event.effective_end_datetime <= timezone.now()
+    ):
+        ineligible_reason = "ended"
+
+    if ineligible_reason is not None:
+        return error_response(
+            "Event is not eligible for Zoom sync",
+            "zoom_sync_ineligible",
+            status=422,
+            details={"reason": ineligible_reason},
+        )
+
+    zoom_failure = force_sync_zoom_meeting(event)
+    if zoom_failure is not None:
+        details = {
+            key: value
+            for key, value in zoom_failure.items()
+            if key != "message"
+        }
+        details["zoom_meeting_id"] = event.zoom_meeting_id
+        return error_response(
+            zoom_failure["message"],
+            "zoom_sync_failed",
+            status=502,
+            details=details,
+        )
+
+    return JsonResponse(
+        {
+            "zoom_sync_status": "synced",
+            "zoom_meeting_id": event.zoom_meeting_id,
+        },
+        status=200,
+    )
 
 
 @token_required

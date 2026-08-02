@@ -274,7 +274,19 @@ class StudioEventEditPlatformTest(TestCase):
 
         with patch(
             'events.services.zoom_lifecycle.update_meeting',
-            side_effect=ZoomAPIError('Zoom unavailable', status_code=503),
+            side_effect=ZoomAPIError(
+                'Zoom unavailable',
+                status_code=400,
+                response_data={
+                    'code': 300,
+                    'message': {
+                        'access_token': 'oauth-secret',
+                        'authorization': 'Bearer auth-secret',
+                        'join_url': 'https://zoom.us/j/private',
+                        'debug_payload': {'account': 42},
+                    },
+                },
+            ),
         ):
             response = self._post_edit(
                 event,
@@ -287,7 +299,17 @@ class StudioEventEditPlatformTest(TestCase):
         self.assertEqual(event.title, 'Saved Despite Zoom Failure')
         self.assertEqual(event.zoom_meeting_id, '99999')
         messages = [str(message) for message in get_messages(response.wsgi_request)]
-        self.assertTrue(any('Zoom unavailable' in message for message in messages))
+        warning = next(message for message in messages if 'Zoom' in message)
+        self.assertIn('local event was saved', warning)
+        self.assertIn('HTTP 400', warning)
+        self.assertIn('provider code 300', warning)
+        self.assertIn('Structured provider message omitted', warning)
+        self.assertIn('/api/events/zoom-failure-sync/sync-zoom', warning)
+        self.assertNotIn('zoom.us', warning)
+        self.assertNotIn('oauth-secret', warning)
+        self.assertNotIn('auth-secret', warning)
+        self.assertNotIn('debug_payload', warning)
+        self.assertNotIn('account', warning)
 
     def test_edit_save_zoom_platform(self):
         """Editing an event to zoom platform sets platform='zoom'."""

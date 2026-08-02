@@ -8,7 +8,9 @@ Handles:
 
 import hashlib
 import hmac
+import json
 import logging
+import re
 import time
 from urllib.parse import urljoin
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -27,6 +29,87 @@ _token_cache = {
 
 ZOOM_OAUTH_TOKEN_URL = 'https://zoom.us/oauth/token'
 ZOOM_API_BASE_URL = 'https://api.zoom.us/v2/'
+ZOOM_PROVIDER_MESSAGE_MAX_LENGTH = 300
+
+_URL_RE = re.compile(r'https?://\S+', re.IGNORECASE)
+_BEARER_RE = re.compile(r'\bBearer\s+\S+', re.IGNORECASE)
+_SENSITIVE_VALUE_RE = re.compile(
+    r'(?i)(?P<quote>["\']?)(?P<key>access[_ -]?token|refresh[_ -]?token|'
+    r'client[_ -]?secret|authorization|join[_ -]?url|password)'
+    r'(?P=quote)\s*[:=]\s*'
+    r'(?P<value>"[^"]*"|\'[^\']*\'|[^\s,;]+)',
+)
+_STRUCTURED_MESSAGE = 'Structured provider message omitted.'
+
+
+def _bounded_text(text, max_length):
+    if max_length <= 0:
+        return None
+    if len(text) > max_length:
+        if max_length == 1:
+            return '…'
+        return text[: max_length - 1].rstrip() + '…'
+    return text
+
+
+def sanitize_provider_message(value, *, max_length=ZOOM_PROVIDER_MESSAGE_MAX_LENGTH):
+    """Return bounded provider text with credentials and URLs redacted.
+
+    Only Zoom's explicit ``message`` value is passed here; callers never
+    stringify or expose the full provider response object. Non-string message
+    values are replaced with a generic marker: arbitrary structured content is
+    never serialized into diagnostics, logs, exception state, or API output.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (dict, list, tuple, set)):
+        return _bounded_text(_STRUCTURED_MESSAGE, max_length)
+    if isinstance(value, bytes):
+        text = value.decode('utf-8', errors='replace')
+    elif isinstance(value, (str, int, float, bool)):
+        text = str(value)
+    else:
+        return _bounded_text(_STRUCTURED_MESSAGE, max_length)
+
+    # A provider can put a JSON-encoded object/array inside its nominal string
+    # ``message`` field. Treat that exactly like an actual structured value so
+    # quoted/nested sensitive and unrelated fields cannot bypass the allowlist.
+    stripped = text.strip()
+    if stripped.startswith(('{', '[')):
+        try:
+            decoded = json.loads(stripped)
+        except (TypeError, ValueError):
+            pass
+        else:
+            if isinstance(decoded, (dict, list)):
+                return _bounded_text(_STRUCTURED_MESSAGE, max_length)
+
+    text = ' '.join(text.split())
+    text = _BEARER_RE.sub('Bearer [redacted]', text)
+    text = _SENSITIVE_VALUE_RE.sub(
+        lambda match: f'{match.group("key")}=[redacted]',
+        text,
+    )
+    text = _URL_RE.sub('[redacted-url]', text)
+    return _bounded_text(text, max_length) or None
+
+
+def _provider_code(value):
+    """Return a small scalar provider code, never an arbitrary payload."""
+    if value is None or isinstance(value, (dict, list, tuple, set)):
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value
+    return sanitize_provider_message(value, max_length=64)
+
+
+def _response_data(response):
+    """Best-effort JSON decoding for extracting only known error fields."""
+    try:
+        data = response.json()
+    except (TypeError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 class ZoomAPIError(Exception):
@@ -34,8 +117,33 @@ class ZoomAPIError(Exception):
 
     def __init__(self, message, status_code=None, response_data=None):
         self.status_code = status_code
-        self.response_data = response_data
-        super().__init__(message)
+        # Retain only the two provider fields that are safe and useful for
+        # operator diagnosis. Never keep a raw response payload on the error.
+        response_data = response_data if isinstance(response_data, dict) else {}
+        self.provider_code = _provider_code(response_data.get('code'))
+        self.provider_message = sanitize_provider_message(
+            response_data.get('message'),
+        )
+        self.response_data = {
+            key: value
+            for key, value in (
+                ('code', self.provider_code),
+                ('message', self.provider_message),
+            )
+            if value is not None
+        }
+        super().__init__(sanitize_provider_message(message) or 'Zoom request failed.')
+
+    def diagnostics(self, operation):
+        """Return the bounded, JSON-safe operator diagnostic fields."""
+        details = {'operation': operation}
+        if self.status_code is not None:
+            details['http_status'] = self.status_code
+        if self.provider_code is not None:
+            details['provider_code'] = self.provider_code
+        if self.provider_message is not None:
+            details['provider_message'] = self.provider_message
+        return details
 
 
 def get_access_token():
@@ -77,7 +185,7 @@ def get_access_token():
         raise ZoomAPIError(
             f'Failed to obtain Zoom access token: {response.status_code}',
             status_code=response.status_code,
-            response_data=response.json() if response.content else None,
+            response_data=_response_data(response),
         )
 
     data = response.json()
@@ -128,7 +236,6 @@ def _meeting_settings():
         'join_before_host': _config_bool('ZOOM_JOIN_BEFORE_HOST', default=False),
         'mute_upon_entry': True,
         'waiting_room': _config_bool('ZOOM_WAITING_ROOM', default=False),
-        'auto_transcribing': True,
     }
 
 
@@ -189,11 +296,11 @@ def create_meeting(event):
         timeout=10,
     )
 
-    if response.status_code not in (200, 201):
+    if not 200 <= response.status_code < 300:
         raise ZoomAPIError(
             f'Failed to create Zoom meeting: {response.status_code}',
             status_code=response.status_code,
-            response_data=response.json() if response.content else None,
+            response_data=_response_data(response),
         )
 
     data = response.json()
@@ -236,11 +343,11 @@ def update_meeting(event):
     )
 
     # PATCH returns 204 No Content on success; accept any 2xx for safety.
-    if response.status_code not in (200, 201, 204):
+    if not 200 <= response.status_code < 300:
         raise ZoomAPIError(
             f'Failed to update Zoom meeting: {response.status_code}',
             status_code=response.status_code,
-            response_data=response.json() if response.content else None,
+            response_data=_response_data(response),
         )
 
     logger.info(
@@ -270,11 +377,11 @@ def update_meeting_settings(event):
     )
 
     # PATCH returns 204 No Content on success; accept any 2xx for safety.
-    if response.status_code not in (200, 201, 204):
+    if not 200 <= response.status_code < 300:
         raise ZoomAPIError(
             f'Failed to update Zoom meeting settings: {response.status_code}',
             status_code=response.status_code,
-            response_data=response.json() if response.content else None,
+            response_data=_response_data(response),
         )
 
     logger.info(
@@ -302,11 +409,11 @@ def delete_meeting(event):
         timeout=10,
     )
 
-    if response.status_code not in (200, 202, 204, 404):
+    if not (200 <= response.status_code < 300 or response.status_code == 404):
         raise ZoomAPIError(
             f'Failed to delete Zoom meeting: {response.status_code}',
             status_code=response.status_code,
-            response_data=response.json() if response.content else None,
+            response_data=_response_data(response),
         )
 
     logger.info(

@@ -213,6 +213,21 @@ def test_events_timestamps_rejects_non_array(monkeypatch):
     assert client.calls == []
 
 
+def test_events_sync_zoom_posts_explicit_action(monkeypatch):
+    client = RecordingEventsClient()
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        cli,
+        ["events", "sync-zoom", "office-hours", "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert client.calls == [
+        ("POST", "/api/events/office-hours/sync-zoom", None),
+    ]
+
+
 # --- Tier-name parsing (used by --required-level / --target-min-level) ---
 
 

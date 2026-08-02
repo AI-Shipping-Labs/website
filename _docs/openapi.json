@@ -3946,6 +3946,95 @@
         ]
       }
     },
+    "/api/events/{slug}/sync-zoom": {
+      "post": {
+        "description": "PATCHes the same stored Zoom meeting from the event's current title, start/end datetimes, timezone, and canonical meeting settings. This action does not save the event, notify attendees, regenerate a banner, create a meeting, or change the stored meeting ID/join URL. Repeating it is safe and convergent. Only future, non-cancelled, Studio/API-origin Zoom events with an existing meeting ID are eligible.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "zoom_meeting_id": "83220656366",
+                  "zoom_sync_status": "synced"
+                }
+              }
+            },
+            "description": "Zoom accepted the meeting PATCH."
+          },
+          "401": {
+            "description": "Missing, invalid, or non-staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_event",
+                  "error": "Event not found"
+                }
+              }
+            },
+            "description": "Event not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "synced_event_read_only",
+                  "error": "Synced GitHub events cannot be force-synced through this action"
+                }
+              }
+            },
+            "description": "Synced/content-owned event is read-only."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "zoom_sync_ineligible",
+                  "details": {
+                    "reason": "missing_meeting_id"
+                  },
+                  "error": "Event is not eligible for Zoom sync"
+                }
+              }
+            },
+            "description": "Event is not an eligible active Zoom meeting."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "zoom_sync_failed",
+                  "details": {
+                    "http_status": 400,
+                    "operation": "update_meeting",
+                    "provider_code": 300,
+                    "provider_message": "Invalid parameter.",
+                    "zoom_meeting_id": "83220656366"
+                  },
+                  "error": "Zoom meeting sync failed. The local event was not changed."
+                }
+              }
+            },
+            "description": "Zoom/auth/network sync failed; local event unchanged."
+          }
+        },
+        "summary": "Force-sync an existing Zoom meeting",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
     "/api/hosts": {
       "get": {
         "responses": {

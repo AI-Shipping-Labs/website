@@ -250,7 +250,7 @@ class ZoomCreateMeetingTest(TestCase):
         self.assertEqual(payload['duration'], 120)  # 2 hours
         self.assertEqual(payload['timezone'], 'Europe/Berlin')
         self.assertEqual(payload['settings']['auto_recording'], 'cloud')
-        self.assertTrue(payload['settings']['auto_transcribing'])
+        self.assertNotIn('auto_transcribing', payload['settings'])
 
     @override_settings(
         ZOOM_CLIENT_ID=ZOOM_TEST_CLIENT_ID,
@@ -530,7 +530,7 @@ class ZoomWaitingRoomSettingsTest(TestCase):
         payload = self._create_payload(mock_post)
         self.assertEqual(payload['settings']['auto_recording'], 'cloud')
         self.assertIs(payload['settings']['mute_upon_entry'], True)
-        self.assertIs(payload['settings']['auto_transcribing'], True)
+        self.assertNotIn('auto_transcribing', payload['settings'])
 
     @patch('integrations.services.zoom.requests.post')
     def test_create_meeting_respects_auto_recording_override(self, mock_post):
@@ -567,6 +567,7 @@ class ZoomWaitingRoomSettingsTest(TestCase):
         body = mock_patch.call_args.kwargs['json']
         self.assertEqual(body['settings']['auto_recording'], 'cloud')
         self.assertIs(body['settings']['join_before_host'], False)
+        self.assertNotIn('auto_transcribing', body['settings'])
 
     @patch('integrations.services.zoom.requests.patch')
     @patch('integrations.services.zoom.requests.post')
@@ -686,6 +687,7 @@ class ZoomWaitingRoomSettingsTest(TestCase):
         self.assertNotIn('duration', body)
         self.assertIs(body['settings']['waiting_room'], False)
         self.assertIs(body['settings']['join_before_host'], False)
+        self.assertNotIn('auto_transcribing', body['settings'])
 
     @patch('integrations.services.zoom.requests.patch')
     @patch('integrations.services.zoom.requests.post')
@@ -706,6 +708,24 @@ class ZoomWaitingRoomSettingsTest(TestCase):
 
         # No exception means 204 is treated as success.
         update_meeting_settings(self.event)
+
+    @patch('integrations.services.zoom.requests.patch')
+    @patch('integrations.services.zoom.requests.post')
+    def test_update_meeting_accepts_any_2xx(self, mock_post, mock_patch):
+        from integrations.services.zoom import update_meeting
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'token-abc', 'expires_in': 3600,
+        }
+        mock_post.return_value = token_response
+        patch_response = MagicMock()
+        patch_response.status_code = 202
+        mock_patch.return_value = patch_response
+
+        # The explicit retry contract treats every provider 2xx as success.
+        update_meeting(self.event)
 
     @patch('integrations.services.zoom.requests.patch')
     @patch('integrations.services.zoom.requests.post')

@@ -98,6 +98,31 @@ class BuildSpecTest(TestCase):
             {"time_seconds": 125, "label": "Build"},
         )
 
+    def test_event_zoom_sync_action_is_documented(self):
+        path = "/api/events/{slug}/sync-zoom"
+        self.assertIn(path, self.document["paths"])
+        operation = self.document["paths"][path]["post"]
+        self.assertEqual(
+            set(operation["responses"]),
+            {"200", "401", "404", "409", "422", "502"},
+        )
+        success = (
+            operation["responses"]["200"]["content"]
+            ["application/json"]["example"]
+        )
+        self.assertEqual(success["zoom_sync_status"], "synced")
+        self.assertIn("zoom_meeting_id", success)
+        self.assertNotIn("zoom_join_url", success)
+        failure = (
+            operation["responses"]["502"]["content"]
+            ["application/json"]["example"]
+        )
+        self.assertEqual(failure["code"], "zoom_sync_failed")
+        self.assertEqual(
+            failure["details"]["operation"],
+            "update_meeting",
+        )
+
     def test_host_patch_documents_title_request_field(self):
         props = self._request_body_properties("/api/hosts/{slug}", "patch")
         self.assertIn("title", props)

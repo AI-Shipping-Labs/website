@@ -1,4 +1,4 @@
-"""``asl events`` -- events CRUD, banner, workshop-ready notify."""
+"""``asl events`` -- events CRUD and explicit operator actions."""
 
 from __future__ import annotations
 
@@ -148,6 +148,14 @@ def events_regenerate_banner(slug, fmt):
 def events_notify_workshop_ready(slug, fmt):
     """Notify that a workshop event is ready."""
     emit(get_client().post(f"{API}/events/{slug}/notify-workshop-ready"), fmt)
+
+
+@events.command("sync-zoom")
+@click.argument("slug")
+@format_option
+def events_sync_zoom(slug, fmt):
+    """Force-sync stored event state to its existing Zoom meeting."""
+    emit(get_client().post(f"{API}/events/{slug}/sync-zoom"), fmt)
 
 
 groups = [events]

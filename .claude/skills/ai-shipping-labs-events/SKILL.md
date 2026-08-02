@@ -28,6 +28,9 @@ uv run asl event-series --help
 - `asl events get <slug>`
 - `asl events create --title "..." --start-datetime "..." [flags]`
 - `asl events update <slug> [flags]`
+- `asl events sync-zoom <slug>` — idempotently PATCH the existing Zoom
+  meeting from the currently stored event state; it does not edit the event or
+  notify attendees
 
 GitHub-origin events are read-only (`editable: false`); only Studio/API-origin events can be created and patched.
 

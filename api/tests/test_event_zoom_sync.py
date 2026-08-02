@@ -3,7 +3,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.utils import timezone
 
 from accounts.models import Token
@@ -54,14 +54,37 @@ class EventZoomSyncApiTest(TestCase):
         values.update(overrides)
         return Event.objects.create(**values)
 
-    def _post(self, event=None, *, key=None):
+    def _post(self, event=None, *, key=None, client=None):
         event = event or self.event
         key = self.staff_key if key is None else key
         headers = {'HTTP_AUTHORIZATION': f'Token {key}'} if key else {}
-        return self.client.post(
+        client = client or self.client
+        return client.post(
             f'/api/events/{event.slug}/sync-zoom',
             **headers,
         )
+
+    @patch('events.services.zoom_lifecycle.update_meeting')
+    def test_staff_token_bypasses_csrf_while_unauthorized_callers_do_not(
+        self,
+        update_meeting,
+    ):
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        anonymous = self._post(key='', client=csrf_client)
+        nonstaff = self._post(
+            key=self.member_token.key,
+            client=csrf_client,
+        )
+        update_meeting.assert_not_called()
+
+        staff = self._post(client=csrf_client)
+
+        self.assertEqual(anonymous.status_code, 401)
+        self.assertEqual(nonstaff.status_code, 401)
+        self.assertEqual(staff.status_code, 200)
+        self.assertEqual(staff.json()['zoom_sync_status'], 'synced')
+        update_meeting.assert_called_once()
 
     @patch('api.views.events._maybe_enqueue_banner')
     @patch('api.views.events.enqueue_schedule_update')

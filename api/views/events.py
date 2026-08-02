@@ -1192,8 +1192,8 @@ def event_detail(request, slug):
     return JsonResponse(body, status=200)
 
 
-@token_required
 @csrf_exempt
+@token_required
 @require_methods("POST")
 @openapi_spec(
     tag="Events",

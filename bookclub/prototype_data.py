@@ -33,14 +33,16 @@ BOOK = {
         {"label": "#book-club on Slack", "url": "/account", "icon": "message-circle"},
     ],
     # Weekly discussion occurrences from the linked event series. In production
-    # each occurrence links its own event-detail page; the prototype points at
-    # /events (always resolves locally).
-    # One real event we already have — the kickoff (prod event
-    # inference-engineering-book-club-kickoff). Later discussions get added as
-    # the club runs; there is no fixed weekly cadence. Links to /events
-    # (resolves locally); prod intent is the event's own detail page.
+    # One real event we already have — the kickoff. Seeded LOCALLY (run
+    # `uv run python manage.py shell < bookclub/seed_local_event.py`), which
+    # creates the event + an "Inference Engineering Book Club" series and
+    # attaches the event to it — to test the flow, since the prod API can't yet
+    # attach an existing event to a series (issue #1358). The event id below is
+    # this local DB's; re-run the seed script if it differs. No fixed weekly
+    # cadence — later discussions get added as the club runs.
     "meetings": [
-        {"title": "Book club kickoff", "when": "Aug 10, 2026 · 17:00 CET", "event_url": "/events", "next": True},
+        {"title": "Book club kickoff", "when": "Aug 10, 2026 · 17:00 CET",
+         "event_url": "/events/48/inference-engineering-book-club-kickoff", "next": True},
     ],
     # cohort-wide progress used for the summary strip
     "readers_count": 34,

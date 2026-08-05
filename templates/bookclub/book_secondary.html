@@ -39,7 +39,7 @@
       <!-- State block -->
       <div class="mt-10 max-w-2xl">
         {% if secondary.status == 'finished' %}
-        <div class="rounded-2xl border border-border bg-card p-6">
+        <div class="rounded-lg border border-border bg-card p-6">
           <div class="flex items-center gap-2">
             <i data-lucide="sparkles" class="h-5 w-5 text-accent"></i>
             <h2 class="text-lg font-semibold tracking-tight">What the group took away</h2>
@@ -58,18 +58,14 @@
           </div>
         </div>
         {% else %}
-        <div class="rounded-2xl border border-accent/40 bg-accent/5 p-6">
+        <div class="rounded-lg border border-accent/30 bg-accent/5 p-6">
           <div class="flex items-center gap-2">
             <i data-lucide="calendar-clock" class="h-5 w-5 text-accent"></i>
             <h2 class="text-lg font-semibold tracking-tight">Up next</h2>
           </div>
           <p class="mt-2 text-sm text-muted-foreground">{{ secondary.start_label }}. The chapter roadmap and weekly deadlines get posted here before we start.</p>
           <div class="mt-5">
-            {% if is_member %}
-            <button type="button" class="{% button_classes 'primary' size='sm' %}"><i data-lucide="bell" class="mr-1 h-4 w-4"></i>Notify me when it starts</button>
-            {% else %}
-            <a href="/pricing" class="{% button_classes 'primary' size='sm' %}">Become a member to join</a>
-            {% endif %}
+            <button type="button" class="{% button_classes 'primary' size='sm' %}"><i data-lucide="bell" class="mr-1 h-4 w-4"></i>Sign up to get notified when we start</button>
           </div>
         </div>
         {% endif %}

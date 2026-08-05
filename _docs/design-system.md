@@ -228,6 +228,17 @@ Shadow rule: repeated cards never carry a shadow. Do not add `shadow-sm` to grid
 
 The canonical arrow markup, owned by `_content_card.html`, is `<i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent">`; badges cluster to its left in the header row, and `hidden sm:block` keeps the mobile arrow-count contract. Eliminated affordances: trailing "Read article ->" / "View download ->" text spans, the `pointer-events-none` fake-button span inside a clickable card, `arrow-up-right` on the gated CTA, and no-affordance clickable cards (they gain the top-right arrow).
 
+### CTA boxes
+
+A CTA box is the callout/action role with one clear action. Surface is the accent callout (`rounded-lg border border-accent/40 bg-accent/5`, `p-6` or `p-6 sm:p-8`), and the action is always a `{% button_classes %}` button — never a hand-rolled link styled as a button. Two layouts, chosen by whether the box sits in a flow or stands alone:
+
+| Layout | When | Structure | Reference |
+|---|---|---|---|
+| Inline action row | A one-destination CTA inside a page flow (dashboard next-step, "starting soon", a section that ends in one action) | `flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between`: eyebrow + heading + supporting text on the left, a non-growing `shrink-0` button on the right | `templates/content/_starting_soon_card.html` |
+| Centered prompt | A self-contained invitation the visitor opts into (subscribe, get notified, join) | `text-center`: eyebrow, heading, `max-w-*` centered supporting line, then one centered button below | the footer newsletter panel in `templates/includes/footer.html` |
+
+Do not center an inline action-row box or left-align a standalone prompt; the layout signals which kind it is. A `rounded-2xl` accent card, or a CTA whose button is not `{% button_classes %}`, is the tell that the box was hand-rolled instead of taken from these.
+
 ### Owners
 
 Clickable cards render through `templates/content/_content_card.html` (the container: `<article>` shell, wrapping anchor, optional media band, header row with badge cluster + arrow, and post-anchor tag row). Static cards use the `templates/content/_info_card_classes.html` class string. Both are layered on the existing `templates/content/_clickable_card_classes.html` anchor a11y contract. See the [Partials and Component Index](#partials-and-component-index) for the canonical usage.

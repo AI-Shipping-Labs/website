@@ -26,9 +26,30 @@ Do not launch the grooming/implementation pipeline from a prototype session. The
 
 Create a dedicated branch, e.g. `prototype/<feature>`. Commit as you go with clear messages. No PR — this is exploratory (real work later merges per the normal flow).
 
-### 2. Learn the design system FIRST — do not hand-roll UI
+### 2. Design-system compliance is a HARD GATE (you self-enforce it)
 
-The single most repeated correction: reuse the real design system instead of inventing styles. Before writing any template, find the canonical component and use it.
+This is the single most repeated correction: interface elements that don't follow the design system. In the normal pipeline a design reviewer catches this; the prototype flow skips that pipeline, so YOU are the gate. Hand-rolling markup or classes for a role the design system already owns is a review-blocking defect even when it renders identically (`_docs/design-system.md` says exactly this).
+
+Run the design system's own procedure — `_docs/design-system.md` § "Before You Write a Class String" — for EVERY element, before writing it:
+
+1. Identify the UI role (button, badge, card, CTA box, empty state, page frame, …).
+2. Find its owner in the design system's "Partials and Component Index" / "Cards" role table.
+3. Copy that owner's exact class string or `{% include %}` / tag. Only invent if there is truly no owner, and say so in a comment.
+
+Element → owner quick map (never hand-roll these):
+
+- Button → `{% button_classes %}`. Badge/pill → `{% member_badges %}` tags. Access/tier → `{% member_access_badge %}`.
+- Card → the "Cards" role table + its partial: static → `_info_card_classes.html`; clickable → `_content_card.html`; gated → `_gated_access_card.html`; accent callout / CTA box → the CTA-box spec (§ "CTA boxes") and `_starting_soon_card.html`.
+- Empty state → `{% member_empty_state %}`. Page width → the four "Spacing and Layout" tiers.
+
+Drift tells — if you wrote any of these, you hand-rolled; stop and fix:
+
+- `rounded-2xl` on anything that isn't a full-page focus panel (roles are `rounded-lg`; spotlight is `rounded-xl`).
+- A `<span class="… rounded-full …">` pill, or a hand-written button class string, instead of the tag.
+- An invented tone/status/width not in the registries.
+- A CTA whose button isn't `{% button_classes %}`.
+
+Self-check before showing the user: for each element, name the partial or role you copied. If you can't name it, it's hand-rolled — go back to step 1. Then reuse the canonical component below.
 
 - Base and tokens: templates extend `base.html`. Color tokens are HSL CSS vars: `background`, `card`, `card-foreground`, `primary`, `muted`, `muted-foreground`, `accent`, `accent-foreground`, `border`. Use `hero-gradient`, `prose`, etc. Include `includes/header.html` and `includes/footer.html`.
 - Buttons: `{% load accounts_extras %}` then `{% button_classes 'primary'|'secondary' size='sm'|'md'|'lg' extra='...' %}`. Never hardcode button classes.

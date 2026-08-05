@@ -22,9 +22,7 @@ BOOK = {
         "A book for engineers who want to understand the technologies behind "
         "every AI product in production — the stack from model architecture and "
         "hardware to serving software, optimization techniques, and running "
-        "inference in production. We're reading it together as a community, one "
-        "chapter block per week, and meeting to share what we learned. The "
-        "kickoff is Aug 10; cadence is decided together on the call."
+        "inference in production."
     ),
     "meeting_cadence": "Weekly · 17:00 CET · Zoom",
     "start_label": "Kickoff Aug 10, 2026",

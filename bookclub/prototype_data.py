@@ -24,13 +24,12 @@ BOOK = {
         "hardware to serving software, optimization techniques, and running "
         "inference in production."
     ),
-    "meeting_cadence": "Weekly · 17:00 CET · Zoom",
+    "meeting_cadence": "Weekly · 17:00 CET",
     "start_label": "Kickoff Aug 10, 2026",
     "links": [
         {"label": "Book page (Baseten)", "url": "https://www.baseten.co/inference-engineering/", "icon": "book-open"},
         {"label": "Kickoff event", "url": "/events/inference-engineering-book-club-kickoff", "icon": "calendar"},
         {"label": "#book-club on Slack", "url": "#", "icon": "message-circle"},
-        {"label": "Zoom room", "url": "#", "icon": "video"},
     ],
     # cohort-wide progress used for the summary strip
     "readers_count": 34,

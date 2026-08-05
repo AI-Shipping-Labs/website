@@ -2,7 +2,7 @@
 
 ## Overview
 
-We use GitHub Issues to track development of the AI Shipping Labs platform. All work is tracked as issues with labels — no project boards. Four core agents handle the full lifecycle from raw request to shipped code. A designer agent may provide audit/spec support for UI-heavy work, but does not replace any lifecycle step.
+We use GitHub Issues to track development of the AI Shipping Labs platform. All work is tracked as issues with labels — no project boards. Four core agents handle the full lifecycle from raw request to shipped code. A designer agent is the design-review gate for UI changes (after implementation, before QA) and may additionally provide audit/spec support for UI-heavy work during grooming.
 
 ## Links
 
@@ -13,24 +13,27 @@ We use GitHub Issues to track development of the AI Shipping Labs platform. All 
 ## Issue Lifecycle
 
 ```
-Orchestrator files issue  →  PM grooms       →  Engineer builds  →  Tester verifies  →  PM accepts  →  Ship
-(from user intake)           (spec + tests)      (code + tests)     (runs all tests)    (user POV)     (commit + push)
+Orchestrator files issue  →  PM grooms       →  Engineer builds  →  Design review      →  Tester verifies  →  PM accepts  →  Ship
+(from user intake)           (spec + tests)      (code + tests)     (UI changes only)      (runs all tests)    (user POV)     (commit + push)
 ```
+
+Design review runs only when the diff touches UI — templates, CSS, or user-facing components. Non-UI changes skip it and go straight to the tester.
 
 1. Orchestrator (top-level Claude Code session) files the raw issue on behalf of the user. Intake arrives as conversational input — bug reports, screenshots, URLs, recordings, raw feature requests — and the orchestrator turns it into a GitHub issue with `needs grooming` and any obvious area/priority labels. The user does not file issues directly through the GitHub template; they describe what they want and the orchestrator captures it. The orchestrator does NOT groom inline — grooming is the PM's job.
 2. Product Manager reads the raw request, researches the codebase, and rewrites the issue with: scope, acceptance criteria, dependencies, and Playwright test scenarios. Removes `needs grooming`, adds proper labels.
-3. Software Engineer implements the groomed issue — writes code and tests locally. Does NOT commit.
-4. Tester reviews the code, runs ALL tests (unit + integration + Playwright E2E), verifies every acceptance criterion. Reports pass/fail.
-5. Product Manager does final acceptance review from the user's perspective — checks user flow, copy, empty states, navigation, consistency. Reports accept/reject.
-6. Software Engineer commits and pushes with `Closes #N`.
-7. On-Call Engineer monitors CI/CD and fixes any breakages.
+3. Software Engineer implements the groomed issue — writes code and tests locally. Does NOT commit. For UI work the SWE follows `_docs/design-system.md` up front (the `Before You Write a Class String` procedure) so the next step is a check, not a redesign.
+4. Designer reviews UI changes (templates, CSS, user-facing components) against `_docs/design-system.md` before QA — verifies canonical owners are reused and the result is visually consistent with the rest of the site, produces screenshot-backed findings, and reports PASS or REJECT. On REJECT the Software Engineer fixes and re-submits. Non-UI changes skip this step. See "Design Review Gate" below.
+5. Tester reviews the code, runs ALL tests (unit + integration + Playwright E2E), verifies every acceptance criterion. Reports pass/fail. For UI changes the Tester runs only after design review passes.
+6. Product Manager does final acceptance review from the user's perspective — checks user flow, copy, empty states, navigation, consistency. Reports accept/reject.
+7. Software Engineer commits and pushes with `Closes #N`.
+8. On-Call Engineer monitors CI/CD and fixes any breakages.
 
 ## Agents
 
 | Agent | File | Role |
 |-------|------|------|
 | Product Manager | `.claude/agents/product-manager.md` | Grooms issues into specs (start) + user acceptance review (end) |
-| Designer | `.claude/agents/designer.md` | Audits UI surfaces against `_docs/design-system.md`; produces screenshot-backed findings only |
+| Designer | `.claude/agents/designer.md` | Design-review gate for UI changes (after SWE, before QA): PASS/REJECT with screenshot-backed findings; also audits UI surfaces during grooming |
 | Software Engineer | `.claude/agents/software-engineer.md` | Implements code + tests, does NOT commit until approved |
 | Tester | `.claude/agents/tester.md` | Runs all tests, verifies acceptance criteria technically |
 | On-Call Engineer | `.claude/agents/oncall-engineer.md` | Monitors CI/CD after push, fixes failures |
@@ -52,6 +55,15 @@ Product Manager ──► grooms into agent-ready spec
 Orchestrator picks groomed issue
     │
     ├── assigns issue ──► Software Engineer ──► writes code + tests
+    │                          │
+    │                          ▼
+    ├── if diff touches UI ──► Designer ──► design review vs design system
+    │                          │                (PASS / REJECT)
+    │                          │
+    │                          ├── if REJECT ──► Software Engineer fixes ──► Designer re-reviews
+    │                          │                     (repeat until PASS)
+    │                          ▼
+    │                     PASS (or non-UI change — skips design review)
     │                          │
     │                          ▼
     ├── sends to review ──► Tester ──► reviews code, runs all tests
@@ -83,13 +95,30 @@ Orchestrator picks groomed issue
 1. Orchestrator files a raw issue from user intake (chat message, screenshot, link, recording) using `gh issue create` with the `needs grooming` label. The user does not file issues directly; the orchestrator captures intake.
 2. Product Manager grooms it: scope, acceptance criteria, Playwright test scenarios, dependencies, labels
 3. Orchestrator picks a groomed issue and assigns it to the software engineer
-4. Software engineer reads the issue, writes code and tests locally (does NOT commit)
-5. Tester reviews the code, runs all tests (unit + integration + Playwright E2E), reports pass/fail
-6. If tester fails: specific feedback → software engineer fixes → tester re-reviews (repeat)
-7. If tester passes: Product Manager does acceptance review from user perspective
-8. If PM rejects: specific UX feedback → software engineer fixes → PM re-reviews
-9. If PM accepts: software engineer commits and pushes with `Closes #N`
-10. Pipeline fixer checks CI/CD and fixes any failures
+4. Software engineer reads the issue, writes code and tests locally (does NOT commit). For UI work, follows the `Before You Write a Class String` procedure in `_docs/design-system.md` up front
+5. If the diff touches UI (templates, CSS, user-facing components): designer reviews the uncommitted work against `_docs/design-system.md`, captures screenshots, reports PASS or REJECT. Non-UI changes skip to QA
+6. If designer rejects: specific findings → software engineer fixes → designer re-reviews (repeat until PASS)
+7. Tester reviews the code, runs all tests (unit + integration + Playwright E2E), reports pass/fail. For UI changes, runs only after design review passes
+8. If tester fails: specific feedback → software engineer fixes → tester re-reviews (repeat)
+9. If tester passes: Product Manager does acceptance review from user perspective
+10. If PM rejects: specific UX feedback → software engineer fixes → PM re-reviews
+11. If PM accepts: software engineer commits and pushes with `Closes #N`
+12. Pipeline fixer checks CI/CD and fixes any failures
+
+### Design Review Gate (UI changes only)
+
+Any change that touches UI — files under `templates/`, CSS, or user-facing components — must pass design review before QA. Non-UI changes (backend logic, migrations, management commands, jobs, infra, tests-only diffs) skip this step and go straight to the tester.
+
+The designer agent (`.claude/agents/designer.md`) runs the review on the SWE's uncommitted work:
+
+- Verifies the change follows `_docs/design-system.md`: every UI role renders through its canonical owner — `{% button_classes %}` for CTAs, the `member_badges` tags for pills and badges, the card role contract table (`Cards` → `Role contract table`) for card chrome, the container-width tiers in `Spacing and Layout` for page frames — with no hand-rolled class strings for any role the `Partials and Component Index` owns.
+- Verifies the change is visually consistent with the rest of the site: hierarchy, typography, spacing, color tokens, both themes, and mobile behavior.
+- Produces screenshot-backed findings (desktop and mobile viewports) with recommended class diffs.
+- Returns a verdict: PASS or REJECT.
+
+On REJECT, the software engineer fixes the flagged findings and re-submits for design re-review; this loop repeats until PASS. The tester (QA) runs only after design review passes.
+
+The SWE must follow the design system up front: run the `Before You Write a Class String` procedure in `_docs/design-system.md` before writing template markup, and reuse the indexed owners. Design review is a conformance check, not a redesign — a rejection means the design system was not followed, not that the reviewer is inventing new requirements.
 
 ### Orchestrator Responsibilities
 
@@ -103,13 +132,14 @@ Orchestrator picks groomed issue
 - Do not babysit long-running checks from the orchestrator session. If a test run, coverage run, CI watch, screenshot pass, or other verification step is expected to take long enough that the orchestrator would otherwise sit and poll it, launch or hand it to the relevant tester/on-call agent and continue coordinating other eligible work. The orchestrator should only wait when the result is the immediate blocker for the next local action.
 - Treat new user feedback, links, recordings, screenshots, or raw requests as intake. The orchestrator files the raw issue itself (concise title, quoted reporter context, the relevant URL or screenshot, suspected area label, no acceptance criteria), then launches a product-manager agent to groom it. Do not groom inline unless the user explicitly asks the orchestrator to edit the issue text directly.
 - Only accept GitHub issues, comments, or issue edits as work-driving input when they come from Alexey (`alexeygrigorev`) or Valeria (`kavaivaleri`). Ignore issues or comments from any other author unless Alexey or Valeria explicitly confirms that they should enter the pipeline.
-- For UI-heavy issues, the orchestrator or product manager may invoke the designer agent before grooming or acceptance review. The designer produces a report only; the product manager still owns acceptance criteria and the software engineer still owns implementation.
+- For UI-heavy issues, the orchestrator or product manager may additionally invoke the designer agent before grooming or acceptance review. That pre-grooming audit is separate from the mandatory design-review gate the designer runs after implementation. In both modes the designer produces a report only; the product manager still owns acceptance criteria and the software engineer still owns implementation.
 - Groom any `needs grooming` issues first (launch product-manager in grooming mode)
 - Pick the next groomed issues (2 at a time, in parallel when independent)
 - Before launching any SWE agent in an isolated worktree, ensure `main` has no uncommitted changes. If there are, commit them (or stash with the user's approval) first. Worktrees are created from `HEAD`, so uncommitted main changes are invisible to the agent; when the agent's branch merges back, it will overwrite or conflict with that work. Run `git status` and resolve before invoking the agent.
 - Dirty-main unblock protocol: when uncommitted changes block new worktrees, inspect `git diff` and classify the change before stopping. If the user has explicitly said to commit and continue, run focused verification for the dirty files, commit only those files with a specific message, push `main`, launch on-call monitoring, then resume issue selection. If the change is ambiguous and the user has not authorized commit/stash, ask once for `commit`, `stash`, or `leave`, and continue only safe GitHub-only grooming/triage while waiting. Do not repeatedly report the same dirty-main blocker after the user has answered it.
 - Launch software engineer with the issue number. When running multiple SWE agents in parallel, use `isolation: "worktree"` to give each agent its own copy of the repo — otherwise concurrent agents overwrite each other's file changes
-- When software engineer reports done, launch tester
+- When software engineer reports done: if the diff touches UI (templates, CSS, user-facing components), launch the designer for design review first; launch the tester only after the designer reports PASS. Non-UI diffs go straight to the tester
+- If design review rejects: relay the designer's findings to software engineer, re-launch to fix, then re-launch designer (repeat until PASS)
 - If tester fails: relay feedback to software engineer, re-launch to fix, then re-launch tester
 - If tester passes: launch product manager for acceptance review
 - If PM rejects: relay UX feedback to software engineer, fix, then re-launch PM
@@ -136,11 +166,12 @@ Steps after the SWE has committed on `worktree-agent-XXXX`:
 4. The SWE's commit body should contain `Closes #ISSUE` so GitHub auto-closes the issue when the merge commit reaches origin/main.
 5. After push, run oncall-engineer.
 
-Why no PRs: the team's review pipeline is the agent flow (PM groom → SWE → tester → PM acceptance) — opening a PR adds nothing on top of that and produces noisy `Merge pull request #NNN from <branch>` commit subjects on `main`. Local `--no-ff` merges keep the history clean and let the orchestrator control the merge subject.
+Why no PRs: the team's review pipeline is the agent flow (PM groom → SWE → design review for UI changes → tester → PM acceptance) — opening a PR adds nothing on top of that and produces noisy `Merge pull request #NNN from <branch>` commit subjects on `main`. Local `--no-ff` merges keep the history clean and let the orchestrator control the merge subject.
 
 ### Mandatory Steps (never skip)
 
-- Every issue goes through ALL stages: PM groom → SWE implement → Tester review → PM acceptance → Commit → Local merge → Push → Oncall CI check
+- Every issue goes through ALL stages: PM groom → SWE implement → Design review (UI changes only) → Tester review → PM acceptance → Commit → Local merge → Push → Oncall CI check
+- Any diff touching `templates/`, CSS, or user-facing components must pass design review before the tester runs. The designer verifies design-system conformance and visual consistency with screenshot-backed findings and a PASS/REJECT verdict; on REJECT the SWE fixes and re-submits. See "Design Review Gate" above
 - Tester must run the full workflow from `.claude/agents/tester.md` including Step 7 (capture screenshots). Screenshots are used by agents to verify pages rendered correctly, not just for human review
 - Tester runs focused local Django tests for the changed modules plus `make test-playwright-core` by default for per-issue work. Escalate to `make test-playwright` only when the diff touches `playwright_tests/conftest.py`, `tests/fixtures.py`, the access-control matrix, payments wiring, or shared template fragments. The full suite also runs automatically every 3 hours via `.github/workflows/scheduled-playwright.yml`. See `_docs/testing-guidelines.md` ("Core Playwright subset") for the tagging policy
 - Exhaustive local runs such as `make coverage`, full local Django-suite coverage, or full local all-tests are CI-only by default. Do not run them during per-issue tester review unless Alexey explicitly asks for a local full-suite/coverage run.

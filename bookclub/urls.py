@@ -15,7 +15,7 @@ urlpatterns = [
     path(
         "books/<slug:slug>/progress",
         views.progress,
-        name="bookclub_leaderboard",
+        name="bookclub_progress",
     ),
     path(
         "books/<slug:slug>/chapters/<int:number>",

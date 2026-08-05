@@ -1,0 +1,20 @@
+{% comment %}
+Body for the "Coming up" / "Past reads" compact cards, rendered inside
+_content_card.html (compact rail; the shell owns the arrow + badge row).
+Branches on the loop variable ``b`` (secondary book dict).
+{% endcomment %}
+<div class="flex gap-4">
+  <div class="flex h-24 w-16 flex-shrink-0 items-center justify-center rounded border border-border bg-gradient-to-br {{ b.cover_accent }} to-card p-2 text-center">
+    <span class="text-[10px] font-semibold leading-tight text-foreground/80">{{ b.title }}</span>
+  </div>
+  <div class="min-w-0">
+    <h3 class="text-base font-semibold leading-snug text-foreground group-hover:text-accent">{{ b.title }}</h3>
+    <p class="text-xs text-muted-foreground">{{ b.author }}</p>
+    {% if b.status == "finished" %}
+    <div class="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+      <span class="inline-flex items-center gap-1"><i data-lucide="users" class="h-3.5 w-3.5"></i>{{ b.readers }}</span>
+      <span class="inline-flex items-center gap-1"><i data-lucide="sparkles" class="h-3.5 w-3.5 text-accent"></i>Summary</span>
+    </div>
+    {% endif %}
+  </div>
+</div>

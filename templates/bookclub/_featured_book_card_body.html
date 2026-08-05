@@ -1,0 +1,20 @@
+{% load static %}
+{% comment %}
+Body for the "Reading now" featured card, rendered inside _content_card.html
+(the shell owns the top-right arrow + badge row). Cover-left, meta-right.
+{% endcomment %}
+<div class="flex flex-col gap-6 sm:flex-row">
+  <img src="{% static book.cover_image %}" alt="{{ book.title }} book cover"
+       class="h-52 w-auto flex-shrink-0 self-start rounded-lg border border-border object-cover shadow-lg">
+  <div class="min-w-0 flex-1">
+    <h3 class="text-lg font-semibold text-foreground group-hover:text-accent">{{ book.title }}</h3>
+    <p class="text-sm text-muted-foreground">{{ book.subtitle }} &middot; {{ book.author }}</p>
+    <p class="mt-3 text-sm text-muted-foreground line-clamp-3">{{ book.description }}</p>
+    <div class="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+      <span class="inline-flex items-center gap-1.5"><i data-lucide="calendar" class="h-4 w-4"></i>{{ book.meeting_cadence }}</span>
+      <span class="inline-flex items-center gap-1.5"><i data-lucide="users" class="h-4 w-4"></i>{{ book.readers_count }} readers</span>
+      <span class="inline-flex items-center gap-1.5"><i data-lucide="flag" class="h-4 w-4"></i>{{ book.start_label }}</span>
+      {% if is_member %}<span class="inline-flex items-center gap-1.5"><i data-lucide="book-open" class="h-4 w-4"></i>{{ viewer_done }}/{{ viewer_total }} read</span>{% endif %}
+    </div>
+  </div>
+</div>

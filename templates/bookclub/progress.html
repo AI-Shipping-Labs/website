@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
 
-{% block title %}Leaderboard — {{ book.title }} | {{ site_name }}{% endblock %}
+{% block title %}Progress — {{ book.title }} | Books | {{ site_name }}{% endblock %}
 
 {% block body %}
 <main class="min-h-screen">
   {% include "includes/header.html" %}
 
+  {# Detail tier (max-w-5xl): one comparison table + header, single column. #}
   <section class="relative overflow-hidden pt-24">
     <div class="absolute inset-0 hero-gradient"></div>
     <div class="relative mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
@@ -16,19 +17,19 @@
       </a>
 
       <header class="mt-4 mb-8">
-        <p class="text-sm uppercase tracking-wide text-muted-foreground">Book Club &middot; Leaderboard</p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight">Who's read what</h1>
-        <p class="mt-2 text-sm text-muted-foreground">Ranked by chapters read, then notes shared. Keep your streak going to hold your spot.</p>
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Books &middot; Progress</p>
+        <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Progress</h1>
+        <p class="mt-2 text-sm text-muted-foreground">Who's read what — ranked by chapters read, then notes shared.</p>
       </header>
 
       {% if not is_member %}
-      <aside class="mb-6 flex flex-col gap-3 rounded-lg border border-accent/40 bg-accent/5 p-4 sm:flex-row sm:items-center sm:justify-between" data-testid="leaderboard-guest-cta">
-        <p class="inline-flex items-center gap-2 text-sm text-foreground"><i data-lucide="lock" class="h-4 w-4 text-accent"></i>Join the book club to appear on the leaderboard and track your streak.</p>
-        <a href="/pricing" class="{% button_classes 'primary' size='sm' extra='flex-shrink-0' %}">Become a member</a>
-      </aside>
+      <div class="mb-6">
+        {% include "content/_gated_access_card.html" %}
+      </div>
       {% endif %}
 
-      <div class="overflow-hidden rounded-2xl border border-border bg-card">
+      {# Prototype: a past book reuses this same board labeled by its title. #}
+      <div class="overflow-x-auto rounded-lg border border-border bg-card">
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -40,7 +41,7 @@
             </tr>
           </thead>
           <tbody>
-            {% for row in leaderboard %}
+            {% for row in progress_rows %}
             <tr class="border-b border-border/60 last:border-0 {% if row.you %}bg-accent/10{% endif %}">
               <td class="px-4 py-3">
                 <span class="font-semibold {% if row.rank == 1 %}text-accent{% else %}text-muted-foreground{% endif %}">{{ row.rank }}</span>
@@ -52,12 +53,9 @@
                     {% if row.public %}
                     <a href="{% url 'bookclub_reader_profile' slug=book.slug handle=row.handle %}" class="font-medium {% if row.you %}text-foreground{% endif %} hover:text-accent hover:underline">{{ row.name }}</a>
                     {% else %}
-                    <span class="font-medium {% if row.you %}text-foreground{% endif %}">{{ row.name }}</span>
+                    <span class="font-medium">{{ row.name }}</span>
+                    <p class="text-xs text-muted-foreground"><span class="inline-flex items-center gap-1"><i data-lucide="lock" class="h-3 w-3"></i>Private</span></p>
                     {% endif %}
-                    <p class="text-xs text-muted-foreground">
-                      {% if row.public %}<span class="inline-flex items-center gap-1"><i data-lucide="globe" class="h-3 w-3"></i>Public profile</span>
-                      {% else %}<span class="inline-flex items-center gap-1"><i data-lucide="lock" class="h-3 w-3"></i>Private</span>{% endif %}
-                    </p>
                   </div>
                 </div>
               </td>

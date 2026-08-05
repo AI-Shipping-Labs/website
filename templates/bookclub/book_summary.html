@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
-{% load member_badges %}
 
 {% block title %}{{ book.title }} summary | Books | {{ site_name }}{% endblock %}
 
@@ -8,37 +7,64 @@
 <main class="min-h-screen">
   {% include "includes/header.html" %}
 
+  {# Reader tier (max-w-3xl): compiled summary, single column. #}
   <section class="relative overflow-hidden pt-24">
     <div class="absolute inset-0 hero-gradient"></div>
     <div class="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
 
-      <a href="{% url 'bookclub_book_detail' slug=book.slug %}" class="inline-flex items-center gap-1 text-sm text-accent hover:underline">
+      <a href="{% url 'bookclub_book_detail' slug=book.slug %}{% if view_param %}?view={{ view_param }}{% endif %}" class="inline-flex items-center gap-1 text-sm text-accent hover:underline">
         <i data-lucide="arrow-left" class="h-4 w-4"></i> {{ book.title }}
       </a>
 
       <header class="mt-4">
-        <p class="text-sm uppercase tracking-wide text-muted-foreground">Books &middot; Summary</p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight">{{ book.title }} &mdash; what the group took away</h1>
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Books &middot; Summary</p>
+        <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">{{ book.title }} &mdash; what the group took away</h1>
         <p class="mt-2 text-sm text-muted-foreground">Compiled from everyone's chapter notes.</p>
       </header>
 
-      <div class="prose mt-8">
-        <p>Prototype placeholder: in the real feature this summary is generated from the notes members wrote for each chapter, giving a single overview of the group's biggest takeaways plus a per-chapter recap.</p>
+      {% if not is_member %}
+      {# The support line above doubles as the teaser; the gate replaces the body. #}
+      <div class="mt-8">
+        {% include "content/_gated_access_card.html" %}
+      </div>
+      {% else %}
+
+      {% if is_finished %}
+      {# Finished state (past book): full compiled body. Prototype keeps the
+         by-chapter lines as plain text — past books have no chapter routes. #}
+      <div class="prose mt-8 max-w-none">
         <h2>Overall</h2>
-        <p>A few sentences capturing the themes the group returned to most often across the whole book, drawn from the highest-signal notes.</p>
+        <p>Across everyone's notes, the group kept returning to a few themes: the
+          value of treating the material as a system rather than a set of isolated
+          tricks, the tradeoffs that only become clear in production, and the
+          handful of mental models that changed how people work day to day.</p>
         <h2>By chapter</h2>
         <ul>
-          <li>Chapter 1 &mdash; the group's key takeaway, in one or two lines.</li>
-          <li>Chapter 2 &mdash; the group's key takeaway, in one or two lines.</li>
-          <li>Chapter 3 &mdash; the group's key takeaway, in one or two lines.</li>
+          <li>Chapter 1 — the group's key takeaway, in one or two lines.</li>
+          <li>Chapter 2 — the group's key takeaway, in one or two lines.</li>
+          <li>Chapter 3 — the group's key takeaway, in one or two lines.</li>
         </ul>
       </div>
+      {% else %}
+      {# In-progress state (active book): index of published chapter summaries. #}
+      <p class="mt-8 text-sm text-muted-foreground">The full summary is compiled after we finish the book.</p>
+      {% if published_summaries %}
+      <h2 class="mt-6 text-lg font-semibold text-foreground">Published so far</h2>
+      <div class="mt-3 space-y-0.5">
+        {% for ch in published_summaries %}
+        {% url 'bookclub_chapter_detail' slug=book.slug number=ch.number as ch_url %}
+        {% include "includes/_list_row.html" with href=ch_url|add:view_query|add:"#summary" title=ch.summary_row_label marker_kind="custom" marker_html='<i data-lucide="sparkles" class="h-4 w-4 text-accent"></i>' %}
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endif %}
 
       <div class="mt-10">
-        <a href="{% url 'bookclub_leaderboard' slug=book.slug %}" class="{% button_classes 'secondary' %}">
-          <i data-lucide="trophy" class="mr-1 h-4 w-4"></i>Final standings
+        <a href="{% url 'bookclub_progress' slug=book.slug %}{% if view_param %}?view={{ view_param }}{% endif %}" class="{% button_classes 'secondary' %}">
+          <i data-lucide="bar-chart-3" class="h-4 w-4"></i>Final standings
         </a>
       </div>
+      {% endif %}
 
     </div>
   </section>

@@ -1,0 +1,75 @@
+{% load accounts_extras %}
+{% comment %}
+Shared Books note card (plan step 5). One dialect for both consumers:
+
+- Chapter page (book_chapter.html): the group's notes for one chapter, so the
+  header shows the author (avatar + name -> reader profile), and the viewer's
+  own note carries a muted "You" static chip.
+- Reader profile (reader_profile.html): one member's notes across chapters, so
+  the header shows a clickable chapter chip -> that chapter's page.
+
+Static/info card role: no group, no hover border, no arrow — the card itself
+navigates nowhere; only the chips/composer inside it are interactive.
+
+Context:
+  note          the note dict.
+  note_header   "author" or "chapter".
+  book          active/secondary book dict (for chip/link URLs).
+  is_member     whether the comment composer renders.
+  view_param    optional ?view= override to preserve on the composer GET form.
+{% endcomment %}
+<article class="{% include 'content/_info_card_classes.html' %} bg-card">
+  {# --- Header --- #}
+  <div class="flex items-center gap-3">
+    {% if note_header == "author" %}
+    <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-border bg-background text-xs font-semibold">{{ note.name|slice:":1" }}</div>
+    <div class="min-w-0 flex-1">
+      <div class="flex flex-wrap items-center gap-2">
+        <a href="{% url 'bookclub_reader_profile' slug=book.slug handle=note.handle %}" class="text-sm font-medium text-foreground hover:text-accent hover:underline">{{ note.name }}</a>
+        {% if note.you %}
+        <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">You</span>
+        {% endif %}
+      </div>
+      <p class="text-xs text-muted-foreground">{{ note.posted }}</p>
+    </div>
+    {% else %}
+    <a href="{% url 'bookclub_chapter_detail' slug=book.slug number=note.chapter %}" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Ch. {{ note.chapter }}</a>
+    <span class="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{{ note.chapter_title }}</span>
+    <span class="text-xs text-muted-foreground">{{ note.posted }}</span>
+    {% endif %}
+  </div>
+
+  {# --- Body --- #}
+  <p class="mt-3 text-sm leading-relaxed text-foreground/90">{{ note.body }}</p>
+
+  {# --- Reactions (static display) --- #}
+  <div class="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
+    <span class="inline-flex items-center gap-1"><i data-lucide="heart" class="h-4 w-4"></i>{{ note.likes }}</span>
+    <span class="inline-flex items-center gap-1"><i data-lucide="message-square" class="h-4 w-4"></i>{{ note.comments|length }} comment{{ note.comments|length|pluralize }}</span>
+  </div>
+
+  {# --- Comments --- #}
+  {% if note.comments %}
+  <div class="mt-4 space-y-3 border-t border-border pt-4">
+    {% for c in note.comments %}
+    <div class="flex gap-3">
+      <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-border bg-background text-xs font-semibold">{{ c.name|slice:":1" }}</div>
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-foreground">{{ c.name }}</p>
+        <p class="text-sm text-muted-foreground">{{ c.body }}</p>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# --- Comment composer (members only) --- #}
+  {% if is_member %}
+  <form method="get" class="mt-4 flex items-center gap-2">
+    {% if view_param %}<input type="hidden" name="view" value="{{ view_param }}">{% endif %}
+    <input type="text" name="comment" placeholder="Add a comment…"
+           class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent">
+    <button type="submit" class="{% button_classes 'secondary' size='sm' extra='shrink-0' %}">Post</button>
+  </form>
+  {% endif %}
+</article>

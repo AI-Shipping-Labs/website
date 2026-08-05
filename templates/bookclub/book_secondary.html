@@ -2,7 +2,7 @@
 {% load accounts_extras %}
 {% load member_badges %}
 
-{% block title %}{{ secondary.title }} | Book Club | {{ site_name }}{% endblock %}
+{% block title %}{{ secondary.title }} | Books | {{ site_name }}{% endblock %}
 
 {% block body %}
 <main class="min-h-screen">
@@ -12,8 +12,8 @@
     <div class="absolute inset-0 hero-gradient"></div>
     <div class="relative mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
 
-      <a href="{% url 'bookclub_index' %}" class="inline-flex items-center gap-1 text-sm text-accent hover:underline">
-        <i data-lucide="arrow-left" class="h-4 w-4"></i> Book Club
+      <a href="{% url 'bookclub_index' %}{% if view_param %}?view={{ view_param }}{% endif %}" class="inline-flex items-center gap-1 text-sm text-accent hover:underline">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i> Books
       </a>
 
       <!-- Header -->
@@ -23,7 +23,7 @@
         </div>
         <div class="flex-1">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="text-sm uppercase tracking-wide text-muted-foreground">Book Club</span>
+            <span class="text-sm font-medium uppercase tracking-widest text-accent">Books</span>
             {% if secondary.status == 'finished' %}
             {% member_status_badge secondary.when_label status="past" icon="check" %}
             {% else %}
@@ -49,8 +49,8 @@
             The full summary below is compiled from everyone's chapter notes.
           </p>
           <div class="mt-5 flex flex-wrap gap-3">
-            <a href="#" class="{% button_classes 'primary' size='sm' %}"><i data-lucide="book-open" class="mr-1 h-4 w-4"></i>Read the book summary</a>
-            <a href="#" class="{% button_classes 'secondary' size='sm' %}"><i data-lucide="trophy" class="mr-1 h-4 w-4"></i>Final standings</a>
+            <a href="{% url 'bookclub_book_summary' slug=secondary.slug %}{% if view_param %}?view={{ view_param }}{% endif %}" class="{% button_classes 'primary' size='sm' %}"><i data-lucide="book-open" class="h-4 w-4"></i>Read the book summary</a>
+            <a href="{% url 'bookclub_progress' slug=secondary.slug %}{% if view_param %}?view={{ view_param }}{% endif %}" class="{% button_classes 'secondary' size='sm' %}"><i data-lucide="bar-chart-3" class="h-4 w-4"></i>Final standings</a>
           </div>
           <div class="mt-5 flex items-center gap-4 text-xs text-muted-foreground">
             <span class="inline-flex items-center gap-1"><i data-lucide="users" class="h-3.5 w-3.5"></i>{{ secondary.readers }} readers</span>
@@ -60,12 +60,22 @@
         {% else %}
         {# Accent CTA box — centered, matching the site's CTA boxes. #}
         <div class="rounded-lg border border-accent/40 bg-accent/5 p-6 sm:p-8 text-center">
-          <p class="text-xs font-semibold uppercase tracking-wider text-accent">Up next</p>
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">Up next</p>
           <h2 class="mt-1 text-lg font-semibold text-foreground sm:text-xl">Get notified when we start</h2>
           <p class="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{{ secondary.start_label }}. The chapter roadmap and weekly deadlines get posted here before we start.</p>
-          <button type="button" class="{% button_classes 'primary' extra='mt-5' %}">
-            <i data-lucide="bell" class="mr-1 h-4 w-4"></i>Get notified
-          </button>
+          {% if notified %}
+          <p class="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+            <i data-lucide="check-circle-2" class="h-4 w-4"></i>You're on the list — we'll email you before kickoff
+          </p>
+          {% else %}
+          <form method="get" class="mt-5">
+            {% if view_param %}<input type="hidden" name="view" value="{{ view_param }}">{% endif %}
+            <input type="hidden" name="notify" value="1">
+            <button type="submit" class="{% button_classes 'primary' %}">
+              <i data-lucide="bell" class="h-4 w-4"></i>Get notified
+            </button>
+          </form>
+          {% endif %}
         </div>
         {% endif %}
       </div>

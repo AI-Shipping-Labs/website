@@ -1,0 +1,6 @@
+{% load member_badges %}
+{% if b.status == "finished" %}
+{% member_status_badge b.when_label status="past" icon="check" %}
+{% else %}
+{% member_status_badge "Up next" status="upcoming" %}
+{% endif %}

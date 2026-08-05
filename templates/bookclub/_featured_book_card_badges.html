@@ -1,0 +1,4 @@
+{% load member_badges %}
+{% member_status_badge "In progress" status="active" %}
+{% member_label_badge book.chapters_count|stringformat:"s"|add:" chapters" tone="muted" %}
+{% member_access_badge book.required_level testid="book-card-access-badge" %}

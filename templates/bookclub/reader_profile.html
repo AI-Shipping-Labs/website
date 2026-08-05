@@ -1,96 +1,87 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
+{% load member_empty_state %}
 
-{% block title %}{{ profile.name }} — {{ book.title }} | {{ site_name }}{% endblock %}
+{% block title %}{{ profile.name }} — {{ book.title }} | Books | {{ site_name }}{% endblock %}
 
 {% block body %}
 <main class="min-h-screen">
   {% include "includes/header.html" %}
 
+  {# Reader tier (max-w-3xl): one member's progress + notes, single column. #}
   <section class="relative overflow-hidden pt-24">
     <div class="absolute inset-0 hero-gradient"></div>
     <div class="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
 
-      <a href="{% url 'bookclub_leaderboard' slug=book.slug %}" class="inline-flex items-center gap-1 text-sm text-accent hover:underline">
-        <i data-lucide="arrow-left" class="h-4 w-4"></i> Leaderboard
+      <a href="{% url 'bookclub_progress' slug=book.slug %}{% if view_param %}?view={{ view_param }}{% endif %}" class="inline-flex items-center gap-1 text-sm text-accent hover:underline">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i> Progress
       </a>
 
-      <!-- Profile header -->
+      {# Profile header #}
       <header class="mt-4 flex items-center gap-4">
         <div class="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full border border-border bg-card text-xl font-semibold">{{ profile.name|slice:":1" }}</div>
         <div>
           <div class="flex items-center gap-2">
-            <h1 class="text-2xl font-semibold tracking-tight">{{ profile.name }}</h1>
-            <span class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"><i data-lucide="globe" class="h-3 w-3"></i>Public</span>
+            <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">{{ profile.name }}</h1>
+            <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground"><i data-lucide="globe" class="h-3 w-3"></i>Public</span>
           </div>
           <p class="text-sm text-muted-foreground">{{ profile.tagline }}</p>
         </div>
       </header>
 
-      <p class="mt-4 text-sm text-muted-foreground">Reading <span class="text-foreground">{{ book.title }}</span></p>
+      <p class="mt-4 text-sm text-muted-foreground">Reading
+        <a href="{% url 'bookclub_book_detail' slug=book.slug %}{% if view_param %}?view={{ view_param }}{% endif %}" class="text-accent hover:underline">{{ book.title }}</a>
+      </p>
 
-      <!-- Stats -->
+      {# Stats (static tiles) #}
       <div class="mt-5 grid grid-cols-3 gap-3">
-        <div class="rounded-2xl border border-border bg-card p-4 text-center">
+        <div class="rounded-lg border border-border bg-card p-4 text-center">
           <p class="text-2xl font-semibold">{{ profile.chapters_read }}</p>
           <p class="text-xs text-muted-foreground">chapters read</p>
         </div>
-        <div class="rounded-2xl border border-border bg-card p-4 text-center">
+        <div class="rounded-lg border border-border bg-card p-4 text-center">
           <p class="text-2xl font-semibold">{{ profile.notes_written }}</p>
           <p class="text-xs text-muted-foreground">notes shared</p>
         </div>
-        <div class="rounded-2xl border border-border bg-card p-4 text-center">
+        <div class="rounded-lg border border-border bg-card p-4 text-center">
           <p class="text-2xl font-semibold inline-flex items-center gap-1"><i data-lucide="flame" class="h-5 w-5 text-accent"></i>{{ profile.streak }}</p>
           <p class="text-xs text-muted-foreground">week streak</p>
         </div>
       </div>
 
-      <!-- Notes feed -->
-      <h2 class="mt-10 mb-4 text-lg font-semibold tracking-tight">Notes</h2>
-      <div class="space-y-5">
-        {% for note in profile.notes %}
-        <article class="rounded-2xl border border-border bg-card p-5">
-          <div class="flex items-center gap-2">
-            <span class="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">Ch. {{ note.chapter }}</span>
-            <span class="text-sm font-medium">{{ note.chapter_title }}</span>
-            <span class="ml-auto text-xs text-muted-foreground">{{ note.posted }}</span>
-          </div>
-          <p class="mt-3 text-sm leading-relaxed text-foreground/90">{{ note.body }}</p>
-
-          <div class="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
-            <button type="button" class="inline-flex items-center gap-1 hover:text-accent"><i data-lucide="heart" class="h-4 w-4"></i>{{ note.likes }}</button>
-            <span class="inline-flex items-center gap-1"><i data-lucide="message-square" class="h-4 w-4"></i>{{ note.comments|length }} comment{{ note.comments|length|pluralize }}</span>
-          </div>
-
-          <!-- Comments -->
-          {% if note.comments %}
-          <div class="mt-4 space-y-3 border-t border-border pt-4">
-            {% for c in note.comments %}
-            <div class="flex gap-3">
-              <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-border bg-background text-xs font-semibold">{{ c.name|slice:":1" }}</div>
-              <div class="min-w-0">
-                <p class="text-sm"><span class="font-medium">{{ c.name }}</span></p>
-                <p class="text-sm text-muted-foreground">{{ c.body }}</p>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-          {% endif %}
-
-          <!-- Add comment (members) / sign-in prompt (guests) -->
-          {% if is_member %}
-          <div class="mt-4 flex items-center gap-2">
-            <input type="text" placeholder="Add a comment…" class="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none">
-            <button type="button" class="{% button_classes 'secondary' size='sm' %}">Post</button>
-          </div>
-          {% else %}
-          <p class="mt-4 text-xs text-muted-foreground">
-            <a href="{{ header_login_url|default:'/accounts/login' }}" class="text-accent hover:underline">Sign in</a> to comment.
-          </p>
-          {% endif %}
-        </article>
+      {# Chapter progress strip — navigation, not participation #}
+      <h2 class="mt-10 text-lg font-semibold text-foreground">Progress</h2>
+      <div class="mt-3 flex flex-wrap gap-2">
+        {% for ch in chapters %}
+        {% url 'bookclub_chapter_detail' slug=book.slug number=ch.number as ch_url %}
+        <a href="{{ ch_url }}{% if view_param %}?view={{ view_param }}{% endif %}"
+           class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium {% if ch.number in profile.read_chapters %}text-muted-foreground{% else %}text-muted-foreground/60{% endif %} transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+          {% if ch.number in profile.read_chapters %}<i data-lucide="check" class="h-3 w-3"></i>{% endif %}Ch. {{ ch.number }}
+        </a>
         {% endfor %}
       </div>
+
+      {# Notes feed #}
+      <h2 class="mt-10 mb-4 text-lg font-semibold text-foreground">Notes</h2>
+      {% if profile.notes %}
+      <div class="space-y-5">
+        {% for note in profile.notes %}
+        {% include "bookclub/_note_card.html" with note=note note_header="chapter" %}
+        {% endfor %}
+      </div>
+      {% else %}
+      {% with empty_body=profile.name|add:" hasn't shared notes for this book." %}
+      {% member_empty_state title='No notes yet' body=empty_body icon='message-square' kind='fresh' %}
+      {% endwith %}
+      {% endif %}
+
+      {% if not is_member %}
+      {# Guest gate: after the feed — the whole feed is readable; the gate
+         covers only participation (commenting / sharing your own notes). #}
+      <div class="mt-10">
+        {% include "content/_gated_access_card.html" %}
+      </div>
+      {% endif %}
 
     </div>
   </section>

@@ -22,9 +22,9 @@ and the synthesized IA plan (implemented).
 
 ## Follow-ups
 
-- [ ] Create the book-club weekly event series (prod API + local) and link real events — BLOCKED: cadence (day/time) not decided yet (kickoff copy says it's set on the call). Prototype meetings link to `/events` meanwhile.
-- [ ] Design-system: add lint rules (hand-rolled button, `rounded-2xl`, hand-rolled pills) — `test_design_system_lint.py`.
-- [ ] Update nav Playwright/Django tests for the redesigned header.
+- [x] Design-system: lint rules (hand-rolled button, `rounded-2xl`, hand-rolled pills) added to `test_design_system_lint.py` (shrink-only ratchet; new drift fails CI).
+- [x] Nav Playwright/Django tests updated for the redesigned header (all pass).
+- [ ] Create the book-club weekly event series (prod API + local) and link real events — BLOCKED on the meeting cadence (day/time), which the kickoff sets on the call. Prototype meetings link to `/events` meanwhile.
 
 ## Filed issues
 

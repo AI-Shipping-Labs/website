@@ -136,6 +136,39 @@ CHAPTERS = [
 ]
 
 
+# --- Other books in the library (index sections) -------------------------
+# Placeholder covers are rendered as a tinted spine box (no image) since these
+# are secondary cards. Titles/authors only — real covers land at build time.
+
+UPCOMING_BOOKS = [
+    {
+        "title": "Designing Data-Intensive Applications",
+        "author": "Martin Kleppmann",
+        "when_label": "Up next",
+        "cover_accent": "from-blue-500/30",
+    },
+]
+
+PAST_BOOKS = [
+    {
+        "title": "Designing Machine Learning Systems",
+        "author": "Chip Huyen",
+        "when_label": "Finished Jun 2026",
+        "chapters": 11,
+        "readers": 41,
+        "cover_accent": "from-purple-500/30",
+    },
+    {
+        "title": "The Pragmatic Programmer",
+        "author": "Hunt & Thomas",
+        "when_label": "Finished Apr 2026",
+        "chapters": 9,
+        "readers": 36,
+        "cover_accent": "from-amber-500/30",
+    },
+]
+
+
 def _progress():
     done = sum(1 for c in CHAPTERS if c["status"] == "done")
     total = len(CHAPTERS)

@@ -38,15 +38,23 @@ The single most repeated correction: reuse the real design system instead of inv
   - `{% member_label_badge "text" tone="muted"|"accent" icon="..." %}` — generic labels.
   - Tones live in `content/templatetags/member_badges.py` (`TONE_CLASSES`, `STATUS_TONES`). Check there before inventing a tone/status string.
 - Cards: match the info-card role (Issue #1339): `rounded-lg border border-border p-6` plus `bg-card` (or `bg-background` on a `bg-card` band). Icon chips are filled: `inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent` with a `h-5 w-5` lucide icon. Static (non-navigating) cards get NO `group`, hover, or arrow. See `templates/content/_info_card_classes.html`.
+- Layout & width consistency: the design system fixes the outer page width — do NOT invent one. `_docs/design-system.md` § "Spacing and Layout" defines four sanctioned tiers, chosen by content shape, enforced by `content/tests/test_container_widths.py`: Frame `max-w-7xl` (index/grid/listing/marketing/dashboard — matches header + footer chrome), Detail `max-w-5xl` (detail pages with mixed layout: media + metadata + cards, e.g. event/course/workshop/plan), Reader `max-w-3xl` (long-form `.prose` and single-column forms), Narrow `max-w-2xl` (confirmations, single-purpose forms). Frame vs Detail is decided by whether content fills the width, not by the word "index": use Frame only when a multi-column grid, dense listing, table, or real sidebar layout actually spans 7xl; a single-column landing/hub (hero + a few stacked sections, or one primary card) is Detail `max-w-5xl` — at 7xl a lone column reads sparse. Pick the tier for the surface's shape and apply that one outer container to EVERY section so they line up on the same edges. Narrower inner columns are fine (a `max-w-3xl` intro paragraph inside a 7xl index) as long as the heading and sections still span the frame. Sibling cards in a row are the same size with copy of roughly the same length.
 - How to discover: `grep -rn` in `templates/` and `*/templatetags/` for an existing partial/tag before building anything. If the site already renders the thing you need (a badge, a card, a leaderboard row), copy that pattern.
 
 ### 3. Access levels are standard tiers
 
 Content-like surfaces carry a standard access level, rendered via `{% member_access_badge %}`. Numeric levels (`content/access.py`): Open=0, Registered=5, Basic=10, Main=20, Premium=30. Store the numeric `required_level` in prototype data and pass it to the badge. The exact tier is a grooming decision — note it as a placeholder.
 
-### 4. Copy: member-facing, no internal jargon
+### 4. Copy: member-facing, accurate, scoped
 
-Write UI copy for members, not for us. Do not reference internal mechanics or other internal features by name (e.g. do NOT say "just like community sprints"). Describe the value in the member's terms (progress, streak, finishing together). No markdown in event-style descriptions/emails.
+Write UI copy for members, not for us. Expect the user to iterate on wording several times — keep each change small and re-verify live.
+
+- No internal jargon: don't reference internal mechanics or other internal features by name (e.g. don't say "just like community sprints"). Describe the value in the member's terms.
+- Let mechanics be discovered, don't over-explain: if a feature (leaderboard, competition, gamification) is meant to be found by exploring, don't name it in the marketing copy — describe the benefit, not the mechanism.
+- Keep each field scoped to its own subject: an entity's `description` should describe the entity itself, not the surrounding process (a book description is about the book; cadence/kickoff/logistics live in their own fields and UI).
+- No filler or vague metaphors ("friendly momentum") — say the concrete thing.
+- Never state something untrue about how the thing works (don't claim a cadence or behavior the team hasn't committed to). When unsure, ask or leave it out.
+- No markdown in event-style descriptions/emails.
 
 ### 5. URL convention: no trailing slashes
 

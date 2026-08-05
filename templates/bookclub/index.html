@@ -13,10 +13,10 @@
     <div class="absolute inset-0 hero-gradient"></div>
     <div class="relative mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
 
-      <header class="max-w-2xl">
+      <header>
         <p class="text-sm uppercase tracking-wide text-muted-foreground">Community &middot; Book Club</p>
         <h1 class="mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">Read together, ship together</h1>
-        <p class="mt-4 text-base text-muted-foreground">
+        <p class="mt-4 max-w-3xl text-base text-muted-foreground">
           We read books together, one chapter block at a time with weekly deadlines, and
           meet to share what we learned. Track your progress, take notes, and read what
           everyone else is thinking.
@@ -55,6 +55,52 @@
           </div>
         </a>
       </div>
+
+      <!-- Coming up -->
+      {% if upcoming_books %}
+      <div class="mt-12">
+        <p class="mb-4 text-sm uppercase tracking-wide text-muted-foreground">Coming up</p>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {% for b in upcoming_books %}
+          <div class="flex gap-4 rounded-lg border border-border bg-card p-4">
+            <div class="flex h-24 w-16 flex-shrink-0 items-center justify-center rounded border border-border bg-gradient-to-br {{ b.cover_accent }} to-card p-2 text-center">
+              <span class="text-[10px] font-semibold leading-tight text-foreground/80">{{ b.title }}</span>
+            </div>
+            <div class="min-w-0">
+              <span class="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">{{ b.when_label }}</span>
+              <h3 class="mt-1.5 text-sm font-semibold leading-snug">{{ b.title }}</h3>
+              <p class="text-xs text-muted-foreground">{{ b.author }}</p>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Past reads -->
+      {% if past_books %}
+      <div class="mt-12">
+        <p class="mb-4 text-sm uppercase tracking-wide text-muted-foreground">Past reads</p>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {% for b in past_books %}
+          <div class="flex gap-4 rounded-lg border border-border bg-card p-4">
+            <div class="flex h-24 w-16 flex-shrink-0 items-center justify-center rounded border border-border bg-gradient-to-br {{ b.cover_accent }} to-card p-2 text-center">
+              <span class="text-[10px] font-semibold leading-tight text-foreground/80">{{ b.title }}</span>
+            </div>
+            <div class="min-w-0">
+              <span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] uppercase tracking-wide text-emerald-400"><i data-lucide="check" class="h-3 w-3"></i>{{ b.when_label }}</span>
+              <h3 class="mt-1.5 text-sm font-semibold leading-snug">{{ b.title }}</h3>
+              <p class="text-xs text-muted-foreground">{{ b.author }}</p>
+              <div class="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                <span class="inline-flex items-center gap-1"><i data-lucide="users" class="h-3.5 w-3.5"></i>{{ b.readers }}</span>
+                <a href="#" class="inline-flex items-center gap-1 text-accent hover:underline"><i data-lucide="sparkles" class="h-3.5 w-3.5"></i>Summary</a>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
 
       <!-- How it works -->
       <div class="mt-14">

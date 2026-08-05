@@ -48,8 +48,11 @@ def _base_context(request):
 
 
 def index(request):
-    """Book Club landing — intro + the active book."""
-    return render(request, "bookclub/index.html", _base_context(request))
+    """Book Club landing — intro + the active book + past/upcoming."""
+    ctx = _base_context(request)
+    ctx["upcoming_books"] = data.UPCOMING_BOOKS
+    ctx["past_books"] = data.PAST_BOOKS
+    return render(request, "bookclub/index.html", ctx)
 
 
 def book_detail(request, slug):

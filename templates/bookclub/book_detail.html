@@ -9,125 +9,93 @@
 <main class="min-h-screen">
   {% include "includes/header.html" %}
 
-  {# Detail tier (max-w-5xl): single column, no aside. #}
+  {% comment %} The club's weekly journal — single column, editorial. Reading is
+  the hero; counts are muted one-liners, not widgets. (2026-08-05 redesign.) {% endcomment %}
   <section class="relative overflow-hidden pt-24">
     <div class="absolute inset-0 hero-gradient"></div>
-    <div class="relative mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+    <div class="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
 
-      {# 1 — Back link #}
-      <a href="{% url 'bookclub_index' %}" class="inline-flex items-center gap-1 text-sm text-accent hover:underline">
+      <a href="{% url 'bookclub_index' %}{{ view_query }}" class="inline-flex items-center gap-1 text-sm text-accent hover:underline">
         <i data-lucide="arrow-left" class="h-4 w-4"></i> Books
       </a>
 
-      {# 2 — Book header #}
-      <header class="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">
-        <img src="{% static book.cover_image %}" alt="{{ book.title }} book cover"
-             class="h-60 w-auto flex-shrink-0 self-start rounded-lg border border-border object-cover shadow-lg">
-
+      {# Book header — cover-forward, calm #}
+      <header class="mt-6 flex flex-col items-start gap-6 sm:flex-row">
+        <img src="{% static book.cover_image %}" alt="{{ book.title }} cover"
+             class="h-56 w-auto flex-shrink-0 rounded-lg border border-border object-cover shadow-lg">
         <div class="flex-1">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="text-sm font-medium uppercase tracking-widest text-accent">Books</span>
-            {% member_access_badge book.required_level testid="book-access-badge" %}
-          </div>
-          <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">{{ book.title }}</h1>
-          <p class="mt-1 text-sm text-muted-foreground">{{ book.subtitle }} &middot; {{ book.author }}</p>
-          <p class="mt-4 max-w-2xl text-sm text-muted-foreground">{{ book.description }}</p>
-
-          <div class="mt-5 flex flex-wrap gap-2">
-            {% for link in book.links %}
-            <a href="{{ link.url }}" class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-              <i data-lucide="{{ link.icon }}" class="h-3.5 w-3.5"></i>{{ link.label }}
-            </a>
-            {% endfor %}
-          </div>
+          <h1 class="text-3xl font-semibold tracking-tight">{{ book.title }}</h1>
+          <p class="mt-1 text-base text-muted-foreground">{{ book.author }}</p>
+          <div class="mt-3">{% member_access_badge book.required_level testid="book-access-badge" %}</div>
+          <p class="mt-4 text-sm leading-relaxed text-muted-foreground">{{ book.description }}</p>
+          <p class="mt-4 text-sm text-muted-foreground">{{ book.readers_count }} people reading along.</p>
         </div>
       </header>
 
-      {% if not is_member %}
-      {# 3 — Guest gate: the one gate on the page #}
-      <div class="mt-8">
-        {% include "content/_gated_access_card.html" %}
-      </div>
-      {% else %}
-      {# 4 — Your progress callout (CTA-box inline action row) #}
-      <div class="mt-8 rounded-lg border border-accent/40 bg-accent/5 p-6">
-        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div class="min-w-0">
-            <p class="text-lg font-semibold text-foreground">{{ viewer_done }} of {{ viewer_total }} chapters read</p>
-            <p class="mt-1 text-sm text-muted-foreground">{{ viewer_streak }}-week streak &middot;
-              <a href="{% url 'bookclub_progress' slug=book.slug %}{% if view_param %}?view={{ view_param }}{% endif %}" class="text-accent hover:underline">See everyone's progress</a>
-            </p>
-          </div>
-          {% if current_chapter %}
-          {% url 'bookclub_chapter_detail' slug=book.slug number=current_chapter.number as continue_url %}
-          <a href="{{ continue_url }}{% if view_param %}?view={{ view_param }}{% endif %}" class="{% button_classes 'primary' extra='shrink-0' %}">
-            {% if current_chapter.viewer_read %}Open{% else %}Continue{% endif %} Ch. {{ current_chapter.number }} — {{ current_chapter.title }}
-          </a>
-          {% endif %}
+      {% if is_member %}
+      {% comment %} This week — the centre of gravity: the current chapter, when
+      we meet, and what people are saying. One primary action. {% endcomment %}
+      {% if current_chapter %}
+      <section class="mt-10 rounded-lg border border-accent/40 bg-accent/5 p-6 sm:p-8">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">This week &middot; {{ current_chapter.week }}</p>
+        <h2 class="mt-1 text-2xl font-semibold tracking-tight">Ch. {{ current_chapter.number }} — {{ current_chapter.title }}</h2>
+        <p class="mt-2 text-sm text-muted-foreground">
+          {% if meetings %}We meet {{ meetings.0.when }} &middot; {% endif %}read by {{ current_chapter.deadline }}
+        </p>
+        {% for note in current_chapter.notes|slice:":2" %}
+        <figure class="mt-5 border-l-2 border-accent/40 pl-4">
+          <blockquote class="text-sm italic leading-relaxed text-foreground/90">{{ note.body }}</blockquote>
+          <figcaption class="mt-1 text-xs text-muted-foreground">&mdash; {{ note.name }}</figcaption>
+        </figure>
+        {% endfor %}
+        <div class="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3">
+          <a href="{% url 'bookclub_chapter_detail' slug=book.slug number=current_chapter.number %}{{ view_query }}" class="{% button_classes 'primary' %}">Open Ch. {{ current_chapter.number }}</a>
+          {% if meetings %}<a href="{{ meetings.0.event_url }}" class="text-sm text-accent hover:underline">Join the discussion &rarr;</a>{% endif %}
         </div>
+      </section>
+      {% endif %}
+      {% else %}
+      {# Guests: exactly one gate. #}
+      <div class="mt-10">
+        {% include "content/_gated_access_card.html" %}
       </div>
       {% endif %}
 
-      {# 5 — Reading roadmap #}
-      <section class="mt-10">
-        <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">Reading roadmap</h2>
-        {% if is_member %}<p class="mt-1 text-sm text-muted-foreground">{{ viewer_done }}/{{ viewer_total }} chapters read</p>{% endif %}
-
-        <ol class="mt-5 space-y-3">
+      {# Contents — the roadmap, collapsed into a quiet, badge-free list. #}
+      <section class="mt-12">
+        <div class="flex items-baseline justify-between">
+          <h2 class="text-lg font-semibold tracking-tight">Contents</h2>
+          {% if is_member %}<span class="text-sm text-muted-foreground">{{ viewer_done }} of {{ viewer_total }} read</span>{% endif %}
+        </div>
+        <ol class="mt-3 space-y-0.5">
           {% for ch in chapters %}
           {% url 'bookclub_chapter_detail' slug=book.slug number=ch.number as ch_url %}
-          <li>
-            <a href="{{ ch_url }}{% if view_param %}?view={{ view_param }}{% endif %}"
-               class="{% include 'content/_clickable_card_classes.html' %} rounded-lg border {% if ch.timeline == 'current' %}border-accent/50{% else %}border-border{% endif %} bg-card p-4 sm:p-5">
-              <div class="flex items-start gap-4">
-                {# Marker disc — tick is the only read indicator #}
-                <div class="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border
-                  {% if is_member and ch.viewer_read %}border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400
-                  {% elif ch.timeline == 'current' %}border-accent/50 bg-accent/10 text-accent
-                  {% else %}border-border text-muted-foreground{% endif %}">
-                  {% if is_member and ch.viewer_read %}<i data-lucide="check" class="h-4 w-4"></i>
-                  {% else %}<span class="text-sm font-semibold">{{ ch.number }}</span>{% endif %}
-                </div>
-
-                <div class="min-w-0 flex-1">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-xs uppercase tracking-wide text-muted-foreground">{{ ch.week }}</span>
-                    {% if ch.timeline == 'current' %}{% member_status_badge "Reading now" status="active" %}{% endif %}
-                  </div>
-                  <h3 class="mt-1 font-semibold text-foreground group-hover:text-accent">Ch. {{ ch.number }} — {{ ch.title }}</h3>
-                  <div class="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
-                    <span class="inline-flex items-center gap-1"><i data-lucide="calendar-clock" class="h-3.5 w-3.5"></i>Due {{ ch.deadline }}</span>
-                    <span class="inline-flex items-center gap-1"><i data-lucide="users" class="h-3.5 w-3.5"></i>{{ ch.readers_done }} read</span>
-                    <span class="inline-flex items-center gap-1"><i data-lucide="message-square" class="h-3.5 w-3.5"></i>{{ ch.notes_count }} notes</span>
-                  </div>
-                </div>
-
-                <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
-              </div>
-            </a>
-          </li>
+          {% with n=ch.number|stringformat:"s" %}
+          {% if is_member and ch.viewer_read %}
+          {% include "includes/_list_row.html" with href=ch_url|add:view_query title="Ch. "|add:n|add:" — "|add:ch.title marker_kind="check" %}
+          {% else %}
+          {% include "includes/_list_row.html" with href=ch_url|add:view_query title="Ch. "|add:n|add:" — "|add:ch.title marker_kind="circle" %}
+          {% endif %}
+          {% endwith %}
           {% endfor %}
         </ol>
       </section>
 
-      {# 6 — Weekly meetings #}
+      {# When we meet — quiet rows to the event pages. #}
+      {% if meetings %}
       <section class="mt-10">
-        <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">Weekly meetings</h2>
-        <p class="mt-1 text-sm text-muted-foreground">{{ book.meeting_cadence }} &middot; linked event series</p>
-        {# Prototype: each occurrence links /events; in production it links its own event-detail page. #}
-        <div class="mt-5 space-y-3">
-          {% for meeting in meetings %}
-          <a href="{{ meeting.event_url }}"
-             class="{% include 'content/_clickable_card_classes.html' %} flex min-h-[44px] items-center justify-between gap-3 rounded-lg border {% if meeting.next %}border-accent/40 bg-accent/5{% else %}border-border bg-card{% endif %} p-4">
-            <div class="min-w-0">
-              <p class="text-sm font-medium text-foreground group-hover:text-accent">{{ meeting.title }}</p>
-              <p class="text-xs text-muted-foreground">{{ meeting.when }}</p>
-            </div>
-            <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
-          </a>
+        <h2 class="text-lg font-semibold tracking-tight">When we meet</h2>
+        <div class="mt-3 space-y-0.5">
+          {% for m in meetings %}
+          {% include "includes/_list_row.html" with href=m.event_url title=m.title|add:" · "|add:m.when marker_kind="custom" marker_html='<i data-lucide="calendar" class="h-4 w-4 text-muted-foreground"></i>' %}
           {% endfor %}
         </div>
       </section>
+      {% endif %}
+
+      <p class="mt-10 text-sm text-muted-foreground">
+        <a href="{% url 'bookclub_progress' slug=book.slug %}{{ view_query }}" class="text-accent hover:underline">See who's reading along &rarr;</a>
+      </p>
 
     </div>
   </section>

@@ -125,6 +125,49 @@ def _class_attributes_with(*tokens: str) -> Callable[[str], Iterable[re.Match[st
     return matcher
 
 
+def _class_attributes_with_any(
+    required: tuple[str, ...],
+    any_of: tuple[str, ...],
+) -> Callable[[str], Iterable[re.Match[str]]]:
+    """All of ``required`` plus at least one of ``any_of`` as whole tokens."""
+    required_res = tuple(re.compile(rf"(?<!\S){re.escape(token)}(?!\S)") for token in required)
+    any_res = tuple(re.compile(rf"(?<!\S){re.escape(token)}(?!\S)") for token in any_of)
+
+    def matcher(source: str) -> Iterable[re.Match[str]]:
+        for match in _quoted_html_class_attributes(source):
+            value = match.group("value")
+            if all(pattern.search(value) for pattern in required_res) and any(
+                pattern.search(value) for pattern in any_res
+            ):
+                yield match
+
+    return matcher
+
+
+# Pill class strings that legitimately live outside member_badges
+# (_docs/design-system.md → Pills, Badges, and Chips: filter pills + tag chips).
+_SANCTIONED_PILL_RES = (
+    re.compile(r"(?<!\S)min-h-\[44px\](?!\S)"),  # page-level filter pill / view toggle
+    re.compile(r"(?<!\S)bg-secondary(?!\S)"),  # static/clickable tag chip recipe
+)
+
+
+def _handrolled_pill_matcher(source: str) -> Iterable[re.Match[str]]:
+    """rounded-full + badge geometry, outside the sanctioned chip recipes."""
+    geometry = (
+        re.compile(r"(?<!\S)rounded-full(?!\S)"),
+        re.compile(r"(?<!\S)text-xs(?!\S)"),
+        re.compile(r"(?<!\S)font-medium(?!\S)"),
+    )
+    for match in _quoted_html_class_attributes(source):
+        value = match.group("value")
+        if not all(pattern.search(value) for pattern in geometry):
+            continue
+        if any(pattern.search(value) for pattern in _SANCTIONED_PILL_RES):
+            continue  # documented tag chip or filter pill, not a badge
+        yield match
+
+
 RULES = (
     Rule(
         "deprecated_content_gated_include",
@@ -158,6 +201,42 @@ RULES = (
         "Empty States",
         _class_attributes_with("p-12", "text-center"),
     ),
+    Rule(
+        # A non-Studio CTA styled by hand (bg-accent + text-accent-foreground +
+        # a padding token) instead of the {% button_classes %} owner. Tag call
+        # sites carry no literal color tokens, so each literal match is not the
+        # tag. Studio ships its own documented primary chrome; emails cannot run
+        # the tag.
+        "handrolled_primary_button",
+        "Buttons",
+        _class_attributes_with_any(
+            required=("bg-accent", "text-accent-foreground"),
+            any_of=("px-3", "px-4", "px-5", "px-6"),
+        ),
+        ("templates/studio/", "templates/emails/"),
+    ),
+    Rule(
+        # rounded-2xl is 'full-page focus panels (out of scope)' only; every
+        # current non-Studio use is baselined, and any NEW one must adopt a
+        # sanctioned card radius or land a design-system change first.
+        "rounded_2xl_outside_focus_panels",
+        "Cards (radius contract)",
+        _class_attributes_with("rounded-2xl"),
+        ("templates/studio/", "templates/emails/"),
+    ),
+    Rule(
+        # Badge-shaped pills (rounded-full + text-xs + font-medium) whose meaning
+        # an owning member_badges tag covers, outside the two sanctioned chip
+        # recipes and the member_badge owner partial.
+        "handrolled_pill_outside_member_badges",
+        "Pills, Badges, and Chips",
+        _handrolled_pill_matcher,
+        (
+            "templates/studio/",
+            "templates/emails/",
+            "templates/includes/member_badge.html",
+        ),
+    ),
 )
 RULE_BY_ID = {rule.rule_id: rule for rule in RULES}
 
@@ -178,6 +257,75 @@ BASELINE: dict[str, dict[str, int]] = {
         "templates/studio/sync/_repos_section.html": 1,
         "templates/studio/utm_analytics/campaign_detail.html": 1,
         "templates/studio/utm_analytics/dashboard.html": 1,
+    },
+    "handrolled_pill_outside_member_badges": {  # Initial legacy debt: #1240.
+        "templates/bookclub/_proto_banner.html": 1,
+        "templates/content/_content_preview.html": 2,
+        "templates/content/_gated_access_card.html": 2,
+        "templates/content/_project_card_badges.html": 1,
+        "templates/content/_related_content_rail.html": 1,
+        "templates/content/_workshops_catalog.html": 4,
+        "templates/content/activities.html": 6,
+        "templates/content/dashboard.html": 1,
+        "templates/content/interview_detail.html": 1,
+        "templates/content/project_detail.html": 1,
+        "templates/content/tags_detail.html": 1,
+        "templates/content/workshop_detail.html": 1,
+        "templates/content/workshop_page_detail.html": 1,
+        "templates/content/workshop_video.html": 1,
+        "templates/events/_upcoming_event_card_badges.html": 1,
+        "templates/events/_upcoming_series_card_badges.html": 1,
+        "templates/events/events_list.html": 1,
+        "templates/home.html": 1,
+        "templates/includes/_studio_edit_button.html": 1,
+        "templates/includes/header.html": 2,
+        "templates/payments/pricing.html": 1,
+        "templates/plans/cohort_board.html": 3,
+        "templates/plans/sprint_detail.html": 3,
+    },
+    "handrolled_primary_button": {  # Initial legacy debt: #1240.
+        "templates/accounts/includes/_login_form.html": 1,
+        "templates/accounts/includes/_password_reset_request_form.html": 1,
+        "templates/accounts/includes/_register_form.html": 1,
+        "templates/accounts/onboarding_chat.html": 2,
+        "templates/accounts/onboarding_complete.html": 3,
+        "templates/accounts/onboarding_start.html": 1,
+        "templates/accounts/password_reset.html": 1,
+        "templates/comments/_qa_section.html": 1,
+        "templates/community/slack_join_denied.html": 1,
+        "templates/content/_gated_access_card.html": 1,
+        "templates/content/_starting_soon_card.html": 1,
+        "templates/content/_verify_email_required.html": 1,
+        "templates/content/about.html": 1,
+        "templates/content/course_detail.html": 2,
+        "templates/content/peer_review/certificate.html": 1,
+        "templates/content/peer_review/dashboard.html": 1,
+        "templates/content/peer_review/review_form.html": 1,
+        "templates/content/peer_review/submit.html": 2,
+        "templates/content/reader/_bottom_nav.html": 1,
+        "templates/content/request_a_call.html": 2,
+        "templates/content/sprints_index.html": 1,
+        "templates/content/workshops_list.html": 1,
+        "templates/email_app/unsubscribe_result.html": 1,
+        "templates/email_app/verify_result.html": 1,
+        "templates/events/_event_registration_card.html": 3,
+        "templates/events/_event_workshop_writeup.html": 1,
+        "templates/events/cancel_registration_result.html": 5,
+        "templates/events/event_series.html": 2,
+        "templates/events/events_calendar.html": 1,
+        "templates/events/events_list.html": 3,
+        "templates/events/join_unavailable.html": 1,
+        "templates/home.html": 1,
+        "templates/includes/footer.html": 1,
+        "templates/includes/header.html": 2,
+        "templates/includes/subscribe_form.html": 1,
+        "templates/includes/tag_rule_components.html": 2,
+        "templates/integrations/admin_sync.html": 2,
+        "templates/payments/pricing.html": 1,
+        "templates/plans/_checkpoint_card.html": 1,
+        "templates/plans/_plan_body.html": 7,
+        "templates/questionnaires/_response_form.html": 1,
+        "templates/voting/poll_detail.html": 1,
     },
     "legacy_px5_py25_pair": {  # Initial legacy debt: #1240.
         "templates/content/_verify_email_required.html": 1,
@@ -200,6 +348,25 @@ BASELINE: dict[str, dict[str, int]] = {
         "templates/events/_recording_materials.html": 1,
         "templates/events/events_calendar.html": 8,
         "templates/integrations/admin_sync_history.html": 3,
+    },
+    "rounded_2xl_outside_focus_panels": {  # Initial legacy debt: #1240.
+        "templates/accounts/onboarding_chat.html": 3,
+        "templates/accounts/onboarding_complete.html": 2,
+        "templates/accounts/onboarding_start.html": 2,
+        "templates/accounts/password_reset.html": 1,
+        "templates/content/_gated_access_card.html": 1,
+        "templates/content/about.html": 3,
+        "templates/email_app/unsubscribe_result.html": 1,
+        "templates/email_app/verify_result.html": 1,
+        "templates/events/cancel_registration_confirm.html": 1,
+        "templates/events/cancel_registration_result.html": 1,
+        "templates/events/host_management.html": 3,
+        "templates/events/host_management_denied.html": 1,
+        "templates/includes/footer.html": 1,
+        "templates/includes/subscribe_form.html": 1,
+        "templates/plans/cohort_board.html": 4,
+        "templates/plans/sprint_feedback_submitted.html": 1,
+        "templates/questionnaires/_response_form.html": 1,
     },
 }
 
@@ -371,6 +538,12 @@ class DesignSystemLintTest(SimpleTestCase):
             "public_tracking_wider": '<p class="tracking-wider">Label</p>',
             "grid_gap5": '<div class="grid gap-5"></div>',
             "handrolled_empty_state_signature": ('<div class="p-12 text-center">Nothing here</div>'),
+            "handrolled_primary_button": ('<a class="rounded-md bg-accent px-4 py-2 text-accent-foreground">Go</a>'),
+            "rounded_2xl_outside_focus_panels": ('<div class="rounded-2xl border border-border p-6">x</div>'),
+            "handrolled_pill_outside_member_badges": (
+                '<span class="inline-flex rounded-full bg-green-500/15 '
+                'px-2.5 py-1 text-xs font-medium text-green-500">Free</span>'
+            ),
         }
         for rule in RULES:
             with self.subTest(rule=rule.rule_id):
@@ -462,6 +635,87 @@ class DesignSystemLintTest(SimpleTestCase):
                 "handrolled_empty_state_signature",
                 "templates/public.html",
                 '<b class="p-120 text-centered">x</b>',
+                0,
+            ),
+            (
+                "handrolled_primary_button",
+                "templates/public.html",
+                '<a class="rounded-md bg-accent px-4 py-2 text-accent-foreground">Go</a>',
+                1,
+            ),
+            (
+                "handrolled_primary_button",
+                "templates/public.html",
+                "<a class=\"{% button_classes 'primary' %}\">Go</a>",
+                0,
+            ),
+            (
+                "handrolled_primary_button",
+                "templates/public.html",
+                '<span class="bg-accent/10 text-accent px-2.5">badge</span>',
+                0,
+            ),
+            (
+                "handrolled_primary_button",
+                "templates/public.html",
+                '<a class="bg-accent text-accent-foreground rounded-md">Go</a>',
+                0,
+            ),
+            (
+                "handrolled_primary_button",
+                "templates/studio/page.html",
+                '<a class="bg-accent px-4 text-accent-foreground">Go</a>',
+                0,
+            ),
+            (
+                "rounded_2xl_outside_focus_panels",
+                "templates/public.html",
+                '<div class="rounded-2xl border border-border p-6">x</div>',
+                1,
+            ),
+            (
+                "rounded_2xl_outside_focus_panels",
+                "templates/public.html",
+                '<div class="rounded-xl">x</div>',
+                0,
+            ),
+            (
+                "rounded_2xl_outside_focus_panels",
+                "templates/studio/page.html",
+                '<div class="rounded-2xl">x</div>',
+                0,
+            ),
+            (
+                "handrolled_pill_outside_member_badges",
+                "templates/public.html",
+                '<span class="inline-flex rounded-full bg-green-500/15 '
+                'px-2.5 py-1 text-xs font-medium text-green-500">Free</span>',
+                1,
+            ),
+            (
+                "handrolled_pill_outside_member_badges",
+                "templates/public.html",
+                '<a class="inline-flex min-h-[44px] items-center rounded-full '
+                'px-4 py-2 text-sm font-medium">All</a>',
+                0,
+            ),
+            (
+                "handrolled_pill_outside_member_badges",
+                "templates/public.html",
+                '<span class="inline-flex rounded-full bg-secondary px-2.5 '
+                'py-0.5 text-xs font-medium text-muted-foreground">tag</span>',
+                0,
+            ),
+            (
+                "handrolled_pill_outside_member_badges",
+                "templates/public.html",
+                '<span class="h-8 w-8 rounded-full bg-muted">avatar</span>',
+                0,
+            ),
+            (
+                "handrolled_pill_outside_member_badges",
+                "templates/includes/member_badge.html",
+                '<span class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium">x</span>',
                 0,
             ),
         )

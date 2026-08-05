@@ -32,38 +32,50 @@ BOOK = {
     ],
     # cohort-wide progress used for the summary strip
     "readers_count": 34,
-    "chapters_count": 7,
+    "chapters_count": 8,
 }
 
 # --- Chapter roadmap -----------------------------------------------------
 # status is from the *current viewer's* perspective in the prototype.
 
-# NOTE: chapter titles are placeholders shaped from the book's described scope
-# (model architecture → hardware → serving → optimization → production). Swap
-# for the real table of contents at implementation time.
+# Chapters are the real table of contents of "Inference Engineering" (Ch 0–7,
+# from the Baseten book page linked in the kickoff event). Deadlines are
+# illustrative — the actual cadence is decided together on the kickoff call.
 CHAPTERS = [
     {
-        "number": 1,
-        "title": "The Inference Stack",
+        "number": 0,
+        "title": "Inference",
         "deadline": "Aug 17",
         "week": "Week 1",
         "status": "done",
-        "readers_done": 31,
-        "notes_count": 22,
+        "readers_done": 32,
+        "notes_count": 24,
         "your_note": (
-            "Great map of the whole stack — model, hardware, serving software, "
-            "optimization. The framing that 'inference is a systems problem, "
-            "not a model problem' is the mental model I keep coming back to."
+            "Good framing of what 'inference' actually means as a systems "
+            "problem, not a model problem. Sets up the whole rest of the book."
+        ),
+    },
+    {
+        "number": 1,
+        "title": "Prerequisites",
+        "deadline": "Aug 24",
+        "week": "Week 2",
+        "status": "done",
+        "readers_done": 29,
+        "notes_count": 19,
+        "your_note": (
+            "Solid refresher on the terms and math the later chapters lean on. "
+            "The tokens/latency/throughput vocabulary is worth memorizing early."
         ),
     },
     {
         "number": 2,
-        "title": "Model Architecture for Inference",
-        "deadline": "Aug 24",
-        "week": "Week 2",
+        "title": "Architecture",
+        "deadline": "Aug 31",
+        "week": "Week 3",
         "status": "done",
-        "readers_done": 27,
-        "notes_count": 18,
+        "readers_done": 24,
+        "notes_count": 16,
         "your_note": (
             "The KV-cache walkthrough finally made attention memory cost click "
             "for me. Screenshotted the diagram of how sequence length blows up "
@@ -72,9 +84,9 @@ CHAPTERS = [
     },
     {
         "number": 3,
-        "title": "GPUs and Hardware",
-        "deadline": "Aug 31",
-        "week": "Week 3",
+        "title": "Hardware",
+        "deadline": "Sep 7",
+        "week": "Week 4",
         "status": "reading",
         "readers_done": 15,
         "notes_count": 11,
@@ -82,9 +94,9 @@ CHAPTERS = [
     },
     {
         "number": 4,
-        "title": "Serving Software and Runtimes",
-        "deadline": "Sep 7",
-        "week": "Week 4",
+        "title": "Software",
+        "deadline": "Sep 14",
+        "week": "Week 5",
         "status": "upcoming",
         "readers_done": 6,
         "notes_count": 4,
@@ -92,9 +104,9 @@ CHAPTERS = [
     },
     {
         "number": 5,
-        "title": "Optimization: Quantization and Batching",
-        "deadline": "Sep 14",
-        "week": "Week 5",
+        "title": "Techniques",
+        "deadline": "Sep 21",
+        "week": "Week 6",
         "status": "upcoming",
         "readers_done": 3,
         "notes_count": 2,
@@ -102,9 +114,9 @@ CHAPTERS = [
     },
     {
         "number": 6,
-        "title": "Latency, Throughput and Cost",
-        "deadline": "Sep 21",
-        "week": "Week 6",
+        "title": "Modalities",
+        "deadline": "Sep 28",
+        "week": "Week 7",
         "status": "upcoming",
         "readers_done": 2,
         "notes_count": 1,
@@ -112,9 +124,9 @@ CHAPTERS = [
     },
     {
         "number": 7,
-        "title": "Running Inference in Production",
-        "deadline": "Sep 28",
-        "week": "Week 7",
+        "title": "Production",
+        "deadline": "Oct 5",
+        "week": "Week 8",
         "status": "upcoming",
         "readers_done": 1,
         "notes_count": 0,
@@ -135,13 +147,13 @@ VIEWER_DONE, VIEWER_TOTAL, VIEWER_PCT = _progress()
 # --- Leaderboard ---------------------------------------------------------
 
 LEADERBOARD = [
-    {"rank": 1, "name": "Priya Nair", "handle": "priya", "chapters": 7,
-     "notes": 7, "streak": 3, "public": True, "you": False},
-    {"rank": 2, "name": "Marco Silva", "handle": "marco", "chapters": 6,
+    {"rank": 1, "name": "Priya Nair", "handle": "priya", "chapters": 8,
+     "notes": 8, "streak": 3, "public": True, "you": False},
+    {"rank": 2, "name": "Marco Silva", "handle": "marco", "chapters": 7,
      "notes": 6, "streak": 3, "public": True, "you": False},
-    {"rank": 3, "name": "Aisha Khan", "handle": "aisha", "chapters": 5,
+    {"rank": 3, "name": "Aisha Khan", "handle": "aisha", "chapters": 6,
      "notes": 7, "streak": 2, "public": True, "you": False},
-    {"rank": 4, "name": "You", "handle": "you", "chapters": 2,
+    {"rank": 4, "name": "You", "handle": "you", "chapters": 3,
      "notes": 2, "streak": 2, "public": True, "you": True},
     {"rank": 5, "name": "Tomás Ruiz", "handle": "tomas", "chapters": 2,
      "notes": 1, "streak": 1, "public": True, "you": False},
@@ -157,13 +169,13 @@ PUBLIC_PROFILE = {
     "name": "Priya Nair",
     "handle": "priya",
     "tagline": "ML engineer · serving models in prod, reading to cut latency",
-    "chapters_read": 7,
-    "notes_written": 7,
+    "chapters_read": 8,
+    "notes_written": 8,
     "streak": 3,
     "notes": [
         {
             "chapter": 3,
-            "chapter_title": "GPUs and Hardware",
+            "chapter_title": "Hardware",
             "posted": "2 days ago",
             "body": (
                 "The section on memory bandwidth vs compute finally made me "
@@ -182,7 +194,7 @@ PUBLIC_PROFILE = {
         },
         {
             "chapter": 2,
-            "chapter_title": "Model Architecture for Inference",
+            "chapter_title": "Architecture",
             "posted": "6 days ago",
             "body": (
                 "The KV-cache explanation is the cleanest I've seen. The point "

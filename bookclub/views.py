@@ -12,6 +12,8 @@ without a database.
 from django.http import Http404
 from django.shortcuts import render
 
+from content.access import LEVEL_MAIN, build_gated_access_copy
+
 from . import prototype_data as data
 
 
@@ -80,26 +82,31 @@ def _base_context(request):
     }
 
 
-def _gate(testid, icon, heading, description, value_items=None):
+def _gate(request, testid, icon, verb, noun, description=None, value_items=None):
     """Context for the canonical ``_gated_access_card.html`` partial.
 
-    Access decisions live in the view (design-system rule); the partial only
-    standardizes the visible hierarchy. Every Books gate is Main-tier, so the
-    pill reads "Main or above required".
+    Delegates heading/description/CTA/tier to
+    ``content.access.build_gated_access_copy`` — the single source of gated
+    copy (issue #1335) — so nothing here hand-assembles a heading or CTA
+    label. We add only the per-surface testid, icon, and optional value
+    manifest. Every Books gate is Main-tier.
     """
-    return {
+    copy = build_gated_access_copy(
+        gated_reason="insufficient_tier",
+        verb=verb,
+        noun=noun,
+        required_level=LEVEL_MAIN,
+        user=getattr(request, "user", None),
+        resource_url=request.get_full_path(),
+        upgrade_description=description,
+    )
+    copy.update({
         "gated_card_testid": testid,
         "gated_icon": icon,
-        "gated_heading": heading,
-        "gated_description": description,
-        "required_tier_name": "Main",
         "gated_value_items": value_items or [],
-        # Canonical paid-tier gate CTA, matching the rest of the site
-        # (content/access.py, content/views/pages.py): "/pricing" + "Upgrade".
-        "gated_cta_url": "/pricing",
-        "gated_cta_label": "Upgrade",
         "gated_cta_testid": testid + "-cta",
-    }
+    })
+    return copy
 
 
 def index(request):
@@ -128,10 +135,12 @@ def book_detail(request, slug):
     )
     ctx["meetings"] = data.BOOK["meetings"]
     ctx.update(_gate(
+        request,
         "book-guest-gate",
         "book-marked",
-        "Read along with the community",
-        "Follow the chapter roadmap, mark chapters read, share notes, and join "
+        "read this book with the community",
+        "book club",
+        description="Follow the chapter roadmap, mark chapters read, share notes, and join "
         "the weekly discussions as the group reads this book together.",
         value_items=[
             {"icon": "check-check", "label": "Mark chapters read"},
@@ -151,10 +160,12 @@ def progress(request, slug):
     ctx["book"] = book
     ctx["progress_rows"] = _progress_rows_for(ctx["is_member"])
     ctx.update(_gate(
+        request,
         "progress-guest-gate",
         "bar-chart-3",
-        "Track your reading with the group",
-        "Join to appear on the board, compare chapters read, and keep your "
+        "track your reading with the group",
+        "reading progress",
+        description="Join to appear on the board, compare chapters read, and keep your "
         "reading streak going.",
     ))
     return render(request, "bookclub/progress.html", ctx)
@@ -192,10 +203,12 @@ def chapter_detail(request, slug, number):
     # Own note pinned first (design-system own-record-first rule).
     ctx["chapter_notes"] = sorted(ch["notes"], key=lambda n: not n.get("you"))
     ctx.update(_gate(
+        request,
         "chapter-guest-gate",
         "book-marked",
-        "Join to read along",
-        "Mark this chapter read, write your own note, and read and comment on "
+        "read along and take notes",
+        "chapter",
+        description="Mark this chapter read, write your own note, and read and comment on "
         "everyone else's as the group works through the book.",
     ))
     return render(request, "bookclub/book_chapter.html", ctx)
@@ -212,10 +225,12 @@ def reader_profile(request, slug, handle):
     ctx["book"] = book
     ctx["profile"] = profile
     ctx.update(_gate(
+        request,
         "reader-guest-gate",
         "message-square",
-        "Join the conversation",
-        "Comment on notes and share your own as you read along.",
+        "join the conversation",
+        "reading profile",
+        description="Comment on notes and share your own as you read along.",
     ))
     return render(request, "bookclub/reader_profile.html", ctx)
 
@@ -246,10 +261,12 @@ def book_summary(request, slug):
             if c.get("summary")
         ]
     ctx.update(_gate(
+        request,
         "summary-guest-gate",
         "sparkles",
-        "Read the group's summary",
-        "The compiled summary is drawn from everyone's chapter notes. Join to "
+        "read the group's summary",
+        "summary",
+        description="The compiled summary is drawn from everyone's chapter notes. Join to "
         "read it in full.",
     ))
     return render(request, "bookclub/book_summary.html", ctx)

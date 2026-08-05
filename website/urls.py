@@ -42,6 +42,9 @@ urlpatterns = [
     path('', include('email_app.urls')),
     path('', include('plans.urls')),
     path('', include('community.urls')),
+    # Book Club — UI PROTOTYPE ONLY (bookclub/__init__.py). Remove or replace
+    # with the real app once the direction is signed off.
+    path('', include('bookclub.urls')),
     path('studio/', include('studio.urls')),
     path('', include('triggers.urls')),
     path('studio/triggers/', include('triggers.studio_urls')),

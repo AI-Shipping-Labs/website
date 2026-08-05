@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+
+{% block title %}{{ book.title }} | Book Club | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="relative overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+
+      <a href="{% url 'bookclub_index' %}" class="inline-flex items-center gap-1 text-sm text-accent hover:underline">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i> Book Club
+      </a>
+
+      <!-- Book header -->
+      <header class="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">
+        <div class="flex h-56 w-40 flex-shrink-0 flex-col justify-between rounded-xl border border-border bg-gradient-to-br {{ book.cover_accent }} to-card p-4">
+          <span class="text-xs uppercase tracking-wide text-muted-foreground">AI Shipping Labs</span>
+          <div>
+            <p class="text-xl font-semibold leading-tight">{{ book.title }}</p>
+            <p class="mt-1 text-xs text-muted-foreground">{{ book.author }}</p>
+          </div>
+        </div>
+        <div class="flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-sm uppercase tracking-wide text-muted-foreground">Book Club</span>
+            <span class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs uppercase tracking-wide text-muted-foreground"><i data-lucide="lock" class="h-3 w-3"></i>{{ book.access_level }}</span>
+          </div>
+          <h1 class="mt-1 text-3xl font-semibold tracking-tight">{{ book.title }}</h1>
+          <p class="mt-1 text-sm text-muted-foreground">{{ book.subtitle }} &middot; {{ book.author }}</p>
+          <p class="mt-4 max-w-2xl text-sm text-muted-foreground">{{ book.description }}</p>
+
+          <div class="mt-5 flex flex-wrap gap-2">
+            {% for link in book.links %}
+            <a href="{{ link.url }}" class="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground">
+              <i data-lucide="{{ link.icon }}" class="h-3.5 w-3.5"></i>{{ link.label }}
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+      </header>
+
+      <!-- Two-column body -->
+      <div class="mt-10 grid gap-8 lg:grid-cols-3">
+
+        <!-- Chapters (main) -->
+        <div class="lg:col-span-2">
+          <div class="mb-4 flex items-center justify-between">
+            <h2 class="text-lg font-semibold tracking-tight">Reading roadmap</h2>
+            <span class="text-sm text-muted-foreground">{{ viewer_done }}/{{ viewer_total }} chapters read</span>
+          </div>
+
+          <ol class="space-y-3">
+            {% for ch in chapters %}
+            <li class="rounded-2xl border {% if ch.status == 'reading' %}border-accent/50{% else %}border-border{% endif %} bg-card p-5">
+              <div class="flex items-start gap-4">
+                <!-- status marker -->
+                <div class="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border
+                  {% if ch.status == 'done' %}border-emerald-500/50 bg-emerald-500/10 text-emerald-400
+                  {% elif ch.status == 'reading' %}border-accent/50 bg-accent/10 text-accent
+                  {% else %}border-border text-muted-foreground{% endif %}">
+                  {% if ch.status == 'done' %}<i data-lucide="check" class="h-4 w-4"></i>
+                  {% else %}<span class="text-sm font-semibold">{{ ch.number }}</span>{% endif %}
+                </div>
+
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs uppercase tracking-wide text-muted-foreground">{{ ch.week }}</span>
+                    {% if ch.status == 'done' %}
+                    <span class="inline-flex items-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-400">Read</span>
+                    {% elif ch.status == 'reading' %}
+                    <span class="inline-flex items-center rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-xs text-accent">Reading now</span>
+                    {% else %}
+                    <span class="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">Upcoming</span>
+                    {% endif %}
+                  </div>
+
+                  <h3 class="mt-1 font-semibold">Ch. {{ ch.number }} — {{ ch.title }}</h3>
+
+                  <div class="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
+                    <span class="inline-flex items-center gap-1"><i data-lucide="calendar-clock" class="h-3.5 w-3.5"></i>Due {{ ch.deadline }}</span>
+                    <span class="inline-flex items-center gap-1"><i data-lucide="users" class="h-3.5 w-3.5"></i>{{ ch.readers_done }} read</span>
+                    <span class="inline-flex items-center gap-1"><i data-lucide="message-square" class="h-3.5 w-3.5"></i>{{ ch.notes_count }} notes</span>
+                  </div>
+
+                  {% if ch.your_note %}
+                  <div class="mt-3 rounded-lg border border-border bg-background/60 p-3">
+                    <p class="mb-1 text-xs font-medium text-muted-foreground">Your note</p>
+                    <p class="text-sm text-foreground/90">{{ ch.your_note }}</p>
+                  </div>
+                  {% endif %}
+
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    {% if ch.status == 'done' %}
+                    <button type="button" class="{% button_classes 'secondary' size='sm' %}">Edit note</button>
+                    <a href="#" class="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:border-accent/50 hover:text-foreground"><i data-lucide="sparkles" class="h-3.5 w-3.5"></i>Chapter summary</a>
+                    <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-emerald-400"><i data-lucide="check-circle-2" class="h-3.5 w-3.5"></i>Marked read</span>
+                    {% elif ch.status == 'reading' %}
+                    <button type="button" class="{% button_classes 'primary' size='sm' %}">Mark as read</button>
+                    <button type="button" class="{% button_classes 'secondary' size='sm' %}">Add note</button>
+                    {% else %}
+                    <button type="button" class="{% button_classes 'secondary' size='sm' %}">Mark as read</button>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </li>
+            {% endfor %}
+          </ol>
+        </div>
+
+        <!-- Sidebar -->
+        <aside class="space-y-6">
+
+          <!-- Your progress -->
+          <div class="rounded-2xl border border-border bg-card p-5">
+            <p class="text-sm font-semibold">Your progress</p>
+            <div class="mt-4 flex items-center gap-4">
+              <div class="relative h-20 w-20 flex-shrink-0">
+                <svg viewBox="0 0 36 36" class="h-20 w-20 -rotate-90">
+                  <path class="text-secondary" stroke="currentColor" stroke-width="3.5" fill="none"
+                    d="M18 2.5 a 15.5 15.5 0 0 1 0 31 a 15.5 15.5 0 0 1 0 -31"/>
+                  <path class="text-accent" stroke="currentColor" stroke-width="3.5" fill="none" stroke-linecap="round"
+                    stroke-dasharray="{{ viewer_pct }}, 100"
+                    d="M18 2.5 a 15.5 15.5 0 0 1 0 31 a 15.5 15.5 0 0 1 0 -31"/>
+                </svg>
+                <div class="absolute inset-0 flex items-center justify-center">
+                  <span class="text-lg font-semibold">{{ viewer_pct }}%</span>
+                </div>
+              </div>
+              <div class="text-sm text-muted-foreground">
+                <p><span class="font-semibold text-foreground">{{ viewer_done }}</span> of {{ viewer_total }} chapters read</p>
+                <p class="mt-1 inline-flex items-center gap-1"><i data-lucide="flame" class="h-4 w-4 text-accent"></i>2-week streak</p>
+              </div>
+            </div>
+            <div class="mt-4 flex items-center justify-between rounded-lg border border-border bg-background/60 p-3">
+              <span class="text-sm text-muted-foreground">Reading profile</span>
+              <label class="inline-flex cursor-pointer items-center gap-2 text-sm">
+                <span class="text-foreground">Public</span>
+                <span class="relative inline-block h-5 w-9 rounded-full bg-accent">
+                  <span class="absolute right-0.5 top-0.5 h-4 w-4 rounded-full bg-accent-foreground"></span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Leaderboard -->
+          <div class="rounded-2xl border border-border bg-card p-5">
+            <div class="mb-3 flex items-center justify-between">
+              <p class="text-sm font-semibold">Leaderboard</p>
+              <a href="{% url 'bookclub_leaderboard' slug=book.slug %}" class="text-xs text-accent hover:underline">View all</a>
+            </div>
+            <ul class="space-y-1">
+              {% for row in leaderboard_top %}
+              <li class="flex items-center gap-3 rounded-lg px-2 py-2 {% if row.you %}bg-accent/10{% endif %}">
+                <span class="w-5 text-center text-sm font-semibold {% if row.rank == 1 %}text-accent{% else %}text-muted-foreground{% endif %}">{{ row.rank }}</span>
+                <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-border bg-background text-xs font-semibold">{{ row.name|slice:":1" }}</div>
+                <span class="min-w-0 flex-1 truncate text-sm {% if row.you %}font-semibold text-foreground{% else %}text-foreground/90{% endif %}">{{ row.name }}</span>
+                <span class="text-xs text-muted-foreground">{{ row.chapters }}/{{ book.chapters_count }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+
+          <!-- Summaries -->
+          <div class="rounded-2xl border border-border bg-card p-5">
+            <div class="mb-1 flex items-center gap-2">
+              <i data-lucide="sparkles" class="h-4 w-4 text-accent"></i>
+              <p class="text-sm font-semibold">Summaries</p>
+            </div>
+            <p class="text-xs text-muted-foreground">Compiled from everyone's chapter notes. Published per chapter as we finish, plus a full book summary at the end.</p>
+            <ul class="mt-3 space-y-1.5 text-sm">
+              <li class="flex items-center justify-between">
+                <span class="inline-flex items-center gap-1.5 text-foreground/90"><i data-lucide="check" class="h-3.5 w-3.5 text-emerald-400"></i>Ch. 1 summary</span>
+                <a href="#" class="text-xs text-accent hover:underline">Read</a>
+              </li>
+              <li class="flex items-center justify-between">
+                <span class="inline-flex items-center gap-1.5 text-foreground/90"><i data-lucide="check" class="h-3.5 w-3.5 text-emerald-400"></i>Ch. 2 summary</span>
+                <a href="#" class="text-xs text-accent hover:underline">Read</a>
+              </li>
+              <li class="flex items-center justify-between text-muted-foreground">
+                <span class="inline-flex items-center gap-1.5"><i data-lucide="clock" class="h-3.5 w-3.5"></i>Full book summary</span>
+                <span class="text-xs">At the end</span>
+              </li>
+            </ul>
+            <!-- Organizer-only affordance -->
+            <button type="button" class="{% button_classes 'secondary' size='sm' extra='mt-3 w-full' %}">
+              <i data-lucide="wand-2" class="mr-1 h-3.5 w-3.5"></i>Compile Ch. 3 summary from 11 notes
+            </button>
+          </div>
+
+          <!-- Meetings / event series -->
+          <div class="rounded-2xl border border-border bg-card p-5">
+            <p class="text-sm font-semibold">Weekly meetings</p>
+            <p class="mt-1 text-sm text-muted-foreground">{{ book.meeting_cadence }}</p>
+            <p class="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <i data-lucide="link" class="h-3.5 w-3.5"></i>Linked event series
+            </p>
+            <div class="mt-2 space-y-2">
+              <div class="flex items-center justify-between rounded-lg border border-accent/40 bg-accent/5 px-3 py-2">
+                <div>
+                  <p class="text-sm font-medium">Ch. 3 discussion</p>
+                  <p class="text-xs text-muted-foreground">Thu Aug 28 · 18:00 CET</p>
+                </div>
+                <a href="#" class="text-xs text-accent hover:underline">RSVP</a>
+              </div>
+              <div class="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                <div>
+                  <p class="text-sm font-medium">Ch. 4 discussion</p>
+                  <p class="text-xs text-muted-foreground">Thu Sep 4 · 18:00 CET</p>
+                </div>
+                <a href="#" class="text-xs text-accent hover:underline">RSVP</a>
+              </div>
+            </div>
+          </div>
+
+        </aside>
+      </div>
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+  {% include "bookclub/_proto_banner.html" %}
+</main>
+{% endblock %}

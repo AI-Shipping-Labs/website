@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+
+{% block title %}Book Club | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="relative overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
+
+      <header class="max-w-2xl">
+        <p class="text-sm uppercase tracking-wide text-muted-foreground">Community &middot; Book Club</p>
+        <h1 class="mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">Read together, ship together</h1>
+        <p class="mt-4 text-base text-muted-foreground">
+          Every few weeks we pick a book, break it into chapters with weekly deadlines,
+          and meet to share what we learned. Track your progress, take notes, climb the
+          leaderboard, and read what everyone else is thinking.
+        </p>
+      </header>
+
+      <!-- Active book -->
+      <div class="mt-12">
+        <p class="mb-4 text-sm uppercase tracking-wide text-muted-foreground">Reading now</p>
+        <a href="{% url 'bookclub_book_detail' slug=book.slug %}"
+           class="group block rounded-2xl border border-border bg-card p-6 transition-colors hover:border-accent/50 sm:p-8">
+          <div class="flex flex-col gap-6 sm:flex-row">
+            <!-- Cover -->
+            <div class="flex h-48 w-36 flex-shrink-0 flex-col justify-between rounded-xl border border-border bg-gradient-to-br {{ book.cover_accent }} to-card p-4">
+              <span class="text-xs uppercase tracking-wide text-muted-foreground">AI Shipping Labs</span>
+              <div>
+                <p class="text-lg font-semibold leading-tight">{{ book.title }}</p>
+                <p class="mt-1 text-xs text-muted-foreground">{{ book.author }}</p>
+              </div>
+            </div>
+            <!-- Meta -->
+            <div class="flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="inline-flex items-center rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-xs uppercase tracking-wide text-accent">In progress</span>
+                <span class="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs uppercase tracking-wide text-muted-foreground">{{ book.chapters_count }} chapters</span>
+                <span class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs uppercase tracking-wide text-muted-foreground"><i data-lucide="lock" class="h-3 w-3"></i>{{ book.access_level }}</span>
+              </div>
+              <h2 class="mt-3 text-2xl font-semibold tracking-tight group-hover:text-accent">{{ book.title }}</h2>
+              <p class="text-sm text-muted-foreground">{{ book.subtitle }} &middot; {{ book.author }}</p>
+              <p class="mt-3 text-sm text-muted-foreground line-clamp-3">{{ book.description }}</p>
+              <div class="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                <span class="inline-flex items-center gap-1.5"><i data-lucide="calendar" class="h-4 w-4"></i>{{ book.meeting_cadence }}</span>
+                <span class="inline-flex items-center gap-1.5"><i data-lucide="users" class="h-4 w-4"></i>{{ book.readers_count }} readers</span>
+                <span class="inline-flex items-center gap-1.5"><i data-lucide="flag" class="h-4 w-4"></i>Starts {{ book.start_label }}</span>
+              </div>
+              <span class="mt-6 inline-flex items-center gap-1 text-sm font-medium text-accent">
+                View book &amp; join <i data-lucide="arrow-right" class="h-4 w-4"></i>
+              </span>
+            </div>
+          </div>
+        </a>
+      </div>
+
+      <!-- How it works -->
+      <div class="mt-14">
+        <h2 class="text-lg font-semibold tracking-tight">How it works</h2>
+        <div class="mt-5 grid gap-4 sm:grid-cols-3">
+          <div class="rounded-2xl border border-border bg-card p-5">
+            <div class="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-accent"><i data-lucide="list-checks" class="h-5 w-5"></i></div>
+            <h3 class="mt-3 text-sm font-semibold">Follow the roadmap</h3>
+            <p class="mt-1 text-sm text-muted-foreground">Each chapter has a suggested weekly deadline. Mark chapters as read as you go.</p>
+          </div>
+          <div class="rounded-2xl border border-border bg-card p-5">
+            <div class="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-accent"><i data-lucide="pen-line" class="h-5 w-5"></i></div>
+            <h3 class="mt-3 text-sm font-semibold">Share your notes</h3>
+            <p class="mt-1 text-sm text-muted-foreground">Jot down takeaways per chapter. Make your reading profile public so others can read and comment.</p>
+          </div>
+          <div class="rounded-2xl border border-border bg-card p-5">
+            <div class="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-accent"><i data-lucide="trophy" class="h-5 w-5"></i></div>
+            <h3 class="mt-3 text-sm font-semibold">Climb the leaderboard</h3>
+            <p class="mt-1 text-sm text-muted-foreground">Just like community sprints — see who's read what and keep your streak alive.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+  {% include "bookclub/_proto_banner.html" %}
+</main>
+{% endblock %}

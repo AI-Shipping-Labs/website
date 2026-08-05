@@ -65,7 +65,7 @@
           <a href="/resources" data-testid="nav-resources-link-curated-links" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Curated Links</a>
           {% endcomment %}
           {% if has_published_downloads %}
-          <a href="/downloads" data-testid="nav-resources-link-downloads" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Downloads</a>
+          <a href="/downloads" data-testid="nav-resources-link-downloads" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Downloadables</a>
           {% endif %}
           {% for page in marketing_nav.resources %}
           <a href="{{ page.get_absolute_url }}" data-testid="nav-resources-link-marketing-{{ forloop.counter }}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">{{ page.nav_text }}</a>
@@ -252,7 +252,7 @@
           <a href="/resources" data-testid="mobile-nav-resources-link-curated-links" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Curated Links</a>
           {% endcomment %}
           {% if has_published_downloads %}
-          <a href="/downloads" data-testid="mobile-nav-resources-link-downloads" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Downloads</a>
+          <a href="/downloads" data-testid="mobile-nav-resources-link-downloads" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Downloadables</a>
           {% endif %}
           {% for page in marketing_nav.resources %}
           <a href="{{ page.get_absolute_url }}" data-testid="mobile-nav-resources-link-marketing-{{ forloop.counter }}" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">{{ page.nav_text }}</a>

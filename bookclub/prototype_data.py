@@ -16,6 +16,7 @@ BOOK = {
     # system's {% member_access_badge %}. 20 = Main (LEVEL_MAIN); the exact
     # tier is a grooming decision.
     "required_level": 20,
+    "cover_image": "bookclub/inference-engineering.png",  # real cover (Baseten)
     "cover_accent": "from-accent/30",
     "description": (
         "A book for engineers who want to understand the technologies behind "

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% load accounts_extras %}
 {% load member_badges %}
 
@@ -17,8 +18,8 @@
         <h1 class="mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">Read together, ship together</h1>
         <p class="mt-4 text-base text-muted-foreground">
           Every few weeks we pick a book, break it into chapters with weekly deadlines,
-          and meet to share what we learned. Track your progress, take notes, climb the
-          leaderboard, and read what everyone else is thinking.
+          and meet to share what we learned. Track your progress, take notes, and read
+          what everyone else is thinking.
         </p>
       </header>
 
@@ -29,13 +30,9 @@
            class="group block rounded-2xl border border-border bg-card p-6 transition-colors hover:border-accent/50 sm:p-8">
           <div class="flex flex-col gap-6 sm:flex-row">
             <!-- Cover -->
-            <div class="flex h-48 w-36 flex-shrink-0 flex-col justify-between rounded-xl border border-border bg-gradient-to-br {{ book.cover_accent }} to-card p-4">
-              <span class="text-xs uppercase tracking-wide text-muted-foreground">AI Shipping Labs</span>
-              <div>
-                <p class="text-lg font-semibold leading-tight">{{ book.title }}</p>
-                <p class="mt-1 text-xs text-muted-foreground">{{ book.author }}</p>
-              </div>
-            </div>
+            <img src="{% static book.cover_image %}" alt="{{ book.title }} book cover"
+                 class="h-52 w-auto flex-shrink-0 self-start object-contain drop-shadow-lg">
+
             <!-- Meta -->
             <div class="flex-1">
               <div class="flex flex-wrap items-center gap-2">
@@ -75,9 +72,9 @@
             <p class="mt-1 text-sm text-muted-foreground">Jot down takeaways per chapter. Make your reading profile public so others can read and comment.</p>
           </div>
           <div class="rounded-lg border border-border bg-card p-6">
-            <div class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent"><i data-lucide="calendar-check" class="h-5 w-5" aria-hidden="true"></i></div>
-            <h3 class="mt-4 text-sm font-semibold">Meet every week</h3>
-            <p class="mt-1 text-sm text-muted-foreground">Join the weekly session to talk through each chapter and hear what everyone else took away.</p>
+            <div class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent"><i data-lucide="users" class="h-5 w-5" aria-hidden="true"></i></div>
+            <h3 class="mt-4 text-sm font-semibold">Read together</h3>
+            <p class="mt-1 text-sm text-muted-foreground">See how everyone's progressing and keep your streak going to stay on pace with the group.</p>
           </div>
         </div>
       </div>

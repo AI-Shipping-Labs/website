@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% load accounts_extras %}
 {% load member_badges %}
 
@@ -18,13 +19,9 @@
 
       <!-- Book header -->
       <header class="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">
-        <div class="flex h-56 w-40 flex-shrink-0 flex-col justify-between rounded-xl border border-border bg-gradient-to-br {{ book.cover_accent }} to-card p-4">
-          <span class="text-xs uppercase tracking-wide text-muted-foreground">AI Shipping Labs</span>
-          <div>
-            <p class="text-xl font-semibold leading-tight">{{ book.title }}</p>
-            <p class="mt-1 text-xs text-muted-foreground">{{ book.author }}</p>
-          </div>
-        </div>
+        <img src="{% static book.cover_image %}" alt="{{ book.title }} book cover"
+             class="h-60 w-auto flex-shrink-0 self-start object-contain drop-shadow-lg">
+
         <div class="flex-1">
           <div class="flex flex-wrap items-center gap-2">
             <span class="text-sm uppercase tracking-wide text-muted-foreground">Book Club</span>

@@ -77,11 +77,17 @@
           </div>
           {% endif %}
 
-          <!-- Add comment -->
+          <!-- Add comment (members) / sign-in prompt (guests) -->
+          {% if is_member %}
           <div class="mt-4 flex items-center gap-2">
             <input type="text" placeholder="Add a comment…" class="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none">
             <button type="button" class="{% button_classes 'secondary' size='sm' %}">Post</button>
           </div>
+          {% else %}
+          <p class="mt-4 text-xs text-muted-foreground">
+            <a href="{{ header_login_url|default:'/accounts/login' }}" class="text-accent hover:underline">Sign in</a> to comment.
+          </p>
+          {% endif %}
         </article>
         {% endfor %}
       </div>

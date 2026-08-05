@@ -1,4 +1,16 @@
-<div class="fixed bottom-4 right-4 z-[60] flex items-center gap-2 rounded-full border border-accent/40 bg-accent/10 px-4 py-2 text-xs font-medium text-accent shadow-lg backdrop-blur">
-  <i data-lucide="flask-conical" class="h-4 w-4"></i>
-  UI prototype &middot; data is fake
+<div class="fixed bottom-4 right-4 z-[60] flex items-center gap-3 rounded-full border border-accent/40 bg-accent/10 px-4 py-2 text-xs font-medium text-accent shadow-lg backdrop-blur">
+  <span class="inline-flex items-center gap-1.5">
+    <i data-lucide="flask-conical" class="h-4 w-4"></i>UI prototype
+  </span>
+  <span class="h-3 w-px bg-accent/30"></span>
+  {# Role preview toggle — the prototype has no real auth. #}
+  <span class="inline-flex items-center gap-1 text-[11px]">
+    {% if is_member %}
+    <span class="rounded-full bg-accent px-2 py-0.5 text-accent-foreground">Member</span>
+    <a href="?view=guest" class="rounded-full px-2 py-0.5 text-accent/80 hover:text-accent">Guest</a>
+    {% else %}
+    <a href="?view=member" class="rounded-full px-2 py-0.5 text-accent/80 hover:text-accent">Member</a>
+    <span class="rounded-full bg-accent px-2 py-0.5 text-accent-foreground">Guest</span>
+    {% endif %}
+  </span>
 </div>

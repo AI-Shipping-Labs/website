@@ -1,0 +1,101 @@
+---
+name: ui-prototype
+description: Build a fast, clickable UI prototype for a new feature to validate direction BEFORE implementing it. Use when the user says "prototype", "mock up the UI", "let's see the UI first", "figure out the mechanics before we build", or wants a throwaway UI on a branch. Deliberately skips the usual PROCESS.md agent pipeline and works inline; also files a raw tracking issue so nothing is forgotten.
+metadata:
+  short-description: Clickable UI prototype on a branch, inline, before implementation
+---
+
+# UI Prototype
+
+Purpose: put a real, clickable UI in front of the user to agree on direction before writing the real feature. The prototype is throwaway scaffolding — it exists to figure out the mechanics (screens, flow, data shapes, copy), not to ship.
+
+## When this applies
+
+The user wants to see and click a UI for a not-yet-built feature. Signals: "prototype", "mock up", "let's do the UI first", "figure out the mechanics", "make sure we go in the right direction", "for now don't follow the process, do it inline".
+
+## Two things happen in parallel
+
+1. File a raw tracking issue (intake), then keep working. The issue is where the real feature and everything out of prototype scope is remembered.
+2. Build the prototype inline on a branch. No PM/SWE/tester/oncall agents, no acceptance cycle. This is the one place the normal PROCESS.md pipeline is deliberately bypassed — say so explicitly to the user.
+
+Do not launch the grooming/implementation pipeline from a prototype session. The issue you file is for a later, separate run.
+
+## Process
+
+### 1. Branch
+
+Create a dedicated branch, e.g. `prototype/<feature>`. Commit as you go with clear messages. No PR — this is exploratory (real work later merges per the normal flow).
+
+### 2. Learn the design system FIRST — do not hand-roll UI
+
+The single most repeated correction: reuse the real design system instead of inventing styles. Before writing any template, find the canonical component and use it.
+
+- Base and tokens: templates extend `base.html`. Color tokens are HSL CSS vars: `background`, `card`, `card-foreground`, `primary`, `muted`, `muted-foreground`, `accent`, `accent-foreground`, `border`. Use `hero-gradient`, `prose`, etc. Include `includes/header.html` and `includes/footer.html`.
+- Buttons: `{% load accounts_extras %}` then `{% button_classes 'primary'|'secondary' size='sm'|'md'|'lg' extra='...' %}`. Never hardcode button classes.
+- Badges/pills: `{% load member_badges %}` — this is the badge design system. Do NOT hand-roll `<span class="... rounded-full ...">` pills.
+  - `{% member_access_badge required_level testid="..." %}` — the standard tier/access badge (lock icon + "Main or above" etc). Use this for access levels.
+  - `{% member_status_badge "In progress" status="active" %}` — status pills. `status` maps to a semantic tone (active/open/registered -> green, upcoming -> blue/info, past/ended -> muted).
+  - `{% member_label_badge "text" tone="muted"|"accent" icon="..." %}` — generic labels.
+  - Tones live in `content/templatetags/member_badges.py` (`TONE_CLASSES`, `STATUS_TONES`). Check there before inventing a tone/status string.
+- Cards: match the info-card role (Issue #1339): `rounded-lg border border-border p-6` plus `bg-card` (or `bg-background` on a `bg-card` band). Icon chips are filled: `inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent` with a `h-5 w-5` lucide icon. Static (non-navigating) cards get NO `group`, hover, or arrow. See `templates/content/_info_card_classes.html`.
+- How to discover: `grep -rn` in `templates/` and `*/templatetags/` for an existing partial/tag before building anything. If the site already renders the thing you need (a badge, a card, a leaderboard row), copy that pattern.
+
+### 3. Access levels are standard tiers
+
+Content-like surfaces carry a standard access level, rendered via `{% member_access_badge %}`. Numeric levels (`content/access.py`): Open=0, Registered=5, Basic=10, Main=20, Premium=30. Store the numeric `required_level` in prototype data and pass it to the badge. The exact tier is a grooming decision — note it as a placeholder.
+
+### 4. Copy: member-facing, no internal jargon
+
+Write UI copy for members, not for us. Do not reference internal mechanics or other internal features by name (e.g. do NOT say "just like community sprints"). Describe the value in the member's terms (progress, streak, finishing together). No markdown in event-style descriptions/emails.
+
+### 5. URL convention: no trailing slashes
+
+The site normalizes to slash-less canonical URLs via `integrations.middleware.RemoveTrailingSlashMiddleware`. Define URL patterns WITHOUT trailing slashes (`path("books", ...)`, `path("books/<slug:slug>", ...)`). A trailing-slash pattern 301s to the slash-less form and then 404s.
+
+### 6. Nav lives in two places
+
+`templates/includes/header.html` defines the primary nav TWICE — desktop dropdown and mobile menu. To add a link (e.g. under Resources) you must edit BOTH blocks and preserve the distinct `data-testid` prefixes (`nav-resources-link-*` and `mobile-nav-resources-link-*`). Verify both render. (A de-duplication refactor is tracked separately; until it lands, edit both.)
+
+### 7. Seed from real data
+
+When the feature has a real-world anchor, pull real data rather than inventing it. Check prod (`uv run asl ...`, see `ai-shipping-labs-prod-api`) and follow links to their source (e.g. take the announced event, then fetch the linked book page for the real table of contents). Keep it clearly fake where it must be (fake users/notes), real where it anchors direction (title, author, chapters).
+
+### 8. Prototype mechanics (keep it throwaway)
+
+- A lightweight module, NOT a full app: `foo/__init__.py` (with a header comment saying PROTOTYPE ONLY), `foo/prototype_data.py` (all context hardcoded), `foo/views.py` (plain function views rendering templates), `foo/urls.py`. No models, no migrations, no auth, no writes, no INSTALLED_APPS entry needed — plain views + templates found via APP_DIRS/global `templates/`.
+- Wire it into the root URLconf (`website/urls.py`) with a comment marking it prototype-only.
+- Templates in `templates/foo/`, extending `base.html`, including header/footer.
+- Add a small fixed "UI prototype — data is fake" banner partial so it is never mistaken for real.
+
+### 9. Show every viewer state, not just the happy path
+
+The user will want to see how the surface looks to different viewers — at minimum authenticated (member) vs logged-out (guest), and often a paid/gated tier and staff/organizer role. Build these in from the start:
+
+- Drive the state from the real `request.user.is_authenticated`, but add a `?view=member` / `?view=guest` override so both can be previewed without actually logging in (the prototype has no real auth).
+- Add a small role toggle to the prototype banner so the user can flip states in one click.
+- Gate member-only affordances behind the flag: progress/streak, "your note", mark-as-read, profile-visibility toggle, comment inputs, organizer/staff actions. Guests get a membership/sign-in CTA in each of those spots and see public social-proof (read counts, leaderboard) but not a personal "You" row.
+
+### 10. Verify visually with Playwright
+
+`manage.py check`, then run the server and screenshot every page (dark mode). Dismiss the site's "Optional analytics" consent modal before shooting (`get_by_role("button", name="Keep analytics off").click()`) or it overlaps content. Read the screenshots and confirm the design matches the site before showing the user.
+
+### Gotcha: "it still looks old" after a template edit
+
+Local `.env` usually sets `DEBUG=False`, which enables Django's cached template loader. Template edits then do NOT appear until the server is restarted. After editing a template, restart the dev server (kill + rerun `manage.py runserver`). If the user says a change "still looks old", this is almost always why — restart, then hard-refresh.
+
+## The tracking issue
+
+File it raw with the `needs grooming` label (orchestrator files intake; PM grooms later — do not groom inline). Capture the whole feature AND everything out of prototype scope so it is not forgotten, for example:
+
+- Admin API and member API surfaces (prototypes have neither).
+- Event/event-series linkage and any per-chapter/per-item events (constrain them to the linked series only if that is the intent).
+- Data-source decision: is the entity git-content-synced (slugs must be content-derivable) or Studio-managed (auto-ids fine)? See `project_content_vs_studio_sources`.
+- Summaries / aggregations / gamification and any "at the end" deliverables.
+- Standard access-level enforcement.
+- Reuse notes: which existing subsystems the real build should lean on (tiers, sprints leaderboard, events, comments, design-system tags).
+
+Also file separate small cleanup issues for real problems you trip over (e.g. nav duplication), labeled `needs grooming`, without fixing them in the prototype.
+
+## Deliverable to the user
+
+Branch name, the routes to click, screenshots, the tracking issue link, and any placeholders/liberties you took (invented copy, guessed tier) called out explicitly so the user can correct direction.

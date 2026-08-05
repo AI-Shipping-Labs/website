@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
+{% load member_badges %}
 
 {% block title %}{{ book.title }} | Book Club | {{ site_name }}{% endblock %}
 
@@ -27,7 +28,7 @@
         <div class="flex-1">
           <div class="flex flex-wrap items-center gap-2">
             <span class="text-sm uppercase tracking-wide text-muted-foreground">Book Club</span>
-            <span class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs uppercase tracking-wide text-muted-foreground"><i data-lucide="lock" class="h-3 w-3"></i>{{ book.access_level }}</span>
+            {% member_access_badge book.required_level testid="book-access-badge" %}
           </div>
           <h1 class="mt-1 text-3xl font-semibold tracking-tight">{{ book.title }}</h1>
           <p class="mt-1 text-sm text-muted-foreground">{{ book.subtitle }} &middot; {{ book.author }}</p>
@@ -43,6 +44,25 @@
         </div>
       </header>
 
+      {% if not is_member %}
+      <!-- Guest gate CTA -->
+      <aside class="mt-8 rounded-lg border border-accent/40 bg-accent/5 p-5" data-testid="book-guest-gate">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-start gap-3">
+            <i data-lucide="lock" class="mt-0.5 h-5 w-5 flex-shrink-0 text-accent"></i>
+            <div>
+              <p class="text-sm font-semibold">Join the book club to take part</p>
+              <p class="text-sm text-muted-foreground">This book club is for Main members. Track your progress, take notes per chapter, and join the leaderboard.</p>
+            </div>
+          </div>
+          <div class="flex flex-shrink-0 gap-2">
+            <a href="/pricing" class="{% button_classes 'primary' size='sm' %}">Become a member</a>
+            <a href="{{ header_login_url|default:'/accounts/login' }}" class="{% button_classes 'secondary' size='sm' %}">Sign in</a>
+          </div>
+        </div>
+      </aside>
+      {% endif %}
+
       <!-- Two-column body -->
       <div class="mt-10 grid gap-8 lg:grid-cols-3">
 
@@ -50,7 +70,7 @@
         <div class="lg:col-span-2">
           <div class="mb-4 flex items-center justify-between">
             <h2 class="text-lg font-semibold tracking-tight">Reading roadmap</h2>
-            <span class="text-sm text-muted-foreground">{{ viewer_done }}/{{ viewer_total }} chapters read</span>
+            {% if is_member %}<span class="text-sm text-muted-foreground">{{ viewer_done }}/{{ viewer_total }} chapters read</span>{% endif %}
           </div>
 
           <ol class="space-y-3">
@@ -86,7 +106,7 @@
                     <span class="inline-flex items-center gap-1"><i data-lucide="message-square" class="h-3.5 w-3.5"></i>{{ ch.notes_count }} notes</span>
                   </div>
 
-                  {% if ch.your_note %}
+                  {% if is_member and ch.your_note %}
                   <div class="mt-3 rounded-lg border border-border bg-background/60 p-3">
                     <p class="mb-1 text-xs font-medium text-muted-foreground">Your note</p>
                     <p class="text-sm text-foreground/90">{{ ch.your_note }}</p>
@@ -94,6 +114,7 @@
                   {% endif %}
 
                   <div class="mt-3 flex flex-wrap gap-2">
+                    {% if is_member %}
                     {% if ch.status == 'done' %}
                     <button type="button" class="{% button_classes 'secondary' size='sm' %}">Edit note</button>
                     <a href="#" class="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:border-accent/50 hover:text-foreground"><i data-lucide="sparkles" class="h-3.5 w-3.5"></i>Chapter summary</a>
@@ -103,6 +124,10 @@
                     <button type="button" class="{% button_classes 'secondary' size='sm' %}">Add note</button>
                     {% else %}
                     <button type="button" class="{% button_classes 'secondary' size='sm' %}">Mark as read</button>
+                    {% endif %}
+                    {% else %}
+                    {# Guest: read-only. Progress/notes require membership. #}
+                    <span class="inline-flex items-center gap-1 text-xs text-muted-foreground"><i data-lucide="lock" class="h-3.5 w-3.5"></i>Join to mark read and take notes</span>
                     {% endif %}
                   </div>
                 </div>
@@ -115,7 +140,8 @@
         <!-- Sidebar -->
         <aside class="space-y-6">
 
-          <!-- Your progress -->
+          <!-- Your progress (member) / Join CTA (guest) -->
+          {% if is_member %}
           <div class="rounded-2xl border border-border bg-card p-5">
             <p class="text-sm font-semibold">Your progress</p>
             <div class="mt-4 flex items-center gap-4">
@@ -146,6 +172,14 @@
               </label>
             </div>
           </div>
+          {% else %}
+          <div class="rounded-2xl border border-border bg-card p-5 text-center" data-testid="sidebar-join-cta">
+            <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent"><i data-lucide="book-marked" class="h-5 w-5"></i></div>
+            <p class="mt-3 text-sm font-semibold">Track your reading</p>
+            <p class="mt-1 text-sm text-muted-foreground">Join to mark chapters read, take notes, and see your progress here.</p>
+            <a href="/pricing" class="{% button_classes 'primary' size='sm' extra='mt-4 w-full' %}">Become a member</a>
+          </div>
+          {% endif %}
 
           <!-- Leaderboard -->
           <div class="rounded-2xl border border-border bg-card p-5">
@@ -186,10 +220,12 @@
                 <span class="text-xs">At the end</span>
               </li>
             </ul>
+            {% if is_member %}
             <!-- Organizer-only affordance -->
             <button type="button" class="{% button_classes 'secondary' size='sm' extra='mt-3 w-full' %}">
               <i data-lucide="wand-2" class="mr-1 h-3.5 w-3.5"></i>Compile Ch. 3 summary from 11 notes
             </button>
+            {% endif %}
           </div>
 
           <!-- Meetings / event series -->

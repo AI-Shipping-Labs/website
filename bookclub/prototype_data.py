@@ -12,7 +12,10 @@ BOOK = {
     "title": "Inference Engineering",
     "subtitle": "The technologies behind every AI product in production",
     "author": "Philip Kiely (Baseten)",
-    "access_level": "Members",  # standard tier access, same as other content
+    # Standard tier access, same as other content. Rendered via the design
+    # system's {% member_access_badge %}. 20 = Main (LEVEL_MAIN); the exact
+    # tier is a grooming decision.
+    "required_level": 20,
     "cover_accent": "from-accent/30",
     "description": (
         "A book for engineers who want to understand the technologies behind "

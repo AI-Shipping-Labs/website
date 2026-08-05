@@ -21,6 +21,13 @@
         <p class="mt-2 text-sm text-muted-foreground">Ranked by chapters read, then notes shared. Keep your streak going to hold your spot.</p>
       </header>
 
+      {% if not is_member %}
+      <aside class="mb-6 flex flex-col gap-3 rounded-lg border border-accent/40 bg-accent/5 p-4 sm:flex-row sm:items-center sm:justify-between" data-testid="leaderboard-guest-cta">
+        <p class="inline-flex items-center gap-2 text-sm text-foreground"><i data-lucide="lock" class="h-4 w-4 text-accent"></i>Join the book club to appear on the leaderboard and track your streak.</p>
+        <a href="/pricing" class="{% button_classes 'primary' size='sm' extra='flex-shrink-0' %}">Become a member</a>
+      </aside>
+      {% endif %}
+
       <div class="overflow-hidden rounded-2xl border border-border bg-card">
         <table class="w-full text-sm">
           <thead>

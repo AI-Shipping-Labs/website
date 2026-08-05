@@ -35,9 +35,12 @@ BOOK = {
     # Weekly discussion occurrences from the linked event series. In production
     # each occurrence links its own event-detail page; the prototype points at
     # /events (always resolves locally).
+    # One real event we already have — the kickoff (prod event
+    # inference-engineering-book-club-kickoff). Later discussions get added as
+    # the club runs; there is no fixed weekly cadence. Links to /events
+    # (resolves locally); prod intent is the event's own detail page.
     "meetings": [
-        {"title": "Ch. 3 discussion", "when": "Thu Aug 28 · 18:00 CET", "event_url": "/events", "next": True},
-        {"title": "Ch. 4 discussion", "when": "Thu Sep 4 · 18:00 CET", "event_url": "/events", "next": False},
+        {"title": "Book club kickoff", "when": "Aug 10, 2026 · 17:00 CET", "event_url": "/events", "next": True},
     ],
     # cohort-wide progress used for the summary strip
     "readers_count": 34,

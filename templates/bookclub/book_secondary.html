@@ -58,14 +58,17 @@
           </div>
         </div>
         {% else %}
-        <div class="rounded-lg border border-accent/30 bg-accent/5 p-6">
-          <div class="flex items-center gap-2">
-            <i data-lucide="calendar-clock" class="h-5 w-5 text-accent"></i>
-            <h2 class="text-lg font-semibold tracking-tight">Up next</h2>
-          </div>
-          <p class="mt-2 text-sm text-muted-foreground">{{ secondary.start_label }}. The chapter roadmap and weekly deadlines get posted here before we start.</p>
-          <div class="mt-5">
-            <button type="button" class="{% button_classes 'primary' size='sm' %}"><i data-lucide="bell" class="mr-1 h-4 w-4"></i>Sign up to get notified when we start</button>
+        {# Callout / action role — mirrors templates/content/_starting_soon_card.html #}
+        <div class="rounded-lg border border-accent/40 bg-accent/5 p-5 sm:p-6">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="min-w-0">
+              <p class="text-xs font-semibold uppercase tracking-wider text-accent">Up next</p>
+              <h2 class="mt-1 text-lg font-semibold text-foreground sm:text-xl">Get notified when we start</h2>
+              <p class="mt-1 text-sm text-muted-foreground">{{ secondary.start_label }}. The chapter roadmap and weekly deadlines get posted here before we start.</p>
+            </div>
+            <button type="button" class="{% button_classes 'primary' extra='shrink-0' %}">
+              <i data-lucide="bell" class="mr-1 h-4 w-4"></i>Sign up
+            </button>
           </div>
         </div>
         {% endif %}

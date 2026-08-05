@@ -59,6 +59,7 @@
         </div>
       </div>
       <a href="/blog" data-testid="nav-blog-link" class="rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Blog</a>
+      <a href="/interview" data-testid="nav-interview-link" class="rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Interview</a>
       <div class="relative group" data-header-public-dropdown="resources">
         <button type="button" class="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" id="resources-dropdown-btn" data-testid="nav-resources-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="resources-dropdown">
           Resources
@@ -70,7 +71,6 @@
           {% comment %} Hidden pending full removal — issue #1355
           <a href="/projects" data-testid="nav-resources-link-projects" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Project Ideas</a>
           {% endcomment %}
-          <a href="/interview" data-testid="nav-resources-link-interview" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Interview Prep</a>
           {% comment %} Hidden pending full removal — issue #1355
           <a href="/resources" data-testid="nav-resources-link-curated-links" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Curated Links</a>
           {% endcomment %}
@@ -258,6 +258,9 @@
         <a href="/blog" data-testid="mobile-nav-blog-link" class="flex w-full min-h-[44px] items-center rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">Blog</a>
       </div>
       <div class="py-0.5">
+        <a href="/interview" data-testid="mobile-nav-interview-link" class="flex w-full min-h-[44px] items-center rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">Interview</a>
+      </div>
+      <div class="py-0.5">
         <button type="button" id="mobile-resources-toggle" data-testid="mobile-nav-resources-trigger" aria-expanded="false" aria-controls="mobile-resources-list" class="flex w-full min-h-[44px] items-center justify-between rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
           Resources
           <svg class="h-4 w-4 transition-transform" id="mobile-resources-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
@@ -267,7 +270,6 @@
           {% comment %} Hidden pending full removal — issue #1355
           <a href="/projects" data-testid="mobile-nav-resources-link-projects" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Project Ideas</a>
           {% endcomment %}
-          <a href="/interview" data-testid="mobile-nav-resources-link-interview" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Interview Prep</a>
           {% comment %} Hidden pending full removal — issue #1355
           <a href="/resources" data-testid="mobile-nav-resources-link-curated-links" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Curated Links</a>
           {% endcomment %}

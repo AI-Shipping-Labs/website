@@ -11,7 +11,7 @@ BOOK = {
     "slug": "inference-engineering",
     "title": "Inference Engineering",
     "subtitle": "The technologies behind every AI product in production",
-    "author": "Philip Kiely (Baseten)",
+    "author": "Philip Kiely",
     # Standard tier access, same as other content. Rendered via the design
     # system's {% member_access_badge %}. 20 = Main (LEVEL_MAIN); the exact
     # tier is a grooming decision.

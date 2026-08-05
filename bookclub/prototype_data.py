@@ -142,31 +142,62 @@ CHAPTERS = [
 
 UPCOMING_BOOKS = [
     {
+        "slug": "designing-data-intensive-applications",
         "title": "Designing Data-Intensive Applications",
         "author": "Martin Kleppmann",
         "when_label": "Up next",
+        "status": "upcoming",
+        "chapters": 12,
+        "start_label": "Starts after we finish Inference Engineering",
         "cover_accent": "from-blue-500/30",
+        "description": (
+            "The big ideas behind reliable, scalable, and maintainable data "
+            "systems — storage engines, replication, partitioning, "
+            "transactions, and the tradeoffs behind each."
+        ),
     },
 ]
 
 PAST_BOOKS = [
     {
+        "slug": "designing-machine-learning-systems",
         "title": "Designing Machine Learning Systems",
         "author": "Chip Huyen",
         "when_label": "Finished Jun 2026",
+        "status": "finished",
         "chapters": 11,
         "readers": 41,
         "cover_accent": "from-purple-500/30",
+        "description": (
+            "An iterative framework for designing ML systems that are reliable, "
+            "scalable, and maintainable in production — from data to deployment "
+            "to monitoring."
+        ),
     },
     {
+        "slug": "the-pragmatic-programmer",
         "title": "The Pragmatic Programmer",
         "author": "Hunt & Thomas",
         "when_label": "Finished Apr 2026",
+        "status": "finished",
         "chapters": 9,
         "readers": 36,
         "cover_accent": "from-amber-500/30",
+        "description": (
+            "Timeless, practical advice on the craft of software — from personal "
+            "responsibility and career development to the technical practices "
+            "that keep code flexible and durable."
+        ),
     },
 ]
+
+
+def get_secondary_book(slug):
+    """Look up a past/upcoming book by slug (None if not found)."""
+    for b in UPCOMING_BOOKS + PAST_BOOKS:
+        if b["slug"] == slug:
+            return b
+    return None
 
 
 def _progress():

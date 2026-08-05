@@ -56,8 +56,15 @@ def index(request):
 
 
 def book_detail(request, slug):
+    # The active book gets the full experience; past/upcoming books get a
+    # lighter detail page reflecting their lifecycle state.
     if slug != data.BOOK["slug"]:
-        raise Http404("Unknown book (prototype only ships one).")
+        secondary = data.get_secondary_book(slug)
+        if secondary is None:
+            raise Http404("Unknown book.")
+        ctx = _base_context(request)
+        ctx["secondary"] = secondary
+        return render(request, "bookclub/book_secondary.html", ctx)
     ctx = _base_context(request)
     ctx["leaderboard_top"] = _leaderboard_for(ctx["is_member"])[:5]
     return render(request, "bookclub/book_detail.html", ctx)

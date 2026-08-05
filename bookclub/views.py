@@ -94,8 +94,10 @@ def _gate(testid, icon, heading, description, value_items=None):
         "gated_description": description,
         "required_tier_name": "Main",
         "gated_value_items": value_items or [],
+        # Canonical paid-tier gate CTA, matching the rest of the site
+        # (content/access.py, content/views/pages.py): "/pricing" + "Upgrade".
         "gated_cta_url": "/pricing",
-        "gated_cta_label": "View pricing",
+        "gated_cta_label": "Upgrade",
         "gated_cta_testid": testid + "-cta",
     }
 

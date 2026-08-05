@@ -24,7 +24,7 @@ and the synthesized IA plan (implemented).
 
 - [x] Design-system: lint rules (hand-rolled button, `rounded-2xl`, hand-rolled pills) added to `test_design_system_lint.py` (shrink-only ratchet; new drift fails CI).
 - [x] Nav Playwright/Django tests updated for the redesigned header (all pass).
-- [ ] Create the book-club weekly event series (prod API + local) and link real events — BLOCKED on the meeting cadence (day/time), which the kickoff sets on the call. Prototype meetings link to `/events` meanwhile.
+- [x] Event series: tested LOCALLY — `bookclub/seed_local_event.py` creates the kickoff event + a book-club series and attaches the event to it; the book-detail meeting links to that real local event. On prod this isn't possible yet (event-update API has no `event_series` field; series can't be a cadence-less collection) — filed #1358 to add both. Deactivated the empty provisional prod series (id 3).
 
 ## Filed issues
 

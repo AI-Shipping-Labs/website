@@ -192,6 +192,46 @@ PAST_BOOKS = [
 ]
 
 
+def get_chapter(number):
+    """Return the chapter dict for the active book by number, else None."""
+    for c in CHAPTERS:
+        if c["number"] == number:
+            return c
+    return None
+
+
+# Sample shared notes shown on a chapter page (the group's notes). Generic
+# reflections, not book content.
+CHAPTER_SAMPLE_NOTES = [
+    {
+        "name": "Priya Nair",
+        "handle": "priya",
+        "posted": "2 days ago",
+        "body": (
+            "The part I keep coming back to is how much of this is a systems "
+            "problem, not a modeling one. Wrote up a small example from our own "
+            "stack that made it click for the team."
+        ),
+        "likes": 8,
+        "comments": [
+            {"name": "Marco Silva", "body": "Same — going to try this on our service this week."},
+        ],
+    },
+    {
+        "name": "Aisha Khan",
+        "handle": "aisha",
+        "posted": "4 days ago",
+        "body": (
+            "Good chapter to read slowly. I re-read the middle section twice; "
+            "the tradeoffs only landed the second time. Bringing questions to "
+            "Thursday's discussion."
+        ),
+        "likes": 5,
+        "comments": [],
+    },
+]
+
+
 def get_secondary_book(slug):
     """Look up a past/upcoming book by slug (None if not found)."""
     for b in UPCOMING_BOOKS + PAST_BOOKS:

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+{% load member_badges %}
+
+{% block title %}{{ book.title }} summary | Books | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="relative overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+
+      <a href="{% url 'bookclub_book_detail' slug=book.slug %}" class="inline-flex items-center gap-1 text-sm text-accent hover:underline">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i> {{ book.title }}
+      </a>
+
+      <header class="mt-4">
+        <p class="text-sm uppercase tracking-wide text-muted-foreground">Books &middot; Summary</p>
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight">{{ book.title }} &mdash; what the group took away</h1>
+        <p class="mt-2 text-sm text-muted-foreground">Compiled from everyone's chapter notes.</p>
+      </header>
+
+      <div class="prose mt-8">
+        <p>Prototype placeholder: in the real feature this summary is generated from the notes members wrote for each chapter, giving a single overview of the group's biggest takeaways plus a per-chapter recap.</p>
+        <h2>Overall</h2>
+        <p>A few sentences capturing the themes the group returned to most often across the whole book, drawn from the highest-signal notes.</p>
+        <h2>By chapter</h2>
+        <ul>
+          <li>Chapter 1 &mdash; the group's key takeaway, in one or two lines.</li>
+          <li>Chapter 2 &mdash; the group's key takeaway, in one or two lines.</li>
+          <li>Chapter 3 &mdash; the group's key takeaway, in one or two lines.</li>
+        </ul>
+      </div>
+
+      <div class="mt-10">
+        <a href="{% url 'bookclub_leaderboard' slug=book.slug %}" class="{% button_classes 'secondary' %}">
+          <i data-lucide="trophy" class="mr-1 h-4 w-4"></i>Final standings
+        </a>
+      </div>
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+  {% include "bookclub/_proto_banner.html" %}
+</main>
+{% endblock %}

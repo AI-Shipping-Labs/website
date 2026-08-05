@@ -84,7 +84,7 @@ def _past_card(page, title):
     return page.locator(f'[data-testid="past-recording-card"]:has-text("{title}")')
 
 
-def test_header_opens_past_recordings_and_workshop_handoff(
+def test_past_recordings_removed_from_nav_but_workshop_handoff_works(
     django_server, page
 ):
     _clear_recordings_data()
@@ -106,11 +106,22 @@ def test_header_opens_past_recordings_and_workshop_handoff(
 
     expect(page.get_by_test_id("home-past-recordings-section")).to_have_count(0)
     expect(page.locator(f'a[href="{standalone.get_absolute_url()}"]')).to_have_count(0)
+
+    # Past Recordings is no longer surfaced in the Community menu; the archive
+    # page itself still exists and is reached directly at /events?filter=past.
     page.get_by_test_id("nav-community-trigger").hover()
-    archive_link = page.get_by_test_id("nav-community-link-past-recordings")
-    expect(archive_link).to_be_visible()
-    expect(archive_link).to_have_attribute("href", "/events?filter=past")
-    archive_link.click()
+    community_menu = page.get_by_test_id("nav-community-menu")
+    community_menu.wait_for(state="visible")
+    expect(
+        community_menu.get_by_test_id("nav-community-link-past-recordings")
+    ).to_have_count(0)
+    expect(
+        community_menu.locator('a[href="/events?filter=past"]')
+    ).to_have_count(0)
+
+    page.goto(
+        f"{django_server}/events?filter=past", wait_until="domcontentloaded"
+    )
     expect(page).to_have_url(re.compile(r".*/events\?filter=past$"))
     expect(page.get_by_test_id("events-filter-past")).to_have_attribute(
         "aria-selected",

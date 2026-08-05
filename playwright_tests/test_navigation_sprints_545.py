@@ -1,10 +1,11 @@
 """Playwright coverage for the top nav restructure (issue #580).
 
 Covers the top nav structure: the desktop primary nav groups About,
-Community, and Resources; About contains About / Team / FAQ, Resources is
-ordered with Blog first, Community starts with Membership,
-Sprints, and Events, and the mobile menu mirrors the same structure with
-three accordions.
+Community, Learning, and Resources, plus top-level Blog and Interview
+links. About contains Team / FAQ, Learning holds Courses / Workshops /
+Learning Paths, Community starts with Membership, Sprints, and Events, and
+Resources holds Books. The mobile menu mirrors the same structure with four
+accordions and the two top-level links.
 
 File name preserved so historical test history stays grouped with the
 earlier #545 grooming work.
@@ -111,6 +112,7 @@ def _desktop_top_level_test_ids(page):
             const ids = [
                 'nav-about-trigger',
                 'nav-community-trigger',
+                'nav-learning-trigger',
                 'nav-resources-trigger',
             ];
             const found = [...nav.querySelectorAll('[data-testid]')]
@@ -128,7 +130,7 @@ def _desktop_top_level_test_ids(page):
 # ---------------------------------------------------------------------------
 
 
-def test_anonymous_top_nav_has_three_groups_in_order(django_server, page):
+def test_anonymous_top_nav_has_four_groups_in_order(django_server, page):
     """Scenario: Anonymous visitor scans the top nav and finds the grouped IA."""
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
@@ -136,6 +138,7 @@ def test_anonymous_top_nav_has_three_groups_in_order(django_server, page):
     assert _desktop_top_level_test_ids(page) == [
         "nav-about-trigger",
         "nav-community-trigger",
+        "nav-learning-trigger",
         "nav-resources-trigger",
     ]
 
@@ -146,6 +149,12 @@ def test_anonymous_top_nav_has_three_groups_in_order(django_server, page):
     assert nav.get_by_role("link", name="FAQ").count() == 0
     # Activities is not a top-level destination (regression #555).
     assert nav.get_by_role("link", name="Activities").count() == 0
+    # Blog and Interview are top-level links between Learning and Resources.
+    assert nav.locator('[data-testid="nav-blog-link"]').get_attribute("href") == "/blog"
+    assert (
+        nav.locator('[data-testid="nav-interview-link"]').get_attribute("href")
+        == "/interview"
+    )
 
     _assert_no_horizontal_overflow(page)
     _shot(page, "01-anonymous-top-nav-order")
@@ -185,8 +194,39 @@ def test_about_dropdown_contains_about_team_faq(django_server, page):
     _shot(page, "02-about-team-anchor")
 
 
-def test_resources_dropdown_lists_blog_first(django_server, page):
-    """Scenario: Visitor opens Resources and sees Blog first."""
+def test_learning_dropdown_lists_courses_workshops_paths(django_server, page):
+    """Scenario: Visitor opens Learning and finds Courses, Workshops, Paths."""
+    page.set_viewport_size({"width": 1280, "height": 800})
+    page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+    page.get_by_test_id("nav-learning-trigger").hover()
+    menu = page.get_by_test_id("nav-learning-menu")
+    menu.wait_for(state="visible")
+
+    link_ids = menu.evaluate(
+        """
+        el => [...el.querySelectorAll('a[data-testid]')]
+            .map(a => a.getAttribute('data-testid'))
+        """
+    )
+    assert link_ids == [
+        "nav-learning-link-courses",
+        "nav-learning-link-workshops",
+        "nav-learning-link-learning-paths",
+    ]
+
+    # Verify the Learning Paths label is plural even though the route is singular.
+    learning_link = page.get_by_test_id("nav-learning-link-learning-paths")
+    assert learning_link.inner_text().strip() == "Learning Paths"
+    assert learning_link.get_attribute("href") == "/learning-path/ai-engineer"
+
+    page.get_by_test_id("nav-learning-link-courses").click()
+    page.wait_for_url("**/courses")
+    _shot(page, "03-learning-courses")
+
+
+def test_resources_dropdown_lists_books_only(django_server, page):
+    """Scenario: Visitor opens Resources and sees the content-focused Books entry."""
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
@@ -200,27 +240,27 @@ def test_resources_dropdown_lists_blog_first(django_server, page):
             .map(a => a.getAttribute('data-testid'))
         """
     )
-    assert link_ids == [
+    # Blog, Courses, Workshops, Learning Paths, and Interview moved out;
+    # Project Ideas and Curated Links are hidden. Only Books remains
+    # (Downloadables appears when published).
+    assert link_ids == ["nav-resources-link-books"]
+    for moved_out in (
         "nav-resources-link-blog",
         "nav-resources-link-courses",
         "nav-resources-link-workshops",
         "nav-resources-link-learning-paths",
-        "nav-resources-link-projects",
         "nav-resources-link-interview",
+        "nav-resources-link-projects",
         "nav-resources-link-curated-links",
-    ]
-
-    # Verify the Learning Paths label is plural even though the route is singular.
-    learning_link = page.get_by_test_id("nav-resources-link-learning-paths")
-    assert learning_link.inner_text().strip() == "Learning Paths"
-    assert learning_link.get_attribute("href") == "/learning-path/ai-engineer"
+    ):
+        assert menu.locator(f'[data-testid="{moved_out}"]').count() == 0
     assert menu.get_by_text("Past Recordings", exact=True).count() == 0
     assert menu.get_by_text("Event Recordings", exact=True).count() == 0
     assert menu.locator('a[href="/events?filter=past"]').count() == 0
 
-    page.get_by_test_id("nav-resources-link-blog").click()
-    page.wait_for_url("**/blog")
-    _shot(page, "03-resources-blog-first")
+    page.get_by_test_id("nav-resources-link-books").click()
+    page.wait_for_url("**/books")
+    _shot(page, "03b-resources-books")
 
 
 def test_resources_dropdown_adds_downloads_only_when_published(
@@ -261,8 +301,8 @@ def test_community_dropdown_groups_membership_sprints_events(django_server, page
         "nav-community-link-activities",
         "nav-community-link-sprints",
         "nav-community-link-events",
-        "nav-community-link-past-recordings",
     ]
+    assert menu.locator('[data-testid="nav-community-link-past-recordings"]').count() == 0
 
     page.get_by_test_id("nav-community-link-membership").click()
     page.wait_for_url("**/pricing")
@@ -284,12 +324,11 @@ def test_community_dropdown_links_membership_first(django_server, page):
             .map(a => [a.getAttribute('data-testid'), a.getAttribute('href')])
         """
     )
-    assert links[:5] == [
+    assert links[:4] == [
         ["nav-community-link-membership", "/pricing"],
         ["nav-community-link-activities", "/activities#access-by-tier"],
         ["nav-community-link-sprints", "/sprints"],
         ["nav-community-link-events", "/events"],
-        ["nav-community-link-past-recordings", "/events?filter=past"],
     ]
 
 
@@ -312,17 +351,22 @@ def test_community_links_reach_membership_sprints_and_events(django_server, page
     page.get_by_test_id("nav-community-menu").wait_for(state="visible")
     events = page.get_by_test_id("nav-community-link-events")
     assert events.get_attribute("href") == "/events"
-    past_recordings = page.get_by_test_id("nav-community-link-past-recordings")
-    assert past_recordings.get_attribute("href") == "/events?filter=past"
+    assert (
+        page.get_by_test_id("nav-community-menu")
+        .locator('[data-testid="nav-community-link-past-recordings"]')
+        .count()
+        == 0
+    )
     events.click()
     page.wait_for_url("**/events")
     _shot(page, "05-sprints-events-community")
 
 
-def test_desktop_community_past_recordings_link_opens_selected_filter(
+def test_desktop_community_omits_past_recordings_but_filter_still_works(
     django_server, page
 ):
-    """Scenario: Visitor finds past recordings from desktop community navigation."""
+    """Scenario: Past Recordings dropped from the Community menu; the filtered
+    events page still works when reached directly."""
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
@@ -330,17 +374,10 @@ def test_desktop_community_past_recordings_link_opens_selected_filter(
     menu = page.get_by_test_id("nav-community-menu")
     menu.wait_for(state="visible")
 
-    link_ids = menu.evaluate(
-        """
-        el => [...el.querySelectorAll('a[data-testid]')]
-            .map(a => a.getAttribute('data-testid'))
-        """
-    )
-    assert link_ids.index("nav-community-link-events") + 1 == link_ids.index(
-        "nav-community-link-past-recordings"
-    )
+    assert menu.locator('[data-testid="nav-community-link-past-recordings"]').count() == 0
+    assert menu.locator('a[href="/events?filter=past"]').count() == 0
 
-    page.get_by_test_id("nav-community-link-past-recordings").click()
+    page.goto(f"{django_server}/events?filter=past", wait_until="domcontentloaded")
     page.wait_for_url(re.compile(r".*/events\?filter=past$"))
     assert page.get_by_test_id("events-filter-past").get_attribute(
         "aria-selected"
@@ -390,43 +427,49 @@ def test_mobile_about_accordion_exposes_team_and_faq(django_server, browser):
     context.close()
 
 
-def test_mobile_resources_accordion_lists_blog_first(django_server, browser):
-    """Scenario: Mobile visitor expands Resources and sees Blog first."""
+def test_mobile_learning_accordion_lists_courses_workshops_paths(
+    django_server, browser
+):
+    """Scenario: Mobile visitor expands Learning and finds the courses group."""
     context = browser.new_context(viewport={"width": 390, "height": 844})
     page = context.new_page()
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
     _open_mobile_menu(page)
-    page.get_by_test_id("mobile-nav-resources-trigger").click()
-    resources_menu = page.get_by_test_id("mobile-nav-resources-menu")
-    resources_menu.wait_for(state="visible")
+    page.get_by_test_id("mobile-nav-learning-trigger").click()
+    learning_menu = page.get_by_test_id("mobile-nav-learning-menu")
+    learning_menu.wait_for(state="visible")
 
-    link_ids = resources_menu.evaluate(
+    link_ids = learning_menu.evaluate(
         """
         el => [...el.querySelectorAll('a[data-testid]')]
             .map(a => a.getAttribute('data-testid'))
         """
     )
     assert link_ids == [
-        "mobile-nav-resources-link-blog",
-        "mobile-nav-resources-link-courses",
-        "mobile-nav-resources-link-workshops",
-        "mobile-nav-resources-link-learning-paths",
-        "mobile-nav-resources-link-projects",
-        "mobile-nav-resources-link-interview",
-        "mobile-nav-resources-link-curated-links",
+        "mobile-nav-learning-link-courses",
+        "mobile-nav-learning-link-workshops",
+        "mobile-nav-learning-link-learning-paths",
     ]
-    learning_link = page.get_by_test_id("mobile-nav-resources-link-learning-paths")
+    learning_link = page.get_by_test_id("mobile-nav-learning-link-learning-paths")
     assert learning_link.inner_text().strip() == "Learning Paths"
 
-    page.get_by_test_id("mobile-nav-resources-link-blog").click()
-    page.wait_for_url("**/blog")
-    _shot(page, "07-mobile-resources-blog")
+    # Resources now surfaces only Books; Blog is a top-level mobile link.
+    assert (
+        page.locator('#mobile-menu [data-testid="mobile-nav-blog-link"]')
+        .get_attribute("href")
+        == "/blog"
+    )
+
+    page.get_by_test_id("mobile-nav-learning-link-courses").click()
+    page.wait_for_url("**/courses")
+    _shot(page, "07-mobile-learning-courses")
     context.close()
 
 
-def test_mobile_community_accordion_reaches_past_recordings(django_server, browser):
-    """Scenario: Mobile visitor reaches the same past-recordings list."""
+def test_mobile_community_accordion_omits_past_recordings(django_server, browser):
+    """Scenario: Mobile Community accordion no longer lists Past Recordings;
+    the filtered events page still loads when reached directly."""
     context = browser.new_context(viewport={"width": 390, "height": 844})
     page = context.new_page()
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
@@ -447,10 +490,15 @@ def test_mobile_community_accordion_reaches_past_recordings(django_server, brows
         "mobile-nav-community-link-activities",
         "mobile-nav-community-link-sprints",
         "mobile-nav-community-link-events",
-        "mobile-nav-community-link-past-recordings",
     ]
+    assert (
+        community_menu.locator(
+            '[data-testid="mobile-nav-community-link-past-recordings"]'
+        ).count()
+        == 0
+    )
 
-    page.get_by_test_id("mobile-nav-community-link-past-recordings").click()
+    page.goto(f"{django_server}/events?filter=past", wait_until="domcontentloaded")
     page.wait_for_url(re.compile(r".*/events\?filter=past$"))
     assert page.get_by_test_id("events-filter-past").get_attribute(
         "aria-selected"
@@ -476,6 +524,7 @@ def test_mobile_top_level_groups_appear_between_about_and_resources(django_serve
             const wanted = new Set([
                 'mobile-nav-about-trigger',
                 'mobile-nav-community-trigger',
+                'mobile-nav-learning-trigger',
                 'mobile-nav-resources-trigger',
             ]);
             return [...menu.querySelectorAll('[data-testid]')]
@@ -487,6 +536,7 @@ def test_mobile_top_level_groups_appear_between_about_and_resources(django_serve
     assert test_ids == [
         "mobile-nav-about-trigger",
         "mobile-nav-community-trigger",
+        "mobile-nav-learning-trigger",
         "mobile-nav-resources-trigger",
     ]
     for duplicate_id in [
@@ -508,6 +558,7 @@ def test_mobile_320px_has_no_horizontal_overflow(django_server, browser):
     _open_mobile_menu(page)
     page.get_by_test_id("mobile-nav-about-trigger").click()
     page.get_by_test_id("mobile-nav-community-trigger").click()
+    page.get_by_test_id("mobile-nav-learning-trigger").click()
     page.get_by_test_id("mobile-nav-resources-trigger").click()
 
     scroll_width = page.evaluate("() => document.documentElement.scrollWidth")
@@ -522,8 +573,8 @@ def test_mobile_320px_has_no_horizontal_overflow(django_server, browser):
         "mobile-nav-community-link-membership",
         "mobile-nav-community-link-activities",
         "mobile-nav-community-link-sprints",
-        "mobile-nav-community-link-past-recordings",
-        "mobile-nav-resources-link-curated-links",
+        "mobile-nav-learning-link-courses",
+        "mobile-nav-resources-link-books",
     ]:
         link = page.get_by_test_id(test_id)
         link.scroll_into_view_if_needed()
@@ -554,6 +605,7 @@ def test_authenticated_member_sees_same_public_nav_plus_account(
     assert _desktop_top_level_test_ids(page) == [
         "nav-about-trigger",
         "nav-community-trigger",
+        "nav-learning-trigger",
         "nav-resources-trigger",
     ]
     assert page.locator("#notification-bell-btn").is_visible()
@@ -573,14 +625,10 @@ def test_authenticated_member_sees_same_public_nav_plus_account(
         "nav-community-link-activities",
         "nav-community-link-sprints",
         "nav-community-link-events",
-        "nav-community-link-past-recordings",
     ]
 
-    page.get_by_test_id("nav-community-link-past-recordings").click()
-    page.wait_for_url(re.compile(r".*/events\?filter=past$"))
-    assert page.get_by_test_id("events-filter-past").get_attribute(
-        "aria-selected"
-    ) == "true"
+    page.get_by_test_id("nav-community-link-events").click()
+    page.wait_for_url("**/events")
     assert page.locator("#notification-bell-btn").is_visible()
     assert page.locator("#account-menu-trigger").is_visible()
     page.locator("#account-menu-trigger").click()

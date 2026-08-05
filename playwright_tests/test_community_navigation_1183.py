@@ -22,11 +22,6 @@ COMMUNITY_DESKTOP_LINKS = [
     ["nav-community-link-activities", "/activities#access-by-tier", "Activities"],
     ["nav-community-link-sprints", "/sprints", "Community Sprints"],
     ["nav-community-link-events", "/events", "Events"],
-    [
-        "nav-community-link-past-recordings",
-        "/events?filter=past",
-        "Past Recordings",
-    ],
 ]
 
 COMMUNITY_MOBILE_LINKS = [
@@ -38,11 +33,6 @@ COMMUNITY_MOBILE_LINKS = [
     ],
     ["mobile-nav-community-link-sprints", "/sprints", "Community Sprints"],
     ["mobile-nav-community-link-events", "/events", "Events"],
-    [
-        "mobile-nav-community-link-past-recordings",
-        "/events?filter=past",
-        "Past Recordings",
-    ],
 ]
 
 
@@ -95,6 +85,7 @@ def test_desktop_community_dropdown_groups_membership_activities_sprints_events(
     assert trigger_ids == [
         "nav-about-trigger",
         "nav-community-trigger",
+        "nav-learning-trigger",
         "nav-resources-trigger",
     ]
     for absent_id in ["nav-membership", "nav-activities", "nav-sprints", "nav-events"]:
@@ -250,11 +241,20 @@ def test_resources_remain_content_focused_while_activities_stays_in_community(
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
+    # Workshops moved to the Learning group; Resources stays content-focused
+    # (Books) and never carries the Activities link.
+    page.get_by_test_id("nav-learning-trigger").hover()
+    learning_menu = page.get_by_test_id("nav-learning-menu")
+    learning_menu.wait_for(state="visible")
+    expect(learning_menu.get_by_test_id("nav-learning-link-workshops")).to_have_attribute(
+        "href", "/workshops"
+    )
+
     page.get_by_test_id("nav-resources-trigger").hover()
     resources_menu = page.get_by_test_id("nav-resources-menu")
     resources_menu.wait_for(state="visible")
-    expect(resources_menu.get_by_test_id("nav-resources-link-workshops")).to_have_attribute(
-        "href", "/workshops"
+    expect(resources_menu.get_by_test_id("nav-resources-link-books")).to_have_attribute(
+        "href", "/books"
     )
     assert resources_menu.get_by_text("Activities", exact=True).count() == 0
 

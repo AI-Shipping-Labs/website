@@ -181,12 +181,13 @@ def test_anonymous_mobile_menu_targets_and_navigation(django_server, browser):
         ] == ["/about", "/faq"]
 
         _expand_mobile_section(page, "community")
-        resources = _expand_mobile_section(page, "resources")
+        learning = _expand_mobile_section(page, "learning")
         for testid in (
-            "mobile-nav-resources-link-courses",
-            "mobile-nav-resources-link-workshops",
+            "mobile-nav-learning-link-courses",
+            "mobile-nav-learning-link-workshops",
         ):
-            assert resources.locator(f'[data-testid="{testid}"]').is_visible()
+            assert learning.locator(f'[data-testid="{testid}"]').is_visible()
+        _expand_mobile_section(page, "resources")
 
         _assert_min_height_for_visible(
             page,
@@ -221,8 +222,8 @@ def test_anonymous_mobile_menu_links_reach_existing_destinations(
 
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
         _open_mobile_menu(page)
-        _expand_mobile_section(page, "resources")
-        courses = page.locator('[data-testid="mobile-nav-resources-link-courses"]')
+        _expand_mobile_section(page, "learning")
+        courses = page.locator('[data-testid="mobile-nav-learning-link-courses"]')
         _assert_target_size(courses, "mobile Courses link")
         courses.click()
         page.wait_for_url(f"{django_server}/courses", timeout=5000)

@@ -99,24 +99,23 @@ def test_anonymous_keyboard_community_menu_reaches_membership(
     page.wait_for_url(f"{django_server}/pricing", timeout=5000)
 
 
-def test_anonymous_keyboard_resources_menu_reaches_workshops(
+def test_anonymous_keyboard_learning_menu_reaches_workshops(
     django_server, page
 ):
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
-    _tab_to_test_id(page, "nav-resources-trigger")
-    _assert_open(page, "resources")
+    _tab_to_test_id(page, "nav-learning-trigger")
+    _assert_open(page, "learning")
     page.keyboard.press("Enter")
-    _assert_open(page, "resources")
+    _assert_open(page, "learning")
 
     _tab_through_links(
         page,
-        "resources",
+        "learning",
         [
-            "nav-resources-link-blog",
-            "nav-resources-link-courses",
-            "nav-resources-link-workshops",
+            "nav-learning-link-courses",
+            "nav-learning-link-workshops",
         ],
     )
     page.keyboard.press("Enter")
@@ -131,17 +130,12 @@ def test_resources_menu_stays_open_until_focus_leaves_or_escape(
 
     _tab_to_test_id(page, "nav-resources-trigger")
     _assert_open(page, "resources")
+    # Resources now holds only Books (Downloadables when published).
     _tab_through_links(
         page,
         "resources",
         [
-            "nav-resources-link-blog",
-            "nav-resources-link-courses",
-            "nav-resources-link-workshops",
-            "nav-resources-link-learning-paths",
-            "nav-resources-link-projects",
-            "nav-resources-link-interview",
-            "nav-resources-link-curated-links",
+            "nav-resources-link-books",
         ],
     )
 
@@ -242,16 +236,14 @@ def test_mobile_public_nav_accordions_keep_existing_aria_and_links(
                 "Activities",
                 "Community Sprints",
                 "Events",
-                "Past Recordings",
             ],
-            "resources": [
-                "Blog",
+            "learning": [
                 "Courses",
                 "Workshops",
                 "Learning Paths",
-                "Project Ideas",
-                "Interview Prep",
-                "Curated Links",
+            ],
+            "resources": [
+                "Books",
             ],
         }
         for section, labels in expected.items():

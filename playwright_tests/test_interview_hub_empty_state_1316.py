@@ -1,8 +1,8 @@
 """Interview hub empty-state and populated coverage for issue #1316.
 
-The Interview Prep hub is a top-nav Resources destination. It must always
-return 200 and render a member empty state when no categories exist, instead
-of hard-404ing and turning a live nav item into a dead link.
+The Interview Prep hub is a top-level nav destination (nav-interview-link).
+It must always return 200 and render a member empty state when no categories
+exist, instead of hard-404ing and turning a live nav item into a dead link.
 """
 
 import os
@@ -79,7 +79,7 @@ def test_empty_interview_hub_returns_200_with_empty_state(
     page.wait_for_url(f"{django_server}/", timeout=5000)
 
 
-def test_resources_nav_interview_link_is_not_a_dead_link_when_empty(
+def test_nav_interview_link_is_not_a_dead_link_when_empty(
     django_server, django_db_blocker, page
 ):
     with django_db_blocker.unblock():
@@ -88,9 +88,10 @@ def test_resources_nav_interview_link_is_not_a_dead_link_when_empty(
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
-    page.locator('[data-testid="nav-resources-trigger"]').hover()
-    interview_link = page.locator('[data-testid="nav-resources-link-interview"]')
+    # Interview is now a top-level nav link, not a Resources dropdown item.
+    interview_link = page.locator('[data-testid="nav-interview-link"]')
     interview_link.wait_for(state="visible", timeout=3000)
+    assert interview_link.get_attribute("href") == "/interview"
     response = page.request.get(f"{django_server}/interview")
     assert response.status == 200
 

@@ -77,24 +77,27 @@ class HeaderMobileMenuTest(TestCase):
         self.assertIn('min-w-0', content)
 
     def test_mobile_nav_sections_have_chevron_indicators(self):
-        """The About, Community, and Resources sections should have chevron SVG indicators."""
+        """The About, Community, Learning, and Resources sections should have chevron SVG indicators."""
         response = self.client.get("/")
         content = response.content.decode()
         self.assertIn('id="mobile-about-chevron"', content)
         self.assertIn('id="mobile-about-toggle"', content)
         self.assertIn('id="mobile-community-chevron"', content)
         self.assertIn('id="mobile-community-toggle"', content)
+        self.assertIn('id="mobile-learning-chevron"', content)
+        self.assertIn('id="mobile-learning-toggle"', content)
         self.assertIn('id="mobile-resources-chevron"', content)
         self.assertIn('id="mobile-resources-toggle"', content)
         self.assertNotIn('id="mobile-learn-toggle"', content)
 
     def test_mobile_nav_toggles_are_buttons(self):
-        """The About, Community, and Resources headings should be buttons."""
+        """The About, Community, Learning, and Resources headings should be buttons."""
         response = self.client.get("/")
         content = response.content.decode()
         for toggle_id in [
             'mobile-about-toggle',
             'mobile-community-toggle',
+            'mobile-learning-toggle',
             'mobile-resources-toggle',
         ]:
             toggle_pos = content.index(f'id="{toggle_id}"')
@@ -116,21 +119,31 @@ class HeaderMobileMenuTest(TestCase):
         self.assertIn('href="/faq"', content)
         self.assertIn('id="about-dropdown-btn"', content)
         self.assertIn('id="community-dropdown-btn"', content)
+        self.assertIn('id="learning-dropdown-btn"', content)
         self.assertIn('id="resources-dropdown-btn"', content)
         self.assertNotIn('id="learn-dropdown-btn"', content)
+        # Courses / Workshops / Learning Paths moved into the Learning group.
         self.assertIn('href="/courses"', content)
         self.assertIn('href="/workshops"', content)
         self.assertIn('href="/learning-path/ai-engineer"', content)
-        self.assertIn('href="/projects"', content)
+        # Blog and Interview are now top-level links.
         self.assertIn('href="/interview"', content)
         self.assertIn('href="/blog"', content)
+        self.assertIn('data-testid="mobile-nav-blog-link"', content)
+        self.assertIn('data-testid="mobile-nav-interview-link"', content)
         self.assertIn('href="/sprints"', content)
         self.assertIn('href="/events"', content)
         self.assertIn('href="/activities#access-by-tier"', content)
         self.assertIn('data-testid="mobile-nav-community-link-activities"', content)
-        self.assertIn('href="/events?filter=past"', content)
-        self.assertIn('data-testid="mobile-nav-community-link-past-recordings"', content)
-        self.assertIn('href="/resources"', content)
+        # Resources now surfaces Books.
+        self.assertIn('href="/books"', content)
+        self.assertIn('data-testid="mobile-nav-resources-link-books"', content)
+        # Past Recordings, Project Ideas, and Curated Links are no longer
+        # exposed in the nav.
+        self.assertNotIn('href="/events?filter=past"', content)
+        self.assertNotIn('data-testid="mobile-nav-community-link-past-recordings"', content)
+        self.assertNotIn('href="/projects"', content)
+        self.assertNotIn('href="/resources"', content)
 
         header = content[:content.index("</header>")]
         primary = header[
@@ -138,7 +151,7 @@ class HeaderMobileMenuTest(TestCase):
             header.index('<div class="hidden md:flex md:items-center md:gap-4">')
         ]
         top_level_ids = re.findall(
-            r'data-testid="(nav-about-trigger|nav-membership|nav-community-trigger|nav-sprints|nav-events|nav-resources-trigger)"',
+            r'data-testid="(nav-about-trigger|nav-community-trigger|nav-learning-trigger|nav-blog-link|nav-interview-link|nav-resources-trigger)"',
             primary,
         )
         self.assertEqual(
@@ -146,6 +159,9 @@ class HeaderMobileMenuTest(TestCase):
             [
                 'nav-about-trigger',
                 'nav-community-trigger',
+                'nav-learning-trigger',
+                'nav-blog-link',
+                'nav-interview-link',
                 'nav-resources-trigger',
             ],
         )

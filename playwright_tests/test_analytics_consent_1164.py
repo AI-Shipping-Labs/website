@@ -64,7 +64,7 @@ class TestAnalyticsConsent:
 
         expect(page.get_by_test_id('analytics-consent-panel')).to_be_visible()
         page.locator('#mobile-menu-btn').click()
-        for section in ('about', 'community', 'resources'):
+        for section in ('about', 'community', 'learning', 'resources'):
             trigger = page.get_by_test_id(f'mobile-nav-{section}-trigger')
             trigger.click()
             expect(trigger).to_have_attribute('aria-expanded', 'true')
@@ -99,7 +99,7 @@ class TestAnalyticsConsent:
             )
             assert hit, f'mobile menu target {index} is obstructed'
 
-        courses = page.get_by_test_id('mobile-nav-resources-link-courses')
+        courses = page.get_by_test_id('mobile-nav-learning-link-courses')
         courses.scroll_into_view_if_needed()
         expect(courses).to_be_visible()
         courses.click()

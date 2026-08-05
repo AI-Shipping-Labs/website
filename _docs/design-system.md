@@ -228,6 +228,10 @@ Shadow rule: repeated cards never carry a shadow. Do not add `shadow-sm` to grid
 
 The canonical arrow markup, owned by `_content_card.html`, is `<i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent">`; badges cluster to its left in the header row, and `hidden sm:block` keeps the mobile arrow-count contract. Eliminated affordances: trailing "Read article ->" / "View download ->" text spans, the `pointer-events-none` fake-button span inside a clickable card, `arrow-up-right` on the gated CTA, and no-affordance clickable cards (they gain the top-right arrow).
 
+### Lists and rows
+
+Do not repeat an identical control, CTA, or hint on every row of a list. A per-row "Join to …", "Sign in to …", or the same button on each item is drift: hoist it to one shared control above the list, or gate the whole list once (guests get a single `_gated_access_card.html`, not a lock hint per row). Rows themselves carry only row-specific content; if the whole row navigates, it is a single whole-row anchor with the canonical top-right arrow, not a row with an inner button. A recurring per-item widget that is really per-entity (e.g. a chapter's summary) belongs on that entity's own page, not duplicated into a list-level sidebar panel.
+
 ### CTA boxes
 
 A CTA box is the callout/action role with one clear action. Surface is the accent callout (`rounded-lg border border-accent/40 bg-accent/5`, `p-6` or `p-6 sm:p-8`), and the action is always a `{% button_classes %}` button — never a hand-rolled link styled as a button. Two layouts, chosen by whether the box sits in a flow or stands alone:

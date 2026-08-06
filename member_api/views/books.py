@@ -20,11 +20,11 @@ from accounts.auth import member_api_key_required
 from accounts.utils.activation import mark_activated
 from api.openapi import openapi_spec
 from api.safety import error_response
-from api.utils import require_methods
-from bookclub.models import BOOK_STATUS_DRAFT, Book, ChapterRead
+from api.utils import parse_json_body, require_methods
+from bookclub.models import BOOK_STATUS_DRAFT, Book, ChapterRead, Note
 from bookclub.reading import viewer_reading_progress
 from content.access import get_user_level
-from member_api.serializers.books import serialize_book_reading
+from member_api.serializers.books import serialize_book_note, serialize_book_reading
 
 
 def _visible_book(slug):
@@ -52,6 +52,18 @@ def _access_error(request, book):
             status=403,
         )
     return None
+
+
+def _require_scope(request, scope):
+    """Return a 401 response if the authenticated key lacks ``scope``."""
+    if scope in getattr(request, "member_api_scopes", set()):
+        return None
+    return error_response(
+        "Member API key is missing the required scope",
+        "insufficient_scope",
+        status=401,
+        details={"required_scope": scope},
+    )
 
 
 _BOOK_READING_OPENAPI = {
@@ -214,3 +226,170 @@ def book_chapter_read(request, slug, number):
         "done": progress["done"],
         "total": progress["total"],
     })
+
+
+_CHAPTER_NOTE_OPENAPI = {
+    "GET": {
+        "summary": "Get the caller's own note for a chapter",
+        "description": (
+            "Returns the authenticated key owner's own note for the chapter, "
+            "or 404 if they have not written one. Scoped to the key owner only "
+            "— never another member's note, and never the group feed of other "
+            "members' notes (that is a rendered web surface). Requires the "
+            "``books:read`` scope."
+        ),
+        "responses": {
+            200: {
+                "description": "The caller's own note.",
+                "example": {
+                    "book": {"slug": "inference-engineering", "title": "Inference Engineering"},
+                    "chapter": {"number": 0, "title": "Inference"},
+                    "body": "The KV cache is the whole game.",
+                    "diagram": "",
+                    "comment_content_id": "0b3d…",
+                    "created_at": "2026-08-06T10:00:00+00:00",
+                    "updated_at": "2026-08-06T10:00:00+00:00",
+                },
+            },
+            401: {
+                "description": "Missing key or missing ``books:read`` scope.",
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+            },
+            403: {
+                "description": "Key owner's tier is below the book's required level.",
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+            },
+            404: {
+                "description": "Unknown/draft book, unknown chapter, or no note yet.",
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+            },
+        },
+    },
+    "PUT": {
+        "summary": "Upsert the caller's own note",
+        "description": (
+            "Creates or replaces the key owner's single note for the chapter "
+            "(``update_or_create`` on owner + chapter). ``body`` is required; "
+            "``diagram`` (mermaid source) is optional. The first save flips "
+            "the account's activation flag. Posting comments on a note and "
+            "reading the group feed are out of scope for the member API — "
+            "comments use the shared web endpoints. Requires the "
+            "``books:write_notes`` scope."
+        ),
+        "request_body": {
+            "required": ["body"],
+            "properties": {
+                "body": {"type": "string"},
+                "diagram": {"type": "string"},
+            },
+            "example": {"body": "The KV cache is the whole game."},
+        },
+        "responses": {
+            200: {"description": "Upserted note."},
+            401: {
+                "description": "Missing key or missing ``books:write_notes`` scope.",
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+            },
+            403: {
+                "description": "Key owner's tier is below the book's required level.",
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+            },
+            404: {
+                "description": "Unknown/draft book or unknown chapter number.",
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+            },
+            422: {
+                "description": "Missing or empty ``body``.",
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+            },
+        },
+    },
+    "DELETE": {
+        "summary": "Clear the caller's own note",
+        "description": (
+            "Idempotently deletes the key owner's note for the chapter. "
+            "Destructive deletes of other members' notes stay Studio/admin "
+            "scoped. Requires the ``books:write_notes`` scope."
+        ),
+        "responses": {
+            200: {"description": "Note cleared (idempotent)."},
+            401: {
+                "description": "Missing key or missing ``books:write_notes`` scope.",
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+            },
+            403: {
+                "description": "Key owner's tier is below the book's required level.",
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+            },
+            404: {
+                "description": "Unknown/draft book or unknown chapter number.",
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+            },
+        },
+    },
+}
+
+
+@csrf_exempt
+@member_api_key_required()
+@require_methods("GET", "PUT", "DELETE")
+@openapi_spec(tag="Books", methods=_CHAPTER_NOTE_OPENAPI)
+def book_chapter_note(request, slug, number):
+    """Owner-scoped CRUD for the caller's own per-chapter note (issue #1365).
+
+    Scopes are enforced per method (the decorator takes no scope so the read
+    and write scopes can diverge): GET requires ``books:read`` while PUT /
+    DELETE require ``books:write_notes`` (a progress-tracking automation with
+    only ``books:write_progress`` must not be able to publish public notes).
+    Access mirrors the server gate: draft / unknown book -> 404, below tier ->
+    403, unknown chapter -> 404.
+    """
+    required_scope = "books:read" if request.method == "GET" else "books:write_notes"
+    denied = _require_scope(request, required_scope)
+    if denied is not None:
+        return denied
+
+    book, book_error = _book_or_error(slug)
+    if book_error is not None:
+        return book_error
+    access_error = _access_error(request, book)
+    if access_error is not None:
+        return access_error
+
+    chapter = book.chapters.filter(number=number).first()
+    if chapter is None:
+        return error_response("Chapter not found", "chapter_not_found", status=404)
+
+    if request.method == "GET":
+        note = Note.objects.filter(user=request.user, chapter=chapter).first()
+        if note is None:
+            return error_response("Note not found", "note_not_found", status=404)
+        return JsonResponse(serialize_book_note(note, book, chapter))
+
+    if request.method == "DELETE":
+        Note.objects.filter(user=request.user, chapter=chapter).delete()
+        return JsonResponse({"deleted": True, "chapter": {"number": number}})
+
+    # PUT — upsert the caller's own note.
+    payload, parse_error = parse_json_body(request)
+    if parse_error is not None:
+        return parse_error
+    if not isinstance(payload, dict):
+        return error_response(
+            "Body must be a JSON object", "invalid_body", status=422,
+        )
+
+    body = (payload.get("body") or "").strip()
+    if not body:
+        return error_response("body is required", "body_required", status=422)
+    diagram = (payload.get("diagram") or "").strip()
+
+    note, created = Note.objects.update_or_create(
+        user=request.user,
+        chapter=chapter,
+        defaults={"body": body, "diagram": diagram},
+    )
+    if created:
+        # Writing a note is a real platform action (issue #768).
+        mark_activated(request.user)
+    return JsonResponse(serialize_book_note(note, book, chapter))

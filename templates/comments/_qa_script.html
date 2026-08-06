@@ -1,15 +1,14 @@
 <script>
-  // Q&A Section
+  // Q&A Section — multi-instance safe.
+  //
+  // Each thread is a `.qa-thread` wrapper carrying `data-content-id`. A page
+  // may render one thread (course unit / workshop page / plan) or many (the
+  // Book Club chapter page, issue #1365, renders one thread per member note).
+  // Element lookups are scoped WITHIN each thread by class, so this script is
+  // agnostic to the id suffixes `_qa_section.html` emits for multiple threads.
   (function() {
-    var section = document.getElementById('qa-section');
-    if (!section) return;
-
-    var contentId = section.dataset.contentId;
-    var listEl = document.getElementById('qa-list');
-    var countEl = document.getElementById('qa-count');
-    var countWrapperEl = document.getElementById('qa-count-wrapper');
-    var postBtn = document.getElementById('qa-post-btn');
-    var textarea = document.getElementById('qa-new-question');
+    var sections = document.querySelectorAll('.qa-thread');
+    if (!sections.length) return;
 
     function getCsrfToken() {
       var cookies = document.cookie.split(';');
@@ -84,86 +83,117 @@
       '</div>';
     }
 
-    function loadComments() {
-      fetch('/api/comments/' + contentId, { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          var comments = data.comments || [];
-          countEl.textContent = comments.length;
-          // Hide the parenthesized count entirely when the thread is
-          // empty so the heading reads "Comments" rather than
-          // "Comments (0)" (issue #597). The #qa-count span itself is
-          // kept in the DOM so existing tests/scripts still find it.
-          if (countWrapperEl) {
-            if (comments.length > 0) {
-              countWrapperEl.removeAttribute('hidden');
-            } else {
-              countWrapperEl.setAttribute('hidden', '');
-            }
-          }
-          if (comments.length === 0) {
-            listEl.innerHTML = '';
-            return;
-          }
-          var html = '';
-          for (var i = 0; i < comments.length; i++) {
-            html += renderComment(comments[i]);
-          }
-          listEl.innerHTML = html;
-          bindEvents();
-        });
-    }
+    function wireThread(section) {
+      var contentId = section.dataset.contentId;
+      var listEl = section.querySelector('.qa-list');
+      var countEl = section.querySelector('.qa-count');
+      var countWrapperEl = section.querySelector('.qa-count-wrapper');
+      var postBtn = section.querySelector('.qa-post-btn');
+      var textarea = section.querySelector('.qa-new-question');
+      if (!listEl) return;
 
-    function bindEvents() {
-      // Vote buttons
-      var voteBtns = listEl.querySelectorAll('.qa-vote-btn');
-      for (var i = 0; i < voteBtns.length; i++) {
-        voteBtns[i].addEventListener('click', function() {
-          var cid = this.dataset.commentId;
-          var btn = this;
-          fetch('/api/comments/' + cid + '/vote', {
-            method: 'POST',
-            headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-          })
+      function loadComments() {
+        fetch('/api/comments/' + contentId, { credentials: 'same-origin' })
           .then(function(r) { return r.json(); })
           .then(function(data) {
-            if (data.error) return;
-            var card = btn.closest('[data-comment-id]');
-            var countSpan = card.querySelector('.qa-vote-count');
-            countSpan.textContent = data.vote_count;
-            var svg = btn.querySelector('svg');
-            if (data.voted) {
-              btn.className = 'qa-vote-btn transition-colors text-accent';
-              svg.classList.add('fill-current');
-            } else {
-              btn.className = 'qa-vote-btn transition-colors text-muted-foreground hover:text-foreground';
-              svg.classList.remove('fill-current');
+            var comments = data.comments || [];
+            if (countEl) countEl.textContent = comments.length;
+            // Hide the parenthesized count entirely when the thread is
+            // empty so the heading reads "Comments" rather than
+            // "Comments (0)" (issue #597). The count span itself is kept
+            // in the DOM so existing tests/scripts still find it.
+            if (countWrapperEl) {
+              if (comments.length > 0) {
+                countWrapperEl.removeAttribute('hidden');
+              } else {
+                countWrapperEl.setAttribute('hidden', '');
+              }
             }
+            if (comments.length === 0) {
+              listEl.innerHTML = '';
+              return;
+            }
+            var html = '';
+            for (var i = 0; i < comments.length; i++) {
+              html += renderComment(comments[i]);
+            }
+            listEl.innerHTML = html;
+            bindEvents();
           });
-        });
       }
 
-      // Reply toggles
-      var replyToggles = listEl.querySelectorAll('.qa-reply-toggle');
-      for (var i = 0; i < replyToggles.length; i++) {
-        replyToggles[i].addEventListener('click', function() {
-          var cid = this.dataset.commentId;
-          var form = listEl.querySelector('.qa-reply-form[data-comment-id="' + cid + '"]');
-          form.classList.toggle('hidden');
-        });
+      function bindEvents() {
+        // Vote buttons
+        var voteBtns = listEl.querySelectorAll('.qa-vote-btn');
+        for (var i = 0; i < voteBtns.length; i++) {
+          voteBtns[i].addEventListener('click', function() {
+            var cid = this.dataset.commentId;
+            var btn = this;
+            fetch('/api/comments/' + cid + '/vote', {
+              method: 'POST',
+              headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (data.error) return;
+              var card = btn.closest('[data-comment-id]');
+              var countSpan = card.querySelector('.qa-vote-count');
+              countSpan.textContent = data.vote_count;
+              var svg = btn.querySelector('svg');
+              if (data.voted) {
+                btn.className = 'qa-vote-btn transition-colors text-accent';
+                svg.classList.add('fill-current');
+              } else {
+                btn.className = 'qa-vote-btn transition-colors text-muted-foreground hover:text-foreground';
+                svg.classList.remove('fill-current');
+              }
+            });
+          });
+        }
+
+        // Reply toggles
+        var replyToggles = listEl.querySelectorAll('.qa-reply-toggle');
+        for (var i = 0; i < replyToggles.length; i++) {
+          replyToggles[i].addEventListener('click', function() {
+            var cid = this.dataset.commentId;
+            var form = listEl.querySelector('.qa-reply-form[data-comment-id="' + cid + '"]');
+            form.classList.toggle('hidden');
+          });
+        }
+
+        // Reply submit buttons
+        var replyBtns = listEl.querySelectorAll('.qa-reply-btn');
+        for (var i = 0; i < replyBtns.length; i++) {
+          replyBtns[i].addEventListener('click', function() {
+            var cid = this.dataset.commentId;
+            var form = listEl.querySelector('.qa-reply-form[data-comment-id="' + cid + '"]');
+            var ta = form.querySelector('textarea');
+            var body = ta.value.trim();
+            if (!body) return;
+            fetch('/api/comments/' + cid + '/reply', {
+              method: 'POST',
+              headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ body: body }),
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (data.error) return;
+              ta.value = '';
+              form.classList.add('hidden');
+              loadComments();
+            });
+          });
+        }
       }
 
-      // Reply submit buttons
-      var replyBtns = listEl.querySelectorAll('.qa-reply-btn');
-      for (var i = 0; i < replyBtns.length; i++) {
-        replyBtns[i].addEventListener('click', function() {
-          var cid = this.dataset.commentId;
-          var form = listEl.querySelector('.qa-reply-form[data-comment-id="' + cid + '"]');
-          var ta = form.querySelector('textarea');
-          var body = ta.value.trim();
+      // Post new question
+      if (postBtn && textarea) {
+        postBtn.addEventListener('click', function() {
+          var body = textarea.value.trim();
           if (!body) return;
-          fetch('/api/comments/' + cid + '/reply', {
+          fetch('/api/comments/' + contentId, {
             method: 'POST',
             headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json' },
             credentials: 'same-origin',
@@ -172,34 +202,17 @@
           .then(function(r) { return r.json(); })
           .then(function(data) {
             if (data.error) return;
-            ta.value = '';
-            form.classList.add('hidden');
+            textarea.value = '';
             loadComments();
           });
         });
       }
+
+      loadComments();
     }
 
-    // Post new question
-    if (postBtn) {
-      postBtn.addEventListener('click', function() {
-        var body = textarea.value.trim();
-        if (!body) return;
-        fetch('/api/comments/' + contentId, {
-          method: 'POST',
-          headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({ body: body }),
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.error) return;
-          textarea.value = '';
-          loadComments();
-        });
-      });
+    for (var s = 0; s < sections.length; s++) {
+      wireThread(sections[s]);
     }
-
-    loadComments();
   })();
 </script>

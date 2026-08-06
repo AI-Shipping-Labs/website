@@ -162,4 +162,6 @@ class WorkshopPageQASectionTest(TierSetupMixin, TestCase):
         # nothing would fetch the comments — confirm the IIFE is on the
         # page when the section is.
         response = self.client.get('/workshops/open-ws/tutorial/intro')
-        self.assertContains(response, "document.getElementById('qa-section')")
+        # The multi-instance IIFE (issue #1365) wires every ``.qa-thread`` on
+        # the page; its selector is the stable marker that the script loaded.
+        self.assertContains(response, "querySelectorAll('.qa-thread')")

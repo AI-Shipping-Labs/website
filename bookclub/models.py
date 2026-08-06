@@ -15,6 +15,8 @@ a viewer sees a book's participation body iff
 ``content.access.get_user_level(user) >= book.required_level``.
 """
 
+import uuid
+
 from django.conf import settings
 from django.db import models
 from django.urls import reverse
@@ -243,3 +245,71 @@ class ChapterRead(models.Model):
 
     def __str__(self):
         return f'{self.user} read {self.chapter}'
+
+
+class Note(TimestampedModelMixin, models.Model):
+    """One member's per-chapter note (issue #1365).
+
+    A first-class object (not a generic ``comments.Comment`` row): one note
+    per member per chapter, an optional mermaid ``diagram``, and it hosts a
+    comment thread of its own. The ``comment_content_id`` UUID is the ONLY
+    bridge from a note to the shared ``comments`` app — comments key off the
+    note, not off the chapter — mirroring ``plans.Plan.comment_content_id``.
+
+    An empty submit clears/deletes the note (the write endpoint enforces
+    "required for a saved note").
+    """
+
+    chapter = models.ForeignKey(
+        Chapter,
+        on_delete=models.CASCADE,
+        related_name='notes',
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='book_notes',
+    )
+    body = models.TextField(
+        help_text='The note text. An empty submit clears/deletes the note.',
+    )
+    diagram = models.TextField(
+        blank=True,
+        default='',
+        help_text='Optional mermaid diagram source (no image uploads).',
+    )
+    # The single bridge to the shared comments app. Comments are keyed by this
+    # UUID (never by the chapter), mirroring ``Plan.comment_content_id``.
+    comment_content_id = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        db_index=True,
+        editable=False,
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'chapter'],
+                name='uniq_book_chapter_note',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['chapter']),
+        ]
+
+    def __str__(self):
+        return f'{self.user} on {self.chapter}'
+
+    def get_absolute_url(self):
+        """The chapter reader page that hosts this note and its thread.
+
+        Used for the note-comment notification deep link (#1341/#1365). The
+        shared notification path appends ``#qa-section`` to land the reader on
+        the comments area of the chapter page.
+        """
+        return reverse(
+            'bookclub_chapter_detail',
+            kwargs={'slug': self.chapter.book.slug, 'number': self.chapter.number},
+        )

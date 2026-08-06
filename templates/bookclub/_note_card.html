@@ -1,0 +1,54 @@
+{% load accounts_extras %}
+{% comment %}
+Book Club note card (issue #1365). Renders one member's chapter note as a
+static/info card that hosts its own shared comment thread.
+
+Static/info card role: no group, no hover border, no wrapping anchor — the
+card navigates nowhere; only the composer/thread inside it is interactive.
+
+Context:
+  note              a bookclub.Note instance. ``note.is_own`` is set by the
+                    view when the note belongs to the viewer.
+  note_header       "author" (chapter page: show the author) — the only
+                    header dialect this issue needs. #1366 adds a "chapter"
+                    dialect for the reader-profile surface.
+  is_member         whether the shared comment thread renders (members only).
+
+The author name is plain text for now: the reader-profile route
+(``bookclub_reader_profile``) is owned by #1366 and is not registered yet, so
+there is nothing to link to without a dead link. #1366 wraps it in the profile
+link once the route and handle scheme exist.
+{% endcomment %}
+<article id="note-{{ note.pk }}" class="{% include 'content/_info_card_classes.html' %} bg-card">
+  {# --- Header (author) --- #}
+  <div class="flex items-center gap-3">
+    <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-border bg-background text-xs font-semibold">{{ note.user|display_name|slice:":1"|upper }}</div>
+    <div class="min-w-0 flex-1">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-sm font-medium text-foreground">{{ note.user|display_name }}</span>
+        {% if note.is_own %}
+        <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" data-testid="note-you-chip">You</span>
+        {% endif %}
+      </div>
+      <p class="text-xs text-muted-foreground">{{ note.created_at|member_short_date }}</p>
+    </div>
+  </div>
+
+  {# --- Body --- #}
+  <p class="mt-3 text-sm leading-relaxed text-foreground/90">{{ note.body }}</p>
+
+  {# --- Optional diagram (mermaid; no image uploads) --- #}
+  {% if note.diagram %}
+  <div class="mt-3 overflow-x-auto rounded-lg border border-border bg-background p-4">
+    <div class="mermaid">{{ note.diagram }}</div>
+  </div>
+  {% endif %}
+
+  {% comment %} Comments: the shared comments-app thread, keyed by this note.
+  Tighter section_class/heading_class keep the embedded thread proportional
+  inside this p-6 card (defaults are the full-page course/workshop sizes).
+  {% endcomment %}
+  {% if is_member %}
+    {% include "comments/_qa_section.html" with content_id=note.comment_content_id instance_id=note.pk user_authenticated=user.is_authenticated section_heading="Comments" composer_placeholder="Add a comment about this note…" composer_button_label="Post comment" composer_signin_prompt="to join this discussion" section_class="mt-6 mb-0" heading_class="text-base" %}
+  {% endif %}
+</article>

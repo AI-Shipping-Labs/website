@@ -43,6 +43,241 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/member-api/v1/books/{slug}/chapters/{number}/note": {
+      "delete": {
+        "description": "Idempotently deletes the key owner's note for the chapter. Destructive deletes of other members' notes stay Studio/admin scoped. Requires the ``books:write_notes`` scope.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Note cleared (idempotent)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``books:write_notes`` scope."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Key owner's tier is below the book's required level."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unknown/draft book or unknown chapter number."
+          }
+        },
+        "summary": "Clear the caller's own note",
+        "tags": [
+          "Books"
+        ]
+      },
+      "get": {
+        "description": "Returns the authenticated key owner's own note for the chapter, or 404 if they have not written one. Scoped to the key owner only \u2014 never another member's note, and never the group feed of other members' notes (that is a rendered web surface). Requires the ``books:read`` scope.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "body": "The KV cache is the whole game.",
+                  "book": {
+                    "slug": "inference-engineering",
+                    "title": "Inference Engineering"
+                  },
+                  "chapter": {
+                    "number": 0,
+                    "title": "Inference"
+                  },
+                  "comment_content_id": "0b3d\u2026",
+                  "created_at": "2026-08-06T10:00:00+00:00",
+                  "diagram": "",
+                  "updated_at": "2026-08-06T10:00:00+00:00"
+                }
+              }
+            },
+            "description": "The caller's own note."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``books:read`` scope."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Key owner's tier is below the book's required level."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unknown/draft book, unknown chapter, or no note yet."
+          }
+        },
+        "summary": "Get the caller's own note for a chapter",
+        "tags": [
+          "Books"
+        ]
+      },
+      "put": {
+        "description": "Creates or replaces the key owner's single note for the chapter (``update_or_create`` on owner + chapter). ``body`` is required; ``diagram`` (mermaid source) is optional. The first save flips the account's activation flag. Posting comments on a note and reading the group feed are out of scope for the member API \u2014 comments use the shared web endpoints. Requires the ``books:write_notes`` scope.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "The KV cache is the whole game."
+              },
+              "schema": {
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "diagram": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "body"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Upserted note."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``books:write_notes`` scope."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Key owner's tier is below the book's required level."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unknown/draft book or unknown chapter number."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or empty ``body``."
+          }
+        },
+        "summary": "Upsert the caller's own note",
+        "tags": [
+          "Books"
+        ]
+      }
+    },
     "/member-api/v1/books/{slug}/chapters/{number}/read": {
       "delete": {
         "description": "Idempotently removes the caller's read row for the chapter (delete if present). A repeated call is a no-op. Returns the updated ``done`` / ``total``. Requires the ``books:write_progress`` scope.",

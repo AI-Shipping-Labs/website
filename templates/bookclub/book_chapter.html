@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+{% load member_badges %}
+{% load member_empty_state %}
+
+{% block title %}Ch. {{ chapter.number }} — {{ chapter.title }} — {{ book.title }} | Books | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  {% comment %} Reader tier (max-w-3xl): a single-column notes feed plus one
+  own-note composer. {% endcomment %}
+  <section class="relative overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+
+      {# Back link to the book #}
+      <a href="{% url 'bookclub_book_detail' slug=book.slug %}" class="inline-flex items-center gap-1 text-sm text-accent hover:underline">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i> {{ book.title }}
+      </a>
+
+      {# Chapter header (public, for discovery/SEO) #}
+      <header class="mt-4">
+        <div class="flex flex-wrap items-center gap-2">
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">Books{% if chapter.week_label %} &middot; {{ chapter.week_label }}{% endif %}</p>
+          {% if is_member %}
+            {% if viewer_read %}
+              {% member_status_badge "Read" status="active" icon="check" testid="chapter-status-badge" %}
+            {% else %}
+              {% member_status_badge "Not read yet" status="upcoming" testid="chapter-status-badge" %}
+            {% endif %}
+          {% else %}
+            {% member_access_badge book.required_level testid="chapter-access-badge" %}
+          {% endif %}
+        </div>
+        <h1 class="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Ch. {{ chapter.number }} — {{ chapter.title }}</h1>
+        <div class="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
+          {% if chapter.deadline %}<span class="inline-flex items-center gap-1" data-testid="chapter-deadline"><i data-lucide="calendar-clock" class="h-3.5 w-3.5"></i>Meets {{ chapter.deadline|member_short_date }}</span>{% endif %}
+          {% if is_member %}
+          <span class="inline-flex items-center gap-1"><i data-lucide="users" class="h-3.5 w-3.5"></i>{{ read_count }} read</span>
+          <span class="inline-flex items-center gap-1"><i data-lucide="message-square" class="h-3.5 w-3.5"></i>{{ notes_count }} note{{ notes_count|pluralize }}</span>
+          {% endif %}
+        </div>
+      </header>
+
+      {% if not is_member %}
+      {# Guests / below-tier members: exactly one gated access card. #}
+      <div class="mt-8">
+        {% include "content/_gated_access_card.html" %}
+      </div>
+      {% else %}
+
+      {# Participation body (members with access) #}
+      <div data-testid="chapter-participation-body">
+
+        {# Mark as read — reuses the existing bookclub_chapter_read endpoint #}
+        <div class="mt-8">
+          <form method="post" action="{% url 'bookclub_chapter_read' book.slug chapter.number %}" class="flex flex-wrap items-center gap-3">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'bookclub_chapter_detail' book.slug chapter.number %}">
+            {% if viewer_read %}
+            <span class="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+              <i data-lucide="check-circle-2" class="h-5 w-5"></i>Marked read
+            </span>
+            <input type="hidden" name="read" value="0">
+            <button type="submit" class="rounded-sm text-sm text-muted-foreground hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="chapter-mark-unread">Mark unread</button>
+            {% else %}
+            <input type="hidden" name="read" value="1">
+            <button type="submit" class="{% button_classes 'primary' %}" data-testid="chapter-mark-read"><i data-lucide="check" class="h-4 w-4"></i>Mark as read</button>
+            {% endif %}
+          </form>
+        </div>
+
+        {# Your note — a single per-member note, written vs empty/editing #}
+        <div class="mt-6">
+          {% if own_note and not editing %}
+          <div class="{% include 'content/_info_card_classes.html' %} bg-card" data-testid="own-note-written">
+            <div class="flex items-start justify-between gap-3">
+              <p class="text-lg font-semibold text-foreground">Your note</p>
+              <a href="?edit=1" class="{% button_classes 'secondary' size='sm' extra='shrink-0' %}" data-testid="own-note-edit">Edit note</a>
+            </div>
+            <p class="mt-3 text-sm leading-relaxed text-foreground/90">{{ own_note.body }}</p>
+            {% if own_note.diagram %}
+            <div class="mt-3 overflow-x-auto rounded-lg border border-border bg-background p-4">
+              <div class="mermaid">{{ own_note.diagram }}</div>
+            </div>
+            {% endif %}
+          </div>
+          {% else %}
+          <div class="rounded-lg border border-accent/30 bg-accent/5 p-6" data-testid="own-note-composer">
+            <p class="text-lg font-semibold text-foreground">Your note</p>
+            <p class="mt-1 text-sm text-muted-foreground">What stuck with you from this chapter? Everyone reading along will see it.</p>
+            <form method="post" action="{% url 'bookclub_chapter_note' book.slug chapter.number %}" class="mt-4">
+              {% csrf_token %}
+              <textarea name="body" rows="4" placeholder="Write your takeaway…"
+                        class="w-full rounded-md border border-border bg-background px-4 py-2 text-base text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="own-note-body">{% if editing %}{{ own_note.body }}{% endif %}</textarea>
+              <label class="mt-3 block text-xs font-medium text-muted-foreground" for="own-note-diagram">Optional diagram (mermaid)</label>
+              <textarea id="own-note-diagram" name="diagram" rows="3" placeholder="graph TD; A--&gt;B"
+                        class="mt-1 w-full rounded-md border border-border bg-background px-4 py-2 font-mono text-xs text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="own-note-diagram-input">{% if editing %}{{ own_note.diagram }}{% endif %}</textarea>
+              <button type="submit" class="{% button_classes 'primary' extra='mt-4' %}" data-testid="own-note-post">Post note</button>
+            </form>
+          </div>
+          {% endif %}
+        </div>
+
+        {% comment %} Chapter summary: authored by #1368 (out of scope here). No
+        summary field exists yet, so only the placeholder handoff copy renders.
+        {% endcomment %}
+        <p class="mt-8 text-sm text-muted-foreground">The chapter summary is compiled from everyone's notes after the deadline.</p>
+
+        {# Notes from the group #}
+        <section class="mt-10">
+          <div class="mb-4 flex items-center justify-between">
+            <h2 class="text-lg font-semibold tracking-tight text-foreground">Notes</h2>
+            <span class="text-sm text-muted-foreground">{{ notes_count }} note{{ notes_count|pluralize }}</span>
+          </div>
+          {% if group_notes %}
+          <div class="space-y-5">
+            {% for note in group_notes %}
+            {% include "bookclub/_note_card.html" with note=note note_header="author" is_member=is_member %}
+            {% endfor %}
+          </div>
+          {% else %}
+          {% member_empty_state title='No notes yet' body='Be the first — post what stuck with you from this chapter.' icon='message-square' kind='fresh' %}
+          {% endif %}
+        </section>
+      </div>
+      {% endif %}
+
+      {% comment %} Prev / next chapter navigation (members and guests). Same
+      element pattern as the workshop / course reader bottom nav: bordered prev
+      on the left, accent-filled next pushed right. {% endcomment %}
+      <nav class="mt-10 flex flex-col gap-4 sm:flex-row sm:items-center border-t border-border pt-8">
+        {% if prev_chapter %}
+        <a href="{% url 'bookclub_chapter_detail' slug=book.slug number=prev_chapter.number %}"
+           class="{% button_classes 'secondary' extra='min-w-0' %}"
+           data-testid="chapter-prev">
+          <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
+          <span class="truncate">Ch. {{ prev_chapter.number }} — {{ prev_chapter.title }}</span>
+        </a>
+        {% endif %}
+
+        {% if next_chapter %}
+        <a href="{% url 'bookclub_chapter_detail' slug=book.slug number=next_chapter.number %}"
+           class="{% button_classes 'primary' extra='min-w-0 sm:ml-auto' %}"
+           data-testid="chapter-next">
+          <span class="truncate">Next: Ch. {{ next_chapter.number }} — {{ next_chapter.title }}</span>
+          <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0"></i>
+        </a>
+        {% else %}
+        {% comment %} No anchor: the full-book-summary route (bookclub_book_summary)
+        is owned by #1368 and not registered yet — linking it would 404 (dead
+        link). #1368 flips this copy to a link when it lands, mirroring how the
+        reader-profile author name stays plain text until #1366. {% endcomment %}
+        <p class="text-sm text-muted-foreground sm:ml-auto sm:text-right" data-testid="chapter-end-of-book">Last chapter — the full book summary lands at the end.</p>
+        {% endif %}
+      </nav>
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}
+
+{% block extra_scripts %}
+{% include "_partials/mermaid_script.html" %}
+{% if is_member %}{% include "comments/_qa_script.html" %}{% endif %}
+{% endblock %}

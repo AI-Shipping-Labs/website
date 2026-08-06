@@ -41,6 +41,7 @@ class MemberAPIKeyModelTest(TestCase):
             member_key.scopes,
             [
                 "books:read",
+                "books:write_notes",
                 "books:write_progress",
                 "plans:read",
                 "plans:write",

@@ -465,6 +465,60 @@ class TestRelatedContentRecommendations:
         assert "Published RAG Project" in rail.inner_text()
         assert "Draft RAG Tutorial" not in rail.inner_text()
 
+    def test_article_does_not_show_duplicate_event_workshop_pair(
+        self, django_server, page,
+    ):
+        # Issue #1359: an Event and its linked Workshop must render as one card.
+        _clear_content()
+        _article(
+            "Cv Careers Article",
+            "cv-careers-article",
+            tags=["careers", "cv"],
+            date=datetime.date(2026, 1, 1),
+        )
+        event = _event(
+            "Tailor Your Cv For Ai Engineering Roles",
+            "tailor-cv-event",
+            tags=["careers", "cv"],
+            days_offset=30,
+            status="upcoming",
+        )
+        workshop = _workshop(
+            "Tailor Your Cv For Ai Engineering Roles",
+            "tailor-cv-workshop",
+            tags=["careers", "cv"],
+            date=datetime.date(2026, 1, 5),
+        )
+        _workshop(
+            "Cv Single Digit Workshop",
+            "cv-single-digit-workshop",
+            tags=["careers"],
+            date=datetime.date(2026, 7, 8),
+        )
+        from content.models import Workshop
+
+        Workshop.objects.filter(pk=workshop.pk).update(event=event)
+        connection.close()
+
+        page.goto(
+            f"{django_server}/blog/cv-careers-article",
+            wait_until="domcontentloaded",
+        )
+
+        rail = page.get_by_test_id("related-content-rail")
+        assert rail.is_visible()
+        pair_cards = page.get_by_test_id("related-content-card").filter(
+            has_text="Tailor Your Cv For Ai Engineering Roles"
+        )
+        assert pair_cards.count() == 1
+        # Reporter directive: the Workshop always wins for a genuine pair.
+        assert (
+            pair_cards.get_by_test_id("related-content-type").inner_text() == "Workshop"
+        )
+        rail_text = rail.inner_text()
+        assert "July 8, 2026" in rail_text
+        assert "July 08, 2026" not in rail_text
+
     def test_minimal_database_does_not_render_empty_rail(self, django_server, page):
         _clear_content()
         _article("Only Public Article", "only-public-article", tags=["agents"])

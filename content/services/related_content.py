@@ -164,6 +164,8 @@ def _iter_candidates(current: Any):
 
     current_model_key = _model_key(current)
     current_pk = getattr(current, 'pk', None)
+
+    collected: list[tuple[Any, str, str, str]] = []
     for queryset, content_type, content_type_label, icon in definitions:
         for obj in queryset:
             if (
@@ -172,17 +174,72 @@ def _iter_candidates(current: Any):
                 and obj.pk == current_pk
             ):
                 continue
-            card = _build_card(obj, content_type, content_type_label, icon)
-            if not card.url:
-                continue
-            yield _Candidate(
-                card=card,
-                all_tags=frozenset(normalize_tags(getattr(obj, 'tags', []))),
-                sort_value=_sort_value(_public_sort_date(obj)),
-                title_key=card.title.casefold(),
-                model_key=_model_key(obj),
-                pk=obj.pk,
-            )
+            collected.append((obj, content_type, content_type_label, icon))
+
+    dropped = _dropped_pair_keys(collected, current, current_model_key, current_pk)
+
+    for obj, content_type, content_type_label, icon in collected:
+        if (_model_key(obj), obj.pk) in dropped:
+            continue
+        card = _build_card(obj, content_type, content_type_label, icon)
+        if not card.url:
+            continue
+        yield _Candidate(
+            card=card,
+            all_tags=frozenset(normalize_tags(getattr(obj, 'tags', []))),
+            sort_value=_sort_value(_public_sort_date(obj)),
+            title_key=card.title.casefold(),
+            model_key=_model_key(obj),
+            pk=obj.pk,
+        )
+
+
+def _dropped_pair_keys(
+    collected: list[tuple[Any, str, str, str]],
+    current: Any,
+    current_model_key: str,
+    current_pk: Any,
+) -> set[tuple[str, int]]:
+    """Return ``(model_key, pk)`` keys to drop so linked event/workshop pairs
+    never occupy two slots in the same rail.
+
+    A genuine pair is an ``Event`` and the ``Workshop`` whose ``event_id`` points
+    at it. The Workshop always wins and the Event is dropped, regardless of the
+    event's upcoming/past/null-start state (reporter directive on #1359: the
+    durable workshop artifact takes precedence unconditionally). The current
+    page's own linked counterpart is always dropped too, since it is a duplicate
+    of the thing being viewed.
+    """
+    events_by_pk = {
+        obj.pk: obj for obj, content_type, *_ in collected if content_type == 'event'
+    }
+    dropped: set[tuple[str, int]] = set()
+
+    for obj, content_type, *_ in collected:
+        if content_type != 'workshop':
+            continue
+        event_id = getattr(obj, 'event_id', None)
+        if event_id is None:
+            continue
+        linked_event = events_by_pk.get(event_id)
+        if linked_event is None:
+            continue
+        dropped.add((_model_key(linked_event), linked_event.pk))
+
+    # Drop the current page's own linked counterpart (the other half of its pair).
+    if current_model_key == 'content.workshop':
+        linked_event_id = getattr(current, 'event_id', None)
+        if linked_event_id is not None:
+            dropped.add(('events.event', linked_event_id))
+    elif current_model_key == 'events.event' and current_pk is not None:
+        for obj, content_type, *_ in collected:
+            if (
+                content_type == 'workshop'
+                and getattr(obj, 'event_id', None) == current_pk
+            ):
+                dropped.add((_model_key(obj), obj.pk))
+
+    return dropped
 
 
 def _build_card(
@@ -241,21 +298,19 @@ def _public_sort_date(obj: Any):
 
 
 def _date_label(obj: Any) -> str:
-    if hasattr(obj, 'formatted_date'):
-        return obj.formatted_date()
+    # Every card renders one non-zero-padded day form (``July 8, 2026``). The
+    # models' own ``formatted_date()`` helpers disagree on padding
+    # (``Event.formatted_date()`` is non-padded, but Article/Tutorial/Project use
+    # zero-padded ``%B %d, %Y``), so the rail resolves the underlying date itself
+    # rather than delegating, keeping one consistent format across card types.
+    value = getattr(obj, 'date', None)
+    if value is None:
+        value = getattr(obj, 'start_datetime', None)
+    if value is None:
+        value = getattr(obj, 'published_at', None)
 
-    value = None
-    if hasattr(obj, 'date'):
-        value = getattr(obj, 'date')
-    elif hasattr(obj, 'start_datetime'):
-        value = getattr(obj, 'start_datetime')
-    elif getattr(obj, 'published_at', None) is not None:
-        value = getattr(obj, 'published_at')
-
-    if isinstance(value, datetime):
+    if isinstance(value, (date, datetime)):
         return f'{value.strftime("%B")} {value.day}, {value.year}'
-    if isinstance(value, date):
-        return value.strftime('%B %d, %Y')
     return ''
 
 

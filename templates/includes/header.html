@@ -13,62 +13,21 @@
     </a>
 
     <div class="hidden md:flex md:items-center md:gap-5 lg:gap-8" data-testid="desktop-primary-nav">
-      <div class="relative group" data-header-public-dropdown="about">
-        <button type="button" class="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" id="about-dropdown-btn" data-testid="nav-about-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="about-dropdown">
-          About
+      {% for group in primary_nav %}
+      <div class="relative group" data-header-public-dropdown="{{ group.key }}">
+        <button type="button" class="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" id="{{ group.key }}-dropdown-btn" data-testid="nav-{{ group.key }}-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="{{ group.key }}-dropdown">
+          {{ group.label }}
           <i data-lucide="chevron-down" class="h-4 w-4"></i>
         </button>
-        <div class="absolute left-0 top-full w-56 pt-2 hidden group-hover:block" id="about-dropdown" data-testid="nav-about-menu" role="menu" aria-labelledby="about-dropdown-btn">
+        <div class="absolute left-0 top-full w-56 pt-2 hidden group-hover:block" id="{{ group.key }}-dropdown" data-testid="nav-{{ group.key }}-menu" role="menu" aria-labelledby="{{ group.key }}-dropdown-btn">
         <div class="rounded-md border border-border bg-popover p-1 shadow-lg">
-          <a href="/about" data-testid="nav-about-link-team" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Team</a>
-          <a href="/faq" data-testid="nav-about-link-faq" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">FAQ</a>
-          {% for page in marketing_nav.about %}
-          <a href="{{ page.get_absolute_url }}" data-testid="nav-about-link-marketing-{{ forloop.counter }}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">{{ page.nav_text }}</a>
+          {% for item in group.items %}
+          <a href="{{ item.href }}" data-testid="nav-{{ group.key }}-link-{{ item.slug }}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">{{ item.label }}</a>
           {% endfor %}
         </div>
         </div>
       </div>
-      <div class="relative group" data-header-public-dropdown="community">
-        <button type="button" class="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" id="community-dropdown-btn" data-testid="nav-community-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="community-dropdown">
-          Community
-          <i data-lucide="chevron-down" class="h-4 w-4"></i>
-        </button>
-        <div class="absolute left-0 top-full w-56 pt-2 hidden group-hover:block" id="community-dropdown" data-testid="nav-community-menu" role="menu" aria-labelledby="community-dropdown-btn">
-        <div class="rounded-md border border-border bg-popover p-1 shadow-lg">
-          <a href="/pricing" data-testid="nav-community-link-membership" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Membership</a>
-          <a href="/activities#access-by-tier" data-testid="nav-community-link-activities" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Activities</a>
-          <a href="/sprints" data-testid="nav-community-link-sprints" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Community Sprints</a>
-          <a href="/events" data-testid="nav-community-link-events" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Events</a>
-          <a href="/events?filter=past" data-testid="nav-community-link-past-recordings" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Past Recordings</a>
-          {% for page in marketing_nav.community %}
-          <a href="{{ page.get_absolute_url }}" data-testid="nav-community-link-marketing-{{ forloop.counter }}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">{{ page.nav_text }}</a>
-          {% endfor %}
-        </div>
-        </div>
-      </div>
-      <div class="relative group" data-header-public-dropdown="resources">
-        <button type="button" class="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" id="resources-dropdown-btn" data-testid="nav-resources-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="resources-dropdown">
-          Resources
-          <i data-lucide="chevron-down" class="h-4 w-4"></i>
-        </button>
-        <div class="absolute left-0 top-full w-56 pt-2 hidden group-hover:block" id="resources-dropdown" data-testid="nav-resources-menu" role="menu" aria-labelledby="resources-dropdown-btn">
-        <div class="rounded-md border border-border bg-popover p-1 shadow-lg">
-          <a href="/blog" data-testid="nav-resources-link-blog" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Blog</a>
-          <a href="/courses" data-testid="nav-resources-link-courses" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Courses</a>
-          <a href="/workshops" data-testid="nav-resources-link-workshops" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Workshops</a>
-          <a href="/learning-path/ai-engineer" data-testid="nav-resources-link-learning-paths" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Learning Paths</a>
-          <a href="/projects" data-testid="nav-resources-link-projects" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Project Ideas</a>
-          <a href="/interview" data-testid="nav-resources-link-interview" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Interview Prep</a>
-          <a href="/resources" data-testid="nav-resources-link-curated-links" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Curated Links</a>
-          {% if has_published_downloads %}
-          <a href="/downloads" data-testid="nav-resources-link-downloads" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Downloads</a>
-          {% endif %}
-          {% for page in marketing_nav.resources %}
-          <a href="{{ page.get_absolute_url }}" data-testid="nav-resources-link-marketing-{{ forloop.counter }}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">{{ page.nav_text }}</a>
-          {% endfor %}
-        </div>
-        </div>
-      </div>
+      {% endfor %}
     </div>
 
     <div class="hidden md:flex md:items-center md:gap-4">
@@ -201,56 +160,19 @@
           <svg class="theme-icon-moon h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
         </button>
       </div>
+      {% for group in primary_nav %}
       <div class="py-0.5">
-        <button type="button" id="mobile-about-toggle" data-testid="mobile-nav-about-trigger" aria-expanded="false" aria-controls="mobile-about-list" class="flex w-full min-h-[44px] items-center justify-between rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
-          About
-          <svg class="h-4 w-4 transition-transform" id="mobile-about-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        <button type="button" id="mobile-{{ group.key }}-toggle" data-testid="mobile-nav-{{ group.key }}-trigger" aria-expanded="false" aria-controls="mobile-{{ group.key }}-list" class="flex w-full min-h-[44px] items-center justify-between rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
+          {{ group.label }}
+          <svg class="h-4 w-4 transition-transform" id="mobile-{{ group.key }}-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
-        <div class="ml-3 mt-0.5 space-y-0 border-l border-border pl-3 hidden" id="mobile-about-list" data-testid="mobile-nav-about-menu">
-          <a href="/about" data-testid="mobile-nav-about-link-team" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Team</a>
-          <a href="/faq" data-testid="mobile-nav-about-link-faq" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">FAQ</a>
-          {% for page in marketing_nav.about %}
-          <a href="{{ page.get_absolute_url }}" data-testid="mobile-nav-about-link-marketing-{{ forloop.counter }}" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">{{ page.nav_text }}</a>
+        <div class="ml-3 mt-0.5 space-y-0 border-l border-border pl-3 hidden" id="mobile-{{ group.key }}-list" data-testid="mobile-nav-{{ group.key }}-menu">
+          {% for item in group.items %}
+          <a href="{{ item.href }}" data-testid="mobile-nav-{{ group.key }}-link-{{ item.slug }}" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">{{ item.label }}</a>
           {% endfor %}
         </div>
       </div>
-      <div class="py-0.5">
-        <button type="button" id="mobile-community-toggle" data-testid="mobile-nav-community-trigger" aria-expanded="false" aria-controls="mobile-community-list" class="flex w-full min-h-[44px] items-center justify-between rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
-          Community
-          <svg class="h-4 w-4 transition-transform" id="mobile-community-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
-        <div class="ml-3 mt-0.5 space-y-0 border-l border-border pl-3 hidden" id="mobile-community-list" data-testid="mobile-nav-community-menu">
-          <a href="/pricing" data-testid="mobile-nav-community-link-membership" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Membership</a>
-          <a href="/activities#access-by-tier" data-testid="mobile-nav-community-link-activities" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Activities</a>
-          <a href="/sprints" data-testid="mobile-nav-community-link-sprints" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Community Sprints</a>
-          <a href="/events" data-testid="mobile-nav-community-link-events" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Events</a>
-          <a href="/events?filter=past" data-testid="mobile-nav-community-link-past-recordings" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Past Recordings</a>
-          {% for page in marketing_nav.community %}
-          <a href="{{ page.get_absolute_url }}" data-testid="mobile-nav-community-link-marketing-{{ forloop.counter }}" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">{{ page.nav_text }}</a>
-          {% endfor %}
-        </div>
-      </div>
-      <div class="py-0.5">
-        <button type="button" id="mobile-resources-toggle" data-testid="mobile-nav-resources-trigger" aria-expanded="false" aria-controls="mobile-resources-list" class="flex w-full min-h-[44px] items-center justify-between rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
-          Resources
-          <svg class="h-4 w-4 transition-transform" id="mobile-resources-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
-        <div class="ml-3 mt-0.5 space-y-0 border-l border-border pl-3 hidden" id="mobile-resources-list" data-testid="mobile-nav-resources-menu">
-          <a href="/blog" data-testid="mobile-nav-resources-link-blog" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Blog</a>
-          <a href="/courses" data-testid="mobile-nav-resources-link-courses" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Courses</a>
-          <a href="/workshops" data-testid="mobile-nav-resources-link-workshops" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Workshops</a>
-          <a href="/learning-path/ai-engineer" data-testid="mobile-nav-resources-link-learning-paths" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Learning Paths</a>
-          <a href="/projects" data-testid="mobile-nav-resources-link-projects" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Project Ideas</a>
-          <a href="/interview" data-testid="mobile-nav-resources-link-interview" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Interview Prep</a>
-          <a href="/resources" data-testid="mobile-nav-resources-link-curated-links" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Curated Links</a>
-          {% if has_published_downloads %}
-          <a href="/downloads" data-testid="mobile-nav-resources-link-downloads" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Downloads</a>
-          {% endif %}
-          {% for page in marketing_nav.resources %}
-          <a href="{{ page.get_absolute_url }}" data-testid="mobile-nav-resources-link-marketing-{{ forloop.counter }}" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">{{ page.nav_text }}</a>
-          {% endfor %}
-        </div>
-      </div>
+      {% endfor %}
       {% if user.is_authenticated %}
       <div class="mt-4 border-t border-border pt-4">
         <div class="mb-3" data-testid="mobile-account-section">

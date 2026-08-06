@@ -89,23 +89,30 @@ class FooterNewsletterFormMessageHooksTest(TestCase):
 
 
 class FooterCommunityNavigationTest(TestCase):
-    """Footer exposes the compact Community map with past recordings."""
+    """Footer Community column is honestly community-only (issue #1356).
 
-    def test_footer_community_column_lists_major_destinations(self):
+    The previous mislabelled catch-all (About, Membership Tiers, FAQ,
+    Manage Subscription) was corrected in #1356: those links moved to the
+    About column or were removed, and the Community column now lists only
+    true community destinations.
+    """
+
+    def test_footer_community_column_lists_community_destinations(self):
         response = self.client.get("/")
         footer = _extract_footer(response.content.decode())
+        # The Community column is the first <h3> block; the Resources
+        # column heading marks its end.
         community_start = footer.index("<h3")
-        legal_start = footer.index("<h3", community_start + 1)
-        community = footer[community_start:legal_start]
+        resources_start = footer.index("<h3", community_start + 1)
+        community = footer[community_start:resources_start]
 
         expected = [
-            ('About', '/about'),
-            ('Membership Tiers', '/pricing'),
             ('Activities', '/activities#access-by-tier'),
             ('Community Sprints', '/sprints'),
             ('Events', '/events'),
-            ('FAQ', '/faq'),
             ('Past Recordings', '/events?filter=past'),
+            ('Books', '/books'),
+            ('Join Slack', '/community/slack'),
         ]
         positions = []
         for label, href in expected:
@@ -118,7 +125,11 @@ class FooterCommunityNavigationTest(TestCase):
                 positions.append(match.start())
 
         self.assertEqual(positions, sorted(positions))
-        self.assertIn("Manage Subscription", community)
+        # The old catch-all links are no longer in the Community column.
+        self.assertNotIn("Manage Subscription", community)
+        self.assertNotIn("Membership Tiers", community)
+        self.assertNotIn(">FAQ</a>", community)
+        # Legal column links remain present in the footer.
         self.assertIn('href="/terms/"', footer)
         self.assertIn('href="/privacy/"', footer)
         self.assertIn('href="/impressum/"', footer)

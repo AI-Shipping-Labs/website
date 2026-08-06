@@ -326,3 +326,87 @@ sprint-end recap job must be scheduled.
 Rotation: Safe to flip at any time.
 
 Test vs live: Configure independently in each deployment.
+
+## SOCIAL_YOUTUBE_URL
+
+Purpose: Public YouTube channel URL rendered as a YouTube icon in the
+footer social row (issue #1356). Read by
+`website.context_processors.site_context` via
+`get_config("SOCIAL_YOUTUBE_URL", "")` and exposed to templates as
+`footer_social.youtube`.
+
+Default: empty (no default handle).
+
+Without it (blank): The YouTube icon does not render in the footer; the
+rest of the social row (Join Slack and any other configured icons) is
+unaffected.
+
+Where to find it: Your community's public YouTube channel URL.
+
+Prereqs: None.
+
+Rotation: Safe to change at any time; the next page render uses the new
+value (no redeploy).
+
+Test vs live: Set per-environment values if staging should point at a
+different channel.
+
+## SOCIAL_LINKEDIN_URL
+
+Purpose: Public LinkedIn page URL rendered as a LinkedIn icon in the
+footer social row (issue #1356). Read by
+`website.context_processors.site_context` via
+`get_config("SOCIAL_LINKEDIN_URL", "")` and exposed to templates as
+`footer_social.linkedin`.
+
+Default: empty (no default handle).
+
+Without it (blank): The LinkedIn icon does not render in the footer.
+
+Where to find it: Your community's public LinkedIn page URL.
+
+Prereqs: None.
+
+Rotation: Safe to change at any time (no redeploy).
+
+Test vs live: Set per-environment values if needed.
+
+## SOCIAL_GITHUB_URL
+
+Purpose: Public GitHub organisation URL rendered as a GitHub icon in the
+footer social row (issue #1356). Read by
+`website.context_processors.site_context` via
+`get_config("SOCIAL_GITHUB_URL", "")` and exposed to templates as
+`footer_social.github`.
+
+Default: empty (no default handle).
+
+Without it (blank): The GitHub icon does not render in the footer.
+
+Where to find it: Your community's public GitHub organisation URL.
+
+Prereqs: None.
+
+Rotation: Safe to change at any time (no redeploy).
+
+Test vs live: Set per-environment values if needed.
+
+## SOCIAL_X_URL
+
+Purpose: Public X (formerly Twitter) profile URL rendered as an X icon
+in the footer social row (issue #1356). Read by
+`website.context_processors.site_context` via
+`get_config("SOCIAL_X_URL", "")` and exposed to templates as
+`footer_social.x`.
+
+Default: empty (no default handle).
+
+Without it (blank): The X icon does not render in the footer.
+
+Where to find it: Your community's public X profile URL.
+
+Prereqs: None.
+
+Rotation: Safe to change at any time (no redeploy).
+
+Test vs live: Set per-environment values if needed.

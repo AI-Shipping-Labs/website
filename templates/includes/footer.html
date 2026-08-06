@@ -37,8 +37,16 @@
 
   <section class="border-t border-border bg-muted">
     <div class="mx-auto max-w-7xl px-5 pt-10 pb-3 sm:px-6 sm:pt-12 lg:px-8 lg:pt-16">
-      <div class="grid gap-6 sm:grid-cols-3 sm:gap-3">
-        <div>
+      {% comment %}
+      Footer information architecture (issue #1356): a brand block plus
+      four honestly-labelled columns — Community, Resources, About, Legal.
+      The content-library links, the conditional Downloadables item, and
+      the ``marketing_nav`` loops mirror the header destinations built in
+      ``website.context_processors``. Project Ideas / Curated Links stay
+      hidden pending #1355.
+      {% endcomment %}
+      <div class="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-6">
+        <div class="col-span-2 sm:col-span-3 lg:col-span-2">
           <a href="/" class="flex min-h-[44px] items-center gap-2 sm:min-h-0">
             <img src="/static/rocket-upscale-no-bg-small.png" alt="AI Shipping Labs" class="h-6 w-6">
             <span class="font-semibold">AI Shipping Labs</span>
@@ -46,17 +54,51 @@
           <p class="mt-2 text-sm text-muted-foreground">
             Where action-oriented builders turn AI ideas into real projects.
           </p>
+          <div class="mt-4 -ml-3 flex flex-wrap items-center gap-1" data-testid="footer-social-row">
+            <a href="{% url 'community_slack_join' %}"
+               aria-label="Slack"
+               data-testid="footer-social-slack"
+               class="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+              {% include 'includes/_icon_slack.html' with css='h-5 w-5' %}
+            </a>
+            {% if footer_social.youtube %}
+            <a href="{{ footer_social.youtube }}" target="_blank" rel="noopener noreferrer"
+               aria-label="YouTube"
+               data-testid="footer-social-youtube"
+               class="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+              {% include 'includes/_icon_youtube.html' with css='h-5 w-5' %}
+            </a>
+            {% endif %}
+            {% if footer_social.linkedin %}
+            <a href="{{ footer_social.linkedin }}" target="_blank" rel="noopener noreferrer"
+               aria-label="LinkedIn"
+               data-testid="footer-social-linkedin"
+               class="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+              {% include 'includes/_icon_linkedin.html' with css='h-5 w-5' %}
+            </a>
+            {% endif %}
+            {% if footer_social.github %}
+            <a href="{{ footer_social.github }}" target="_blank" rel="noopener noreferrer"
+               aria-label="GitHub"
+               data-testid="footer-social-github"
+               class="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+              {% include 'includes/_icon_github.html' with css='h-5 w-5' %}
+            </a>
+            {% endif %}
+            {% if footer_social.x %}
+            <a href="{{ footer_social.x }}" target="_blank" rel="noopener noreferrer"
+               aria-label="X"
+               data-testid="footer-social-x"
+               class="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+              {% include 'includes/_icon_x.html' with css='h-5 w-5' %}
+            </a>
+            {% endif %}
+          </div>
         </div>
 
         <div>
           <h3 class="text-sm font-semibold text-foreground">Community</h3>
           <ul class="mt-0.5 space-y-0 sm:mt-2">
-            <li>
-              <a href="/about" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">About</a>
-            </li>
-            <li>
-              <a href="{% url 'pricing' %}" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Membership Tiers</a>
-            </li>
             <li>
               <a href="/activities#access-by-tier" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Activities</a>
             </li>
@@ -67,14 +109,65 @@
               <a href="/events" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Events</a>
             </li>
             <li>
-              <a href="/faq" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">FAQ</a>
-            </li>
-            <li>
               <a href="/events?filter=past" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Past Recordings</a>
             </li>
             <li>
-              <a href="{{ stripe_customer_portal_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Manage Subscription</a>
+              <a href="/books" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Books</a>
             </li>
+            <li>
+              <a href="{% url 'community_slack_join' %}" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Join Slack</a>
+            </li>
+          </ul>
+        </div>
+
+        <div>
+          <h3 class="text-sm font-semibold text-foreground">Resources</h3>
+          <ul class="mt-0.5 space-y-0 sm:mt-2">
+            <li>
+              <a href="/blog" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Blog</a>
+            </li>
+            <li>
+              <a href="/courses" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Courses</a>
+            </li>
+            <li>
+              <a href="/workshops" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Workshops</a>
+            </li>
+            <li>
+              <a href="/learning-path/ai-engineer" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Learning Paths</a>
+            </li>
+            <li>
+              <a href="/interview" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Interview Prep</a>
+            </li>
+            {% if has_published_downloads %}
+            <li>
+              <a href="/downloads" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Downloadables</a>
+            </li>
+            {% endif %}
+            {% for page in marketing_nav.resources %}
+            <li>
+              <a href="{{ page.get_absolute_url }}" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">{{ page.nav_text }}</a>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+
+        <div>
+          <h3 class="text-sm font-semibold text-foreground">About</h3>
+          <ul class="mt-0.5 space-y-0 sm:mt-2">
+            <li>
+              <a href="/about" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Team</a>
+            </li>
+            <li>
+              <a href="/faq" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">FAQ</a>
+            </li>
+            <li>
+              <a href="{% url 'pricing' %}" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Membership Tiers</a>
+            </li>
+            {% for page in marketing_nav.about %}
+            <li>
+              <a href="{{ page.get_absolute_url }}" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">{{ page.nav_text }}</a>
+            </li>
+            {% endfor %}
           </ul>
         </div>
 

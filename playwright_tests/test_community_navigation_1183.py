@@ -160,13 +160,16 @@ def test_footer_community_column_links_to_major_destinations(django_server, page
     footer = page.locator("footer")
     expect(footer.get_by_role("heading", name="Community")).to_be_visible()
 
+    # Issue #1356 corrected the mislabelled catch-all: the Community
+    # column now lists only true community destinations (About /
+    # Membership Tiers / FAQ moved to the About column).
     expected = [
-        ["About", "/about"],
-        ["Membership Tiers", "/pricing"],
         ["Activities", "/activities#access-by-tier"],
         ["Community Sprints", "/sprints"],
         ["Events", "/events"],
-        ["FAQ", "/faq"],
+        ["Past Recordings", "/events?filter=past"],
+        ["Books", "/books"],
+        ["Join Slack", "/community/slack"],
     ]
     for label, href in expected:
         link = footer.get_by_role("link", name=label, exact=True)

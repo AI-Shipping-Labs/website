@@ -1411,7 +1411,10 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
         content = response.content.decode()
         self.assertNotIn('Join our Slack community', content)
         self.assertNotIn('Connected to Slack', content)
-        self.assertNotIn('Join Slack', content)
+        # The dashboard Slack CTA card is absent. (The sitewide footer's
+        # Join Slack link — #1356 — is unrelated and always present, so
+        # the guard targets the dashboard card, not the raw label.)
+        self.assertNotIn('data-testid="slack-account-card"', content)
 
     def test_basic_user_sees_no_slack_section(self):
         """Basic tier users do not see any Slack-related content."""
@@ -1431,7 +1434,9 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
             response = self.client.get('/')
         content = response.content.decode()
         self.assertNotIn('Join our Slack community', content)
-        self.assertNotIn('Join Slack', content)
+        # See note above: the dashboard Slack card is absent; the footer
+        # Join Slack link (#1356) is unrelated and always present.
+        self.assertNotIn('data-testid="slack-account-card"', content)
 
     def test_dashboard_renders_normally_when_slack_url_empty(self):
         """The rest of the dashboard renders without errors when SLACK_INVITE_URL is empty."""

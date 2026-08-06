@@ -724,6 +724,50 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/site.md#crm_export_max_limit',
             },
+            {
+                'key': 'SOCIAL_YOUTUBE_URL',
+                'is_secret': False,
+                'optional': True,
+                'description': (
+                    'Public YouTube channel URL for the footer social row '
+                    '(issue #1356). Leave blank to hide the YouTube icon; '
+                    'there is no default handle.'
+                ),
+                'docs_url': '_docs/integrations/site.md#social_youtube_url',
+            },
+            {
+                'key': 'SOCIAL_LINKEDIN_URL',
+                'is_secret': False,
+                'optional': True,
+                'description': (
+                    'Public LinkedIn page URL for the footer social row '
+                    '(issue #1356). Leave blank to hide the LinkedIn icon; '
+                    'there is no default handle.'
+                ),
+                'docs_url': '_docs/integrations/site.md#social_linkedin_url',
+            },
+            {
+                'key': 'SOCIAL_GITHUB_URL',
+                'is_secret': False,
+                'optional': True,
+                'description': (
+                    'Public GitHub organisation URL for the footer social '
+                    'row (issue #1356). Leave blank to hide the GitHub icon; '
+                    'there is no default handle.'
+                ),
+                'docs_url': '_docs/integrations/site.md#social_github_url',
+            },
+            {
+                'key': 'SOCIAL_X_URL',
+                'is_secret': False,
+                'optional': True,
+                'description': (
+                    'Public X (formerly Twitter) profile URL for the footer '
+                    'social row (issue #1356). Leave blank to hide the X '
+                    'icon; there is no default handle.'
+                ),
+                'docs_url': '_docs/integrations/site.md#social_x_url',
+            },
         ],
     },
     {

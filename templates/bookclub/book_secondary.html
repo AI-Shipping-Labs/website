@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% load member_badges %}
+{% load accounts_extras %}
+
+{% block title %}{{ book.title }} | Books | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  {% comment %} Secondary book page (issue #1363): the lighter lifecycle page for
+  an upcoming or finished book — the group is not reading it right now, so there
+  is no participation body and no gate, just public lifecycle info. Detail-tier
+  width (max-w-5xl). {% endcomment %}
+  <section class="relative overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+
+      <a href="{% url 'bookclub_index' %}" class="inline-flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="book-back-link">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i> Books
+      </a>
+
+      <header class="mt-4 flex flex-col items-start gap-6 sm:flex-row">
+        {% if book.cover_image_url %}
+        <img src="{{ book.cover_image_url }}" alt="{{ book.title }} cover"
+             class="h-56 w-40 flex-shrink-0 rounded-lg border border-border object-cover shadow-lg">
+        {% else %}
+        <div class="flex h-56 w-40 flex-shrink-0 items-end rounded-lg border border-border bg-gradient-to-br {{ book.cover_accent }} to-transparent p-4 shadow-lg"
+             aria-hidden="true">
+          <span class="text-sm font-medium text-foreground/80">{{ book.title }}</span>
+        </div>
+        {% endif %}
+        <div class="flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-sm font-medium uppercase tracking-widest text-accent">Books</span>
+            {% if book.status == 'finished' %}
+            {% member_status_badge "Finished" status="past" icon="check" testid="book-status-badge" %}
+            {% else %}
+            {% member_status_badge "Up next" status="upcoming" testid="book-status-badge" %}
+            {% endif %}
+          </div>
+          <h1 class="mt-1 text-3xl font-semibold tracking-tight">{{ book.title }}</h1>
+          {% if book.subtitle %}<p class="mt-1 text-base text-muted-foreground">{{ book.subtitle }}</p>{% endif %}
+          <p class="mt-1 text-sm text-muted-foreground">{{ book.author }}</p>
+          {% if book.description %}<p class="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground">{{ book.description }}</p>{% endif %}
+        </div>
+      </header>
+
+      <div class="mt-10 max-w-2xl" data-testid="book-secondary-body">
+        {% if book.status == 'finished' %}
+        {% comment %} Finished recap. Summary (#1368) / standings (#1367) CTAs
+        are absent until those routes exist — this page ships with no dead
+        links. {% endcomment %}
+        <div class="{% include 'content/_info_card_classes.html' %} bg-card" data-testid="book-finished-recap">
+          <div class="flex items-center gap-2">
+            <i data-lucide="check-circle-2" class="h-5 w-5 text-accent" aria-hidden="true"></i>
+            <h2 class="text-lg font-semibold text-foreground">This book is finished</h2>
+          </div>
+          <p class="mt-3 text-sm text-muted-foreground">
+            The group read {{ book.title }} together across {{ num_chapters }} chapter{{ num_chapters|pluralize }}.
+          </p>
+        </div>
+        {% else %}
+        {% comment %} Upcoming: when it starts. No fake "Get notified" control —
+        no notify mechanism exists yet. Members below the tier get a join CTA.
+        {% endcomment %}
+        <div class="rounded-lg border border-accent/40 bg-accent/5 p-6" data-testid="book-upcoming-callout">
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">Up next</p>
+          <h2 class="mt-1 text-lg font-semibold text-foreground sm:text-xl">
+            {% if book.start_date %}Starts {{ book.start_date|member_full_date }}{% else %}Kickoff date coming soon{% endif %}
+          </h2>
+          <p class="mt-2 max-w-md text-sm text-muted-foreground">
+            The chapter roadmap and weekly deadlines get posted here before we start.
+          </p>
+          {% if show_join_cta %}
+          <div class="mt-5">
+            <a href="/pricing" class="{% button_classes 'primary' %}" data-testid="book-upcoming-join-cta">
+              Join to read along
+            </a>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

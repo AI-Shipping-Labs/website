@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% load member_badges %}
+{% load member_empty_state %}
+
+{% block title %}Books | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  {% comment %} Books hub (issue #1363): a public discovery page, never gated
+  (like /sprints). Books are grouped by the operator-set Book.status. Kept at
+  Detail width (max-w-5xl), matching /sprints. {% endcomment %}
+  <section class="relative overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
+
+      <header>
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Community &middot; Books</p>
+        <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">Read together, ship together</h1>
+        <p class="mt-4 max-w-3xl text-base text-muted-foreground">
+          We read books together, one chapter block at a time with weekly
+          deadlines, and meet to share what we learned. Track your progress,
+          take notes, and read what everyone else is thinking.
+        </p>
+      </header>
+
+      {# Reading now — one featured clickable card, or a calm empty state. #}
+      <div class="mt-12">
+        <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">Reading now</h2>
+        {% if featured_book %}
+        {% url 'bookclub_book_detail' slug=featured_book.slug as featured_url %}
+        <div class="mt-5">
+          {% include "content/_content_card.html" with card_url=featured_url card_testid="featured-book-card" card_body_template="bookclub/_featured_book_card_body.html" card_badge_template="bookclub/_featured_book_card_badges.html" card_aria_label=featured_book.title %}
+        </div>
+        {% else %}
+        <div class="mt-5">
+          {% member_empty_state title="No book in progress right now" body="See what's coming up below, or check back soon — a new read starts here." icon="book-open" kind="fresh" %}
+        </div>
+        {% endif %}
+      </div>
+
+      {% if upcoming_books %}
+      <div class="mt-12">
+        <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">Coming up</h2>
+        <div class="mt-5 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {% for b in upcoming_books %}
+          {% url 'bookclub_book_detail' slug=b.slug as b_url %}
+          {% include "content/_content_card.html" with card_url=b_url card_testid="upcoming-book-card" card_body_template="bookclub/_secondary_book_card_body.html" card_badge_template="bookclub/_secondary_book_card_badges.html" card_compact=True card_aria_label=b.title %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if past_books %}
+      <div class="mt-12">
+        <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">Past reads</h2>
+        <div class="mt-5 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {% for b in past_books %}
+          {% url 'bookclub_book_detail' slug=b.slug as b_url %}
+          {% include "content/_content_card.html" with card_url=b_url card_testid="past-book-card" card_body_template="bookclub/_secondary_book_card_body.html" card_badge_template="bookclub/_secondary_book_card_badges.html" card_compact=True card_aria_label=b.title %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if draft_books %}
+      {# Staff-only: preview unpublished books before they go live. #}
+      <div class="mt-12" data-testid="draft-books-section">
+        <div class="flex flex-wrap items-center gap-2">
+          <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">Drafts</h2>
+          {% member_label_badge "Staff preview" tone="neutral" %}
+        </div>
+        <div class="mt-5 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {% for b in draft_books %}
+          {% url 'bookclub_book_detail' slug=b.slug as b_url %}
+          {% include "content/_content_card.html" with card_url=b_url card_testid="draft-book-card" card_body_template="bookclub/_secondary_book_card_body.html" card_badge_template="bookclub/_secondary_book_card_badges.html" card_compact=True card_aria_label=b.title %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {# How it works — static info cards (de-gamified). #}
+      <div class="mt-14">
+        <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">How it works</h2>
+        <div class="mt-5 grid gap-6 sm:grid-cols-3">
+          <div class="{% include 'content/_info_card_classes.html' %} bg-card">
+            <div class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent"><i data-lucide="list-checks" class="h-5 w-5" aria-hidden="true"></i></div>
+            <h3 class="mt-4 text-lg font-semibold text-foreground">Follow the roadmap</h3>
+            <p class="mt-1 text-sm text-muted-foreground">Each chapter has a suggested weekly deadline. Mark chapters as read as you go.</p>
+          </div>
+          <div class="{% include 'content/_info_card_classes.html' %} bg-card">
+            <div class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent"><i data-lucide="pen-line" class="h-5 w-5" aria-hidden="true"></i></div>
+            <h3 class="mt-4 text-lg font-semibold text-foreground">Share your notes</h3>
+            <p class="mt-1 text-sm text-muted-foreground">Jot down takeaways per chapter. Make your reading profile public so others can read and comment.</p>
+          </div>
+          <div class="{% include 'content/_info_card_classes.html' %} bg-card">
+            <div class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent"><i data-lucide="users" class="h-5 w-5" aria-hidden="true"></i></div>
+            <h3 class="mt-4 text-lg font-semibold text-foreground">Read together</h3>
+            <p class="mt-1 text-sm text-muted-foreground">See how everyone's progressing and stay on pace with the group.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

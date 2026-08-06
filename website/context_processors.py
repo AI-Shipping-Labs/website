@@ -229,6 +229,7 @@ def _build_primary_nav(marketing_nav, has_published_downloads):
             'slug': 'activities',
         },
         {'label': 'Community Sprints', 'href': '/sprints', 'slug': 'sprints'},
+        {'label': 'Books', 'href': '/books', 'slug': 'books'},
         {'label': 'Events', 'href': '/events', 'slug': 'events'},
         {
             'label': 'Past Recordings',

@@ -260,6 +260,7 @@ def test_community_dropdown_groups_membership_sprints_events(django_server, page
         "nav-community-link-membership",
         "nav-community-link-activities",
         "nav-community-link-sprints",
+        "nav-community-link-books",
         "nav-community-link-events",
         "nav-community-link-past-recordings",
     ]
@@ -284,10 +285,11 @@ def test_community_dropdown_links_membership_first(django_server, page):
             .map(a => [a.getAttribute('data-testid'), a.getAttribute('href')])
         """
     )
-    assert links[:5] == [
+    assert links[:6] == [
         ["nav-community-link-membership", "/pricing"],
         ["nav-community-link-activities", "/activities#access-by-tier"],
         ["nav-community-link-sprints", "/sprints"],
+        ["nav-community-link-books", "/books"],
         ["nav-community-link-events", "/events"],
         ["nav-community-link-past-recordings", "/events?filter=past"],
     ]
@@ -446,6 +448,7 @@ def test_mobile_community_accordion_reaches_past_recordings(django_server, brows
         "mobile-nav-community-link-membership",
         "mobile-nav-community-link-activities",
         "mobile-nav-community-link-sprints",
+        "mobile-nav-community-link-books",
         "mobile-nav-community-link-events",
         "mobile-nav-community-link-past-recordings",
     ]
@@ -572,6 +575,7 @@ def test_authenticated_member_sees_same_public_nav_plus_account(
         "nav-community-link-membership",
         "nav-community-link-activities",
         "nav-community-link-sprints",
+        "nav-community-link-books",
         "nav-community-link-events",
         "nav-community-link-past-recordings",
     ]

@@ -1,0 +1,17 @@
+{% load member_badges %}
+{% comment %}
+Issue #1363 — compact book card header badge cluster for the "Coming up",
+"Past reads", and staff-only "Drafts" grids. Rendered in the shared
+content/_content_card.html header row via card_badge_template. Reads the loop
+variable ``b`` and shows a lifecycle status badge: "Draft" (warning/yellow) for
+staff draft previews, "Up next" (info) for upcoming, "Past read" (neutral) for
+finished — finished/past states are neutral, never green.
+{% endcomment %}
+{% member_access_badge b.required_level testid="secondary-book-access-badge" %}
+{% if b.status == 'draft' %}
+{% member_status_badge "Draft" status="pending" %}
+{% elif b.status == 'finished' %}
+{% member_status_badge "Past read" status="past" icon="check" %}
+{% else %}
+{% member_status_badge "Up next" status="upcoming" %}
+{% endif %}

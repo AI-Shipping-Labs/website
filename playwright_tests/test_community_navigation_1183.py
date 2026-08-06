@@ -21,6 +21,7 @@ COMMUNITY_DESKTOP_LINKS = [
     ["nav-community-link-membership", "/pricing", "Membership"],
     ["nav-community-link-activities", "/activities#access-by-tier", "Activities"],
     ["nav-community-link-sprints", "/sprints", "Community Sprints"],
+    ["nav-community-link-books", "/books", "Books"],
     ["nav-community-link-events", "/events", "Events"],
     [
         "nav-community-link-past-recordings",
@@ -37,6 +38,7 @@ COMMUNITY_MOBILE_LINKS = [
         "Activities",
     ],
     ["mobile-nav-community-link-sprints", "/sprints", "Community Sprints"],
+    ["mobile-nav-community-link-books", "/books", "Books"],
     ["mobile-nav-community-link-events", "/events", "Events"],
     [
         "mobile-nav-community-link-past-recordings",

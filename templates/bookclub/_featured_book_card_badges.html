@@ -1,0 +1,8 @@
+{% load member_badges %}
+{% comment %}
+Issue #1363 — featured book card header badge cluster. Rendered in the shared
+content/_content_card.html header row via card_badge_template. Access badge
+plus a live "In progress" status badge (the group is reading this now).
+{% endcomment %}
+{% member_access_badge featured_book.required_level testid="featured-book-access-badge" %}
+{% member_status_badge "In progress" status="active" %}

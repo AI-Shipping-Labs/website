@@ -76,6 +76,12 @@ AUDITED_PAGE_WIDTHS = {
     # 2026-07-21 widening was originally protecting.
     "templates/content/sprints_index.html": "max-w-5xl",
     "templates/events/events_list.html": "max-w-5xl",
+    # Book Club (issue #1363): the hub and secondary (upcoming/finished)
+    # lifecycle pages are sparse hubs at Detail width; the full detail is a
+    # single-column reader page at max-w-3xl.
+    "templates/bookclub/index.html": "max-w-5xl",
+    "templates/bookclub/book_secondary.html": "max-w-5xl",
+    "templates/bookclub/book_detail.html": "max-w-3xl",
     "templates/content/blog_list.html": "max-w-5xl",
     "templates/content/tutorials_list.html": "max-w-5xl",
     "templates/content/downloads_list.html": "max-w-5xl",

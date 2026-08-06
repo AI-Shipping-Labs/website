@@ -2,6 +2,7 @@
 
 from django.urls import path
 
+from member_api.views.books import book_chapter_read, book_reading
 from member_api.views.docs import docs_page, openapi_json
 from member_api.views.plans import (
     checkpoint_collection,
@@ -90,5 +91,15 @@ urlpatterns = [
         "v1/plans/<int:plan_id>/resources/<int:resource_id>",
         resource_detail,
         name="member_api_resource_detail",
+    ),
+    path(
+        "v1/books/<slug:slug>/reading",
+        book_reading,
+        name="member_api_book_reading",
+    ),
+    path(
+        "v1/books/<slug:slug>/chapters/<int:number>/read",
+        book_chapter_read,
+        name="member_api_book_chapter_read",
     ),
 ]

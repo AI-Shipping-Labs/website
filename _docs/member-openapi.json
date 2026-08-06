@@ -43,6 +43,228 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/member-api/v1/books/{slug}/chapters/{number}/read": {
+      "delete": {
+        "description": "Idempotently removes the caller's read row for the chapter (delete if present). A repeated call is a no-op. Returns the updated ``done`` / ``total``. Requires the ``books:write_progress`` scope.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "done": 2,
+                  "read": false,
+                  "total": 5
+                }
+              }
+            },
+            "description": "Chapter is unread."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``books:write_progress`` scope."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Key owner's tier is below the book's required level."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unknown/draft book or unknown chapter number."
+          }
+        },
+        "summary": "Mark a chapter unread",
+        "tags": [
+          "Books"
+        ]
+      },
+      "put": {
+        "description": "Idempotently marks the chapter read for the authenticated key owner (``get_or_create``). A repeated call is a no-op. Returns the updated ``done`` / ``total``. Requires the ``books:write_progress`` scope.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "done": 3,
+                  "read": true,
+                  "read_at": "2026-08-06T10:00:00+00:00",
+                  "total": 5
+                }
+              }
+            },
+            "description": "Chapter is read."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``books:write_progress`` scope."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Key owner's tier is below the book's required level."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unknown/draft book or unknown chapter number."
+          }
+        },
+        "summary": "Mark a chapter read",
+        "tags": [
+          "Books"
+        ]
+      }
+    },
+    "/member-api/v1/books/{slug}/reading": {
+      "get": {
+        "description": "Returns the authenticated key owner's per-chapter read state for the book plus ``total`` / ``done`` / ``pct``. Scoped to the key owner only \u2014 never another member's state. Requires the ``books:read`` scope.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "book": {
+                    "slug": "inference-engineering",
+                    "title": "Inference Engineering"
+                  },
+                  "chapters": [
+                    {
+                      "number": 0,
+                      "read": true,
+                      "read_at": "2026-08-06T10:00:00+00:00",
+                      "title": "Inference"
+                    },
+                    {
+                      "number": 1,
+                      "read": false,
+                      "read_at": null,
+                      "title": "Prerequisites"
+                    }
+                  ],
+                  "done": 2,
+                  "pct": 40,
+                  "total": 5
+                }
+              }
+            },
+            "description": "The caller's reading state."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``books:read`` scope."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Key owner's tier is below the book's required level."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unknown or draft book."
+          }
+        },
+        "summary": "Get the caller's reading state for a book",
+        "tags": [
+          "Books"
+        ]
+      }
+    },
     "/member-api/v1/plans": {
       "get": {
         "description": "Lists plans owned by the authenticated member API key owner, newest first. Never returns other members' plans.",

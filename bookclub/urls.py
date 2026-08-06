@@ -18,4 +18,9 @@ urlpatterns = [
         views.book_detail,
         name='bookclub_book_detail',
     ),
+    path(
+        'books/<slug:slug>/chapters/<int:number>/read',
+        views.chapter_read,
+        name='bookclub_chapter_read',
+    ),
 ]

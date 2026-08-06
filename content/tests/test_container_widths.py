@@ -61,12 +61,29 @@ FRAME_DELEGATED_TO_INCLUDE = {
     "templates/content/workshops_catalog.html": "templates/content/_workshops_catalog.html",
 }
 
-# Pages the 2026-07-21 audit changed, plus the pair that prompted it
-# (/sprints had drifted to max-w-5xl while every sibling index page was 7xl).
+# Pages the width audits pinned to a specific tier.
+#
+# The 2026-07-21 audit moved everything to Frame on the rule "an index page must
+# never be narrower than the chrome above it".  The 2026-08-06 addendum (issue
+# #1340) superseded that with a content-shape rule: single-column row feeds and
+# sparse 2-column hubs re-tier down to Detail (max-w-5xl), aligning each list
+# with its own detail page, while genuine 3+ column grids keep the Frame.  See
+# _docs/audits/2026-07-21-container-widths.md -> "2026-08-06 addendum".
 AUDITED_PAGE_WIDTHS = {
-    # The reported complaint: index pages must match each other and the chrome.
-    "templates/content/sprints_index.html": "max-w-7xl",
-    "templates/events/events_list.html": "max-w-7xl",
+    # 2026-08-06: single-column row lists and sparse hubs re-tiered 7xl -> 5xl
+    # so the right half of the frame no longer reads empty.  /sprints and
+    # /events move together to preserve the sibling consistency that the
+    # 2026-07-21 widening was originally protecting.
+    "templates/content/sprints_index.html": "max-w-5xl",
+    "templates/events/events_list.html": "max-w-5xl",
+    "templates/content/blog_list.html": "max-w-5xl",
+    "templates/content/tutorials_list.html": "max-w-5xl",
+    "templates/content/downloads_list.html": "max-w-5xl",
+    "templates/content/interview_hub.html": "max-w-5xl",
+    "templates/content/tags_index.html": "max-w-5xl",
+    "templates/content/tags_detail.html": "max-w-5xl",
+    "templates/voting/poll_list.html": "max-w-5xl",
+    "templates/content/workshops_list.html": "max-w-5xl",
     # Was max-w-4xl, the only 4xl on the site.
     "templates/events/host_management.html": "max-w-5xl",
     # Were max-w-lg, off the scale entirely.

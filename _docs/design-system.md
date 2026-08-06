@@ -129,12 +129,14 @@ Four tiers, chosen by content shape rather than per-page taste. These are the on
 
 | Tier | Class | Use for |
 |---|---|---|
-| Frame | `max-w-7xl` | Index, grid, and listing pages; marketing pages; the member dashboard; sidebar-plus-content layouts. Matches the header and footer chrome. |
-| Detail | `max-w-5xl` | Detail pages with mixed layout: media embed plus metadata plus cards or CTAs (event, course, workshop, sprint, plan, poll detail; account; notifications). |
+| Frame | `max-w-7xl` | Surfaces that visibly consume the full width: 3+ column card grids with enough items to fill them, the 4-column pricing grid, the month calendar, the member dashboard, sidebar-plus-content layouts, and multi-section marketing pages. Matches the header and footer chrome. Being an index page does not by itself earn the Frame — only the content shape does. |
+| Detail | `max-w-5xl` | Detail pages with mixed layout: media embed plus metadata plus cards or CTAs (event, course, workshop, sprint, plan, poll detail; account; notifications). Also the home for single-column row feeds and sparse 2-column hubs (blog, tutorials, downloads, interview, tags, workshops hero, events, vote, sprints), which read as empty on the right at 7xl and align better with their own 5xl detail page. |
 | Reader | `max-w-3xl` | Long-form `.prose` bodies and multi-step single-column forms. 48rem keeps the measure near the 65-75ch readable band while leaving code blocks usable width. |
 | Narrow | `max-w-2xl` | Terminal status and confirmation interstitials, and single-purpose forms (subscribe, join-state, cancel registration, verify/unsubscribe result, peer review). |
 
-The outer frame always sets the tier; narrower inner columns (a `max-w-3xl` intro inside a 7xl index, a `max-w-md` auth card) are normal and live inside it. An index page must never be narrower than the chrome above it: content that is inset from the header reads as a layout bug.
+Pick the narrowest sanctioned tier that fits the widest repeated element on the page. Single-column row feeds and sparse 2-column hubs use `max-w-5xl` (aligning each list with its own 5xl detail page); reserve the 7xl Frame for genuine grids that fill it.
+
+The outer frame always sets the tier; narrower inner columns (a `max-w-3xl` intro inside a Frame index, a `max-w-md` auth card) are normal and live inside it. A page column may be narrower than the header chrome when its content is single-column or sparse: the shared `px-4 sm:px-6 lg:px-8` gutters keep it left-aligned below the max width and centered above it, exactly like `/about`. A 7xl Frame may still cap individual inner sections, but those inner caps must use sanctioned widths (no `max-w-6xl`).
 
 Enforced by `content/tests/test_container_widths.py`. Rationale, the full route table, and the 2026-07-21 remediation are in [`audits/2026-07-21-container-widths.md`](audits/2026-07-21-container-widths.md).
 

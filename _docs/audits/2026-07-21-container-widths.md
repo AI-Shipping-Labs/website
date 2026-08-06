@@ -216,6 +216,31 @@ Note that the Playwright layer is `local_only` and is deselected by the core gat
 - Inner `max-w-6xl` grids on `activities.html` (`:45`, `:107`). Inner elements, not outer frames; the guard checks frames only.
 - Studio and `templates/integrations/` admin surfaces.
 
+## 2026-08-06 addendum — the "index is always Frame" rule is superseded
+
+Issue #1340 (2026-08-06) reverses part of the 2026-07-21 remediation. The original rule — "an index page must never be narrower than the chrome above it" — over-corrected: 10 of the Frame-tier surfaces are single-column row lists or sparse 2-column hubs whose content fills only ~55-70% of the 1216px column, so the right half reads empty (the reported `/workshops` and `/sprints` complaint). That rule is superseded by a content-shape rule: pick the narrowest sanctioned tier that fits the widest repeated element. Being an index page no longer automatically means Frame.
+
+Re-tiered from `max-w-7xl` to `max-w-5xl` (10 pages, outer container only):
+
+| Template | Shape |
+|---|---|
+| `templates/content/blog_list.html` | Single-column row list |
+| `templates/content/tutorials_list.html` | Single-column list |
+| `templates/content/downloads_list.html` | Sparse 2-col cards (keeps `sm:grid-cols-2`) |
+| `templates/content/interview_hub.html` | Sparse 2-col hub (keeps `sm:grid-cols-2`) |
+| `templates/content/tags_index.html` | Chip cloud |
+| `templates/content/tags_detail.html` | Single-column result rows |
+| `templates/content/workshops_list.html` | Hero only; the included `_workshops_catalog.html` grid stays 7xl |
+| `templates/events/events_list.html` | Single-column rows |
+| `templates/voting/poll_list.html` | Single-column poll cards |
+| `templates/content/sprints_index.html` | Single-column rows |
+
+`/sprints` and `/events` move together, preserving the sibling consistency that was the original 2026-07-21 complaint — both now sit at `max-w-5xl` rather than both at `max-w-7xl`.
+
+Kept at `max-w-7xl` (genuine grids / marketing / dashboard / calendar / sidebar-plus-content): `/` (anon + dashboard), `/pricing`, `/projects`, `/resources`, `/courses`, `/workshops/catalog`, `/events/calendar`, `/activities`. On `/activities` the two inner `max-w-6xl` blocks (`:45`, `:107`) were folded to `max-w-5xl`, so the last unsanctioned width on a member page is gone (this resolves the second "Open PM question" above).
+
+Test contract: `AUDITED_PAGE_WIDTHS` in `content/tests/test_container_widths.py` now pins all 10 at `max-w-5xl`; `playwright_tests/test_container_widths_525.py` splits the listing band into a 7xl grid band and a 5xl row-list band (`LISTINGS_WIDE` / `LISTINGS_NARROW`) and `TestListingFrameWidthConsistency` asserts each band internally rather than across bands.
+
 ## Screenshots
 
 Captured at 1440x900 on 2026-07-21, stored under `.tmp/designer-width-audit-desktop/` (untracked; regenerate with `scripts/capture_screenshots.py` if needed):

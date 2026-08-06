@@ -171,7 +171,11 @@ class TestStudioBookManagement:
             page.fill('input[name="author"]', "Philip Kiely")
             page.select_option('[data-testid="book-required-level"]', "20")
             page.select_option('[data-testid="book-status"]', "current")
-            page.fill('input[name="start_date"]', "2026-08-10")
+            # Dynamic future date so the fixture never rots (see date-rot guard).
+            start_date = (
+                datetime.date.today() + datetime.timedelta(days=4)
+            ).isoformat()
+            page.fill('input[name="start_date"]', start_date)
             page.click('button[type="submit"][form="book-edit-form"]')
 
             # Lands on the book detail page with the auto-derived slug.

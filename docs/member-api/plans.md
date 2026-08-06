@@ -157,15 +157,51 @@ Send only the collections you want to update. Validation failures roll back the 
 
 ## Scopes
 
-Each member key carries a set of scopes. New keys are created with all three by default.
+Each member key carries a set of scopes. New keys are created with all of them by default.
 
 | Scope | Grants |
 | --- | --- |
 | `plans:read` | Read your own plans (`GET`). |
 | `plans:write_progress` | Toggle `done` on existing items via `PATCH /plans/{plan_id}/progress`. |
 | `plans:write` | Edit plan content: create / update / delete weeks, checkpoints, deliverables, next steps, resources, week notes, and edit narrative fields. |
+| `books:read` | Read your own Book Club reading state (`GET /books/{slug}/reading`). |
+| `books:write_progress` | Mark your own chapters read / unread (`PUT` / `DELETE /books/{slug}/chapters/{number}/read`). |
 
-The scopes are checked independently: `plans:write` is not a superset of `plans:write_progress`. A request to a content-editing endpoint with a key that lacks `plans:write` returns `401`.
+The scopes are checked independently: `plans:write` is not a superset of `plans:write_progress`. A request to a content-editing endpoint with a key that lacks the required scope returns `401`.
+
+## Book Club Reading
+
+The Book Club endpoints track which chapters you have read. Every endpoint is owner-scoped: there is no request parameter that can target another member, so a key only ever reads or mutates its own reading state. Access mirrors the site — a book gated above your tier returns `403`, and an unknown or draft book (or unknown chapter number) returns `404`.
+
+`GET /books/{slug}/reading` (scope `books:read`) returns your per-chapter state plus totals:
+
+```bash
+curl -sS \
+  -H "Authorization: Token $AI_SHIPPING_LABS_MEMBER_API_KEY" \
+  https://aishippinglabs.com/member-api/v1/books/inference-engineering/reading
+```
+
+```json
+{
+  "book": {"slug": "inference-engineering", "title": "Inference Engineering"},
+  "total": 5,
+  "done": 2,
+  "pct": 40,
+  "chapters": [
+    {"number": 0, "title": "Inference", "read": true, "read_at": "2026-08-06T10:00:00+00:00"},
+    {"number": 1, "title": "Prerequisites", "read": false, "read_at": null}
+  ]
+}
+```
+
+`PUT /books/{slug}/chapters/{number}/read` (scope `books:write_progress`) marks a chapter read; `DELETE` on the same path marks it unread. Both are idempotent — repeating the call is a no-op — and return the updated `done` / `total`:
+
+```bash
+curl -sS -X PUT \
+  -H "Authorization: Token $AI_SHIPPING_LABS_MEMBER_API_KEY" \
+  https://aishippinglabs.com/member-api/v1/books/inference-engineering/chapters/0/read
+# {"read": true, "read_at": "2026-08-06T10:00:00+00:00", "done": 3, "total": 5}
+```
 
 ## Editing Plan Content
 

@@ -15,8 +15,10 @@ a viewer sees a book's participation body iff
 ``content.access.get_user_level(user) >= book.required_level``.
 """
 
+from django.conf import settings
 from django.db import models
 from django.urls import reverse
+from django.utils import timezone
 
 from content.access import LEVEL_MAIN
 from content.access import VISIBILITY_CHOICES as TIER_VISIBILITY_CHOICES
@@ -200,3 +202,44 @@ class Chapter(TimestampedModelMixin, models.Model):
 
     def __str__(self):
         return f'Ch. {self.number} — {self.title}'
+
+
+class ChapterRead(models.Model):
+    """One member's "I've read this chapter" mark (issue #1364).
+
+    Presence-of-row semantics, following the
+    ``content.UserContentCompletion`` / ``UserCourseProgress`` precedent: a
+    row means "read"; to unmark, delete the row — there is no ``is_read``
+    boolean to keep in sync. A dedicated ``ForeignKey(Chapter)`` (rather than
+    the generic completion discriminator table) keeps queries flat, gives
+    cascade-on-chapter-delete for free, and lets the board (#1367) and
+    profiles (#1366) aggregate with plain ORM ``Count``/``filter``.
+    """
+
+    chapter = models.ForeignKey(
+        Chapter,
+        on_delete=models.CASCADE,
+        related_name='reads',
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='book_chapter_reads',
+    )
+    # Always set; the insert time is the read signal (mirrors
+    # ``UserContentCompletion.completed_at``).
+    read_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'chapter'],
+                name='uniq_book_chapter_read',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['chapter']),
+        ]
+
+    def __str__(self):
+        return f'{self.user} read {self.chapter}'

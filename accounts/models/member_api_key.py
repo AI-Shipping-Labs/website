@@ -20,8 +20,20 @@ class MemberAPIKey(models.Model):
 
     KEY_PREFIX = "asl_member_"
     LOOKUP_PREFIX_LENGTH = 24
-    SUPPORTED_SCOPES = frozenset({"plans:read", "plans:write_progress", "plans:write"})
-    DEFAULT_SCOPES = ("plans:read", "plans:write_progress", "plans:write")
+    SUPPORTED_SCOPES = frozenset({
+        "plans:read",
+        "plans:write_progress",
+        "plans:write",
+        "books:read",
+        "books:write_progress",
+    })
+    DEFAULT_SCOPES = (
+        "plans:read",
+        "plans:write_progress",
+        "plans:write",
+        "books:read",
+        "books:write_progress",
+    )
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

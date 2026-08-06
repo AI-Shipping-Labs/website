@@ -50,16 +50,40 @@
       {% if is_member %}
       {# Participation body — the chapter roadmap. #}
       <section class="mt-12" data-testid="book-participation-body">
-        <h2 class="text-lg font-semibold tracking-tight">Contents</h2>
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 class="text-lg font-semibold tracking-tight">Contents</h2>
+          {% if viewer_total %}
+          <span class="text-sm text-muted-foreground" data-testid="book-reading-progress">{{ viewer_done }} of {{ viewer_total }} read</span>
+          {% endif %}
+        </div>
+        {% if viewer_total %}
+        {# Calm read-progress bar — no streak / gamification chrome. #}
+        <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted" role="progressbar"
+             aria-valuenow="{{ viewer_pct }}" aria-valuemin="0" aria-valuemax="100"
+             aria-label="Reading progress" data-testid="book-reading-progress-bar">
+          <div class="h-full rounded-full bg-accent transition-all" style="width: {{ viewer_pct }}%"></div>
+        </div>
+        {% endif %}
         {% if chapters %}
-        <ol class="mt-3 space-y-0.5">
+        <ol class="mt-4 space-y-0.5">
           {% for ch in chapters %}
-          <li class="flex min-h-[44px] items-center justify-between gap-2.5 rounded-md px-3 py-2 text-sm">
+          <li id="chapter-{{ ch.number }}" class="flex min-h-[44px] flex-wrap items-center justify-between gap-2.5 rounded-md px-3 py-2 text-sm">
             <span class="text-foreground">Ch. {{ ch.number }} — {{ ch.title }}</span>
-            <span class="flex items-center gap-3 text-xs text-muted-foreground">
+            <div class="flex items-center gap-3 text-xs text-muted-foreground">
               {% if ch.week_label %}<span>{{ ch.week_label }}</span>{% endif %}
               {% if ch.deadline %}<span data-testid="book-chapter-deadline">{{ ch.deadline|member_short_date }}</span>{% endif %}
-            </span>
+              <form method="post" action="{% url 'bookclub_chapter_read' book.slug ch.number %}" class="flex items-center">
+                {% csrf_token %}
+                {% if ch.viewer_read %}
+                <input type="hidden" name="read" value="0">
+                {% member_status_badge "Read" status="active" icon="check" testid="book-chapter-read-badge" %}
+                <button type="submit" class="{% button_classes 'secondary' size='sm' extra='ml-2' %}" data-testid="book-chapter-mark-unread">Mark unread</button>
+                {% else %}
+                <input type="hidden" name="read" value="1">
+                <button type="submit" class="{% button_classes 'secondary' size='sm' %}" data-testid="book-chapter-mark-read">Mark as read</button>
+                {% endif %}
+              </form>
+            </div>
           </li>
           {% endfor %}
         </ol>

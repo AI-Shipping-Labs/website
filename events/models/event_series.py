@@ -23,6 +23,10 @@ from events.models.event import PUBLIC_EVENT_STATUSES
 
 EVENT_SERIES_CADENCE_CHOICES = [
     ('weekly', 'Weekly'),
+    # Issue #1358: a cadence-less "plain collection". The series groups events
+    # together but makes no recurring-schedule claim, so ``day_of_week`` and
+    # ``start_time`` may be null. Never surfaced as a schedule label.
+    ('none', 'No fixed cadence'),
 ]
 
 # Issue #877: a weekly series' occurrences are 7 days apart, but a clock
@@ -62,18 +66,27 @@ class EventSeries(TimestampedModelMixin, models.Model):
         max_length=20,
         choices=EVENT_SERIES_CADENCE_CHOICES,
         default='weekly',
-        help_text='Cadence label. v1 supports weekly only.',
+        help_text=(
+            "Cadence label. 'weekly' or 'none' (No fixed cadence, a plain "
+            'collection with no schedule).'
+        ),
     )
     day_of_week = models.IntegerField(
         choices=DAY_OF_WEEK_CHOICES,
         default=2,
+        null=True, blank=True,
         help_text=(
             'Day of the week of the first occurrence. Stored on the series '
-            'so the cadence label survives per-event drift.'
+            'so the cadence label survives per-event drift. Null for a '
+            "'No fixed cadence' collection (issue #1358)."
         ),
     )
     start_time = models.TimeField(
-        help_text='Time of day (24-hour) of the first occurrence.',
+        null=True, blank=True,
+        help_text=(
+            'Time of day (24-hour) of the first occurrence. Null for a '
+            "'No fixed cadence' collection (issue #1358)."
+        ),
     )
     timezone = models.CharField(
         max_length=100, default='Europe/Berlin',

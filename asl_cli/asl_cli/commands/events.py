@@ -64,6 +64,9 @@ EVENT_FLAGS = [
     click.option("--tags", default=None, help="Comma-separated tags, e.g. sprint:may-2026,workshop."),
     click.option("--zoom-join-url", default=None),
     click.option("--recording-url", default=None),
+    click.option("--event-series", "event_series", default=None,
+                 help="Attach to a series by pk or slug. Pass an empty "
+                      'string ("") to detach.'),
     json_option(
         "timestamps",
         required=False,
@@ -101,6 +104,15 @@ def _validate_timestamps_option(body):
         raise click.UsageError("--timestamps must be a JSON array.")
 
 
+def _normalize_event_series(body):
+    """Map ``--event-series ""`` to a JSON null so the API detaches the event.
+
+    A non-empty value (pk or slug) is forwarded verbatim; the API resolves it.
+    """
+    if body.get("event_series") == "":
+        body["event_series"] = None
+
+
 @events.command("create")
 @apply_event_flags
 @format_option
@@ -116,6 +128,7 @@ def events_create(fmt, **kwargs):
     if "host_ids" in body and isinstance(body["host_ids"], str):
         body["host_ids"] = _split_csv_int(body["host_ids"])
     _validate_timestamps_option(body)
+    _normalize_event_series(body)
     emit(get_client().post(f"{API}/events", json_body=body), fmt)
 
 
@@ -131,6 +144,7 @@ def events_update(slug, fmt, **kwargs):
     if "host_ids" in body and isinstance(body["host_ids"], str):
         body["host_ids"] = _split_csv_int(body["host_ids"])
     _validate_timestamps_option(body)
+    _normalize_event_series(body)
     emit(get_client().patch(f"{API}/events/{slug}", json_body=body), fmt)
 
 

@@ -18,9 +18,11 @@
   </div>
   <h1 class="text-2xl font-semibold text-foreground">New event series</h1>
   <p class="text-muted-foreground mt-1">
-    Create a weekly series and the form will generate one event per occurrence,
-    seven days apart, each as an independent draft. Edit any session later to
-    drift its time, title, or status — siblings stay untouched.
+    A weekly series generates one event per occurrence, seven days apart, each
+    as an independent draft — edit any session later to drift its time, title,
+    or status while siblings stay untouched. Choose “No fixed cadence” instead
+    to create a plain collection with no schedule; attach existing events to it
+    later from each event’s edit page.
   </p>
 </div>
 
@@ -50,13 +52,32 @@
                   class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ form_values.description }}</textarea>
       </div>
 
-      {% include "studio/_partials/datetime_picker.html" with instance_id="series" date_name="start_date" time_name="start_time" duration_name="duration_hours" tz_name="timezone" date_value=form_values.start_date time_value=form_values.start_time duration_value=form_values.duration_hours tz_value=timezone_value tz_label=timezone_label tz_options=timezone_options date_label="Start date (dd/mm/yyyy)" time_label="Start time (HH:MM)" required=True error_date=errors.start_date error_time=errors.start_time error_duration=errors.duration_hours error_timezone=errors.timezone error_date_testid="error-start-date" error_time_testid="error-start-time" error_duration_testid="error-duration" %}
-
+      {% comment %}
+        Issue #1358: cadence picker. "Weekly" generates a schedule from the
+        fields below; "No fixed cadence" creates a plain collection and hides
+        those fields (toggled by the script at the end of this template).
+      {% endcomment %}
       <div>
-        <label class="block text-sm font-medium text-foreground mb-1" for="occurrences-input">Occurrences (1–{{ max_occurrences }})</label>
-        <input id="occurrences-input" type="number" name="occurrences" value="{{ form_values.occurrences }}" required min="1" max="{{ max_occurrences }}"
-               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-        {% if errors.occurrences %}<p class="text-xs text-red-400 mt-1" data-testid="error-occurrences">{{ errors.occurrences }}</p>{% endif %}
+        <label class="block text-sm font-medium text-foreground mb-1" for="cadence-input">Cadence</label>
+        <select id="cadence-input" name="cadence" data-testid="series-cadence-select"
+                class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          <option value="weekly" {% if form_values.cadence != 'none' %}selected{% endif %}>Weekly</option>
+          <option value="none" {% if form_values.cadence == 'none' %}selected{% endif %}>No fixed cadence</option>
+        </select>
+        <p class="text-xs text-muted-foreground mt-1">
+          Weekly generates one draft event per occurrence. No fixed cadence creates an empty collection you attach events to later.
+        </p>
+      </div>
+
+      <div id="weekly-schedule-fields" class="space-y-4">
+        {% include "studio/_partials/datetime_picker.html" with instance_id="series" date_name="start_date" time_name="start_time" duration_name="duration_hours" tz_name="timezone" date_value=form_values.start_date time_value=form_values.start_time duration_value=form_values.duration_hours tz_value=timezone_value tz_label=timezone_label tz_options=timezone_options date_label="Start date (dd/mm/yyyy)" time_label="Start time (HH:MM)" required=True error_date=errors.start_date error_time=errors.start_time error_duration=errors.duration_hours error_timezone=errors.timezone error_date_testid="error-start-date" error_time_testid="error-start-time" error_duration_testid="error-duration" %}
+
+        <div>
+          <label class="block text-sm font-medium text-foreground mb-1" for="occurrences-input">Occurrences (1–{{ max_occurrences }})</label>
+          <input id="occurrences-input" type="number" name="occurrences" value="{{ form_values.occurrences }}" required min="1" max="{{ max_occurrences }}"
+                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          {% if errors.occurrences %}<p class="text-xs text-red-400 mt-1" data-testid="error-occurrences">{{ errors.occurrences }}</p>{% endif %}
+        </div>
       </div>
 
       <div class="grid grid-cols-3 gap-4">
@@ -84,5 +105,32 @@
 
 {% url 'studio_event_series_list' as event_series_cancel_url %}
 {% include "studio/includes/sticky_action_bar.html" with form_id="event-series-create-form" title="New event series" subtitle="Save remains available while you review the form." can_save=True primary_label="Create series" cancel_url=event_series_cancel_url %}
+
+{% comment %}
+  Issue #1358: hide the weekly-schedule fields and drop their `required`
+  attribute when "No fixed cadence" is chosen so the collection can be created
+  with a blank day/time. Server-side validation is the source of truth; this is
+  a progressive-enhancement convenience.
+{% endcomment %}
+<script>
+(function () {
+  var cadence = document.getElementById('cadence-input');
+  var weekly = document.getElementById('weekly-schedule-fields');
+  if (!cadence || !weekly) { return; }
+  var requiredEls = weekly.querySelectorAll('input, select');
+  function sync() {
+    var isNone = cadence.value === 'none';
+    weekly.style.display = isNone ? 'none' : '';
+    requiredEls.forEach(function (el) {
+      if (el.dataset.wasRequired === undefined) {
+        el.dataset.wasRequired = el.required ? '1' : '0';
+      }
+      el.required = isNone ? false : el.dataset.wasRequired === '1';
+    });
+  }
+  cadence.addEventListener('change', sync);
+  sync();
+})();
+</script>
 
 {% endblock %}

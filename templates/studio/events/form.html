@@ -155,6 +155,31 @@
     </div>
 
     {% comment %}
+      Issue #1358: editable Series selector. Attach an existing event to a
+      series, or choose "— None —" to detach. Native select matching the
+      status/platform sibling pattern in this file. Disabled on synced rows
+      (series membership is not editable for source-managed events). The
+      read-only "Part of series" line above reflects the saved value after
+      the redirect.
+    {% endcomment %}
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="event-series-select">Series</label>
+      <select name="event_series" id="event-series-select"
+              {% if is_synced %}disabled{% endif %}
+              data-testid="studio-event-series-select"
+              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
+        <option value="">— None —</option>
+        {% for series in event_series_options %}
+        <option value="{{ series.pk }}"{% if series.pk == selected_event_series_id %} selected{% endif %}>{{ series.name }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">
+        Attach this event to a series, or choose “— None —” to detach. Attaching does not renumber the series or rename this event.
+      </p>
+      {% if errors.event_series %}<p class="text-xs text-red-400 mt-1" data-testid="error-event-series">{{ errors.event_series }}</p>{% endif %}
+    </div>
+
+    {% comment %}
       Issue #579: external_host is constrained to a small set of known
       partners via choices on the model. Render a select so staff cannot
       type free text. The list of options comes from

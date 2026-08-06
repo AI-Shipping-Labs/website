@@ -7,6 +7,7 @@ import json
 import click
 import pytest
 from asl_cli.cli import cli
+from asl_cli.commands import event_series as event_series_module
 from asl_cli.commands import events as events_module
 from asl_cli.commands import groups
 from asl_cli.commands import sync as sync_module
@@ -191,6 +192,61 @@ def test_events_create_timestamps_parses_json_file(monkeypatch, tmp_path):
         )
     ]
     assert isinstance(client.calls[0][2]["timestamps"], list)
+
+
+def test_events_update_event_series_forwarded_as_id_or_slug(monkeypatch):
+    client = RecordingEventsClient()
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "events",
+            "update",
+            "book-club-kickoff",
+            "--event-series",
+            "inference-engineering-book-club",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    method, path, body = client.calls[0]
+    assert method == "PATCH"
+    assert path == "/api/events/book-club-kickoff"
+    assert body["event_series"] == "inference-engineering-book-club"
+
+
+def test_events_update_empty_event_series_detaches_via_null(monkeypatch):
+    client = RecordingEventsClient()
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        cli,
+        ["events", "update", "book-club-kickoff", "--event-series", ""],
+    )
+
+    assert result.exit_code == 0, result.output
+    _method, _path, body = client.calls[0]
+    assert "event_series" in body
+    assert body["event_series"] is None
+
+
+def test_event_series_create_accepts_cadence_none(monkeypatch):
+    client = RecordingEventsClient()
+    monkeypatch.setattr(event_series_module, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        cli,
+        ["event-series", "create", "--name", "Book Club", "--cadence", "none"],
+    )
+
+    assert result.exit_code == 0, result.output
+    method, path, body = client.calls[0]
+    assert method == "POST"
+    assert path == "/api/event-series"
+    assert body["cadence"] == "none"
+    assert "day_of_week" not in body
+    assert "start_time" not in body
 
 
 def test_events_timestamps_rejects_non_array(monkeypatch):

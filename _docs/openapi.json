@@ -2197,12 +2197,15 @@
               "schema": {
                 "properties": {
                   "cadence": {
+                    "description": "Defaults to 'weekly'. Use 'none' (No fixed cadence) for a plain collection that groups events without a recurring-schedule claim; day_of_week and start_time may be omitted and are stored null (issue #1358).",
                     "enum": [
+                      "none",
                       "weekly"
                     ],
                     "type": "string"
                   },
                   "day_of_week": {
+                    "description": "Required when cadence is 'weekly'; optional (may be null) when cadence is 'none'.",
                     "maximum": 6,
                     "minimum": 0,
                     "type": "integer"
@@ -2230,7 +2233,7 @@
                     "type": "string"
                   },
                   "start_time": {
-                    "description": "HH:MM or HH:MM:SS.",
+                    "description": "HH:MM or HH:MM:SS. Required when cadence is 'weekly'; optional (may be null) when cadence is 'none'.",
                     "type": "string"
                   },
                   "timezone": {
@@ -2238,9 +2241,7 @@
                   }
                 },
                 "required": [
-                  "name",
-                  "day_of_week",
-                  "start_time"
+                  "name"
                 ],
                 "type": "object"
               }
@@ -2410,12 +2411,15 @@
               "schema": {
                 "properties": {
                   "cadence": {
+                    "description": "'weekly' or 'none' (No fixed cadence). Switching to 'none' lets day_of_week / start_time be null (issue #1358).",
                     "enum": [
+                      "none",
                       "weekly"
                     ],
                     "type": "string"
                   },
                   "day_of_week": {
+                    "description": "Required for a weekly series; send null to clear it on a 'none' collection.",
                     "maximum": 6,
                     "minimum": 0,
                     "type": "integer"
@@ -2443,6 +2447,7 @@
                     "type": "string"
                   },
                   "start_time": {
+                    "description": "HH:MM or HH:MM:SS. Send null to clear it on a 'none' collection.",
                     "type": "string"
                   },
                   "timezone": {
@@ -3139,6 +3144,7 @@
                       "description": "Open Q&A.",
                       "editable": true,
                       "end_datetime": "2026-05-05T18:00:00+02:00",
+                      "event_series": null,
                       "external_host": "",
                       "host_email": "host@example.com",
                       "hosts": [
@@ -3240,6 +3246,20 @@
                   "end_datetime": {
                     "format": "date-time",
                     "type": "string"
+                  },
+                  "event_series": {
+                    "description": "Attach this event to an event series by pk (integer) or slug (string); JSON null detaches it. An unknown pk/slug returns 422 with an event_series field error. Attaching an existing event is ad-hoc: it does not renumber the series (series_position stays null) or rewrite the event's title, and it does not change the event's required_level (no series-level enforcement on ad-hoc attach in v1).",
+                    "oneOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "external_host": {
                     "type": "string"
@@ -3381,6 +3401,7 @@
                   "description": "Open Q&A.",
                   "editable": true,
                   "end_datetime": "2026-05-05T18:00:00+02:00",
+                  "event_series": null,
                   "external_host": "",
                   "host_email": "host@example.com",
                   "hosts": [
@@ -3503,6 +3524,7 @@
                   "description": "Open Q&A.",
                   "editable": true,
                   "end_datetime": "2026-05-05T18:00:00+02:00",
+                  "event_series": null,
                   "external_host": "",
                   "host_email": "host@example.com",
                   "hosts": [
@@ -3621,6 +3643,20 @@
                   "description": {
                     "type": "string"
                   },
+                  "event_series": {
+                    "description": "Attach this event to an event series by pk (integer) or slug (string); JSON null detaches it. An unknown pk/slug returns 422 with an event_series field error. Attaching an existing event is ad-hoc: it does not renumber the series (series_position stays null) or rewrite the event's title, and it does not change the event's required_level (no series-level enforcement on ad-hoc attach in v1).",
+                    "oneOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "generate_banner": {
                     "description": "Write-only action trigger. Explicit-only on PATCH (default off): only an explicit true re-enqueues a forced banner render after the update is saved, so an unrelated edit never silently re-renders. Never stored or returned.",
                     "type": "boolean",
@@ -3726,6 +3762,7 @@
                   "description": "Open Q&A.",
                   "editable": true,
                   "end_datetime": "2026-05-05T18:00:00+02:00",
+                  "event_series": null,
                   "external_host": "",
                   "host_email": "host@example.com",
                   "hosts": [

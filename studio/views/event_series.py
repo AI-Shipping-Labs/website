@@ -163,6 +163,9 @@ def event_series_create(request):
         'name': '',
         'slug': '',
         'description': '',
+        # Issue #1358: 'weekly' generates a schedule; 'none' creates a plain
+        # collection with no generated occurrences and no day/time.
+        'cadence': 'weekly',
         'start_date': '',
         'start_time': '',
         'duration_hours': '1',
@@ -181,10 +184,13 @@ def event_series_create(request):
         name = form_values['name']
         slug = form_values['slug'] or slugify(name)
         description = form_values['description']
-        start_date_str = form_values['start_date']
-        start_time_str = form_values['start_time']
-        duration_str = form_values['duration_hours'] or '1'
-        occurrences_str = form_values['occurrences'] or '0'
+        # Issue #1358: cadence gates whether a weekly schedule is generated.
+        cadence = (
+            form_values['cadence']
+            if form_values['cadence'] in ('weekly', 'none')
+            else 'weekly'
+        )
+        form_values['cadence'] = cadence
         # Issue #665: validate the TZ; reject unknown IANA names.
         posted_tz = form_values['timezone'] or default_tz
         if posted_tz and not is_valid_timezone(posted_tz):
@@ -200,42 +206,6 @@ def event_series_create(request):
             errors['name'] = 'Name is required.'
 
         try:
-            start_date = _parse_date_str(start_date_str)
-        except (ValueError, AttributeError):
-            errors['start_date'] = 'Start date is required (dd/mm/yyyy).'
-            start_date = None
-
-        try:
-            hour, minute = start_time_str.split(':')
-            start_time = datetime(2000, 1, 1, int(hour), int(minute)).time()
-        except (ValueError, AttributeError):
-            errors['start_time'] = 'Start time is required (HH:MM, 24h).'
-            start_time = None
-
-        try:
-            duration_hours = float(duration_str)
-            if duration_hours <= 0:
-                raise ValueError
-        except ValueError:
-            errors['duration_hours'] = 'Duration must be a positive number.'
-            duration_hours = None
-
-        try:
-            occurrences = int(occurrences_str)
-        except ValueError:
-            errors['occurrences'] = 'Occurrences must be a whole number.'
-            occurrences = None
-        else:
-            if occurrences < 1:
-                errors['occurrences'] = (
-                    'Occurrences must be at least 1.'
-                )
-            elif occurrences > MAX_OCCURRENCES:
-                errors['occurrences'] = (
-                    f'Occurrences cannot exceed {MAX_OCCURRENCES}.'
-                )
-
-        try:
             required_level = int(required_level_str)
         except ValueError:
             required_level = 0
@@ -243,15 +213,72 @@ def event_series_create(request):
         if slug and EventSeries.objects.filter(slug=slug).exists():
             errors['slug'] = 'A series with this slug already exists.'
 
+        # Issue #1358: the weekly-schedule fields (start date/time, duration,
+        # occurrence count) are validated and used only for a weekly cadence.
+        # A 'none' collection creates the series alone with no occurrences and
+        # no day/time.
+        start_date = None
+        start_time = None
+        duration_hours = None
+        occurrences = None
+        if cadence == 'weekly':
+            start_date_str = form_values['start_date']
+            start_time_str = form_values['start_time']
+            duration_str = form_values['duration_hours'] or '1'
+            occurrences_str = form_values['occurrences'] or '0'
+
+            try:
+                start_date = _parse_date_str(start_date_str)
+            except (ValueError, AttributeError):
+                errors['start_date'] = 'Start date is required (dd/mm/yyyy).'
+                start_date = None
+
+            try:
+                hour, minute = start_time_str.split(':')
+                start_time = datetime(
+                    2000, 1, 1, int(hour), int(minute),
+                ).time()
+            except (ValueError, AttributeError):
+                errors['start_time'] = 'Start time is required (HH:MM, 24h).'
+                start_time = None
+
+            try:
+                duration_hours = float(duration_str)
+                if duration_hours <= 0:
+                    raise ValueError
+            except ValueError:
+                errors['duration_hours'] = (
+                    'Duration must be a positive number.'
+                )
+                duration_hours = None
+
+            try:
+                occurrences = int(occurrences_str)
+            except ValueError:
+                errors['occurrences'] = 'Occurrences must be a whole number.'
+                occurrences = None
+            else:
+                if occurrences < 1:
+                    errors['occurrences'] = (
+                        'Occurrences must be at least 1.'
+                    )
+                elif occurrences > MAX_OCCURRENCES:
+                    errors['occurrences'] = (
+                        f'Occurrences cannot exceed {MAX_OCCURRENCES}.'
+                    )
+
         if not errors:
             with transaction.atomic():
                 series = EventSeries(
                     name=name,
                     slug=slug,
                     description=description,
-                    cadence='weekly',
-                    day_of_week=start_date.weekday(),
-                    start_time=start_time,
+                    cadence=cadence,
+                    # Issue #1358: null day/time for a 'none' collection.
+                    day_of_week=(
+                        start_date.weekday() if cadence == 'weekly' else None
+                    ),
+                    start_time=start_time if cadence == 'weekly' else None,
                     timezone=timezone_value,
                     # Issue #958: the chosen level is the canonical series
                     # level AND is stamped on each generated occurrence.
@@ -259,8 +286,10 @@ def event_series_create(request):
                 )
                 series.save()
 
+                # A 'none' collection generates no occurrences here — events
+                # are attached later (Studio event edit or the events API).
                 used_slugs = set()
-                for i in range(1, occurrences + 1):
+                for i in range(1, (occurrences or 0) + 1):
                     occurrence_date = start_date + timedelta(days=7 * (i - 1))
                     event_start = _localize_to_utc(
                         occurrence_date, start_time, timezone_value,
@@ -622,6 +651,13 @@ def event_series_add_occurrence(request, series_id):
             )
     else:
         start_time = series.start_time
+
+    # Issue #1358: a 'No fixed cadence' collection has no default series time,
+    # so a blank per-occurrence time cannot fall back to one. Require it.
+    if start_time is None:
+        return _render_add_occurrence_error(
+            request, series, 'Start time is required (HH:MM, 24h).',
+        )
 
     try:
         duration_hours = float(duration_str)

@@ -42,7 +42,7 @@
         </nav>
       </div>
 
-      <div class="mx-auto mt-12 grid max-w-6xl gap-6 md:grid-cols-2" id="activities-grid" data-testid="activities-grid">
+      <div class="mx-auto mt-12 grid max-w-5xl gap-6 md:grid-cols-2" id="activities-grid" data-testid="activities-grid">
         {% for activity in activities %}
         <article class="activity-card"
                  data-tiers="{{ activity.tiers|join:',' }}"
@@ -104,7 +104,7 @@
         {% endfor %}
       </div>
 
-      <div class="mx-auto mt-20 max-w-6xl" data-testid="activities-quick-comparison">
+      <div class="mx-auto mt-20 max-w-5xl" data-testid="activities-quick-comparison">
         <h2 class="mb-8 text-center text-xl font-semibold text-foreground">Quick comparison</h2>
         <div class="grid gap-6 md:grid-cols-3">
           <div class="rounded-lg border border-border bg-card p-6">

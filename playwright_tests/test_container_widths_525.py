@@ -1,10 +1,11 @@
 """Issue #525 — every public page renders at the standardized container
 width for its page-group, and never produces horizontal overflow on mobile.
 
-The audit table in the issue defines three target groups:
-    - marketing/listings    -> max-w-7xl
-    - detail pages          -> max-w-5xl
-    - reader / long-form    -> max-w-3xl
+The audit table defines these target groups (updated by issue #1340):
+    - wide grids / marketing / dashboard / calendar -> max-w-7xl
+    - single-column row lists and sparse hubs       -> max-w-5xl
+    - mixed-layout detail pages                      -> max-w-5xl
+    - reader / long-form                             -> max-w-3xl
 
 This test parametrizes the audited URLs and asserts:
 1. The first ``mx-auto max-w-*`` wrapper inside ``<main>`` carries the
@@ -294,26 +295,34 @@ def _has_horizontal_overflow(page):
 #   provides via the returned dict.
 # - login email of None means anonymous; otherwise the ``page`` is
 #   replaced with an authed context.
+# Genuine multi-column grids / marketing / dashboard / calendar keep the full
+# Frame (max-w-7xl): they visibly consume the width.
 LISTINGS_WIDE = [
     ('/', 'max-w-7xl', None),
-    ('/blog', 'max-w-7xl', None),
     ('/courses', 'max-w-7xl', None),
     ('/projects', 'max-w-7xl', None),
-    ('/tutorials', 'max-w-7xl', None),
-    ('/downloads', 'max-w-7xl', None),
-    ('/workshops', 'max-w-7xl', None),
-    ('/events', 'max-w-7xl', None),
     ('/events/calendar', 'max-w-7xl', None),
-    # Absent from the original #525 sweep, which is exactly how it drifted to
-    # max-w-5xl and shipped a listing page inset from the chrome. See
-    # _docs/audits/2026-07-21-container-widths.md (2026-07-21).
-    ('/sprints', 'max-w-7xl', None),
-    ('/vote', 'max-w-7xl', None),
-    ('/tags', 'max-w-7xl', None),
-    ('/interview', 'max-w-7xl', None),
     ('/resources', 'max-w-7xl', None),
     ('/pricing', 'max-w-7xl', None),
     ('/activities', 'max-w-7xl', None),
+]
+
+# Single-column row feeds and sparse 2-column hubs re-tiered 7xl -> 5xl by the
+# 2026-08-06 addendum (issue #1340): at 7xl their content filled only ~55-70%
+# of the column and the right half read empty. Each now aligns with its own
+# detail page. See _docs/audits/2026-07-21-container-widths.md -> "2026-08-06
+# addendum". /workshops here is the hero wrapper (the first mx-auto max-w-* in
+# <main>); the included catalog grid below it stays max-w-7xl.
+LISTINGS_NARROW = [
+    ('/blog', 'max-w-5xl', None),
+    ('/tutorials', 'max-w-5xl', None),
+    ('/downloads', 'max-w-5xl', None),
+    ('/workshops', 'max-w-5xl', None),
+    ('/events', 'max-w-5xl', None),
+    ('/sprints', 'max-w-5xl', None),
+    ('/vote', 'max-w-5xl', None),
+    ('/tags', 'max-w-5xl', None),
+    ('/interview', 'max-w-5xl', None),
 ]
 
 DETAIL_MEDIUM = [
@@ -342,6 +351,46 @@ class TestListingPagesUseMaxW7xl:
     """
 
     @pytest.mark.parametrize('path,expected_max_w,_email', LISTINGS_WIDE)
+    def test_outer_wrapper_has_target_max_width(
+        self, django_server, browser, path, expected_max_w, _email,
+    ):
+        _ensure_tiers()
+        _ensure_site_config_tiers()
+        _seed_listings()
+
+        ctx = browser.new_context(viewport=DESKTOP_VIEWPORT)
+        page = ctx.new_page()
+        try:
+            page.goto(f'{django_server}{path}', wait_until='domcontentloaded')
+
+            cls = _outer_wrapper_class_string(page)
+            assert cls is not None, (
+                f'No mx-auto max-w-* wrapper found inside <main> on {path}'
+            )
+            assert expected_max_w in cls, (
+                f'{path}: expected outer wrapper to carry {expected_max_w}, '
+                f'got class string: {cls!r}'
+            )
+
+            width = _outer_wrapper_client_width(page)
+            target_px = TARGET_WIDTHS_PX[expected_max_w]
+            assert width <= target_px + PADDING_BUDGET_PX, (
+                f'{path}: outer wrapper clientWidth={width}px exceeds '
+                f'{target_px}+{PADDING_BUDGET_PX}px budget for '
+                f'{expected_max_w}'
+            )
+        finally:
+            ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestListingPagesUseMaxW5xl:
+    """Single-column row feeds and sparse 2-column hubs share ``max-w-5xl``
+    so the sparse right half no longer reads as empty (issue #1340). Each
+    also aligns with its own detail page.
+    """
+
+    @pytest.mark.parametrize('path,expected_max_w,_email', LISTINGS_NARROW)
     def test_outer_wrapper_has_target_max_width(
         self, django_server, browser, path, expected_max_w, _email,
     ):
@@ -575,12 +624,26 @@ class TestAuthenticatedDashboardAndAccount:
 
 @pytest.mark.django_db(transaction=True)
 class TestListingFrameWidthConsistency:
-    """Navigating between marketing / listing pages produces the same
-    outer container width (within ±1 px) — the user does not see the
-    page frame jump in or out.
+    """Navigating within a width band produces the same outer container
+    width (within ±1 px) — the user does not see the page frame jump in or
+    out. Since issue #1340 there are two bands: the 7xl grids and the 5xl
+    row-list / sparse-hub pages. A page in one band is not required to match
+    a page in the other, so the two bands are asserted separately.
     """
 
-    def test_listings_share_frame_width(self, django_server, browser):
+    def _measure(self, django_server, page, urls):
+        widths = []
+        for u in urls:
+            page.goto(
+                f'{django_server}{u}',
+                wait_until='domcontentloaded',
+            )
+            w = _outer_wrapper_client_width(page)
+            assert w is not None, f'No outer wrapper on {u}'
+            widths.append((u, w))
+        return widths
+
+    def test_wide_grid_listings_share_frame_width(self, django_server, browser):
         _ensure_tiers()
         _ensure_site_config_tiers()
         _seed_listings()
@@ -588,34 +651,40 @@ class TestListingFrameWidthConsistency:
         ctx = browser.new_context(viewport=DESKTOP_VIEWPORT)
         page = ctx.new_page()
         try:
-            urls = [
-                '/',
-                '/blog',
-                '/courses',
-                '/resources',
-                '/projects',
-                '/events',
-                '/workshops',
-                '/tutorials',
-                '/downloads',
-                '/vote',
-                '/tags',
-            ]
-            widths = []
-            for u in urls:
-                page.goto(
-                    f'{django_server}{u}',
-                    wait_until='domcontentloaded',
-                )
-                w = _outer_wrapper_client_width(page)
-                assert w is not None, f'No outer wrapper on {u}'
-                widths.append((u, w))
-
+            widths = self._measure(
+                django_server,
+                page,
+                ['/', '/courses', '/resources', '/projects'],
+            )
             min_w = min(w for _, w in widths)
             max_w = max(w for _, w in widths)
             assert max_w - min_w <= 1, (
-                'Listing page frame widths differ by more than 1px: '
-                f'{widths}'
+                'Wide (7xl) listing page frame widths differ by more than '
+                f'1px: {widths}'
+            )
+        finally:
+            ctx.close()
+
+    def test_narrow_listings_share_frame_width(self, django_server, browser):
+        _ensure_tiers()
+        _ensure_site_config_tiers()
+        _seed_listings()
+
+        ctx = browser.new_context(viewport=DESKTOP_VIEWPORT)
+        page = ctx.new_page()
+        try:
+            # /workshops measures its 5xl hero (first mx-auto max-w-* in main).
+            widths = self._measure(
+                django_server,
+                page,
+                ['/blog', '/events', '/workshops', '/tutorials',
+                 '/downloads', '/vote', '/tags'],
+            )
+            min_w = min(w for _, w in widths)
+            max_w = max(w for _, w in widths)
+            assert max_w - min_w <= 1, (
+                'Narrow (5xl) listing page frame widths differ by more than '
+                f'1px: {widths}'
             )
         finally:
             ctx.close()

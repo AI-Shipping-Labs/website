@@ -60,6 +60,7 @@ PARTIAL_USERS = {
     'questionnaires/list.html',
     'personas/list.html',
     'sprints/list.html',
+    'books/list.html',
     'redirects/list.html',
     'campaigns/list.html',
     'utm_campaigns/list.html',

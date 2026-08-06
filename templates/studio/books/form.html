@@ -1,0 +1,147 @@
+{% extends "studio/base.html" %}
+{% load studio_filters admin_links %}
+
+{% block studio_title %}{% if form_action == 'edit' %}Edit book{% else %}New book{% endif %}{% endblock %}
+
+{% block studio_content %}
+{% if form_action == 'edit' %}
+{% studio_header_actions title='Edit book' back_url='/studio/books/' back_label='Back to book club' %}
+  {% if book %}
+    {% admin_change_url book as admin_url %}
+    {% if admin_url %}
+      {% studio_overflow_menu %}
+        <a href="{{ admin_url }}" data-testid="studio-open-in-admin" title="Open in Django admin" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="wrench" class="h-4 w-4" aria-hidden="true"></i><span>Open in Django admin</span></a>
+      {% endstudio_overflow_menu %}
+    {% endif %}
+  {% endif %}
+{% endstudio_header_actions %}
+{% else %}{% studio_header_actions title='New book' back_url='/studio/books/' back_label='Back to book club' %}{% endstudio_header_actions %}{% endif %}
+
+{% if error %}
+<div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm" data-testid="book-form-error">
+  {{ error }}
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  <form id="book-edit-form" method="post" action="{% if form_action == 'edit' %}{% url 'studio_book_edit' book_id=book.pk %}{% else %}{% url 'studio_book_create' %}{% endif %}">
+    {% csrf_token %}
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Title</label>
+      <input type="text" name="title" value="{{ form_data.title }}" required
+             placeholder="Inference Engineering"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Slug</label>
+      <input type="text" name="slug" value="{{ form_data.slug }}"
+             placeholder="inference-engineering"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">URL-safe id powering /books/&lt;slug&gt;. Leave blank to auto-derive from the title.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Author</label>
+      <input type="text" name="author" value="{{ form_data.author }}" required
+             placeholder="Philip Kiely"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Subtitle</label>
+      <input type="text" name="subtitle" value="{{ form_data.subtitle }}"
+             placeholder="The technologies behind every AI product in production"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">Optional.</p>
+    </div>
+
+    <div class="mb-6">
+      <label for="book-description" class="block text-sm font-medium text-foreground mb-1">Description</label>
+      <textarea id="book-description" name="description" rows="5"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.description }}</textarea>
+      <p class="text-xs text-muted-foreground mt-1">Optional. Appears on the public book page.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Cover image URL</label>
+      <input type="url" name="cover_image_url" value="{{ form_data.cover_image_url }}"
+             placeholder="https://cdn.aishippinglabs.com/bookclub/…"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">Optional. Blank shows a tinted-spine fallback.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Cover accent</label>
+      <input type="text" name="cover_accent" value="{{ form_data.cover_accent }}"
+             placeholder="from-accent/30"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">Tailwind gradient token for the tinted-spine fallback, e.g. from-accent/30 or from-blue-500/30.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Required tier</label>
+      <select name="required_level" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select"
+              data-testid="book-required-level">
+        {% for value, label in tier_level_choices %}
+        <option value="{{ value }}" {% if form_data.required_level == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">Default Main. Reuses the standard content access levels.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Status</label>
+      <select name="status" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select" data-testid="book-status">
+        {% for value, label in status_choices %}
+        <option value="{{ value }}" {% if form_data.status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">Only one book should be Current at a time. Draft hides the book from the public.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Kickoff date</label>
+      <input type="date" name="start_date" value="{{ form_data.start_date }}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">Optional.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Meeting cadence</label>
+      <input type="text" name="meeting_cadence" value="{{ form_data.meeting_cadence }}"
+             placeholder="Weekly · 17:00 CET"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">Optional display label.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Buy URL</label>
+      <input type="url" name="buy_url" value="{{ form_data.buy_url }}"
+             placeholder="https://www.baseten.co/inference-engineering/"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">Optional publisher/buy page.</p>
+    </div>
+
+    <div class="mb-6">
+      <label for="book-event-series" class="block text-sm font-medium text-foreground mb-1">Event series</label>
+      <select name="event_series" id="book-event-series" data-testid="book-event-series"
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select">
+        <option value="" {% if not form_data.event_series %}selected{% endif %}>— None —</option>
+        {% for series in event_series_list %}
+        <option value="{{ series.pk }}" {% if form_data.event_series == series.pk|stringformat:"s" %}selected{% endif %}>{{ series.name }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">
+        Optional recurring meeting series for this book club.
+        {% if form_action == 'edit' %}Unlinking removes the link; the series and its events stay.{% endif %}
+      </p>
+    </div>
+
+  </form>
+</div>
+
+{% url 'studio_book_list' as book_cancel_url %}
+{% include "studio/includes/sticky_action_bar.html" with form_id="book-edit-form" title="Book changes" subtitle="Save remains available while you review the form." can_save=True primary_label=primary_label cancel_url=book_cancel_url %}
+{% endblock %}

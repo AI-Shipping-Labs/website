@@ -20,6 +20,14 @@ from api.views.articles import (
     article_preview_link,
     article_preview_token_regenerate,
 )
+from api.views.books import (
+    book_chapter_detail,
+    book_chapters_collection,
+    books_collection,
+)
+from api.views.books import (
+    book_detail as book_api_detail,
+)
 from api.views.boot_timing import boot_timing_diagnostics
 from api.views.campaigns import (
     campaign_detail,
@@ -531,6 +539,30 @@ urlpatterns = [
         "tier-overrides",
         tier_overrides_grant,
         name="api_tier_overrides_grant",
+    ),
+    # ---- Book Club (issue #1362) --------------------------------------
+    # Register the chapters sub-routes (more segments) BEFORE the bare
+    # ``books/<slug>`` detail so precedence is explicit. Slug is a single
+    # path segment, so the ``chapters`` literal is never swallowed.
+    path(
+        "books",
+        books_collection,
+        name="api_books_collection",
+    ),
+    path(
+        "books/<slug:slug>/chapters",
+        book_chapters_collection,
+        name="api_book_chapters_collection",
+    ),
+    path(
+        "books/<slug:slug>/chapters/<int:number>",
+        book_chapter_detail,
+        name="api_book_chapter_detail",
+    ),
+    path(
+        "books/<slug:slug>",
+        book_api_detail,
+        name="api_book_detail",
     ),
     # ---- Sprints (issue #433) -----------------------------------------
     path(

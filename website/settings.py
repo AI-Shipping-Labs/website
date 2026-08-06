@@ -161,6 +161,7 @@ INSTALLED_APPS = [
     'community',
     'notifications',
     'plans.apps.PlansConfig',
+    'bookclub.apps.BookclubConfig',
     'questionnaires.apps.QuestionnairesConfig',
     'crm.apps.CRMConfig',
     'studio',

@@ -588,6 +588,31 @@ new workspace.
 Test vs live: n/a. Each workspace has its own team ID; pin it to the
 environment that uses that workspace.
 
+## BOOK_CLUB_SLACK_URL
+
+Purpose: Link to the `#book-club` channel shown to members on Book Club
+surfaces (`/books/<slug>` and the pages built in the epic #1353). A
+workspace deep link (e.g.
+`https://<workspace>.slack.com/archives/<channel_id>`) or any join URL.
+Read through the IntegrationSetting framework via
+`bookclub.config.get_book_club_slack_url()` (`get_config`), never a
+hardcoded `#` anchor or raw setting.
+
+Without it: Book Club surfaces fall back to `/account`, where Slack
+joining lives, rather than showing a dead `#` anchor.
+
+Where to find it: In Slack, open the `#book-club` channel, click the
+channel name, then "Copy link" — that is the `.../archives/<channel_id>`
+deep link. A public workspace join URL also works.
+
+Prereqs: The `#book-club` channel must exist in the workspace.
+
+Rotation: The archive link is stable for the lifetime of the channel.
+Update only if the channel is renamed/recreated or the join URL changes.
+
+Test vs live: n/a. Set it to the channel used by the environment's
+workspace.
+
 ## STAFF_SIGNUP_NOTIFY_CHANNEL_ID
 
 Purpose: Single Slack channel ID where the bot posts an internal

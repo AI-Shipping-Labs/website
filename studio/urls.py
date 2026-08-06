@@ -39,6 +39,17 @@ from studio.views.banner_upload import (
     studio_workshop_remove_banner,
     studio_workshop_upload_banner,
 )
+from studio.views.books import (
+    book_chapter_create,
+    book_chapter_delete,
+    book_chapter_edit,
+    book_chapter_reorder,
+    book_create,
+    book_delete,
+    book_detail,
+    book_edit,
+    book_list,
+)
 from studio.views.calendly_oauth import calendly_callback, calendly_connect, calendly_sync
 from studio.views.call_hosts import call_host_edit, call_host_list
 from studio.views.campaigns import (
@@ -1118,6 +1129,36 @@ urlpatterns = [
         'sprints/<int:sprint_id>/feedback/<int:feedback_request_id>/synthesize',
         sprint_feedback_synthesize,
         name='studio_sprint_feedback_synthesize',
+    ),
+
+    # Book Club (issue #1362). Community section. Mirrors the sprints block:
+    # literal ``new`` before the ``<int:book_id>`` routes so the slug/int
+    # converter does not swallow it. Chapter management hangs off the book
+    # detail page.
+    path('books/', book_list, name='studio_book_list'),
+    path('books/new', book_create, name='studio_book_create'),
+    path('books/<int:book_id>/', book_detail, name='studio_book_detail'),
+    path('books/<int:book_id>/edit', book_edit, name='studio_book_edit'),
+    path('books/<int:book_id>/delete', book_delete, name='studio_book_delete'),
+    path(
+        'books/<int:book_id>/chapters/reorder',
+        book_chapter_reorder,
+        name='studio_book_chapter_reorder',
+    ),
+    path(
+        'books/<int:book_id>/chapters/add',
+        book_chapter_create,
+        name='studio_book_chapter_create',
+    ),
+    path(
+        'books/<int:book_id>/chapters/<int:chapter_id>/edit',
+        book_chapter_edit,
+        name='studio_book_chapter_edit',
+    ),
+    path(
+        'books/<int:book_id>/chapters/<int:chapter_id>/delete',
+        book_chapter_delete,
+        name='studio_book_chapter_delete',
     ),
 
     # Questionnaires (issue #800). Planning section. The literal ``new``

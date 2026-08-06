@@ -99,6 +99,689 @@
         ]
       }
     },
+    "/api/books": {
+      "get": {
+        "description": "Returns every book. Chapters are summarized as a count.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "books": [
+                    {
+                      "author": "Philip Kiely",
+                      "buy_url": "https://www.baseten.co/inference-engineering/",
+                      "chapter_count": 8,
+                      "cover_accent": "from-accent/30",
+                      "cover_image_url": "",
+                      "created_at": "2026-08-01T12:00:00+00:00",
+                      "description": "",
+                      "event_series": null,
+                      "meeting_cadence": "Weekly \u00b7 17:00 CET",
+                      "required_level": 20,
+                      "slug": "inference-engineering",
+                      "start_date": "2026-08-10",
+                      "status": "current",
+                      "subtitle": "The technologies behind every AI product in production",
+                      "title": "Inference Engineering",
+                      "updated_at": "2026-08-01T12:00:00+00:00"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of books."
+          },
+          "401": {
+            "description": "Missing or invalid token."
+          }
+        },
+        "summary": "List books",
+        "tags": [
+          "Book Club"
+        ]
+      },
+      "post": {
+        "description": "Admin-only. Non-admin tokens get 403. Slug uniqueness is enforced at the API layer (422) before hitting the DB.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "author": "Philip Kiely",
+                "required_level": 20,
+                "slug": "inference-engineering",
+                "start_date": "2026-08-10",
+                "status": "current",
+                "title": "Inference Engineering"
+              },
+              "schema": {
+                "properties": {
+                  "author": {
+                    "type": "string"
+                  },
+                  "buy_url": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "cover_accent": {
+                    "default": "from-accent/30",
+                    "type": "string"
+                  },
+                  "cover_image_url": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "description": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "event_series": {
+                    "description": "Link to an event series, resolved by id (integer or numeric string) or slug (non-numeric string). ``null`` or an empty string clears the link; an unknown id/slug returns 422 ``unknown_series``.",
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "meeting_cadence": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "required_level": {
+                    "default": 20,
+                    "enum": [
+                      0,
+                      10,
+                      20,
+                      30
+                    ],
+                    "type": "integer"
+                  },
+                  "slug": {
+                    "type": "string"
+                  },
+                  "start_date": {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  "status": {
+                    "default": "draft",
+                    "enum": [
+                      "cancelled",
+                      "current",
+                      "draft",
+                      "finished",
+                      "upcoming"
+                    ],
+                    "type": "string"
+                  },
+                  "subtitle": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "author",
+                  "slug"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "author": "Philip Kiely",
+                  "buy_url": "https://www.baseten.co/inference-engineering/",
+                  "chapter_count": 8,
+                  "cover_accent": "from-accent/30",
+                  "cover_image_url": "",
+                  "created_at": "2026-08-01T12:00:00+00:00",
+                  "description": "",
+                  "event_series": null,
+                  "meeting_cadence": "Weekly \u00b7 17:00 CET",
+                  "required_level": 20,
+                  "slug": "inference-engineering",
+                  "start_date": "2026-08-10",
+                  "status": "current",
+                  "subtitle": "The technologies behind every AI product in production",
+                  "title": "Inference Engineering",
+                  "updated_at": "2026-08-01T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Book created."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "403": {
+            "description": "Non-admin token attempted to create."
+          },
+          "422": {
+            "description": "Validation error (missing field, bad value, duplicate slug, unknown series)."
+          }
+        },
+        "summary": "Create a book (admin bearer)",
+        "tags": [
+          "Book Club"
+        ]
+      }
+    },
+    "/api/books/{slug}": {
+      "delete": {
+        "description": "Book deletion is not available through the API; operators must use Studio. DELETE returns a structured 405.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "book_delete_not_available",
+                  "error": "Book deletion is not available through the API. Go to Studio to delete this book manually."
+                }
+              }
+            },
+            "description": "Book deletion is not available."
+          }
+        },
+        "summary": "DELETE is not available on this route",
+        "tags": [
+          "Book Club"
+        ]
+      },
+      "get": {
+        "description": "Returns the book with its ordered chapters.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "author": "Philip Kiely",
+                  "buy_url": "https://www.baseten.co/inference-engineering/",
+                  "chapter_count": 8,
+                  "cover_accent": "from-accent/30",
+                  "cover_image_url": "",
+                  "created_at": "2026-08-01T12:00:00+00:00",
+                  "description": "",
+                  "event_series": null,
+                  "meeting_cadence": "Weekly \u00b7 17:00 CET",
+                  "required_level": 20,
+                  "slug": "inference-engineering",
+                  "start_date": "2026-08-10",
+                  "status": "current",
+                  "subtitle": "The technologies behind every AI product in production",
+                  "title": "Inference Engineering",
+                  "updated_at": "2026-08-01T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Book detail."
+          },
+          "401": {
+            "description": "Missing or invalid token."
+          },
+          "404": {
+            "description": "Book not found."
+          }
+        },
+        "summary": "Retrieve a book",
+        "tags": [
+          "Book Club"
+        ]
+      },
+      "patch": {
+        "description": "Admin-only partial update.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "status": "finished"
+              },
+              "schema": {
+                "properties": {
+                  "author": {
+                    "type": "string"
+                  },
+                  "buy_url": {
+                    "type": "string"
+                  },
+                  "cover_accent": {
+                    "type": "string"
+                  },
+                  "cover_image_url": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "event_series": {
+                    "description": "Link to an event series, resolved by id (integer or numeric string) or slug (non-numeric string). ``null`` or an empty string clears the link; an unknown id/slug returns 422 ``unknown_series``.",
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "meeting_cadence": {
+                    "type": "string"
+                  },
+                  "required_level": {
+                    "enum": [
+                      0,
+                      10,
+                      20,
+                      30
+                    ],
+                    "type": "integer"
+                  },
+                  "start_date": {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "cancelled",
+                      "current",
+                      "draft",
+                      "finished",
+                      "upcoming"
+                    ],
+                    "type": "string"
+                  },
+                  "subtitle": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "author": "Philip Kiely",
+                  "buy_url": "https://www.baseten.co/inference-engineering/",
+                  "chapter_count": 8,
+                  "cover_accent": "from-accent/30",
+                  "cover_image_url": "",
+                  "created_at": "2026-08-01T12:00:00+00:00",
+                  "description": "",
+                  "event_series": null,
+                  "meeting_cadence": "Weekly \u00b7 17:00 CET",
+                  "required_level": 20,
+                  "slug": "inference-engineering",
+                  "start_date": "2026-08-10",
+                  "status": "current",
+                  "subtitle": "The technologies behind every AI product in production",
+                  "title": "Inference Engineering",
+                  "updated_at": "2026-08-01T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Book updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "403": {
+            "description": "Non-admin token."
+          },
+          "404": {
+            "description": "Book not found."
+          },
+          "422": {
+            "description": "Validation error."
+          }
+        },
+        "summary": "Update a book (admin bearer)",
+        "tags": [
+          "Book Club"
+        ]
+      }
+    },
+    "/api/books/{slug}/chapters": {
+      "get": {
+        "description": "Returns the book's chapters ordered by number.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "chapters": [
+                    {
+                      "created_at": "2026-08-01T12:00:00+00:00",
+                      "deadline": "2026-08-17",
+                      "event_id": null,
+                      "number": 0,
+                      "title": "Inference",
+                      "updated_at": "2026-08-01T12:00:00+00:00",
+                      "week_label": "Week 1"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of chapters."
+          },
+          "401": {
+            "description": "Missing or invalid token."
+          },
+          "404": {
+            "description": "Book not found."
+          }
+        },
+        "summary": "List chapters",
+        "tags": [
+          "Book Club"
+        ]
+      },
+      "post": {
+        "description": "Admin-only. ``number`` must be unique within the book (422 on collision).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "number": 0,
+                "title": "Inference",
+                "week_label": "Week 1"
+              },
+              "schema": {
+                "properties": {
+                  "deadline": {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  "number": {
+                    "type": "integer"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "week_label": {
+                    "default": "",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "number",
+                  "title"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-08-01T12:00:00+00:00",
+                  "deadline": "2026-08-17",
+                  "event_id": null,
+                  "number": 0,
+                  "title": "Inference",
+                  "updated_at": "2026-08-01T12:00:00+00:00",
+                  "week_label": "Week 1"
+                }
+              }
+            },
+            "description": "Chapter created."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "403": {
+            "description": "Non-admin token."
+          },
+          "404": {
+            "description": "Book not found."
+          },
+          "422": {
+            "description": "Validation error or duplicate number."
+          }
+        },
+        "summary": "Create a chapter (admin bearer)",
+        "tags": [
+          "Book Club"
+        ]
+      }
+    },
+    "/api/books/{slug}/chapters/{number}": {
+      "delete": {
+        "description": "Chapter deletion is not available through the API; operators must use Studio. DELETE returns a structured 405.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "chapter_delete_not_available",
+                  "error": "Chapter deletion is not available through the API. Go to Studio to delete this chapter manually."
+                }
+              }
+            },
+            "description": "Chapter deletion is not available."
+          }
+        },
+        "summary": "DELETE is not available on this route",
+        "tags": [
+          "Book Club"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-08-01T12:00:00+00:00",
+                  "deadline": "2026-08-17",
+                  "event_id": null,
+                  "number": 0,
+                  "title": "Inference",
+                  "updated_at": "2026-08-01T12:00:00+00:00",
+                  "week_label": "Week 1"
+                }
+              }
+            },
+            "description": "Chapter detail."
+          },
+          "401": {
+            "description": "Missing or invalid token."
+          },
+          "404": {
+            "description": "Book or chapter not found."
+          }
+        },
+        "summary": "Retrieve a chapter",
+        "tags": [
+          "Book Club"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "deadline": "2026-09-10"
+              },
+              "schema": {
+                "properties": {
+                  "deadline": {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "week_label": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-08-01T12:00:00+00:00",
+                  "deadline": "2026-08-17",
+                  "event_id": null,
+                  "number": 0,
+                  "title": "Inference",
+                  "updated_at": "2026-08-01T12:00:00+00:00",
+                  "week_label": "Week 1"
+                }
+              }
+            },
+            "description": "Chapter updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "403": {
+            "description": "Non-admin token."
+          },
+          "404": {
+            "description": "Book or chapter not found."
+          },
+          "422": {
+            "description": "Validation error."
+          }
+        },
+        "summary": "Update a chapter (admin bearer)",
+        "tags": [
+          "Book Club"
+        ]
+      }
+    },
     "/api/campaigns": {
       "get": {
         "description": "Returns every ``EmailCampaign`` row ordered by ``-created_at``. Optional filters narrow the result.",

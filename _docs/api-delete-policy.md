@@ -34,6 +34,8 @@ Studio so ownership and sync rules stay explicit.
 | `api/views/redirects.py` (`redirect_detail`) | `redirect_delete_not_available` |
 | `api/views/interview_notes.py` (`interview_note_detail`) | `interview_note_delete_not_available` |
 | `api/views/enrollments.py` (`sprint_enrollment_detail`) | `sprint_enrollment_delete_not_available` |
+| `api/views/books.py` (`book_detail`) | `book_delete_not_available` |
+| `api/views/books.py` (`book_chapter_detail`) | `chapter_delete_not_available` |
 
 The last five were added per the human decision (Alexey, 2026-06-13, issue #864)
 to block delete on all five previously-pending endpoints. See the rationale

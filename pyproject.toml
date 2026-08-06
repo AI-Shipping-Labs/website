@@ -54,6 +54,7 @@ source = [
     "accounts",
     "analytics",
     "api",
+    "bookclub",
     "comments",
     "community",
     "content",

@@ -1,0 +1,233 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}{{ book.title }}{% endblock %}
+
+{% block studio_content %}
+{% studio_header_actions title=book.title subtitle=book.author back_url='/studio/books/' back_label='Back to book club' testid="book-detail-header" %}
+  <a href="{% url 'studio_book_edit' book_id=book.pk %}"
+     class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+    <i data-lucide="pencil" class="h-4 w-4"></i><span>Edit book</span>
+  </a>
+{% endstudio_header_actions %}
+
+{# Book summary #}
+<div class="bg-card border border-border rounded-lg p-6 mb-6 max-w-3xl">
+  <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+    <div><dt class="text-muted-foreground">Slug</dt><dd class="text-foreground font-mono" data-testid="book-detail-slug">{{ book.slug }}</dd></div>
+    <div><dt class="text-muted-foreground">Status</dt><dd class="mt-0.5">{% studio_status_badge book.status book.get_status_display %}</dd></div>
+    <div><dt class="text-muted-foreground">Required tier</dt><dd class="text-foreground" data-testid="book-detail-tier">{{ book.get_required_level_display }}</dd></div>
+    <div><dt class="text-muted-foreground">Kickoff</dt><dd class="text-foreground">{% if book.start_date %}{{ book.start_date|operator_date }}{% else %}—{% endif %}</dd></div>
+    <div><dt class="text-muted-foreground">Meeting cadence</dt><dd class="text-foreground">{{ book.meeting_cadence|default:"—" }}</dd></div>
+    <div><dt class="text-muted-foreground">Event series</dt><dd class="text-foreground">{% if book.event_series %}{{ book.event_series.name }}{% else %}—{% endif %}</dd></div>
+    <div class="sm:col-span-2"><dt class="text-muted-foreground">Public page</dt><dd><a href="{{ book.get_absolute_url }}" class="text-accent hover:underline" data-testid="book-detail-public-link">{{ book.get_absolute_url }}</a></dd></div>
+  </dl>
+</div>
+
+{% if chapter_error %}
+<div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm max-w-3xl" data-testid="book-chapter-error">
+  {{ chapter_error }}
+</div>
+{% endif %}
+
+{# Chapters #}
+<div class="mb-4 flex items-baseline justify-between max-w-3xl">
+  <h2 class="text-lg font-semibold tracking-tight text-foreground">Chapters</h2>
+  <span class="text-sm text-muted-foreground">{{ chapters|length }} chapter{{ chapters|length|pluralize }}</span>
+</div>
+
+<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto mb-6 max-w-3xl"
+     data-book-chapters-reorder
+     data-reorder-url="{% url 'studio_book_chapter_reorder' book_id=book.pk %}">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="w-8 px-3 py-3"><span class="sr-only">Drag to reorder</span></th>
+        <th class="text-left px-3 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">No.</th>
+        <th class="text-left px-3 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
+        <th class="text-left px-3 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Deadline</th>
+        <th class="text-left px-3 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Week</th>
+        <th class="text-right px-3 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for chapter in chapters %}
+      <tr class="hover:bg-secondary/40 transition-colors" draggable="true"
+          data-testid="book-chapter-row" data-chapter-id="{{ chapter.pk }}">
+        <td class="px-3 py-3 align-middle">
+          <button type="button" class="cursor-grab text-muted-foreground hover:text-foreground"
+                  data-testid="book-chapter-drag-handle" title="Drag to reorder" aria-label="Drag to reorder">
+            <i data-lucide="grip-vertical" class="h-4 w-4"></i>
+          </button>
+        </td>
+        <td colspan="4" class="px-3 py-3">
+          <form method="post" action="{% url 'studio_book_chapter_edit' book_id=book.pk chapter_id=chapter.pk %}"
+                class="grid grid-cols-1 sm:grid-cols-[4rem_1fr_9rem_7rem] gap-2 items-center" id="chapter-form-{{ chapter.pk }}">
+            {% csrf_token %}
+            <input type="number" name="number" value="{{ chapter.number }}" min="0" required
+                   class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                   aria-label="Chapter number">
+            <input type="text" name="title" value="{{ chapter.title }}" required
+                   class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                   aria-label="Chapter title">
+            <input type="date" name="deadline" value="{{ chapter.deadline|form_date_value }}"
+                   class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                   aria-label="Chapter deadline">
+            <input type="text" name="week_label" value="{{ chapter.week_label }}" placeholder="Week 1"
+                   class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                   aria-label="Week label">
+          </form>
+        </td>
+        <td class="px-3 py-3 text-right whitespace-nowrap align-middle">
+          <button type="submit" form="chapter-form-{{ chapter.pk }}"
+                  class="{% studio_action_class 'primary' %}" data-testid="book-chapter-save">Save</button>
+          <form method="post" action="{% url 'studio_book_chapter_delete' book_id=book.pk chapter_id=chapter.pk %}" class="inline ml-2"
+                onsubmit="return confirm('Delete chapter {{ chapter.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="{% studio_action_class 'destructive' %}" data-testid="book-chapter-delete">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="6" class="px-3 py-6 text-center text-sm text-muted-foreground" data-testid="book-chapters-empty">
+          No chapters yet. Add the first one below.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# Add chapter #}
+<div class="bg-card border border-border rounded-lg p-6 mb-6 max-w-3xl">
+  <h3 class="text-sm font-semibold text-foreground mb-4">Add chapter</h3>
+  <form method="post" action="{% url 'studio_book_chapter_create' book_id=book.pk %}"
+        class="grid grid-cols-1 sm:grid-cols-[4rem_1fr_9rem_7rem_auto] gap-2 items-end" data-testid="book-chapter-add-form">
+    {% csrf_token %}
+    <div>
+      <label class="block text-xs text-muted-foreground mb-1">No.</label>
+      <input type="number" name="number" min="0" required
+             class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+             data-testid="book-chapter-add-number">
+    </div>
+    <div>
+      <label class="block text-xs text-muted-foreground mb-1">Title</label>
+      <input type="text" name="title" required
+             class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+             data-testid="book-chapter-add-title">
+    </div>
+    <div>
+      <label class="block text-xs text-muted-foreground mb-1">Deadline</label>
+      <input type="date" name="deadline"
+             class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+             data-testid="book-chapter-add-deadline">
+    </div>
+    <div>
+      <label class="block text-xs text-muted-foreground mb-1">Week</label>
+      <input type="text" name="week_label" placeholder="Week 1"
+             class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+             data-testid="book-chapter-add-week">
+    </div>
+    <button type="submit"
+            class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            data-testid="book-chapter-add-submit">
+      <i data-lucide="plus" class="h-4 w-4"></i><span>Add</span>
+    </button>
+  </form>
+</div>
+
+{# Delete book — danger zone (mirrors the sprints destructive dialect) #}
+<section class="mb-8 max-w-3xl" data-testid="book-danger-zone">
+  <h2 class="text-lg font-semibold text-red-400 mb-4">Danger zone</h2>
+  <div class="bg-card border border-red-500/30 rounded-lg p-6 flex items-start justify-between gap-4">
+    <div>
+      <p class="text-sm font-medium text-foreground">Delete this book</p>
+      <p class="text-xs text-muted-foreground mt-1">
+        Permanently delete this book and all its chapters. This cannot be undone.
+      </p>
+    </div>
+    <form method="post" action="{% url 'studio_book_delete' book_id=book.pk %}"
+          onsubmit="return confirm('Delete &quot;{{ book.title|escapejs }}&quot; and all its chapters?');">
+      {% csrf_token %}
+      <button type="submit"
+              class="bg-red-500/10 text-red-400 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500/20 transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              data-testid="book-delete-submit">
+        <i data-lucide="trash-2" class="h-4 w-4"></i><span>Delete book</span>
+      </button>
+    </form>
+  </div>
+</section>
+
+<script>
+// Drag-to-reorder for book chapters (issue #1362). Native HTML5 DnD, mirrors
+// the persona reorder pattern. Posts [{id, number}] to the reorder endpoint.
+(function () {
+  var root = document.querySelector('[data-book-chapters-reorder]');
+  if (!root) { return; }
+  var container = root.querySelector('tbody');
+  if (!container) { return; }
+  var url = root.getAttribute('data-reorder-url');
+  var dragged = null;
+
+  function getCsrfToken() {
+    var input = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    if (input) { return input.value; }
+    var cookie = document.cookie.split(';').find(function (c) {
+      return c.trim().startsWith('csrftoken=');
+    });
+    return cookie ? cookie.split('=')[1] : '';
+  }
+
+  container.addEventListener('dragstart', function (e) {
+    var row = e.target.closest('[data-chapter-id]');
+    if (!row || !container.contains(row)) { return; }
+    dragged = row;
+    row.classList.add('opacity-50');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+
+  container.addEventListener('dragend', function () {
+    if (dragged) { dragged.classList.remove('opacity-50'); }
+    dragged = null;
+  });
+
+  container.addEventListener('dragover', function (e) {
+    if (!dragged) { return; }
+    e.preventDefault();
+    var over = e.target.closest('[data-chapter-id]');
+    if (!over || over === dragged || !container.contains(over)) { return; }
+    var rect = over.getBoundingClientRect();
+    var after = (e.clientY - rect.top) > (rect.height / 2);
+    if (after) {
+      over.parentNode.insertBefore(dragged, over.nextSibling);
+    } else {
+      over.parentNode.insertBefore(dragged, over);
+    }
+  });
+
+  container.addEventListener('drop', function (e) {
+    if (!dragged) { return; }
+    e.preventDefault();
+    var rows = Array.prototype.slice.call(
+      container.querySelectorAll('[data-chapter-id]')
+    );
+    var payload = rows.map(function (row, index) {
+      return { id: parseInt(row.getAttribute('data-chapter-id'), 10), number: index };
+    });
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCsrfToken(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    }).then(function (resp) {
+      window.location.reload();
+    }).catch(function () {
+      window.location.reload();
+    });
+  });
+})();
+</script>
+{% endblock %}

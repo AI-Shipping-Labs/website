@@ -1,0 +1,202 @@
+"""Book Club data models (issue #1362).
+
+A :class:`Book` is a Studio-managed, operator-authored reading cohort,
+mirroring the Community Sprints pattern (``plans.Sprint``): a
+``TimestampedModelMixin`` row with an operator-entered unique slug that
+powers ``/books/<slug>``, a tier level drawn from ``content.access``
+choices, and an optional recurring meeting series.
+
+A :class:`Chapter` is one entry in a book's ordered roadmap, with an
+optional organizer-set ``deadline`` (a meeting appointment, not homework)
+and an optional link to a real event (wired in #1369).
+
+Access reuses ``content.access`` exactly like every other content type:
+a viewer sees a book's participation body iff
+``content.access.get_user_level(user) >= book.required_level``.
+"""
+
+from django.db import models
+from django.urls import reverse
+
+from content.access import LEVEL_MAIN
+from content.access import VISIBILITY_CHOICES as TIER_VISIBILITY_CHOICES
+from content.models.mixins import TimestampedModelMixin
+
+# Operator/admin lifecycle state. Drives the public hub sections (built in
+# #1363): ``current`` = reading now, ``upcoming`` = coming up, ``finished`` =
+# past reads. ``draft`` hides the book from every public surface;
+# ``cancelled`` is a reversible off state. Only one book should be ``current``
+# at a time — this is enforced softly in Studio (a non-blocking warning), not
+# by a DB constraint, so operators can transition between cohorts freely.
+BOOK_STATUS_DRAFT = 'draft'
+BOOK_STATUS_UPCOMING = 'upcoming'
+BOOK_STATUS_CURRENT = 'current'
+BOOK_STATUS_FINISHED = 'finished'
+BOOK_STATUS_CANCELLED = 'cancelled'
+
+BOOK_STATUS_CHOICES = [
+    (BOOK_STATUS_DRAFT, 'Draft'),
+    (BOOK_STATUS_UPCOMING, 'Upcoming'),
+    (BOOK_STATUS_CURRENT, 'Current'),
+    (BOOK_STATUS_FINISHED, 'Finished'),
+    (BOOK_STATUS_CANCELLED, 'Cancelled'),
+]
+
+
+class Book(TimestampedModelMixin, models.Model):
+    """A community book-club reading cohort.
+
+    Mirrors ``plans.Sprint``: operator-entered unique slug, tier level via
+    ``content.access`` choices, optional ``event_series`` FK with
+    ``SET_NULL``. Only one book should be ``current`` at a time; Studio warns
+    (non-blocking) if a second is set current — this is deliberately not a DB
+    constraint so operators can flip cohorts without a two-step dance.
+    """
+
+    title = models.CharField(max_length=200)
+    slug = models.SlugField(
+        max_length=160,
+        unique=True,
+        help_text=(
+            'URL-safe id powering /books/<slug>. Operator-entered, '
+            'content-derivable (e.g. "inference-engineering").'
+        ),
+    )
+    subtitle = models.CharField(max_length=300, blank=True, default='')
+    author = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default='')
+    cover_image_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default='',
+        help_text='Publisher/CDN cover image URL. Blank shows a tinted spine.',
+    )
+    cover_accent = models.CharField(
+        max_length=60,
+        blank=True,
+        default='from-accent/30',
+        help_text=(
+            'Tailwind gradient token for the tinted-spine fallback when no '
+            'cover image exists (e.g. from-accent/30, from-blue-500/30).'
+        ),
+    )
+    # Minimum tier level required to participate. Default Main (20) so
+    # community members can join by default. Same level integers and choices
+    # used elsewhere for content gating (``content.access.VISIBILITY_CHOICES``).
+    required_level = models.IntegerField(
+        default=LEVEL_MAIN,
+        choices=TIER_VISIBILITY_CHOICES,
+        help_text=(
+            'Minimum tier level required to participate. Default 20 (Main).'
+        ),
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=BOOK_STATUS_CHOICES,
+        default=BOOK_STATUS_DRAFT,
+    )
+    start_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text='Kickoff date. Drives ordering and the "Kickoff …" label.',
+    )
+    meeting_cadence = models.CharField(
+        max_length=80,
+        blank=True,
+        default='',
+        help_text=(
+            'Display label for the meeting cadence, e.g. "Weekly · 17:00 CET". '
+            'Interim field; the authoritative source is the event series (#1369).'
+        ),
+    )
+    buy_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default='',
+        help_text='Publisher/buy page for the book.',
+    )
+    # Optional link to a recurring meeting series (rendered as meeting rows in
+    # #1369). ``SET_NULL`` mirrors ``Sprint.event_series``: deleting the series
+    # only severs the link; the book survives.
+    event_series = models.ForeignKey(
+        'events.EventSeries',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='books',
+        help_text=(
+            'Optional recurring meeting series for this book club. Deleting '
+            'the series unlinks the book; the book itself is preserved.'
+        ),
+    )
+
+    class Meta:
+        ordering = ['-start_date', '-created_at']
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['slug']),
+        ]
+
+    def __str__(self):
+        return self.title
+
+    def get_absolute_url(self):
+        return reverse('bookclub_book_detail', kwargs={'slug': self.slug})
+
+
+class Chapter(TimestampedModelMixin, models.Model):
+    """One entry in a book's ordered reading roadmap.
+
+    ``number`` starts at 0 (the epic URL contract:
+    ``/books/<slug>/chapters/<int:number>``) and is unique within the book.
+    ``deadline`` is an optional meeting appointment ("For Thursday's call ·
+    Sep 7"), not homework — there is no recurrence engine. The presentation
+    timeline (done/current/upcoming) is derived in the view layer (#1363/#1364),
+    not stored here.
+    """
+
+    book = models.ForeignKey(
+        Book,
+        on_delete=models.CASCADE,
+        related_name='chapters',
+    )
+    number = models.PositiveSmallIntegerField(
+        help_text='Chapter order, starting at 0. Unique per book.',
+    )
+    title = models.CharField(max_length=200)
+    deadline = models.DateField(
+        null=True,
+        blank=True,
+        help_text='Optional meeting appointment date. No recurrence engine.',
+    )
+    week_label = models.CharField(
+        max_length=40,
+        blank=True,
+        default='',
+        help_text='Optional display label, e.g. "Week 1".',
+    )
+    # Optional link to a real event (rendered / constrained to the book's
+    # linked series in #1369). ``SET_NULL``: deleting the event unlinks the
+    # chapter; the chapter survives.
+    event = models.ForeignKey(
+        'events.Event',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='book_chapters',
+        help_text=(
+            'Optional linked event. Deleting the event unlinks the chapter.'
+        ),
+    )
+
+    class Meta:
+        ordering = ['number']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['book', 'number'],
+                name='uniq_book_chapter_number',
+            ),
+        ]
+
+    def __str__(self):
+        return f'Ch. {self.number} — {self.title}'

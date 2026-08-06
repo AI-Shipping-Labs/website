@@ -231,21 +231,43 @@ def _collect_series_values(data, *, existing=None):
         else:
             values["cadence"] = cadence
 
+    # Issue #1358: day_of_week / start_time are required only when the
+    # effective cadence is ``weekly``. A ``none`` collection may omit them
+    # (stored null); an explicit JSON null also clears them.
+    if "cadence" in values:
+        effective_cadence = values["cadence"]
+    elif existing is not None:
+        effective_cadence = existing.cadence
+    else:
+        effective_cadence = "weekly"
+
     if "day_of_week" in data:
-        try:
-            day_of_week = int(data["day_of_week"])
-        except (TypeError, ValueError):
-            day_of_week = None
-        if day_of_week is None or day_of_week < 0 or day_of_week > 6:
-            errors["day_of_week"] = "Must be an integer between 0 and 6."
+        raw_day = data["day_of_week"]
+        if raw_day is None:
+            values["day_of_week"] = None
         else:
-            values["day_of_week"] = day_of_week
+            try:
+                day_of_week = int(raw_day)
+            except (TypeError, ValueError):
+                day_of_week = None
+            if day_of_week is None or day_of_week < 0 or day_of_week > 6:
+                errors["day_of_week"] = "Must be an integer between 0 and 6."
+            else:
+                values["day_of_week"] = day_of_week
     elif existing is None:
-        errors["day_of_week"] = "Day of week is required."
+        if effective_cadence == "weekly":
+            errors["day_of_week"] = (
+                "Day of week is required for a weekly series."
+            )
+        else:
+            # A 'none' collection stores null rather than the model default.
+            values["day_of_week"] = None
 
     if "start_time" in data:
         start_time = data["start_time"]
-        if not isinstance(start_time, str):
+        if start_time is None:
+            values["start_time"] = None
+        elif not isinstance(start_time, str):
             errors["start_time"] = "Must be a HH:MM or HH:MM:SS string."
         else:
             parsed = _parse_time_string(start_time)
@@ -254,7 +276,12 @@ def _collect_series_values(data, *, existing=None):
             else:
                 values["start_time"] = parsed
     elif existing is None:
-        errors["start_time"] = "Start time is required."
+        if effective_cadence == "weekly":
+            errors["start_time"] = (
+                "Start time is required for a weekly series."
+            )
+        else:
+            values["start_time"] = None
 
     if "timezone" in data:
         tz_value = data["timezone"]
@@ -394,7 +421,7 @@ def _save_series_or_error(series):
         "POST": {
             "summary": "Create an event series",
             "request_body": {
-                "required": ["name", "day_of_week", "start_time"],
+                "required": ["name"],
                 "properties": {
                     "name": {"type": "string"},
                     "slug": {"type": "string"},
@@ -402,15 +429,30 @@ def _save_series_or_error(series):
                     "cadence": {
                         "type": "string",
                         "enum": _VALID_CADENCES_ENUM,
+                        "description": (
+                            "Defaults to 'weekly'. Use 'none' (No fixed "
+                            "cadence) for a plain collection that groups "
+                            "events without a recurring-schedule claim; "
+                            "day_of_week and start_time may be omitted and are "
+                            "stored null (issue #1358)."
+                        ),
                     },
                     "day_of_week": {
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 6,
+                        "description": (
+                            "Required when cadence is 'weekly'; optional (may "
+                            "be null) when cadence is 'none'."
+                        ),
                     },
                     "start_time": {
                         "type": "string",
-                        "description": "HH:MM or HH:MM:SS.",
+                        "description": (
+                            "HH:MM or HH:MM:SS. Required when cadence is "
+                            "'weekly'; optional (may be null) when cadence is "
+                            "'none'."
+                        ),
                     },
                     "timezone": {"type": "string"},
                     "required_level": {
@@ -552,13 +594,28 @@ def event_series_collection(request):
                     "cadence": {
                         "type": "string",
                         "enum": _VALID_CADENCES_ENUM,
+                        "description": (
+                            "'weekly' or 'none' (No fixed cadence). Switching "
+                            "to 'none' lets day_of_week / start_time be null "
+                            "(issue #1358)."
+                        ),
                     },
                     "day_of_week": {
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 6,
+                        "description": (
+                            "Required for a weekly series; send null to clear "
+                            "it on a 'none' collection."
+                        ),
                     },
-                    "start_time": {"type": "string"},
+                    "start_time": {
+                        "type": "string",
+                        "description": (
+                            "HH:MM or HH:MM:SS. Send null to clear it on a "
+                            "'none' collection."
+                        ),
+                    },
                     "timezone": {"type": "string"},
                     "required_level": {
                         "type": "integer",

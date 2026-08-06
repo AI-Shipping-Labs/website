@@ -195,6 +195,7 @@ class EventsListAndDetailTest(EventsApiTestBase):
                 "required_level",
                 "status",
                 "series_position",
+                "event_series",
                 "external_host",
                 "published",
                 "host_email",

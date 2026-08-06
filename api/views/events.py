@@ -33,7 +33,7 @@ from api.utils import (
     validation_response,
 )
 from content.access import VISIBILITY_CHOICES
-from events.models import Event, EventHost, Host
+from events.models import Event, EventHost, EventSeries, Host
 from events.models.event import (
     EVENT_KIND_CHOICES,
     EVENT_ORIGIN_CHOICES,
@@ -100,6 +100,8 @@ WRITABLE_FIELDS = {
     "recording_url",
     "timestamps",
     "materials",
+    # Issue #1358: attach/detach an existing event to a series (pk/slug/null).
+    "event_series",
 }
 
 VALID_KINDS = {value for value, _label in EVENT_KIND_CHOICES}
@@ -149,6 +151,22 @@ _TIMESTAMPS_SCHEMA = {
     ),
 }
 
+_EVENT_SERIES_REQUEST_SCHEMA = {
+    "oneOf": [
+        {"type": "integer"},
+        {"type": "string"},
+        {"type": "null"},
+    ],
+    "description": (
+        "Attach this event to an event series by pk (integer) or slug "
+        "(string); JSON null detaches it. An unknown pk/slug returns 422 with "
+        "an event_series field error. Attaching an existing event is ad-hoc: "
+        "it does not renumber the series (series_position stays null) or "
+        "rewrite the event's title, and it does not change the event's "
+        "required_level (no series-level enforcement on ad-hoc attach in v1)."
+    ),
+}
+
 _EVENT_EXAMPLE = {
     "id": 42,
     "slug": "office-hours-2026-05-05",
@@ -164,6 +182,7 @@ _EVENT_EXAMPLE = {
     "tags": ["sprint:may-2026"],
     "required_level": 0,
     "status": "scheduled",
+    "event_series": None,
     "external_host": "",
     "published": True,
     "host_email": "host@example.com",
@@ -233,6 +252,18 @@ def _serialize_host(host):
     }
 
 
+def _serialize_event_series_ref(event):
+    """Return the compact series reference for ``serialize_event`` (issue #1358).
+
+    ``null`` when the event is unattached, otherwise ``{id, slug, name}`` for
+    the parent series so an attach/detach is verifiable through the API.
+    """
+    series = event.event_series
+    if series is None:
+        return None
+    return {"id": series.id, "slug": series.slug, "name": series.name}
+
+
 def serialize_event(event):
     """Return the canonical event object for list/detail/create/update."""
     return {
@@ -251,6 +282,7 @@ def serialize_event(event):
         "required_level": event.required_level,
         "status": event.status,
         "series_position": event.series_position,
+        "event_series": _serialize_event_series_ref(event),
         "external_host": event.external_host,
         "published": event.published,
         "host_email": event.host_email,
@@ -342,6 +374,35 @@ def _validate_materials(value):
         materials.append(material)
 
     return materials, None
+
+
+def _resolve_event_series(raw):
+    """Resolve an ``event_series`` payload value to an ``EventSeries`` or None.
+
+    Issue #1358. ``None`` (JSON null) detaches. A JSON integer is a pk; a JSON
+    string is a slug (a digit-only string is tried as a pk first, then as a
+    slug). Returns ``(series_or_none, resolved_bool)`` — ``resolved`` is False
+    when a non-null value could not be matched so the caller can raise a 422
+    ``event_series`` field error rather than 404 the event.
+    """
+    if raw is None:
+        return None, True
+    if isinstance(raw, bool):
+        return None, False
+    if isinstance(raw, int):
+        series = EventSeries.objects.filter(pk=raw).first()
+        return series, series is not None
+    if isinstance(raw, str):
+        value = raw.strip()
+        if not value:
+            return None, False
+        if value.isdigit():
+            series = EventSeries.objects.filter(pk=int(value)).first()
+            if series is not None:
+                return series, True
+        series = EventSeries.objects.filter(slug=value).first()
+        return series, series is not None
+    return None, False
 
 
 def _collect_event_values(data, *, existing=None):
@@ -437,6 +498,18 @@ def _collect_event_values(data, *, existing=None):
         if not isinstance(data["published"], bool):
             errors["published"] = "Must be a boolean."
         values["published"] = data["published"]
+
+    # Issue #1358: attach/detach a series by pk or slug (null detaches). An
+    # unknown series is a field-level 422, never a 404 on the event. Resolving
+    # here (before ``_apply_event_values``) leaves ``series_position`` /
+    # ``title_is_auto`` / the title untouched — an ad-hoc attach never
+    # renumbers or renames.
+    if "event_series" in data:
+        series, resolved = _resolve_event_series(data["event_series"])
+        if not resolved:
+            errors["event_series"] = "Unknown event series."
+        else:
+            values["event_series"] = series
 
     start_supplied = "start_datetime" in data
     end_supplied = "end_datetime" in data
@@ -710,6 +783,7 @@ def _maybe_enqueue_banner(event, generate_banner):
                     },
                     "required_level": {"type": "integer"},
                     "status": {"type": "string"},
+                    "event_series": _EVENT_SERIES_REQUEST_SCHEMA,
                     "external_host": {"type": "string"},
                     "published": {"type": "boolean"},
                     "host_email": {
@@ -839,7 +913,12 @@ def events_collection(request):
         )
 
     if request.method == "GET":
-        qs = Event.objects.prefetch_related(_host_prefetch()).all()
+        qs = (
+            Event.objects
+            .select_related("event_series")
+            .prefetch_related(_host_prefetch())
+            .all()
+        )
         status_filter = request.GET.get("status")
         if status_filter:
             if status_filter not in VALID_STATUSES:
@@ -965,6 +1044,7 @@ def events_collection(request):
                     "title": {"type": "string"},
                     "description": {"type": "string"},
                     "status": {"type": "string"},
+                    "event_series": _EVENT_SERIES_REQUEST_SCHEMA,
                     "published": {"type": "boolean"},
                     "host_email": {
                         "type": "string",
@@ -1102,6 +1182,7 @@ def event_detail(request, slug):
 
     event = (
         Event.objects
+        .select_related("event_series")
         .prefetch_related(_host_prefetch())
         .filter(slug=slug)
         .first()

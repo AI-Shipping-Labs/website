@@ -24,7 +24,14 @@ from accounts.services.timezones import (
 )
 from content.access import VISIBILITY_CHOICES
 from email_app.models import EmailCampaign
-from events.models import Event, EventFeedback, EventHost, EventRegistration, Host
+from events.models import (
+    Event,
+    EventFeedback,
+    EventHost,
+    EventRegistration,
+    EventSeries,
+    Host,
+)
 from events.models.event import EXTERNAL_HOST_CHOICES
 from events.services.calendar_lifecycle import (
     enqueue_cancellation_update,
@@ -124,6 +131,46 @@ def _parse_required_level(value, fallback):
     except (TypeError, ValueError):
         return fallback
     return parsed if parsed in _VALID_EVENT_REQUIRED_LEVELS else fallback
+
+
+def _resolve_series_selection(raw):
+    """Resolve a Studio ``event_series`` POST value to ``(series_or_None, error)``.
+
+    Issue #1358. A blank value detaches (``None``). A pk resolves to the
+    ``EventSeries``; an unknown/invalid value returns an error string so the
+    form re-renders instead of silently mis-attaching. Same validation intent
+    as the API, which returns a 422 field error for an unknown series.
+    Attaching never renumbers the series or rewrites the event title.
+    """
+    value = (raw or '').strip()
+    if not value:
+        return None, None
+    try:
+        series_id = int(value)
+    except ValueError:
+        return None, 'Unknown series selected.'
+    series = EventSeries.objects.filter(pk=series_id).first()
+    if series is None:
+        return None, 'Unknown series selected.'
+    return series, None
+
+
+def _apply_event_series_context(context, *, event=None, selected_id=None):
+    """Attach the Series-selector options + current selection to ``context``.
+
+    Issue #1358. Options are every series ordered by name; ``selected_id`` (an
+    int pk or None) drives which option is pre-selected. On an edit the current
+    ``event.event_series_id`` is used unless an explicit ``selected_id`` is
+    passed (e.g. a re-rendered create/edit POST).
+    """
+    context['event_series_options'] = EventSeries.objects.all().order_by('name')
+    if selected_id is not None:
+        context['selected_event_series_id'] = selected_id
+    elif event is not None:
+        context['selected_event_series_id'] = event.event_series_id
+    else:
+        context['selected_event_series_id'] = None
+    return context
 
 
 def _default_timezone_for(user):
@@ -579,6 +626,14 @@ def _new_event_context(request, form_values, errors, selected_host_ids, source=N
         'duplicate_source': source,
     }
     _apply_host_context(context, selected_host_ids)
+    # Issue #1358: Series selector. On a re-rendered POST reflect the chosen
+    # series; a fresh/duplicate create form defaults to detached.
+    selected_series_id = None
+    if request.method == 'POST':
+        raw_series = (request.POST.get('event_series') or '').strip()
+        if raw_series.isdigit():
+            selected_series_id = int(raw_series)
+    _apply_event_series_context(context, selected_id=selected_series_id)
     return context
 
 
@@ -617,6 +672,13 @@ def event_create(request):
         )
         if host_error:
             errors['host_ids'] = host_error
+
+        # Issue #1358: optional parent series at create time.
+        selected_series, series_error = _resolve_series_selection(
+            request.POST.get('event_series'),
+        )
+        if series_error:
+            errors['event_series'] = series_error
 
         title = form_values['title']
         slug = form_values['slug'] or slugify(title)
@@ -679,6 +741,8 @@ def event_create(request):
                 host_email=form_values['host_email'],
                 origin='studio',
                 published=True,
+                # Issue #1358: ad-hoc attach — no series_position, no rename.
+                event_series=selected_series,
             )
             if platform == 'custom':
                 event.zoom_join_url = custom_url
@@ -909,7 +973,24 @@ def event_edit(request, event_id):
         selected_host_ids, host_error = _validate_host_ids(
             request.POST.getlist('host_ids'),
         )
+        # Issue #1358: resolve the Series selector only when the field is
+        # present in the POST. An absent field means "no change" (a disabled
+        # synced select submits nothing, and a partial POST must not silently
+        # detach); an explicit blank value ("— None —") detaches. Applied only
+        # on the non-synced branch below.
+        series_provided = 'event_series' in request.POST
+        if series_provided:
+            selected_series, series_error = _resolve_series_selection(
+                request.POST.get('event_series'),
+            )
+        else:
+            selected_series, series_error = None, None
+        form_errors = {}
         if host_error:
+            form_errors['host_ids'] = host_error
+        if series_error:
+            form_errors['event_series'] = series_error
+        if form_errors:
             context = _event_form_context(event, default_tz)
             context['form_action'] = 'edit'
             context['is_synced'] = synced
@@ -922,7 +1003,7 @@ def event_edit(request, event_id):
                 kwargs={'event_id': event.pk},
             )
             context['form_values'] = {}
-            context['errors'] = {'host_ids': host_error}
+            context['errors'] = form_errors
             context['save_status'] = 'error'
             context['external_host_choices'] = EXTERNAL_HOST_CHOICES
             tz_value = context['timezone_value']
@@ -930,6 +1011,7 @@ def event_edit(request, event_id):
             context['timezone_options'] = build_timezone_options()
             context['tz_settings_link'] = _should_autodetect_tz(request.user)
             _apply_host_context(context, selected_host_ids)
+            _apply_event_series_context(context, event=event)
             context.update(_event_edit_panels_context(event))
             context.update(notification_action_context(
                 'event', event, includes_slack=False,
@@ -1025,6 +1107,7 @@ def event_edit(request, event_id):
                 context['timezone_options'] = build_timezone_options()
                 context['tz_settings_link'] = _should_autodetect_tz(request.user)
                 _apply_host_context(context, selected_host_ids)
+                _apply_event_series_context(context, event=event)
                 context.update(_event_edit_panels_context(event))
                 context.update(notification_action_context(
                     'event', event, includes_slack=False,
@@ -1074,6 +1157,14 @@ def event_edit(request, event_id):
 
             # Platform user email for host attendee auto-registration.
             event.host_email = request.POST.get('host_email', '').strip()
+
+            # Issue #1358: attach/detach the parent series when the selector
+            # was submitted. Assigning the FK only — never renumber the series
+            # or rewrite this event's title, so an ad-hoc attach leaves
+            # series_position and title_is_auto untouched. An absent field
+            # leaves the current membership unchanged.
+            if series_provided:
+                event.event_series = selected_series
 
             event.save()
             _set_event_hosts(event, selected_host_ids)
@@ -1129,6 +1220,7 @@ def event_edit(request, event_id):
     context['timezone_options'] = build_timezone_options()
     context['tz_settings_link'] = _should_autodetect_tz(request.user)
     _apply_host_context(context)
+    _apply_event_series_context(context, event=event)
     context.update(_event_edit_panels_context(event))
     return render(request, 'studio/events/form.html', context)
 

@@ -29,4 +29,14 @@ urlpatterns = [
         views.chapter_read,
         name='bookclub_chapter_read',
     ),
+    path(
+        'books/<slug:slug>/chapters/<int:number>/note',
+        views.chapter_note,
+        name='bookclub_chapter_note',
+    ),
+    path(
+        'books/<slug:slug>/chapters/<int:number>',
+        views.chapter_detail,
+        name='bookclub_chapter_detail',
+    ),
 ]

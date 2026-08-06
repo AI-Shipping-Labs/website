@@ -3,18 +3,21 @@
 The comments app is generic: it stores ``Comment`` rows keyed by an
 opaque ``content_id`` UUID and serves them through three endpoints
 that have been live since the course Q&A surface shipped. Plan
-discussion (issue #499) reuses these same endpoints by passing
-``Plan.comment_content_id`` as the ``content_id``.
+discussion (issue #499) and Book Club note discussion (issue #1365)
+reuse these same endpoints by passing ``Plan.comment_content_id`` /
+``bookclub.Note.comment_content_id`` as the ``content_id``.
 
 To keep the comments app oblivious to specific content kinds, the
-plan-specific permission hook is imported lazily through a small
-helper at the top of each request -- never at module load -- so the
-comments app does not have a static dependency on the plans app and
-non-plan ``content_id`` UUIDs (course units, workshop pages) keep
-their original public-read / authenticated-write behaviour exactly.
+domain-specific permission hooks are imported lazily inside a single
+dispatch helper at the top of each request -- never at module load --
+so the comments app does not have a static dependency on the plans or
+bookclub apps and non-gated ``content_id`` UUIDs (course units,
+workshop pages) keep their original public-read / authenticated-write
+behaviour exactly.
 """
 
 import json
+from collections import namedtuple
 
 from django.db.models import Count
 from django.http import JsonResponse
@@ -24,23 +27,50 @@ from accounts.utils.display import display_name
 from comments import services as comment_services
 from comments.models import Comment, CommentVote
 
+# A resolved gated thread: two predicates ``can_read(viewer)`` /
+# ``can_write(viewer)`` already bound to the underlying domain object.
+_GatedThread = namedtuple('_GatedThread', ['can_read', 'can_write'])
 
-def _resolve_plan_permissions(content_id):
-    """Return a small dict describing plan-specific access for ``content_id``.
 
-    Returns ``None`` when the ``content_id`` is not a plan thread --
-    callers must treat that as "fall through to the default comments
-    behaviour". Otherwise returns a dict with the plan and the
-    boolean read/write predicates already evaluated for
-    ``viewer``.
+def _resolve_gated_thread(content_id):
+    """Return a :class:`_GatedThread` for ``content_id``, or ``None``.
 
-    The import lives inside the function so the ``comments`` app does
-    not pull in ``plans`` at module load (and so a future test that
-    swaps in a stub plans app stays cheap).
+    A ``content_id`` may resolve to a plan thread (issue #499) or a Book Club
+    note thread (issue #1365); both carry tier / visibility gating that the
+    otherwise-generic comments app must honour. Non-gated UUIDs (course units,
+    workshop pages) return ``None`` -- callers must treat that as "fall through
+    to the default comments behaviour" (public read, authenticated write).
+
+    The imports live inside the function so the ``comments`` app does not pull
+    in ``plans`` / ``bookclub`` at module load.
     """
-    from plans.comments_permissions import resolve_plan_for_content_id  # noqa: PLC0415
+    from plans.comments_permissions import (  # noqa: PLC0415
+        resolve_plan_for_content_id,
+        viewer_can_read_plan_thread,
+        viewer_can_write_plan_thread,
+    )
 
-    return resolve_plan_for_content_id(content_id)
+    plan = resolve_plan_for_content_id(content_id)
+    if plan is not None:
+        return _GatedThread(
+            can_read=lambda viewer: viewer_can_read_plan_thread(plan, viewer),
+            can_write=lambda viewer: viewer_can_write_plan_thread(plan, viewer),
+        )
+
+    from bookclub.comments_permissions import (  # noqa: PLC0415
+        resolve_book_note_for_content_id,
+        viewer_can_read_book_note_thread,
+        viewer_can_write_book_note_thread,
+    )
+
+    note = resolve_book_note_for_content_id(content_id)
+    if note is not None:
+        return _GatedThread(
+            can_read=lambda viewer: viewer_can_read_book_note_thread(note, viewer),
+            can_write=lambda viewer: viewer_can_write_book_note_thread(note, viewer),
+        )
+
+    return None
 
 
 def comments_endpoint(request, content_id):
@@ -58,17 +88,15 @@ def list_comments(request, content_id):
     Returns top-level comments sorted by vote count desc, then created_at desc.
     Each comment includes its replies sorted by created_at asc.
 
-    For plan threads (UUID matches ``Plan.comment_content_id``) the
-    viewer must satisfy the plan's visibility predicate -- otherwise
-    the request is rejected with 404 so the existence of a private
-    plan does not leak. Non-plan UUIDs preserve existing behaviour.
+    For gated threads (a UUID matching ``Plan.comment_content_id`` or
+    ``bookclub.Note.comment_content_id``) the viewer must satisfy the
+    thread's read predicate -- otherwise the request is rejected with
+    404 so the existence of a private plan / tier-gated note does not
+    leak. Non-gated UUIDs preserve existing behaviour.
     """
-    plan = _resolve_plan_permissions(content_id)
-    if plan is not None:
-        from plans.comments_permissions import viewer_can_read_plan_thread  # noqa: PLC0415
-
-        if not viewer_can_read_plan_thread(plan, request.user):
-            return JsonResponse({'error': 'Not found'}, status=404)
+    gate = _resolve_gated_thread(content_id)
+    if gate is not None and not gate.can_read(request.user):
+        return JsonResponse({'error': 'Not found'}, status=404)
 
     top_level = (
         Comment.objects
@@ -120,20 +148,17 @@ def list_comments(request, content_id):
 def create_comment(request, content_id):
     """POST /api/comments/<content_id> - create a top-level comment (question).
 
-    For plan threads, write access is restricted: private plans
-    accept writes only from staff; cohort plans accept writes from
-    anyone who can view the plan. Non-plan UUIDs keep the original
-    "any authenticated user" rule.
+    For gated threads, write access is restricted: plan threads follow
+    the plan visibility rules; Book Club note threads require the book's
+    tier. Non-gated UUIDs keep the original "any authenticated user"
+    rule. Anonymous writes are rejected with 401 before the gate runs.
     """
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'Authentication required'}, status=401)
 
-    plan = _resolve_plan_permissions(content_id)
-    if plan is not None:
-        from plans.comments_permissions import viewer_can_write_plan_thread  # noqa: PLC0415
-
-        if not viewer_can_write_plan_thread(plan, request.user):
-            return JsonResponse({'error': 'Not allowed'}, status=403)
+    gate = _resolve_gated_thread(content_id)
+    if gate is not None and not gate.can_write(request.user):
+        return JsonResponse({'error': 'Not allowed'}, status=403)
 
     try:
         data = json.loads(request.body)
@@ -165,10 +190,8 @@ def create_comment(request, content_id):
 def reply_to_comment(request, comment_id):
     """POST /api/comments/<comment_id>/reply - create a reply to a comment.
 
-    Plan threads (parent's ``content_id`` matches a
-    ``Plan.comment_content_id``) inherit the same write rules as
-    ``create_comment``: private plans need staff; cohort plans need
-    visibility.
+    Gated threads (parent's ``content_id`` matches a plan or Book Club
+    note) inherit the same write rules as ``create_comment``.
     """
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'Authentication required'}, status=401)
@@ -182,12 +205,9 @@ def reply_to_comment(request, comment_id):
     if parent.parent is not None:
         return JsonResponse({'error': 'Cannot reply to a reply'}, status=400)
 
-    plan = _resolve_plan_permissions(parent.content_id)
-    if plan is not None:
-        from plans.comments_permissions import viewer_can_write_plan_thread  # noqa: PLC0415
-
-        if not viewer_can_write_plan_thread(plan, request.user):
-            return JsonResponse({'error': 'Not allowed'}, status=403)
+    gate = _resolve_gated_thread(parent.content_id)
+    if gate is not None and not gate.can_write(request.user):
+        return JsonResponse({'error': 'Not allowed'}, status=403)
 
     try:
         data = json.loads(request.body)
@@ -217,8 +237,8 @@ def reply_to_comment(request, comment_id):
 def toggle_vote(request, comment_id):
     """POST /api/comments/<comment_id>/vote - toggle upvote on a top-level comment.
 
-    Plan threads inherit the plan write rules: private-plan votes
-    require staff, cohort-plan votes require visibility. Non-plan
+    Gated threads inherit their write rules: plan votes follow plan
+    visibility, Book Club note votes require the book's tier. Non-gated
     threads keep the existing "authenticated user" rule.
     """
     if not request.user.is_authenticated:
@@ -233,12 +253,9 @@ def toggle_vote(request, comment_id):
     if comment.parent is not None:
         return JsonResponse({'error': 'Cannot vote on a reply'}, status=400)
 
-    plan = _resolve_plan_permissions(comment.content_id)
-    if plan is not None:
-        from plans.comments_permissions import viewer_can_write_plan_thread  # noqa: PLC0415
-
-        if not viewer_can_write_plan_thread(plan, request.user):
-            return JsonResponse({'error': 'Not allowed'}, status=403)
+    gate = _resolve_gated_thread(comment.content_id)
+    if gate is not None and not gate.can_write(request.user):
+        return JsonResponse({'error': 'Not allowed'}, status=403)
 
     vote, created = CommentVote.objects.get_or_create(
         comment=comment,

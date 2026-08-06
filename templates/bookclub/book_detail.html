@@ -86,7 +86,7 @@
         <ol class="mt-4 space-y-0.5">
           {% for ch in chapters %}
           <li id="chapter-{{ ch.number }}" class="flex min-h-[44px] flex-wrap items-center justify-between gap-2.5 rounded-md px-3 py-2 text-sm">
-            <span class="text-foreground">Ch. {{ ch.number }} — {{ ch.title }}</span>
+            <a href="{% url 'bookclub_chapter_detail' book.slug ch.number %}" class="group inline-flex items-center gap-1 text-foreground hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="book-chapter-link">Ch. {{ ch.number }} — {{ ch.title }}<i data-lucide="chevron-right" class="h-4 w-4 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-accent"></i></a>
             <div class="flex items-center gap-3 text-xs text-muted-foreground">
               {% if ch.week_label %}<span>{{ ch.week_label }}</span>{% endif %}
               {% if ch.deadline %}<span data-testid="book-chapter-deadline">{{ ch.deadline|member_short_date }}</span>{% endif %}

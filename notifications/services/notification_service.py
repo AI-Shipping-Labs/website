@@ -262,14 +262,16 @@ def _send_email_channel(email_template, content_type, content):
 def _resolve_commented_content(content_id):
     """Resolve a comment ``content_id`` to its content object and title.
 
-    The comment composer is embedded on exactly two content surfaces: course
-    unit lessons (``Unit.content_id``) and workshop tutorial pages
-    (``WorkshopPage.content_id``). Sprint plan threads
+    The comment composer is embedded on three content surfaces that carry an
+    author to notify: course unit lessons (``Unit.content_id``), workshop
+    tutorial pages (``WorkshopPage.content_id``), and Book Club member notes
+    (``bookclub.Note.comment_content_id``, issue #1365) -- a note's author is
+    notified when a fellow member comments on it. Sprint plan threads
     (``Plan.comment_content_id``) and unknown UUIDs are intentionally
-    unresolved -- they carry no content author to notify.
+    unresolved -- they carry no single content author to notify.
 
     Returns ``(content, content_title)`` or ``(None, None)`` when the
-    ``content_id`` matches neither a ``Unit`` nor a ``WorkshopPage``.
+    ``content_id`` matches none of the above.
     """
     from content.models import Unit, WorkshopPage
 
@@ -291,17 +293,37 @@ def _resolve_commented_content(content_id):
     if page is not None:
         return page, page.title
 
+    from bookclub.models import Note
+
+    note = (
+        Note.objects
+        .filter(comment_content_id=content_id)
+        .select_related('chapter__book', 'user')
+        .first()
+    )
+    if note is not None:
+        # The recipient's own note: "New comment on your note".
+        return note, 'your note'
+
     return None, None
 
 
 def _content_instructors(content):
-    """Return the instructor queryset for a resolved content object."""
+    """Return the notification recipients for a resolved content object.
+
+    Each element must expose ``.user`` / ``.user_id`` (matching the
+    ``Instructor`` shape the caller iterates). A Book Club ``Note`` is its own
+    single recipient — the note author — and already exposes both attributes.
+    """
+    from bookclub.models import Note
     from content.models import Unit, WorkshopPage
 
     if isinstance(content, Unit):
         return content.module.course.instructors.all()
     if isinstance(content, WorkshopPage):
         return content.workshop.instructors.all()
+    if isinstance(content, Note):
+        return [content]
     return []
 
 

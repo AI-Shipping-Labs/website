@@ -164,8 +164,9 @@ Each member key carries a set of scopes. New keys are created with all of them b
 | `plans:read` | Read your own plans (`GET`). |
 | `plans:write_progress` | Toggle `done` on existing items via `PATCH /plans/{plan_id}/progress`. |
 | `plans:write` | Edit plan content: create / update / delete weeks, checkpoints, deliverables, next steps, resources, week notes, and edit narrative fields. |
-| `books:read` | Read your own Book Club reading state (`GET /books/{slug}/reading`). |
+| `books:read` | Read your own Book Club reading state (`GET /books/{slug}/reading`) and your own chapter note (`GET /books/{slug}/chapters/{number}/note`). |
 | `books:write_progress` | Mark your own chapters read / unread (`PUT` / `DELETE /books/{slug}/chapters/{number}/read`). |
+| `books:write_notes` | Write or clear your own chapter note (`PUT` / `DELETE /books/{slug}/chapters/{number}/note`). Kept separate from `books:write_progress` so a progress-tracking automation cannot publish public notes. |
 
 The scopes are checked independently: `plans:write` is not a superset of `plans:write_progress`. A request to a content-editing endpoint with a key that lacks the required scope returns `401`.
 
@@ -201,6 +202,23 @@ curl -sS -X PUT \
   -H "Authorization: Token $AI_SHIPPING_LABS_MEMBER_API_KEY" \
   https://aishippinglabs.com/member-api/v1/books/inference-engineering/chapters/0/read
 # {"read": true, "read_at": "2026-08-06T10:00:00+00:00", "done": 3, "total": 5}
+```
+
+### Your own chapter note
+
+Each member may keep one note per chapter. The note endpoint is owner-scoped: it only ever reads or mutates your own note — never another member's, and never the group feed of other members' notes (that is a rendered web surface). Posting comments on a note also stays on the shared web endpoints and is out of scope for the member API.
+
+`PUT /books/{slug}/chapters/{number}/note` (scope `books:write_notes`) upserts your note; `body` is required and `diagram` (mermaid source) is optional. `DELETE` on the same path clears it (idempotent). `GET` (scope `books:read`) returns your own note or `404` if you have not written one:
+
+```bash
+curl -sS -X PUT \
+  -H "Authorization: Token $AI_SHIPPING_LABS_MEMBER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"body": "The KV cache is the whole game."}' \
+  https://aishippinglabs.com/member-api/v1/books/inference-engineering/chapters/0/note
+# {"book": {...}, "chapter": {"number": 0, "title": "Inference"},
+#  "body": "The KV cache is the whole game.", "diagram": "",
+#  "comment_content_id": "…", "created_at": "…", "updated_at": "…"}
 ```
 
 ## Editing Plan Content

@@ -25,6 +25,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.db.models import Count
 from django.http import Http404, HttpResponseForbidden
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -39,8 +40,9 @@ from bookclub.models import (
     BOOK_STATUS_UPCOMING,
     Book,
     ChapterRead,
+    Note,
 )
-from bookclub.reading import viewer_reading_progress
+from bookclub.reading import viewer_read_numbers, viewer_reading_progress
 from content.access import build_gated_access_copy, get_user_level
 
 
@@ -253,3 +255,131 @@ def chapter_read(request, slug, number):
     ):
         next_url = f'{book.get_absolute_url()}#chapter-{number}'
     return redirect(next_url)
+
+
+def _chapter_url(book, number):
+    """Canonical ``/books/<slug>/chapters/<number>`` reader URL."""
+    return reverse(
+        'bookclub_chapter_detail',
+        kwargs={'slug': book.slug, 'number': number},
+    )
+
+
+def chapter_detail(request, slug, number):
+    """``/books/<slug>/chapters/<int:number>`` — the per-chapter reader page.
+
+    The route #1362/#1363 deliberately left non-linked; #1365 wires it. Access
+    mirrors ``book_detail`` exactly: ``cancelled`` is a 404 for everyone,
+    ``draft`` is 404-public / 200-staff, and an unknown chapter number is a
+    404. A public chapter header always renders (for discovery/SEO); the
+    participation body (own-note composer, group feed, comment threads) is
+    gated behind ``get_user_level(user) >= book.required_level`` — guests /
+    below-tier members see exactly one ``content/_gated_access_card.html``.
+    """
+    book = Book.objects.filter(slug=slug).select_related('event_series').first()
+    if book is None:
+        raise Http404('Unknown book.')
+
+    is_staff = bool(getattr(request.user, 'is_staff', False))
+    if book.status == BOOK_STATUS_CANCELLED:
+        raise Http404('This book is not available.')
+    if book.status == BOOK_STATUS_DRAFT and not is_staff:
+        raise Http404('This book is not published.')
+
+    chapters = list(book.chapters.all())
+    chapter = next((c for c in chapters if c.number == number), None)
+    if chapter is None:
+        raise Http404('Unknown chapter.')
+
+    index = chapters.index(chapter)
+    prev_chapter = chapters[index - 1] if index > 0 else None
+    next_chapter = chapters[index + 1] if index < len(chapters) - 1 else None
+
+    is_member = get_user_level(request.user) >= book.required_level
+    context = {
+        'book': book,
+        'chapter': chapter,
+        'is_member': is_member,
+        'prev_chapter': prev_chapter,
+        'next_chapter': next_chapter,
+    }
+
+    if not is_member:
+        context.update(_gate_context(request, book))
+        return render(request, 'bookclub/book_chapter.html', context)
+
+    read_numbers = viewer_read_numbers(request.user, book)
+    own_note = (
+        Note.objects.filter(user=request.user, chapter=chapter).first()
+    )
+
+    # Group notes feed: all members' notes for this chapter, newest first.
+    # Seam for #1366 (reader profiles): private-profile filtering adds a single
+    # ``.exclude(user__in=private_profile_users)`` here once the ``visibility``
+    # field exists — the query shape does not need to change. A member's OWN
+    # note (``own_note`` above) is always shown regardless of future visibility.
+    group_notes = list(
+        Note.objects.filter(chapter=chapter)
+        .select_related('user')
+        .order_by('-created_at')
+    )
+    for note in group_notes:
+        note.is_own = note.user_id == request.user.id
+
+    context.update({
+        'viewer_read': chapter.number in read_numbers,
+        'own_note': own_note,
+        'editing': request.GET.get('edit') == '1',
+        'group_notes': group_notes,
+        'notes_count': len(group_notes),
+        'read_count': chapter.reads.count(),
+    })
+    return render(request, 'bookclub/book_chapter.html', context)
+
+
+@require_POST
+def chapter_note(request, slug, number):
+    """``POST /books/<slug>/chapters/<int:number>/note`` — upsert own note.
+
+    Mirrors ``chapter_read``'s gate exactly (draft -> 404 for non-staff,
+    anonymous -> login redirect, below-tier -> 403, unknown slug / chapter ->
+    404). Upserts the viewer's single ``Note`` for the chapter from POST
+    ``body`` (+ optional mermaid ``diagram``); an empty ``body`` deletes the
+    note (idempotent clear). The first real save flips ``account_activated``
+    via ``mark_activated`` (issue #768). Redirect (P/R/G) back to the chapter
+    reader page so a browser refresh re-issues a GET.
+    """
+    book = Book.objects.filter(slug=slug).first()
+    if book is None:
+        raise Http404('Unknown book.')
+
+    is_staff = bool(getattr(request.user, 'is_staff', False))
+    if book.status == BOOK_STATUS_DRAFT and not is_staff:
+        raise Http404('This book is not published.')
+
+    if not request.user.is_authenticated:
+        return redirect_to_login(_chapter_url(book, number))
+
+    if get_user_level(request.user) < book.required_level:
+        return HttpResponseForbidden('You do not have access to this book.')
+
+    chapter = book.chapters.filter(number=number).first()
+    if chapter is None:
+        raise Http404('Unknown chapter.')
+
+    body = (request.POST.get('body') or '').strip()
+    diagram = (request.POST.get('diagram') or '').strip()
+
+    if not body:
+        # Empty submit clears the note (idempotent).
+        Note.objects.filter(user=request.user, chapter=chapter).delete()
+    else:
+        Note.objects.update_or_create(
+            user=request.user,
+            chapter=chapter,
+            defaults={'body': body, 'diagram': diagram},
+        )
+        # Writing a note is a real platform action (issue #768). Idempotent.
+        mark_activated(request.user)
+
+    return redirect(_chapter_url(book, number))

@@ -31,11 +31,25 @@ Parameters:
   where comments are visible but only staff can write.
 - ``composer_disabled_reason`` (optional): the text shown in the
   disabled notice. Defaults to a generic message.
+- ``instance_id`` (optional): a unique suffix appended to every element
+  id so several threads can coexist on one page (the Book Club chapter
+  page, issue #1365, renders one thread per member note). When omitted
+  the bare ids (``qa-section``, ``qa-new-question``, …) are used exactly
+  as before, keeping single-thread pages unchanged. The
+  ``comments/_qa_script.html`` IIFE wires every ``.qa-thread`` on the
+  page by class, so it is id-suffix agnostic and multi-instance safe.
+- ``section_class`` (optional, default "mt-12 mb-12"): vertical rhythm on
+  the thread wrapper. The Book Club note card (#1365) passes a tighter
+  "mt-6 mb-0" so the embedded thread fits inside a ``p-6`` card.
+- ``heading_class`` (optional, default "text-xl"): heading size. The note
+  card passes "text-base" so the thread heading does not dominate the card.
+  Both default to the exact prior values so course / workshop / plan pages
+  render byte-identically.
 {% endcomment %}
-<div class="mt-12 mb-12" id="qa-section" data-content-id="{{ content_id }}">
-  <h2 class="mb-6 flex items-center gap-2 text-xl font-semibold tracking-tight">
+<div class="{{ section_class|default:'mt-12 mb-12' }} qa-thread" id="qa-section{% if instance_id %}-{{ instance_id }}{% endif %}" data-content-id="{{ content_id }}">
+  <h2 class="mb-6 flex items-center gap-2 {{ heading_class|default:'text-xl' }} font-semibold tracking-tight">
     <i data-lucide="message-circle" class="h-5 w-5 text-accent"></i>
-    {% if section_heading %}{{ section_heading }}{% else %}Questions &amp; Answers{% endif %}<span id="qa-count-wrapper" hidden> (<span id="qa-count">0</span>)</span>
+    {% if section_heading %}{{ section_heading }}{% else %}Questions &amp; Answers{% endif %}<span class="qa-count-wrapper" id="qa-count-wrapper{% if instance_id %}-{{ instance_id }}{% endif %}" hidden> (<span class="qa-count" id="qa-count{% if instance_id %}-{{ instance_id }}{% endif %}">0</span>)</span>
   </h2>
 
   {% if user_authenticated %}
@@ -46,15 +60,15 @@ Parameters:
     {% else %}
     <div class="mb-8">
       <textarea
-        id="qa-new-question"
+        id="qa-new-question{% if instance_id %}-{{ instance_id }}{% endif %}"
         rows="3"
         placeholder="{{ composer_placeholder|default:'Ask a question about this lesson...' }}"
-        class="w-full rounded-lg border border-border bg-card p-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+        class="qa-new-question w-full rounded-lg border border-border bg-card p-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
       ></textarea>
       <button
         type="button"
-        id="qa-post-btn"
-        class="mt-2 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+        id="qa-post-btn{% if instance_id %}-{{ instance_id }}{% endif %}"
+        class="qa-post-btn mt-2 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
       >
         {{ composer_button_label|default:"Post Question" }}
       </button>
@@ -68,5 +82,5 @@ Parameters:
   </div>
   {% endif %}
 
-  <div id="qa-list"></div>
+  <div class="qa-list" id="qa-list{% if instance_id %}-{{ instance_id }}{% endif %}"></div>
 </div>

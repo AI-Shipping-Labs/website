@@ -32,19 +32,39 @@ def _resolve_is_member(request):
     return request.user.is_authenticated
 
 
+# Points scoring (discoverable-by-doing): +1 per chapter read, +2 per note.
+POINTS_PER_CHAPTER = 1
+POINTS_PER_NOTE = 2
+
+
+def _with_points(row):
+    return {
+        **row,
+        "points": row["chapters"] * POINTS_PER_CHAPTER
+        + row["notes"] * POINTS_PER_NOTE,
+    }
+
+
 def _progress_rows_for(is_member):
-    """Rows for the progress board.
+    """Rows for the progress board, ranked by points.
+
+    Points = chapters read (+1 each) + notes shared (+2 each). Rows are ranked
+    by points (tie-break: chapters, then notes) and the rank is recomputed so
+    it always matches the points order.
 
     Members see their own row first (design-system own-record-first rule) with
-    its real rank, then everyone else in rank order. Guests have no 'You' row,
-    so it is dropped and the ranks are renumbered to close the gap.
+    its real rank; guests have no 'You' row, so it is dropped and the ranks are
+    renumbered to close the gap.
     """
+    scored = [_with_points(r) for r in data.LEADERBOARD]
+    scored.sort(key=lambda r: (r["points"], r["chapters"], r["notes"]), reverse=True)
+    ranked = [{**r, "rank": i + 1} for i, r in enumerate(scored)]
     if is_member:
-        you = [r for r in data.LEADERBOARD if r.get("you")]
-        others = [r for r in data.LEADERBOARD if not r.get("you")]
+        you = [r for r in ranked if r.get("you")]
+        others = [r for r in ranked if not r.get("you")]
         return you + others
-    rows = [r for r in data.LEADERBOARD if not r.get("you")]
-    return [{**r, "rank": i + 1} for i, r in enumerate(rows)]
+    others = [r for r in ranked if not r.get("you")]
+    return [{**r, "rank": i + 1} for i, r in enumerate(others)]
 
 
 def _book_for(slug):
@@ -192,6 +212,12 @@ def chapter_detail(request, slug, number):
     ctx["viewer_read"] = viewer_read
     # ?edit=1 swaps a written note back to the composer.
     ctx["editing"] = request.GET.get("edit") == "1"
+    # Points feedback: marking read (?read=1) earns +1, posting a note
+    # (?note=…) earns +2. The toast is the moment the scoring reveals itself.
+    if request.GET.get("note", "").strip():
+        ctx["points_earned"] = {"points": 2, "label": "Note shared"}
+    elif read_override == "1":
+        ctx["points_earned"] = {"points": 1, "label": "Chapter marked read"}
     prev_chapter = data.get_chapter(number - 1)
     next_chapter = data.get_chapter(number + 1)
     ctx["prev_chapter"] = prev_chapter
@@ -243,8 +269,19 @@ def book_summary(request, slug):
         raise Http404("Unknown book.")
     ctx = _base_context(request)
     ctx["book"] = book
-    is_finished = book.get("is_finished", False)
+    # The active book is in progress, but ``?state=finished`` previews the
+    # finished state so we can see the full compiled summary before the club
+    # actually finishes. Real past books render finished by their own status.
+    finished_preview = (
+        slug == data.BOOK["slug"] and request.GET.get("state") == "finished"
+    )
+    is_finished = book.get("is_finished", False) or finished_preview
     ctx["is_finished"] = is_finished
+    ctx["finished_preview"] = finished_preview
+    # The compiled body (overall + per-chapter takeaways) is available for the
+    # active book's finished state; past books keep the generic template body.
+    if slug == data.BOOK["slug"]:
+        ctx["compiled_summary"] = data.COMPILED_SUMMARY
     # Active book: list only the chapters whose summary has been published.
     if is_finished:
         ctx["published_summaries"] = []

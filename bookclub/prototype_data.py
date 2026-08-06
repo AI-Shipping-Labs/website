@@ -213,8 +213,7 @@ CHAPTERS = [
         "readers_done": 24,
         "your_note": (
             "The KV-cache walkthrough finally made attention memory cost click "
-            "for me. Screenshotted the diagram of how sequence length blows up "
-            "memory."
+            "for me. Sketched how sequence length blows up memory as a diagram."
         ),
         "summary": None,
         "notes": [
@@ -225,8 +224,14 @@ CHAPTERS = [
                 "you": True,
                 "body": (
                     "The KV-cache walkthrough finally made attention memory "
-                    "cost click for me. Screenshotted the diagram of how "
-                    "sequence length blows up memory."
+                    "cost click for me. Here's how sequence length blows up "
+                    "memory:"
+                ),
+                "diagram": (
+                    "flowchart TD\n"
+                    '  S["Sequence length n"] --> KV["KV-cache O(n) per layer"]\n'
+                    '  KV --> MEM["Memory grows linearly with n"]\n'
+                    '  MEM --> CAP["Fewer concurrent requests fit"]'
                 ),
                 "likes": 7,
                 "comments": [
@@ -444,6 +449,55 @@ LEADERBOARD = [
     {"rank": 7, "name": "Sam O'Brien", "handle": "sam", "chapters": 1,
      "notes": 0, "streak": 1, "public": True, "you": False},
 ]
+
+# --- Compiled book summary (finished state) ------------------------------
+# What the whole-book summary looks like once the club finishes and it is
+# compiled from everyone's chapter notes. The active book is still in
+# progress, so the summary page only renders this when previewing the
+# finished state (``?state=finished``).
+
+COMPILED_SUMMARY = {
+    "overall": [
+        "Across everyone's notes, one theme kept returning: inference is a "
+        "systems problem long before it is a modeling one. The group came in "
+        "expecting model tricks and left talking about latency, throughput, "
+        "and cost as the three levers every decision trades against.",
+        "The mental models that changed how people work were concrete — the "
+        "KV-cache explaining why memory grows with sequence length, the "
+        "memory-bandwidth vs compute framing that reframed batch size as the "
+        "main lever, and continuous batching as the fix that finally made the "
+        "decode loop make sense. Several readers said they applied one of "
+        "these to their own stack the same week.",
+    ],
+    "by_chapter": [
+        {"number": 0, "title": "Inference",
+         "takeaway": "Inference is a systems problem before it's a modeling "
+         "one — latency, throughput, and cost are the three levers everything "
+         "else trades against."},
+        {"number": 1, "title": "Prerequisites",
+         "takeaway": "The shared-vocabulary chapter: tokens, latency, "
+         "throughput, and batch size are the terms every later chapter reuses."},
+        {"number": 2, "title": "Architecture",
+         "takeaway": "The KV-cache is why memory grows with sequence length; "
+         "the decode loop, not the model, is what makes responses slow."},
+        {"number": 3, "title": "Hardware",
+         "takeaway": "Most serving is memory-bandwidth-bound, not "
+         "compute-bound — batch size is the lever, and leaving it at 1 wastes "
+         "the GPU."},
+        {"number": 4, "title": "Software",
+         "takeaway": "The serving stack matters as much as the model; "
+         "continuous batching was the single biggest win people took away."},
+        {"number": 5, "title": "Techniques",
+         "takeaway": "Quantization and speculative decoding pay off, but only "
+         "after you've measured where the bottleneck actually is."},
+        {"number": 6, "title": "Modalities",
+         "takeaway": "Vision and audio change the shape of the problem, but "
+         "the same latency/throughput/cost frame still holds."},
+        {"number": 7, "title": "Production",
+         "takeaway": "Observability and load testing close the loop — you "
+         "can't tune what you don't measure."},
+    ],
+}
 
 # --- Members' public reading profiles (progress + notes) -----------------
 # Keyed by handle. Private members (e.g. "lena") have no entry, so

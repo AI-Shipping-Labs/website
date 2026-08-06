@@ -28,7 +28,9 @@
           <p class="mt-1 text-base text-muted-foreground">{{ book.author }}</p>
           <div class="mt-3">{% member_access_badge book.required_level testid="book-access-badge" %}</div>
           <p class="mt-4 text-sm leading-relaxed text-muted-foreground">{{ book.description }}</p>
-          <p class="mt-4 text-sm text-muted-foreground">{{ book.readers_count }} people reading along.</p>
+          <ul class="mt-4 list-disc pl-5 text-sm text-muted-foreground">
+            <li>{{ book.readers_count }} people reading along</li>
+          </ul>
         </div>
       </header>
 

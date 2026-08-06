@@ -30,8 +30,28 @@
       {% else %}
 
       {% if is_finished %}
-      {# Finished state (past book): full compiled body. Prototype keeps the
-         by-chapter lines as plain text — past books have no chapter routes. #}
+      {% if finished_preview %}
+      <p class="mt-6 inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground">
+        <i data-lucide="eye" class="h-3.5 w-3.5"></i>Preview of the finished summary
+      </p>
+      {% endif %}
+      {% if compiled_summary %}
+      {% comment %} Finished state (active book): the full compiled body, drawn
+         from the per-chapter summaries the group's notes produced. {% endcomment %}
+      <div class="prose mt-8 max-w-none">
+        <h2>Overall</h2>
+        {% for para in compiled_summary.overall %}
+        <p>{{ para }}</p>
+        {% endfor %}
+        <h2>By chapter</h2>
+        <ul>
+          {% for ch in compiled_summary.by_chapter %}
+          <li><span class="font-medium text-foreground">Ch. {{ ch.number }} — {{ ch.title }}.</span> {{ ch.takeaway }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% else %}
+      {# Finished state (past book): generic body — no compiled data on file. #}
       <div class="prose mt-8 max-w-none">
         <h2>Overall</h2>
         <p>Across everyone's notes, the group kept returning to a few themes: the
@@ -45,6 +65,7 @@
           <li>Chapter 3 — the group's key takeaway, in one or two lines.</li>
         </ul>
       </div>
+      {% endif %}
       {% else %}
       {# In-progress state (active book): index of published chapter summaries. #}
       <p class="mt-8 text-sm text-muted-foreground">The full summary is compiled after we finish the book.</p>

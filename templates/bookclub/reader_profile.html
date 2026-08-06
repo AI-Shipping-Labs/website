@@ -76,8 +76,8 @@
       {% endif %}
 
       {% if not is_member %}
-      {# Guest gate: after the feed — the whole feed is readable; the gate
-         covers only participation (commenting / sharing your own notes). #}
+      {% comment %} Guest gate: after the feed — the whole feed is readable; the gate
+         covers only participation (commenting / sharing your own notes). {% endcomment %}
       <div class="mt-10">
         {% include "content/_gated_access_card.html" %}
       </div>
@@ -90,3 +90,5 @@
   {% include "bookclub/_proto_banner.html" %}
 </main>
 {% endblock %}
+
+{% block extra_scripts %}{% include "_partials/mermaid_script.html" %}{% endblock %}

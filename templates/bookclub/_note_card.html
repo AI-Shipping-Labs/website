@@ -42,6 +42,13 @@ Context:
   {# --- Body --- #}
   <p class="mt-3 text-sm leading-relaxed text-foreground/90">{{ note.body }}</p>
 
+  {# --- Optional diagram (mermaid; no image uploads) --- #}
+  {% if note.diagram %}
+  <div class="mt-3 overflow-x-auto rounded-lg border border-border bg-background p-4">
+    <div class="mermaid">{{ note.diagram }}</div>
+  </div>
+  {% endif %}
+
   {# --- Reactions (static display) --- #}
   <div class="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
     <span class="inline-flex items-center gap-1"><i data-lucide="heart" class="h-4 w-4"></i>{{ note.likes }}</span>

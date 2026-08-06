@@ -1,0 +1,43 @@
+{% comment %}
+Points toast (prototype). Renders only when the view set ``points_earned``
+(marking a chapter read = +1, posting a note = +2). This is the moment the
+points scoring reveals itself — the board hints that points exist, the toast
+teaches what each action is worth. Auto-dismisses; also manually closeable.
+
+Context:
+  points_earned  {"points": N, "label": "..."} or unset.
+  book           active book dict (for the "See the board" link).
+{% endcomment %}
+{% if points_earned %}
+<div id="points-toast"
+     class="fixed inset-x-0 bottom-6 z-50 flex justify-center px-4"
+     data-testid="points-toast">
+  <div class="flex items-center gap-3 rounded-full border border-accent/40 bg-card/95 py-2 pl-3 pr-2 shadow-lg backdrop-blur">
+    <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-accent">
+      <i data-lucide="sparkles" class="h-4 w-4"></i>+{{ points_earned.points }}
+    </span>
+    <span class="text-sm text-foreground">{{ points_earned.label }}</span>
+    <a href="{% url 'bookclub_progress' slug=book.slug %}{{ view_query }}"
+       class="text-sm font-medium text-accent hover:underline">See the board &rarr;</a>
+    <button type="button" data-points-toast-close
+            class="ml-1 rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Dismiss">
+      <i data-lucide="x" class="h-4 w-4"></i>
+    </button>
+  </div>
+</div>
+<script>
+  (function () {
+    var toast = document.getElementById('points-toast');
+    if (!toast) return;
+    var hide = function () {
+      toast.style.transition = 'opacity .3s ease';
+      toast.style.opacity = '0';
+      setTimeout(function () { toast.remove(); }, 300);
+    };
+    var btn = toast.querySelector('[data-points-toast-close]');
+    if (btn) btn.addEventListener('click', hide);
+    setTimeout(hide, 4500);
+  })();
+</script>
+{% endif %}

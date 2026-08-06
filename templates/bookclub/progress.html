@@ -19,7 +19,7 @@
       <header class="mt-4 mb-8">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Books &middot; Progress</p>
         <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Progress</h1>
-        <p class="mt-2 text-sm text-muted-foreground">Who's read what — ranked by chapters read, then notes shared.</p>
+        <p class="mt-2 text-sm text-muted-foreground">Ranked by points. The more you read along, the higher you climb.</p>
       </header>
 
       {% if not is_member %}
@@ -28,47 +28,60 @@
       </div>
       {% endif %}
 
-      {# Prototype: a past book reuses this same board labeled by its title. #}
-      <div class="overflow-x-auto rounded-lg border border-border bg-card">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <th class="px-4 py-3 font-medium">#</th>
-              <th class="px-4 py-3 font-medium">Reader</th>
-              <th class="px-4 py-3 font-medium">Progress</th>
-              <th class="hidden px-4 py-3 text-right font-medium sm:table-cell">Notes</th>
-              <th class="hidden px-4 py-3 text-right font-medium sm:table-cell">Streak</th>
+      {% comment %} Same board style as the sprint cohort board
+         (templates/plans/cohort_board.html): rounded-2xl card, secondary-tinted
+         header, divide-y rows, own-row highlight + hover. Books adds the
+         rank / points / notes / streak columns on top of that shared style. {% endcomment %}
+      <div class="overflow-x-auto rounded-2xl border border-border bg-card">
+        <table class="min-w-full divide-y divide-border text-left text-sm">
+          <thead class="bg-secondary/40">
+            <tr>
+              <th scope="col" class="px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:px-5">#</th>
+              <th scope="col" class="px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:px-5">Reader</th>
+              <th scope="col" class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground sm:px-5">
+                <span class="inline-flex items-center gap-1">Points
+                  <i data-lucide="info" class="h-3.5 w-3.5 cursor-help" title="Points climb as you read along — mark chapters read and share notes to earn them."></i>
+                </span>
+              </th>
+              <th scope="col" class="w-56 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:px-5">Progress</th>
+              <th scope="col" class="hidden px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground sm:table-cell sm:px-5">Notes</th>
+              <th scope="col" class="hidden px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground sm:table-cell sm:px-5">Streak</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody class="divide-y divide-border">
             {% for row in progress_rows %}
-            <tr class="border-b border-border/60 last:border-0 {% if row.you %}bg-accent/10{% endif %}">
-              <td class="px-4 py-3">
+            <tr class="{% if row.you %}bg-accent/10{% else %}transition-colors hover:bg-secondary/40{% endif %}"{% if row.you %} aria-current="true"{% endif %}>
+              <td class="px-4 py-4 sm:px-5">
                 <span class="font-semibold {% if row.rank == 1 %}text-accent{% else %}text-muted-foreground{% endif %}">{{ row.rank }}</span>
               </td>
-              <td class="px-4 py-3">
+              <td class="px-4 py-4 sm:px-5">
                 <div class="flex items-center gap-3">
                   <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-border bg-background text-xs font-semibold">{{ row.name|slice:":1" }}</div>
                   <div class="min-w-0">
                     {% if row.public %}
-                    <a href="{% url 'bookclub_reader_profile' slug=book.slug handle=row.handle %}" class="font-medium {% if row.you %}text-foreground{% endif %} hover:text-accent hover:underline">{{ row.name }}</a>
+                    <a href="{% url 'bookclub_reader_profile' slug=book.slug handle=row.handle %}" class="font-medium {% if row.you %}text-foreground{% endif %} hover:text-accent hover:underline">{{ row.name }}{% if row.you %} (you){% endif %}</a>
                     {% else %}
-                    <span class="font-medium">{{ row.name }}</span>
-                    <p class="text-xs text-muted-foreground"><span class="inline-flex items-center gap-1"><i data-lucide="lock" class="h-3 w-3"></i>Private</span></p>
+                    <div class="flex items-center gap-2">
+                      <span class="font-medium">{{ row.name }}</span>
+                      <span class="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">Private</span>
+                    </div>
                     {% endif %}
                   </div>
                 </div>
               </td>
-              <td class="px-4 py-3">
-                <div class="flex items-center gap-2">
-                  <div class="h-1.5 w-24 overflow-hidden rounded-full bg-secondary">
-                    <div class="h-full rounded-full bg-accent" style="width: {% widthratio row.chapters book.chapters_count 100 %}%"></div>
+              <td class="px-4 py-4 text-right sm:px-5">
+                <span class="font-semibold {% if row.rank == 1 %}text-accent{% else %}text-foreground{% endif %}">{{ row.points }}</span>
+              </td>
+              <td class="px-4 py-4 sm:px-5">
+                <div class="flex min-w-[11rem] items-center gap-3">
+                  <div class="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div class="h-full bg-emerald-500" style="width: {% widthratio row.chapters book.chapters_count 100 %}%"></div>
                   </div>
-                  <span class="text-xs text-muted-foreground">{{ row.chapters }}/{{ book.chapters_count }}</span>
+                  <span class="whitespace-nowrap text-sm text-muted-foreground">{{ row.chapters }} of {{ book.chapters_count }}</span>
                 </div>
               </td>
-              <td class="hidden px-4 py-3 text-right text-muted-foreground sm:table-cell">{{ row.notes }}</td>
-              <td class="hidden px-4 py-3 text-right sm:table-cell">
+              <td class="hidden px-4 py-4 text-right text-muted-foreground sm:table-cell sm:px-5">{{ row.notes }}</td>
+              <td class="hidden px-4 py-4 text-right sm:table-cell sm:px-5">
                 <span class="inline-flex items-center gap-1 text-muted-foreground"><i data-lucide="flame" class="h-3.5 w-3.5 text-accent"></i>{{ row.streak }}w</span>
               </td>
             </tr>

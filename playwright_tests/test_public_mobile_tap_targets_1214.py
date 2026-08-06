@@ -111,20 +111,21 @@ def _assert_no_horizontal_overflow(page):
 
 def _assert_footer_targets(page):
     page.locator("footer").scroll_into_view_if_needed()
+    # Issue #1356 removed footer Manage Subscription and regrouped the
+    # columns; the About-column links (/about, /pricing, /faq) and Legal
+    # links keep their 44px mobile tap targets.
     targets = [
         ('footer a[href="/"]', "footer logo/home"),
-        ('footer a[href="/about"]', "footer About"),
+        ('footer a[href="/about"]', "footer Team"),
         ('footer a[href="/pricing"]', "footer Membership Tiers"),
         ('footer a[href="/faq"]', "footer FAQ"),
-        ('footer a', "footer Manage Subscription"),
+        ('footer a[href="/community/slack"]', "footer Join Slack"),
         ('footer a[href="/terms/"]', "footer Terms of Service"),
         ('footer a[href="/privacy/"]', "footer Privacy Policy"),
         ('footer a[href="/impressum/"]', "footer Impressum"),
     ]
     for selector, label in targets:
-        locator = page.locator(selector)
-        if label == "footer Manage Subscription":
-            locator = page.get_by_role("link", name="Manage Subscription")
+        locator = page.locator(selector).first
         _assert_target_size(locator, label)
 
 

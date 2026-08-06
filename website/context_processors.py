@@ -389,6 +389,12 @@ def site_context(request):
         'primary_nav': _build_primary_nav(
             marketing_nav, has_published_downloads
         ),
+        'footer_social': {
+            'youtube': get_config('SOCIAL_YOUTUBE_URL', ''),
+            'linkedin': get_config('SOCIAL_LINKEDIN_URL', ''),
+            'github': get_config('SOCIAL_GITHUB_URL', ''),
+            'x': get_config('SOCIAL_X_URL', ''),
+        },
     }
 
 

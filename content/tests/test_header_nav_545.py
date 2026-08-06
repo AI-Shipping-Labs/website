@@ -27,6 +27,7 @@ COMMUNITY_LINKS = [
     ('Membership', '/pricing'),
     ('Activities', '/activities#access-by-tier'),
     ('Community Sprints', '/sprints'),
+    ('Books', '/books'),
     ('Events', '/events'),
     ('Past Recordings', '/events?filter=past'),
 ]
@@ -134,6 +135,7 @@ class HeaderTextNavigationIssue580Test(TestCase):
                 'nav-community-link-membership',
                 'nav-community-link-activities',
                 'nav-community-link-sprints',
+                'nav-community-link-books',
                 'nav-community-link-events',
                 'nav-community-link-past-recordings',
             ],
@@ -198,6 +200,7 @@ class HeaderTextNavigationIssue580Test(TestCase):
                 'mobile-nav-community-link-membership',
                 'mobile-nav-community-link-activities',
                 'mobile-nav-community-link-sprints',
+                'mobile-nav-community-link-books',
                 'mobile-nav-community-link-events',
                 'mobile-nav-community-link-past-recordings',
             ],

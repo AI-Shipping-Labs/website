@@ -1,11 +1,12 @@
-"""Book Club public URLs (issue #1362).
+"""Book Club public URLs (issues #1362, #1363).
 
-Mounted at the site root so the canonical path is ``/books/<slug>``. No
-trailing slash — the site normalizes to slash-less canonical URLs via
-``integrations.middleware.RemoveTrailingSlashMiddleware``.
+Mounted at the site root so the canonical path is ``/books`` /
+``/books/<slug>``. No trailing slash — the site normalizes to slash-less
+canonical URLs via ``integrations.middleware.RemoveTrailingSlashMiddleware``.
 
-Foundation scope registers only the detail route. The hub, progress board,
-chapter, summary, and reader-profile routes arrive in #1363+.
+Foundation scope (#1362) registered the detail route. #1363 adds the public
+hub. The progress board, chapter, summary, and reader-profile routes arrive in
+#1364+.
 """
 
 from django.urls import path
@@ -13,6 +14,11 @@ from django.urls import path
 from bookclub import views
 
 urlpatterns = [
+    path(
+        'books',
+        views.index,
+        name='bookclub_index',
+    ),
     path(
         'books/<slug:slug>',
         views.book_detail,

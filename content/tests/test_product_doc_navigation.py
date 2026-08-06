@@ -12,7 +12,7 @@ class ProductDocPastRecordingsNavigationTest(SimpleTestCase):
         self.assertIn(
             "Community dropdown: Membership (`/pricing`), "
             "Activities (`/activities#access-by-tier`), Community Sprints (`/sprints`), "
-            "Events (`/events`), Past Recordings (`/events?filter=past`)",
+            "Books (`/books`), Events (`/events`), Past Recordings (`/events?filter=past`)",
             self.doc,
         )
 

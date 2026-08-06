@@ -228,7 +228,7 @@ The fixed header appears on every page and contains:
 - Logo + site name linking to `/` (home)
 - Primary nav groups (desktop): About, Community, Resources
 - About dropdown: About, Team, FAQ
-- Community dropdown: Membership (`/pricing`), Activities (`/activities#access-by-tier`), Community Sprints (`/sprints`), Events (`/events`), Past Recordings (`/events?filter=past`). The former `/community` overview permanently redirects to the merged home page.
+- Community dropdown: Membership (`/pricing`), Activities (`/activities#access-by-tier`), Community Sprints (`/sprints`), Books (`/books`), Events (`/events`), Past Recordings (`/events?filter=past`). The former `/community` overview permanently redirects to the merged home page.
 - Resources dropdown: Blog, Courses, Workshops, Learning Paths, Project Ideas, Interview Prep, Curated Links (`/resources`), and Downloads when published downloads exist. Resources is for content/reference surfaces and does not contain Past Recordings or Event Recordings.
 - Auth area (desktop): "Sign in" for anonymous users; for authenticated users: notification bell with unread badge dropdown, email link to account page, "Log out" button
 - Mobile menu: Hamburger toggle with About, Community, and Resources accordions plus account/notifications/logout controls

@@ -9,15 +9,20 @@
 <main class="min-h-screen">
   {% include "includes/header.html" %}
 
-  {% comment %} Foundation detail (issue #1362): a single-column editorial page,
-  model-driven, wired to prove tier gating. The hub, progress board, chapter,
-  and summary surfaces arrive in #1363+. {% endcomment %}
+  {% comment %} Full detail (issues #1362, #1363, #1364): a single-column
+  editorial page for the current book — cover-forward header, tier gate for
+  guests, and for members the "This week" callout plus the chapter roadmap with
+  mark-read controls and a derived progress bar. {% endcomment %}
   <section class="relative overflow-hidden pt-24">
     <div class="absolute inset-0 hero-gradient"></div>
     <div class="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
 
+      <a href="{% url 'bookclub_index' %}" class="inline-flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="book-back-link">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i> Books
+      </a>
+
       {# Book header — cover-forward, calm #}
-      <header class="flex flex-col items-start gap-6 sm:flex-row">
+      <header class="mt-4 flex flex-col items-start gap-6 sm:flex-row">
         {% if book.cover_image_url %}
         <img src="{{ book.cover_image_url }}" alt="{{ book.title }} cover"
              class="h-56 w-40 flex-shrink-0 rounded-lg border border-border object-cover shadow-lg">
@@ -50,6 +55,19 @@
       {% if is_member %}
       {# Participation body — the chapter roadmap. #}
       <section class="mt-12" data-testid="book-participation-body">
+        {% if current_chapter %}
+        {% comment %} "This week" callout — derived book-level state (not
+        per-user), text only. The open-chapter action arrives with the
+        per-chapter route (#1365). {% endcomment %}
+        <div class="mb-8 rounded-lg border border-accent/40 bg-accent/5 p-6" data-testid="book-this-week">
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">This week</p>
+          <p class="mt-1 text-base font-semibold text-foreground">Ch. {{ current_chapter.number }} — {{ current_chapter.title }}</p>
+          <div class="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            {% if current_chapter.week_label %}<span>{{ current_chapter.week_label }}</span>{% endif %}
+            {% if current_chapter.deadline %}<span>read by {{ current_chapter.deadline|member_short_date }}</span>{% endif %}
+          </div>
+        </div>
+        {% endif %}
         <div class="flex flex-wrap items-baseline justify-between gap-2">
           <h2 class="text-lg font-semibold tracking-tight">Contents</h2>
           {% if viewer_total %}

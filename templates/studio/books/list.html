@@ -1,0 +1,68 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Book club{% endblock %}
+
+{% block studio_content %}
+{% studio_header_actions title="Book club" subtitle="Community reading cohorts. Chapters hang off a book." testid="books-header" %}
+  <a href="{% url 'studio_book_create' %}"
+     class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+    <i data-lucide="plus" class="h-4 w-4"></i>
+    <span>New book</span>
+  </a>
+{% endstudio_header_actions %}
+
+{% studio_list_filter search "" "Search books..." None False %}
+
+{% if books or search %}
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Author</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Tier</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Chapters</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Start date</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for book in books %}
+      <tr class="hover:bg-secondary/50 transition-colors">
+        <td class="px-6 py-4 text-sm text-foreground">
+          <a href="{% url 'studio_book_detail' book_id=book.pk %}" class="text-accent hover:underline">{{ book.title }}</a>
+          <div class="text-xs text-muted-foreground font-mono">{{ book.slug }}</div>
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ book.author }}</td>
+        <td class="px-6 py-4" data-testid="book-list-status">
+          {% studio_status_badge book.status book.get_status_display %}
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="book-list-tier">{{ book.get_required_level_display }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="book-list-chapter-count">{{ book.chapter_count }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap">{% if book.start_date %}{{ book.start_date|operator_date }}{% else %}—{% endif %}</td>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %}">
+            {% url 'studio_book_detail' book_id=book.pk as book_detail_url %}
+            {% url 'studio_book_edit' book_id=book.pk as book_edit_url %}
+            {% studio_list_action book_edit_url 'Edit' 'secondary' %}
+            {% studio_list_action book_detail_url 'View' 'secondary' %}
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+        {% url 'studio_book_list' as books_clear_url %}
+        {% studio_empty_state 'filter' entity_label='book' entity_label_plural='books' clear_url=books_clear_url colspan=7 %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="book-list-pager" %}
+{% endif %}
+{% else %}
+  {% url 'studio_book_create' as books_create_url %}
+  {% studio_empty_state 'fresh' entity_label='book' entity_label_plural='books' create_url=books_create_url %}
+{% endif %}
+{% endblock %}

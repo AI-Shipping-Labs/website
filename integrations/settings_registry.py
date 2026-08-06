@@ -600,6 +600,19 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/slack.md#slack_team_id',
             },
+            {
+                'key': 'BOOK_CLUB_SLACK_URL',
+                'is_secret': False,
+                'optional': True,
+                'description': (
+                    'Link to the #book-club channel shown to members on Book '
+                    'Club surfaces. A workspace deep link (e.g. '
+                    'https://<workspace>.slack.com/archives/<channel_id>) or '
+                    'any join URL. Leave blank to fall back to the account '
+                    'page, where Slack joining lives.'
+                ),
+                'docs_url': '_docs/integrations/slack.md#book_club_slack_url',
+            },
         ],
     },
     {
@@ -1160,6 +1173,7 @@ SETTING_VALUE_TYPES = {
     'CALENDLY_ORGANIZATION_URI': 'url',
     'CALENDLY_WEBHOOK_SUBSCRIPTION_URI': 'url',
     'SLACK_INVITE_URL': 'url',
+    'BOOK_CLUB_SLACK_URL': 'url',
     'SITE_BASE_URL': 'url',
     'BANNER_GENERATOR_FUNCTION_URL': 'url',
     'LLM_BASE_URL': 'url',

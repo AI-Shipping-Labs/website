@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% load static %}
+{% load member_badges %}
+{% load accounts_extras %}
+
+{% block title %}{{ book.title }} | Books | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  {% comment %} Foundation detail (issue #1362): a single-column editorial page,
+  model-driven, wired to prove tier gating. The hub, progress board, chapter,
+  and summary surfaces arrive in #1363+. {% endcomment %}
+  <section class="relative overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+
+      {# Book header — cover-forward, calm #}
+      <header class="flex flex-col items-start gap-6 sm:flex-row">
+        {% if book.cover_image_url %}
+        <img src="{{ book.cover_image_url }}" alt="{{ book.title }} cover"
+             class="h-56 w-40 flex-shrink-0 rounded-lg border border-border object-cover shadow-lg">
+        {% else %}
+        <div class="flex h-56 w-40 flex-shrink-0 items-end rounded-lg border border-border bg-gradient-to-br {{ book.cover_accent }} to-transparent p-4 shadow-lg"
+             aria-hidden="true">
+          <span class="text-sm font-medium text-foreground/80">{{ book.title }}</span>
+        </div>
+        {% endif %}
+        <div class="flex-1">
+          <h1 class="text-3xl font-semibold tracking-tight">{{ book.title }}</h1>
+          {% if book.subtitle %}<p class="mt-1 text-base text-muted-foreground">{{ book.subtitle }}</p>{% endif %}
+          <p class="mt-1 text-sm text-muted-foreground">{{ book.author }}</p>
+          <div class="mt-3">{% member_access_badge book.required_level testid="book-access-badge" %}</div>
+          {% if book.description %}<p class="mt-4 text-sm leading-relaxed text-muted-foreground">{{ book.description }}</p>{% endif %}
+          <dl class="mt-4 space-y-1 text-sm text-muted-foreground">
+            {% if book.meeting_cadence %}<div><dt class="inline font-medium text-foreground">Meets:</dt> <dd class="inline">{{ book.meeting_cadence }}</dd></div>{% endif %}
+            {% if book.start_date %}<div><dt class="inline font-medium text-foreground">Kickoff:</dt> <dd class="inline">{{ book.start_date|member_full_date }}</dd></div>{% endif %}
+          </dl>
+          {% if book.buy_url %}
+          <p class="mt-4">
+            <a href="{{ book.buy_url }}" class="{% button_classes 'secondary' %}" target="_blank" rel="noopener" data-testid="book-buy-link">
+              <i data-lucide="book-open" class="h-4 w-4"></i> Get the book
+            </a>
+          </p>
+          {% endif %}
+        </div>
+      </header>
+
+      {% if is_member %}
+      {# Participation body — the chapter roadmap. #}
+      <section class="mt-12" data-testid="book-participation-body">
+        <h2 class="text-lg font-semibold tracking-tight">Contents</h2>
+        {% if chapters %}
+        <ol class="mt-3 space-y-0.5">
+          {% for ch in chapters %}
+          <li class="flex min-h-[44px] items-center justify-between gap-2.5 rounded-md px-3 py-2 text-sm">
+            <span class="text-foreground">Ch. {{ ch.number }} — {{ ch.title }}</span>
+            <span class="flex items-center gap-3 text-xs text-muted-foreground">
+              {% if ch.week_label %}<span>{{ ch.week_label }}</span>{% endif %}
+              {% if ch.deadline %}<span data-testid="book-chapter-deadline">{{ ch.deadline|member_short_date }}</span>{% endif %}
+            </span>
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}
+        <p class="mt-3 text-sm text-muted-foreground">The chapter roadmap is being prepared.</p>
+        {% endif %}
+      </section>
+      {% else %}
+      {# Guests / below-tier members: exactly one gated access card. #}
+      <div class="mt-12">
+        {% include "content/_gated_access_card.html" %}
+      </div>
+      {% endif %}
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

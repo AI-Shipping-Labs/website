@@ -38,6 +38,10 @@ FORBIDDEN_DELETE_HANDLERS = {
     "redirects.redirect_detail": "redirect_delete_not_available",
     "interview_notes.interview_note_detail": "interview_note_delete_not_available",
     "enrollments.sprint_enrollment_detail": "sprint_enrollment_delete_not_available",
+    # Book Club (issue #1362): destructive delete stays Studio-scoped, same
+    # precedent as sprints.
+    "books.book_detail": "book_delete_not_available",
+    "books.book_chapter_detail": "chapter_delete_not_available",
 }
 
 # Legitimate deleters. Each entry documents the category (see the doc) so the

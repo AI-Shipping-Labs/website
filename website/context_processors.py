@@ -180,6 +180,105 @@ def _build_env_mismatch_payload(request):
     }
 
 
+def _build_primary_nav(marketing_nav, has_published_downloads):
+    """Assemble the ordered primary-nav structure rendered in the header.
+
+    Single source of truth for the public primary navigation. Both the
+    desktop dropdown block and the mobile accordion drawer in
+    ``templates/includes/header.html`` loop over this structure, so a link
+    is declared exactly once and the two viewports can never drift.
+
+    Returns an ordered list of group dicts. Each dropdown group is
+    ``{'kind': 'dropdown', 'key', 'label', 'items': [...]}`` where every
+    item is ``{'label', 'href', 'slug'}``. The ``slug`` becomes the
+    ``data-testid`` suffix (``{prefix}-{key}-link-{slug}``); marketing
+    pages use ``marketing-{n}`` (1-based) to match the historical
+    ``forloop.counter`` testids.
+
+    The Downloads item is appended to Resources only when
+    ``has_published_downloads`` is true, mirroring the prior template
+    ``{% if %}`` guard. Marketing pages assigned to a nav section are
+    appended after the static items for that section.
+
+    Note: the ``#1355`` Project Ideas / Curated Links visibility work is
+    tracked separately; this structure renders the nav exactly as it
+    stands on ``main`` and does not un-hide or hide any item.
+    """
+
+    def marketing_items(section):
+        return [
+            {
+                'label': page.nav_text,
+                'href': page.get_absolute_url(),
+                'slug': f'marketing-{index}',
+            }
+            for index, page in enumerate(marketing_nav.get(section, []), start=1)
+        ]
+
+    about_items = [
+        {'label': 'Team', 'href': '/about', 'slug': 'team'},
+        {'label': 'FAQ', 'href': '/faq', 'slug': 'faq'},
+        *marketing_items('about'),
+    ]
+
+    community_items = [
+        {'label': 'Membership', 'href': '/pricing', 'slug': 'membership'},
+        {
+            'label': 'Activities',
+            'href': '/activities#access-by-tier',
+            'slug': 'activities',
+        },
+        {'label': 'Community Sprints', 'href': '/sprints', 'slug': 'sprints'},
+        {'label': 'Events', 'href': '/events', 'slug': 'events'},
+        {
+            'label': 'Past Recordings',
+            'href': '/events?filter=past',
+            'slug': 'past-recordings',
+        },
+        *marketing_items('community'),
+    ]
+
+    resources_items = [
+        {'label': 'Blog', 'href': '/blog', 'slug': 'blog'},
+        {'label': 'Courses', 'href': '/courses', 'slug': 'courses'},
+        {'label': 'Workshops', 'href': '/workshops', 'slug': 'workshops'},
+        {
+            'label': 'Learning Paths',
+            'href': '/learning-path/ai-engineer',
+            'slug': 'learning-paths',
+        },
+        {'label': 'Project Ideas', 'href': '/projects', 'slug': 'projects'},
+        {'label': 'Interview Prep', 'href': '/interview', 'slug': 'interview'},
+        {'label': 'Curated Links', 'href': '/resources', 'slug': 'curated-links'},
+    ]
+    if has_published_downloads:
+        resources_items.append(
+            {'label': 'Downloads', 'href': '/downloads', 'slug': 'downloads'}
+        )
+    resources_items.extend(marketing_items('resources'))
+
+    return [
+        {
+            'kind': 'dropdown',
+            'key': 'about',
+            'label': 'About',
+            'items': about_items,
+        },
+        {
+            'kind': 'dropdown',
+            'key': 'community',
+            'label': 'Community',
+            'items': community_items,
+        },
+        {
+            'kind': 'dropdown',
+            'key': 'resources',
+            'label': 'Resources',
+            'items': resources_items,
+        },
+    ]
+
+
 def site_context(request):
     """Add site-wide context variables to all templates.
 
@@ -287,6 +386,9 @@ def site_context(request):
         'current_year': __import__('datetime').datetime.now().year,
         'has_published_downloads': has_published_downloads,
         'marketing_nav': marketing_nav,
+        'primary_nav': _build_primary_nav(
+            marketing_nav, has_published_downloads
+        ),
     }
 
 

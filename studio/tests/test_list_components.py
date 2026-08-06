@@ -538,8 +538,11 @@ class StudioListRowActionPillStyleTest(TestCase):
             ):
                 primary_calls.append(f"{path.relative_to(REPO_ROOT)}:{match.group(0)}")
         self.assertEqual(
-            primary_calls,
+            sorted(primary_calls),
             [
+                # Book Club chapter row "Save" button (POST mutation) — #1362.
+                "templates/studio/books/detail.html:"
+                "studio_action_class 'primary'",
                 "templates/studio/questionnaires/response_queue.html:"
                 "studio_action_class 'primary'",
             ],

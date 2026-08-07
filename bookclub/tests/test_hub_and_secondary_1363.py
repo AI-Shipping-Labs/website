@@ -209,8 +209,11 @@ class SecondaryPageContentTest(TestCase):
         response = self.client.get('/books/done-book')
         self.assertContains(response, 'book-finished-recap')
         self.assertContains(response, '2 chapters')
-        # Summary / standings routes do not exist yet — no dead links to them.
-        self.assertNotContains(response, '/summary')
+        # #1368 registered the full-book summary route, so the finished recap
+        # now links to it (no longer a dead link).
+        self.assertContains(response, '/books/done-book/summary')
+        self.assertContains(response, 'book-finished-summary-cta')
+        # The standings route stays behind #1367's own flag — no dead link.
         self.assertNotContains(response, '/progress')
         # Multi-line template comments must not leak as visible page text.
         self.assertNotContains(response, '{#')

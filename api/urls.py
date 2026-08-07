@@ -22,6 +22,7 @@ from api.views.articles import (
 )
 from api.views.books import (
     book_chapter_detail,
+    book_chapter_pull_notes,
     book_chapters_collection,
     books_collection,
 )
@@ -553,6 +554,11 @@ urlpatterns = [
         "books/<slug:slug>/chapters",
         book_chapters_collection,
         name="api_book_chapters_collection",
+    ),
+    path(
+        "books/<slug:slug>/chapters/<int:number>/summary/pull-notes",
+        book_chapter_pull_notes,
+        name="api_book_chapter_pull_notes",
     ),
     path(
         "books/<slug:slug>/chapters/<int:number>",

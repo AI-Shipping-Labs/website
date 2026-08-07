@@ -115,16 +115,17 @@ class ChapterPrevNextNavTest(ChapterDetailFixture):
         self.assertContains(response, 'chapter-prev')
         self.assertContains(response, 'chapter-next')
 
-    def test_last_chapter_shows_summary_handoff_and_no_next(self):
+    def test_last_chapter_links_to_full_book_summary_and_no_next(self):
+        # #1368 flipped the deferred handoff copy into a real link to the
+        # full-book summary route (no more dead link).
         self.client.force_login(self.main_user)
         response = self.client.get(self._url(2))
         self.assertNotContains(response, 'chapter-next')
         self.assertContains(response, 'chapter-end-of-book')
-        self.assertContains(response, 'full book summary lands at the end')
-        # No dead link: the summary route (#1368) is not registered yet, so
-        # the handoff copy must stay plain text — no anchor to /summary.
-        self.assertNotContains(response, 'href="/books/inference-engineering/summary"')
-        self.assertNotContains(response, '/books/inference-engineering/summary')
+        self.assertContains(response, 'Read the full book summary')
+        self.assertContains(
+            response, 'href="/books/inference-engineering/summary"',
+        )
 
 
 class ChapterNoteWriteTest(ChapterDetailFixture):

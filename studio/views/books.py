@@ -26,6 +26,7 @@ from bookclub.models import (
     Book,
     Chapter,
 )
+from bookclub.summaries import append_notes_digest, resolve_publish_state
 from content.access import LEVEL_MAIN
 from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
 from events.models import Event, EventSeries
@@ -128,6 +129,8 @@ def _form_data_from_post(request):
         'meeting_cadence': (request.POST.get('meeting_cadence') or '').strip(),
         'buy_url': (request.POST.get('buy_url') or '').strip(),
         'event_series': (request.POST.get('event_series') or '').strip(),
+        'summary': (request.POST.get('summary') or '').strip(),
+        'summary_published': bool(request.POST.get('summary_published')),
     }
 
 
@@ -148,6 +151,8 @@ def _form_data_from_book(book):
         'event_series': (
             str(book.event_series_id) if book.event_series_id else ''
         ),
+        'summary': book.summary,
+        'summary_published': book.summary_published_at is not None,
     }
 
 
@@ -204,6 +209,23 @@ def _apply_book_fields(book, *, form_data, required_level, status_value,
     book.meeting_cadence = form_data['meeting_cadence']
     book.buy_url = form_data['buy_url']
     book.event_series = event_series
+    book.summary = form_data['summary']
+
+
+def _apply_summary_publish(book, publish):
+    """Resolve the full-book summary publish toggle. Returns an error string.
+
+    Mutates ``book.summary_published_at`` (idempotent set / unpublish clear) and
+    returns a friendly error when publishing an empty summary (empty string
+    otherwise). ``book.summary`` must already be applied by the caller.
+    """
+    new_published_at, empty_publish = resolve_publish_state(
+        book.summary_published_at, book.summary, publish,
+    )
+    if empty_publish:
+        return 'Write the summary before publishing.'
+    book.summary_published_at = new_published_at
+    return ''
 
 
 def _warn_second_current(request, book):
@@ -239,6 +261,7 @@ def book_create(request):
                 'required_level': str(LEVEL_MAIN), 'status': 'draft',
                 'start_date': '', 'meeting_cadence': '', 'buy_url': '',
                 'event_series': '',
+                'summary': '', 'summary_published': False,
             },
         )
 
@@ -281,6 +304,9 @@ def book_create(request):
         status_value=status_value, start_date=start_date,
         event_series=event_series,
     )
+    publish_error = _apply_summary_publish(book, form_data['summary_published'])
+    if publish_error:
+        return _reject(publish_error)
     book.save()
     _warn_second_current(request, book)
     messages.success(request, f'Book "{book.title}" created.')
@@ -334,6 +360,9 @@ def book_edit(request, book_id):
         status_value=status_value, start_date=start_date,
         event_series=event_series,
     )
+    publish_error = _apply_summary_publish(book, form_data['summary_published'])
+    if publish_error:
+        return _reject(publish_error)
     book.save()
     _warn_second_current(request, book)
     messages.success(request, f'Book "{book.title}" updated.')
@@ -452,6 +481,8 @@ def book_chapter_edit(request, book_id, chapter_id):
     event, event_error = _parse_chapter_event(
         (request.POST.get('event') or '').strip(),
     )
+    summary = (request.POST.get('summary') or '').strip()
+    publish_summary = bool(request.POST.get('summary_published'))
 
     error = ''
     if number_error:
@@ -470,16 +501,24 @@ def book_chapter_edit(request, book_id, chapter_id):
     chapter.deadline = deadline
     chapter.week_label = week_label
     chapter.event = event
+    chapter.summary = summary
     if not error:
         try:
             chapter.clean()
         except ValidationError as exc:
             error = exc.message_dict.get('event', ['Invalid event.'])[0]
 
+    new_published_at, empty_publish = resolve_publish_state(
+        chapter.summary_published_at, summary, publish_summary,
+    )
+    if not error and empty_publish:
+        error = 'Write the summary before publishing.'
+
     if error:
         request.session['book_chapter_error'] = error
         return redirect('studio_book_detail', book_id=book.pk)
 
+    chapter.summary_published_at = new_published_at
     chapter.save()
     messages.success(request, f'Chapter {number} — "{title}" updated.')
     return redirect('studio_book_detail', book_id=book.pk)
@@ -494,6 +533,32 @@ def book_chapter_delete(request, book_id, chapter_id):
     number = chapter.number
     chapter.delete()
     messages.success(request, f'Chapter {number} deleted.')
+    return redirect('studio_book_detail', book_id=book.pk)
+
+
+@staff_required
+@require_POST
+def book_chapter_pull_notes(request, book_id, chapter_id):
+    """Seed a chapter's draft summary from every member's note (issue #1368).
+
+    Pure server-side aggregation — no AI, no external call. Appends a plain-text
+    digest of every member's ``bookclub.Note`` for the chapter under a ``----``
+    separator (non-destructive: never overwrites existing draft text) and never
+    touches ``summary_published_at``. A no-op with an info message when there
+    are no notes. Redirect (P/R/G) back to the book detail page.
+    """
+    book = get_object_or_404(Book, pk=book_id)
+    chapter = get_object_or_404(Chapter, pk=chapter_id, book=book)
+
+    count = append_notes_digest(chapter)
+    if count == 0:
+        messages.info(request, 'No notes to pull yet.')
+    else:
+        messages.success(
+            request,
+            f'Pulled {count} note{"" if count == 1 else "s"} into the '
+            f'Chapter {chapter.number} summary draft.',
+        )
     return redirect('studio_book_detail', book_id=book.pk)
 
 

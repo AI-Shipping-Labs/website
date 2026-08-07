@@ -123,6 +123,9 @@
                       "start_date": "2026-08-10",
                       "status": "current",
                       "subtitle": "The technologies behind every AI product in production",
+                      "summary": "",
+                      "summary_published": false,
+                      "summary_published_at": null,
                       "title": "Inference Engineering",
                       "updated_at": "2026-08-01T12:00:00+00:00"
                     }
@@ -254,6 +257,9 @@
                   "start_date": "2026-08-10",
                   "status": "current",
                   "subtitle": "The technologies behind every AI product in production",
+                  "summary": "",
+                  "summary_published": false,
+                  "summary_published_at": null,
                   "title": "Inference Engineering",
                   "updated_at": "2026-08-01T12:00:00+00:00"
                 }
@@ -339,6 +345,9 @@
                   "start_date": "2026-08-10",
                   "status": "current",
                   "subtitle": "The technologies behind every AI product in production",
+                  "summary": "",
+                  "summary_published": false,
+                  "summary_published_at": null,
                   "title": "Inference Engineering",
                   "updated_at": "2026-08-01T12:00:00+00:00"
                 }
@@ -374,7 +383,8 @@
           "content": {
             "application/json": {
               "example": {
-                "status": "finished"
+                "summary": "Across everyone's notes, the group kept returning to a few themes\u2026",
+                "summary_published": true
               },
               "schema": {
                 "properties": {
@@ -431,6 +441,14 @@
                   "subtitle": {
                     "type": "string"
                   },
+                  "summary": {
+                    "description": "Organizer-authored summary (plain text; blank-line-separated paragraphs). Also holds the working draft before publish.",
+                    "type": "string"
+                  },
+                  "summary_published": {
+                    "description": "Publish toggle. ``true`` sets ``summary_published_at`` to now when currently unpublished (idempotent \u2014 a re-publish never bumps it); ``false`` clears it. Publishing an empty ``summary`` returns 422.",
+                    "type": "boolean"
+                  },
                   "title": {
                     "type": "string"
                   }
@@ -460,6 +478,9 @@
                   "start_date": "2026-08-10",
                   "status": "current",
                   "subtitle": "The technologies behind every AI product in production",
+                  "summary": "",
+                  "summary_published": false,
+                  "summary_published_at": null,
                   "title": "Inference Engineering",
                   "updated_at": "2026-08-01T12:00:00+00:00"
                 }
@@ -510,6 +531,9 @@
                       "deadline": "2026-08-17",
                       "event": null,
                       "number": 0,
+                      "summary": "",
+                      "summary_published": false,
+                      "summary_published_at": null,
                       "title": "Inference",
                       "updated_at": "2026-08-01T12:00:00+00:00",
                       "week_label": "Week 1"
@@ -597,6 +621,9 @@
                   "deadline": "2026-08-17",
                   "event": null,
                   "number": 0,
+                  "summary": "",
+                  "summary_published": false,
+                  "summary_published_at": null,
                   "title": "Inference",
                   "updated_at": "2026-08-01T12:00:00+00:00",
                   "week_label": "Week 1"
@@ -691,6 +718,9 @@
                   "deadline": "2026-08-17",
                   "event": null,
                   "number": 0,
+                  "summary": "",
+                  "summary_published": false,
+                  "summary_published_at": null,
                   "title": "Inference",
                   "updated_at": "2026-08-01T12:00:00+00:00",
                   "week_label": "Week 1"
@@ -734,7 +764,8 @@
           "content": {
             "application/json": {
               "example": {
-                "deadline": "2026-09-10"
+                "summary": "The KV cache framing was the takeaway.",
+                "summary_published": true
               },
               "schema": {
                 "properties": {
@@ -750,6 +781,14 @@
                       "integer",
                       "null"
                     ]
+                  },
+                  "summary": {
+                    "description": "Organizer-authored summary (plain text; blank-line-separated paragraphs). Also holds the working draft before publish.",
+                    "type": "string"
+                  },
+                  "summary_published": {
+                    "description": "Publish toggle. ``true`` sets ``summary_published_at`` to now when currently unpublished (idempotent \u2014 a re-publish never bumps it); ``false`` clears it. Publishing an empty ``summary`` returns 422.",
+                    "type": "boolean"
                   },
                   "title": {
                     "type": "string"
@@ -773,6 +812,9 @@
                   "deadline": "2026-08-17",
                   "event": null,
                   "number": 0,
+                  "summary": "",
+                  "summary_published": false,
+                  "summary_published_at": null,
                   "title": "Inference",
                   "updated_at": "2026-08-01T12:00:00+00:00",
                   "week_label": "Week 1"
@@ -795,6 +837,78 @@
           }
         },
         "summary": "Update a chapter (admin bearer)",
+        "tags": [
+          "Book Club"
+        ]
+      }
+    },
+    "/api/books/{slug}/chapters/{number}/summary/pull-notes": {
+      "post": {
+        "description": "Admin-only. Pure server-side aggregation (no AI): reads every member's note for the chapter and composes a plain-text digest. By default the digest is returned read-only and the chapter is left unchanged. With ``{\"apply\": true}`` the digest is appended to the chapter draft ``summary`` under a separator (non-destructive) and the updated chapter is returned. ``summary_published_at`` is never touched. Publishing stays a separate PATCH.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "apply": true
+              },
+              "schema": {
+                "properties": {
+                  "apply": {
+                    "default": false,
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "applied": false,
+                  "digest": "Member notes \u2014 2 notes, pulled 2026-08-10\n- Ada: The KV cache framing clicked.\n- Lin: Batching tradeoffs were the key idea.",
+                  "note_count": 2
+                }
+              }
+            },
+            "description": "Aggregated digest (default) or the updated chapter (apply=true)."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "403": {
+            "description": "Non-admin token."
+          },
+          "404": {
+            "description": "Book or chapter not found."
+          },
+          "422": {
+            "description": "Invalid ``apply`` type."
+          }
+        },
+        "summary": "Aggregate member notes into the chapter draft (admin)",
         "tags": [
           "Book Club"
         ]

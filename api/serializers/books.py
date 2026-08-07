@@ -37,6 +37,9 @@ def serialize_chapter(chapter):
             if event is not None
             else None
         ),
+        "summary": chapter.summary,
+        "summary_published": chapter.is_summary_published,
+        "summary_published_at": _isoformat_or_none(chapter.summary_published_at),
         "created_at": _isoformat_or_none(chapter.created_at),
         "updated_at": _isoformat_or_none(chapter.updated_at),
     }
@@ -67,6 +70,9 @@ def serialize_book(book, *, include_chapters=False):
         "event_series": (
             {"id": series.id, "slug": series.slug} if series else None
         ),
+        "summary": book.summary,
+        "summary_published": book.is_summary_published,
+        "summary_published_at": _isoformat_or_none(book.summary_published_at),
         "chapter_count": book.chapters.count(),
         "created_at": _isoformat_or_none(book.created_at),
         "updated_at": _isoformat_or_none(book.updated_at),

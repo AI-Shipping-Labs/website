@@ -120,6 +120,25 @@ class Book(TimestampedModelMixin, models.Model):
         default='',
         help_text='Publisher/buy page for the book.',
     )
+    # Full-book "Overall" summary the organizer writes at the end (issue #1368).
+    # Plain text (no markdown engine); blank-line-separated paragraphs render as
+    # separate <p>. A ``null`` ``summary_published_at`` means draft; a set
+    # timestamp published — presence of the timestamp is the state (mirrors the
+    # ``ChapterRead`` presence-of-row precedent). A published-but-empty summary
+    # is treated as not published (see ``is_summary_published``).
+    summary = models.TextField(
+        blank=True,
+        default='',
+        help_text=(
+            'Full-book overall summary (plain text; blank-line-separated '
+            'paragraphs). Also holds the working draft before publish.'
+        ),
+    )
+    summary_published_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='When the full-book summary was published. Null = draft.',
+    )
     # Optional link to a recurring meeting series (rendered as meeting rows in
     # #1369). ``SET_NULL`` mirrors ``Sprint.event_series``: deleting the series
     # only severs the link; the book survives.
@@ -147,6 +166,18 @@ class Book(TimestampedModelMixin, models.Model):
 
     def get_absolute_url(self):
         return reverse('bookclub_book_detail', kwargs={'slug': self.slug})
+
+    @property
+    def is_summary_published(self):
+        """Whether the full-book summary is visible to members (issue #1368).
+
+        Published only when the timestamp is set AND the body is non-empty —
+        a published-but-empty summary is treated as not published (the guard
+        against publishing an empty body).
+        """
+        return self.summary_published_at is not None and bool(
+            self.summary.strip()
+        )
 
 
 class Chapter(TimestampedModelMixin, models.Model):
@@ -193,6 +224,22 @@ class Chapter(TimestampedModelMixin, models.Model):
             'Optional linked event. Deleting the event unlinks the chapter.'
         ),
     )
+    # Organizer-authored per-chapter summary (issue #1368). Plain text; the
+    # working draft lives here before publish. ``null`` ``summary_published_at``
+    # = draft (staff-only preview); a set timestamp = published to members.
+    summary = models.TextField(
+        blank=True,
+        default='',
+        help_text=(
+            'Chapter summary (plain text; blank-line-separated paragraphs). '
+            'Also holds the working draft before publish.'
+        ),
+    )
+    summary_published_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='When the chapter summary was published. Null = draft.',
+    )
 
     class Meta:
         ordering = ['number']
@@ -205,6 +252,17 @@ class Chapter(TimestampedModelMixin, models.Model):
 
     def __str__(self):
         return f'Ch. {self.number} — {self.title}'
+
+    @property
+    def is_summary_published(self):
+        """Whether this chapter's summary is visible to members (issue #1368).
+
+        Published only when the timestamp is set AND the body is non-empty,
+        mirroring ``Book.is_summary_published``.
+        """
+        return self.summary_published_at is not None and bool(
+            self.summary.strip()
+        )
 
     def clean(self):
         """Enforce the series-only rule for a chapter's linked event (#1369).

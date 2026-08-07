@@ -51,6 +51,7 @@ from bookclub.reading import (
     viewer_read_numbers,
     viewer_reading_progress,
 )
+from bookclub.summaries import summary_excerpt, summary_paragraphs
 from content.access import build_gated_access_copy, get_user_level
 from events.models.event import PUBLIC_EVENT_STATUSES
 
@@ -220,21 +221,21 @@ def _book_secondary(request, book):
     """Render the lighter lifecycle page for an ``upcoming`` / ``finished`` book.
 
     This page carries only public lifecycle info (no participation body, no
-    gate): the group is not reading this book right now. The summary and
-    standings CTAs target routes that do not exist yet (#1368 / #1367), so they
-    are absent here — ``book_summary_available`` / ``book_progress_available``
-    are the coordination flags those issues flip when they add the routes and
-    the CTA markup. The upcoming "join to read along" CTA points to ``/pricing``
-    only when the viewer does not already meet the tier.
+    gate): the group is not reading this book right now. The full-book summary
+    route (``bookclub_book_summary``) now exists (#1368), so a finished book
+    links to it; the standings CTA (#1367) is still gated on its own flag. The
+    upcoming "join to read along" CTA points to ``/pricing`` only when the
+    viewer does not already meet the tier.
     """
     viewer_has_access = get_user_level(request.user) >= book.required_level
     context = {
         'book': book,
         'num_chapters': book.chapters.count(),
         'show_join_cta': not viewer_has_access,
-        # Flipped by #1368 (summary) / #1367 (progress board) when those routes
-        # and their CTA markup land. False here keeps the page dead-link free.
-        'book_summary_available': False,
+        # #1368 registered the full-book summary route, so the finished recap
+        # now links to it (no longer a dead link). ``book_progress_available``
+        # stays #1367's coordination flag.
+        'book_summary_available': True,
         'book_progress_available': False,
     }
     return render(request, 'bookclub/book_secondary.html', context)
@@ -294,6 +295,74 @@ def book_progress(request, slug):
         'first_mover': first_mover,
     })
     return render(request, 'bookclub/progress.html', context)
+
+
+def book_summary(request, slug):
+    """``/books/<slug>/summary`` — the compiled full-book summary page (#1368).
+
+    Resolution and gating mirror ``book_detail`` exactly: unknown slug -> 404,
+    ``cancelled`` -> 404, ``draft`` -> 404 for non-staff (staff preview). A
+    viewer sees the compiled body iff
+    ``get_user_level(user) >= book.required_level``; guests / below-tier get
+    exactly one ``content/_gated_access_card.html`` and no summary body.
+
+    Three member states:
+
+    - Full-book summary published (or a staff preview of an unpublished draft):
+      an "Overall" section plus a "By chapter" list built from every chapter
+      that has a published summary, each row linking to that chapter ``#summary``
+      anchor.
+    - Full-book summary not published but one or more chapter summaries are:
+      the "compiled after we finish the book" line plus a "Published so far"
+      index of the published chapter summaries.
+    - Nothing published yet: the same line with a calm empty state.
+    """
+    book = Book.objects.filter(slug=slug).first()
+    if book is None:
+        raise Http404('Unknown book.')
+
+    is_staff = bool(getattr(request.user, 'is_staff', False))
+    if book.status == BOOK_STATUS_CANCELLED:
+        raise Http404('This book is not available.')
+    if book.status == BOOK_STATUS_DRAFT and not is_staff:
+        raise Http404('This book is not published.')
+
+    is_member = get_user_level(request.user) >= book.required_level
+    context = {'book': book, 'is_member': is_member}
+    if not is_member:
+        context.update(_gate_context(request, book))
+        return render(request, 'bookclub/book_summary.html', context)
+
+    chapters = list(book.chapters.all())
+    published_chapters = [c for c in chapters if c.is_summary_published]
+    by_chapter_rows = [
+        {
+            'number': chapter.number,
+            'title': chapter.title,
+            'label': f'Ch. {chapter.number} — {chapter.title}',
+            'url': f'{_chapter_url(book, chapter.number)}#summary',
+            'excerpt': summary_excerpt(chapter.summary),
+            'published_at': chapter.summary_published_at,
+        }
+        for chapter in published_chapters
+    ]
+
+    overall_published = book.is_summary_published
+    # Staff may preview an unpublished full-book draft (body written, not yet
+    # published) with a "Draft preview" chip; members never see it.
+    overall_draft_preview = (
+        is_staff and not overall_published and bool(book.summary.strip())
+    )
+    show_overall = overall_published or overall_draft_preview
+
+    context.update({
+        'show_overall': show_overall,
+        'overall_draft_preview': overall_draft_preview,
+        'overall_paragraphs': summary_paragraphs(book.summary),
+        'by_chapter_rows': by_chapter_rows,
+        'has_published_chapters': bool(published_chapters),
+    })
+    return render(request, 'bookclub/book_summary.html', context)
 
 
 @require_POST
@@ -396,6 +465,28 @@ def chapter_detail(request, slug, number):
     if not is_member:
         context.update(_gate_context(request, book))
         return render(request, 'bookclub/book_chapter.html', context)
+
+    # Chapter summary (#1368). A published summary (timestamp set + non-empty
+    # body) renders to every member; an unpublished draft renders only to staff
+    # with a "Draft" chip so the organizer can preview before publishing. When
+    # nothing is published, a member sees the calm placeholder only once the
+    # chapter deadline has passed — before that, nothing (no premature promise).
+    summary_paras = summary_paragraphs(chapter.summary)
+    summary_draft_preview = (
+        is_staff
+        and not chapter.is_summary_published
+        and bool(chapter.summary.strip())
+    )
+    deadline_passed = (
+        chapter.deadline is not None
+        and chapter.deadline < timezone.localdate()
+    )
+    context.update({
+        'summary_paragraphs': summary_paras,
+        'summary_published': chapter.is_summary_published,
+        'summary_draft_preview': summary_draft_preview,
+        'summary_deadline_passed': deadline_passed,
+    })
 
     read_numbers = viewer_read_numbers(request.user, book)
     own_note = (

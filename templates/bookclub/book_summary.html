@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+{% load member_badges %}
+{% load member_empty_state %}
+
+{% block title %}{{ book.title }} summary | Books | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  {% comment %} Reader tier (max-w-3xl): the compiled full-book summary, single
+  column. Guests / below-tier see only the public header plus one gated-access
+  card; members see the compiled body. {% endcomment %}
+  <section class="relative overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+
+      <a href="{% url 'bookclub_book_detail' slug=book.slug %}" class="inline-flex items-center gap-1 text-sm text-accent hover:underline" data-testid="summary-back-link">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i> {{ book.title }}
+      </a>
+
+      <header class="mt-4">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Books &middot; Summary</p>
+        <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">{{ book.title }} — what the group took away</h1>
+        <p class="mt-2 text-sm text-muted-foreground">Compiled from everyone's chapter notes.</p>
+      </header>
+
+      {% if not is_member %}
+      {% comment %} The support line above doubles as the teaser; the gate
+      replaces the body. {% endcomment %}
+      <div class="mt-8">
+        {% include "content/_gated_access_card.html" %}
+      </div>
+      {% else %}
+
+      {% if show_overall %}
+      {% comment %} Full-book summary published (or a staff preview of an
+      unpublished draft): the Overall narrative plus a By-chapter index built
+      from every chapter with a published summary. {% endcomment %}
+      {% if overall_draft_preview %}
+      <p class="mt-6 inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground" data-testid="summary-draft-chip">
+        <i data-lucide="eye-off" class="h-3.5 w-3.5"></i>Draft preview — only staff can see this
+      </p>
+      {% endif %}
+
+      <section class="mt-8" data-testid="summary-overall">
+        <h2 class="text-lg font-semibold text-foreground">Overall</h2>
+        <div class="mt-3 space-y-4 text-sm leading-relaxed text-foreground/90">
+          {% for para in overall_paragraphs %}
+          <p>{{ para }}</p>
+          {% endfor %}
+        </div>
+      </section>
+
+      {% if by_chapter_rows %}
+      <section class="mt-10" data-testid="summary-by-chapter">
+        <h2 class="text-lg font-semibold text-foreground">By chapter</h2>
+        <div class="mt-3 space-y-1">
+          {% for row in by_chapter_rows %}
+          <a href="{{ row.url }}" class="group block min-h-[44px] rounded-md px-3 py-2 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="summary-chapter-row">
+            <span class="text-sm font-medium text-foreground group-hover:text-accent">Ch. {{ row.number }} — {{ row.title }}</span>
+            {% if row.excerpt %}<span class="mt-0.5 block text-sm text-muted-foreground">{{ row.excerpt }}</span>{% endif %}
+          </a>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
+      {% else %}
+      {% comment %} Full-book summary not published yet. If chapter summaries are
+      published, index them ("Published so far"); otherwise a calm empty state.
+      {% endcomment %}
+      <p class="mt-8 text-sm text-muted-foreground" data-testid="summary-in-progress">The full summary is compiled after we finish the book.</p>
+
+      {% if has_published_chapters %}
+      <section class="mt-6" data-testid="summary-published-so-far">
+        <h2 class="text-lg font-semibold text-foreground">Published so far</h2>
+        <div class="mt-3 space-y-0.5">
+          {% for row in by_chapter_rows %}
+          {% include "includes/_list_row.html" with href=row.url title=row.label marker_kind="custom" marker_html='<i data-lucide="sparkles" class="h-4 w-4 text-accent"></i>' testid="summary-published-row" %}
+          {% endfor %}
+        </div>
+      </section>
+      {% else %}
+      <div class="mt-6">
+        {% member_empty_state title='No summary yet' body="Chapter summaries land here as the group finishes each chapter, and the full-book summary once we finish the book." icon='sparkles' kind='fresh' %}
+      </div>
+      {% endif %}
+      {% endif %}
+
+      {% comment %} The progress board route (#1367) exists, so the standings
+      link is always live for a member. {% endcomment %}
+      <div class="mt-10">
+        <a href="{% url 'bookclub_book_progress' slug=book.slug %}" class="{% button_classes 'secondary' %}" data-testid="summary-standings-link">
+          <i data-lucide="bar-chart-3" class="h-4 w-4"></i>Final standings
+        </a>
+      </div>
+      {% endif %}
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

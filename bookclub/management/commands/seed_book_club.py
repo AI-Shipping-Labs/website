@@ -11,16 +11,19 @@ The seed never fails when the series or its kickoff event is absent — the
 kickoff attaches via that series once #1369/#1358 land.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from bookclub.models import BOOK_STATUS_CURRENT, Book, Chapter
 from content.access import LEVEL_MAIN
+from events.models import Event
 from events.models.event_series import EventSeries
 
 BOOK_SLUG = 'inference-engineering'
 EVENT_SERIES_SLUG = 'inference-engineering-book-club'
+KICKOFF_EVENT_SLUG = 'inference-engineering-book-club-kickoff'
 
 BOOK_DEFAULTS = {
     'title': 'Inference Engineering',
@@ -59,6 +62,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         event_series = self._resolve_event_series()
+        if event_series is not None:
+            self._ensure_kickoff_event(event_series)
 
         defaults = dict(BOOK_DEFAULTS)
         if event_series is not None:
@@ -112,3 +117,42 @@ class Command(BaseCommand):
     def _resolve_event_series(self):
         """Return the book-club EventSeries by slug, or None if absent."""
         return EventSeries.objects.filter(slug=EVENT_SERIES_SLUG).first()
+
+    def _ensure_kickoff_event(self, event_series):
+        """Idempotently attach the kickoff event to the collection (#1369).
+
+        Uses #1358's supported path — a real ``events.Event`` whose
+        ``event_series`` points at the (cadence-less) collection — rather than
+        the prototype's standalone ``seed_local_event.py`` script. The start is
+        derived from ``timezone.now()`` so the seed never hard-codes a date that
+        rots. Safe to re-run: the event is upserted by slug and re-attached if a
+        pre-existing event drifted off the series.
+        """
+        start = timezone.now() + timedelta(days=7)
+        event, created = Event.objects.get_or_create(
+            slug=KICKOFF_EVENT_SLUG,
+            defaults={
+                'title': 'Inference Engineering book club kickoff',
+                'description': (
+                    'Kickoff session for the Inference Engineering book club.'
+                ),
+                'start_datetime': start,
+                'end_datetime': start + timedelta(hours=1),
+                'timezone': 'Europe/Berlin',
+                'required_level': 0,
+                'status': 'upcoming',
+                'origin': 'studio',
+                'event_series': event_series,
+            },
+        )
+        if not created and event.event_series_id != event_series.id:
+            event.event_series = event_series
+            event.save(update_fields=['event_series'])
+        self.stdout.write(
+            'Kickoff event "%s" %s and attached to series "%s".'
+            % (
+                event.slug,
+                'created' if created else 'exists',
+                event_series.slug,
+            )
+        )

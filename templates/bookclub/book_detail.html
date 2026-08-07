@@ -2,6 +2,7 @@
 {% load static %}
 {% load member_badges %}
 {% load accounts_extras %}
+{% load date_formatting %}
 
 {% block title %}{{ book.title }} | Books | {{ site_name }}{% endblock %}
 
@@ -39,7 +40,16 @@
           <div class="mt-3">{% member_access_badge book.required_level testid="book-access-badge" %}</div>
           {% if book.description %}<p class="mt-4 text-sm leading-relaxed text-muted-foreground">{{ book.description }}</p>{% endif %}
           <dl class="mt-4 space-y-1 text-sm text-muted-foreground">
-            {% if book.meeting_cadence %}<div><dt class="inline font-medium text-foreground">Meets:</dt> <dd class="inline">{{ book.meeting_cadence }}</dd></div>{% endif %}
+            {% comment %} Derived "Meets:" line (#1369): prefer the linked
+            series' occurrence-derived schedule_label (which refuses a false
+            weekly claim for a cadence-less collection) over the manual
+            meeting_cadence; fall back to meeting_cadence when no series is
+            linked. {% endcomment %}
+            {% if book.event_series.schedule_label %}
+            <div><dt class="inline font-medium text-foreground">Meets:</dt> <dd class="inline" data-testid="book-meets">{{ book.event_series.schedule_label }}</dd></div>
+            {% elif book.meeting_cadence %}
+            <div><dt class="inline font-medium text-foreground">Meets:</dt> <dd class="inline" data-testid="book-meets">{{ book.meeting_cadence }}</dd></div>
+            {% endif %}
             {% if book.start_date %}<div><dt class="inline font-medium text-foreground">Kickoff:</dt> <dd class="inline">{{ book.start_date|member_full_date }}</dd></div>{% endif %}
           </dl>
           {% if book.buy_url %}
@@ -110,6 +120,23 @@
         </ol>
         {% else %}
         <p class="mt-3 text-sm text-muted-foreground">The chapter roadmap is being prepared.</p>
+        {% endif %}
+
+        {% comment %} "When we meet" (#1369) — quiet calendar rows to the
+        linked series' public occurrences, one per meeting, ordered by start.
+        Member-only (this whole section sits in the is_member branch), so
+        meetings never leak below the tier gate. Hidden entirely when the book
+        has no series or the series has zero public occurrences. {% endcomment %}
+        {% if meetings %}
+        <div class="mt-10" data-testid="book-when-we-meet">
+          <h2 class="text-lg font-semibold tracking-tight">When we meet</h2>
+          <div class="mt-3 space-y-0.5">
+            {% for m in meetings %}
+            {% user_event_datetime m.start_datetime user fmt='%b %d, %H:%M' as m_when %}
+            {% include "includes/_list_row.html" with href=m.get_absolute_url title=m_when|add:" · "|add:m.title marker_kind="custom" marker_html='<i data-lucide="calendar" class="h-4 w-4 text-muted-foreground"></i>' testid="book-meeting-row" %}
+            {% endfor %}
+          </div>
+        </div>
         {% endif %}
       </section>
       {% else %}

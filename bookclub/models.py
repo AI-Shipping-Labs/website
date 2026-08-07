@@ -18,6 +18,7 @@ a viewer sees a book's participation body iff
 import uuid
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
@@ -204,6 +205,42 @@ class Chapter(TimestampedModelMixin, models.Model):
 
     def __str__(self):
         return f'Ch. {self.number} — {self.title}'
+
+    def clean(self):
+        """Enforce the series-only rule for a chapter's linked event (#1369).
+
+        A chapter's ``event`` must be an occurrence of the book's own
+        ``event_series``. This is the single source of truth for the
+        constraint: the Studio view and the admin API both call it (or
+        replicate the identical check) so the rule cannot be bypassed. A
+        cross-table check like this is not expressible as a DB
+        ``CheckConstraint``, so the app-level ``clean()`` is the contract.
+
+        No-op when ``event`` is unset (detach is always allowed). When
+        ``event`` is set:
+
+        - the book must have an ``event_series`` linked, else a friendly
+          field error tells the operator to link a series first;
+        - the event must belong to that series, else a friendly field error.
+        """
+        super().clean()
+        if self.event_id is None:
+            return
+        # A chapter always belongs to a book; guard defensively so an
+        # in-memory chapter without a book set does not raise here.
+        if self.book_id is None:
+            return
+        if self.book.event_series_id is None:
+            raise ValidationError({
+                'event': (
+                    'Link an event series to the book before attaching '
+                    'chapter events.'
+                ),
+            })
+        if self.event.event_series_id != self.book.event_series_id:
+            raise ValidationError({
+                'event': "This event is not part of the book's event series.",
+            })
 
 
 class ChapterRead(models.Model):

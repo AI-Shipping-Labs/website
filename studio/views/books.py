@@ -12,6 +12,7 @@ import json
 from datetime import datetime
 
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q
 from django.http import JsonResponse
@@ -27,7 +28,8 @@ from bookclub.models import (
 )
 from content.access import LEVEL_MAIN
 from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
-from events.models import EventSeries
+from events.models import Event, EventSeries
+from events.models.event import PUBLIC_EVENT_STATUSES
 from studio.decorators import staff_required
 from studio.utils import studio_pagination_context
 
@@ -71,6 +73,29 @@ def _parse_event_series(raw):
     if series is None:
         return None, 'Selected event series does not exist.'
     return series, ''
+
+
+def _parse_chapter_event(raw):
+    """Parse the chapter ``event`` form field. Returns ``(Event|None, error)``.
+
+    Empty -> detach (``None``). A numeric value resolves by pk; a non-numeric
+    string by slug (the admin API shares this behaviour). Unknown id/slug is an
+    error so the caller re-renders without a write. The series-only rule is
+    enforced separately by ``Chapter.clean()``.
+    """
+    if raw in (None, ''):
+        return None, ''
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        event = Event.objects.filter(pk=raw).first()
+    elif isinstance(raw, str) and raw.lstrip('-').isdigit():
+        event = Event.objects.filter(pk=int(raw)).first()
+    elif isinstance(raw, str):
+        event = Event.objects.filter(slug=raw).first()
+    else:
+        return None, 'Selected event does not exist.'
+    if event is None:
+        return None, 'Selected event does not exist.'
+    return event, ''
 
 
 def _parse_optional_date(raw, *, field_label):
@@ -321,10 +346,22 @@ def book_detail(request, book_id):
     book = get_object_or_404(
         Book.objects.select_related('event_series'), pk=book_id,
     )
-    chapters = list(book.chapters.all())
+    chapters = list(book.chapters.select_related('event').all())
+    # The chapter-event selector lists only the book's own series occurrences
+    # (issue #1369). Empty list when no series is linked -> the selector is
+    # disabled with a hint so an arbitrary event can never be attached.
+    if book.event_series_id:
+        series_events = list(
+            book.event_series.events
+            .filter(status__in=PUBLIC_EVENT_STATUSES)
+            .order_by('start_datetime')
+        )
+    else:
+        series_events = []
     return render(request, 'studio/books/detail.html', {
         'book': book,
         'chapters': chapters,
+        'series_events': series_events,
         'tier_level_labels': dict(TIER_LEVEL_CHOICES),
         'chapter_error': request.session.pop('book_chapter_error', ''),
     })
@@ -365,6 +402,9 @@ def book_chapter_create(request, book_id):
         (request.POST.get('deadline') or '').strip(), field_label='Deadline',
     )
     week_label = (request.POST.get('week_label') or '').strip()
+    event, event_error = _parse_chapter_event(
+        (request.POST.get('event') or '').strip(),
+    )
 
     error = ''
     if number_error:
@@ -373,17 +413,26 @@ def book_chapter_create(request, book_id):
         error = 'Chapter title is required.'
     elif date_error:
         error = date_error
+    elif event_error:
+        error = event_error
     elif Chapter.objects.filter(book=book, number=number).exists():
         error = f'This book already has a chapter numbered {number}.'
+
+    chapter = Chapter(
+        book=book, number=number, title=title,
+        deadline=deadline, week_label=week_label, event=event,
+    )
+    if not error:
+        try:
+            chapter.clean()
+        except ValidationError as exc:
+            error = exc.message_dict.get('event', ['Invalid event.'])[0]
 
     if error:
         request.session['book_chapter_error'] = error
         return redirect('studio_book_detail', book_id=book.pk)
 
-    Chapter.objects.create(
-        book=book, number=number, title=title,
-        deadline=deadline, week_label=week_label,
-    )
+    chapter.save()
     messages.success(request, f'Chapter {number} — "{title}" added.')
     return redirect('studio_book_detail', book_id=book.pk)
 
@@ -400,6 +449,9 @@ def book_chapter_edit(request, book_id, chapter_id):
         (request.POST.get('deadline') or '').strip(), field_label='Deadline',
     )
     week_label = (request.POST.get('week_label') or '').strip()
+    event, event_error = _parse_chapter_event(
+        (request.POST.get('event') or '').strip(),
+    )
 
     error = ''
     if number_error:
@@ -408,17 +460,26 @@ def book_chapter_edit(request, book_id, chapter_id):
         error = 'Chapter title is required.'
     elif date_error:
         error = date_error
+    elif event_error:
+        error = event_error
     elif Chapter.objects.filter(book=book, number=number).exclude(pk=chapter.pk).exists():
         error = f'This book already has a chapter numbered {number}.'
-
-    if error:
-        request.session['book_chapter_error'] = error
-        return redirect('studio_book_detail', book_id=book.pk)
 
     chapter.number = number
     chapter.title = title
     chapter.deadline = deadline
     chapter.week_label = week_label
+    chapter.event = event
+    if not error:
+        try:
+            chapter.clean()
+        except ValidationError as exc:
+            error = exc.message_dict.get('event', ['Invalid event.'])[0]
+
+    if error:
+        request.session['book_chapter_error'] = error
+        return redirect('studio_book_detail', book_id=book.pk)
+
     chapter.save()
     messages.success(request, f'Chapter {number} — "{title}" updated.')
     return redirect('studio_book_detail', book_id=book.pk)

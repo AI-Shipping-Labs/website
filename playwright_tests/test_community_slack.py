@@ -249,7 +249,12 @@ class TestScenario2BasicMemberNoCommunityAction:
         assert page.locator(
             'section:has(h2:has-text("Join our Slack community"))'
         ).count() == 0
-        assert page.get_by_role("link", name="Join Slack").count() == 0
+        # The dashboard main content shows no "Join Slack" CTA for a basic
+        # member. The global footer (#1356) keeps its own Join Slack link, so
+        # scope to <main> rather than counting the link page-wide.
+        assert (
+            page.locator("main").get_by_role("link", name="Join Slack").count() == 0
+        )
 # ---------------------------------------------------------------
 # Scenario 3: Free member discovers community access is a Main
 #              tier benefit on the activities page

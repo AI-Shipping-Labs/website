@@ -198,8 +198,17 @@ class TestBookClubHubJourneys:
 
             page.locator('[data-testid="book-status-badge"]').wait_for(state="visible")
             assert page.locator('[data-testid="book-finished-recap"]').count() == 1
-            # No dead links to unbuilt summary / standings routes.
-            assert page.locator('a[href*="/summary"]').count() == 0
+            # The full-book summary route (#1368) is built, so the finished recap
+            # links to it. Standings/progress route is still unbuilt — no link.
+            summary_cta = page.locator('[data-testid="book-finished-summary-cta"]')
+            assert summary_cta.count() == 1
+            assert "/books/pragmatic/summary" in summary_cta.get_attribute("href")
+            page.goto(
+                f"{django_server}/books/pragmatic/summary",
+                wait_until="domcontentloaded",
+            )
+            assert page.locator('[data-testid="summary-back-link"]').count() == 1
+            page.go_back(wait_until="domcontentloaded")
             assert page.locator('a[href*="/progress"]').count() == 0
             # No participation body — the group is not reading it now.
             assert page.locator('[data-testid="book-participation-body"]').count() == 0

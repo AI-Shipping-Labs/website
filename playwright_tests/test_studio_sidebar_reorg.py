@@ -614,6 +614,7 @@ class TestPlanningSection:
         assert [label.strip() for label in planning_labels if label.strip()] == [
             "Sprints",
             "Plans",
+            "Book club",
         ]
 
         onboarding.click()

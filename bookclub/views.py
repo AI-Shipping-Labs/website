@@ -42,7 +42,11 @@ from bookclub.models import (
     ChapterRead,
     Note,
 )
-from bookclub.reading import viewer_read_numbers, viewer_reading_progress
+from bookclub.reading import (
+    build_reader_rows,
+    viewer_read_numbers,
+    viewer_reading_progress,
+)
 from content.access import build_gated_access_copy, get_user_level
 
 
@@ -205,6 +209,62 @@ def _book_secondary(request, book):
         'book_progress_available': False,
     }
     return render(request, 'bookclub/book_secondary.html', context)
+
+
+def book_progress(request, slug):
+    """``/books/<slug>/progress`` — the calm, you-first Progress board (#1367).
+
+    A read-only roster of the members reading a book together, ordered by
+    chapters read (then notes shared, then ``display_name``). No ranks, no
+    points, no streaks, no medals, no leaderboard vocabulary — the committed
+    ``books.md`` direction retired the prototype's gamification.
+
+    Resolution and gating mirror ``book_detail`` exactly: unknown slug -> 404,
+    ``cancelled`` -> 404, ``draft`` -> 404 for non-staff / rendered for staff.
+    A viewer sees the board iff ``get_user_level(user) >= book.required_level``
+    (``get_user_level`` already elevates staff/superusers to premium, so this
+    single check also grants staff their support/preview view — no separate
+    staff branch is needed). Anyone below the tier — including anonymous
+    visitors — sees the single canonical gated-access card and NO roster, so
+    reader identities never leak below the gate. An authenticated viewer with
+    access is always pinned first (you-first), even at ``0 of N``; the calm
+    empty card is reached only when the board has no rows at all — e.g. an
+    open-tier book an anonymous visitor may view but has no readers yet.
+    """
+    book = Book.objects.filter(slug=slug).first()
+    if book is None:
+        raise Http404('Unknown book.')
+
+    is_staff = bool(getattr(request.user, 'is_staff', False))
+    if book.status == BOOK_STATUS_CANCELLED:
+        raise Http404('This book is not available.')
+    if book.status == BOOK_STATUS_DRAFT and not is_staff:
+        raise Http404('This book is not published.')
+
+    can_view = get_user_level(request.user) >= book.required_level
+
+    context = {'book': book, 'can_view': can_view}
+    if not can_view:
+        # Below-tier / anonymous: gated card only, never a roster row.
+        context.update(_gate_context(request, book))
+        return render(request, 'bookclub/progress.html', context)
+
+    reader_rows, distinct_readers = build_reader_rows(
+        request.user, book, include_self=True,
+    )
+    # First-mover nudge: the viewer is pinned but is the only row and has read
+    # nothing — welcome them instead of a dead-end empty page.
+    first_mover = (
+        len(reader_rows) == 1
+        and reader_rows[0]['is_self']
+        and reader_rows[0]['chapters_read'] == 0
+    )
+    context.update({
+        'reader_rows': reader_rows,
+        'distinct_readers': distinct_readers,
+        'first_mover': first_mover,
+    })
+    return render(request, 'bookclub/progress.html', context)
 
 
 @require_POST

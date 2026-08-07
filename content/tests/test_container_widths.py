@@ -81,6 +81,7 @@ AUDITED_PAGE_WIDTHS = {
     # single-column reader page at max-w-3xl.
     "templates/bookclub/index.html": "max-w-5xl",
     "templates/bookclub/book_secondary.html": "max-w-5xl",
+    "templates/bookclub/progress.html": "max-w-5xl",
     "templates/bookclub/book_detail.html": "max-w-3xl",
     "templates/content/blog_list.html": "max-w-5xl",
     "templates/content/tutorials_list.html": "max-w-5xl",

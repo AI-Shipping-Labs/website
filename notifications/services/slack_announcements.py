@@ -339,6 +339,101 @@ def post_series_slack_announcement(series):
     return True
 
 
+def post_bookclub_summary_announcement(payload):
+    """Post ONE Slack broadcast when a Book Club summary is published (#1374).
+
+    ``payload`` is the dict built by
+    ``bookclub.summary_notifications._summary_payload`` (``title`` +
+    ``full_url``). This is a single channel post, not a per-member send, so it
+    carries no preference/bounce/tier logic. Reuses the same config gating,
+    ``chat.postMessage`` transport, JSON/``ok`` validation, and logging as
+    :func:`post_slack_announcement`. No-ops quietly (returns ``False``) when
+    Slack is disabled or the announcements channel is not configured.
+
+    Returns ``True`` when posted, ``False`` otherwise.
+    """
+    if not is_enabled('SLACK_ENABLED'):
+        logger.debug(
+            'Skipping bookclub summary Slack announcement: SLACK_ENABLED is not true'
+        )
+        return False
+
+    bot_token = get_config('SLACK_BOT_TOKEN')
+    channel_id = _get_announcements_channel_id()
+
+    if not bot_token or not channel_id:
+        logger.info(
+            'Skipping bookclub summary Slack announcement: bot_token or '
+            'channel_id not configured',
+        )
+        return False
+
+    title = payload['title']
+    full_url = payload['full_url']
+    text_fallback = title
+    mrkdwn_text = f'*{title}*\n<{full_url}|Read the summary>'
+
+    blocks = [
+        {
+            'type': 'section',
+            'text': {'type': 'mrkdwn', 'text': mrkdwn_text},
+        },
+        {
+            'type': 'actions',
+            'elements': [
+                {
+                    'type': 'button',
+                    'text': {'type': 'plain_text', 'text': 'Read the summary'},
+                    'url': full_url,
+                    'action_id': 'view_bookclub_summary',
+                },
+            ],
+        },
+    ]
+
+    try:
+        response = requests.post(
+            'https://slack.com/api/chat.postMessage',
+            json={
+                'channel': channel_id,
+                'text': text_fallback,
+                'blocks': blocks,
+            },
+            headers={
+                'Authorization': f'Bearer {bot_token}',
+                'Content-Type': 'application/json; charset=utf-8',
+            },
+            timeout=10,
+        )
+    except requests.exceptions.RequestException:
+        logger.exception('Failed to post bookclub summary Slack announcement')
+        return False
+
+    try:
+        data = response.json()
+    except ValueError:
+        logger.exception(
+            'Bookclub summary Slack announcement returned invalid JSON'
+        )
+        return False
+
+    if not isinstance(data, dict):
+        logger.warning(
+            'Bookclub summary Slack announcement returned malformed JSON'
+        )
+        return False
+
+    if not data.get('ok'):
+        logger.warning(
+            'Bookclub summary Slack announcement failed: %s',
+            data.get('error', 'unknown'),
+        )
+        return False
+
+    logger.info('Posted bookclub summary Slack announcement: %s', title)
+    return True
+
+
 def post_slack_announcement(content_type, content):
     """Post a Block Kit formatted announcement to the Slack #announcements channel.
 

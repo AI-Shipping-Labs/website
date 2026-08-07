@@ -289,6 +289,29 @@
         </div>
 
         <p class="mt-4 hidden text-sm text-foreground" id="sprint-cadence-emails-status" data-testid="sprint-cadence-emails-status" aria-live="polite"></p>
+
+        {% comment %}
+          Issue #1374: per-type opt-out for Book Club summary emails. Bell
+          notifications are unaffected; only the email channel is opt-out.
+        {% endcomment %}
+        <div class="flex items-center justify-between mt-6 pt-6 border-t border-border">
+          <div>
+            <p class="text-foreground font-medium">Book Club summary emails</p>
+            <p class="text-sm text-muted-foreground mt-1">Receive an email when an organizer publishes a chapter or full-book summary for a book you have access to.</p>
+          </div>
+          <div class="touch-target-toggle">
+            <button type="button"
+                    id="bookclub-emails-toggle"
+                    data-testid="bookclub-emails-toggle"
+                    class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors {% if bookclub_emails_enabled %}bg-accent{% else %}bg-secondary{% endif %}"
+                    onclick="toggleBookclubEmails()"
+                    aria-label="Toggle Book Club summary emails">
+              <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full shadow ring-0 transition-transform {% if bookclub_emails_enabled %}translate-x-5 bg-accent-foreground{% else %}translate-x-0 bg-foreground{% endif %}" id="bookclub-emails-toggle-dot"></span>
+            </button>
+          </div>
+        </div>
+
+        <p class="mt-4 hidden text-sm text-foreground" id="bookclub-emails-status" data-testid="bookclub-emails-status" aria-live="polite"></p>
       </div>
 
       {% if not is_newsletter_only %}
@@ -810,6 +833,46 @@ function toggleSprintCadenceEmails() {
         toggle.classList.remove('bg-accent');
         toggle.classList.add('bg-secondary');
         showInlineStatus(status, 'Sprint reminders turned off.');
+      }
+    } else {
+      alert(data.error || 'Failed to update preferences');
+    }
+  })
+  .catch(function() {
+    alert('An error occurred. Please try again.');
+  });
+}
+
+function toggleBookclubEmails() {
+  var toggle = document.getElementById('bookclub-emails-toggle');
+  var dot = document.getElementById('bookclub-emails-toggle-dot');
+  var status = document.getElementById('bookclub-emails-status');
+  var isCurrentlyEnabled = dot.classList.contains('translate-x-5');
+  var newValue = !isCurrentlyEnabled;
+
+  fetch('/account/api/email-preferences', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrfToken(),
+    },
+    body: JSON.stringify({ bookclub_emails: newValue }),
+  })
+  .then(function(resp) { return resp.json(); })
+  .then(function(data) {
+    if (data.status === 'ok') {
+      if (data.bookclub_emails) {
+        dot.classList.add('translate-x-5', 'bg-accent-foreground');
+        dot.classList.remove('translate-x-0', 'bg-foreground');
+        toggle.classList.add('bg-accent');
+        toggle.classList.remove('bg-secondary');
+        showInlineStatus(status, 'Book Club summary emails turned on.');
+      } else {
+        dot.classList.remove('translate-x-5', 'bg-accent-foreground');
+        dot.classList.add('translate-x-0', 'bg-foreground');
+        toggle.classList.remove('bg-accent');
+        toggle.classList.add('bg-secondary');
+        showInlineStatus(status, 'Book Club summary emails turned off.');
       }
     } else {
       alert(data.error || 'Failed to update preferences');

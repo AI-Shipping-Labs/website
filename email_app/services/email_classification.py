@@ -101,6 +101,10 @@ PROMOTIONAL_EMAIL_TYPES = {
     "workshop_announcement",
     "sprint_week_start",
     "sprint_week_note_prompt",
+    # Issue #1374: Book Club summary-publish announcements. Community-content
+    # announcements, so the global unsubscribe + unsubscribe footer apply.
+    "bookclub_chapter_summary",
+    "bookclub_book_summary",
 }
 
 # Issue #937: welcome emails go out from a dedicated `welcome@` sender, but

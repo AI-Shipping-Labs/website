@@ -60,6 +60,8 @@ TEMPLATE_SENT_WHEN = {
     'account_email_change_confirm': 'Sent when a member requests an account email-address change.',
     'account_email_changed_notice': 'Sent to the previous address after an account email change succeeds.',
     'basic_welcome': 'Sent when a member first receives Basic membership access.',
+    'bookclub_book_summary': 'Sent to book-access members when an organizer publishes a full-book summary.',
+    'bookclub_chapter_summary': 'Sent to book-access members when an organizer publishes a chapter summary.',
     'cancellation': 'Sent when a paid membership is scheduled to cancel.',
     'cofounder_welcome': 'Sent when a cofounder membership signup is completed.',
     'community_invite': 'Sent when an eligible member is invited to the private community.',

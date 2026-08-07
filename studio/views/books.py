@@ -9,6 +9,7 @@ All views are staff-only (``studio.decorators.staff_required``).
 """
 
 import json
+import logging
 from datetime import datetime
 
 from django.contrib import messages
@@ -27,6 +28,10 @@ from bookclub.models import (
     Chapter,
 )
 from bookclub.summaries import append_notes_digest, resolve_publish_state
+from bookclub.summary_notifications import (
+    is_new_publish,
+    notify_summary_published,
+)
 from content.access import LEVEL_MAIN
 from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
 from events.models import Event, EventSeries
@@ -34,9 +39,30 @@ from events.models.event import PUBLIC_EVENT_STATUSES
 from studio.decorators import staff_required
 from studio.utils import studio_pagination_context
 
+logger = logging.getLogger(__name__)
+
 # Valid tier level integers accepted by the form, mirroring
 # ``content.access.VISIBILITY_CHOICES`` so the dropdown stays consistent.
 _VALID_TIER_LEVELS = {value for value, _label in TIER_LEVEL_CHOICES}
+
+
+def _notify_summary_if_published(request, obj, old_published_at):
+    """Fire the summary-publish notification on the ``null -> set`` transition.
+
+    Shared by the Studio full-book (``_apply_summary_publish``) and chapter
+    (``book_chapter_edit``) save paths so both detect the publish transition
+    identically (issue #1374). Best-effort: a notification failure must never
+    roll back the publish — it is caught and logged here. The acting staff
+    user is passed so they never self-notify.
+    """
+    if not is_new_publish(old_published_at, obj.summary_published_at):
+        return
+    try:
+        notify_summary_published(obj, acting_user=getattr(request, 'user', None))
+    except Exception:
+        logger.exception(
+            'Book Club summary notification failed for %r', obj,
+        )
 
 
 def _parse_required_level(raw):
@@ -308,6 +334,8 @@ def book_create(request):
     if publish_error:
         return _reject(publish_error)
     book.save()
+    # A brand-new book starts unpublished, so the pre-save timestamp is None.
+    _notify_summary_if_published(request, book, old_published_at=None)
     _warn_second_current(request, book)
     messages.success(request, f'Book "{book.title}" created.')
     return redirect('studio_book_detail', book_id=book.pk)
@@ -323,6 +351,7 @@ def book_edit(request, book_id):
             form_data=_form_data_from_book(book),
         )
 
+    old_summary_published_at = book.summary_published_at
     form_data = _form_data_from_post(request)
     title = form_data['title']
     required_level, tier_error = _parse_required_level(form_data['required_level'])
@@ -364,6 +393,9 @@ def book_edit(request, book_id):
     if publish_error:
         return _reject(publish_error)
     book.save()
+    _notify_summary_if_published(
+        request, book, old_published_at=old_summary_published_at,
+    )
     _warn_second_current(request, book)
     messages.success(request, f'Book "{book.title}" updated.')
     return redirect('studio_book_detail', book_id=book.pk)
@@ -472,6 +504,7 @@ def book_chapter_edit(request, book_id, chapter_id):
     """Edit a chapter's fields. Friendly error on duplicate number."""
     book = get_object_or_404(Book, pk=book_id)
     chapter = get_object_or_404(Chapter, pk=chapter_id, book=book)
+    old_summary_published_at = chapter.summary_published_at
     number, number_error = _parse_chapter_number(request.POST.get('number'))
     title = (request.POST.get('title') or '').strip()
     deadline, date_error = _parse_optional_date(
@@ -520,6 +553,9 @@ def book_chapter_edit(request, book_id, chapter_id):
 
     chapter.summary_published_at = new_published_at
     chapter.save()
+    _notify_summary_if_published(
+        request, chapter, old_published_at=old_summary_published_at,
+    )
     messages.success(request, f'Chapter {number} — "{title}" updated.')
     return redirect('studio_book_detail', book_id=book.pk)
 

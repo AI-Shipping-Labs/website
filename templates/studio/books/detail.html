@@ -94,11 +94,28 @@
               <p class="text-xs text-muted-foreground mt-1" data-testid="book-chapter-event-hint">Link an event series to the book to attach chapter events.</p>
               {% endif %}
             </div>
+            {# Chapter summary + publish toggle (#1368) #}
+            <div class="sm:col-span-4">
+              <label class="block text-xs text-muted-foreground mb-1">Chapter summary</label>
+              <textarea name="summary" rows="4" aria-label="Chapter summary" data-testid="book-chapter-summary"
+                        placeholder="What the group took away from this chapter…"
+                        class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ chapter.summary }}</textarea>
+              <label class="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <input type="checkbox" name="summary_published" value="1" {% if chapter.summary_published_at %}checked{% endif %}
+                       class="h-4 w-4 rounded border-border bg-secondary text-accent focus:ring-accent" data-testid="book-chapter-summary-published">
+                <span>Publish chapter summary{% if chapter.summary_published_at %} · published {{ chapter.summary_published_at|operator_datetime }}{% endif %}</span>
+              </label>
+              <p class="text-xs text-muted-foreground mt-1">Plain text; separate paragraphs with a blank line. Publishing an empty summary is rejected.</p>
+            </div>
           </form>
         </td>
         <td class="px-3 py-3 text-right whitespace-nowrap align-middle">
           <button type="submit" form="chapter-form-{{ chapter.pk }}"
                   class="{% studio_action_class 'primary' %}" data-testid="book-chapter-save">Save</button>
+          <form method="post" action="{% url 'studio_book_chapter_pull_notes' book_id=book.pk chapter_id=chapter.pk %}" class="inline ml-2">
+            {% csrf_token %}
+            <button type="submit" class="{% studio_action_class 'secondary' %}" data-testid="book-chapter-pull-notes">Pull all notes</button>
+          </form>
           <form method="post" action="{% url 'studio_book_chapter_delete' book_id=book.pk chapter_id=chapter.pk %}" class="inline ml-2"
                 onsubmit="return confirm('Delete chapter {{ chapter.number }}?');">
             {% csrf_token %}

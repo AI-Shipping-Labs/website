@@ -48,9 +48,9 @@
 
       <div class="mt-10 max-w-2xl" data-testid="book-secondary-body">
         {% if book.status == 'finished' %}
-        {% comment %} Finished recap. Summary (#1368) / standings (#1367) CTAs
-        are absent until those routes exist — this page ships with no dead
-        links. {% endcomment %}
+        {% comment %} Finished recap. The full-book summary route (#1368) now
+        exists, so the recap links to it; the standings CTA (#1367) stays behind
+        its own flag until that route lands. {% endcomment %}
         <div class="{% include 'content/_info_card_classes.html' %} bg-card" data-testid="book-finished-recap">
           <div class="flex items-center gap-2">
             <i data-lucide="check-circle-2" class="h-5 w-5 text-accent" aria-hidden="true"></i>
@@ -59,6 +59,13 @@
           <p class="mt-3 text-sm text-muted-foreground">
             The group read {{ book.title }} together across {{ num_chapters }} chapter{{ num_chapters|pluralize }}.
           </p>
+          {% if book_summary_available %}
+          <div class="mt-5">
+            <a href="{% url 'bookclub_book_summary' slug=book.slug %}" class="{% button_classes 'secondary' %}" data-testid="book-finished-summary-cta">
+              <i data-lucide="sparkles" class="h-4 w-4"></i>Read the group's summary
+            </a>
+          </div>
+          {% endif %}
         </div>
         {% else %}
         {% comment %} Upcoming: when it starts. No fake "Get notified" control —

@@ -43,6 +43,7 @@ from studio.views.books import (
     book_chapter_create,
     book_chapter_delete,
     book_chapter_edit,
+    book_chapter_pull_notes,
     book_chapter_reorder,
     book_create,
     book_delete,
@@ -1159,6 +1160,11 @@ urlpatterns = [
         'books/<int:book_id>/chapters/<int:chapter_id>/delete',
         book_chapter_delete,
         name='studio_book_chapter_delete',
+    ),
+    path(
+        'books/<int:book_id>/chapters/<int:chapter_id>/pull-notes',
+        book_chapter_pull_notes,
+        name='studio_book_chapter_pull_notes',
     ),
 
     # Questionnaires (issue #800). Planning section. The literal ``new``

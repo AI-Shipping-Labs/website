@@ -32,6 +32,11 @@ from api.utils import (
 )
 from api.views._permissions import bearer_is_admin
 from bookclub.models import BOOK_STATUS_CHOICES, Book, Chapter
+from bookclub.summaries import (
+    append_notes_digest,
+    build_notes_digest,
+    resolve_publish_state,
+)
 from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
 from events.models import Event
 from studio.views.books import _parse_event_series
@@ -76,6 +81,9 @@ _BOOK_EXAMPLE = {
     "meeting_cadence": "Weekly · 17:00 CET",
     "buy_url": "https://www.baseten.co/inference-engineering/",
     "event_series": None,
+    "summary": "",
+    "summary_published": False,
+    "summary_published_at": None,
     "chapter_count": 8,
     "created_at": "2026-08-01T12:00:00+00:00",
     "updated_at": "2026-08-01T12:00:00+00:00",
@@ -100,8 +108,28 @@ _CHAPTER_EXAMPLE = {
     "deadline": "2026-08-17",
     "week_label": "Week 1",
     "event": None,
+    "summary": "",
+    "summary_published": False,
+    "summary_published_at": None,
     "created_at": "2026-08-01T12:00:00+00:00",
     "updated_at": "2026-08-01T12:00:00+00:00",
+}
+
+# Shared OpenAPI schema fragments for the summary author/publish fields (#1368).
+_SUMMARY_PROPERTY = {
+    "type": "string",
+    "description": (
+        "Organizer-authored summary (plain text; blank-line-separated "
+        "paragraphs). Also holds the working draft before publish."
+    ),
+}
+_SUMMARY_PUBLISHED_PROPERTY = {
+    "type": "boolean",
+    "description": (
+        "Publish toggle. ``true`` sets ``summary_published_at`` to now when "
+        "currently unpublished (idempotent — a re-publish never bumps it); "
+        "``false`` clears it. Publishing an empty ``summary`` returns 422."
+    ),
 }
 
 
@@ -112,6 +140,34 @@ def _parse_iso_date(value):
         return date.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _apply_summary_published(obj, data):
+    """Apply a ``summary_published`` toggle to a ``Book`` / ``Chapter`` (#1368).
+
+    Returns a ready ``error_response`` (or ``None``). ``obj.summary`` must
+    already reflect the incoming body so the empty-publish guard sees the
+    effective text. Idempotent: a re-publish never bumps ``summary_published_at``.
+    A no-op when ``summary_published`` is absent from the body.
+    """
+    if "summary_published" not in data:
+        return None
+    publish = data["summary_published"]
+    if not isinstance(publish, bool):
+        return error_response(
+            "summary_published must be a boolean", "invalid_type",
+            details={"field": "summary_published", "expected": "boolean"},
+        )
+    new_published_at, empty_publish = resolve_publish_state(
+        obj.summary_published_at, obj.summary, publish,
+    )
+    if empty_publish:
+        return error_response(
+            "Cannot publish an empty summary", "validation_error", status=422,
+            details={"summary": "Write the summary before publishing"},
+        )
+    obj.summary_published_at = new_published_at
+    return None
 
 
 def _resolve_book(slug):
@@ -268,7 +324,7 @@ def _read_book_fields(data, *, partial):
     fields = {}
     string_fields = (
         "subtitle", "description", "cover_image_url", "cover_accent",
-        "meeting_cadence", "buy_url",
+        "meeting_cadence", "buy_url", "summary",
     )
     for name in string_fields:
         if name in data:
@@ -358,8 +414,14 @@ def _read_book_fields(data, *, partial):
                     "meeting_cadence": {"type": "string"},
                     "buy_url": {"type": "string"},
                     "event_series": _EVENT_SERIES_PROPERTY,
+                    "summary": _SUMMARY_PROPERTY,
+                    "summary_published": _SUMMARY_PUBLISHED_PROPERTY,
                 },
-                "example": {"status": "finished"},
+                "example": {
+                    "summary": "Across everyone's notes, the group kept "
+                               "returning to a few themes…",
+                    "summary_published": True,
+                },
             },
             "responses": {
                 200: {"description": "Book updated.", "example": _BOOK_EXAMPLE},
@@ -447,6 +509,9 @@ def book_detail(request, slug):
         book.author = data["author"]
     for name, value in fields.items():
         setattr(book, name, value)
+    publish_error = _apply_summary_published(book, data)
+    if publish_error is not None:
+        return publish_error
     book.save()
     return JsonResponse(serialize_book(book, include_chapters=True), status=200)
 
@@ -527,6 +592,13 @@ def _read_chapter_fields(data, *, partial):
                 details={"field": "week_label", "expected": "string"},
             )
         fields["week_label"] = data["week_label"]
+    if "summary" in data:
+        if not isinstance(data["summary"], str):
+            return None, error_response(
+                "summary must be a string", "invalid_type",
+                details={"field": "summary", "expected": "string"},
+            )
+        fields["summary"] = data["summary"]
     if "deadline" in data:
         if data["deadline"] in (None, ""):
             fields["deadline"] = None
@@ -678,8 +750,13 @@ def book_chapters_collection(request, slug):
                     "deadline": {"type": "string", "format": "date"},
                     "week_label": {"type": "string"},
                     "event": _CHAPTER_EVENT_PROPERTY,
+                    "summary": _SUMMARY_PROPERTY,
+                    "summary_published": _SUMMARY_PUBLISHED_PROPERTY,
                 },
-                "example": {"deadline": "2026-09-10"},
+                "example": {
+                    "summary": "The KV cache framing was the takeaway.",
+                    "summary_published": True,
+                },
             },
             "responses": {
                 200: {"description": "Chapter updated.", "example": _CHAPTER_EXAMPLE},
@@ -752,5 +829,103 @@ def book_chapter_detail(request, slug, number):
         # Re-read from the DB so the in-memory (rejected) mutation does not
         # leak back to the caller; the persisted chapter is unchanged.
         return event_error
+    publish_error = _apply_summary_published(chapter, data)
+    if publish_error is not None:
+        return publish_error
     chapter.save()
     return JsonResponse(serialize_chapter(chapter), status=200)
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Book Club",
+    summary="Pull member notes into a chapter summary draft",
+    methods={
+        "POST": {
+            "summary": "Aggregate member notes into the chapter draft (admin)",
+            "description": (
+                "Admin-only. Pure server-side aggregation (no AI): reads every "
+                "member's note for the chapter and composes a plain-text digest. "
+                "By default the digest is returned read-only and the chapter is "
+                "left unchanged. With ``{\"apply\": true}`` the digest is "
+                "appended to the chapter draft ``summary`` under a separator "
+                "(non-destructive) and the updated chapter is returned. "
+                "``summary_published_at`` is never touched. Publishing stays a "
+                "separate PATCH."
+            ),
+            "request_body": {
+                "properties": {
+                    "apply": {"type": "boolean", "default": False},
+                },
+                "example": {"apply": True},
+            },
+            "responses": {
+                200: {
+                    "description": (
+                        "Aggregated digest (default) or the updated chapter "
+                        "(apply=true)."
+                    ),
+                    "example": {
+                        "digest": "Member notes — 2 notes, pulled 2026-08-10\n"
+                                  "- Ada: The KV cache framing clicked.\n"
+                                  "- Lin: Batching tradeoffs were the key idea.",
+                        "note_count": 2,
+                        "applied": False,
+                    },
+                },
+                400: {"description": "Invalid JSON body."},
+                403: {"description": "Non-admin token."},
+                404: {"description": "Book or chapter not found."},
+                422: {"description": "Invalid ``apply`` type."},
+            },
+        },
+    },
+)
+def book_chapter_pull_notes(request, slug, number):
+    """``POST /api/books/<slug>/chapters/<int:number>/summary/pull-notes``.
+
+    Automation parity for the Studio "Pull all notes" button (#1368).
+    """
+    book, book_error = _resolve_book(slug)
+    if book_error is not None:
+        return book_error
+    chapter = Chapter.objects.filter(book=book, number=number).first()
+    if chapter is None:
+        return error_response(
+            "Chapter not found", "unknown_chapter", status=404,
+        )
+
+    if not bearer_is_admin(request.user):
+        return error_response("Admin-only endpoint", "forbidden", status=403)
+
+    apply = False
+    if request.body:
+        data, parse_error = parse_json_body(request)
+        if parse_error is not None:
+            return parse_error
+        if not isinstance(data, dict):
+            return error_response(
+                "Body must be a JSON object", "invalid_type",
+                details={"field": "body", "expected": "object"},
+            )
+        apply_raw = data.get("apply", False)
+        if not isinstance(apply_raw, bool):
+            return error_response(
+                "apply must be a boolean", "validation_error", status=422,
+                details={"apply": "Must be a boolean"},
+            )
+        apply = apply_raw
+
+    if apply:
+        count = append_notes_digest(chapter)
+        payload = serialize_chapter(chapter)
+        payload["notes_pulled"] = count
+        return JsonResponse(payload, status=200)
+
+    digest, count = build_notes_digest(chapter)
+    return JsonResponse(
+        {"digest": digest, "note_count": count, "applied": False},
+        status=200,
+    )

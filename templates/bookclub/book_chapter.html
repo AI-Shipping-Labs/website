@@ -104,10 +104,34 @@
           {% endif %}
         </div>
 
-        {% comment %} Chapter summary: authored by #1368 (out of scope here). No
-        summary field exists yet, so only the placeholder handoff copy renders.
-        {% endcomment %}
-        <p class="mt-8 text-sm text-muted-foreground">The chapter summary is compiled from everyone's notes after the deadline.</p>
+        {% comment %} Chapter summary (#1368). Published (timestamp set +
+        non-empty body) renders to every member; an unpublished draft renders
+        only to staff with a "Draft" chip. When nothing is published, the calm
+        placeholder shows only once the deadline has passed — before that,
+        nothing (no premature promise). {% endcomment %}
+        {% if summary_published or summary_draft_preview %}
+        <section id="summary" class="mt-8 rounded-lg border border-accent/30 bg-accent/5 p-6" data-testid="chapter-summary">
+          <div class="flex flex-wrap items-center gap-2">
+            <i data-lucide="sparkles" class="h-5 w-5 text-accent"></i>
+            <h2 class="text-lg font-semibold text-foreground">Chapter summary</h2>
+            {% if summary_draft_preview %}
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground" data-testid="chapter-summary-draft-chip">
+              <i data-lucide="eye-off" class="h-3.5 w-3.5"></i>Draft — only staff can see this
+            </span>
+            {% endif %}
+          </div>
+          {% if summary_published %}
+          <p class="mt-1 text-xs text-muted-foreground">Published {{ chapter.summary_published_at|member_short_date }}</p>
+          {% endif %}
+          <div class="mt-3 space-y-3 text-sm leading-relaxed text-foreground/90">
+            {% for para in summary_paragraphs %}
+            <p>{{ para }}</p>
+            {% endfor %}
+          </div>
+        </section>
+        {% elif summary_deadline_passed %}
+        <p id="summary" class="mt-8 text-sm text-muted-foreground" data-testid="chapter-summary-placeholder">The chapter summary is compiled from everyone's notes after the deadline.</p>
+        {% endif %}
 
         {# Notes from the group #}
         <section class="mt-10">
@@ -149,11 +173,15 @@
           <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0"></i>
         </a>
         {% else %}
-        {% comment %} No anchor: the full-book-summary route (bookclub_book_summary)
-        is owned by #1368 and not registered yet — linking it would 404 (dead
-        link). #1368 flips this copy to a link when it lands, mirroring how the
-        reader-profile author name stays plain text until #1366. {% endcomment %}
-        <p class="text-sm text-muted-foreground sm:ml-auto sm:text-right" data-testid="chapter-end-of-book">Last chapter — the full book summary lands at the end.</p>
+        {% comment %} Last chapter: #1368 registered the full-book-summary route,
+        so the deferred handoff copy is now a real link to /books/<slug>/summary
+        (no more dead link). {% endcomment %}
+        <a href="{% url 'bookclub_book_summary' slug=book.slug %}"
+           class="{% button_classes 'primary' extra='min-w-0 sm:ml-auto' %}"
+           data-testid="chapter-end-of-book">
+          <span class="truncate">Read the full book summary</span>
+          <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0"></i>
+        </a>
         {% endif %}
       </nav>
 

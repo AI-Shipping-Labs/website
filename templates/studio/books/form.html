@@ -139,6 +139,28 @@
       </p>
     </div>
 
+    {# Full-book summary (#1368) #}
+    <div class="mb-6 border-t border-border pt-6">
+      <label for="book-summary" class="block text-sm font-medium text-foreground mb-1">Full-book summary</label>
+      <textarea id="book-summary" name="summary" rows="8"
+                placeholder="What the group took away from the whole book…"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                data-testid="book-summary">{{ form_data.summary }}</textarea>
+      <p class="text-xs text-muted-foreground mt-1">Optional. The overall narrative shown on /books/&lt;slug&gt;/summary. Plain text; separate paragraphs with a blank line.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="flex items-center gap-2 text-sm font-medium text-foreground">
+        <input type="checkbox" name="summary_published" value="1" {% if form_data.summary_published %}checked{% endif %}
+               class="h-4 w-4 rounded border-border bg-secondary text-accent focus:ring-accent"
+               data-testid="book-summary-published">
+        <span>Publish full-book summary</span>
+      </label>
+      <p class="text-xs text-muted-foreground mt-1" data-testid="book-summary-published-state">
+        {% if form_action == 'edit' and book.summary_published_at %}Published {{ book.summary_published_at|operator_datetime }} — visible to members.{% else %}Members only see the summary once published. Publishing an empty summary is rejected.{% endif %}
+      </p>
+    </div>
+
   </form>
 </div>
 

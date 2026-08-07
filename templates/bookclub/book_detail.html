@@ -85,6 +85,7 @@
             <span class="text-sm text-muted-foreground" data-testid="book-reading-progress">{{ viewer_done }} of {{ viewer_total }} read</span>
             {% endif %}
             <a href="{% url 'bookclub_book_progress' slug=book.slug %}" class="text-sm text-accent transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="book-progress-link">View reading progress</a>
+            <a href="{% url 'bookclub_reader_profile' slug=book.slug user_id=user.pk %}" class="text-sm text-accent transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="book-reader-profile-link">Your reading profile</a>
           </div>
         </div>
         {% if viewer_total %}

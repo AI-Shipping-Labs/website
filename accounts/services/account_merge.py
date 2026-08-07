@@ -344,6 +344,27 @@ def _strategy_enrollment(plan, related_model, field_name, canonical, secondary):
     plan.record_move(related_model._meta.label, field_name, moved=moved, dropped=dropped)
 
 
+def _strategy_reader_profile(plan, related_model, field_name, canonical, secondary):
+    """bookclub.ReaderProfile: O2O on a non-PK ``user`` — one visibility flag.
+
+    Keep canonical's profile if it exists: the surviving identity's own privacy
+    choice wins, so a merge never silently makes a reader more public than they
+    chose. If canonical has none, repoint secondary's row (preserving their
+    opt-in). Drop secondary's on collision.
+    """
+    sec = related_model.objects.filter(user=secondary).first()
+    if sec is None:
+        return
+    canon = related_model.objects.filter(user=canonical).first()
+    if canon is None:
+        sec.user = canonical
+        sec.save(update_fields=["user"])
+        plan.record_move(related_model._meta.label, field_name, moved=1)
+        return
+    sec.delete()
+    plan.record_move(related_model._meta.label, field_name, moved=0, dropped=1)
+
+
 # Keyed by ``(app_label.ModelName, field_name)``.
 #
 # These cover the cases the generic unique-key walker cannot express correctly:
@@ -360,6 +381,7 @@ _SPECIAL_STRATEGIES = {
     ("content.Enrollment", "user"): _strategy_enrollment,
     ("account.EmailAddress", "user"): _strategy_email_address,
     ("email_app.EmailLog", "user"): _strategy_email_log,
+    ("bookclub.ReaderProfile", "user"): _strategy_reader_profile,
 }
 
 

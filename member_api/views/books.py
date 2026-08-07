@@ -21,10 +21,20 @@ from accounts.utils.activation import mark_activated
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
-from bookclub.models import BOOK_STATUS_DRAFT, Book, ChapterRead, Note
+from bookclub.models import (
+    BOOK_STATUS_DRAFT,
+    READER_VISIBILITY_CHOICES,
+    READER_VISIBILITY_PRIVATE,
+    Book,
+    ChapterRead,
+    Note,
+    ReaderProfile,
+)
 from bookclub.reading import viewer_reading_progress
 from content.access import get_user_level
 from member_api.serializers.books import serialize_book_note, serialize_book_reading
+
+_VALID_VISIBILITIES = {value for value, _ in READER_VISIBILITY_CHOICES}
 
 
 def _visible_book(slug):
@@ -393,3 +403,120 @@ def book_chapter_note(request, slug, number):
         # Writing a note is a real platform action (issue #768).
         mark_activated(request.user)
     return JsonResponse(serialize_book_note(note, book, chapter))
+
+
+_READER_PROFILE_OPENAPI = {
+    "GET": {
+        "summary": "Get the caller's reading-profile visibility",
+        "description": (
+            "Returns the authenticated key owner's Book Club reading-profile "
+            "visibility (``public`` or ``private``). Book-agnostic — visibility "
+            "is a single per-user flag. A member with no profile row is "
+            "reported as ``private`` (the default). Scoped to the key owner "
+            "only — never another member's profile. Requires the ``books:read`` "
+            "scope."
+        ),
+        "responses": {
+            200: {
+                "description": "The caller's current visibility.",
+                "example": {"visibility": "private"},
+            },
+            401: {
+                "description": "Missing key or missing ``books:read`` scope.",
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+            },
+        },
+    },
+    "PUT": {
+        "summary": "Set the caller's reading-profile visibility",
+        "description": (
+            "Sets the authenticated key owner's reading-profile visibility "
+            "from the JSON body ``{\"visibility\": \"public\"|\"private\"}`` "
+            "(``get_or_create`` on the owner). Public lists the member by name "
+            "on the progress board and shows their notes in other members' "
+            "group feeds; private hides both. Book-agnostic and scoped to the "
+            "key owner only — there is no user parameter. Any value other than "
+            "``public`` / ``private`` returns a 400. Reading another member's "
+            "public profile / notes feed (a rendered web surface) and posting "
+            "comments (the shared web comment endpoints) are out of scope for "
+            "the member API; destructive deletes stay Studio/admin-scoped. "
+            "Requires the ``books:write_profile`` scope."
+        ),
+        "request_body": {
+            "required": ["visibility"],
+            "properties": {
+                "visibility": {"type": "string", "enum": ["public", "private"]},
+            },
+            "example": {"visibility": "public"},
+        },
+        "responses": {
+            200: {
+                "description": "Updated visibility.",
+                "example": {"visibility": "public"},
+            },
+            400: {
+                "description": "Missing or invalid ``visibility`` value.",
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+            },
+            401: {
+                "description": (
+                    "Missing key or missing ``books:write_profile`` scope."
+                ),
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+            },
+        },
+    },
+}
+
+
+@csrf_exempt
+@member_api_key_required()
+@require_methods("GET", "PUT")
+@openapi_spec(tag="Books", methods=_READER_PROFILE_OPENAPI)
+def reader_profile(request):
+    """Owner-scoped read/set of the caller's reading-profile visibility (#1366).
+
+    Book-agnostic — visibility is a single per-user flag. Scopes are enforced
+    per method (the decorator takes no scope so read and write diverge): GET
+    requires ``books:read`` while PUT requires ``books:write_profile`` (a
+    progress or notes automation must not be able to flip a member's public /
+    private posture). No user parameter — the endpoint only ever acts on the
+    key owner.
+    """
+    required_scope = (
+        "books:read" if request.method == "GET" else "books:write_profile"
+    )
+    denied = _require_scope(request, required_scope)
+    if denied is not None:
+        return denied
+
+    if request.method == "GET":
+        profile = ReaderProfile.objects.filter(user=request.user).first()
+        visibility = (
+            profile.visibility if profile is not None
+            else READER_VISIBILITY_PRIVATE
+        )
+        return JsonResponse({"visibility": visibility})
+
+    # PUT — set the caller's visibility.
+    payload, parse_error = parse_json_body(request)
+    if parse_error is not None:
+        return parse_error
+    if not isinstance(payload, dict):
+        return error_response(
+            "Body must be a JSON object", "invalid_body", status=400,
+        )
+
+    visibility = payload.get("visibility")
+    if visibility not in _VALID_VISIBILITIES:
+        return error_response(
+            "visibility must be 'public' or 'private'",
+            "invalid_visibility",
+            status=400,
+        )
+
+    profile, _ = ReaderProfile.objects.update_or_create(
+        user=request.user,
+        defaults={"visibility": visibility},
+    )
+    return JsonResponse({"visibility": profile.visibility})

@@ -8,7 +8,6 @@ route #1366 is not built, so names stay plain text).
 """
 
 from datetime import date
-from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.db import connection
@@ -16,7 +15,15 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from bookclub.models import Book, Chapter, ChapterRead, Note
+from bookclub.models import (
+    READER_VISIBILITY_PRIVATE,
+    READER_VISIBILITY_PUBLIC,
+    Book,
+    Chapter,
+    ChapterRead,
+    Note,
+    ReaderProfile,
+)
 from bookclub.reading import build_reader_rows
 from content.access import LEVEL_MAIN, LEVEL_OPEN
 from payments.models import Tier
@@ -28,6 +35,13 @@ def _mark_read(user, chapters, count):
     """Mark the first ``count`` of ``chapters`` read for ``user``."""
     for chapter in chapters[:count]:
         ChapterRead.objects.create(user=user, chapter=chapter)
+
+
+def _set_visibility(user, visibility):
+    """Set ``user``'s reader-profile visibility (issue #1366)."""
+    ReaderProfile.objects.update_or_create(
+        user=user, defaults={'visibility': visibility},
+    )
 
 
 class ProgressBoardTestMixin:
@@ -53,12 +67,16 @@ class ProgressBoardTestMixin:
         cls.free_user.save()
 
     @classmethod
-    def _member(cls, email, first_name=''):
+    def _member(cls, email, first_name='', visibility=READER_VISIBILITY_PUBLIC):
+        # Board rows are opt-in (#1366): a reader must be public to be listed
+        # by name to others, so the ordering/count fixtures default to public.
         user = User.objects.create_user(
             email=email, password='pw', first_name=first_name,
         )
         user.tier = cls.main_tier
         user.save()
+        if visibility is not None:
+            ReaderProfile.objects.create(user=user, visibility=visibility)
         return user
 
     @property
@@ -308,49 +326,98 @@ class ProgressHeaderStatTest(ProgressBoardTestMixin, TestCase):
         self.assertContains(response, '2 readers reading along')
 
     def test_private_reader_counts_but_is_not_listed(self):
-        # Exercise the #1366 guard as if a visibility field existed.
-        private = self._member('private@test.com')
+        # #1366 live: a private, non-self reader is excluded from named rows
+        # but still counts toward the "reading along" header stat.
+        private = self._member(
+            'private@test.com', visibility=READER_VISIBILITY_PRIVATE,
+        )
         _mark_read(private, self.chapters, 3)
         _mark_read(self.viewer, self.chapters, 1)
 
-        def fake_private(member):
-            return member.pk == private.pk
-
-        with mock.patch(
-            'bookclub.reading._reader_is_private', side_effect=fake_private,
-        ):
-            rows, distinct = build_reader_rows(
-                self.viewer, self.book, include_self=True,
-            )
+        rows, distinct = build_reader_rows(
+            self.viewer, self.book, include_self=True,
+        )
         row_pks = [r['member'].pk for r in rows]
         self.assertNotIn(private.pk, row_pks)  # not listed
         self.assertIn(self.viewer.pk, row_pks)
         self.assertEqual(distinct, 2)  # still counted
 
-    def test_private_guard_is_a_noop_today(self):
-        # No visibility field exists yet -> every reader is listed.
-        reader = self._member('reader@test.com')
+    def test_reader_with_no_profile_row_is_private_by_default(self):
+        # Absence of a ReaderProfile row means private (the default) -> a
+        # non-self reader without a row is not listed by name to others.
+        no_profile = self._member('no-profile@test.com', visibility=None)
+        _mark_read(no_profile, self.chapters, 2)
+        _mark_read(self.viewer, self.chapters, 1)
+        rows, distinct = build_reader_rows(
+            self.viewer, self.book, include_self=True,
+        )
+        self.assertNotIn(no_profile.pk, [r['member'].pk for r in rows])
+        self.assertEqual(distinct, 2)  # still counted
+
+    def test_public_reader_is_listed(self):
+        # A public, non-self reader is listed by name.
+        reader = self._member(
+            'reader@test.com', visibility=READER_VISIBILITY_PUBLIC,
+        )
         _mark_read(reader, self.chapters, 2)
         _mark_read(self.viewer, self.chapters, 1)
         rows, _ = build_reader_rows(self.viewer, self.book, include_self=True)
         self.assertIn(reader.pk, [r['member'].pk for r in rows])
 
+    def test_own_private_row_is_always_shown_to_self(self):
+        # The viewer's OWN row is shown even when their profile is private.
+        _set_visibility(self.viewer, READER_VISIBILITY_PRIVATE)
+        _mark_read(self.viewer, self.chapters, 2)
+        rows, _ = build_reader_rows(self.viewer, self.book, include_self=True)
+        self.assertIn(self.viewer.pk, [r['member'].pk for r in rows])
 
-class ProgressDeadLinkSafetyTest(ProgressBoardTestMixin, TestCase):
-    def test_reader_names_are_plain_text_no_profile_link(self):
+
+class ProgressNameLinkTest(ProgressBoardTestMixin, TestCase):
+    def test_public_reader_name_links_to_reader_profile(self):
+        # #1366 flips names on: a public reader's name links to their profile.
         reader = self._member('reader@test.com', first_name='Reader One')
         _mark_read(reader, self.chapters, 3)
         _mark_read(self.viewer, self.chapters, 1)
         self.client.force_login(self.viewer)
-        # A missing reader-profile route would raise NoReverseMatch -> 500.
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Reader One')
-        # The name is rendered in a span, not an anchor to a reader profile.
         self.assertContains(
             response, f'data-testid="progress-name-{reader.pk}"',
         )
-        self.assertNotContains(response, '/readers/')
+        profile_url = reverse(
+            'bookclub_reader_profile',
+            kwargs={'slug': self.book.slug, 'user_id': reader.pk},
+        )
+        self.assertContains(response, f'href="{profile_url}"')
+
+    def test_own_row_links_to_own_profile(self):
+        _mark_read(self.viewer, self.chapters, 1)
+        self.client.force_login(self.viewer)
+        response = self.client.get(self.url)
+        own_url = reverse(
+            'bookclub_reader_profile',
+            kwargs={'slug': self.book.slug, 'user_id': self.viewer.pk},
+        )
+        self.assertContains(response, f'href="{own_url}"')
+
+    def test_only_public_and_self_rows_are_emitted_as_links(self):
+        # A private non-self reader is never emitted as a named row/link.
+        private = self._member(
+            'hidden@test.com', visibility=READER_VISIBILITY_PRIVATE,
+        )
+        _mark_read(private, self.chapters, 4)
+        _mark_read(self.viewer, self.chapters, 1)
+        self.client.force_login(self.viewer)
+        response = self.client.get(self.url)
+        self.assertNotContains(
+            response, f'progress-name-{private.pk}',
+        )
+        private_url = reverse(
+            'bookclub_reader_profile',
+            kwargs={'slug': self.book.slug, 'user_id': private.pk},
+        )
+        self.assertNotContains(response, f'href="{private_url}"')
 
 
 class ProgressFirstMoverTest(ProgressBoardTestMixin, TestCase):

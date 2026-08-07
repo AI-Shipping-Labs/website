@@ -350,3 +350,55 @@ class Note(TimestampedModelMixin, models.Model):
             'bookclub_chapter_detail',
             kwargs={'slug': self.chapter.book.slug, 'number': self.chapter.number},
         )
+
+
+# Per-member Book Club reading-profile visibility (issue #1366). A single
+# per-user flag — not per-user-per-book — drives whether a member is named on
+# the progress board (#1367) and whether their notes appear in other members'
+# group feeds (#1365). Default ``private``: a member opts in to public. Absence
+# of a ``ReaderProfile`` row is therefore treated as ``private`` everywhere.
+READER_VISIBILITY_PUBLIC = 'public'
+READER_VISIBILITY_PRIVATE = 'private'
+
+READER_VISIBILITY_CHOICES = [
+    (READER_VISIBILITY_PUBLIC, 'Public'),
+    (READER_VISIBILITY_PRIVATE, 'Private'),
+]
+
+
+class ReaderProfile(TimestampedModelMixin, models.Model):
+    """A member's Book Club reading-profile visibility preference (issue #1366).
+
+    One row per member (``OneToOneField``) carrying a single ``visibility``
+    flag. The flag is book-agnostic: it mirrors a single-privacy-setting mental
+    model (like the newsletter toggle), and per-book granularity is a
+    documented future extension (add a ``book`` FK + a ``UniqueConstraint`` on
+    ``(user, book)``) reachable without reshaping any caller because every read
+    routes through ``bookclub.profiles.is_reader_public`` /
+    ``public_reader_ids``.
+
+    A member with no row is treated as ``private`` — the default. The toggle
+    ``get_or_create``s the row on first use, so no data backfill is needed.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='book_reader_profile',
+    )
+    visibility = models.CharField(
+        max_length=10,
+        choices=READER_VISIBILITY_CHOICES,
+        default=READER_VISIBILITY_PRIVATE,
+        help_text=(
+            'Public lists the member by name on the progress board and shows '
+            "their notes in other members' group feeds. Default private."
+        ),
+    )
+
+    def __str__(self):
+        return f'{self.user} — {self.visibility}'
+
+    @property
+    def is_public(self):
+        return self.visibility == READER_VISIBILITY_PUBLIC

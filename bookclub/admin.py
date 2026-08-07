@@ -6,7 +6,7 @@ thin superuser-facing fallback, mirroring how sprints expose both.
 
 from django.contrib import admin
 
-from bookclub.models import Book, Chapter
+from bookclub.models import Book, Chapter, ReaderProfile
 
 
 class ChapterInline(admin.TabularInline):
@@ -31,3 +31,11 @@ class ChapterAdmin(admin.ModelAdmin):
     list_filter = ('book',)
     search_fields = ('title',)
     ordering = ('book', 'number')
+
+
+@admin.register(ReaderProfile)
+class ReaderProfileAdmin(admin.ModelAdmin):
+    list_display = ('user', 'visibility', 'updated_at')
+    list_filter = ('visibility',)
+    search_fields = ('user__email',)
+    ordering = ('-updated_at',)

@@ -77,6 +77,18 @@ def _create_note(email, slug, number, body):
     return content_id
 
 
+def _set_public(email):
+    """Opt a reader into a public profile so others see their notes (#1366)."""
+    from accounts.models import User
+    from bookclub.models import ReaderProfile
+
+    user = User.objects.get(email=email)
+    ReaderProfile.objects.update_or_create(
+        user=user, defaults={"visibility": "public"},
+    )
+    connection.close()
+
+
 @pytest.mark.django_db(transaction=True)
 class TestChapterNoteFlow:
     def test_member_writes_note_and_edits_in_place(self, django_server, browser):
@@ -130,6 +142,8 @@ class TestChapterNoteFlow:
         _create_book()
         _create_user("author@test.com", tier_slug="main")
         _create_user("reader@test.com", tier_slug="main")
+        # The author opts public so their note appears in the reader's feed.
+        _set_public("author@test.com")
         _create_note(
             "author@test.com", "inference-engineering", 0,
             "Speculative decoding is underrated.",

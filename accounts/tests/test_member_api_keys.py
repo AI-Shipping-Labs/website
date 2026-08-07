@@ -42,6 +42,7 @@ class MemberAPIKeyModelTest(TestCase):
             [
                 "books:read",
                 "books:write_notes",
+                "books:write_profile",
                 "books:write_progress",
                 "plans:read",
                 "plans:write",

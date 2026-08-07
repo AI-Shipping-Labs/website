@@ -75,6 +75,18 @@ def _mark_read(email, slug, numbers):
     connection.close()
 
 
+def _set_visibility(email, visibility):
+    """Set a reader's profile visibility (#1366). Public = named on the board."""
+    from accounts.models import User
+    from bookclub.models import ReaderProfile
+
+    user = User.objects.get(email=email)
+    ReaderProfile.objects.update_or_create(
+        user=user, defaults={"visibility": visibility},
+    )
+    connection.close()
+
+
 def _user_pk(email):
     from accounts.models import User
 
@@ -97,6 +109,9 @@ class TestProgressBoard:
         _mark_read("main@test.com", SLUG, [0, 1])
         _mark_read("reader-fast@test.com", SLUG, [0, 1, 2, 3])
         _mark_read("reader-slow@test.com", SLUG, [0])
+        # Other readers are named on the board only if they opted public (#1366).
+        _set_visibility("reader-fast@test.com", "public")
+        _set_visibility("reader-slow@test.com", "public")
 
         me = _user_pk("main@test.com")
         fast = _user_pk("reader-fast@test.com")
@@ -253,6 +268,7 @@ class TestProgressBoard:
         _create_user("reader-fast@test.com", tier_slug="main")
         _mark_read("main@test.com", SLUG, [0, 1])
         _mark_read("reader-fast@test.com", SLUG, [0, 1, 2, 3])
+        _set_visibility("reader-fast@test.com", "public")
 
         context = _auth_context(browser, "main@test.com")
         try:
@@ -268,7 +284,8 @@ class TestProgressBoard:
         finally:
             context.close()
 
-    def test_reader_names_are_plain_text(self, django_server, browser):
+    def test_public_reader_name_links_to_profile(self, django_server, browser):
+        # #1366: a public reader's name links to their reader-profile page.
         _ensure_tiers()
         _clear_books()
         _create_book(chapters=5)
@@ -276,6 +293,7 @@ class TestProgressBoard:
         _create_user("reader-fast@test.com", tier_slug="main")
         _mark_read("main@test.com", SLUG, [0])
         _mark_read("reader-fast@test.com", SLUG, [0, 1])
+        _set_visibility("reader-fast@test.com", "public")
         other = _user_pk("reader-fast@test.com")
 
         context = _auth_context(browser, "main@test.com")
@@ -287,9 +305,52 @@ class TestProgressBoard:
             )
             name = page.locator(f'[data-testid="progress-name-{other}"]')
             assert name.is_visible()
-            # The name is a span, never an anchor into a reader-profile route.
-            assert name.evaluate("el => el.tagName").lower() == "span"
-            assert name.locator("a").count() == 0
+            # The name is now an anchor into the reader-profile route.
+            assert name.evaluate("el => el.tagName").lower() == "a"
+            assert name.get_attribute("href").endswith(f"/readers/{other}")
+            # Clicking it opens that reader's profile.
+            name.click()
+            page.wait_for_load_state("domcontentloaded")
+            assert page.url.endswith(f"/books/{SLUG}/readers/{other}")
+        finally:
+            context.close()
+
+    def test_private_reader_is_counted_but_not_named(
+        self, django_server, browser,
+    ):
+        # #1366: a private, non-self reader is not listed by name but still
+        # counts in the "N reading along" header stat.
+        _ensure_tiers()
+        _clear_books()
+        _create_book(chapters=5)
+        _create_user("main@test.com", tier_slug="main")
+        _create_user("hidden@test.com", tier_slug="main")
+        _mark_read("main@test.com", SLUG, [0])
+        _mark_read("hidden@test.com", SLUG, [0, 1, 2, 3])
+        _set_visibility("hidden@test.com", "private")
+        hidden = _user_pk("hidden@test.com")
+
+        context = _auth_context(browser, "main@test.com")
+        try:
+            page = context.new_page()
+            page.goto(
+                f"{django_server}/books/{SLUG}/progress",
+                wait_until="domcontentloaded",
+            )
+            # Not a named row.
+            assert page.locator(
+                f'[data-testid="progress-row-{hidden}"]',
+            ).count() == 0
+            # But counted in the header stat (2 readers reading along).
+            assert "2 readers reading along" in page.locator(
+                '[data-testid="progress-reader-count"]',
+            ).inner_text()
+            # Their private profile is a 404 to others (privacy not revealed).
+            response = page.goto(
+                f"{django_server}/books/{SLUG}/readers/{hidden}",
+                wait_until="domcontentloaded",
+            )
+            assert response.status == 404
         finally:
             context.close()
 

@@ -5,7 +5,14 @@ from datetime import date
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 
-from bookclub.models import Book, Chapter, Note
+from bookclub.models import (
+    READER_VISIBILITY_PRIVATE,
+    READER_VISIBILITY_PUBLIC,
+    Book,
+    Chapter,
+    Note,
+    ReaderProfile,
+)
 from content.access import LEVEL_MAIN
 from payments.models import Tier
 
@@ -182,7 +189,11 @@ class ChapterNoteWriteTest(ChapterDetailFixture):
 
 
 class ChapterGroupFeedTest(ChapterDetailFixture):
-    def test_feed_shows_all_members_notes_with_you_chip(self):
+    def test_feed_shows_public_and_own_notes_with_you_chip(self):
+        # #1366: another member's note appears only if their profile is public.
+        ReaderProfile.objects.create(
+            user=self.other_main, visibility=READER_VISIBILITY_PUBLIC,
+        )
         Note.objects.create(chapter=self.ch0, user=self.other_main, body='Theirs')
         Note.objects.create(chapter=self.ch0, user=self.main_user, body='Mine')
         self.client.force_login(self.main_user)
@@ -191,9 +202,31 @@ class ChapterGroupFeedTest(ChapterDetailFixture):
         self.assertContains(response, 'Mine')
         # The viewer's own note carries the "You" chip; exactly one on the page.
         self.assertContains(response, 'note-you-chip', count=1)
+        # The public author's name links to their reader profile (#1366).
+        self.assertContains(response, 'note-author-link')
         # No leaked Django comment markers from the rendered note cards.
         self.assertNotContains(response, '{#')
         self.assertNotContains(response, '{% comment %}')
+
+    def test_private_authors_note_hidden_from_others_own_note_shown(self):
+        # A private, non-self author's note is excluded from the feed shown to
+        # others; the viewer's own note is always shown to the viewer.
+        ReaderProfile.objects.create(
+            user=self.other_main, visibility=READER_VISIBILITY_PRIVATE,
+        )
+        Note.objects.create(chapter=self.ch0, user=self.other_main, body='Hidden')
+        Note.objects.create(chapter=self.ch0, user=self.main_user, body='Mine')
+        self.client.force_login(self.main_user)
+        response = self.client.get(self._url(0))
+        self.assertNotContains(response, 'Hidden')
+        self.assertContains(response, 'Mine')
+
+    def test_reader_with_no_profile_is_private_by_default_in_feed(self):
+        # No ReaderProfile row -> private default -> hidden from other members.
+        Note.objects.create(chapter=self.ch0, user=self.other_main, body='Ghost')
+        self.client.force_login(self.main_user)
+        response = self.client.get(self._url(0))
+        self.assertNotContains(response, 'Ghost')
 
     def test_empty_feed_renders_member_empty_state(self):
         self.client.force_login(self.main_user)

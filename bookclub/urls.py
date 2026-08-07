@@ -44,4 +44,14 @@ urlpatterns = [
         views.chapter_detail,
         name='bookclub_chapter_detail',
     ),
+    path(
+        'books/<slug:slug>/readers/<int:user_id>/visibility',
+        views.reader_visibility,
+        name='bookclub_reader_visibility',
+    ),
+    path(
+        'books/<slug:slug>/readers/<int:user_id>',
+        views.reader_profile,
+        name='bookclub_reader_profile',
+    ),
 ]

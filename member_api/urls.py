@@ -6,6 +6,7 @@ from member_api.views.books import (
     book_chapter_note,
     book_chapter_read,
     book_reading,
+    reader_profile,
 )
 from member_api.views.docs import docs_page, openapi_json
 from member_api.views.plans import (
@@ -95,6 +96,11 @@ urlpatterns = [
         "v1/plans/<int:plan_id>/resources/<int:resource_id>",
         resource_detail,
         name="member_api_resource_detail",
+    ),
+    path(
+        "v1/books/reader-profile",
+        reader_profile,
+        name="member_api_reader_profile",
     ),
     path(
         "v1/books/<slug:slug>/reading",

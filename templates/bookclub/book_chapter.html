@@ -118,7 +118,7 @@
           {% if group_notes %}
           <div class="space-y-5">
             {% for note in group_notes %}
-            {% include "bookclub/_note_card.html" with note=note note_header="author" is_member=is_member %}
+            {% include "bookclub/_note_card.html" with note=note note_header="author" book=book is_member=is_member %}
             {% endfor %}
           </div>
           {% else %}

@@ -375,6 +375,12 @@ def _render_account_page(
             "sprint_cadence_emails", True
         ),
         "maven_emails_enabled": user.email_preferences.get("maven_emails", True),
+        # Issue #1374: per-type opt-out for Book Club summary emails. Default
+        # ON (opted in) when the key is absent — new accounts and any account
+        # that has never touched the toggle.
+        "bookclub_emails_enabled": user.email_preferences.get(
+            "bookclub_emails", True
+        ),
         "timezone_options": build_timezone_options(),
         "preferred_timezone_label": get_timezone_label(user.preferred_timezone),
         "active_override": active_override,
@@ -681,23 +687,26 @@ def email_preferences_view(request):
     workshop_emails = data.get("workshop_emails")
     sprint_cadence_emails = data.get("sprint_cadence_emails")
     maven_emails = data.get("maven_emails")
+    bookclub_emails = data.get("bookclub_emails")
 
     newsletter_provided = isinstance(newsletter, bool)
     workshop_emails_provided = isinstance(workshop_emails, bool)
     sprint_cadence_emails_provided = isinstance(sprint_cadence_emails, bool)
     maven_emails_provided = isinstance(maven_emails, bool)
+    bookclub_emails_provided = isinstance(bookclub_emails, bool)
 
     if (
         not newsletter_provided
         and not workshop_emails_provided
         and not sprint_cadence_emails_provided
         and not maven_emails_provided
+        and not bookclub_emails_provided
     ):
         return JsonResponse(
             {
                 "error": (
-                    "newsletter, workshop_emails, sprint_cadence_emails, or maven_emails "
-                    "boolean field is required"
+                    "newsletter, workshop_emails, sprint_cadence_emails, "
+                    "maven_emails, or bookclub_emails boolean field is required"
                 ),
             },
             status=400,
@@ -724,6 +733,10 @@ def email_preferences_view(request):
     if maven_emails_provided:
         user.email_preferences["maven_emails"] = maven_emails
         response["maven_emails"] = maven_emails
+
+    if bookclub_emails_provided:
+        user.email_preferences["bookclub_emails"] = bookclub_emails
+        response["bookclub_emails"] = bookclub_emails
 
     user.save(update_fields=update_fields)
 

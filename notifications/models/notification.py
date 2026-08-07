@@ -27,6 +27,10 @@ NOTIFICATION_TYPE_CHOICES = [
     # unit lesson or workshop tutorial page. One notification per distinct
     # linked content-author (Instructor.user), excluding the commenter.
     ('content_comment', 'Content Comment'),
+    # Issue #1374: fired when an organizer publishes a Book Club chapter or
+    # full-book summary. One notification per book-access member (tier-eligible
+    # audience), deep-linked to the chapter #summary or the /summary page.
+    ('bookclub_summary', 'Book Club Summary'),
 ]
 
 

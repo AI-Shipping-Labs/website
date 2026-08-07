@@ -14,6 +14,7 @@ admin bearer for writes, JSON error envelopes, and OpenAPI registration.
 mirroring the sprint precedent.
 """
 
+import logging
 from datetime import date
 
 from django.core.exceptions import ValidationError
@@ -37,9 +38,15 @@ from bookclub.summaries import (
     build_notes_digest,
     resolve_publish_state,
 )
+from bookclub.summary_notifications import (
+    is_new_publish,
+    notify_summary_published,
+)
 from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
 from events.models import Event
 from studio.views.books import _parse_event_series
+
+logger = logging.getLogger(__name__)
 
 VALID_BOOK_STATUSES = {choice for choice, _label in BOOK_STATUS_CHOICES}
 VALID_TIER_LEVELS = {value for value, _label in TIER_LEVEL_CHOICES}
@@ -168,6 +175,23 @@ def _apply_summary_published(obj, data):
         )
     obj.summary_published_at = new_published_at
     return None
+
+
+def _notify_summary_if_published(obj, old_published_at):
+    """Fire the summary-publish notification on the ``null -> set`` transition.
+
+    Shared detection for both PATCH paths (book + chapter) via the same
+    ``is_new_publish`` predicate the Studio surface uses, so the trigger
+    cannot drift (issue #1374). Best-effort: a notification failure must never
+    roll back the publish or 5xx the PATCH. The admin-token API has no acting
+    user, so there is no self-notify exclusion here.
+    """
+    if not is_new_publish(old_published_at, obj.summary_published_at):
+        return
+    try:
+        notify_summary_published(obj)
+    except Exception:
+        logger.exception('Book Club summary notification failed for %r', obj)
 
 
 def _resolve_book(slug):
@@ -509,10 +533,12 @@ def book_detail(request, slug):
         book.author = data["author"]
     for name, value in fields.items():
         setattr(book, name, value)
+    old_summary_published_at = book.summary_published_at
     publish_error = _apply_summary_published(book, data)
     if publish_error is not None:
         return publish_error
     book.save()
+    _notify_summary_if_published(book, old_summary_published_at)
     return JsonResponse(serialize_book(book, include_chapters=True), status=200)
 
 
@@ -829,10 +855,12 @@ def book_chapter_detail(request, slug, number):
         # Re-read from the DB so the in-memory (rejected) mutation does not
         # leak back to the caller; the persisted chapter is unchanged.
         return event_error
+    old_summary_published_at = chapter.summary_published_at
     publish_error = _apply_summary_published(chapter, data)
     if publish_error is not None:
         return publish_error
     chapter.save()
+    _notify_summary_if_published(chapter, old_summary_published_at)
     return JsonResponse(serialize_chapter(chapter), status=200)
 
 

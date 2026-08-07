@@ -25,6 +25,11 @@ urlpatterns = [
         name='bookclub_book_detail',
     ),
     path(
+        'books/<slug:slug>/progress',
+        views.book_progress,
+        name='bookclub_book_progress',
+    ),
+    path(
         'books/<slug:slug>/chapters/<int:number>/read',
         views.chapter_read,
         name='bookclub_chapter_read',

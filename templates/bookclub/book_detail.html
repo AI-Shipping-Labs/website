@@ -70,9 +70,12 @@
         {% endif %}
         <div class="flex flex-wrap items-baseline justify-between gap-2">
           <h2 class="text-lg font-semibold tracking-tight">Contents</h2>
-          {% if viewer_total %}
-          <span class="text-sm text-muted-foreground" data-testid="book-reading-progress">{{ viewer_done }} of {{ viewer_total }} read</span>
-          {% endif %}
+          <div class="flex flex-wrap items-baseline gap-3">
+            {% if viewer_total %}
+            <span class="text-sm text-muted-foreground" data-testid="book-reading-progress">{{ viewer_done }} of {{ viewer_total }} read</span>
+            {% endif %}
+            <a href="{% url 'bookclub_book_progress' slug=book.slug %}" class="text-sm text-accent transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="book-progress-link">View reading progress</a>
+          </div>
         </div>
         {% if viewer_total %}
         {# Calm read-progress bar — no streak / gamification chrome. #}

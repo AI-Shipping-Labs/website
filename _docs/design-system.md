@@ -276,6 +276,8 @@ Mobile carousel convention:
 
 Hand-rolling markup or classes for a role owned by the index is a review-blocking defect, even when the duplicate renders identically.
 
+Django `{# #}` comments are single-line only; use `{% comment %} ... {% endcomment %}` for anything spanning more than one line. A multi-line `{# #}` renders as visible text and is blocked by the `content/tests/test_template_comment_lint.py` lint.
+
 ## Partials and Component Index
 
 The documented owner is mandatory for every instance of its named role, subject only to the explicit constraints in that component's existing documentation.

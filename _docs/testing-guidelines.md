@@ -618,6 +618,40 @@ GitHub). Even then, pin the arg shape that proves the call was correct.
 
 ---
 
+## Rule 21: Django `{# #}` comments are single-line only
+
+Django's `{# ... #}` comment token is recognized only when the closing `#}`
+is on the same line as the opening `{#`. A `{# #}` block that spans more than
+one line is not a comment: Django's lexer never sees a comment token, so the
+raw `{# ... #}` text renders as visible page content. This has leaked to
+production pages repeatedly, caught only at design review.
+
+Use `{% comment %} ... {% endcomment %}` for anything spanning more than one
+line. Reserve `{# #}` for single-line comments.
+
+Bad — renders as visible text:
+```html
+{# This explains the block below
+   and continues on a second line #}
+```
+
+Good:
+```html
+{% comment %}
+This explains the block below
+and continues on a second line.
+{% endcomment %}
+{# single-line note #}
+```
+
+This is enforced repository-wide by
+`content/tests/test_template_comment_lint.py`, a `@tag("core")` lint that
+scans every `templates/**/*.html` file as raw text and fails on any multi-line
+or unclosed `{# #}`. It replaces the reactive per-page
+`assertNotContains(response, '{#')` guards, which missed untested branches.
+
+---
+
 ## Coverage gate (`make coverage`)
 
 `make coverage` is the exhaustive Django coverage gate. It starts from clean

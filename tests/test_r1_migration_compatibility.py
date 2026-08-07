@@ -121,8 +121,46 @@ ORIGINAL_1E5_DEV_LEAVES = tuple(
 )
 
 
+class _SerializedRollbackContentTypeResetMixin:
+    """Make the serialized-rollback R1 classes parallel-safe.
+
+    Both R1 classes below are ``TransactionTestCase`` subclasses with
+    ``serialized_rollback = True`` that drive ``MigrationExecutor`` to unapply
+    and reapply the full migration graph. ``serialized_rollback`` captures a
+    JSON snapshot of the entire test database (including every
+    ``django_content_type`` and ``auth_permission`` row) once at test-DB
+    creation and re-inserts it in each ``_fixture_setup``.
+
+    When these classes are interleaved with any other ``TransactionTestCase``
+    in a shared ``--parallel`` worker, that other class's ``_fixture_teardown``
+    flush re-fires the ``post_migrate`` handlers (``create_contenttypes`` /
+    ``create_permissions``), repopulating ``django_content_type`` and
+    ``auth_permission``. Our serialized restore then tries to reinsert the same
+    natural keys / primary keys, so SQLite raises
+    ``UNIQUE constraint failed: django_content_type``. (This never surfaces when
+    the module runs in isolation, because no foreign class repopulates the
+    tables between our own post_migrate-inhibited flush teardown and the next
+    serialized restore.)
+
+    Clearing both tables immediately before the serialized restore makes that
+    restore the single inserter of content-type state, regardless of what ran
+    before us in the worker. Deletion order matters: ``auth_permission`` has a
+    foreign key to ``django_content_type``, so permissions are removed first.
+    """
+
+    @classmethod
+    def _fixture_setup(cls):
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM auth_permission")
+            cursor.execute("DELETE FROM django_content_type")
+        super()._fixture_setup()
+
+
 @tag("postgres_migration")
-class R1ProductionMigrationCompatibilityTest(TransactionTestCase):
+class R1ProductionMigrationCompatibilityTest(
+    _SerializedRollbackContentTypeResetMixin,
+    TransactionTestCase,
+):
     serialized_rollback = True
 
     def setUp(self):
@@ -499,7 +537,10 @@ class R1ProductionMigrationCompatibilityTest(TransactionTestCase):
 
 
 @tag("postgres_migration")
-class PostR1ProductionOverlapCompatibilityTest(TransactionTestCase):
+class PostR1ProductionOverlapCompatibilityTest(
+    _SerializedRollbackContentTypeResetMixin,
+    TransactionTestCase,
+):
     """Exact dc075646 old-model overlap through the corrected candidate."""
 
     serialized_rollback = True

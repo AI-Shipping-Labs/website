@@ -71,8 +71,10 @@ def test_owner_and_teammate_share_equal_weekly_work_hierarchy(
                 weeks.get_by_role('heading', name='Weekly work'),
             ).to_have_attribute('class', expected_classes)
             assert weeks.get_by_text('Timeline', exact=True).count() == 0
+            resources = page.locator('[data-testid="plan-resources"]')
+            expect(resources).to_be_visible()
             expect(
-                page.get_by_role('heading', name='Resources'),
+                resources.get_by_role('heading', name='Resources', exact=True),
             ).to_have_attribute('class', expected_classes)
         finally:
             context.close()

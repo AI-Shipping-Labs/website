@@ -76,6 +76,24 @@
             <input type="text" name="week_label" value="{{ chapter.week_label }}" placeholder="Week 1"
                    class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
                    aria-label="Week label">
+            <div class="sm:col-span-4">
+              <label class="block text-xs text-muted-foreground mb-1">Event</label>
+              {% if series_events %}
+              <select name="event" data-testid="book-chapter-event" aria-label="Chapter event"
+                      class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select">
+                <option value="">— None —</option>
+                {% for ev in series_events %}
+                <option value="{{ ev.pk }}" {% if chapter.event_id == ev.pk %}selected{% endif %}>{{ ev.title }} · {{ ev.start_datetime|operator_date }}</option>
+                {% endfor %}
+              </select>
+              {% else %}
+              <select name="event" data-testid="book-chapter-event" aria-label="Chapter event" disabled
+                      class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-muted-foreground opacity-60 studio-select">
+                <option value="">— None —</option>
+              </select>
+              <p class="text-xs text-muted-foreground mt-1" data-testid="book-chapter-event-hint">Link an event series to the book to attach chapter events.</p>
+              {% endif %}
+            </div>
           </form>
         </td>
         <td class="px-3 py-3 text-right whitespace-nowrap align-middle">
@@ -128,6 +146,24 @@
       <input type="text" name="week_label" placeholder="Week 1"
              class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
              data-testid="book-chapter-add-week">
+    </div>
+    <div class="sm:col-span-5">
+      <label class="block text-xs text-muted-foreground mb-1">Event</label>
+      {% if series_events %}
+      <select name="event" data-testid="book-chapter-add-event" aria-label="Chapter event"
+              class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select">
+        <option value="">— None —</option>
+        {% for ev in series_events %}
+        <option value="{{ ev.pk }}">{{ ev.title }} · {{ ev.start_datetime|operator_date }}</option>
+        {% endfor %}
+      </select>
+      {% else %}
+      <select name="event" data-testid="book-chapter-add-event" aria-label="Chapter event" disabled
+              class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-muted-foreground opacity-60 studio-select">
+        <option value="">— None —</option>
+      </select>
+      <p class="text-xs text-muted-foreground mt-1" data-testid="book-chapter-add-event-hint">Link an event series to the book to attach chapter events.</p>
+      {% endif %}
     </div>
     <button type="submit"
             class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"

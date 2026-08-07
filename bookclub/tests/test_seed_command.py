@@ -50,6 +50,31 @@ class SeedBookClubTest(TestCase):
         book = Book.objects.get(slug='inference-engineering')
         self.assertEqual(book.event_series_id, series.id)
 
+    def test_attaches_kickoff_event_to_cadence_less_collection(self):
+        from events.models import Event, EventSeries
+
+        series = EventSeries.objects.create(
+            slug='inference-engineering-book-club',
+            name='Inference Engineering Book Club',
+            cadence='none', day_of_week=None, start_time=None,
+            timezone='Europe/Berlin', required_level=0, is_active=True,
+        )
+        call_command('seed_book_club')
+        # The kickoff event is created and attached through the series link
+        # (#1358's supported path), not a standalone script.
+        kickoff = Event.objects.get(
+            slug='inference-engineering-book-club-kickoff',
+        )
+        self.assertEqual(kickoff.event_series_id, series.id)
+        # Idempotent: a re-run neither duplicates nor detaches.
+        call_command('seed_book_club')
+        self.assertEqual(
+            Event.objects.filter(
+                slug='inference-engineering-book-club-kickoff',
+            ).count(),
+            1,
+        )
+
     def test_does_not_duplicate_chapters_on_rerun(self):
         call_command('seed_book_club')
         call_command('seed_book_club')

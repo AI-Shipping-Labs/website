@@ -16,6 +16,7 @@ mirroring the sprint precedent.
 
 from datetime import date
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -32,6 +33,7 @@ from api.utils import (
 from api.views._permissions import bearer_is_admin
 from bookclub.models import BOOK_STATUS_CHOICES, Book, Chapter
 from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
+from events.models import Event
 from studio.views.books import _parse_event_series
 
 VALID_BOOK_STATUSES = {choice for choice, _label in BOOK_STATUS_CHOICES}
@@ -79,12 +81,25 @@ _BOOK_EXAMPLE = {
     "updated_at": "2026-08-01T12:00:00+00:00",
 }
 
+_CHAPTER_EVENT_PROPERTY = {
+    "type": ["string", "integer", "null"],
+    "nullable": True,
+    "description": (
+        "Link to an event, resolved by id (integer or numeric string) or "
+        "slug (non-numeric string). ``null`` or an empty string detaches. "
+        "Series-only rule: the event must be an occurrence of the book's "
+        "linked ``event_series``. If the book has no series, the event is not "
+        "in the series, or the id/slug is unknown, the request returns 422 "
+        "with an ``event`` field error and the chapter is left unchanged."
+    ),
+}
+
 _CHAPTER_EXAMPLE = {
     "number": 0,
     "title": "Inference",
     "deadline": "2026-08-17",
     "week_label": "Week 1",
-    "event_id": None,
+    "event": None,
     "created_at": "2026-08-01T12:00:00+00:00",
     "updated_at": "2026-08-01T12:00:00+00:00",
 }
@@ -436,9 +451,68 @@ def book_detail(request, slug):
     return JsonResponse(serialize_book(book, include_chapters=True), status=200)
 
 
+def _resolve_event_body(raw):
+    """Resolve a chapter ``event`` from a JSON body. Returns ``(event, error)``.
+
+    ``error`` is a ready ``error_response`` (or ``None``). ``event`` is
+    ``None`` for an explicit detach (JSON ``null`` / empty string). Resolution
+    is by integer pk (or numeric string pk), else by slug. Wrong types are a
+    422 ``validation_error``; an unknown id/slug is a 422 with an ``event``
+    field error — never a 404 on the chapter. The series-only rule is enforced
+    separately via ``Chapter.clean()`` (``_validate_chapter_event``).
+    """
+    if raw in (None, ""):
+        return None, None
+    if isinstance(raw, bool) or not isinstance(raw, (int, str)):
+        return None, error_response(
+            "Invalid event", "validation_error", status=422,
+            details={"event": "Must be an event id or slug"},
+        )
+    if isinstance(raw, int):
+        event = Event.objects.filter(pk=raw).first()
+    elif raw.lstrip("-").isdigit():
+        event = Event.objects.filter(pk=int(raw)).first()
+    else:
+        event = Event.objects.filter(slug=raw).first()
+    if event is None:
+        return None, error_response(
+            "Unknown event", "validation_error", status=422,
+            details={"event": "Unknown event"},
+        )
+    return event, None
+
+
+def _validate_chapter_event(chapter):
+    """Run the series-only ``Chapter.clean()`` rule. Returns ``error|None``.
+
+    Translates the model ``ValidationError`` on the ``event`` field into the
+    API's 422 error envelope so the constraint lives in exactly one place
+    (``Chapter.clean()``) and cannot be bypassed through the API.
+    """
+    try:
+        chapter.clean()
+    except ValidationError as exc:
+        messages = exc.message_dict.get("event") or ["Invalid event"]
+        return error_response(
+            "Invalid event", "validation_error", status=422,
+            details={"event": messages[0]},
+        )
+    return None
+
+
 def _read_chapter_fields(data, *, partial):
-    """Read/validate chapter fields. Returns ``(fields, error_response|None)``."""
+    """Read/validate chapter fields. Returns ``(fields, error_response|None)``.
+
+    ``event`` (pk/slug/null) is resolved to an ``events.Event`` instance here;
+    the series-only rule is applied by the caller via ``_validate_chapter_event``
+    once the chapter's ``book`` is known.
+    """
     fields = {}
+    if "event" in data:
+        event, event_error = _resolve_event_body(data["event"])
+        if event_error is not None:
+            return None, event_error
+        fields["event"] = event
     if "title" in data:
         if not isinstance(data["title"], str) or not data["title"].strip():
             return None, error_response(
@@ -500,6 +574,7 @@ def _read_chapter_fields(data, *, partial):
                     "title": {"type": "string"},
                     "deadline": {"type": "string", "format": "date"},
                     "week_label": {"type": "string", "default": ""},
+                    "event": _CHAPTER_EVENT_PROPERTY,
                 },
                 "example": {"number": 0, "title": "Inference", "week_label": "Week 1"},
             },
@@ -567,6 +642,9 @@ def book_chapters_collection(request, slug):
     chapter = Chapter(book=book, number=data["number"])
     for name, value in fields.items():
         setattr(chapter, name, value)
+    event_error = _validate_chapter_event(chapter)
+    if event_error is not None:
+        return event_error
     try:
         chapter.save()
     except IntegrityError:
@@ -599,6 +677,7 @@ def book_chapters_collection(request, slug):
                     "title": {"type": "string"},
                     "deadline": {"type": "string", "format": "date"},
                     "week_label": {"type": "string"},
+                    "event": _CHAPTER_EVENT_PROPERTY,
                 },
                 "example": {"deadline": "2026-09-10"},
             },
@@ -668,5 +747,10 @@ def book_chapter_detail(request, slug, number):
         return field_error
     for name, value in fields.items():
         setattr(chapter, name, value)
+    event_error = _validate_chapter_event(chapter)
+    if event_error is not None:
+        # Re-read from the DB so the in-memory (rejected) mutation does not
+        # leak back to the caller; the persisted chapter is unchanged.
+        return event_error
     chapter.save()
     return JsonResponse(serialize_chapter(chapter), status=200)

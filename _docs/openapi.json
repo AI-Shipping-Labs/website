@@ -508,7 +508,7 @@
                     {
                       "created_at": "2026-08-01T12:00:00+00:00",
                       "deadline": "2026-08-17",
-                      "event_id": null,
+                      "event": null,
                       "number": 0,
                       "title": "Inference",
                       "updated_at": "2026-08-01T12:00:00+00:00",
@@ -558,6 +558,15 @@
                     "format": "date",
                     "type": "string"
                   },
+                  "event": {
+                    "description": "Link to an event, resolved by id (integer or numeric string) or slug (non-numeric string). ``null`` or an empty string detaches. Series-only rule: the event must be an occurrence of the book's linked ``event_series``. If the book has no series, the event is not in the series, or the id/slug is unknown, the request returns 422 with an ``event`` field error and the chapter is left unchanged.",
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "number": {
                     "type": "integer"
                   },
@@ -586,7 +595,7 @@
                 "example": {
                   "created_at": "2026-08-01T12:00:00+00:00",
                   "deadline": "2026-08-17",
-                  "event_id": null,
+                  "event": null,
                   "number": 0,
                   "title": "Inference",
                   "updated_at": "2026-08-01T12:00:00+00:00",
@@ -680,7 +689,7 @@
                 "example": {
                   "created_at": "2026-08-01T12:00:00+00:00",
                   "deadline": "2026-08-17",
-                  "event_id": null,
+                  "event": null,
                   "number": 0,
                   "title": "Inference",
                   "updated_at": "2026-08-01T12:00:00+00:00",
@@ -733,6 +742,15 @@
                     "format": "date",
                     "type": "string"
                   },
+                  "event": {
+                    "description": "Link to an event, resolved by id (integer or numeric string) or slug (non-numeric string). ``null`` or an empty string detaches. Series-only rule: the event must be an occurrence of the book's linked ``event_series``. If the book has no series, the event is not in the series, or the id/slug is unknown, the request returns 422 with an ``event`` field error and the chapter is left unchanged.",
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "title": {
                     "type": "string"
                   },
@@ -753,7 +771,7 @@
                 "example": {
                   "created_at": "2026-08-01T12:00:00+00:00",
                   "deadline": "2026-08-17",
-                  "event_id": null,
+                  "event": null,
                   "number": 0,
                   "title": "Inference",
                   "updated_at": "2026-08-01T12:00:00+00:00",

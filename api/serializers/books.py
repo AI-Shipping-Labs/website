@@ -14,13 +14,29 @@ def _isoformat_or_none(value):
 
 
 def serialize_chapter(chapter):
-    """Flat chapter row."""
+    """Flat chapter row.
+
+    ``event`` is a resolvable object (``{id, slug, title, url}``) when the
+    chapter is linked to an event, else ``null`` (issue #1369). This replaces
+    the bare ``event_id`` the foundation (#1362) returned so an attach/detach
+    is verifiable through the API.
+    """
+    event = chapter.event
     return {
         "number": chapter.number,
         "title": chapter.title,
         "deadline": _isoformat_or_none(chapter.deadline),
         "week_label": chapter.week_label,
-        "event_id": chapter.event_id,
+        "event": (
+            {
+                "id": event.id,
+                "slug": event.slug,
+                "title": event.title,
+                "url": event.get_absolute_url(),
+            }
+            if event is not None
+            else None
+        ),
         "created_at": _isoformat_or_none(chapter.created_at),
         "updated_at": _isoformat_or_none(chapter.updated_at),
     }

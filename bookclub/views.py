@@ -48,6 +48,7 @@ from bookclub.reading import (
     viewer_reading_progress,
 )
 from content.access import build_gated_access_copy, get_user_level
+from events.models.event import PUBLIC_EVENT_STATUSES
 
 
 def _gate_context(request, book):
@@ -181,10 +182,32 @@ def book_detail(request, slug):
             'viewer_done': progress['done'],
             'viewer_pct': progress['pct'],
             'current_chapter': _derive_current_chapter(chapters),
+            # "When we meet" rows (#1369): the linked series' public
+            # occurrences, ordered by start. Members only — computed inside the
+            # is_member branch so meetings never reach the gated context and
+            # cannot leak below the tier gate. Empty/absent series -> [] -> the
+            # template hides the section entirely.
+            'meetings': _series_meetings(book),
         })
     else:
         context.update(_gate_context(request, book))
     return render(request, 'bookclub/book_detail.html', context)
+
+
+def _series_meetings(book):
+    """Public occurrences of a book's linked series, ordered by start (#1369).
+
+    Returns the same visible-occurrence set (``upcoming`` / ``completed``) the
+    public series page lists. Empty list when the book has no series or the
+    series has zero public occurrences.
+    """
+    if not book.event_series_id:
+        return []
+    return list(
+        book.event_series.events
+        .filter(status__in=PUBLIC_EVENT_STATUSES)
+        .order_by('start_datetime')
+    )
 
 
 def _book_secondary(request, book):

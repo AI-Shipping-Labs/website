@@ -27,6 +27,7 @@ class MemberAPIKey(models.Model):
         "books:read",
         "books:write_progress",
         "books:write_notes",
+        "books:write_profile",
     })
     DEFAULT_SCOPES = (
         "plans:read",
@@ -35,6 +36,7 @@ class MemberAPIKey(models.Model):
         "books:read",
         "books:write_progress",
         "books:write_notes",
+        "books:write_profile",
     )
 
     user = models.ForeignKey(

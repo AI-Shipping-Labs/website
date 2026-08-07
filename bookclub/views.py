@@ -21,9 +21,10 @@ Access reuses ``content.access`` — a viewer sees the participation body iff
 gated-access card renders. Draft books 404 for the public.
 """
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.views import redirect_to_login
 from django.db.models import Count
-from django.http import Http404, HttpResponseForbidden
+from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -38,10 +39,13 @@ from bookclub.models import (
     BOOK_STATUS_DRAFT,
     BOOK_STATUS_FINISHED,
     BOOK_STATUS_UPCOMING,
+    READER_VISIBILITY_CHOICES,
     Book,
     ChapterRead,
     Note,
+    ReaderProfile,
 )
+from bookclub.profiles import is_reader_public, public_reader_ids
 from bookclub.reading import (
     build_reader_rows,
     viewer_read_numbers,
@@ -49,6 +53,8 @@ from bookclub.reading import (
 )
 from content.access import build_gated_access_copy, get_user_level
 from events.models.event import PUBLIC_EVENT_STATUSES
+
+_VALID_VISIBILITIES = {value for value, _ in READER_VISIBILITY_CHOICES}
 
 
 def _gate_context(request, book):
@@ -396,16 +402,21 @@ def chapter_detail(request, slug, number):
         Note.objects.filter(user=request.user, chapter=chapter).first()
     )
 
-    # Group notes feed: all members' notes for this chapter, newest first.
-    # Seam for #1366 (reader profiles): private-profile filtering adds a single
-    # ``.exclude(user__in=private_profile_users)`` here once the ``visibility``
-    # field exists — the query shape does not need to change. A member's OWN
-    # note (``own_note`` above) is always shown regardless of future visibility.
-    group_notes = list(
+    # Group notes feed: members' notes for this chapter, newest first. #1366
+    # flips the private-profile exclusion on: a note whose author is a private,
+    # non-self reader is not shown to other members. The viewer's OWN note is
+    # always visible to them regardless of their own visibility. One
+    # ``public_reader_ids`` query partitions the authors (no N+1).
+    all_notes = list(
         Note.objects.filter(chapter=chapter)
         .select_related('user')
         .order_by('-created_at')
     )
+    public_author_ids = public_reader_ids({n.user_id for n in all_notes})
+    group_notes = [
+        note for note in all_notes
+        if note.user_id == request.user.id or note.user_id in public_author_ids
+    ]
     for note in group_notes:
         note.is_own = note.user_id == request.user.id
 
@@ -466,3 +477,149 @@ def chapter_note(request, slug, number):
         mark_activated(request.user)
 
     return redirect(_chapter_url(book, number))
+
+
+def _resolve_book_or_404(request, slug):
+    """Resolve a non-cancelled/non-hidden ``Book`` by slug, mirroring detail.
+
+    Returns ``(book, is_staff)``. ``cancelled`` -> 404 for everyone; ``draft``
+    -> 404 for non-staff (staff preview allowed); unknown slug -> 404.
+    """
+    book = Book.objects.filter(slug=slug).first()
+    if book is None:
+        raise Http404('Unknown book.')
+    is_staff = bool(getattr(request.user, 'is_staff', False))
+    if book.status == BOOK_STATUS_CANCELLED:
+        raise Http404('This book is not available.')
+    if book.status == BOOK_STATUS_DRAFT and not is_staff:
+        raise Http404('This book is not published.')
+    return book, is_staff
+
+
+def _reader_profile_url(book, user_id):
+    return reverse(
+        'bookclub_reader_profile',
+        kwargs={'slug': book.slug, 'user_id': user_id},
+    )
+
+
+def reader_profile(request, slug, user_id):
+    """``/books/<slug>/readers/<user_id>`` — a member's public reading profile.
+
+    Access mirrors ``book_detail`` exactly, then layers a visibility gate:
+
+    - Draft -> 404 non-staff; cancelled / unknown slug -> 404.
+    - The target must be a participant (>= 1 ``ChapterRead`` OR >= 1 ``Note``
+      on the book's chapters); a non-participant -> 404.
+    - Visibility: a private profile is a 404 to everyone except the owner and
+      staff. The message never distinguishes "private" from "does not exist" —
+      a private profile's existence is never revealed.
+    - Tier gate (mirrors ``book_detail`` / the board): a guest / below-tier
+      viewer who passes the visibility gate sees the public header plus exactly
+      one gated-access card and NO notes feed — participation content (other
+      members' notes) never leaks below the gate. Members with access get the
+      chapters-read progress strip, the two stats, and the target's notes.
+    - The owner always sees their own profile (public or private) with a
+      visibility toggle; staff can view any profile (support/preview).
+    """
+    book, is_staff = _resolve_book_or_404(request, slug)
+
+    target = get_user_model().objects.filter(pk=user_id).first()
+    private_or_missing = Http404(
+        "This reader's profile is private or does not exist.",
+    )
+    if target is None:
+        raise private_or_missing
+
+    is_owner = (
+        request.user.is_authenticated and request.user.id == target.id
+    )
+
+    # A non-participant has no profile to others (404). The owner always
+    # reaches their own profile — even at zero reads/notes — so the calm
+    # "Your reading profile" link on book detail never dead-ends.
+    is_participant = (
+        ChapterRead.objects.filter(user=target, chapter__book=book).exists()
+        or Note.objects.filter(user=target, chapter__book=book).exists()
+    )
+    if not is_participant and not is_owner:
+        raise private_or_missing
+
+    target_public = is_reader_public(target)
+    if not target_public and not is_owner and not is_staff:
+        # Never reveal that a private profile exists.
+        raise private_or_missing
+
+    is_member = get_user_level(request.user) >= book.required_level
+    chapters = list(book.chapters.all())
+    read_numbers = set(
+        ChapterRead.objects.filter(user=target, chapter__book=book)
+        .values_list('chapter__number', flat=True)
+    )
+    for chapter in chapters:
+        chapter.target_read = chapter.number in read_numbers
+
+    context = {
+        'book': book,
+        'target': target,
+        'chapters': chapters,
+        'is_member': is_member,
+        'is_owner': is_owner,
+        'target_public': target_public,
+        'chapters_read': len(read_numbers),
+        'notes_shared': Note.objects.filter(
+            user=target, chapter__book=book,
+        ).count(),
+    }
+
+    if not is_member:
+        # Below-tier / anonymous viewer of a public profile: header + gate,
+        # never other members' notes.
+        context.update(_gate_context(request, book))
+        return render(request, 'bookclub/reader_profile.html', context)
+
+    notes = list(
+        Note.objects.filter(user=target, chapter__book=book)
+        .select_related('chapter')
+        .order_by('-created_at')
+    )
+    for note in notes:
+        note.is_own = note.user_id == request.user.id
+    context['notes'] = notes
+    return render(request, 'bookclub/reader_profile.html', context)
+
+
+@require_POST
+def reader_visibility(request, slug, user_id):
+    """``POST /books/<slug>/readers/<user_id>/visibility`` — owner toggle.
+
+    A preference change (like the newsletter toggle), not a platform action —
+    it never calls ``mark_activated``. Gate mirrors ``chapter_read`` (draft ->
+    404, anonymous -> login redirect, below-tier -> 403). Only the profile
+    owner may flip their own visibility: any attempt to toggle another user is
+    a 403. ``get_or_create``s the caller's ``ReaderProfile`` and sets
+    ``visibility`` from POST; any value other than the choices is a 400.
+    Redirect (P/R/G) back to the owner's profile so a refresh re-issues GET.
+    """
+    book, _ = _resolve_book_or_404(request, slug)
+
+    if not request.user.is_authenticated:
+        return redirect_to_login(_reader_profile_url(book, user_id))
+
+    if get_user_level(request.user) < book.required_level:
+        return HttpResponseForbidden('You do not have access to this book.')
+
+    if request.user.id != user_id:
+        return HttpResponseForbidden(
+            'You can only change your own reading profile.',
+        )
+
+    visibility = (request.POST.get('visibility') or '').strip()
+    if visibility not in _VALID_VISIBILITIES:
+        return HttpResponseBadRequest('Invalid visibility value.')
+
+    ReaderProfile.objects.update_or_create(
+        user=request.user,
+        defaults={'visibility': visibility},
+    )
+    return redirect(_reader_profile_url(book, request.user.id))

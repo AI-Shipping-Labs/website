@@ -409,6 +409,48 @@ class CRMRecordO2OTest(UserMergeTestBase):
         )
 
 
+class ReaderProfileO2OTest(UserMergeTestBase):
+    """bookclub.ReaderProfile O2O collision strategy (issue #1366)."""
+
+    def test_keeps_canonicals_visibility_and_drops_secondary(self):
+        from bookclub.models import ReaderProfile
+
+        canonical, secondary = self._make_pair()
+        # Canonical chose private; secondary was public. The surviving
+        # identity's own choice must win — never silently go more public.
+        ReaderProfile.objects.create(user=canonical, visibility="private")
+        ReaderProfile.objects.create(user=secondary, visibility="public")
+
+        response = self._post(
+            {"canonical_email": "keep@test.com", "merge_email": "dupe@test.com"}
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+
+        self.assertEqual(
+            ReaderProfile.objects.filter(user=canonical).count(), 1,
+        )
+        self.assertFalse(ReaderProfile.objects.filter(user=secondary).exists())
+        self.assertEqual(
+            ReaderProfile.objects.get(user=canonical).visibility, "private",
+        )
+
+    def test_repoints_secondary_when_canonical_has_none(self):
+        from bookclub.models import ReaderProfile
+
+        canonical, secondary = self._make_pair()
+        ReaderProfile.objects.create(user=secondary, visibility="public")
+
+        response = self._post(
+            {"canonical_email": "keep@test.com", "merge_email": "dupe@test.com"}
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+
+        self.assertEqual(
+            ReaderProfile.objects.get(user=canonical).visibility, "public",
+        )
+        self.assertFalse(ReaderProfile.objects.filter(user=secondary).exists())
+
+
 class TierOverrideReconcileTest(UserMergeTestBase):
     def _override(self, user, tier):
         return TierOverride.objects.create(

@@ -13,6 +13,7 @@ from django.db.models import Count
 
 from accounts.utils.display import display_name as _display_name
 from bookclub.models import ChapterRead, Note
+from bookclub.profiles import public_reader_ids
 
 
 def viewer_read_numbers(user, book):
@@ -49,21 +50,6 @@ def viewer_reading_progress(user, book, chapters=None):
     }
 
 
-def _reader_is_private(member):
-    """Private-profile exclusion seam for #1366 (a documented no-op today).
-
-    #1366 introduces a reader-profile ``visibility`` toggle so a reader can
-    keep their reading private: a private reader is not listed as a named row
-    to other viewers, but still counts toward the "reading along" header stat.
-    That field does not exist yet, so ``getattr`` falls through to ``False``
-    and every reader is treated as public and listed. When #1366 merges,
-    replace the attribute lookup below with the real visibility check — the
-    caller already excludes non-self private readers, so only this one line
-    changes. The viewer's OWN row is always shown regardless of this flag.
-    """
-    return getattr(member, 'book_reader_is_private', False)
-
-
 def build_reader_rows(viewer, book, *, include_self):
     """Build the you-first Progress board roster for ``book`` (issue #1367).
 
@@ -74,10 +60,10 @@ def build_reader_rows(viewer, book, *, include_self):
     member themselves (you-first) when ``include_self`` — even at ``0 of N``.
 
     Query budget is fixed, independent of roster size (no N+1): one aggregate
-    for read counts, one for note counts, one bulk fetch of the ``User`` rows.
-    Returns ``(rows, distinct_readers)`` where ``distinct_readers`` counts
-    every reader with >= 1 read (including private readers, who count but are
-    not individually listed once #1366's guard is live).
+    for read counts, one for note counts, one bulk fetch of the ``User`` rows,
+    one ``public_reader_ids`` lookup. Returns ``(rows, distinct_readers)``
+    where ``distinct_readers`` counts every reader with >= 1 read (including
+    private readers, who count but are not individually listed — #1366).
     """
     total = book.chapters.count()
 
@@ -111,12 +97,16 @@ def build_reader_rows(viewer, book, *, include_self):
         u.pk: u
         for u in get_user_model().objects.filter(pk__in=reader_ids)
     }
+    # #1366: one query partitions the roster into public / private. A private
+    # reader still counts in ``distinct_readers`` above but is not listed as a
+    # named row to others; the viewer's OWN row is always shown (you-first).
+    public_ids = public_reader_ids(reader_ids)
 
     rows = []
     for uid, member in members.items():
         is_self = uid == viewer_id
-        if _reader_is_private(member) and not is_self:
-            # #1366 seam: private readers still count above, never listed here.
+        is_private = uid not in public_ids
+        if is_private and not is_self:
             continue
         chapters_read = read_counts.get(uid, 0)
         pct = round(chapters_read / total * 100) if total else 0
@@ -127,10 +117,7 @@ def build_reader_rows(viewer, book, *, include_self):
             'total': total,
             'pct': pct,
             'is_self': is_self,
-            'is_private': _reader_is_private(member),
-            # Reserved for #1366: the reader-profile route does not exist yet,
-            # so the template renders the name as plain text (zero dead links).
-            'handle': None,
+            'is_private': is_private,
         })
 
     # You-first, then chapters read desc, notes shared desc, display_name asc.

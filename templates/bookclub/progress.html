@@ -59,11 +59,12 @@
               <td class="px-4 py-4 align-top sm:px-5">
                 <div class="flex items-center gap-3">
                   <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-border bg-background text-xs font-semibold" aria-hidden="true">{{ row.member|display_name|slice:":1"|upper }}</div>
-                  {% comment %} Reader names are PLAIN TEXT: the reader-profile
-                  route (bookclub_reader_profile) does not exist until #1366, so
-                  we never emit a link to it — zero dead links. #1366 flips this
-                  span to an anchor using row.handle. {% endcomment %}
-                  <span class="text-sm font-medium text-foreground" data-testid="progress-name-{{ row.member.pk }}">{{ row.member|display_name }}{% if row.is_self %} (you){% endif %}</span>
+                  {% comment %} Reader names link to the reader-profile page
+                  (#1366). Only public readers and the viewer's own row are
+                  emitted here (private non-self readers are collapsed into the
+                  header count), so every link is reachable — no dead links,
+                  no leaks. {% endcomment %}
+                  <a href="{% url 'bookclub_reader_profile' slug=book.slug user_id=row.member.pk %}" class="text-sm font-medium text-foreground transition-colors hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="progress-name-{{ row.member.pk }}">{{ row.member|display_name }}{% if row.is_self %} (you){% endif %}</a>
                 </div>
               </td>
               <td class="px-4 py-4 align-top sm:px-5">

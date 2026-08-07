@@ -43,6 +43,101 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/member-api/v1/books/reader-profile": {
+      "get": {
+        "description": "Returns the authenticated key owner's Book Club reading-profile visibility (``public`` or ``private``). Book-agnostic \u2014 visibility is a single per-user flag. A member with no profile row is reported as ``private`` (the default). Scoped to the key owner only \u2014 never another member's profile. Requires the ``books:read`` scope.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "visibility": "private"
+                }
+              }
+            },
+            "description": "The caller's current visibility."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``books:read`` scope."
+          }
+        },
+        "summary": "Get the caller's reading-profile visibility",
+        "tags": [
+          "Books"
+        ]
+      },
+      "put": {
+        "description": "Sets the authenticated key owner's reading-profile visibility from the JSON body ``{\"visibility\": \"public\"|\"private\"}`` (``get_or_create`` on the owner). Public lists the member by name on the progress board and shows their notes in other members' group feeds; private hides both. Book-agnostic and scoped to the key owner only \u2014 there is no user parameter. Any value other than ``public`` / ``private`` returns a 400. Reading another member's public profile / notes feed (a rendered web surface) and posting comments (the shared web comment endpoints) are out of scope for the member API; destructive deletes stay Studio/admin-scoped. Requires the ``books:write_profile`` scope.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "visibility": "public"
+              },
+              "schema": {
+                "properties": {
+                  "visibility": {
+                    "enum": [
+                      "public",
+                      "private"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "visibility"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "visibility": "public"
+                }
+              }
+            },
+            "description": "Updated visibility."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid ``visibility`` value."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``books:write_profile`` scope."
+          }
+        },
+        "summary": "Set the caller's reading-profile visibility",
+        "tags": [
+          "Books"
+        ]
+      }
+    },
     "/member-api/v1/books/{slug}/chapters/{number}/note": {
       "delete": {
         "description": "Idempotently deletes the key owner's note for the chapter. Destructive deletes of other members' notes stay Studio/admin scoped. Requires the ``books:write_notes`` scope.",

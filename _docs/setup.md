@@ -268,6 +268,24 @@ To roll back, redeploy a previously known-good tag with `deploy_dev.sh` for dev 
 - `deploy/deploy_prod.sh [tag]` — promotes a tag to prod. If no tag is given, reads the current dev tag. Requires confirmation.
 - `deploy/update_task_def.py` — helper that ensures the worker container exists and updates the image tag plus `VERSION`, `DEBUG`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `SITE_BASE_URL`, and per-container `RUN_MIGRATIONS` in a task definition JSON file.
 
+### Canonical-host redirect verification
+
+After deploying the website canonical-host middleware and applying the
+corresponding production ALB listener/rule change, run the read-only redirect
+contract check:
+
+```bash
+uv run python deploy/verify_canonical_redirects.py https://aishippinglabs.com
+```
+
+The verifier disables automatic redirect following. It checks HTTP apex,
+HTTP `www`, and HTTPS `www` for both `/` and a path with a query string,
+requires an exact `301` to the clean apex HTTPS URL, and confirms the target
+returns `200` without another redirect. Do not add this check to the automatic
+production deploy gate until the external ALB change is applied: the website
+must be deployed first so Django can safely receive and canonicalize that
+traffic.
+
 ## Production access model
 
 Production URL: `https://aishippinglabs.com`.

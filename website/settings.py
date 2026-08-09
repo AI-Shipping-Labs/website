@@ -181,6 +181,10 @@ MIDDLEWARE = [
     # health checks (which use the container's VPC IP as Host) don't trip
     # ALLOWED_HOSTS validation. See website/middleware.py.
     'website.middleware.HealthCheckMiddleware',
+    # Canonicalize production apex HTTP and www traffic before middleware
+    # that can emit a separate slash or application redirect. /ping remains
+    # the exact host-validation bypass above this middleware.
+    'website.middleware.CanonicalHostRedirectMiddleware',
     'django.middleware.security.SecurityMiddleware',
     # Serves /static/* from STATIC_ROOT in production (DEBUG=False).
     # Must come right after SecurityMiddleware so static responses still

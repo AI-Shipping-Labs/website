@@ -67,6 +67,10 @@ jobs:
           echo "CI_TIMING phase=lint_advisory seconds=$((end - start))"
 
       - name: Collect static files
+        env:
+          DEBUG: "False"
+          SECRET_KEY: "ci-static-build-only-not-a-real-secret"
+          ALLOWED_HOSTS: "localhost"
         run: |
           start=$(date +%s)
           make collectstatic

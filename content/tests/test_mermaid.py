@@ -329,19 +329,20 @@ class MermaidScriptTagInclusionTest(TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
         head, rendered_body = body.split('<body', 1)
-        selector = 'div.mermaid:not([data-processed]) { white-space: pre; }'
-        self.assertEqual(body.count(selector), 1)
-        self.assertIn(selector, head)
-        self.assertNotIn(selector, rendered_body)
-        self.assertIn(
+        stylesheet = '/static/css/tailwind.css'
+        self.assertEqual(body.count(stylesheet), 1)
+        self.assertIn(stylesheet, head)
+        self.assertNotIn(stylesheet, rendered_body)
+
+        css = Path('assets/css/tailwind.css').read_text(encoding='utf-8')
+        for rule in (
+            'div.mermaid:not([data-processed]) { white-space: pre; }',
             'div.mermaid { max-width: 100%; overflow-x: auto; }',
-            head,
-        )
-        self.assertIn(
             'div.mermaid > svg { max-width: none; height: auto; '
             'display: block; margin: 0 auto; }',
-            head,
-        )
+        ):
+            self.assertEqual(css.count(rule), 1)
+            self.assertNotIn(rule, body)
         self.assertRegex(body, r'js/mermaid-render(\.[0-9a-f]+)?\.js')
 
         partial = Path('templates/_partials/mermaid_script.html').read_text(

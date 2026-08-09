@@ -15,6 +15,7 @@ from content.views.sitemap import sitemap
 from email_app.urls import api_urlpatterns as email_api_urlpatterns
 from notifications.urls import api_urlpatterns as notification_api_urlpatterns
 from notifications.urls import page_urlpatterns as notification_page_urlpatterns
+from website.robots import robots_txt
 
 urlpatterns = [
     # /ping is served by website.middleware.HealthCheckMiddleware so the
@@ -33,6 +34,7 @@ urlpatterns = [
     path('member-api/', include('member_api.urls')),
     path('', include(notification_page_urlpatterns)),
     path('register', signup_redirect_view, name='register_shortcut'),
+    path('robots.txt', robots_txt, name='robots_txt'),
     path('sitemap.xml', sitemap, {'sitemaps': sitemaps}, name='sitemap'),
     path('', include('payments.urls')),
     path('', include('content.urls')),

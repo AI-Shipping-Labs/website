@@ -108,6 +108,9 @@ jobs:
               uv run python deploy/verify_sitemap.py \
                 "https://${PROD_HOST}/sitemap.xml" \
                 "https://${PROD_HOST}"
+              uv run python deploy/verify_robots.py \
+                "https://${PROD_HOST}/robots.txt" \
+                "https://${PROD_HOST}/sitemap.xml"
               exit 0
             fi
             echo "Attempt ${i}/30: prod /ping returned '${DEPLOYED:-<unreachable>}'; expected ${EXPECTED_TAG}. Sleeping 10s..."

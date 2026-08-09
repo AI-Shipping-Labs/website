@@ -233,14 +233,22 @@ class TestContactImportOutcomePreview:
             f'Name,Contact email\nAda,ada-{suffix}@example.com\n',
         )
         select = page.get_by_test_id('import-email-column')
+        pending_routes = []
+        page.route(
+            '**/studio/users/import/preview',
+            lambda route: pending_routes.append(route),
+        )
         select.focus()
-        with page.expect_response(lambda response: response.url.endswith('/preview')):
+        with page.expect_request(lambda request: request.url.endswith('/preview')):
             select.evaluate(
                 "element => { element.value = 'Contact email'; "
                 "element.dispatchEvent(new Event('change', {bubbles: true})); }"
             )
-            assert page.get_by_test_id('import-preview-loading').is_visible()
-            assert page.get_by_test_id('import-confirm-submit').is_disabled()
+        assert len(pending_routes) == 1
+        assert page.get_by_test_id('import-preview-loading').is_visible()
+        assert page.get_by_test_id('import-confirm-submit').is_disabled()
+        with page.expect_response(lambda response: response.url.endswith('/preview')):
+            pending_routes[0].continue_()
         assert select.evaluate('element => document.activeElement === element')
         assert page.get_by_test_id('import-confirm-submit').is_enabled()
         assert page.get_by_test_id('import-outcome-card').get_attribute('aria-live') == 'polite'

@@ -16,7 +16,10 @@ from content.nav_availability import (
 )
 from integrations.config import get_config, site_base_url
 from integrations.middleware import get_announcement_banner
-from website.search_indexing import search_indexing_disabled
+from website.search_indexing import (
+    request_indexing_disabled,
+    search_indexing_disabled,
+)
 
 # Cookie name for the analytics anonymous-visitor UUID4 set by
 # ``analytics.middleware.CampaignTrackingMiddleware``. Duplicated here
@@ -368,9 +371,7 @@ def site_context(request):
     google_analytics_id = (
         get_config('GOOGLE_ANALYTICS_ID', '') if consent_granted else ''
     )
-    indexing_disabled = getattr(request, 'search_indexing_disabled', None)
-    if indexing_disabled is None:
-        indexing_disabled = search_indexing_disabled()
+    indexing_disabled = request_indexing_disabled(request)
 
     return {
         'VERSION': settings.VERSION,
@@ -378,6 +379,9 @@ def site_context(request):
         'site_url': site_base_url(),
         'site_description': settings.SITE_DESCRIPTION,
         'search_indexing_disabled': indexing_disabled,
+        # Canonical omission is a dev-environment rule from #1376, not a
+        # consequence of production page-level noindex from #1379.
+        'search_canonical_disabled': search_indexing_disabled(),
         'stripe_customer_portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
         'google_analytics_id': google_analytics_id,
         'analytics_consent_state': consent_state,

@@ -173,9 +173,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    # Outermost so every dev response, including the early /ping response,
-    # redirects, non-HTML responses, and errors receives the robots header.
-    'website.middleware.DevSearchExclusionMiddleware',
+    # Outermost so every dev response and every production-private response,
+    # including early responses, redirects, and errors, can receive the
+    # applicable robots header.
+    'website.middleware.SearchIndexingPolicyMiddleware',
     # Must run before SecurityMiddleware/CommonMiddleware so that ALB
     # health checks (which use the container's VPC IP as Host) don't trip
     # ALLOWED_HOSTS validation. See website/middleware.py.

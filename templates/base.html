@@ -13,7 +13,7 @@
   {% block robots %}<meta name="robots" content="max-snippet:-1, max-image-preview:large, max-video-preview:-1">{% endblock %}
   {% endif %}
   {% block page_head_metadata %}
-  {% if not search_indexing_disabled %}
+  {% if not search_canonical_disabled %}
   {% block canonical %}<link rel="canonical" href="{{ site_url }}">{% endblock %}
   {% endif %}
 

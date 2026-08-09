@@ -780,7 +780,7 @@ def page_seo_tags(context, title, description, canonical_path, canonical_query='
     default_image_url = f'{site_url}{DEFAULT_OG_IMAGE_PATH}'
     escaped_canonical_url = _escape_attr(canonical_url)
     tags = []
-    if not context.get('search_indexing_disabled', False):
+    if not context.get('search_canonical_disabled', False):
         tags.append(f'<link rel="canonical" href="{escaped_canonical_url}">')
     tags.extend([
         f'<meta property="og:title" content="{_escape_attr(title)}">',

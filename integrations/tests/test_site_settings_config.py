@@ -92,13 +92,13 @@ class SiteBaseUrlConfigTest(TestCase):
         # Write a row and clear the cache (simulating settings_save_group).
         IntegrationSetting.objects.create(
             key='SITE_BASE_URL_ALIASES',
-            value='https://prod.aishippinglabs.com',
+            value='https://configured.example.com',
             group='site',
         )
         clear_config_cache()
         # Subsequent reads see the new value.
         result2 = get_config('SITE_BASE_URL_ALIASES', 'no-aliases')
-        self.assertEqual(result2, 'https://prod.aishippinglabs.com')
+        self.assertEqual(result2, 'https://configured.example.com')
 
 
 class WorkerConfigCacheTest(TestCase):
@@ -157,7 +157,7 @@ class SiteSettingsSaveViewTest(TestCase):
         self.client.login(email='admin@test.com', password='testpass')
         response = self.client.post('/studio/settings/site/save/', {
             'SITE_BASE_URL': 'https://aishippinglabs.com',
-            'SITE_BASE_URL_ALIASES': 'https://prod.aishippinglabs.com',
+            'SITE_BASE_URL_ALIASES': 'https://configured.example.com',
             'EVENT_DISPLAY_TIMEZONE': 'Europe/Berlin',
         })
         self.assertEqual(response.status_code, 302)
@@ -169,7 +169,7 @@ class SiteSettingsSaveViewTest(TestCase):
             IntegrationSetting.objects.get(
                 key='SITE_BASE_URL_ALIASES',
             ).value,
-            'https://prod.aishippinglabs.com',
+            'https://configured.example.com',
         )
         self.assertEqual(
             IntegrationSetting.objects.get(key='EVENT_DISPLAY_TIMEZONE').value,
@@ -187,14 +187,14 @@ class SiteSettingsSaveViewTest(TestCase):
         self.client.login(email='admin@test.com', password='testpass')
         self.client.post('/studio/settings/site/save/', {
             'SITE_BASE_URL': 'https://aishippinglabs.com',
-            'SITE_BASE_URL_ALIASES': 'https://prod.aishippinglabs.com',
+            'SITE_BASE_URL_ALIASES': 'https://configured.example.com',
             'EVENT_DISPLAY_TIMEZONE': 'Europe/Berlin',
         })
         # After save, get_config returns the new DB value rather than
         # the stale cached blank.
         self.assertEqual(
             get_config('SITE_BASE_URL_ALIASES'),
-            'https://prod.aishippinglabs.com',
+            'https://configured.example.com',
         )
 
 
@@ -346,7 +346,7 @@ class CrossProcessCacheInvalidationTest(TestCase):
 
         # Process B updates and clears.
         IntegrationSetting.objects.filter(key='SITE_BASE_URL').update(
-            value='https://prod.aishippinglabs.com',
+            value='https://configured.example.com',
         )
         clear_config_cache()
 
@@ -358,4 +358,4 @@ class CrossProcessCacheInvalidationTest(TestCase):
 
         # The helper picks up the new value without a process restart.
         second = site_base_url()
-        self.assertEqual(second, 'https://prod.aishippinglabs.com')
+        self.assertEqual(second, 'https://configured.example.com')

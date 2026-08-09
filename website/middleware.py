@@ -3,6 +3,31 @@
 from django.conf import settings
 from django.http import HttpResponse
 
+from website.search_indexing import (
+    DEV_ROBOTS_DIRECTIVE,
+    search_indexing_disabled,
+)
+
+
+class DevSearchExclusionMiddleware:
+    """Add the development deployment's robots header to every response.
+
+    This middleware deliberately sits outside ``HealthCheckMiddleware`` so
+    even the early ``/ping`` response, redirects, errors, and non-HTML
+    responses receive the deployment-wide exclusion directive.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        indexing_disabled = search_indexing_disabled()
+        request.search_indexing_disabled = indexing_disabled
+        response = self.get_response(request)
+        if indexing_disabled:
+            response['X-Robots-Tag'] = DEV_ROBOTS_DIRECTIVE
+        return response
+
 
 class HealthCheckMiddleware:
     """Respond to ``/ping`` with 200 + VERSION before any host-validation runs.
@@ -16,8 +41,9 @@ class HealthCheckMiddleware:
     can stay strict (no wildcard / no IP whitelist) while health checks
     still pass.
 
-    Must be placed first in ``MIDDLEWARE`` so it runs before
-    ``SecurityMiddleware`` and ``CommonMiddleware``.
+    Must be placed before host-validating middleware. The dev search-exclusion
+    wrapper is allowed ahead of it because that wrapper does not inspect the
+    request host and still lets this middleware short-circuit the request.
 
     The body is the ``settings.VERSION`` string (e.g.
     ``20260426-130731-b126a1e``) so the post-deploy Verify step can curl

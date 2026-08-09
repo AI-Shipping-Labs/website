@@ -361,7 +361,7 @@ class ProxySSLHeaderTest(TestCase):
     @override_settings(
         DEBUG=False,
         SECURE_PROXY_SSL_HEADER=('HTTP_X_FORWARDED_PROTO', 'https'),
-        SITE_BASE_URL='https://prod.aishippinglabs.com',
+        SITE_BASE_URL='https://configured.example.com',
         ALLOWED_HOSTS=['dev.aishippinglabs.com'],
     )
     def test_banner_still_fires_when_host_genuinely_differs(self):
@@ -376,7 +376,7 @@ class ProxySSLHeaderTest(TestCase):
         payload = _build_env_mismatch_payload(request)
         self.assertIsNotNone(payload)
         self.assertEqual(
-            payload['configured_host'], 'prod.aishippinglabs.com',
+            payload['configured_host'], 'configured.example.com',
         )
 
     @override_settings(SECURE_PROXY_SSL_HEADER=None)
@@ -440,7 +440,7 @@ class EnvMismatchAliasTest(TestCase):
     @override_settings(
         SITE_BASE_URL='https://aishippinglabs.com',
         ALLOWED_HOSTS=[
-            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'aishippinglabs.com', 'configured.example.com',
             'www.aishippinglabs.com', 'dev.aishippinglabs.com',
             'localhost',
         ],
@@ -448,17 +448,17 @@ class EnvMismatchAliasTest(TestCase):
     def test_alias_match_suppresses_banner(self):
         IntegrationSetting.objects.create(
             key='SITE_BASE_URL_ALIASES',
-            value='https://prod.aishippinglabs.com',
+            value='https://configured.example.com',
             group='site',
         )
         clear_config_cache()
-        request = self._request('prod.aishippinglabs.com', scheme='https')
+        request = self._request('configured.example.com', scheme='https')
         self.assertIsNone(_build_env_mismatch_payload(request))
 
     @override_settings(
         SITE_BASE_URL='https://aishippinglabs.com',
         ALLOWED_HOSTS=[
-            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'aishippinglabs.com', 'configured.example.com',
             'www.aishippinglabs.com', 'dev.aishippinglabs.com',
             'localhost',
         ],
@@ -467,7 +467,7 @@ class EnvMismatchAliasTest(TestCase):
         # Canonical match still wins even when aliases are configured.
         IntegrationSetting.objects.create(
             key='SITE_BASE_URL_ALIASES',
-            value='https://prod.aishippinglabs.com',
+            value='https://configured.example.com',
             group='site',
         )
         clear_config_cache()
@@ -477,7 +477,7 @@ class EnvMismatchAliasTest(TestCase):
     @override_settings(
         SITE_BASE_URL='https://aishippinglabs.com',
         ALLOWED_HOSTS=[
-            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'aishippinglabs.com', 'configured.example.com',
             'www.aishippinglabs.com', 'dev.aishippinglabs.com',
             'localhost',
         ],
@@ -485,19 +485,19 @@ class EnvMismatchAliasTest(TestCase):
     def test_multiple_aliases_parsed_from_comma_separated(self):
         IntegrationSetting.objects.create(
             key='SITE_BASE_URL_ALIASES',
-            value='https://prod.aishippinglabs.com, https://www.aishippinglabs.com',
+            value='https://configured.example.com, https://www.aishippinglabs.com',
             group='site',
         )
         clear_config_cache()
-        prod_request = self._request('prod.aishippinglabs.com', scheme='https')
+        configured_request = self._request('configured.example.com', scheme='https')
         www_request = self._request('www.aishippinglabs.com', scheme='https')
-        self.assertIsNone(_build_env_mismatch_payload(prod_request))
+        self.assertIsNone(_build_env_mismatch_payload(configured_request))
         self.assertIsNone(_build_env_mismatch_payload(www_request))
 
     @override_settings(
         SITE_BASE_URL='https://aishippinglabs.com',
         ALLOWED_HOSTS=[
-            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'aishippinglabs.com', 'configured.example.com',
             'www.aishippinglabs.com', 'dev.aishippinglabs.com',
             'localhost',
         ],
@@ -506,21 +506,21 @@ class EnvMismatchAliasTest(TestCase):
         IntegrationSetting.objects.create(
             key='SITE_BASE_URL_ALIASES',
             value=(
-                'https://prod.aishippinglabs.com\n'
+                'https://configured.example.com\n'
                 'https://www.aishippinglabs.com'
             ),
             group='site',
         )
         clear_config_cache()
-        prod_request = self._request('prod.aishippinglabs.com', scheme='https')
+        configured_request = self._request('configured.example.com', scheme='https')
         www_request = self._request('www.aishippinglabs.com', scheme='https')
-        self.assertIsNone(_build_env_mismatch_payload(prod_request))
+        self.assertIsNone(_build_env_mismatch_payload(configured_request))
         self.assertIsNone(_build_env_mismatch_payload(www_request))
 
     @override_settings(
         SITE_BASE_URL='https://aishippinglabs.com',
         ALLOWED_HOSTS=[
-            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'aishippinglabs.com', 'configured.example.com',
             'www.aishippinglabs.com', 'dev.aishippinglabs.com',
             'localhost',
         ],
@@ -530,7 +530,7 @@ class EnvMismatchAliasTest(TestCase):
         # fire the banner.
         IntegrationSetting.objects.create(
             key='SITE_BASE_URL_ALIASES',
-            value='https://prod.aishippinglabs.com https://www.aishippinglabs.com',
+            value='https://configured.example.com https://www.aishippinglabs.com',
             group='site',
         )
         clear_config_cache()
@@ -545,7 +545,7 @@ class EnvMismatchAliasTest(TestCase):
     @override_settings(
         SITE_BASE_URL='https://aishippinglabs.com',
         ALLOWED_HOSTS=[
-            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'aishippinglabs.com', 'configured.example.com',
             'www.aishippinglabs.com', 'dev.aishippinglabs.com',
             'localhost',
         ],
@@ -555,7 +555,7 @@ class EnvMismatchAliasTest(TestCase):
         # still works alongside it.
         IntegrationSetting.objects.create(
             key='SITE_BASE_URL_ALIASES',
-            value='not a url, https://prod.aishippinglabs.com',
+            value='not a url, https://configured.example.com',
             group='site',
         )
         clear_config_cache()
@@ -563,8 +563,8 @@ class EnvMismatchAliasTest(TestCase):
         bad_request = self._request('dev.aishippinglabs.com', scheme='https')
         self.assertIsNotNone(_build_env_mismatch_payload(bad_request))
         # The well-formed alias still suppresses its match.
-        prod_request = self._request('prod.aishippinglabs.com', scheme='https')
-        self.assertIsNone(_build_env_mismatch_payload(prod_request))
+        configured_request = self._request('configured.example.com', scheme='https')
+        self.assertIsNone(_build_env_mismatch_payload(configured_request))
 
     @override_settings(
         SITE_BASE_URL='https://aishippinglabs.com',
@@ -607,27 +607,27 @@ class EnvMismatchOverrideTest(TestCase):
     @override_settings(
         SITE_BASE_URL='https://aishippinglabs.com',
         ALLOWED_HOSTS=[
-            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'aishippinglabs.com', 'configured.example.com',
             'localhost',
         ],
     )
     def test_db_override_clears_banner_when_matches_request_host(self):
         # The original bug: env says aishippinglabs.com, override is
-        # prod.aishippinglabs.com, request comes in on prod — banner
+        # configured.example.com, request comes in there — banner
         # MUST be suppressed because the override is what we want.
         IntegrationSetting.objects.create(
             key='SITE_BASE_URL',
-            value='https://prod.aishippinglabs.com',
+            value='https://configured.example.com',
             group='site',
         )
         clear_config_cache()
-        request = self._request('prod.aishippinglabs.com', scheme='https')
+        request = self._request('configured.example.com', scheme='https')
         self.assertIsNone(_build_env_mismatch_payload(request))
 
     @override_settings(
         SITE_BASE_URL='https://aishippinglabs.com',
         ALLOWED_HOSTS=[
-            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'aishippinglabs.com', 'configured.example.com',
             'localhost',
         ],
     )
@@ -637,7 +637,7 @@ class EnvMismatchOverrideTest(TestCase):
         # under "Configured" — this is the operator-visible symptom.
         IntegrationSetting.objects.create(
             key='SITE_BASE_URL',
-            value='https://prod.aishippinglabs.com',
+            value='https://configured.example.com',
             group='site',
         )
         clear_config_cache()
@@ -646,10 +646,10 @@ class EnvMismatchOverrideTest(TestCase):
         self.assertIsNotNone(payload)
         self.assertEqual(
             payload['configured_base_url'],
-            'https://prod.aishippinglabs.com',
+            'https://configured.example.com',
         )
         self.assertEqual(
-            payload['configured_host'], 'prod.aishippinglabs.com',
+            payload['configured_host'], 'configured.example.com',
         )
         # Negative assertion: the env value must not appear.
         self.assertNotEqual(
@@ -676,7 +676,7 @@ class EnvMismatchOverrideTest(TestCase):
     @override_settings(
         SITE_BASE_URL='https://aishippinglabs.com',
         ALLOWED_HOSTS=[
-            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'aishippinglabs.com', 'configured.example.com',
             'localhost',
         ],
     )
@@ -686,21 +686,21 @@ class EnvMismatchOverrideTest(TestCase):
         # row, which must restore env-only behaviour.
         IntegrationSetting.objects.create(
             key='SITE_BASE_URL',
-            value='https://prod.aishippinglabs.com',
+            value='https://configured.example.com',
             group='site',
         )
         clear_config_cache()
-        # Sanity: with override, prod request is suppressed.
-        prod_request = self._request('prod.aishippinglabs.com', scheme='https')
-        self.assertIsNone(_build_env_mismatch_payload(prod_request))
+        # Sanity: with the override, the configured-host request is suppressed.
+        configured_request = self._request('configured.example.com', scheme='https')
+        self.assertIsNone(_build_env_mismatch_payload(configured_request))
 
         # Now delete the override the same way settings_save_group does.
         IntegrationSetting.objects.filter(key='SITE_BASE_URL').delete()
         clear_config_cache()
 
-        # With no override, the prod request now triggers the banner
-        # (env value is aishippinglabs.com which doesn't match prod).
-        payload = _build_env_mismatch_payload(prod_request)
+        # With no override, the configured-host request now triggers the banner
+        # (the env apex value does not match the configured test host).
+        payload = _build_env_mismatch_payload(configured_request)
         self.assertIsNotNone(payload)
         self.assertEqual(
             payload['configured_base_url'], 'https://aishippinglabs.com',
@@ -710,7 +710,7 @@ class EnvMismatchOverrideTest(TestCase):
 class EnvMismatchCrossProcessTest(TestCase):
     """Reproduce the operator-reported scenario from issue #462.
 
-    Env var is ``https://prod.aishippinglabs.com``, the DB row is
+    Env var is ``https://configured.example.com``, the DB row is
     ``https://aishippinglabs.com``, the request comes in on
     ``aishippinglabs.com``. Before the cross-process stamp fix, a
     gunicorn worker that had populated its in-process ``_cache`` BEFORE
@@ -743,9 +743,9 @@ class EnvMismatchCrossProcessTest(TestCase):
         )
 
     @override_settings(
-        SITE_BASE_URL='https://prod.aishippinglabs.com',
+        SITE_BASE_URL='https://configured.example.com',
         ALLOWED_HOSTS=[
-            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'aishippinglabs.com', 'configured.example.com',
         ],
     )
     def test_stale_worker_picks_up_db_override_after_save(self):
@@ -755,7 +755,7 @@ class EnvMismatchCrossProcessTest(TestCase):
         # With no DB row, get_config returns settings.SITE_BASE_URL (the
         # env-time snapshot). The cache itself is populated but empty.
         self.assertTrue(config_module._cache_populated)
-        self.assertEqual(first_read, 'https://prod.aishippinglabs.com')
+        self.assertEqual(first_read, 'https://configured.example.com')
         stamp_seen_by_worker_a = config_module._cache_stamp
 
         # Worker B (simulated) handles the Studio save: it writes the DB
@@ -777,14 +777,14 @@ class EnvMismatchCrossProcessTest(TestCase):
         request = self._request('aishippinglabs.com', scheme='https')
         # Banner must NOT fire. Before the fix, Worker A never refreshed
         # its cache and kept comparing against settings.SITE_BASE_URL
-        # (= prod.aishippinglabs.com), which produced a false-positive
+        # (= configured.example.com), which produced a false-positive
         # banner.
         self.assertIsNone(_build_env_mismatch_payload(request))
 
     @override_settings(
-        SITE_BASE_URL='https://prod.aishippinglabs.com',
+        SITE_BASE_URL='https://configured.example.com',
         ALLOWED_HOSTS=[
-            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'aishippinglabs.com', 'configured.example.com',
         ],
     )
     def test_alias_set_via_db_suppresses_banner_after_cross_process_save(self):

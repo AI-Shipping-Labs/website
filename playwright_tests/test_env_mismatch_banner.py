@@ -153,16 +153,16 @@ def test_studio_mismatch_banner_stays_compact_on_mobile(django_server, browser, 
 
 @pytest.mark.django_db(transaction=True)
 def test_db_override_clears_banner_on_next_page_load(django_server, browser, settings):
-    settings.SITE_BASE_URL = "https://prod.aishippinglabs.com"
+    settings.SITE_BASE_URL = "https://configured.example.com"
     _reset_site_settings()
     context = _login_staff(browser, "env-mismatch-override@test.com")
     page = context.new_page()
 
-    # Step 1: env says prod, the test server runs on 127.0.0.1 — banner fires.
+    # Step 1: env names another host; the local test server does not match.
     page.goto(f"{django_server}/studio/settings/", wait_until="domcontentloaded")
     banner = page.locator('[data-testid="env-mismatch-banner"]')
     assert banner.is_visible()
-    assert "https://prod.aishippinglabs.com" in banner.inner_text()
+    assert "https://configured.example.com" in banner.inner_text()
 
     # Step 2: save SITE_BASE_URL to the test server URL via the Site card form.
     site_card = _open_site_settings_card(page)
@@ -187,7 +187,7 @@ def test_db_override_clears_banner_on_next_page_load(django_server, browser, set
 def test_alias_set_via_db_suppresses_banner(django_server, browser, settings):
     # Env disagrees with request host, but operator sets SITE_BASE_URL_ALIASES
     # to include the request host — banner must not fire.
-    settings.SITE_BASE_URL = "https://prod.aishippinglabs.com"
+    settings.SITE_BASE_URL = "https://configured.example.com"
     _reset_site_settings()
     context = _login_staff(browser, "env-mismatch-alias@test.com")
     page = context.new_page()

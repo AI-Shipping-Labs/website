@@ -13,7 +13,7 @@ The app runs on AWS ECS Fargate behind an ALB, with Docker images stored in ECR.
 | RDS | `ai-shipping-labs` (PostgreSQL, private VPC) |
 | ALB | `aisl-alb` |
 | Dev URL | https://dev.aishippinglabs.com |
-| Prod URL | https://aishippinglabs.com (canonical) — `prod.aishippinglabs.com` is a legacy alias that still resolves to the same ECS service |
+| Prod URL | https://aishippinglabs.com |
 | Region | `eu-west-1` |
 
 The ECS task runs two containers from the same Docker image:
@@ -70,7 +70,7 @@ Fetched at runtime by the Django app (not injected via ECS):
 
 The app fetches this from Secrets Manager automatically if no direct PEM is set. The secret path and region can be configured in Studio with `GITHUB_APP_PRIVATE_KEY_SECRET_ID` and `GITHUB_APP_PRIVATE_KEY_SECRET_REGION`; otherwise the app uses `ai-shipping-labs/github-app-private-key` in `eu-west-1`. Fallback order: Studio PEM → local PEM file → env var → Studio secret path → default Secrets Manager path.
 
-When adding a new environment, make sure `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` include all domains that will submit forms to it. `deploy/update_task_def.py` currently writes `dev.aishippinglabs.com` for dev and `aishippinglabs.com,www.aishippinglabs.com` plus matching HTTPS origins for prod. If `prod.aishippinglabs.com` must keep accepting traffic, add it to the deploy helper and redeploy so the task definition matches reality.
+When adding a new environment, make sure `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` include all domains that will submit forms to it. `deploy/update_task_def.py` currently writes `dev.aishippinglabs.com` for dev and `aishippinglabs.com,www.aishippinglabs.com` plus matching HTTPS origins for prod.
 
 The app also has test-only/internal env controls:
 

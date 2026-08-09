@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, re_path
 
 from events.views.api import (
     cancel_registration_action,
@@ -11,6 +11,11 @@ from events.views.host_management import (
     host_event_manage,
     host_event_notify,
     host_event_update,
+)
+from events.views.legacy_recordings import (
+    legacy_recording_detail_redirect,
+    legacy_recording_not_found,
+    legacy_recordings_list_redirect,
 )
 from events.views.pages import (
     cancel_registration_page,
@@ -28,6 +33,24 @@ from events.views.pages import (
 from events.views.recording import event_recording_stream
 
 urlpatterns = [
+    # Issue #1381: object-aware compatibility for the retired public
+    # recording catalog. These explicit routes precede the project-level
+    # marketing-page fallback; unsupported nested/malformed paths remain 404.
+    path(
+        'event-recordings',
+        legacy_recordings_list_redirect,
+        name='legacy_recordings_list_redirect',
+    ),
+    path(
+        'event-recordings/<slug:slug>',
+        legacy_recording_detail_redirect,
+        name='legacy_recording_detail_redirect',
+    ),
+    re_path(
+        r'^event-recordings/(?P<suffix>.+)$',
+        legacy_recording_not_found,
+        name='legacy_recording_not_found',
+    ),
     path('events', events_list, name='events_list'),
     path(
         'events/<int:event_id>/host/manage',

@@ -463,7 +463,7 @@ def _build_workshop_page_jsonld(page):
     }
 
 
-def _build_workshop_video_jsonld(workshop):
+def _build_workshop_video_jsonld(workshop, *, include_video_url=True):
     """Build JSON-LD for a workshop recording page."""
     site_url = _get_site_url()
     page_url = f'{workshop.get_absolute_url()}/video'
@@ -476,6 +476,8 @@ def _build_workshop_video_jsonld(workshop):
             or getattr(event, 'recording_embed_url', '')
         )
         upload_date = _format_date(event)
+    if not include_video_url:
+        video_url = ''
 
     data = {
         '@context': 'https://schema.org',
@@ -632,8 +634,8 @@ JSONLD_BUILDERS = {
 }
 
 
-@register.simple_tag
-def structured_data(content=None, content_type=None):
+@register.simple_tag(takes_context=True)
+def structured_data(context, content=None, content_type=None):
     """Generate JSON-LD structured data script tag for a content object.
 
     Usage:
@@ -648,7 +650,16 @@ def structured_data(content=None, content_type=None):
             content_type = _get_content_type(content)
         builder = JSONLD_BUILDERS.get(content_type)
         if builder:
-            data = builder(content)
+            if content_type == 'workshop_video':
+                data = builder(
+                    content,
+                    include_video_url=context.get(
+                        'can_access_recording',
+                        True,
+                    ),
+                )
+            else:
+                data = builder(content)
         else:
             data = _build_organization_jsonld()
 

@@ -32,9 +32,8 @@ jobs:
 
     env:
       AWS_REGION: eu-west-1
-      # Hostname the verify step polls. The apex DNS cutover has happened —
-      # production users land on the apex, and `prod.aishippinglabs.com` is
-      # a legacy alias that may be retired.
+      # Hostname the verify step polls. Production users land on the
+      # canonical apex hostname.
       PROD_HOST: aishippinglabs.com
 
     steps:

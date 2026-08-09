@@ -14,7 +14,7 @@ NeverBounce, etc.). Per-domain MX results are cached for the run, so a
 
 Usage:
     uv run python scripts/validate_emails.py \
-        --base-url https://prod.aishippinglabs.com \
+        --base-url https://aishippinglabs.com \
         --token "$API_SHIPPING_LABS_API_TOKEN" \
         --tag event \
         --mark-bounced

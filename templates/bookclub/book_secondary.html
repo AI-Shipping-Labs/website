@@ -25,7 +25,7 @@
         <img src="{{ book.cover_image_url }}" alt="{{ book.title }} cover"
              class="h-56 w-40 flex-shrink-0 rounded-lg border border-border object-cover shadow-lg">
         {% else %}
-        <div class="flex h-56 w-40 flex-shrink-0 items-end rounded-lg border border-border bg-gradient-to-br {{ book.cover_accent }} to-transparent p-4 shadow-lg"
+        <div class="flex h-56 w-40 flex-shrink-0 items-end rounded-lg border border-border bg-gradient-to-br {{ book.cover_accent_class }} to-transparent p-4 shadow-lg"
              aria-hidden="true">
           <span class="text-sm font-medium text-foreground/80">{{ book.title }}</span>
         </div>

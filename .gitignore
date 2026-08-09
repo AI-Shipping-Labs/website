@@ -6,10 +6,12 @@ __pycache__/
 # Django
 *.sqlite3
 staticfiles/
+static/css/tailwind.css
 
 # Environment
 .env
 .venv/
+node_modules/
 *.pem
 
 # Coverage

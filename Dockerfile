@@ -1,3 +1,17 @@
+FROM node:24-slim AS css-builder
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+
+# Tailwind scans templates plus first-party Python/JavaScript producers. Copy
+# the source tree only into this disposable build stage and export the one
+# generated bundle; Node/npm/node_modules never enter the Python runtime image.
+COPY . .
+RUN npm run css:build
+
+
 FROM python:3.13-slim
 
 WORKDIR /app
@@ -16,6 +30,7 @@ RUN uv sync --no-dev --frozen
 
 # Copy application code
 COPY . .
+COPY --from=css-builder /app/static/css/tailwind.css /app/static/css/tailwind.css
 
 # Collect static files with the same storage backend used at runtime.
 RUN DEBUG=False SECRET_KEY=collectstatic-build-secret ALLOWED_HOSTS=localhost \

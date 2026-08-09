@@ -1,7 +1,9 @@
 """Studio admin views for sprints (issue #432)."""
 
 import datetime
+from pathlib import Path
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
@@ -175,18 +177,21 @@ class SprintCreateTest(TestCase):
         response = self.client.get('/studio/sprints/new')
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'select.studio-select')
-        self.assertContains(response, 'appearance: none')
-        self.assertContains(response, '-webkit-appearance: none')
-        self.assertContains(response, '-moz-appearance: none')
-        self.assertContains(response, 'hsl(var(--muted-foreground))')
         content = response.content.decode()
+        self.assertIn('/static/css/tailwind.css', content)
         status_pos = content.index('name="status"')
         status_tag = content[content.rfind('<select', 0, status_pos):status_pos + 250]
         min_tier_pos = content.index('name="min_tier_level"')
         min_tier_tag = content[content.rfind('<select', 0, min_tier_pos):min_tier_pos + 300]
         self.assertIn('studio-select', status_tag)
         self.assertIn('studio-select', min_tier_tag)
+
+        css = Path(settings.BASE_DIR, 'assets/css/tailwind.css').read_text()
+        self.assertIn('select.studio-select', css)
+        self.assertIn('appearance: none', css)
+        self.assertIn('-webkit-appearance: none', css)
+        self.assertIn('-moz-appearance: none', css)
+        self.assertIn('hsl(var(--muted-foreground))', css)
 
 
 class SprintEditTest(TestCase):

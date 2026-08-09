@@ -37,6 +37,12 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
       # See the install-step comment below in the `unit-tests` job for the
       # full `--locked` rationale (#657).
       - name: Install dependencies
@@ -63,7 +69,8 @@ jobs:
       - name: Collect static files
         run: |
           start=$(date +%s)
-          uv run python manage.py collectstatic --noinput
+          make collectstatic
+          uv run python scripts/verify_tailwind_build.py --rebuild --collected
           end=$(date +%s)
           echo "CI_TIMING phase=collectstatic seconds=$((end - start))"
 
@@ -344,8 +351,17 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
       - name: Install dependencies
         run: uv sync --locked
+
+      - name: Build Tailwind CSS
+        run: make css-build
 
       - name: Install Playwright browsers
         run: uv run playwright install --with-deps chromium

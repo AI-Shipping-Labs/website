@@ -321,7 +321,7 @@
         {# Issue #1339 — tier / pricing role: singular spotlight surface keeps rounded-xl, #}
         {# p-5 sm:p-8, shadow-xl on the highlighted tier only, and a full-width Join button #}
         {# with no navigation arrow. Mirrors payments/pricing.html; no visual change here. #}
-        <div class="relative flex flex-col overflow-visible rounded-xl border p-5 transition-all max-lg:flex-none max-lg:snap-center sm:p-8 {% if tier.highlighted %}border-accent bg-background shadow-xl ring-2 ring-accent/20 max-lg:w-[min(82vw,22rem)] lg:scale-105{% else %}border-border bg-background max-lg:w-[min(70vw,18rem)] max-lg:p-4{% endif %}"
+        <div class="relative flex flex-col overflow-visible rounded-xl border p-5 transition-all max-lg:flex-none max-lg:snap-center sm:p-8 {% if tier.highlighted %}border-accent bg-background shadow-xl ring-2 ring-accent/20 max-lg:w-[min(86vw,22rem)] lg:scale-105{% else %}border-border bg-background max-lg:w-[min(70vw,18rem)] max-lg:p-4{% endif %}"
              data-tier-card="{{ tier.stripe_key }}"
              data-testid="home-tier-card"
              style="{% if tier.highlighted %}box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);{% endif %}">

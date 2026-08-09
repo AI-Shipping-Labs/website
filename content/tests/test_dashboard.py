@@ -1312,8 +1312,8 @@ class DashboardTemplateTest(TierSetupMixin, TestCase):
 
     def test_dashboard_extends_base(self):
         response = self.client.get('/')
-        # base.html includes Tailwind CDN
-        self.assertContains(response, 'tailwindcss')
+        self.assertContains(response, '/static/css/tailwind.css')
+        self.assertNotContains(response, 'cdn.tailwindcss.com')
 
 
 # ============================================================

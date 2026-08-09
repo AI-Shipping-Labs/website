@@ -26,6 +26,7 @@ from urllib.parse import urlparse
 
 import pytest
 from django.utils import timezone
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     VIEWPORT,
@@ -895,9 +896,31 @@ class TestScenario1AnonymousReadsOpenContent:
 
         body = page.content()
         assert "A free recording about building AI tools" in body
-        # The video embed should be present (youtube_url rendered)
-        assert "youtube" in body.lower() or "iframe" in body.lower()
         assert "Upgrade to" not in body
+
+        # Issue #426 moved linked-event playback to the canonical Workshop
+        # video page.  Assert the actual player there rather than searching
+        # the whole event document for the word ``iframe``: Tailwind Play's
+        # injected Preflight stylesheet happened to contain that element
+        # selector, which made the old assertion a false positive.
+        rec_date = (
+            datetime.date.today() - datetime.timedelta(days=1)
+        ).isoformat()
+        page.goto(
+            f"{django_server}/workshops/{rec_date}-open-recording-all/video",
+            wait_until="domcontentloaded",
+        )
+        expect(page.get_by_test_id("video-title")).to_contain_text(
+            "Open Recording for All"
+        )
+        player = page.get_by_test_id("video-player")
+        expect(player).to_be_visible()
+        video = player.locator(".video-player")
+        assert video.get_attribute("data-source") == "youtube"
+        assert video.get_attribute("data-video-id") == "open123"
+        iframe = player.locator("iframe")
+        expect(iframe).to_be_visible()
+        assert "Upgrade to" not in page.locator("main").inner_text()
     @pytest.mark.core
     def test_anonymous_reads_open_tutorial(self, django_server, page):
         """Anonymous visitor navigates to /tutorials and reads an open

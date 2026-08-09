@@ -100,6 +100,12 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
       # We use `--locked` so any drift between pyproject.toml and uv.lock
       # fails the install step loudly with "requirements are unsatisfiable"
       # rather than silently re-resolving (which `--frozen` would mask: it
@@ -112,6 +118,9 @@ jobs:
       # with `uv sync` and commit it. Refs #657.
       - name: Install dependencies
         run: uv sync --locked
+
+      - name: Build Tailwind CSS
+        run: make css-build
 
       - name: Install Playwright browsers
         run: uv run playwright install --with-deps chromium
@@ -161,8 +170,17 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
       - name: Install dependencies
         run: uv sync --locked
+
+      - name: Build Tailwind CSS
+        run: make css-build
 
       - name: Install Playwright browsers
         run: uv run playwright install --with-deps chromium

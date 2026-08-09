@@ -28,3 +28,14 @@ class BookModelTest(TestCase):
     def test_required_level_display_uses_content_access_labels(self):
         # required_level draws its choices from content.access.VISIBILITY_CHOICES.
         self.assertEqual(self.book.get_required_level_display(), 'Main and above')
+
+    def test_cover_accent_class_preserves_documented_complete_values(self):
+        for value in ('from-accent/30', 'from-blue-500/30'):
+            with self.subTest(value=value):
+                self.book.cover_accent = value
+                self.assertEqual(self.book.cover_accent_class, value)
+
+    def test_cover_accent_class_safely_falls_back_for_runtime_values(self):
+        self.book.cover_accent = 'from-{{not-build-detectable}}'
+
+        self.assertEqual(self.book.cover_accent_class, 'from-accent/30')

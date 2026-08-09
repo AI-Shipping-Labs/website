@@ -94,7 +94,7 @@
         {# Issue #1339 — tier / pricing role: singular spotlight surface keeps rounded-xl, #}
         {# p-5 sm:p-8, shadow-xl on the highlighted tier only, and a full-width Join button #}
         {# with no navigation arrow. Mirrors home.html; no visual change here. #}
-        <div class="relative overflow-visible flex flex-col rounded-xl border p-5 sm:p-8 transition-all max-lg:flex-none max-lg:snap-center {% if item.tier.slug == 'free' %}pricing-free-tier-card {% endif %}{% if item.tier.slug == 'main' %}border-accent bg-background shadow-xl ring-2 ring-accent/20 mt-4 sm:mt-0 max-lg:w-[min(82vw,22rem)]{% else %}border-border bg-background {% if item.tier.slug == 'free' %}max-lg:w-[min(82vw,22rem)]{% else %}max-lg:w-[min(70vw,18rem)]{% endif %} max-lg:p-4{% endif %}"
+        <div class="relative overflow-visible flex flex-col rounded-xl border p-5 sm:p-8 transition-all max-lg:flex-none max-lg:snap-center {% if item.tier.slug == 'free' %}pricing-free-tier-card {% endif %}{% if item.tier.slug == 'main' %}border-accent bg-background shadow-xl ring-2 ring-accent/20 mt-4 sm:mt-0 max-lg:w-[min(82vw,22rem)]{% else %}border-border bg-background {% if item.tier.slug == 'free' %}max-lg:w-[min(82vw,22rem)]{% else %}max-lg:w-[min(72vw,18rem)]{% endif %} max-lg:p-4{% endif %}"
              data-tier-card="{{ item.tier.slug }}"
              data-testid="pricing-tier-card"
              {% if item.tier.slug == 'main' %}style="box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);"{% endif %}>

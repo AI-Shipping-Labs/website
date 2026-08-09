@@ -72,7 +72,7 @@ class ProseOverflowTemplateContractTest(TestCase):
         )
 
     def test_global_prose_table_contract_keeps_cells_on_one_line(self):
-        css = Path("templates/base.html").read_text()
+        css = Path("assets/css/tailwind.css").read_text()
 
         self.assertRegex(
             css,

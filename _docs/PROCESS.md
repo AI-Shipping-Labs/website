@@ -233,7 +233,9 @@ Point-in-time documents — audits, remediation plans, one-off analyses, dated s
 ## Technology Stack
 
 - Backend: Django (Python), managed with uv
-- Frontend: Tailwind CSS via CDN (no build step)
+- Frontend: pinned Tailwind CSS 3.4.17 compiled and minified at build time;
+  `make css-build` is canonical, local `make dev` watches sources, and the
+  generated `static/css/tailwind.css` is never edited or committed
 - Testing: Playwright for E2E, Django TestCase for unit/integration
 - Payments: Stripe
 - Community: Slack

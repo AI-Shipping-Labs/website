@@ -3,9 +3,11 @@
 {% load member_badges %}
 {% load member_empty_state %}
 {% load tag_filters %}
+{% load seo_tags %}
 
 {% block title %}Courses | AI Shipping Labs{% endblock %}
 {% block meta_description %}Structured courses on AI engineering, machine learning, and data engineering. Learn from hands-on projects and guided lessons.{% endblock %}
+{% block page_head_metadata %}{% page_seo_tags "Courses | AI Shipping Labs" "Structured courses on AI engineering, machine learning, and data engineering. Learn from hands-on projects and guided lessons." "/courses" %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}

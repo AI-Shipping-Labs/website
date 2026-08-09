@@ -62,6 +62,18 @@ class DevSearchExclusionResponseTest(TestCase):
         self.assertNotIn('<link rel="canonical"', html)
         self.assertIn('property="og:url" content="https://dev.aishippinglabs.com"', html)
 
+    def test_public_collection_metadata_keeps_dev_og_but_omits_canonical(self):
+        response = self.client.get('/about')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertDevHeader(response)
+        html = response.content.decode()
+        self.assertNotIn('<link rel="canonical"', html)
+        self.assertIn(
+            'property="og:url" content="https://dev.aishippinglabs.com/about"',
+            html,
+        )
+
     def test_dev_redirect_health_xml_and_404_all_receive_header(self):
         redirect_response = self.client.get('/account/')
         ping_response = self.client.get('/ping')

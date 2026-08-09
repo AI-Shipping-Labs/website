@@ -1,7 +1,9 @@
 {% extends "base.html" %}
+{% load seo_tags %}
 
 {% block title %}{{ page_title }}{% endblock %}
 {% block meta_description %}{{ page_meta_description }}{% endblock %}
+{% block page_head_metadata %}{% page_seo_tags page_title page_meta_description "/workshops/catalog" %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}

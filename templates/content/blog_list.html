@@ -4,9 +4,11 @@
 {% load member_empty_state %}
 {% load tag_filters %}
 {% load teaser_tags %}
+{% load seo_tags %}
 
 {% block title %}Blog | AI Shipping Labs{% endblock %}
 {% block meta_description %}Articles on AI engineering, MLOps, production systems, and building with data.{% endblock %}
+{% block page_head_metadata %}{% page_seo_tags "Blog | AI Shipping Labs" "Articles on AI engineering, MLOps, production systems, and building with data." "/blog" %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}

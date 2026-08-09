@@ -1,7 +1,9 @@
 {% extends "base.html" %}
+{% load seo_tags %}
 
 {% block title %}Hands-on AI Workshops | AI Shipping Labs{% endblock %}
 {% block meta_description %}Hands-on AI workshops with recordings, step-by-step writeups, tutorial pages, code, and materials for builders shipping real projects.{% endblock %}
+{% block page_head_metadata %}{% page_seo_tags "Hands-on AI Workshops | AI Shipping Labs" "Hands-on AI workshops with recordings, step-by-step writeups, tutorial pages, code, and materials for builders shipping real projects." "/workshops" %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}

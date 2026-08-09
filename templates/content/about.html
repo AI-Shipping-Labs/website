@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% load static %}
+{% load seo_tags %}
 
 {% block title %}About | AI Shipping Labs{% endblock %}
 {% block meta_description %}Learn about AI Shipping Labs, its founders, and membership options for builders shipping AI projects.{% endblock %}
+{% block page_head_metadata %}{% page_seo_tags "About | AI Shipping Labs" "Learn about AI Shipping Labs, its founders, and membership options for builders shipping AI projects." "/about" %}{% endblock %}
 
 {% block body %}
 <main class="min-h-screen">

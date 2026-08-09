@@ -12,13 +12,10 @@
   {% else %}
   {% block robots %}<meta name="robots" content="max-snippet:-1, max-image-preview:large, max-video-preview:-1">{% endblock %}
   {% endif %}
+  {% block page_head_metadata %}
   {% if not search_indexing_disabled %}
   {% block canonical %}<link rel="canonical" href="{{ site_url }}">{% endblock %}
   {% endif %}
-
-  <!-- Favicon & Apple Touch Icon -->
-  <link rel="icon" href="{% static 'rocket-upscale-no-bg-small.png' %}" type="image/png">
-  <link rel="apple-touch-icon" href="{% static 'rocket-upscale-no-bg-small.png' %}">
 
   <!-- Open Graph & Twitter Card -->
   {% block og_tags %}
@@ -37,6 +34,11 @@
   <meta name="twitter:image" content="{{ site_url }}{% static 'ai-shipping-labs.jpg' %}">
   <meta name="twitter:creator" content="@Al_Grigor">
   {% endblock %}
+  {% endblock %}
+
+  <!-- Favicon & Apple Touch Icon -->
+  <link rel="icon" href="{% static 'rocket-upscale-no-bg-small.png' %}" type="image/png">
+  <link rel="apple-touch-icon" href="{% static 'rocket-upscale-no-bg-small.png' %}">
 
   {% block verification %}{% endblock %}
 

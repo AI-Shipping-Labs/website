@@ -2,6 +2,12 @@
 
 If you are an operator bringing up a fresh environment (not a developer running locally), see [`_docs/configuration.md`](configuration.md) first — it covers the OAuth login + Studio integration setup. This file documents infrastructure, CI/CD, ECS env vars, and bastion / remote-DB access.
 
+Local development additionally requires Node.js 24 and npm. Tailwind CSS
+3.4.17 is pinned in `package.json`/`package-lock.json`; `make run` and
+`make run2` perform a minified one-time build, while `make dev` starts the CSS
+watcher. `make css-build` and `make css-watch` are the canonical explicit
+commands. The output at `static/css/tailwind.css` is generated and gitignored.
+
 ## Infrastructure
 
 The app runs on AWS ECS Fargate behind an ALB, with Docker images stored in ECR.
@@ -166,14 +172,25 @@ make setup
 make dev
 ```
 
-`make dev` starts the web server and the django-q worker using `Procfile.dev`; both use `SITE_BASE_URL=http://localhost:8000`. To run one process at a time:
+`make dev` starts the web server, django-q worker, and Tailwind watcher using
+`Procfile.dev`; the application processes use
+`SITE_BASE_URL=http://localhost:8000`. To run one process at a time:
 
 ```bash
 make run
 make worker
 ```
 
-For ECS, the same Docker image runs both containers. `scripts/entrypoint_init.py` imports Django once, applies migrations only when `RUN_MIGRATIONS=true`, runs `manage.py check --fail-level ERROR`, then starts gunicorn for the web container or `qcluster` for the worker container. The web container is essential; the worker container is non-essential but should be alive for background jobs and Studio worker health.
+For ECS, the same Docker image runs both containers. A disposable Node build
+stage installs the npm lockfile and compiles minified CSS; only that bundle is
+copied into the Python image before `collectstatic` fingerprints and creates
+gzip/Brotli variants. Node, npm, `node_modules`, and Tailwind are absent from
+the runtime image. `scripts/entrypoint_init.py` imports Django once, applies
+migrations only when `RUN_MIGRATIONS=true`, runs `manage.py check --fail-level
+ERROR`, then starts gunicorn for the web container or `qcluster` for the worker
+container. The web container is essential; the worker container is
+non-essential but should be alive for background jobs and Studio worker
+health.
 
 After a fresh setup or deploy, register recurring jobs:
 

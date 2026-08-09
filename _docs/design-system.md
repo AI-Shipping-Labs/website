@@ -9,16 +9,25 @@ This reference documents presentation contracts only. It does not introduce prod
 ## Stack and Sources of Truth
 
 - Templates: Django templates under `templates/`, with public pages extending `templates/base.html`.
-- Tailwind: loaded via CDN in `templates/base.html`; there is no Tailwind build step.
-- Tokens: HSL CSS variables live in `templates/base.html` on `:root` and `.dark`.
-- Theme mapping: the inline Tailwind config maps variables to `bg-*`, `text-*`, `border-*`, `ring-*`, and related utilities.
-- Fonts: Inter for UI text and JetBrains Mono for code, loaded from Google Fonts.
+- Tailwind: v3.4.17 is pinned and compiled with `make css-build` from
+  `assets/css/tailwind.css`; `templates/base.html` loads the generated bundle
+  through Django staticfiles.
+- Tokens: HSL CSS variables live in `assets/css/tailwind.css` on `:root` and `.dark`.
+- Theme mapping: `tailwind.config.js` maps variables to `bg-*`, `text-*`,
+  `border-*`, `ring-*`, and related utilities. It scans complete utility
+  strings in runtime templates, Python, and first-party JavaScript. Do not
+  construct utility fragments dynamically or add broad safelists.
+- Fonts: Inter for UI text and JetBrains Mono for code, loaded from Google
+  Fonts with `display=optional`; do not reintroduce a late font swap that can
+  shift the faster build-time-CSS first paint.
 - Icons: Lucide via CDN with `<i data-lucide="...">`; brand marks such as GitHub use inline SVG partials.
 - Theme: a blocking head script reads `localStorage['theme']` or `prefers-color-scheme` and toggles `<html class="dark">`.
 
 ## Color Tokens
 
-All theme-aware color should come from the variables in `templates/base.html`. Use opacity slash syntax such as `bg-accent/10`, `border-accent/30`, and `text-muted-foreground/40` instead of raw hex values.
+All theme-aware color should come from the variables in
+`assets/css/tailwind.css`. Use opacity slash syntax such as `bg-accent/10`,
+`border-accent/30`, and `text-muted-foreground/40` instead of raw hex values.
 
 | Variable | Light | Dark | Tailwind classes | Primary use |
 |---|---:|---:|---|---|
@@ -501,7 +510,12 @@ class="app-select w-full rounded-md border border-border bg-background px-4 py-2
 
 ### Chevron technique
 
-The custom caret is rendered with two `linear-gradient` backgrounds in the global CSS rule (`templates/base.html`, around the `select.app-select, select.studio-select` block). It is theme-aware, requires zero extra DOM nodes, and needs no JS init. Do not replace it with a Lucide overlay or a per-template SVG — the gradient approach is in production, accessible, and already covered by `studio.tests.test_form_components.GlobalSelectStyleTest`.
+The custom caret is rendered with two `linear-gradient` backgrounds in the
+global CSS rule in `assets/css/tailwind.css` (`select.app-select,
+select.studio-select`). It is theme-aware, requires zero extra DOM nodes, and
+needs no JS init. Do not replace it with a Lucide overlay or a per-template SVG
+— the gradient approach is in production, accessible, and already covered by
+`studio.tests.test_form_components.GlobalSelectStyleTest`.
 
 Do not add per-template `appearance: none` overrides or background-image rules to `<select>` elements. If a new visual variant is needed, extend the global rule, not the local template.
 

@@ -1,0 +1,11 @@
+{
+  "name": "ai-shipping-labs-static",
+  "private": true,
+  "scripts": {
+    "css:build": "tailwindcss -c tailwind.config.js -i assets/css/tailwind.css -o static/css/tailwind.css --minify",
+    "css:watch": "tailwindcss -c tailwind.config.js -i assets/css/tailwind.css -o static/css/tailwind.css --minify --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

@@ -6,6 +6,7 @@ Django-based community platform for [aishippinglabs.com](https://aishippinglabs.
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/) for package management
+- Node.js 24 and npm (the pinned Tailwind 3.4.17 build is lockfile-driven)
 
 ## Setup
 
@@ -28,6 +29,12 @@ make run
 ```
 
 Visit http://localhost:8000
+
+`make run` and `make run2` compile the minified Tailwind bundle once before
+starting Django. For active template/Python/JavaScript styling work, use
+`make dev`: its `Procfile.dev` runs `npm run css:watch` beside Django and the
+worker. The generated `static/css/tailwind.css` is gitignored and must never be
+edited or committed. Use `make css-build` for an explicit production build.
 
 ## Seed Data and Test Users
 

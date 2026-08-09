@@ -85,6 +85,23 @@ class Book(TimestampedModelMixin, models.Model):
             'cover image exists (e.g. from-accent/30, from-blue-500/30).'
         ),
     )
+
+    @property
+    def cover_accent_class(self):
+        """Return a complete, build-detectable fallback-cover class.
+
+        ``cover_accent`` predates compiled Tailwind and is editable through
+        Studio/API data. Never splice that runtime value into markup: Tailwind
+        cannot discover arbitrary database strings, and emitting them would
+        also allow an operator typo to silently remove the gradient. These are
+        the two values documented by the field and Studio form; unknown legacy
+        values fall back safely to the brand accent.
+        """
+        classes = {
+            'from-accent/30': 'from-accent/30',
+            'from-blue-500/30': 'from-blue-500/30',
+        }
+        return classes.get(self.cover_accent, 'from-accent/30')
     # Minimum tier level required to participate. Default Main (20) so
     # community members can join by default. Same level integers and choices
     # used elsewhere for content gating (``content.access.VISIBILITY_CHOICES``).

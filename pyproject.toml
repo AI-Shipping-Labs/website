@@ -26,7 +26,7 @@ dependencies = [
     "python-frontmatter>=1.1.0",  # parses YAML frontmatter in synced content (github_sync/parsing.py)
     "stripe>=14.3.0",             # payments — checkout, subscriptions, webhooks (payments/*)
     "watchdog>=6.0.0",            # filesystem watching — content watch command + dev autoreload
-    "whitenoise>=6.12.0",         # serves static files in production
+    "whitenoise[brotli]>=6.12.0",         # serves static files in production
 ]
 
 [tool.tmuxctl]

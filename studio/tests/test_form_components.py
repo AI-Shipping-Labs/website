@@ -125,14 +125,14 @@ class GlobalSelectStyleTest(SimpleTestCase):
         return Path(settings.BASE_DIR, 'templates', relative_path).read_text()
 
     def test_global_base_defines_app_select_and_studio_select_alias(self):
-        html = self._template('base.html')
+        css = Path(settings.BASE_DIR, 'assets/css/tailwind.css').read_text()
 
-        self.assertIn('select.app-select,', html)
-        self.assertIn('select.studio-select', html)
-        self.assertIn('appearance: none;', html)
-        self.assertIn('linear-gradient(45deg', html)
-        self.assertIn('hsl(var(--muted-foreground))', html)
-        self.assertNotIn('data:image/svg+xml', html)
+        self.assertIn('select.app-select,', css)
+        self.assertIn('select.studio-select', css)
+        self.assertIn('appearance: none;', css)
+        self.assertIn('linear-gradient(45deg', css)
+        self.assertIn('hsl(var(--muted-foreground))', css)
+        self.assertNotIn('data:image/svg+xml', css)
 
     def test_studio_base_does_not_duplicate_studio_select_rule(self):
         html = self._template('studio/base.html')

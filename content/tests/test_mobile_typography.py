@@ -1,9 +1,15 @@
 import re
+from pathlib import Path
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 User = get_user_model()
+
+
+def _tailwind_source():
+    return Path(settings.BASE_DIR, "assets/css/tailwind.css").read_text()
 
 
 class MobileTypographyAndSpacingTest(TestCase):
@@ -19,11 +25,10 @@ class MobileTypographyAndSpacingTest(TestCase):
     # ── iOS auto-zoom prevention ──
 
     def test_base_html_has_mobile_input_font_size_rule(self):
-        """base.html should include a CSS rule setting inputs to 16px on mobile to prevent iOS auto-zoom."""
-        response = self.client.get("/")
-        content = response.content.decode()
-        self.assertIn("font-size: 16px", content)
-        self.assertIn("input, textarea, select", content)
+        """The source stylesheet prevents iOS auto-zoom on mobile inputs."""
+        css = _tailwind_source()
+        self.assertIn("font-size: 16px", css)
+        self.assertIn("input, textarea, select", css)
 
     def test_login_page_renders(self):
         """Login page should render without errors."""
@@ -39,10 +44,9 @@ class MobileTypographyAndSpacingTest(TestCase):
 
     def test_prose_has_overflow_wrap(self):
         """The .prose CSS should include overflow-wrap or word-break for long URLs."""
-        response = self.client.get("/")
-        content = response.content.decode()
+        css = _tailwind_source()
         # Check that .prose style includes word-break: break-word
-        prose_section = content[content.index(".prose {"):]
+        prose_section = css[css.index(".prose {"):]
         prose_rule_end = prose_section.index("}")
         prose_rule = prose_section[:prose_rule_end]
         self.assertIn("break-word", prose_rule)
@@ -107,10 +111,9 @@ class MobileTypographyAndSpacingTest(TestCase):
 
     def test_touch_target_toggle_css_defined(self):
         """The touch-target-toggle CSS class should be defined with min-height: 44px."""
-        response = self.client.get("/")
-        content = response.content.decode()
-        self.assertIn("touch-target-toggle", content)
-        self.assertIn("min-height: 44px", content)
+        css = _tailwind_source()
+        self.assertIn("touch-target-toggle", css)
+        self.assertIn("min-height: 44px", css)
 
     # ── Section vertical padding reduced on mobile ──
 
@@ -148,11 +151,10 @@ class MobileTypographyAndSpacingTest(TestCase):
 
     def test_prose_tables_still_have_overflow_x_auto(self):
         """Prose table styles should retain overflow-x: auto for horizontal scrolling."""
-        response = self.client.get("/")
-        content = response.content.decode()
+        css = _tailwind_source()
         # Find .prose table rule
-        table_pos = content.index(".prose table")
-        table_rule = content[table_pos:content.index("}", table_pos)]
+        table_pos = css.index(".prose table")
+        table_rule = css[table_pos:css.index("}", table_pos)]
         self.assertIn("overflow-x: auto", table_rule)
 
     # ── Content offset still correct ──
@@ -166,8 +168,7 @@ class MobileTypographyAndSpacingTest(TestCase):
     # ── Both themes work ──
 
     def test_light_and_dark_theme_css_vars_present(self):
-        """Both light and dark theme CSS variables should be present in the base template."""
-        response = self.client.get("/")
-        content = response.content.decode()
-        self.assertIn(":root {", content)
-        self.assertIn(".dark {", content)
+        """Both light and dark theme variables remain in the source stylesheet."""
+        css = _tailwind_source()
+        self.assertIn(":root {", css)
+        self.assertIn(".dark {", css)

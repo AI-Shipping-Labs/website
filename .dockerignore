@@ -6,6 +6,8 @@ __pycache__/
 */__pycache__/
 */*/__pycache__/
 staticfiles/
+static/css/tailwind.css
+node_modules/
 _content-repo/
 .coverage
 htmlcov/

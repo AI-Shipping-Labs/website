@@ -1502,7 +1502,8 @@ class AccountPageHeaderFooterTest(TestCase):
 
     def test_extends_base_template(self):
         response = self.client.get("/account/")
-        self.assertContains(response, "tailwindcss")
+        self.assertContains(response, "/static/css/tailwind.css")
+        self.assertNotContains(response, "cdn.tailwindcss.com")
 
     def test_page_title(self):
         response = self.client.get("/account/")

@@ -1,4 +1,4 @@
-.PHONY: run run2 worker dev migrate qcache sync seed test test-core test-judge coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory check-openapi-drift boot-profile clean
+.PHONY: css-build css-watch check-tailwind collectstatic run run2 worker dev migrate qcache sync seed test test-core test-judge coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory check-openapi-drift boot-profile clean
 
 # Default SITE_BASE_URL for local dev so generated links (unsubscribe,
 # calendar invites, password resets, share URLs) point at the running
@@ -6,12 +6,31 @@
 #   SITE_BASE_URL=http://localhost:8001 make run2
 SITE_BASE_URL ?= http://localhost:8000
 
+# Tailwind is compiled from committed inputs on every build. The generated
+# bundle is intentionally gitignored; npm's lockfile keeps clean-checkout
+# installs deterministic and the Make dependency avoids reinstalling when the
+# local dependency tree is already current.
+node_modules/.package-lock.json: package.json package-lock.json
+	npm ci --ignore-scripts
+
+css-build: node_modules/.package-lock.json
+	npm run css:build
+
+css-watch: node_modules/.package-lock.json
+	npm run css:watch
+
+check-tailwind: css-build
+	uv run python scripts/verify_tailwind_build.py --rebuild
+
+collectstatic: css-build
+	uv run python manage.py collectstatic --noinput
+
 # Start dev server
-run: migrate
+run: migrate css-build
 	SITE_BASE_URL=$(SITE_BASE_URL) uv run python manage.py runserver
 
 # Start dev server on port 8001
-run2: migrate
+run2: migrate css-build
 	SITE_BASE_URL=http://localhost:8001 uv run python manage.py runserver 8001
 
 # Start django-q worker
@@ -20,7 +39,7 @@ worker: migrate
 
 # Start dev server + django-q worker together (Ctrl-C kills both).
 # Procfile.dev sets SITE_BASE_URL=http://localhost:8000 on each line.
-dev: migrate
+dev: migrate css-build
 	uv run honcho -f Procfile.dev start
 
 # Run migrations. The ``email_app`` ``0013_create_django_q_cache_table``
@@ -75,18 +94,18 @@ coverage:
 # port. A repo-local pytest guard blocks two local Playwright sessions inside
 # the same worktree because they would share test_playwright_db.sqlite3.
 # Set PLAYWRIGHT_DJANGO_PORT only to pin a known port.
-test-playwright:
+test-playwright: css-build
 	uv run pytest -m "not visual_regression" playwright_tests/ -v
 
 # Run only the core subset of Playwright tests (auth, access control, payments,
 # one happy path each for events/courses/sprints/plans, notifications, and
 # minimal Studio operator coverage). Runs on every push to main via Deploy Dev.
 # See _docs/testing-guidelines.md ("Core Playwright subset") for the tagging policy.
-test-playwright-core:
+test-playwright-core: css-build
 	uv run pytest -m "core and not visual_regression" playwright_tests/ -v
 
 # Run screenshot-generator/manual-review Playwright tests on demand.
-test-playwright-manual-visual:
+test-playwright-manual-visual: css-build
 	uv run pytest -m manual_visual playwright_tests/ -v
 
 # Run only the visual_regression-tagged tests on demand. The scheduled
@@ -97,7 +116,7 @@ test-playwright-manual-visual:
 # (only the Django side has migrated tests so far). When the Playwright
 # suite picks up its first ``visual_regression`` test, that test's
 # pass/fail will surface normally.
-test-visual-regression:
+test-visual-regression: css-build
 	uv run python manage.py test --tag=visual_regression --parallel
 	@uv run pytest -m visual_regression playwright_tests/ -v; \
 	status=$$?; \
@@ -162,6 +181,7 @@ boot-profile:
 # Clean generated files
 clean:
 	rm -f db.sqlite3
+	rm -f static/css/tailwind.css
 	rm -rf __pycache__ */__pycache__ */*/__pycache__
 	rm -rf .coverage htmlcov
 	rm -rf /tmp/screenshots_*

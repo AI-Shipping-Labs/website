@@ -1,0 +1,258 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Light theme (default) */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 9%;
+  --card: 0 0% 98%;
+  --card-foreground: 0 0% 9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 9%;
+  --primary: 0 0% 9%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 0 0% 96%;
+  --secondary-foreground: 0 0% 9%;
+  --muted: 0 0% 96%;
+  --muted-foreground: 0 0% 45%;
+  --accent: 75 100% 35%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84.2% 60.2%;
+  --border: 0 0% 90%;
+  --input: 0 0% 90%;
+  --ring: 45 100% 41%;
+  --hero-gradient-mid: 0 0% 96%;
+  --hero-gradient-end: 0 0% 100%;
+}
+
+/* Dark theme */
+.dark {
+  color-scheme: dark;
+  --background: 0 0% 4%;
+  --foreground: 0 0% 98%;
+  --card: 0 0% 7%;
+  --card-foreground: 0 0% 98%;
+  --popover: 0 0% 7%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 0 0% 4%;
+  --secondary: 0 0% 12%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 60%;
+  --accent: 75 100% 50%;
+  --accent-foreground: 0 0% 4%;
+  --destructive: 0 84.2% 60.2%;
+  --border: 0 0% 28%;
+  --input: 0 0% 28%;
+  --ring: 45 100% 51%;
+  --hero-gradient-mid: 0 0% 12%;
+  --hero-gradient-end: 0 0% 4%;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Hero gradient that responds to theme */
+.hero-gradient {
+  background: radial-gradient(ellipse at top, hsl(var(--hero-gradient-mid)), hsl(var(--hero-gradient-end)), hsl(var(--hero-gradient-end)));
+}
+
+/* Prose styles for markdown content */
+.prose h1 { font-size: 1.875rem; font-weight: 600; letter-spacing: -0.025em; margin-top: 2rem; margin-bottom: 1rem; }
+.prose h2 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.025em; margin-top: 2rem; margin-bottom: 1rem; }
+.prose h3 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.025em; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+.prose { overflow-wrap: break-word; word-break: break-word; }
+.prose p { margin-top: 1rem; font-size: 1rem; line-height: 1.75; color: hsl(var(--muted-foreground)); }
+.prose a,
+.prose a:visited { color: hsl(var(--accent)); text-decoration: underline; text-underline-offset: 4px; }
+.prose .event-widget-link,
+.prose .event-widget-link:visited,
+.prose .event-widget-link:hover,
+.prose .event-widget-link:focus-visible {
+  color: hsl(var(--accent-foreground));
+  text-decoration: none;
+}
+.prose blockquote { border-left: 2px solid hsl(var(--accent)); padding-left: 1rem; font-style: italic; color: hsl(var(--muted-foreground)); margin-top: 1rem; }
+.prose ul, .prose ol { margin-top: 1rem; margin-left: 1.5rem; color: hsl(var(--muted-foreground)); list-style: disc; }
+.prose ol { list-style: decimal; }
+.prose li { margin: 0.25rem 0; }
+/* Issue #527: tighten prose <li> rhythm inside the workshop landing
+   description and the tutorial page body so the markdown
+   Walkthrough/Links lists feel in the same family as the canonical
+   card rows. Pins line-height 1.5 + the 0.25rem margin against
+   any future drift in the global .prose li rule above.
+   Uses a `prose-tight` class (not the `data-testid` attribute) so
+   this CSS does not introduce literal substrings that would
+   false-positive `assertNotContains(response, 'data-testid="..."')`
+   paywall assertions in the test suite. Consumer templates opt in
+   by adding `prose-tight` as a second class on the prose wrapper. */
+.prose-tight li { margin: 0.25rem 0; line-height: 1.5; }
+.prose code { border-radius: 0.25rem; background: hsl(var(--secondary)); padding: 0.125rem 0.375rem; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace; color: hsl(var(--foreground)); border: 1px solid hsl(var(--border)); font-variant-ligatures: none; }
+.prose pre { margin-top: 1rem; border-radius: 0.5rem; border: 1px solid hsl(var(--border)); background: hsl(var(--card)); padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; overflow-x: auto; font-variant-ligatures: none; }
+.prose pre code { background: transparent; padding: 0; border: none; color: hsl(var(--card-foreground)); }
+.prose img { border-radius: 0.5rem; border: 1px solid hsl(var(--border)); width: 100%; margin: 1rem 0; }
+.prose figure { margin: 3rem 0; border: 1px solid hsl(var(--border) / 0.5); border-radius: 0.5rem; padding: 1rem; background: hsl(var(--card) / 0.3); }
+.prose figure img { margin: 0; }
+/* Issue #359: preserve Mermaid's natural SVG width inside a local
+   horizontal scroll container. Keeping these rules in the document
+   head also gives unprocessed diagrams their final preformatted height
+   at first paint, before the lazy renderer runs (issue #1237). */
+div.mermaid { max-width: 100%; overflow-x: auto; }
+div.mermaid > svg { max-width: none; height: auto; display: block; margin: 0 auto; }
+div.mermaid:not([data-processed]) { white-space: pre; }
+.prose figcaption { text-align: center; font-size: 0.875rem; font-style: italic; color: hsl(var(--muted-foreground) / 0.8); margin-top: 1rem; }
+.prose strong { color: hsl(var(--foreground)); font-weight: 600; }
+.prose table { width: 100%; border-collapse: collapse; margin-top: 1rem; margin-bottom: 1rem; font-size: 0.875rem; overflow-x: auto; display: block; }
+.prose thead { border-bottom: 2px solid hsl(var(--border)); }
+.prose th { padding: 0.5rem 0.75rem; text-align: left; font-weight: 600; color: hsl(var(--foreground)); white-space: nowrap; }
+.prose td { padding: 0.5rem 0.75rem; color: hsl(var(--muted-foreground)); border-bottom: 1px solid hsl(var(--border)); white-space: nowrap; }
+.prose tbody tr:hover { background: hsl(var(--secondary) / 0.5); }
+
+/* Pygments syntax highlighting (monokai theme for dark, github-like for light) */
+.prose .codehilite { background: hsl(var(--card)); color: #F8F8F2; border-radius: 0.5rem; border: 1px solid hsl(var(--border)); padding: 1rem; margin-top: 1rem; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; font-variant-ligatures: none; }
+:root:not(.dark) .prose .codehilite { color: hsl(0 0% 14%); }
+.prose .codehilite pre { margin: 0; padding: 0; border: none; background: transparent; }
+.prose .codehilite code { background: transparent; padding: 0; border: none; color: inherit; }
+.codehilite .hll { background-color: #49483e }
+.codehilite .c { color: #959077 }
+.codehilite .err { color: #ED007E; background-color: #1E0010 }
+.codehilite .k { color: #66D9EF }
+.codehilite .l { color: #AE81FF }
+.codehilite .n { color: #F8F8F2 }
+.codehilite .o { color: #FF4689 }
+.codehilite .p { color: #F8F8F2 }
+.codehilite .ch, .codehilite .cm, .codehilite .cp, .codehilite .cpf, .codehilite .c1, .codehilite .cs { color: #959077 }
+.codehilite .gd { color: #FF4689 }
+.codehilite .ge { font-style: italic }
+.codehilite .gi { color: #A6E22E }
+.codehilite .go { color: #66D9EF }
+.codehilite .gp { color: #FF4689; font-weight: bold }
+.codehilite .gs { font-weight: bold }
+.codehilite .gu { color: #959077 }
+.codehilite .kc, .codehilite .kd, .codehilite .kp, .codehilite .kr, .codehilite .kt { color: #66D9EF }
+.codehilite .kn { color: #FF4689 }
+.codehilite .m, .codehilite .mb, .codehilite .mf, .codehilite .mh, .codehilite .mi, .codehilite .mo, .codehilite .il { color: #AE81FF }
+.codehilite .s, .codehilite .sa, .codehilite .sb, .codehilite .sc, .codehilite .dl, .codehilite .sd, .codehilite .s2, .codehilite .sh, .codehilite .si, .codehilite .sx, .codehilite .sr, .codehilite .s1, .codehilite .ss { color: #E6DB74 }
+.codehilite .se { color: #AE81FF }
+.codehilite .na { color: #A6E22E }
+.codehilite .nc, .codehilite .nd, .codehilite .ne, .codehilite .nf, .codehilite .fm { color: #A6E22E }
+.codehilite .nt { color: #FF4689 }
+.codehilite .ow { color: #FF4689 }
+
+/* Light theme overrides for syntax highlighting */
+:root:not(.dark) .codehilite .c { color: #6a737d }
+:root:not(.dark) .codehilite .err { color: #cb2431; background-color: transparent }
+:root:not(.dark) .codehilite .k { color: #d73a49 }
+:root:not(.dark) .codehilite .l { color: #005cc5 }
+:root:not(.dark) .codehilite .n { color: #24292e }
+:root:not(.dark) .codehilite .o { color: #d73a49 }
+:root:not(.dark) .codehilite .p { color: #24292e }
+:root:not(.dark) .codehilite .ch, :root:not(.dark) .codehilite .cm, :root:not(.dark) .codehilite .cp, :root:not(.dark) .codehilite .cpf, :root:not(.dark) .codehilite .c1, :root:not(.dark) .codehilite .cs { color: #6a737d }
+:root:not(.dark) .codehilite .gd { color: #cb2431 }
+:root:not(.dark) .codehilite .gi { color: #22863a }
+:root:not(.dark) .codehilite .go { color: #005cc5 }
+:root:not(.dark) .codehilite .gp { color: #6f42c1; font-weight: bold }
+:root:not(.dark) .codehilite .gu { color: #6a737d }
+:root:not(.dark) .codehilite .kc, :root:not(.dark) .codehilite .kd, :root:not(.dark) .codehilite .kp, :root:not(.dark) .codehilite .kr, :root:not(.dark) .codehilite .kt { color: #d73a49 }
+:root:not(.dark) .codehilite .kn { color: #d73a49 }
+:root:not(.dark) .codehilite .m, :root:not(.dark) .codehilite .mb, :root:not(.dark) .codehilite .mf, :root:not(.dark) .codehilite .mh, :root:not(.dark) .codehilite .mi, :root:not(.dark) .codehilite .mo, :root:not(.dark) .codehilite .il { color: #005cc5 }
+:root:not(.dark) .codehilite .s, :root:not(.dark) .codehilite .sa, :root:not(.dark) .codehilite .sb, :root:not(.dark) .codehilite .sc, :root:not(.dark) .codehilite .dl, :root:not(.dark) .codehilite .sd, :root:not(.dark) .codehilite .s2, :root:not(.dark) .codehilite .sh, :root:not(.dark) .codehilite .si, :root:not(.dark) .codehilite .sx, :root:not(.dark) .codehilite .sr, :root:not(.dark) .codehilite .s1, :root:not(.dark) .codehilite .ss { color: #032f62 }
+:root:not(.dark) .codehilite .se { color: #005cc5 }
+:root:not(.dark) .codehilite .na { color: #6f42c1 }
+:root:not(.dark) .codehilite .nc, :root:not(.dark) .codehilite .nd, :root:not(.dark) .codehilite .ne, :root:not(.dark) .codehilite .nf, :root:not(.dark) .codehilite .fm { color: #6f42c1 }
+:root:not(.dark) .codehilite .nt { color: #22863a }
+:root:not(.dark) .codehilite .ow { color: #d73a49 }
+:root:not(.dark) .codehilite .hll { background-color: #fffbdd }
+
+/* Accordion styles */
+.accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+.accordion-content.open { max-height: 500px; }
+
+/* Shared <details> accordion (issue #516).
+   Used by templates/includes/_accordion.html and any consumer that
+   follows the same pattern. The chevron rotates 180° when the
+   parent <details> is open, and the default disclosure marker is
+   hidden so the lucide chevron is the only affordance. */
+details[open] > summary .accordion-chevron { transform: rotate(180deg); }
+details > summary.list-none::-webkit-details-marker,
+details > summary.list-none::marker { display: none; }
+
+/* Smooth scroll */
+html { scroll-behavior: smooth; }
+
+/* Mobile: prevent iOS auto-zoom on form inputs (requires >= 16px font-size) */
+@media (max-width: 767px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+select.app-select,
+select.studio-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, hsl(var(--muted-foreground)) 50%),
+    linear-gradient(135deg, hsl(var(--muted-foreground)) 50%, transparent 50%);
+  background-repeat: no-repeat;
+  background-position:
+    calc(100% - 1rem) 50%,
+    calc(100% - 0.75rem) 50%;
+  background-size: 0.25rem 0.25rem, 0.25rem 0.25rem;
+  padding-right: 2.5rem;
+}
+
+/* Touch target: ensure toggle switches have 44px minimum tap area */
+.touch-target-toggle {
+  position: relative;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Line clamp utility */
+.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.line-clamp-10 { display: -webkit-box; -webkit-line-clamp: 10; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Copy button for code blocks (issue #228).
+   The button is positioned in the top-right of the code block.
+   The wrapper class .code-copy-wrapper is added by JS so we don't have to
+   touch every template that renders markdown. The wrapper sits inside
+   .prose so existing prose styles continue to apply. */
+.code-copy-wrapper { position: relative; }
+.code-copy-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 0.75rem;
+  line-height: 1;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.25rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.code-copy-wrapper:hover .code-copy-btn,
+.code-copy-btn:focus-visible { opacity: 1; }
+.code-copy-btn:hover { color: hsl(var(--foreground)); }
+.code-copy-btn.is-copied { color: hsl(var(--accent)); opacity: 1; }
+/* Touch devices (no hover): always show the button so it's tappable. */
+@media (hover: none) {
+  .code-copy-btn { opacity: 1; }
+}

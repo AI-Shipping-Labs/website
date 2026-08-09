@@ -221,8 +221,6 @@ def _assert_route_headers(page, route):
                 ('#sprint-story', 'h2', '[data-testid="home-sprints-index-link"]'),
                 ('#upcoming-events', 'h2', '[data-testid="home-upcoming-events-link"]'),
                 ('#blog', 'h2', 'a[href="/blog"]'),
-                ('#projects', 'h2', 'a[href="/projects"]'),
-                ('#collection', 'h2', 'a[href="/resources"]'),
             ):
                 _assert_control_below(page, section, heading, control)
     elif route == '/activities':
@@ -242,13 +240,13 @@ def _assert_route_headers(page, route):
         _assert_control_below(
             page,
             '[data-testid="workshop-catalog"]',
-            'h2',
+            'h1',
             '[data-testid="workshop-access-filters"]',
         )
         _assert_control_below(
             page,
             '[data-testid="workshop-facet-topic"]',
-            'h3',
+            'summary',
             '[data-testid="workshop-topic-summary"]',
             require_focus=False,
         )

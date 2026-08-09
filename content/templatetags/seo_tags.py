@@ -744,6 +744,56 @@ def og_tags(context, content=None, content_type=None):
     return mark_safe('\n  '.join(tags))
 
 
+@register.simple_tag
+def page_seo_tags(title, description, canonical_path, canonical_query=''):
+    """Render the complete canonical and social contract for a public page.
+
+    Collection and static pages do not have a model instance for ``og_tags``
+    to inspect.  Their templates provide the same title and description used
+    by the document head, plus a stable route path.  The canonical host always
+    comes from the IntegrationSetting-aware site URL resolver; request host and
+    scheme data are deliberately ignored.
+    """
+    site_url = _get_site_url().rstrip('/')
+    path = str(canonical_path or '').strip()
+    if not path.startswith('/'):
+        path = f'/{path}'
+    if path != '/':
+        path = path.rstrip('/')
+
+    canonical_url = f'{site_url}{path}'
+    query = str(canonical_query or '').strip().lstrip('?')
+    if query:
+        canonical_url = f'{canonical_url}?{query}'
+
+    default_image_url = f'{site_url}{DEFAULT_OG_IMAGE_PATH}'
+    escaped_canonical_url = _escape_attr(canonical_url)
+    tags = [
+        f'<link rel="canonical" href="{escaped_canonical_url}">',
+        f'<meta property="og:title" content="{_escape_attr(title)}">',
+        (
+            '<meta property="og:description" '
+            f'content="{_escape_attr(description)}">'
+        ),
+        f'<meta property="og:url" content="{escaped_canonical_url}">',
+        '<meta property="og:type" content="website">',
+        f'<meta property="og:site_name" content="{SITE_NAME}">',
+        f'<meta property="og:image" content="{_escape_attr(default_image_url)}">',
+        '<meta property="og:image:width" content="1200">',
+        '<meta property="og:image:height" content="630">',
+        f'<meta property="og:image:alt" content="{DEFAULT_OG_IMAGE_ALT}">',
+        '<meta name="twitter:card" content="summary_large_image">',
+        f'<meta name="twitter:title" content="{_escape_attr(title)}">',
+        (
+            '<meta name="twitter:description" '
+            f'content="{_escape_attr(description)}">'
+        ),
+        f'<meta name="twitter:image" content="{_escape_attr(default_image_url)}">',
+        '<meta name="twitter:creator" content="@Al_Grigor">',
+    ]
+    return mark_safe('\n  '.join(tags))
+
+
 def _escape_attr(value):
     """Escape HTML attribute value."""
     if not value:

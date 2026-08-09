@@ -55,6 +55,16 @@ from events.services.time_windows import (
 
 VALID_EVENTS_FILTERS = {'all', 'upcoming', 'past'}
 PUBLIC_EVENTS_PER_PAGE = 20
+EVENTS_PAGE_TITLE = 'Events | AI Shipping Labs'
+EVENTS_PAGE_DESCRIPTION = (
+    'Scheduled live community sessions, registration, calendar view, and '
+    'recordings from past AI Shipping Labs events.'
+)
+PAST_EVENTS_PAGE_TITLE = 'Past Event Recordings | AI Shipping Labs'
+PAST_EVENTS_PAGE_DESCRIPTION = (
+    'Browse recorded AI Shipping Labs events, including workshops, community '
+    'sessions, and practical AI engineering recordings.'
+)
 _validate_resource_url = URLValidator(schemes=['http', 'https'])
 
 
@@ -85,6 +95,28 @@ def _pagination_query_prefix(request):
     if not encoded:
         return ''
     return f'{encoded}&'
+
+
+def _events_seo_context(filter_mode, selected_tags, page_obj):
+    """Return normalized metadata for the rendered Events collection page."""
+    is_past = filter_mode == 'past'
+    query_parts = ['filter=past'] if is_past else []
+
+    # A tag facet represents a narrower alternate view of its owning past
+    # collection.  It must not claim equivalence with an unfiltered page N.
+    if not selected_tags and page_obj is not None and page_obj.number > 1:
+        query_parts.append(f'page={page_obj.number}')
+
+    return {
+        'events_seo_title': (
+            PAST_EVENTS_PAGE_TITLE if is_past else EVENTS_PAGE_TITLE
+        ),
+        'events_seo_description': (
+            PAST_EVENTS_PAGE_DESCRIPTION if is_past
+            else EVENTS_PAGE_DESCRIPTION
+        ),
+        'events_canonical_query': '&'.join(query_parts),
+    }
 
 
 def _clean_event_materials(materials):
@@ -425,6 +457,7 @@ def events_list(request):
         'base_path': '/events',
         'subscribe_urls': subscribe_urls,
     }
+    context.update(_events_seo_context(filter_mode, selected_tags, page_obj))
     return render(request, 'events/events_list.html', context)
 
 

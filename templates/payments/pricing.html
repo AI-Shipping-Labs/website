@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
+{% load seo_tags %}
 
 {% block title %}Pricing | {{ site_name }}{% endblock %}
 {% block meta_description %}Choose your membership tier. Free newsletter, or paid access to exclusive content, community, courses, and personalized feedback.{% endblock %}
+{% block page_head_metadata %}{% page_seo_tags "Pricing | AI Shipping Labs" "Choose your membership tier. Free newsletter, or paid access to exclusive content, community, courses, and personalized feedback." "/pricing" %}{% endblock %}
 
 {% block body %}
 <main class="min-h-screen">

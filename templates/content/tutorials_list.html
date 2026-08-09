@@ -3,9 +3,11 @@
 {% load member_badges %}
 {% load member_empty_state %}
 {% load teaser_tags %}
+{% load seo_tags %}
 
 {% block title %}Tutorials | AI Shipping Labs{% endblock %}
 {% block meta_description %}Easy to read tutorials on narrow topics. Learn how to do this and that.{% endblock %}
+{% block page_head_metadata %}{% page_seo_tags "Tutorials | AI Shipping Labs" "Easy to read tutorials on narrow topics. Learn how to do this and that." "/tutorials" %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}

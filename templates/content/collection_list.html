@@ -4,9 +4,11 @@
 {% load member_empty_state %}
 {% load tag_filters %}
 {% load teaser_tags %}
+{% load seo_tags %}
 
 {% block title %}Curated Links | AI Shipping Labs{% endblock %}
 {% block meta_description %}Curated links to workshops, courses, articles, tools, and references for AI builders.{% endblock %}
+{% block page_head_metadata %}{% page_seo_tags "Curated Links | AI Shipping Labs" "Curated links to workshops, courses, articles, tools, and references for AI builders." "/resources" %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}

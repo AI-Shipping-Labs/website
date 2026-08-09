@@ -1,5 +1,7 @@
 import re
+from pathlib import Path
 
+from django.conf import settings
 from django.test import TestCase
 
 
@@ -104,9 +106,9 @@ class HomepageMobileLayoutTest(TestCase):
 
     def test_both_themes_css_vars_present(self):
         """Both light and dark theme CSS variables should be present."""
-        content = self._get_homepage_content()
-        self.assertIn(":root {", content)
-        self.assertIn(".dark {", content)
+        css = Path(settings.BASE_DIR, "assets/css/tailwind.css").read_text()
+        self.assertIn(":root {", css)
+        self.assertIn(".dark {", css)
 
     # -- Hero CTA buttons --
 

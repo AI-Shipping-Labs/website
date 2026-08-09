@@ -4,29 +4,31 @@ from django.conf import settings
 from django.http import HttpResponse
 
 from website.search_indexing import (
-    DEV_ROBOTS_DIRECTIVE,
-    search_indexing_disabled,
+    NOINDEX_ROBOTS_DIRECTIVE,
+    request_indexing_disabled,
 )
 
 
-class DevSearchExclusionMiddleware:
-    """Add the development deployment's robots header to every response.
+class SearchIndexingPolicyMiddleware:
+    """Apply the central environment/route/state robots response policy.
 
     This middleware deliberately sits outside ``HealthCheckMiddleware`` so
-    even the early ``/ping`` response, redirects, errors, and non-HTML
-    responses receive the deployment-wide exclusion directive.
+    even early responses, redirects, errors, and non-HTML responses can carry
+    the applicable exclusion directive without changing their body or status.
     """
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        indexing_disabled = search_indexing_disabled()
-        request.search_indexing_disabled = indexing_disabled
         response = self.get_response(request)
-        if indexing_disabled:
-            response['X-Robots-Tag'] = DEV_ROBOTS_DIRECTIVE
+        if request_indexing_disabled(request):
+            response['X-Robots-Tag'] = NOINDEX_ROBOTS_DIRECTIVE
         return response
+
+
+# Compatibility import for tests/extensions written against issue #1376.
+DevSearchExclusionMiddleware = SearchIndexingPolicyMiddleware
 
 
 class HealthCheckMiddleware:
@@ -42,7 +44,7 @@ class HealthCheckMiddleware:
     still pass.
 
     Must be placed before host-validating middleware. The dev search-exclusion
-    wrapper is allowed ahead of it because that wrapper does not inspect the
+    policy wrapper is allowed ahead of it because it does not inspect the
     request host and still lets this middleware short-circuit the request.
 
     The body is the ``settings.VERSION`` string (e.g.

@@ -126,7 +126,7 @@ class StudioArticleEditTest(TestCase):
     def test_edit_form_selects_use_studio_select_class(self):
         response = self.client.get(f'/studio/articles/{self.article.pk}/edit')
 
-        self.assertContains(response, 'select.studio-select')
+        self.assertContains(response, '/static/css/tailwind.css')
         content = response.content.decode()
         status_pos = content.index('name="status"')
         status_tag = content[content.rfind('<select', 0, status_pos):status_pos + 250]

@@ -92,6 +92,22 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
                 "aishippinglabs.com,www.aishippinglabs.com",
             )
 
+    def test_every_dev_and_prod_web_worker_gets_canonical_site_base_url(self):
+        generated = (
+            ('dev combined', self._env_by_container('dev')),
+            ('prod web', self._env_by_container('prod', 'web')),
+            ('prod worker', self._env_by_container('prod', 'worker')),
+        )
+        for deployment, env_by_container in generated:
+            expected = (
+                'https://dev.aishippinglabs.com'
+                if deployment.startswith('dev')
+                else 'https://aishippinglabs.com'
+            )
+            for container, environment in env_by_container.items():
+                with self.subTest(deployment=deployment, container=container):
+                    self.assertEqual(environment['SITE_BASE_URL'], expected)
+
     def test_run_migrations_only_set_on_web_container(self):
         with TemporaryDirectory() as tmpdir:
             input_path = Path(tmpdir) / "input.json"

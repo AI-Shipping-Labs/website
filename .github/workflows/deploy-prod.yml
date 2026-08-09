@@ -106,6 +106,9 @@ jobs:
             DEPLOYED=$(curl -fsSL --max-time 10 "https://${PROD_HOST}/ping" 2>/dev/null || echo "")
             if [ -n "${DEPLOYED}" ] && [ "${DEPLOYED}" = "${EXPECTED_TAG}" ]; then
               echo "::notice ::Prod verified — /ping returned ${DEPLOYED} after ${i} attempt(s)."
+              uv run python deploy/verify_sitemap.py \
+                "https://${PROD_HOST}/sitemap.xml" \
+                "https://${PROD_HOST}"
               exit 0
             fi
             echo "Attempt ${i}/30: prod /ping returned '${DEPLOYED:-<unreachable>}'; expected ${EXPECTED_TAG}. Sleeping 10s..."

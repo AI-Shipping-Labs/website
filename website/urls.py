@@ -1,6 +1,5 @@
 from django.conf import settings
 from django.contrib import admin
-from django.contrib.sitemaps.views import sitemap
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.urls import include, path, re_path
 
@@ -12,6 +11,7 @@ from accounts.urls import (
 from accounts.views.auth import signup_redirect_view
 from content.sitemaps import sitemaps
 from content.views.marketing_pages import marketing_page_fallback
+from content.views.sitemap import sitemap
 from email_app.urls import api_urlpatterns as email_api_urlpatterns
 from notifications.urls import api_urlpatterns as notification_api_urlpatterns
 from notifications.urls import page_urlpatterns as notification_page_urlpatterns

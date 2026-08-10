@@ -444,6 +444,29 @@ class SeriesPublicPageTest(TierSetupMixin, TestCase):
         # The past occurrence shows the Past state.
         self.assertContains(response, 'series-event-state-past')
 
+    def test_individually_registered_user_sees_no_additional_sessions_copy(self):
+        user = User.objects.create_user(
+            email='single@test.com', password='pass', email_verified=True,
+        )
+        user.tier = self.main_tier
+        user.save()
+        EventRegistration.objects.create(event=self.upcoming, user=user)
+        self.client.force_login(user)
+
+        response = self.client.get(self.url)
+
+        self.assertFalse(response.context['is_series_registered'])
+        self.assertContains(response, 'series-event-state-registered')
+        self.assertContains(
+            response,
+            'There are no additional upcoming sessions available for you '
+            'to register for right now.',
+        )
+        self.assertNotContains(
+            response,
+            'No upcoming sessions are open for registration right now.',
+        )
+
 
 @tag('core')
 class SeriesEntryPointTest(TierSetupMixin, TestCase):

@@ -23,6 +23,8 @@ Usage:
 
 import datetime
 import os
+import re
+from pathlib import Path
 
 import pytest
 
@@ -43,6 +45,20 @@ from django.db import connection  # noqa: E402
 # fixture served by the in-process runserver. Cannot run against a
 # deployed environment. See _docs/testing-guidelines.md.
 pytestmark = pytest.mark.local_only
+
+# The in-process Django static server does not provide the Range responses used
+# by production media delivery, so self-hosted seek tests must wait for the tiny
+# long-duration fixture to buffer in full. Keep this load-tolerant budget shared
+# by both buffering-bound journeys; each poll still returns immediately once
+# its specific media readiness condition is true.
+MEDIA_BUFFER_TIMEOUT_MS = 45_000
+_BYTE_RANGE_RE = re.compile(r"bytes=(\d*)-(\d*)")
+_CUE_FIXTURE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "static"
+    / "test_media"
+    / "cue_fixture.mp4"
+)
 
 
 def _clear_workshops():
@@ -120,6 +136,112 @@ def _self_hosted_url(django_server):
     return f'{django_server}/static/test_media/cue_fixture.mp4'
 
 
+def _fixture_range_response(fixture, requested_range):
+    """Build a deterministic full or single-range response for ``fixture``."""
+    fixture_size = len(fixture)
+    match = _BYTE_RANGE_RE.fullmatch(requested_range)
+    if not match or not any(match.groups()):
+        return {
+            "status": 200,
+            "content_type": "video/mp4",
+            "headers": {
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(fixture_size),
+            },
+            "body": fixture,
+        }
+
+    first, last = match.groups()
+    if first:
+        start = int(first)
+        end = int(last) if last else fixture_size - 1
+    else:
+        suffix_length = int(last)
+        start = max(0, fixture_size - suffix_length)
+        end = fixture_size - 1
+    end = min(end, fixture_size - 1)
+    if start >= fixture_size or start > end:
+        return {
+            "status": 416,
+            "headers": {"Content-Range": f"bytes */{fixture_size}"},
+        }
+
+    payload = fixture[start : end + 1]
+    return {
+        "status": 206,
+        "content_type": "video/mp4",
+        "headers": {
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(len(payload)),
+            "Content-Range": f"bytes {start}-{end}/{fixture_size}",
+        },
+        "body": payload,
+    }
+
+
+def _serve_fixture_with_ranges(page, django_server):
+    """Serve the committed MP4 with production-like byte-range semantics."""
+    fixture = _CUE_FIXTURE_PATH.read_bytes()
+
+    def fulfill(route):
+        requested_range = route.request.headers.get("range", "")
+        route.fulfill(**_fixture_range_response(fixture, requested_range))
+
+    page.route(_self_hosted_url(django_server), fulfill)
+
+
+@pytest.mark.core
+@pytest.mark.parametrize(
+    ("requested_range", "expected_status", "body_slice", "content_range"),
+    [
+        ("", 200, slice(None), None),
+        ("not-a-range", 200, slice(None), None),
+        ("bytes=-", 200, slice(None), None),
+        ("bytes=0-9", 206, slice(0, 10), "bytes 0-9/{size}"),
+        ("bytes=10-", 206, slice(10, None), "bytes 10-{last}/{size}"),
+        ("bytes=-10", 206, slice(-10, None), "bytes {suffix}-{last}/{size}"),
+        ("bytes={size}-", 416, None, "bytes */{size}"),
+        ("bytes=10-9", 416, None, "bytes */{size}"),
+    ],
+    ids=[
+        "no-range",
+        "invalid-unit",
+        "empty-range",
+        "bounded-range",
+        "open-range",
+        "suffix-range",
+        "past-end",
+        "reversed-range",
+    ],
+)
+def test_fixture_range_response_matrix(
+    requested_range, expected_status, body_slice, content_range,
+):
+    fixture = _CUE_FIXTURE_PATH.read_bytes()
+    fixture_size = len(fixture)
+    requested_range = requested_range.format(size=fixture_size)
+    response = _fixture_range_response(fixture, requested_range)
+
+    assert response["status"] == expected_status
+    assert response["headers"].get("Content-Range") == (
+        content_range.format(
+            size=fixture_size,
+            last=fixture_size - 1,
+            suffix=fixture_size - 10,
+        )
+        if content_range
+        else None
+    )
+    if body_slice is None:
+        assert "body" not in response
+        return
+
+    expected_body = fixture[body_slice]
+    assert response["body"] == expected_body
+    assert response["headers"]["Accept-Ranges"] == "bytes"
+    assert response["headers"]["Content-Length"] == str(len(expected_body))
+
+
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSelfHostedCuePausedThenPlays:
@@ -154,6 +276,10 @@ class TestSelfHostedCuePausedThenPlays:
         video = page.locator('#video-player-self-hosted')
         assert video.count() == 1
 
+        # Install the deterministic media route only after navigation so the
+        # page's own loadedmetadata/canplay listeners are attached before the
+        # range-backed reload emits readiness events.
+        _serve_fixture_with_ranges(page, django_server)
         # The local test static server does not honor HTTP Range requests
         # (production self-hosted recordings live on S3/CloudFront, which
         # do), so the source isn't seekable until fully buffered. Nudge a
@@ -170,7 +296,7 @@ class TestSelfHostedCuePausedThenPlays:
         page.wait_for_function(
             "() => { const v = document.getElementById('video-player-self-hosted');"
             " return v && v.currentTime > 900; }",
-            timeout=45000,
+            timeout=MEDIA_BUFFER_TIMEOUT_MS,
         )
 
         current_time = page.evaluate(
@@ -239,6 +365,7 @@ class TestSelfHostedCuePausedThenPlays:
         ctx.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSelfHostedChapterClickStillPlays:
     """Boundary: explicit chapter clicks keep their seek-AND-play behavior."""
@@ -251,6 +378,7 @@ class TestSelfHostedChapterClickStillPlays:
 
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
+        _serve_fixture_with_ranges(page, django_server)
         # Bare page (no ?t=) so we start paused at 0 before clicking.
         page.goto(
             f'{django_server}/workshops/{url_key}/video',
@@ -265,7 +393,7 @@ class TestSelfHostedChapterClickStillPlays:
         page.wait_for_function(
             "() => { const v = document.getElementById('video-player-self-hosted');"
             " return v && v.seekable.length && v.seekable.end(0) > 960; }",
-            timeout=15000,
+            timeout=MEDIA_BUFFER_TIMEOUT_MS,
         )
         # Confirm we start paused at 0 (no autoplay, no ?t= cue here).
         assert page.evaluate(

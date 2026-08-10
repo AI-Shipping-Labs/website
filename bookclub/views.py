@@ -109,6 +109,61 @@ def _derive_current_chapter(chapters):
     return chapters[-1]
 
 
+def _group_chapters_by_week(chapters):
+    """Group ordered chapters into weeks for the roadmap.
+
+    Returns a list of ``{'week_number', 'label', 'deadline', 'chapters'}`` in
+    reading order. Chapters are bucketed by ``week_number`` (preserving
+    first-appearance order); chapters with ``week_number is None`` collect into
+    a single group that renders without a heading — so a book that never sets a
+    week number looks exactly as it did before this feature.
+
+    ``label`` is the operator's ``week_label`` theme when any chapter in the
+    week set one, else ``"Week N"``. ``deadline`` is the week's latest chapter
+    deadline (the read-by date for the whole week).
+    """
+    groups = {}
+    order = []
+    for chapter in chapters:
+        key = chapter.week_number
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(chapter)
+
+    weeks = []
+    for key in order:
+        members = groups[key]
+        if key is None:
+            label = ''
+        else:
+            theme = next((c.week_label for c in members if c.week_label), '')
+            label = theme or f'Week {key}'
+        deadlines = [c.deadline for c in members if c.deadline]
+        weeks.append({
+            'week_number': key,
+            'label': label,
+            'deadline': max(deadlines) if deadlines else None,
+            'chapters': members,
+        })
+    return weeks
+
+
+def _derive_current_week(chapter_weeks, current_chapter):
+    """The week group that holds ``current_chapter`` (or ``None``).
+
+    Used for the "This week" callout so it can list the whole week's chapters,
+    not just one. Returns ``None`` when the current chapter has no week number
+    (the callout then falls back to the single-chapter form).
+    """
+    if current_chapter is None or current_chapter.week_number is None:
+        return None
+    return next(
+        (w for w in chapter_weeks if w['week_number'] == current_chapter.week_number),
+        None,
+    )
+
+
 def index(request):
     """``/books`` — public Book Club hub (never gated, like ``/sprints``).
 
@@ -184,11 +239,15 @@ def book_detail(request, slug):
         read_numbers = progress['read_numbers']
         for chapter in chapters:
             chapter.viewer_read = chapter.number in read_numbers
+        current_chapter = _derive_current_chapter(chapters)
+        chapter_weeks = _group_chapters_by_week(chapters)
         context.update({
             'viewer_total': progress['total'],
             'viewer_done': progress['done'],
             'viewer_pct': progress['pct'],
-            'current_chapter': _derive_current_chapter(chapters),
+            'current_chapter': current_chapter,
+            'chapter_weeks': chapter_weeks,
+            'current_week': _derive_current_week(chapter_weeks, current_chapter),
             # "When we meet" rows (#1369): the linked series' public
             # occurrences, ordered by start. Members only — computed inside the
             # is_member branch so meetings never reach the gated context and
@@ -529,8 +588,10 @@ def chapter_note(request, slug, number):
     Mirrors ``chapter_read``'s gate exactly (draft -> 404 for non-staff,
     anonymous -> login redirect, below-tier -> 403, unknown slug / chapter ->
     404). Upserts the viewer's single ``Note`` for the chapter from POST
-    ``body`` (+ optional mermaid ``diagram``); an empty ``body`` deletes the
-    note (idempotent clear). The first real save flips ``account_activated``
+    ``body`` (markdown; a fenced ````mermaid```` block renders as a diagram);
+    an empty ``body`` deletes the note (idempotent clear). The rendered,
+    sanitised ``body_html`` is recomputed by ``Note.save()``. The first real
+    save flips ``account_activated``
     via ``mark_activated`` (issue #768). Redirect (P/R/G) back to the chapter
     reader page so a browser refresh re-issues a GET.
     """
@@ -553,7 +614,6 @@ def chapter_note(request, slug, number):
         raise Http404('Unknown chapter.')
 
     body = (request.POST.get('body') or '').strip()
-    diagram = (request.POST.get('diagram') or '').strip()
 
     if not body:
         # Empty submit clears the note (idempotent).
@@ -562,7 +622,7 @@ def chapter_note(request, slug, number):
         Note.objects.update_or_create(
             user=request.user,
             chapter=chapter,
-            defaults={'body': body, 'diagram': diagram},
+            defaults={'body': body},
         )
         # Writing a note is a real platform action (issue #768). Idempotent.
         mark_activated(request.user)

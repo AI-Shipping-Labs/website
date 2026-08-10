@@ -80,12 +80,7 @@
               <p class="text-lg font-semibold text-foreground">Your note</p>
               <a href="?edit=1" class="{% button_classes 'secondary' size='sm' extra='shrink-0' %}" data-testid="own-note-edit">Edit note</a>
             </div>
-            <p class="mt-3 text-sm leading-relaxed text-foreground/90">{{ own_note.body }}</p>
-            {% if own_note.diagram %}
-            <div class="mt-3 overflow-x-auto rounded-lg border border-border bg-background p-4">
-              <div class="mermaid">{{ own_note.diagram }}</div>
-            </div>
-            {% endif %}
+            <div class="prose mt-3 max-w-none text-sm text-foreground/90" data-testid="own-note-body-rendered">{{ own_note.body_html|safe }}</div>
           </div>
           {% else %}
           <div class="rounded-lg border border-accent/30 bg-accent/5 p-6" data-testid="own-note-composer">
@@ -93,11 +88,9 @@
             <p class="mt-1 text-sm text-muted-foreground">What stuck with you from this chapter? Everyone reading along will see it.</p>
             <form method="post" action="{% url 'bookclub_chapter_note' book.slug chapter.number %}" class="mt-4">
               {% csrf_token %}
-              <textarea name="body" rows="4" placeholder="Write your takeaway…"
+              <textarea name="body" rows="5" placeholder="Write your takeaway… Markdown supported."
                         class="w-full rounded-md border border-border bg-background px-4 py-2 text-base text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="own-note-body">{% if editing %}{{ own_note.body }}{% endif %}</textarea>
-              <label class="mt-3 block text-xs font-medium text-muted-foreground" for="own-note-diagram">Optional diagram (mermaid)</label>
-              <textarea id="own-note-diagram" name="diagram" rows="3" placeholder="graph TD; A--&gt;B"
-                        class="mt-1 w-full rounded-md border border-border bg-background px-4 py-2 font-mono text-xs text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="own-note-diagram-input">{% if editing %}{{ own_note.diagram }}{% endif %}</textarea>
+              <p class="mt-2 text-xs text-muted-foreground">Markdown supported. Fence a code block with <code class="rounded bg-muted px-1 py-0.5 font-mono">```</code>; use <code class="rounded bg-muted px-1 py-0.5 font-mono">```mermaid</code> to render a diagram.</p>
               <button type="submit" class="{% button_classes 'primary' extra='mt-4' %}" data-testid="own-note-post">Post note</button>
             </form>
           </div>

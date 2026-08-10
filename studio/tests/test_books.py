@@ -139,6 +139,42 @@ class BookStudioChapterTest(TestCase):
         self.assertEqual(chapter.deadline, date(2026, 8, 17))
         self.assertEqual(chapter.week_label, 'Week 1')
 
+    def test_add_chapter_with_week_number(self):
+        response = self.client.post(
+            f'/studio/books/{self.book.pk}/chapters/add',
+            {'number': '0', 'title': 'Inference', 'week_number': '1'},
+        )
+        self.assertRedirects(response, f'/studio/books/{self.book.pk}/')
+        chapter = Chapter.objects.get(book=self.book, number=0)
+        self.assertEqual(chapter.week_number, 1)
+
+    def test_edit_chapter_week_number_and_clear(self):
+        chapter = Chapter.objects.create(
+            book=self.book, number=0, title='Inference', week_number=1,
+        )
+        # Set to week 2.
+        self.client.post(
+            f'/studio/books/{self.book.pk}/chapters/{chapter.pk}/edit',
+            {'number': '0', 'title': 'Inference', 'week_number': '2'},
+        )
+        chapter.refresh_from_db()
+        self.assertEqual(chapter.week_number, 2)
+        # Blank clears the grouping.
+        self.client.post(
+            f'/studio/books/{self.book.pk}/chapters/{chapter.pk}/edit',
+            {'number': '0', 'title': 'Inference', 'week_number': ''},
+        )
+        chapter.refresh_from_db()
+        self.assertIsNone(chapter.week_number)
+
+    def test_invalid_week_number_shows_friendly_error(self):
+        response = self.client.post(
+            f'/studio/books/{self.book.pk}/chapters/add',
+            {'number': '0', 'title': 'Inference', 'week_number': 'x'}, follow=True,
+        )
+        self.assertContains(response, 'Week number must be a whole number.')
+        self.assertEqual(Chapter.objects.filter(book=self.book).count(), 0)
+
     def test_duplicate_chapter_number_shows_friendly_error(self):
         Chapter.objects.create(book=self.book, number=0, title='Inference')
         response = self.client.post(

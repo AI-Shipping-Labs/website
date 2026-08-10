@@ -82,11 +82,15 @@ class MemberBookNoteApiTest(TestCase):
         self.assertEqual(response.json()["body"], "First")
         self.assertEqual(Note.objects.filter(user=self.member).count(), 1)
 
-        response = self._put(self.plaintext, {"body": "Second", "diagram": "graph TD; A-->B"})
+        response = self._put(
+            self.plaintext,
+            {"body": "Second\n\n```mermaid\ngraph TD; A-->B\n```"},
+        )
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["body"], "Second")
-        self.assertEqual(data["diagram"], "graph TD; A-->B")
+        self.assertEqual(data["body"], "Second\n\n```mermaid\ngraph TD; A-->B\n```")
+        # body is markdown; a mermaid fence renders to a diagram div in body_html.
+        self.assertIn('class="mermaid"', data["body_html"])
         self.assertEqual(Note.objects.filter(user=self.member).count(), 1)
 
     def test_put_first_save_marks_activated(self):

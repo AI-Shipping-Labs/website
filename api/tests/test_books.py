@@ -198,6 +198,30 @@ class BookChaptersApiTest(BookApiTestBase):
         chapter = Chapter.objects.get(book=self.book, number=0)
         self.assertEqual(chapter.deadline, date(2026, 9, 10))
 
+    def test_patch_chapter_week_number(self):
+        response = self._patch(
+            '/api/books/inference-engineering/chapters/0',
+            {'week_number': 2},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['week_number'], 2)
+        chapter = Chapter.objects.get(book=self.book, number=0)
+        self.assertEqual(chapter.week_number, 2)
+        # Null clears the grouping.
+        self._patch(
+            '/api/books/inference-engineering/chapters/0',
+            {'week_number': None},
+        )
+        chapter.refresh_from_db()
+        self.assertIsNone(chapter.week_number)
+
+    def test_patch_chapter_week_number_rejects_zero(self):
+        response = self._patch(
+            '/api/books/inference-engineering/chapters/0',
+            {'week_number': 0},
+        )
+        self.assertEqual(response.status_code, 422)
+
     def test_chapter_delete_returns_405(self):
         response = self.client.delete(
             '/api/books/inference-engineering/chapters/0', **self._auth(),

@@ -167,14 +167,39 @@ class ChapterNoteWriteTest(ChapterDetailFixture):
         self.main_user.refresh_from_db()
         self.assertTrue(self.main_user.account_activated)
 
-    def test_optional_diagram_is_saved(self):
+    def test_mermaid_fence_in_body_renders_to_diagram_div(self):
+        # A ```mermaid fence in the note body renders to a client-side
+        # ``div.mermaid`` in the sanitised body_html (no separate field).
         self.client.force_login(self.main_user)
         self.client.post(
             self._url(0) + '/note',
-            {'body': 'x', 'diagram': 'graph TD; A-->B'},
+            {'body': 'My take.\n\n```mermaid\ngraph TD; A-->B\n```'},
         )
         note = Note.objects.get(user=self.main_user, chapter=self.ch0)
-        self.assertEqual(note.diagram, 'graph TD; A-->B')
+        self.assertIn('class="mermaid"', note.body_html)
+        self.assertIn('graph TD; A--&gt;B', note.body_html)
+
+    def test_edit_recomputes_body_html(self):
+        # The edit path saves with update_fields={'body'}; body_html is derived
+        # and must be recomputed, not left stale from the first save.
+        self.client.force_login(self.main_user)
+        self.client.post(self._url(0) + '/note', {'body': 'first'})
+        self.client.post(self._url(0) + '/note', {'body': 'second take'})
+        note = Note.objects.get(user=self.main_user, chapter=self.ch0)
+        self.assertEqual(note.body, 'second take')
+        self.assertIn('second take', note.body_html)
+        self.assertNotIn('first', note.body_html)
+
+    def test_body_html_strips_script(self):
+        # Notes are member-authored and shown to every reader, so raw HTML is
+        # sanitised out of the stored body_html.
+        self.client.force_login(self.main_user)
+        self.client.post(
+            self._url(0) + '/note',
+            {'body': 'hi <script>alert(1)</script> there'},
+        )
+        note = Note.objects.get(user=self.main_user, chapter=self.ch0)
+        self.assertNotIn('<script>', note.body_html)
 
     def test_anonymous_write_redirects_to_login(self):
         response = self.client.post(self._url(0) + '/note', {'body': 'x'})

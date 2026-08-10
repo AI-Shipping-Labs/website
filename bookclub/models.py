@@ -26,6 +26,7 @@ from django.utils import timezone
 from content.access import LEVEL_MAIN
 from content.access import VISIBILITY_CHOICES as TIER_VISIBILITY_CHOICES
 from content.models.mixins import TimestampedModelMixin
+from content.utils.markdown import render_description_html
 
 # Operator/admin lifecycle state. Drives the public hub sections (built in
 # #1363): ``current`` = reading now, ``upcoming`` = coming up, ``finished`` =
@@ -222,11 +223,20 @@ class Chapter(TimestampedModelMixin, models.Model):
         blank=True,
         help_text='Optional meeting appointment date. No recurrence engine.',
     )
+    week_number = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text='Optional week grouping. Chapters sharing a week_number are '
+                  'read together and render under one "Week N" heading on the '
+                  'roadmap (e.g. chapters 0,1,2 -> week 1; 3,4 -> week 2).',
+    )
     week_label = models.CharField(
         max_length=40,
         blank=True,
         default='',
-        help_text='Optional display label, e.g. "Week 1".',
+        help_text='Optional theme/label for the week or chapter, e.g. '
+                  '"Batching". When a week_number is set, this overrides the '
+                  'default "Week N" heading.',
     )
     # Optional link to a real event (rendered / constrained to the book's
     # linked series in #1369). ``SET_NULL``: deleting the event unlinks the
@@ -363,7 +373,8 @@ class Note(TimestampedModelMixin, models.Model):
     """One member's per-chapter note (issue #1365).
 
     A first-class object (not a generic ``comments.Comment`` row): one note
-    per member per chapter, an optional mermaid ``diagram``, and it hosts a
+    per member per chapter, written in markdown (a fenced ````mermaid```` block
+    renders as a diagram; other fenced blocks render as code), and it hosts a
     comment thread of its own. The ``comment_content_id`` UUID is the ONLY
     bridge from a note to the shared ``comments`` app — comments key off the
     note, not off the chapter — mirroring ``plans.Plan.comment_content_id``.
@@ -383,12 +394,20 @@ class Note(TimestampedModelMixin, models.Model):
         related_name='book_notes',
     )
     body = models.TextField(
-        help_text='The note text. An empty submit clears/deletes the note.',
+        help_text='The note text, in markdown. An empty submit clears/deletes '
+                  'the note. A fenced ````mermaid```` code block renders as a '
+                  'diagram; other fenced code blocks render as code.',
     )
-    diagram = models.TextField(
+    # Rendered, sanitised HTML of ``body`` (markdown -> linkify -> nh3),
+    # recomputed on every save() exactly like ``events.Event.description_html``.
+    # Notes are member-authored and shown to every reader, so the stored HTML
+    # is always the sanitised output: a raw ``<script>`` is stripped, while
+    # fenced code blocks and the ``div.mermaid`` diagram wrapper survive for
+    # client-side rendering by ``static/js/mermaid-render.js``.
+    body_html = models.TextField(
         blank=True,
         default='',
-        help_text='Optional mermaid diagram source (no image uploads).',
+        editable=False,
     )
     # The single bridge to the shared comments app. Comments are keyed by this
     # UUID (never by the chapter), mirroring ``Plan.comment_content_id``.
@@ -413,6 +432,20 @@ class Note(TimestampedModelMixin, models.Model):
 
     def __str__(self):
         return f'{self.user} on {self.chapter}'
+
+    def save(self, *args, **kwargs):
+        # Render the markdown body to sanitised HTML on write, mirroring
+        # ``events.Event.description_html``. A fenced ````mermaid```` block
+        # becomes ``div.mermaid`` (rendered client-side); other fenced blocks
+        # become highlighted code; raw HTML/scripts are stripped by nh3.
+        self.body_html = render_description_html(self.body)
+        # ``Note.objects.update_or_create`` saves the edit path with
+        # ``update_fields={'body'}``; body_html is a derived column, so it must
+        # ride along or the stored HTML goes stale on every edit.
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None and 'body' in set(update_fields):
+            kwargs['update_fields'] = set(update_fields) | {'body_html'}
+        super().save(*args, **kwargs)
 
     def get_absolute_url(self):
         """The chapter reader page that hosts this note and its thread.

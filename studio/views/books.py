@@ -452,6 +452,24 @@ def _parse_chapter_number(raw):
     return value, ''
 
 
+def _parse_optional_week_number(raw):
+    """Parse an optional chapter ``week_number``. Returns ``(int|None, error)``.
+
+    Blank -> ``(None, '')`` (ungrouped). Otherwise a whole number >= 1 groups
+    the chapter into that week on the roadmap.
+    """
+    raw = (raw or '').strip()
+    if raw == '':
+        return None, ''
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None, 'Week number must be a whole number.'
+    if value < 1:
+        return None, 'Week number must be 1 or greater.'
+    return value, ''
+
+
 @staff_required
 @require_POST
 def book_chapter_create(request, book_id):
@@ -463,6 +481,9 @@ def book_chapter_create(request, book_id):
         (request.POST.get('deadline') or '').strip(), field_label='Deadline',
     )
     week_label = (request.POST.get('week_label') or '').strip()
+    week_number, week_error = _parse_optional_week_number(
+        request.POST.get('week_number'),
+    )
     event, event_error = _parse_chapter_event(
         (request.POST.get('event') or '').strip(),
     )
@@ -474,6 +495,8 @@ def book_chapter_create(request, book_id):
         error = 'Chapter title is required.'
     elif date_error:
         error = date_error
+    elif week_error:
+        error = week_error
     elif event_error:
         error = event_error
     elif Chapter.objects.filter(book=book, number=number).exists():
@@ -481,7 +504,8 @@ def book_chapter_create(request, book_id):
 
     chapter = Chapter(
         book=book, number=number, title=title,
-        deadline=deadline, week_label=week_label, event=event,
+        deadline=deadline, week_label=week_label, week_number=week_number,
+        event=event,
     )
     if not error:
         try:
@@ -511,6 +535,9 @@ def book_chapter_edit(request, book_id, chapter_id):
         (request.POST.get('deadline') or '').strip(), field_label='Deadline',
     )
     week_label = (request.POST.get('week_label') or '').strip()
+    week_number, week_error = _parse_optional_week_number(
+        request.POST.get('week_number'),
+    )
     event, event_error = _parse_chapter_event(
         (request.POST.get('event') or '').strip(),
     )
@@ -524,6 +551,8 @@ def book_chapter_edit(request, book_id, chapter_id):
         error = 'Chapter title is required.'
     elif date_error:
         error = date_error
+    elif week_error:
+        error = week_error
     elif event_error:
         error = event_error
     elif Chapter.objects.filter(book=book, number=number).exclude(pk=chapter.pk).exists():
@@ -533,6 +562,7 @@ def book_chapter_edit(request, book_id, chapter_id):
     chapter.title = title
     chapter.deadline = deadline
     chapter.week_label = week_label
+    chapter.week_number = week_number
     chapter.event = event
     chapter.summary = summary
     if not error:

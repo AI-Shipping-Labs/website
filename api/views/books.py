@@ -618,6 +618,24 @@ def _read_chapter_fields(data, *, partial):
                 details={"field": "week_label", "expected": "string"},
             )
         fields["week_label"] = data["week_label"]
+    if "week_number" in data:
+        raw_week = data["week_number"]
+        # Null clears the grouping; otherwise a whole number >= 1. Reject
+        # bools (isinstance(True, int) is True) and non-integers.
+        if raw_week is None:
+            fields["week_number"] = None
+        elif isinstance(raw_week, bool) or not isinstance(raw_week, int):
+            return None, error_response(
+                "week_number must be an integer or null", "invalid_type",
+                details={"field": "week_number", "expected": "integer|null"},
+            )
+        elif raw_week < 1:
+            return None, error_response(
+                "week_number must be 1 or greater", "validation_error",
+                status=422, details={"week_number": "Must be >= 1"},
+            )
+        else:
+            fields["week_number"] = raw_week
     if "summary" in data:
         if not isinstance(data["summary"], str):
             return None, error_response(

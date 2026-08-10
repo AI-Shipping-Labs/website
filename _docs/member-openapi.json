@@ -225,6 +225,7 @@
               "application/json": {
                 "example": {
                   "body": "The KV cache is the whole game.",
+                  "body_html": "<p>The KV cache is the whole game.</p>",
                   "book": {
                     "slug": "inference-engineering",
                     "title": "Inference Engineering"
@@ -235,7 +236,6 @@
                   },
                   "comment_content_id": "0b3d\u2026",
                   "created_at": "2026-08-06T10:00:00+00:00",
-                  "diagram": "",
                   "updated_at": "2026-08-06T10:00:00+00:00"
                 }
               }
@@ -279,7 +279,7 @@
         ]
       },
       "put": {
-        "description": "Creates or replaces the key owner's single note for the chapter (``update_or_create`` on owner + chapter). ``body`` is required; ``diagram`` (mermaid source) is optional. The first save flips the account's activation flag. Posting comments on a note and reading the group feed are out of scope for the member API \u2014 comments use the shared web endpoints. Requires the ``books:write_notes`` scope.",
+        "description": "Creates or replaces the key owner's single note for the chapter (``update_or_create`` on owner + chapter). ``body`` is required and is markdown \u2014 a fenced ```mermaid block renders as a diagram on the web, other fenced blocks render as code. The rendered, sanitised HTML is returned as ``body_html``. The first save flips the account's activation flag. Posting comments on a note and reading the group feed are out of scope for the member API \u2014 comments use the shared web endpoints. Requires the ``books:write_notes`` scope.",
         "parameters": [
           {
             "in": "path",
@@ -307,9 +307,6 @@
               "schema": {
                 "properties": {
                   "body": {
-                    "type": "string"
-                  },
-                  "diagram": {
                     "type": "string"
                   }
                 },

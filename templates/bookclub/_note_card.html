@@ -44,15 +44,10 @@ dead or leaking link.
   </div>
   {% endif %}
 
-  {# --- Body --- #}
-  <p class="mt-3 text-sm leading-relaxed text-foreground/90">{{ note.body }}</p>
-
-  {# --- Optional diagram (mermaid; no image uploads) --- #}
-  {% if note.diagram %}
-  <div class="mt-3 overflow-x-auto rounded-lg border border-border bg-background p-4">
-    <div class="mermaid">{{ note.diagram }}</div>
-  </div>
-  {% endif %}
+  {% comment %} Body: rendered markdown, sanitised on save. Fenced code blocks
+  render as code; a ```mermaid fence renders as a diagram via mermaid-render.js
+  (the hosting page includes _partials/mermaid_script.html). {% endcomment %}
+  <div class="prose mt-3 max-w-none text-sm text-foreground/90" data-testid="note-body">{{ note.body_html|safe }}</div>
 
   {% comment %} Comments: the shared comments-app thread, keyed by this note.
   Tighter section_class/heading_class keep the embedded thread proportional

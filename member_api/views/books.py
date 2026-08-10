@@ -255,7 +255,7 @@ _CHAPTER_NOTE_OPENAPI = {
                     "book": {"slug": "inference-engineering", "title": "Inference Engineering"},
                     "chapter": {"number": 0, "title": "Inference"},
                     "body": "The KV cache is the whole game.",
-                    "diagram": "",
+                    "body_html": "<p>The KV cache is the whole game.</p>",
                     "comment_content_id": "0b3d…",
                     "created_at": "2026-08-06T10:00:00+00:00",
                     "updated_at": "2026-08-06T10:00:00+00:00",
@@ -279,8 +279,10 @@ _CHAPTER_NOTE_OPENAPI = {
         "summary": "Upsert the caller's own note",
         "description": (
             "Creates or replaces the key owner's single note for the chapter "
-            "(``update_or_create`` on owner + chapter). ``body`` is required; "
-            "``diagram`` (mermaid source) is optional. The first save flips "
+            "(``update_or_create`` on owner + chapter). ``body`` is required "
+            "and is markdown — a fenced ```mermaid block renders as a diagram "
+            "on the web, other fenced blocks render as code. The rendered, "
+            "sanitised HTML is returned as ``body_html``. The first save flips "
             "the account's activation flag. Posting comments on a note and "
             "reading the group feed are out of scope for the member API — "
             "comments use the shared web endpoints. Requires the "
@@ -290,7 +292,6 @@ _CHAPTER_NOTE_OPENAPI = {
             "required": ["body"],
             "properties": {
                 "body": {"type": "string"},
-                "diagram": {"type": "string"},
             },
             "example": {"body": "The KV cache is the whole game."},
         },
@@ -392,12 +393,11 @@ def book_chapter_note(request, slug, number):
     body = (payload.get("body") or "").strip()
     if not body:
         return error_response("body is required", "body_required", status=422)
-    diagram = (payload.get("diagram") or "").strip()
 
     note, created = Note.objects.update_or_create(
         user=request.user,
         chapter=chapter,
-        defaults={"body": body, "diagram": diagram},
+        defaults={"body": body},
     )
     if created:
         # Writing a note is a real platform action (issue #768).

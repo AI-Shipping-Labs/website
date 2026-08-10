@@ -62,7 +62,7 @@
         </td>
         <td colspan="4" class="px-3 py-3">
           <form method="post" action="{% url 'studio_book_chapter_edit' book_id=book.pk chapter_id=chapter.pk %}"
-                class="grid grid-cols-1 sm:grid-cols-[4rem_1fr_9rem_7rem] gap-2 items-center" id="chapter-form-{{ chapter.pk }}">
+                class="grid grid-cols-1 sm:grid-cols-[3.5rem_1fr_9rem_3.5rem_7rem] gap-2 items-center" id="chapter-form-{{ chapter.pk }}">
             {% csrf_token %}
             <input type="number" name="number" value="{{ chapter.number }}" min="0" required
                    class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
@@ -73,9 +73,12 @@
             <input type="date" name="deadline" value="{{ chapter.deadline|form_date_value }}"
                    class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
                    aria-label="Chapter deadline">
-            <input type="text" name="week_label" value="{{ chapter.week_label }}" placeholder="Week 1"
+            <input type="number" name="week_number" value="{{ chapter.week_number|default_if_none:'' }}" min="1" placeholder="Wk"
                    class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-                   aria-label="Week label">
+                   aria-label="Week number" title="Week number — chapters sharing it group under one Week heading">
+            <input type="text" name="week_label" value="{{ chapter.week_label }}" placeholder="Theme"
+                   class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                   aria-label="Week label or theme">
             <div class="sm:col-span-4">
               <label class="block text-xs text-muted-foreground mb-1">Event</label>
               {% if series_events %}
@@ -138,7 +141,7 @@
 <div class="bg-card border border-border rounded-lg p-6 mb-6 max-w-3xl">
   <h3 class="text-sm font-semibold text-foreground mb-4">Add chapter</h3>
   <form method="post" action="{% url 'studio_book_chapter_create' book_id=book.pk %}"
-        class="grid grid-cols-1 sm:grid-cols-[4rem_1fr_9rem_7rem_auto] gap-2 items-end" data-testid="book-chapter-add-form">
+        class="grid grid-cols-1 sm:grid-cols-[3.5rem_1fr_9rem_3.5rem_7rem_auto] gap-2 items-end" data-testid="book-chapter-add-form">
     {% csrf_token %}
     <div>
       <label class="block text-xs text-muted-foreground mb-1">No.</label>
@@ -159,12 +162,18 @@
              data-testid="book-chapter-add-deadline">
     </div>
     <div>
-      <label class="block text-xs text-muted-foreground mb-1">Week</label>
-      <input type="text" name="week_label" placeholder="Week 1"
+      <label class="block text-xs text-muted-foreground mb-1">Wk</label>
+      <input type="number" name="week_number" min="1" placeholder="1"
+             class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+             data-testid="book-chapter-add-week-number" title="Week number — chapters sharing it group under one Week heading">
+    </div>
+    <div>
+      <label class="block text-xs text-muted-foreground mb-1">Theme</label>
+      <input type="text" name="week_label" placeholder="optional"
              class="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
              data-testid="book-chapter-add-week">
     </div>
-    <div class="sm:col-span-5">
+    <div class="sm:col-span-6">
       <label class="block text-xs text-muted-foreground mb-1">Event</label>
       {% if series_events %}
       <select name="event" data-testid="book-chapter-add-event" aria-label="Chapter event"

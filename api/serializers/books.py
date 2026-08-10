@@ -26,6 +26,7 @@ def serialize_chapter(chapter):
         "number": chapter.number,
         "title": chapter.title,
         "deadline": _isoformat_or_none(chapter.deadline),
+        "week_number": chapter.week_number,
         "week_label": chapter.week_label,
         "event": (
             {

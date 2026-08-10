@@ -53,7 +53,7 @@ def serialize_book_note(note, book, chapter):
         "book": {"slug": book.slug, "title": book.title},
         "chapter": {"number": chapter.number, "title": chapter.title},
         "body": note.body,
-        "diagram": note.diagram,
+        "body_html": note.body_html,
         "comment_content_id": str(note.comment_content_id),
         "created_at": note.created_at.isoformat(),
         "updated_at": note.updated_at.isoformat(),

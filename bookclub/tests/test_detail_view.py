@@ -91,3 +91,73 @@ class BookDetailGatingTest(TestCase):
     def test_unknown_slug_404s(self):
         response = self.client.get('/books/does-not-exist')
         self.assertEqual(response.status_code, 404)
+
+
+class BookRoadmapWeekGroupingTest(TestCase):
+    """Chapters group into weeks on the member roadmap (week_number)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        cls.book = Book.objects.create(
+            title='Weekly Book', slug='weekly-book', author='Author',
+            required_level=LEVEL_MAIN, status='current',
+        )
+        today = timezone.localdate()
+        # Week 1 = chapters 0,1,2 (nearer deadline); week 2 = chapters 3,4.
+        for n in (0, 1, 2):
+            Chapter.objects.create(
+                book=cls.book, number=n, title=f'Ch{n}', week_number=1,
+                deadline=today + timedelta(days=7),
+            )
+        for n in (3, 4):
+            Chapter.objects.create(
+                book=cls.book, number=n, title=f'Ch{n}', week_number=2,
+                deadline=today + timedelta(days=14),
+            )
+        cls.member = User.objects.create_user(email='wk@test.com', password='pw')
+        cls.member.tier = Tier.objects.get(slug='main')
+        cls.member.save()
+
+    def test_roadmap_renders_a_group_per_week(self):
+        self.client.force_login(self.member)
+        response = self.client.get('/books/weekly-book')
+        self.assertContains(response, 'data-week-number="1"')
+        self.assertContains(response, 'data-week-number="2"')
+        # Exactly two week groups, each with a heading.
+        self.assertContains(response, 'book-week-heading', count=2)
+        self.assertContains(response, '>Week 1<')
+        self.assertContains(response, '>Week 2<')
+
+    def test_week_label_overrides_the_default_heading(self):
+        Chapter.objects.filter(book=self.book, number=0).update(
+            week_label='Foundations',
+        )
+        self.client.force_login(self.member)
+        response = self.client.get('/books/weekly-book')
+        self.assertContains(response, '>Foundations<')
+        self.assertContains(response, '>Week 2<')
+
+    def test_this_week_lists_the_whole_week_set(self):
+        self.client.force_login(self.member)
+        response = self.client.get('/books/weekly-book')
+        # Current chapter is in week 1, so the callout lists chapters 0,1,2.
+        self.assertContains(response, 'book-this-week')
+        self.assertContains(response, 'book-this-week-chapter', count=3)
+
+    def test_book_without_week_numbers_renders_flat(self):
+        flat = Book.objects.create(
+            title='Flat Book', slug='flat-book', author='Author',
+            required_level=LEVEL_MAIN, status='current',
+        )
+        Chapter.objects.create(book=flat, number=0, title='A')
+        Chapter.objects.create(book=flat, number=1, title='B')
+        self.client.force_login(self.member)
+        response = self.client.get('/books/flat-book')
+        self.assertContains(response, 'book-participation-body')
+        self.assertContains(response, 'Ch. 0 — A')
+        # No week headings when no chapter has a week_number.
+        self.assertNotContains(response, 'book-week-heading')

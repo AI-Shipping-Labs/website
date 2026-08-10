@@ -65,10 +65,24 @@
       {% if is_member %}
       {# Participation body — the chapter roadmap. #}
       <section class="mt-12" data-testid="book-participation-body">
-        {% if current_chapter %}
+        {% if current_week %}
         {% comment %} "This week" callout — derived book-level state (not
-        per-user), text only. The open-chapter action arrives with the
-        per-chapter route (#1365). {% endcomment %}
+        per-user). When the current chapter belongs to a week, list the whole
+        read-together set; otherwise fall back to the single-chapter form. The
+        open-chapter action is each chapter's own link (#1365). {% endcomment %}
+        <div class="mb-8 rounded-lg border border-accent/40 bg-accent/5 p-6" data-testid="book-this-week">
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">This week{% if current_week.label %} &middot; {{ current_week.label }}{% endif %}</p>
+          <ul class="mt-2 space-y-1">
+            {% for ch in current_week.chapters %}
+            <li class="flex items-center justify-between gap-3">
+              <a href="{% url 'bookclub_chapter_detail' book.slug ch.number %}" class="text-base font-semibold text-foreground hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="book-this-week-chapter">Ch. {{ ch.number }} — {{ ch.title }}</a>
+              {% if ch.viewer_read %}<span class="text-xs text-muted-foreground">Read</span>{% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          {% if current_week.deadline %}<p class="mt-2 text-sm text-muted-foreground">read by {{ current_week.deadline|member_short_date }}</p>{% endif %}
+        </div>
+        {% elif current_chapter %}
         <div class="mb-8 rounded-lg border border-accent/40 bg-accent/5 p-6" data-testid="book-this-week">
           <p class="text-sm font-medium uppercase tracking-widest text-accent">This week</p>
           <p class="mt-1 text-base font-semibold text-foreground">Ch. {{ current_chapter.number }} — {{ current_chapter.title }}</p>
@@ -96,29 +110,45 @@
           <div class="h-full rounded-full bg-accent transition-all" style="width: {{ viewer_pct }}%"></div>
         </div>
         {% endif %}
-        {% if chapters %}
-        <ol class="mt-4 space-y-0.5">
-          {% for ch in chapters %}
-          <li id="chapter-{{ ch.number }}" class="flex min-h-[44px] flex-wrap items-center justify-between gap-2.5 rounded-md px-3 py-2 text-sm">
-            <a href="{% url 'bookclub_chapter_detail' book.slug ch.number %}" class="group inline-flex items-center gap-1 text-foreground hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="book-chapter-link">Ch. {{ ch.number }} — {{ ch.title }}<i data-lucide="chevron-right" class="h-4 w-4 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-accent"></i></a>
-            <div class="flex items-center gap-3 text-xs text-muted-foreground">
-              {% if ch.week_label %}<span>{{ ch.week_label }}</span>{% endif %}
-              {% if ch.deadline %}<span data-testid="book-chapter-deadline">{{ ch.deadline|member_short_date }}</span>{% endif %}
-              <form method="post" action="{% url 'bookclub_chapter_read' book.slug ch.number %}" class="flex items-center">
-                {% csrf_token %}
-                {% if ch.viewer_read %}
-                <input type="hidden" name="read" value="0">
-                {% member_status_badge "Read" status="active" icon="check" testid="book-chapter-read-badge" %}
-                <button type="submit" class="{% button_classes 'secondary' size='sm' extra='ml-2' %}" data-testid="book-chapter-mark-unread">Mark unread</button>
-                {% else %}
-                <input type="hidden" name="read" value="1">
-                <button type="submit" class="{% button_classes 'secondary' size='sm' %}" data-testid="book-chapter-mark-read">Mark as read</button>
-                {% endif %}
-              </form>
+        {% if chapter_weeks %}
+        {% comment %} Roadmap grouped by week. Chapters sharing a week_number
+        render under one "Week N" heading (the read-together set); chapters
+        without a week_number fall into an unheaded group so a book that never
+        sets weeks looks exactly as before. {% endcomment %}
+        <div class="mt-4 space-y-6">
+          {% for week in chapter_weeks %}
+          <div{% if week.week_number %} data-testid="book-week-group" data-week-number="{{ week.week_number }}"{% endif %}>
+            {% if week.week_number %}
+            <div class="flex flex-wrap items-baseline justify-between gap-2 px-3">
+              <h3 class="text-sm font-semibold tracking-tight text-foreground" data-testid="book-week-heading">{{ week.label }}</h3>
+              {% if week.deadline %}<span class="text-xs text-muted-foreground" data-testid="book-week-deadline">read by {{ week.deadline|member_short_date }}</span>{% endif %}
             </div>
-          </li>
+            {% endif %}
+            <ol class="mt-1 space-y-0.5">
+              {% for ch in week.chapters %}
+              <li id="chapter-{{ ch.number }}" class="flex min-h-[44px] flex-wrap items-center justify-between gap-2.5 rounded-md px-3 py-2 text-sm">
+                <a href="{% url 'bookclub_chapter_detail' book.slug ch.number %}" class="group inline-flex items-center gap-1 text-foreground hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="book-chapter-link">Ch. {{ ch.number }} — {{ ch.title }}<i data-lucide="chevron-right" class="h-4 w-4 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-accent"></i></a>
+                <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                  {% if ch.week_label and not ch.week_number %}<span>{{ ch.week_label }}</span>{% endif %}
+                  {% if ch.deadline %}<span data-testid="book-chapter-deadline">{{ ch.deadline|member_short_date }}</span>{% endif %}
+                  <form method="post" action="{% url 'bookclub_chapter_read' book.slug ch.number %}" class="flex items-center">
+                    {% csrf_token %}
+                    {% if ch.viewer_read %}
+                    <input type="hidden" name="read" value="0">
+                    {% member_status_badge "Read" status="active" icon="check" testid="book-chapter-read-badge" %}
+                    <button type="submit" class="{% button_classes 'secondary' size='sm' extra='ml-2' %}" data-testid="book-chapter-mark-unread">Mark unread</button>
+                    {% else %}
+                    <input type="hidden" name="read" value="1">
+                    <button type="submit" class="{% button_classes 'secondary' size='sm' %}" data-testid="book-chapter-mark-read">Mark as read</button>
+                    {% endif %}
+                  </form>
+                </div>
+              </li>
+              {% endfor %}
+            </ol>
+          </div>
           {% endfor %}
-        </ol>
+        </div>
         {% else %}
         <p class="mt-3 text-sm text-muted-foreground">The chapter roadmap is being prepared.</p>
         {% endif %}

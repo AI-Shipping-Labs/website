@@ -11,6 +11,7 @@ import tempfile
 import uuid
 
 from django.test import TestCase, override_settings
+from PIL import Image
 
 from content.models import Article, Course, Project
 from integrations.models import ContentSource
@@ -140,13 +141,13 @@ class ArticleCoverImageSyncTest(TestCase):
             f.write('\n'.join(lines))
 
     def _write_image(self, rel_path):
-        """Drop a minimal PNG-shaped byte string at ``rel_path`` so the
-        sync's image-walker counts it as a known image (issue #797).
-        """
+        """Write a small decodable raster controlled by the fixture repo."""
         full_path = os.path.join(self.temp_dir, rel_path)
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        with open(full_path, 'wb') as f:
-            f.write(b'\x89PNG\r\n\x1a\nfake image bytes')
+        image_format = (
+            'JPEG' if rel_path.lower().endswith(('.jpg', '.jpeg')) else 'PNG'
+        )
+        Image.new('RGB', (320, 200), 'navy').save(full_path, image_format)
 
     @override_settings(CONTENT_CDN_BASE='https://cdn.example.com')
     def test_relative_cover_image_rewritten(self):

@@ -5,6 +5,7 @@ import os
 from django.db import transaction
 from django.utils import timezone
 
+from integrations.services.article_images import build_article_image_manifest
 from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
 from integrations.services.github_sync.common import logger
 from integrations.services.github_sync.media import (
@@ -152,7 +153,9 @@ def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
 
             seen_slugs.add(current_slug)
 
-            # Rewrite image URLs
+            # Build responsive variants from the author-owned references before
+            # rewriting them. The manifest itself is machine-owned, while the
+            # Markdown and cover fields retain their existing sync behavior.
             base_dir = os.path.dirname(rel_path)
 
             # Edge Case 8: Check for broken image references
@@ -162,7 +165,27 @@ def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
                     known_images, stats['errors'],
                 )
 
-            body = rewrite_image_urls(body, source.repo_name, base_dir)
+            authored_body = body
+            authored_cover = (
+                metadata.get('cover_image', '')
+                or metadata.get('cover_image_url', '')
+            )
+            image_manifest, image_stats = build_article_image_manifest(
+                source=source,
+                repo_dir=repo_dir,
+                rel_path=rel_path,
+                body=authored_body,
+                cover_image=authored_cover,
+            )
+            for image_error in image_stats.errors:
+                stats['errors'].append({
+                    'file': rel_path,
+                    'article': current_slug,
+                    'source': source.repo_name,
+                    **image_error,
+                })
+
+            body = rewrite_image_urls(authored_body, source.repo_name, base_dir)
 
             # Extract page_type and data from frontmatter
             page_type = metadata.get('page_type', 'blog')
@@ -177,10 +200,12 @@ def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
                 'author': metadata.get('author', ''),
                 'tags': metadata.get('tags', []),
                 'cover_image_url': rewrite_cover_image_url(
-                    metadata.get('cover_image', '') or metadata.get('cover_image_url', ''),
+                    authored_cover,
                     source, rel_path,
                     known_images=known_images, errors=stats['errors'],
                 ),
+                'image_manifest': image_manifest,
+                'image_manifest_complete': image_stats.complete,
                 'required_level': metadata.get('required_level', 0),
                 'published': published,
                 'source_repo': source.repo_name,

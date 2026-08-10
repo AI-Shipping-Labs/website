@@ -105,8 +105,8 @@ def rewrite_cover_image_url(
             before, preserving backward compatibility.
         errors: Optional list to receive structured error entries when
             ``known_images`` validation finds a missing reference.
-            Each entry has the shape
-            ``{'file': rel_path, 'error': <message>, 'step': 'cover_image_missing'}``.
+            Each entry has the shape ``{'file': rel_path, 'error': <message>,
+            'step': 'cover_image_missing', 'retryable': False}``.
 
     Returns:
         str: The CDN URL if the path was relative and present in
@@ -129,6 +129,10 @@ def rewrite_cover_image_url(
                     f'cover_image references missing file: {cover_image}'
                 ),
                 'step': 'cover_image_missing',
+                # The warning remains operator-visible, but an unchanged
+                # repository cannot make this authored path appear. The HEAD
+                # fast path may therefore treat it as a completed fallback.
+                'retryable': False,
             })
         return ''
     image_base, include_repo_prefix = _image_base_url(source.repo_name)
@@ -304,7 +308,9 @@ def _collect_image_paths(content_dir):
 def _check_broken_image_refs(body, rel_path, repo_name, base_dir, known_images, errors):
     """Check for broken image references in markdown content.
 
-    Logs warnings for images not found in the repo.
+    Logs terminal, operator-visible warnings for images not found in the repo.
+    An unchanged repository cannot repair an absent authored path, so the
+    classification is explicitly non-retryable for HEAD-skip reconciliation.
     """
     # Match markdown image syntax: ![alt](path)
     md_pattern = r'!\[([^\]]*)\]\(([^)]+)\)'
@@ -317,6 +323,8 @@ def _check_broken_image_refs(body, rel_path, repo_name, base_dir, known_images, 
             errors.append({
                 'file': rel_path,
                 'error': f'Broken image reference: {img_path} not found in repo',
+                'step': 'image_reference_missing',
+                'retryable': False,
             })
             logger.warning(
                 'Broken image reference in %s: %s not found in repo',

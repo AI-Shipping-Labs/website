@@ -5,6 +5,7 @@
 {% load tag_filters %}
 {% load teaser_tags %}
 {% load seo_tags %}
+{% load article_images %}
 
 {% block title %}Blog | AI Shipping Labs{% endblock %}
 {% block meta_description %}Articles on AI engineering, MLOps, production systems, and building with data.{% endblock %}
@@ -76,8 +77,7 @@
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div class="sm:w-48 sm:flex-shrink-0" data-testid="blog-card-thumbnail">
                 {% if article.cover_image_url %}
-                <img src="{{ article.cover_image_url }}" alt="{{ article.title }}"
-                     class="w-full aspect-video sm:aspect-auto sm:h-32 object-cover rounded-lg border border-border">
+                {% article_cover_image article "(min-width: 640px) 12rem, calc(100vw - 2rem)" "w-full aspect-video sm:aspect-auto sm:h-32 object-cover rounded-lg border border-border" forloop.first %}
                 {% else %}
                 <div class="flex aspect-video w-full items-center justify-center rounded-lg border border-border bg-secondary sm:h-32 sm:aspect-auto" data-testid="blog-card-thumbnail-fallback" aria-hidden="true">
                   <i data-lucide="file-text" class="h-8 w-8 text-muted-foreground/50"></i>

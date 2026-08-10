@@ -18,6 +18,58 @@ markdown article, course, or project. The flow is:
 This bucket is public-read by design — images load directly in
 browsers via the CDN.
 
+## Article responsive variants
+
+Article sync keeps the author-owned `cover_image_url`, Markdown, and
+`data_json` intact and stores generated image state separately in
+`Article.image_manifest`. Repository-relative JPEG, PNG, and WebP cover/body
+images are decoded with Pillow, EXIF-transposed, converted to sRGB when a valid
+embedded profile exists, and stripped of ancillary metadata. Animated and
+unsupported formats, corrupt files, arbitrary absolute URLs, and sources over
+the byte/pixel/dimension safety limits are not transformed; the public page
+continues to use the original browser URL.
+
+`Article.image_manifest_complete` distinguishes an unprocessed legacy row
+from a row that was reconciled and legitimately has no variants (coverless,
+external-only, unsupported, corrupt, animated, or over-limit). Terminal
+fallback classifications restore the unchanged-HEAD sync fast path. Retryable
+storage or file-I/O failures leave this flag false, so an unchanged repository
+still receives another reconciliation attempt.
+
+The deterministic widths are 320, 480, 768, 1200, and 1600 pixels, with no
+upscaling. Each width has WebP quality 82 plus an optimized source-format
+fallback (progressive JPEG quality 85 or optimized PNG). Keys are content
+addressed under `<repo>/_variants/articles/<hash>/<width>.<format>` (a URL-safe
+120-bit SHA-256 prefix; the manifest retains the full digest). Variant
+objects use their exact image MIME type and
+`Cache-Control: public, max-age=31536000, immutable`; mutable originals retain
+the existing one-day policy. Re-syncing identical bytes reuses the same keys.
+
+The schema migration only adds the default-empty manifest and a default-false
+completion flag. It performs no image, repository, or network work, so
+deploying before backfill is safe: legacy/empty manifests render their original
+URLs and the next normal sync remains eligible to reconcile them. After
+deploying, operators should run a scoped dry-run and then the same live scope:
+
+```bash
+uv run python manage.py backfill_article_image_variants --dry-run --source content
+uv run python manage.py backfill_article_image_variants --source content
+```
+
+Use repeatable `--article <slug>` selectors for a canary or retry. `--repo-dir`
+can point at one trusted local checkout for development; without it the command
+clones the configured `ContentSource`. Output reports scanned, generated,
+reused, skipped, and failed counts. A failed image does not stop other images,
+and the command never downloads external URLs or deletes originals/variants.
+Repeated runs are safe. Rollback is code-only: the old templates ignore the
+manifest and keep using original URLs; leave immutable variants in place.
+
+For performance reproduction, pin both application and content-source SHAs,
+seed identical Article rows, and run three cold mobile and desktop Lighthouse
+runs for `/blog` and one image-rich detail. Separate Article image bytes from
+the shared logo. Record individual values and medians; do not attribute a
+comparison if content changed between runs.
+
 Direct deep-link URLs are intentionally written in code blocks so they
 do not render as clickable links. Copy them into the browser.
 

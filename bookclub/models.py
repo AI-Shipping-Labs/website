@@ -24,7 +24,11 @@ from django.urls import reverse
 from django.utils import timezone
 
 from content.access import LEVEL_MAIN
-from content.access import VISIBILITY_CHOICES as TIER_VISIBILITY_CHOICES
+
+# Books use the unit-level choices (Open / Registered / Basic / Main / Premium)
+# so an operator can set a book to "Free with sign-in" (LEVEL_REGISTERED): any
+# signed-in member reads it, anonymous visitors get a sign-in wall.
+from content.access import UNIT_VISIBILITY_CHOICES as TIER_VISIBILITY_CHOICES
 from content.models.mixins import TimestampedModelMixin
 from content.utils.markdown import render_description_html
 

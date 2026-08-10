@@ -52,7 +52,11 @@ from bookclub.reading import (
     viewer_reading_progress,
 )
 from bookclub.summaries import summary_excerpt, summary_paragraphs
-from content.access import build_gated_access_copy, get_user_level
+from content.access import (
+    build_gated_access_copy,
+    can_access,
+    get_gated_reason,
+)
 from events.models.event import PUBLIC_EVENT_STATUSES
 
 _VALID_VISIBILITIES = {value for value, _ in READER_VISIBILITY_CHOICES}
@@ -63,10 +67,12 @@ def _gate_context(request, book):
 
     Delegates all copy to ``content.access.build_gated_access_copy`` (the
     single source of gated copy, issue #1335); we only add the per-surface
-    testid, icon, and value manifest. Every Books gate is tier-based.
+    testid, icon, and value manifest. The gated reason is computed from the
+    viewer + book so a ``LEVEL_REGISTERED`` ("Free with sign-in") book draws
+    the sign-in wall for anonymous visitors instead of an upgrade CTA.
     """
     copy = build_gated_access_copy(
-        gated_reason='insufficient_tier',
+        gated_reason=get_gated_reason(getattr(request, 'user', None), book),
         verb='read this book with the community',
         noun='book club',
         required_level=book.required_level,
@@ -225,7 +231,7 @@ def book_detail(request, slug):
     if book.status in (BOOK_STATUS_UPCOMING, BOOK_STATUS_FINISHED):
         return _book_secondary(request, book)
 
-    is_member = get_user_level(request.user) >= book.required_level
+    is_member = can_access(request.user, book)
     chapters = list(book.chapters.all())
 
     context = {
@@ -286,7 +292,7 @@ def _book_secondary(request, book):
     upcoming "join to read along" CTA points to ``/pricing`` only when the
     viewer does not already meet the tier.
     """
-    viewer_has_access = get_user_level(request.user) >= book.required_level
+    viewer_has_access = can_access(request.user, book)
     context = {
         'book': book,
         'num_chapters': book.chapters.count(),
@@ -330,7 +336,7 @@ def book_progress(request, slug):
     if book.status == BOOK_STATUS_DRAFT and not is_staff:
         raise Http404('This book is not published.')
 
-    can_view = get_user_level(request.user) >= book.required_level
+    can_view = can_access(request.user, book)
 
     context = {'book': book, 'can_view': can_view}
     if not can_view:
@@ -386,7 +392,7 @@ def book_summary(request, slug):
     if book.status == BOOK_STATUS_DRAFT and not is_staff:
         raise Http404('This book is not published.')
 
-    is_member = get_user_level(request.user) >= book.required_level
+    is_member = can_access(request.user, book)
     context = {'book': book, 'is_member': is_member}
     if not is_member:
         context.update(_gate_context(request, book))
@@ -449,7 +455,7 @@ def chapter_read(request, slug, number):
     if not request.user.is_authenticated:
         return redirect_to_login(book.get_absolute_url())
 
-    if get_user_level(request.user) < book.required_level:
+    if not can_access(request.user, book):
         return HttpResponseForbidden('You do not have access to this book.')
 
     chapter = book.chapters.filter(number=number).first()
@@ -512,7 +518,7 @@ def chapter_detail(request, slug, number):
     prev_chapter = chapters[index - 1] if index > 0 else None
     next_chapter = chapters[index + 1] if index < len(chapters) - 1 else None
 
-    is_member = get_user_level(request.user) >= book.required_level
+    is_member = can_access(request.user, book)
     context = {
         'book': book,
         'chapter': chapter,
@@ -606,7 +612,7 @@ def chapter_note(request, slug, number):
     if not request.user.is_authenticated:
         return redirect_to_login(_chapter_url(book, number))
 
-    if get_user_level(request.user) < book.required_level:
+    if not can_access(request.user, book):
         return HttpResponseForbidden('You do not have access to this book.')
 
     chapter = book.chapters.filter(number=number).first()
@@ -701,7 +707,7 @@ def reader_profile(request, slug, user_id):
         # Never reveal that a private profile exists.
         raise private_or_missing
 
-    is_member = get_user_level(request.user) >= book.required_level
+    is_member = can_access(request.user, book)
     chapters = list(book.chapters.all())
     read_numbers = set(
         ChapterRead.objects.filter(user=target, chapter__book=book)
@@ -757,7 +763,7 @@ def reader_visibility(request, slug, user_id):
     if not request.user.is_authenticated:
         return redirect_to_login(_reader_profile_url(book, user_id))
 
-    if get_user_level(request.user) < book.required_level:
+    if not can_access(request.user, book):
         return HttpResponseForbidden('You do not have access to this book.')
 
     if request.user.id != user_id:

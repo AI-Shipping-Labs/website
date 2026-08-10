@@ -33,7 +33,7 @@ from bookclub.summary_notifications import (
     notify_summary_published,
 )
 from content.access import LEVEL_MAIN
-from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
+from content.access import UNIT_VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
 from events.models import Event, EventSeries
 from events.models.event import PUBLIC_EVENT_STATUSES
 from studio.decorators import staff_required

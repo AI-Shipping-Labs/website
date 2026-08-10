@@ -135,6 +135,16 @@ class BookDetailTest(BookApiTestBase):
         self.book.refresh_from_db()
         self.assertEqual(self.book.status, 'finished')
 
+    def test_patch_book_required_level_registered(self):
+        # "Free with sign-in" (LEVEL_REGISTERED=5) is now a valid book level.
+        response = self._patch(
+            '/api/books/inference-engineering', {'required_level': 5},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['required_level'], 5)
+        self.book.refresh_from_db()
+        self.assertEqual(self.book.required_level, 5)
+
     def test_non_admin_cannot_patch(self):
         response = self._patch(
             '/api/books/inference-engineering', {'status': 'finished'},

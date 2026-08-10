@@ -161,3 +161,47 @@ class BookRoadmapWeekGroupingTest(TestCase):
         self.assertContains(response, 'Ch. 0 — A')
         # No week headings when no chapter has a week_number.
         self.assertNotContains(response, 'book-week-heading')
+
+
+class BookRegisteredWallTest(TestCase):
+    """A LEVEL_REGISTERED book is free with sign-in: anonymous gets a wall,
+    any signed-in (verified) member reads it, regardless of paid tier."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from content.access import LEVEL_REGISTERED
+
+        cls.book = Book.objects.create(
+            title='Free With Signin', slug='reg-book', author='A',
+            required_level=LEVEL_REGISTERED, status='current',
+        )
+        Chapter.objects.create(book=cls.book, number=0, title='Intro')
+        cls.free_tier = Tier.objects.get(slug='free')
+        cls.verified_free = User.objects.create_user(
+            email='vfree@test.com', password='pw', email_verified=True,
+        )
+        cls.verified_free.tier = cls.free_tier
+        cls.verified_free.save()
+        cls.unverified_free = User.objects.create_user(
+            email='ufree@test.com', password='pw', email_verified=False,
+        )
+        cls.unverified_free.tier = cls.free_tier
+        cls.unverified_free.save()
+
+    def test_anonymous_gets_gate(self):
+        response = self.client.get('/books/reg-book')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'book-guest-gate')
+        self.assertNotContains(response, 'book-participation-body')
+
+    def test_signed_in_verified_free_member_gets_access(self):
+        self.client.force_login(self.verified_free)
+        response = self.client.get('/books/reg-book')
+        self.assertContains(response, 'book-participation-body')
+        self.assertNotContains(response, 'book-guest-gate')
+
+    def test_unverified_free_member_still_gated(self):
+        self.client.force_login(self.unverified_free)
+        response = self.client.get('/books/reg-book')
+        self.assertContains(response, 'book-guest-gate')
+        self.assertNotContains(response, 'book-participation-body')

@@ -42,7 +42,7 @@ from bookclub.summary_notifications import (
     is_new_publish,
     notify_summary_published,
 )
-from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
+from content.access import UNIT_VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
 from events.models import Event
 from studio.views.books import _parse_event_series
 

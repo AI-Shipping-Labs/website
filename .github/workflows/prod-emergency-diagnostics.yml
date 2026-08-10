@@ -1,0 +1,233 @@
+name: Emergency Production Diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmDiagnostics:
+        description: "Explicitly confirm read-only production incident diagnostics"
+        required: true
+        type: boolean
+        default: false
+
+concurrency:
+  group: emergency-production-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  diagnostics:
+    name: Collect Read-Only Production Diagnostics
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: eu-west-1
+      ECS_CLUSTER: ai-shipping-labs
+      ECS_WEB_SERVICE: ai-shipping-labs-prod
+      CONFIRM_DIAGNOSTICS: ${{ inputs.confirmDiagnostics }}
+
+    steps:
+      - name: Validate explicit confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${CONFIRM_DIAGNOSTICS}" != "true" ]]; then
+            echo "::error ::Read-only production diagnostics were not explicitly confirmed."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::387546586013:role/website-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Collect ECS service summary, deployments, and events
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          aws ecs describe-services \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER}" \
+            --services "${ECS_WEB_SERVICE}" \
+            --query 'services[0].{serviceName:serviceName,serviceArn:serviceArn,status:status,taskDefinition:taskDefinition,desiredCount:desiredCount,runningCount:runningCount,pendingCount:pendingCount,healthCheckGracePeriodSeconds:healthCheckGracePeriodSeconds,deploymentConfiguration:deploymentConfiguration,deployments:deployments[].{id:id,status:status,taskDefinition:taskDefinition,desiredCount:desiredCount,runningCount:runningCount,pendingCount:pendingCount,failedTasks:failedTasks,rolloutState:rolloutState,rolloutStateReason:rolloutStateReason,createdAt:createdAt,updatedAt:updatedAt},loadBalancers:loadBalancers[].{targetGroupArn:targetGroupArn,containerName:containerName,containerPort:containerPort},events:events[0:20].{createdAt:createdAt,id:id,message:message}}' \
+            --output json
+
+      - name: Collect running and recent stopped task state
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t running_task_arns < <(
+            aws ecs list-tasks \
+              --region "${AWS_REGION}" \
+              --cluster "${ECS_CLUSTER}" \
+              --service-name "${ECS_WEB_SERVICE}" \
+              --desired-status RUNNING \
+              --max-results 80 \
+              --query 'taskArns[]' \
+              --output text | tr '\t' '\n' | sed '/^$/d'
+          )
+          mapfile -t stopped_task_arns < <(
+            aws ecs list-tasks \
+              --region "${AWS_REGION}" \
+              --cluster "${ECS_CLUSTER}" \
+              --service-name "${ECS_WEB_SERVICE}" \
+              --desired-status STOPPED \
+              --max-results 20 \
+              --query 'taskArns[]' \
+              --output text | tr '\t' '\n' | sed '/^$/d'
+          )
+          mapfile -t task_arns < <(
+            printf '%s\n' "${running_task_arns[@]}" "${stopped_task_arns[@]}" \
+              | sed '/^$/d' | sort -u
+          )
+
+          echo "Running task ARNs (${#running_task_arns[@]}):"
+          printf '  %s\n' "${running_task_arns[@]}"
+          echo "Recent stopped task ARNs (${#stopped_task_arns[@]}):"
+          printf '  %s\n' "${stopped_task_arns[@]}"
+
+          if [[ "${#task_arns[@]}" -eq 0 ]]; then
+            echo "No running or recent stopped tasks were returned."
+            exit 0
+          fi
+
+          aws ecs describe-tasks \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER}" \
+            --tasks "${task_arns[@]}" \
+            --query 'tasks[].{taskArn:taskArn,taskDefinitionArn:taskDefinitionArn,lastStatus:lastStatus,desiredStatus:desiredStatus,healthStatus:healthStatus,connectivity:connectivity,createdAt:createdAt,startedAt:startedAt,stoppingAt:stoppingAt,stoppedAt:stoppedAt,stopCode:stopCode,stoppedReason:stoppedReason,containers:containers[].{name:name,lastStatus:lastStatus,healthStatus:healthStatus,exitCode:exitCode,reason:reason}}' \
+            --output json
+
+      - name: Collect active task definition public runtime fields
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          active_task_definition="$(aws ecs describe-services \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER}" \
+            --services "${ECS_WEB_SERVICE}" \
+            --query 'services[0].taskDefinition' \
+            --output text)"
+
+          if [[ -z "${active_task_definition}" || "${active_task_definition}" == "None" ]]; then
+            echo "::error ::The active production web task definition could not be resolved."
+            exit 1
+          fi
+
+          aws ecs describe-task-definition \
+            --region "${AWS_REGION}" \
+            --task-definition "${active_task_definition}" \
+            --query 'taskDefinition.{taskDefinitionArn:taskDefinitionArn,status:status,cpu:cpu,memory:memory,containerDefinitions:containerDefinitions[].{name:name,image:image,essential:essential,cpu:cpu,memory:memory,memoryReservation:memoryReservation,portMappings:portMappings[].{containerPort:containerPort,hostPort:hostPort,protocol:protocol,appProtocol:appProtocol},logConfiguration:{logDriver:logConfiguration.logDriver,group:logConfiguration.options."awslogs-group",region:logConfiguration.options."awslogs-region",streamPrefix:logConfiguration.options."awslogs-stream-prefix"}}}' \
+            --output json
+
+      - name: Collect production target health
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t target_group_arns < <(
+            aws ecs describe-services \
+              --region "${AWS_REGION}" \
+              --cluster "${ECS_CLUSTER}" \
+              --services "${ECS_WEB_SERVICE}" \
+              --query 'services[0].loadBalancers[].targetGroupArn' \
+              --output text | tr '\t' '\n' | sed '/^$/d'
+          )
+
+          if [[ "${#target_group_arns[@]}" -eq 0 ]]; then
+            echo "No target groups are configured on the production web service."
+            exit 0
+          fi
+
+          for target_group_arn in "${target_group_arns[@]}"; do
+            echo "Target group: ${target_group_arn}"
+            aws elbv2 describe-target-health \
+              --region "${AWS_REGION}" \
+              --target-group-arn "${target_group_arn}" \
+              --query 'TargetHealthDescriptions[].{target:{id:Target.Id,port:Target.Port,availabilityZone:Target.AvailabilityZone},health:{state:TargetHealth.State,reason:TargetHealth.Reason,description:TargetHealth.Description}}' \
+              --output json
+          done
+
+      - name: Collect redacted recent CloudWatch logs when permitted
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          active_task_definition="$(aws ecs describe-services \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER}" \
+            --services "${ECS_WEB_SERVICE}" \
+            --query 'services[0].taskDefinition' \
+            --output text)"
+          mapfile -t log_groups < <(
+            aws ecs describe-task-definition \
+              --region "${AWS_REGION}" \
+              --task-definition "${active_task_definition}" \
+              --query 'taskDefinition.containerDefinitions[].logConfiguration.options."awslogs-group"' \
+              --output text | tr '\t' '\n' | sed '/^$/d' | sort -u
+          )
+
+          if [[ "${#log_groups[@]}" -eq 0 ]]; then
+            echo "No CloudWatch log groups were configured on the active task definition."
+            exit 0
+          fi
+
+          end_time_ms="$(($(date +%s) * 1000))"
+          start_time_ms="$((end_time_ms - 30 * 60 * 1000))"
+          raw_log_file="${RUNNER_TEMP}/production-incident-logs.json"
+
+          for log_group in "${log_groups[@]}"; do
+            echo "CloudWatch log group: ${log_group} (last approximately 30 minutes, maximum 500 events)"
+            if aws logs filter-log-events \
+              --region "${AWS_REGION}" \
+              --log-group-name "${log_group}" \
+              --start-time "${start_time_ms}" \
+              --end-time "${end_time_ms}" \
+              --limit 500 \
+              --no-paginate \
+              --query 'events[].{timestamp:timestamp,logStreamName:logStreamName,message:message}' \
+              --output json > "${raw_log_file}"; then
+              python3 - "${raw_log_file}" <<'PY'
+          import json
+          import re
+          import sys
+
+          path = sys.argv[1]
+          events = json.loads(open(path, encoding="utf-8").read())
+          sensitive_assignment = re.compile(
+              r"(?i)\b(authorization|api[_-]?key|access[_-]?key|token|password|secret|cookie|session|dsn)"
+              r"(\s*[:=]\s*)([^\s,;]+)"
+          )
+          bearer = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+")
+          uri_credentials = re.compile(r"(://[^\s:/]+:)[^\s@]+(@)")
+          known_tokens = re.compile(
+              r"\b(?:AKIA[0-9A-Z]{16}|gh[opusr]_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]+)\b"
+          )
+          email_address = re.compile(
+              r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b"
+          )
+
+          for event in events:
+              message = str(event.get("message", ""))
+              message = sensitive_assignment.sub(r"\1\2[REDACTED]", message)
+              message = bearer.sub("Bearer [REDACTED]", message)
+              message = uri_credentials.sub(r"\1[REDACTED]\2", message)
+              message = known_tokens.sub("[REDACTED]", message)
+              message = email_address.sub("[REDACTED_EMAIL]", message)
+              event["message"] = message
+
+          print(json.dumps(events, indent=2, sort_keys=True))
+          PY
+            else
+              echo "::warning ::CloudWatch log access failed for ${log_group}; continuing with ECS and target-health evidence."
+            fi
+            rm -f "${raw_log_file}"
+          done

@@ -145,6 +145,8 @@ Four tiers, chosen by content shape rather than per-page taste. These are the on
 
 Pick the narrowest sanctioned tier that fits the widest repeated element on the page. Single-column row feeds and sparse 2-column hubs use `max-w-5xl` (aligning each list with its own 5xl detail page); reserve the 7xl Frame for genuine grids that fill it.
 
+Content listing/index pages are an exception to "choose by content shape": they are all `max-w-5xl` regardless of column count (including 3-column grids like `/courses`, `/projects`, and the events calendar), so every listing page is the same width and never changes width mid-page. See [Content Listing Pages](#content-listing-pages), which is authoritative for those routes.
+
 The outer frame always sets the tier; narrower inner columns (a `max-w-3xl` intro inside a Frame index, a `max-w-md` auth card) are normal and live inside it. A page column may be narrower than the header chrome when its content is single-column or sparse: the shared `px-4 sm:px-6 lg:px-8` gutters keep it left-aligned below the max width and centered above it, exactly like `/about`. A 7xl Frame may still cap individual inner sections, but those inner caps must use sanctioned widths (no `max-w-6xl`).
 
 Enforced by `content/tests/test_container_widths.py`. Rationale, the full route table, and the 2026-07-21 remediation are in [`audits/2026-07-21-container-widths.md`](audits/2026-07-21-container-widths.md).
@@ -261,6 +263,137 @@ Current per-type decisions:
 | Blog list rows | Do not render |
 
 Workshops are the deliberate conditional-explicit exception. Public cards use `Workshop.card_image_url` (`cover_image_url` → `custom_banner_url` → empty) and include `_content_preview.html` exactly once only when that value is nonempty. Never pass a decorative fallback for a coverless or auto-only workshop. `Workshop.display_image_url` keeps cover → custom → auto precedence for SEO, social sharing, and Studio; suppressing an auto banner on a public card does not delete or disable that sharing asset.
+
+## Content Listing Pages
+
+This section is the site-wide standard for public content listing/index pages: `/blog`, `/workshops`, `/events` (list and calendar), `/books`, `/courses`, `/projects`, and any future catalog surface (tutorials, downloads, resources). A listing page presents a collection of one content type with optional filters. Every rule below is mandatory; the blog list is the reference implementation.
+
+Where this section conflicts with earlier guidance in this document, this section wins for listing pages specifically: the width-tier table's "Frame for 3+ column grids" rule and the `bg-secondary` unselected filter-pill recipe are both superseded here. `content/tests/test_container_widths.py`'s route table updates as part of adoption.
+
+### Page skeleton
+
+Exactly one `<section>`, one container, one width. No mid-page width changes, no `border-b` section dividers, no alternating band backgrounds (`bg-secondary/20` hero bands are not used on listing pages).
+
+```html
+<main class="min-h-screen pt-24">
+  <section class="py-8 sm:py-16 lg:py-24">
+    <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+      <!-- 1. page header -->
+      <!-- 2. toolbar (optional) -->
+      <!-- 3. list or grid (or grouped sub-sections) -->
+      <!-- 4. supporting info cards (optional, last) -->
+    </div>
+  </section>
+</main>
+```
+
+### Canonical width
+
+All listing pages use `max-w-5xl` (the `/events` list is the reference). Rationale: it matches each content type's own detail page, it is the width of the reference blog list, and at 64rem a `lg:grid-cols-3` grid still yields ~19.5rem cards — the compact-rail card width. `max-w-7xl` is no longer a listing width; it remains for the member dashboard, the pricing grid, marketing pages, and the events month **calendar** view. The calendar is the one deliberate exception to the shared listing width — a month grid genuinely needs the wider frame — so toggling List↔Calendar does change page width; that is accepted. Inner columns may be narrower (the subtitle is capped at `max-w-3xl`); the outer container never changes mid-page.
+
+Detail/content pages are narrower: prose/reader pages (a blog article, a book chapter, the learning path) use `max-w-3xl` (Reader tier); mixed-layout detail pages keep `max-w-5xl` (Detail tier). Only the listing/index widths change under this section.
+
+### Page header
+
+One format for every listing page: eyebrow, H1, subtitle, optional CTA row. Wrapper: `<div class="mb-12">`.
+
+```html
+<div class="mb-12">
+  <p class="text-sm font-medium uppercase tracking-widest text-accent">Workshops</p>
+  <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+    Hands-on AI workshops
+  </h1>
+  <p class="mt-4 max-w-3xl text-lg text-muted-foreground">
+    One or two sentences. No second paragraph.
+  </p>
+  <div class="mt-6 flex flex-wrap gap-3">
+    <a href="..." class="{% button_classes 'primary' %}">Primary action</a>
+    <a href="..." class="{% button_classes 'secondary' %}">Secondary action</a>
+  </div>
+</div>
+```
+
+Rules:
+
+- Eyebrow is the plain section name, one or two words: `Blog`, `Workshops`, `Events`, `Books`, `Courses`, `Projects`. No composed eyebrows (`Community · Books`) and no renamed sections (`Project Showcase`).
+- H1 is always `text-3xl font-semibold tracking-tight sm:text-4xl`. No `lg:text-5xl` on listing pages — that is the detail-hero scale.
+- Subtitle is one `text-lg text-muted-foreground` paragraph capped at `max-w-3xl`. Merge or cut longer intros; explanatory prose moves to info cards at the bottom of the page.
+- CTA row is optional and holds at most two `{% button_classes %}` buttons. Use it only for a real action that is not "scroll down". Never link to the list the user is already on.
+- No `hero-gradient` backgrounds on listing pages.
+
+### Toolbar
+
+The toolbar sits between header and content: `<div class="mb-8 space-y-3">`. Up to three pill rows, in this fixed order; omit rows that do not apply.
+
+1. Mode row — view toggles that change how the same collection renders (`List` / `Calendar`) plus at most one compact utility control (the events Subscribe popover).
+2. Scope row — mutually exclusive collection scopes (`All` / `Upcoming` / `Past recordings`, or difficulty).
+3. Topic row — `All` plus curated topic pills.
+
+Every pill in every row uses one base class string:
+
+```html
+inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background
+```
+
+- Active: `bg-accent text-accent-foreground` plus `aria-current="page"`.
+- Inactive: `border border-border bg-transparent text-muted-foreground hover:border-accent/50 hover:text-foreground`.
+
+The outlined inactive style (from the blog redesign) replaces the older `bg-secondary` inactive fill everywhere on listing pages; a page must not mix the two dialects. Each row is `flex flex-wrap gap-2` with an `aria-label`.
+
+#### Topic filter
+
+The topic row is the curated-topics pattern from `/blog`, powered by `content/topics.py` (`topics_with_matches`, `filter_by_topic`, `primary_topic`) — never a raw-tag wall:
+
+- Pills are a small ordered curated set (about 5-7), first pill `All`, labels humanized via `humanize_tag` (`AI Engineering`, not `ai-engineering`).
+- Only topics that match at least one item render (no dead pills).
+- One topic selected at a time via `?topic=<slug>`; multi-tag query combinatorics (`?tag=a&tag=b`), tag accordions, `More topics (+N)` disclosures, and active-filter chip strips are all retired from listing pages. Deep raw-tag filtering, if kept at all, lives on `/tags`.
+- Generalize `BLOG_TOPICS` into per-surface curated maps of the same shape so workshops, projects, courses, and event recordings reuse the same helpers.
+
+Filtered-to-empty states use `{% member_empty_state ... kind='filter' %}` with a `View all <things>` CTA back to the unfiltered page.
+
+### The content card
+
+Every listing item renders through `templates/content/_content_card.html` (the existing owner: `<article>` shell, whole-card anchor from `_clickable_card_classes.html`, `hover:border-accent/50`, `group-hover:text-accent` title, top-right translating arrow). One anatomy, ordered slots; every slot except title is optional per content type:
+
+1. Media — thumbnail per the Card Media Slots policy table. List rows: left-aligned `sm:w-48 sm:h-32 rounded-lg border border-border object-cover`. Grid cards: `_content_preview.html` band.
+2. Signal row — `mb-3 flex flex-wrap items-center gap-2`, in order: `{% member_access_badge %}` (always, `sm` size), at most one status/type badge (`Recording available`, `Cancelled`, `Enrolled`), then the topic eyebrow.
+3. Topic eyebrow — one non-clickable `<span class="text-xs font-medium uppercase tracking-wide text-accent">` with the item's `primary_topic` label. This is the only topic representation on a card. Raw-tag chip rows are removed everywhere, as the blog did.
+4. Title — `text-lg font-semibold text-foreground group-hover:text-accent transition-colors`, `line-clamp-3` in grids.
+5. Description — `mt-2 text-sm text-muted-foreground line-clamp-2`, markdown stripped.
+6. Meta row — icon+text pairs (author, date, reading time, attendee count). List rows: `mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground` with `h-4 w-4` icons. Grid cards: `mt-2 gap-x-3 gap-y-1.5 text-xs` with `h-3.5 w-3.5` icons.
+7. Type-specific slot — at most one extra row per content type, static tag chips (`rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground`): workshop `Includes` deliverable pills (max 4); book progress/schedule line; nothing for blog, courses, projects.
+8. CTA — at most one explicit `{% button_classes %}` button when the card has a distinct action besides navigation (event `Watch recording`). Cards never carry both a CTA button and trailing link text.
+
+#### List vs grid
+
+- List rows (horizontal card, full container width, thumbnail left): time-ordered feeds where recency organizes the page — Blog, Events.
+- Grid cards (vertical, media on top): browsable catalogs where users compare options — Workshops, Courses, Projects, Books.
+- Grid: `grid gap-6 sm:grid-cols-2 lg:grid-cols-3` (1 / 2 / 3 columns). A grid page with fewer than 3 items still uses the grid.
+- List: rows stack in `space-y-6` — the same 1.5rem rhythm as `gap-6`.
+
+### Section rhythm and grouped listings
+
+When a listing groups items (`Reading now` / `Coming up` / `Past reads`; `Upcoming` / `Past events`), groups are sub-sections inside the single container:
+
+- Group heading: `<h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">`, plain text — no decorative icons inside listing H2s.
+- First group starts immediately after the toolbar; each subsequent group heading gets `mt-12`; its list/grid follows with `mt-6`.
+- Never use `<hr>`, `border-b` bands, or background-color changes to separate groups — the `mt-12` + H2 rhythm is the only divider.
+- Supporting info cards (`How it works`, workshop value props) are one optional trio at the bottom of the page: `mt-16`, H2 as above, then `grid gap-6 sm:grid-cols-3` of static cards using `_info_card_classes.html`. Info cards never sit between the header and the content list.
+
+### Empty states and pagination
+
+Every zero state renders `{% member_empty_state %}`: `kind='fresh'` when the collection is empty, `kind='filter'` with a `View all <things>` primary CTA when filters produced zero results. No hand-rolled `p-8 text-center` cards. Pagination uses the shared pager row: `mt-12 flex flex-wrap items-center justify-center gap-2`, Previous/Next as `{% button_classes 'secondary' %}` with chevron icons, `Page X of Y` in `text-sm text-muted-foreground`.
+
+### Per-page application snapshot
+
+| Page | Layout | Toolbar rows | Type-specific slot |
+|---|---|---|---|
+| Blog | List | Topic | — |
+| Workshops | Grid | Topic (curated, replaces access/skill/tag facets) | `Includes` pills |
+| Events | List | Mode (List/Calendar + Subscribe), Scope (All/Upcoming/Past recordings), Topic (recordings only) | `Watch recording` CTA |
+| Books | Grid (grouped) | — | schedule/progress line |
+| Courses | Grid | Topic (when >6 courses) | — |
+| Projects | Grid | Scope (difficulty), Topic | — |
 
 ## Breakpoints and Mobile Carousels
 
@@ -563,6 +696,8 @@ inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text
 ```
 
 The selected state adds `bg-accent text-accent-foreground` and `aria-current="page"`. The unselected state adds `bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground`.
+
+On content listing pages specifically (`/blog`, `/workshops`, `/events`, `/books`, `/courses`, `/projects`), the unselected filter pill uses the outlined variant `border border-border bg-transparent text-muted-foreground hover:border-accent/50 hover:text-foreground` instead of the `bg-secondary` fill above — see [Content Listing Pages](#content-listing-pages), which is authoritative there. Do not mix the two dialects within one page.
 
 Pill icons are usually `h-3 w-3` or `h-3.5 w-3.5`.
 

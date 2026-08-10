@@ -402,8 +402,8 @@ class WorkshopCatalogFacetTest(TierSetupMixin, TestCase):
         )
         unselected = (
             base
-            + "bg-secondary text-muted-foreground hover:bg-secondary/80 "
-            "hover:text-foreground"
+            + "border border-border bg-transparent text-muted-foreground "
+            "hover:border-accent/50 hover:text-foreground"
         )
         self.assertEqual(access_options[1]["attrs"]["class"], unselected)
         self.assertEqual(access_options[2]["attrs"]["class"], unselected)

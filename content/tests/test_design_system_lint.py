@@ -184,7 +184,6 @@ BASELINE: dict[str, dict[str, int]] = {
         "templates/content/course_detail.html": 2,
         "templates/content/reader/_bottom_nav.html": 2,
         "templates/content/reader/_completion_button.html": 1,
-        "templates/content/workshops_list.html": 2,
     },
     "public_font_bold": {  # Initial legacy debt: #1240.
         "templates/base.html": 1,
@@ -544,6 +543,9 @@ class DesignSystemWorkshopMediaContractTest(SimpleTestCase):
         cls.catalog_template = (cls.base_dir / "templates/content/_workshops_catalog.html").read_text(
             encoding="utf-8"
         )
+        cls.card_media_template = (
+            cls.base_dir / "templates/content/_workshop_card_media.html"
+        ).read_text(encoding="utf-8")
         cls.banner_resolver = (
             cls.base_dir / "integrations/services/banner_generator/resolve.py"
         ).read_text(encoding="utf-8")
@@ -594,14 +596,18 @@ class DesignSystemWorkshopMediaContractTest(SimpleTestCase):
             self.banner_resolver,
         )
 
-        conditional_start = self.catalog_template.index("{% if workshop.card_image_url %}")
-        preview_include = self.catalog_template.index(
+        # The workshop card renders through the shared content/_content_card.html
+        # component; the conditional media policy lives in its dedicated media
+        # partial (content/_workshop_card_media.html), which wraps the
+        # _content_preview include in the ``card_image_url`` guard.
+        conditional_start = self.card_media_template.index("{% if workshop.card_image_url %}")
+        preview_include = self.card_media_template.index(
             '{% include "content/_content_preview.html"',
             conditional_start,
         )
-        conditional_end = self.catalog_template.index("{% endif %}", preview_include)
-        card_body = self.catalog_template.index('class="min-w-0 p-4 sm:p-5"', conditional_end)
+        conditional_end = self.card_media_template.index("{% endif %}", preview_include)
         self.assertLess(conditional_start, preview_include)
         self.assertLess(preview_include, conditional_end)
-        self.assertLess(conditional_end, card_body)
-        self.assertNotIn("preview_decorative_fallback", self.catalog_template)
+        # Coverless / auto-only cards omit the media slot: no decorative or
+        # reserved aspect-video fallback outside the cover branch.
+        self.assertNotIn("preview_decorative_fallback", self.card_media_template)

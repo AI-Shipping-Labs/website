@@ -147,8 +147,11 @@ class PublicStackedHeaderStaticTest(TestCase):
         # markup and pill classes now live in the facet body partials.
         # The accordion supplies its own 44px summary and focus ring.
         self.assertIn('includes/_accordion.html', source)
+        # The per-card topic-chip links (which each carried a focus ring) were
+        # removed when workshop cards moved onto the shared content card, so the
+        # catalog template now has one fewer focus-visible:ring-2 occurrence.
         self.assertEqual(source.count('min-h-[44px]'), 4)
-        self.assertEqual(source.count('focus-visible:ring-2'), 5)
+        self.assertEqual(source.count('focus-visible:ring-2'), 4)
 
         for body in (TOPIC_FACET_BODY, TECHNOLOGY_FACET_BODY):
             body_source = _source(body)

@@ -20,7 +20,7 @@ from html.parser import HTMLParser
 
 from django.test import Client, TestCase
 
-from content.models import Article, Course, CuratedLink, Download, Project, Tutorial, Workshop
+from content.models import Article, Course, CuratedLink, Download, Project, Tutorial
 from events.models import Event
 
 # Class string emitted by ``templates/content/_clickable_card_classes.html``.
@@ -261,24 +261,9 @@ class CatalogTagDensityTest(TestCase):
         self.assertIn('+1', tags_block)
         self.assertNotIn('four', tags_block)
 
-    def test_workshops_card_caps_visible_tag_chips(self):
-        Workshop.objects.create(
-            title='Workshop With Many Tags',
-            slug='many-workshop-tags',
-            status='published',
-            date=datetime.date(2026, 4, 21),
-            landing_required_level=0,
-            pages_required_level=10,
-            recording_required_level=20,
-            tags=['one', 'two', 'three', 'four', 'five'],
-        )
-        response = self.client.get('/workshops')
-        body = response.content.decode()
-        tags_block = body.split('data-testid="workshop-card-tags"', 1)[1].split('</div>', 1)[0]
-        self.assertIn('one', tags_block)
-        self.assertIn('three', tags_block)
-        self.assertIn('+2', tags_block)
-        self.assertNotIn('four', tags_block)
+    # Workshop cards moved onto the shared content/_content_card.html at the
+    # book-card density (badge + title + description + meta); they no longer
+    # render per-card topic chips, so there is no workshop tag-cap to assert.
 
     def test_resources_card_caps_visible_tag_chips(self):
         CuratedLink.objects.create(

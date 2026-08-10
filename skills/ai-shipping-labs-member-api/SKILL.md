@@ -1,6 +1,6 @@
 ---
 name: ai-shipping-labs-member-api
-description: Catalog of the AI Shipping Labs member API skills. Use to discover which member-API family fits the task (Plans or Book Club), then follow that family's sub-skill. Covers shared auth with a member-owned API key against /member-api/v1 — a member acting on their own data only, never Studio or staff endpoints.
+description: Catalog for the AI Shipping Labs member API. Use to discover which member-API family fits the task (Plans or Book Club), then read that family's reference doc (plans.md / books.md). Covers shared auth with a member-owned API key against /member-api/v1 — a member acting on their own data only, never Studio or staff endpoints.
 ---
 
 # AI Shipping Labs Member API
@@ -10,12 +10,12 @@ member act on their own data with a member-owned API key. It is scoped to the
 key owner: it never exposes Studio, staff, CRM, onboarding, or other members'
 data.
 
-Pick the family that matches the task and follow its sub-skill:
+Pick the family that matches the task and read its reference doc:
 
 | Family | What it does | Sub-skill |
 |--------|--------------|-----------|
-| Plans | List, fetch, download, and edit the member's own sprint plans — weeks, checkpoints, deliverables, next steps, resources, week notes, and progress. | [`plans/SKILL.md`](plans/SKILL.md) |
-| Book Club | Read and update the member's own Book Club activity — per-chapter read state, per-chapter notes (markdown), reading progress for a book, and the reader profile. | [`books/SKILL.md`](books/SKILL.md) |
+| Plans | List, fetch, download, and edit the member's own sprint plans — weeks, checkpoints, deliverables, next steps, resources, week notes, and progress. | [`plans.md`](plans.md) |
+| Book Club | Read and update the member's own Book Club activity — per-chapter read state, per-chapter notes (markdown), reading progress for a book, and the reader profile. | [`books.md`](books.md) |
 
 Everything below is shared by every family.
 

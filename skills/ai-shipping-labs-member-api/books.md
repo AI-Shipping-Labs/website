@@ -1,14 +1,10 @@
----
-name: ai-shipping-labs-member-api-books
-description: Read and update a member's own AI Shipping Labs Book Club activity through the member API. Use when a member wants to see their per-chapter reading progress for a book, mark a chapter read or unread, read/write/delete their own per-chapter note, or view and set their reader-profile visibility through /member-api/v1 using a member-owned API key.
----
+# Member API — Book Club
 
-# AI Shipping Labs Member API — Book Club
-
-The Book Club family of the member API. See the catalog at
-[`../SKILL.md`](../SKILL.md) for shared auth, key setup, the safe-surface rules,
-and error handling. This skill covers a member acting on their own Book Club
-activity: reading state, their own chapter notes, and their reader profile.
+Supporting reference for the Book Club family of the member API (not a
+standalone skill). Load the catalog [`SKILL.md`](SKILL.md) first for shared
+auth, key setup, the safe-surface rules, and error handling. This file covers a
+member acting on their own Book Club activity: reading state, their own chapter
+notes, and their reader profile.
 
 Base URL and auth are the same as every family:
 

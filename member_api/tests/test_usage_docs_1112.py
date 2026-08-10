@@ -13,8 +13,8 @@ DOCS_PATH = Path("docs/member-api/plans.md")
 SKILL_DIR = Path("skills/ai-shipping-labs-member-api")
 SKILL_PATH = SKILL_DIR / "SKILL.md"
 SKILL_README_PATH = SKILL_DIR / "README.md"
-PLANS_SKILL_PATH = SKILL_DIR / "plans" / "SKILL.md"
-BOOKS_SKILL_PATH = SKILL_DIR / "books" / "SKILL.md"
+PLANS_SKILL_PATH = SKILL_DIR / "plans.md"
+BOOKS_SKILL_PATH = SKILL_DIR / "books.md"
 
 
 @tag("core")
@@ -62,8 +62,8 @@ class MemberApiUsageDocsArtifactTest(TestCase):
         self.assertIn("AI_SHIPPING_LABS_MEMBER_API_KEY", text)
         self.assertIn("Authorization: Token <asl_member_...>", text)
         # Catalog points at every family.
-        self.assertIn("plans/SKILL.md", text)
-        self.assertIn("books/SKILL.md", text)
+        self.assertIn("plans.md", text)
+        self.assertIn("books.md", text)
         # Shared safe-surface rules live in the catalog.
         self.assertIn("Do not call `/api/`, `/studio/`, Django admin", text)
         self.assertIn("CRM notes", text)
@@ -78,7 +78,8 @@ class MemberApiUsageDocsArtifactTest(TestCase):
         self.assertTrue(PLANS_SKILL_PATH.exists())
         text = PLANS_SKILL_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("name: ai-shipping-labs-member-api-plans", text)
+        # Supporting reference, not a standalone skill: no frontmatter name.
+        self.assertNotIn("name: ai-shipping-labs-member-api-plans", text)
         self.assertIn("GET /member-api/v1/plans", text)
         self.assertIn("GET /member-api/v1/plans/{plan_id}", text)
         self.assertIn("GET /member-api/v1/plans/{plan_id}/markdown", text)
@@ -90,7 +91,8 @@ class MemberApiUsageDocsArtifactTest(TestCase):
         self.assertTrue(BOOKS_SKILL_PATH.exists())
         text = BOOKS_SKILL_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("name: ai-shipping-labs-member-api-books", text)
+        # Supporting reference, not a standalone skill: no frontmatter name.
+        self.assertNotIn("name: ai-shipping-labs-member-api-books", text)
         self.assertIn("GET /member-api/v1/books/{slug}/reading", text)
         self.assertIn(
             "PUT    /member-api/v1/books/{slug}/chapters/{number}/note", text,

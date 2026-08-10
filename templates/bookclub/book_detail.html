@@ -115,22 +115,24 @@
         render under one "Week N" heading (the read-together set); chapters
         without a week_number fall into an unheaded group so a book that never
         sets weeks looks exactly as before. {% endcomment %}
-        <div class="mt-4 space-y-6">
+        <div class="mt-4 space-y-4">
           {% for week in chapter_weeks %}
           <div{% if week.week_number %} data-testid="book-week-group" data-week-number="{{ week.week_number }}"{% endif %}>
+            {% comment %} Subtle week divider: one muted line, no bold heading.
+            The week carries the read-by date, so per-chapter dates are dropped
+            inside a grouped week to avoid the duplication. {% endcomment %}
             {% if week.week_number %}
-            <div class="flex flex-wrap items-baseline justify-between gap-2 px-3">
-              <h3 class="text-sm font-semibold tracking-tight text-foreground" data-testid="book-week-heading">{{ week.label }}</h3>
-              {% if week.deadline %}<span class="text-xs text-muted-foreground" data-testid="book-week-deadline">read by {{ week.deadline|member_short_date }}</span>{% endif %}
-            </div>
+            <p class="px-3 pb-1 text-xs text-muted-foreground">
+              <span class="font-medium uppercase tracking-wide" data-testid="book-week-heading">{{ week.label }}</span>{% if week.deadline %} <span data-testid="book-week-deadline">· read by {{ week.deadline|member_short_date }}</span>{% endif %}
+            </p>
             {% endif %}
-            <ol class="mt-1 space-y-0.5">
+            <ol class="space-y-0.5">
               {% for ch in week.chapters %}
               <li id="chapter-{{ ch.number }}" class="flex min-h-[44px] flex-wrap items-center justify-between gap-2.5 rounded-md px-3 py-2 text-sm">
                 <a href="{% url 'bookclub_chapter_detail' book.slug ch.number %}" class="group inline-flex items-center gap-1 text-foreground hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="book-chapter-link">Ch. {{ ch.number }} — {{ ch.title }}<i data-lucide="chevron-right" class="h-4 w-4 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-accent"></i></a>
                 <div class="flex items-center gap-3 text-xs text-muted-foreground">
                   {% if ch.week_label and not ch.week_number %}<span>{{ ch.week_label }}</span>{% endif %}
-                  {% if ch.deadline %}<span data-testid="book-chapter-deadline">{{ ch.deadline|member_short_date }}</span>{% endif %}
+                  {% if ch.deadline and not ch.week_number %}<span data-testid="book-chapter-deadline">{{ ch.deadline|member_short_date }}</span>{% endif %}
                   <form method="post" action="{% url 'bookclub_chapter_read' book.slug ch.number %}" class="flex items-center">
                     {% csrf_token %}
                     {% if ch.viewer_read %}

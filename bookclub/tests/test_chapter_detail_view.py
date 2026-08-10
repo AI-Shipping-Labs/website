@@ -71,6 +71,10 @@ class ChapterDetailAccessTest(ChapterDetailFixture):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'chapter-participation-body')
         self.assertContains(response, 'own-note-composer')
+        # Notes can be edited via the member API: hint + docs + settings links.
+        self.assertContains(response, 'own-note-api-hint')
+        self.assertContains(response, '/member-api/docs')
+        self.assertContains(response, '/account/#api-keys')
         # No leaked multi-line Django comment markers on the new page.
         self.assertNotContains(response, '{#')
         self.assertNotContains(response, '{% comment %}')

@@ -95,6 +95,14 @@
             </form>
           </div>
           {% endif %}
+          {% comment %} You can read and update your own note programmatically
+          via the member API. Shown in both the written and composer states.
+          {% endcomment %}
+          <p class="mt-3 text-xs text-muted-foreground" data-testid="own-note-api-hint">
+            You can also read and update this note through the
+            <a href="/member-api/docs" class="text-accent hover:underline">member API</a> — create an API token in your
+            <a href="/account/#api-keys" class="text-accent hover:underline">account settings</a>.
+          </p>
         </div>
 
         {% comment %} Chapter summary (#1368). Published (timestamp set +

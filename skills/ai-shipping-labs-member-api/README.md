@@ -5,13 +5,14 @@ member API — the API a member uses to act on their own data with a
 member-owned API key.
 
 `SKILL.md` is the catalog: it holds the shared auth and key setup and points to
-one sub-skill per API family. Load the catalog first, then follow the family
-that matches the task:
+one reference doc per API family. Load the catalog first, then read the family
+that matches the task (`plans.md` / `books.md` are supporting material, not
+standalone skills):
 
-- `plans/SKILL.md` — the member Plans API: list, fetch, download, and edit the
+- `plans.md` — the member Plans API: list, fetch, download, and edit the
   member's own sprint plans (weeks, checkpoints, deliverables, next steps,
   resources, week notes, progress).
-- `books/SKILL.md` — the member Book Club API: per-chapter read state, the
+- `books.md` — the member Book Club API: per-chapter read state, the
   member's own chapter notes, reading progress for a book, and the reader
   profile.
 

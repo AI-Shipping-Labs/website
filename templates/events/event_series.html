@@ -63,9 +63,11 @@
              class="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
              data-testid="series-register-login-cta">
             <i data-lucide="calendar-plus" class="h-4 w-4"></i>
-            Register for all upcoming sessions
+            Register for the series
           </a>
-          <p class="mt-2 text-xs text-muted-foreground">Sign in to register for the whole series.</p>
+          <p class="mt-2 text-xs text-muted-foreground">
+            Sign in once, and new sessions added to this series will be registered automatically.
+          </p>
           {% elif is_series_registered %}
           <div class="flex flex-wrap items-center gap-3">
             {% member_status_badge "You're registered for this series" status="registered" size="md" icon="check-circle" testid="series-registered-state" extra_class="rounded-lg py-2.5 font-semibold" %}
@@ -76,24 +78,23 @@
               Cancel series registration
             </button>
           </div>
-          {% elif has_upcoming_to_register %}
+          {% else %}
           <button type="button"
                   class="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   data-testid="series-register-button"
                   data-series-register>
             <i data-lucide="calendar-plus" class="h-4 w-4"></i>
-            Register for all upcoming sessions
+            Register for the series
           </button>
+          <p class="mt-2 text-xs text-muted-foreground" data-testid="series-auto-register-note">
+            New sessions added to this series will be registered automatically.
+          </p>
           {% if has_tier_locked %}
           <p class="mt-2 text-xs text-muted-foreground" data-testid="series-tier-note">
             {{ tier_locked_count }} session{{ tier_locked_count|pluralize }} require a higher tier.
             <a href="{{ pricing_url }}" class="text-accent hover:underline">Upgrade</a>
           </p>
           {% endif %}
-          {% else %}
-          <p class="text-sm text-muted-foreground" data-testid="series-no-upcoming">
-            There are no additional upcoming sessions available for you to register for right now.
-          </p>
           {% endif %}
 
           {# Summary flash filled in by JS after a fan-out. #}

@@ -408,7 +408,11 @@ class SeriesPublicPageTest(TierSetupMixin, TestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'series-register-login-cta')
-        self.assertContains(response, 'Register for all upcoming sessions')
+        self.assertContains(response, 'Register for the series')
+        self.assertContains(
+            response,
+            'new sessions added to this series will be registered automatically',
+        )
 
     def test_authenticated_unregistered_sees_register_button(self):
         user = User.objects.create_user(
@@ -423,6 +427,7 @@ class SeriesPublicPageTest(TierSetupMixin, TestCase):
         self.assertFalse(response.context['is_series_registered'])
         self.assertContains(response, 'data-series-register')
         self.assertContains(response, 'series-register-button')
+        self.assertContains(response, 'Register for the series')
 
     def test_registered_user_sees_registered_state_and_cancel(self):
         user = User.objects.create_user(
@@ -444,7 +449,7 @@ class SeriesPublicPageTest(TierSetupMixin, TestCase):
         # The past occurrence shows the Past state.
         self.assertContains(response, 'series-event-state-past')
 
-    def test_individually_registered_user_sees_no_additional_sessions_copy(self):
+    def test_individually_registered_user_can_add_standing_series_registration(self):
         user = User.objects.create_user(
             email='single@test.com', password='pass', email_verified=True,
         )
@@ -457,14 +462,11 @@ class SeriesPublicPageTest(TierSetupMixin, TestCase):
 
         self.assertFalse(response.context['is_series_registered'])
         self.assertContains(response, 'series-event-state-registered')
+        self.assertContains(response, 'series-register-button')
+        self.assertContains(response, 'Register for the series')
         self.assertContains(
             response,
-            'There are no additional upcoming sessions available for you '
-            'to register for right now.',
-        )
-        self.assertNotContains(
-            response,
-            'No upcoming sessions are open for registration right now.',
+            'New sessions added to this series will be registered automatically.',
         )
 
 

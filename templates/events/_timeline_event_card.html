@@ -1,0 +1,52 @@
+{% load member_badges %}
+{% comment %}
+Issue #1382 — Luma-style upcoming event card for the /events timeline. The
+whole card is one anchor (#523 focus ring). A series occurrence routes to the
+series page (#857); a standalone event routes to its own detail page (#673
+keeps get_absolute_url as the source of truth). Layout: time -> title ->
+(optional description) -> platform + registered meta -> badges (access first,
+then the Weekly-series pill + cadence line, Registered, and external host).
+A right-side thumbnail renders ONLY for an authored ``cover_image_url`` (never
+the busy auto-generated banner).
+
+Required context: ``event``, ``display_time`` (localized clock label from the
+view), ``registered_event_ids``.
+{% endcomment %}
+{% firstof event.event_series.get_absolute_url event.get_absolute_url as event_card_href %}
+<article class="group rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50" data-testid="upcoming-event-card">
+  <a href="{{ event_card_href }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="event-card-link">
+    <div class="flex items-start justify-between gap-4">
+      <div class="min-w-0 flex-1">
+        <p class="text-sm font-medium text-muted-foreground" data-testid="event-card-time">{{ display_time }}</p>
+        <h3 class="mt-1 text-lg font-semibold text-foreground transition-colors group-hover:text-accent">{{ event.title }}</h3>
+        {% if event.description_html %}
+        <p class="mt-2 line-clamp-2 text-sm text-muted-foreground">{{ event.description_html|striptags|truncatechars:160 }}</p>
+        {% endif %}
+        <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground" data-testid="event-card-meta">
+          {% include "events/_timeline_platform_label.html" with event=event %}
+          {% include "events/_timeline_registered_count.html" with event=event %}
+        </div>
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          {% member_access_badge event.required_level testid="event-tier-badge" %}
+          {% if event.event_series %}
+          {% member_label_badge event.event_series.list_badge_label tone="accent_outline_strong" icon="repeat" testid="series-card-badge" %}
+          <span class="text-xs text-muted-foreground" data-testid="series-cadence-line">{% if event.event_series.cadence_prefix %}{{ event.event_series.cadence_prefix }} · {% endif %}part of {{ event.event_series.name }}</span>
+          {% endif %}
+          {% if event.id in registered_event_ids %}
+          {% member_status_badge "Registered" status="registered" icon="check" %}
+          {% endif %}
+          {% if event.is_external %}
+          {% with external_host_label="Hosted on "|add:event.external_host %}
+          {% member_label_badge external_host_label tone="accent_outline_strong" icon="external-link" testid="event-card-external-badge" %}
+          {% endwith %}
+          {% endif %}
+        </div>
+      </div>
+      {% if event.cover_image_url %}
+      <div class="hidden flex-shrink-0 sm:block" style="width:180px">
+        <img src="{{ event.cover_image_url }}" alt="" loading="lazy" class="rounded-lg border border-border object-cover" style="width:180px;height:112px" data-testid="event-card-thumbnail">
+      </div>
+      {% endif %}
+    </div>
+  </a>
+</article>

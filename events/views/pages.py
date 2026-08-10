@@ -3,6 +3,7 @@ import hashlib
 from datetime import date, datetime, timedelta
 from datetime import timezone as dt_timezone
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
@@ -15,7 +16,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
-from accounts.services.timezones import format_user_datetime
+from accounts.services.timezones import format_user_datetime, is_valid_timezone
 from content.access import (
     build_gating_context,
     can_access,
@@ -48,12 +49,10 @@ from events.services.display_time import (
 )
 from events.services.freestyle_evidence import build_freestyle_evidence
 from events.services.time_windows import (
-    past_events_queryset,
     past_recording_events_queryset,
     upcoming_events_queryset,
 )
 
-VALID_EVENTS_FILTERS = {'all', 'upcoming', 'past'}
 PUBLIC_EVENTS_PER_PAGE = 20
 EVENTS_PAGE_TITLE = 'Events | AI Shipping Labs'
 EVENTS_PAGE_DESCRIPTION = (
@@ -263,6 +262,82 @@ def _build_upcoming_rows(upcoming_events):
     return rows
 
 
+def _viewer_timezone(user):
+    """Return the viewer's ``ZoneInfo`` when they have a valid preference.
+
+    Issue #1382: the Luma-style /events timeline groups occurrences by their
+    LOCAL calendar date and shows a local time on each card. We reuse the
+    exact timezone precedence the per-card datetime partial
+    (``_event_list_time.html``) already uses: an authenticated viewer with a
+    valid ``preferred_timezone`` sees times in that zone; everyone else falls
+    back to each event's own stored timezone. This helper resolves only the
+    viewer half; the per-event fallback lives in ``_event_local_datetime``.
+    """
+    if not getattr(user, 'is_authenticated', False):
+        # Anonymous viewers fall through to each event's own stored timezone
+        # (``_event_local_datetime`` handles the ``None`` case), matching the
+        # ``event_source_short_datetime`` branch of the per-card partial.
+        return None
+    tz_name = getattr(user, 'preferred_timezone', '')
+    if is_valid_timezone(tz_name):
+        return ZoneInfo(tz_name)
+    # An authenticated viewer without a valid preference gets the UTC fallback,
+    # mirroring ``format_user_datetime``.
+    return ZoneInfo('UTC')
+
+
+def _event_local_datetime(start_datetime, event_timezone, viewer_tz):
+    """Localize ``start_datetime`` for grouping/display on the timeline."""
+    dt = start_datetime
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=dt_timezone.utc)
+    if viewer_tz is not None:
+        return dt.astimezone(viewer_tz)
+    tz_name = event_timezone if is_valid_timezone(event_timezone) else 'UTC'
+    return dt.astimezone(ZoneInfo(tz_name))
+
+
+def _format_time_label(local_dt):
+    """Return a 12-hour "4:00 PM" clock label (portable, no ``%-I``)."""
+    hour = local_dt.hour % 12 or 12
+    suffix = 'AM' if local_dt.hour < 12 else 'PM'
+    return f'{hour}:{local_dt.minute:02d} {suffix}'
+
+
+def _group_timeline_days(rows, viewer_tz):
+    """Group already-ordered timeline rows into per-date buckets.
+
+    ``rows`` is the ordered list produced by ``_build_upcoming_rows`` (for the
+    Upcoming timeline) or a list of ``{'kind': 'past', 'event': ...}`` dicts
+    (for the Past timeline). Each row's anchor event (the ``event`` key, or the
+    ``next_occurrence`` for a grouped series row) supplies the date/time. The
+    input order is preserved — ascending for upcoming, descending for past — so
+    same-day rows are always adjacent and we can bucket in a single pass.
+
+    Mutates each row in place to add a ``display_time`` label and returns an
+    ordered list of ``{iso_date, date_label, weekday_label, rows}`` dicts.
+    """
+    days = []
+    current = None
+    for row in rows:
+        anchor = row.get('event') or row.get('next_occurrence')
+        local_dt = _event_local_datetime(
+            anchor.start_datetime, anchor.timezone, viewer_tz,
+        )
+        row['display_time'] = _format_time_label(local_dt)
+        iso_date = local_dt.date().isoformat()
+        if current is None or current['iso_date'] != iso_date:
+            current = {
+                'iso_date': iso_date,
+                'date_label': f'{local_dt.strftime("%b")} {local_dt.day}',
+                'weekday_label': local_dt.strftime('%A'),
+                'rows': [],
+            }
+            days.append(current)
+        current['rows'].append(row)
+    return days
+
+
 def events_calendar(request, year=None, month=None):
     """Monthly calendar grid view for events."""
     today = date.today()
@@ -355,72 +430,28 @@ def events_calendar(request, year=None, month=None):
 
 
 def events_list(request):
-    """Events list page with Upcoming and Past sections.
+    """Luma-style events timeline with an Upcoming/Past toggle.
 
-    Accepts ``?filter=`` with values ``all`` (default), ``upcoming``, or
-    ``past``. The past surface filters to completed events that have a
-    recording, supports tag filtering via ``?tag=``, and paginates at
-    20 per page.
+    Issue #1382: the page defaults to Upcoming ONLY (like Luma). Past events
+    render exclusively under ``?filter=past``. Any other ``filter`` value
+    (including the legacy ``all``) resolves to Upcoming, so old links keep
+    working without showing a combined view. Both surfaces render as a single
+    date-grouped timeline (``events/_events_timeline.html``). The Past surface
+    filters to completed events that have a recording, supports tag filtering
+    via ``?tag=``, and paginates at 20 per page.
     """
-    filter_mode = request.GET.get('filter', 'all').strip().lower()
-    if filter_mode not in VALID_EVENTS_FILTERS:
-        filter_mode = 'all'
+    filter_mode = (
+        'past'
+        if request.GET.get('filter', '').strip().lower() == 'past'
+        else 'upcoming'
+    )
 
     selected_tags = _get_selected_tags(request)
-
     now = timezone.now()
-    upcoming_events = (
-        upcoming_events_queryset(now=now)
-        .annotate(_attendee_count=Count('registrations'))
-        .select_related('event_series')
-        .order_by('start_datetime')
-    )
-
-    # For the "past" surface we show published finished events with any
-    # recording field populated. The default "all" view does not require a
-    # recording. Issue #863: cancelled occurrences are hidden from every public
-    # listing, so neither bucket includes them.
-    past_with_recording_qs = past_recording_events_queryset(
-        now=now,
-    ).annotate(
-        _attendee_count=Count('registrations')
-    ).select_related('workshop').order_by('-start_datetime')
-
-    # ``past_all_qs`` = any non-cancelled event past its effective end.
-    # Issue #863: cancelled events no longer appear here (previously they were
-    # added back via ``Q(status='cancelled')``).
-    past_all_qs = (
-        past_events_queryset(now=now)
-        .annotate(_attendee_count=Count('registrations'))
-        .select_related('workshop')
-        .order_by('-start_datetime')
-    )
-
-    # Collect all tags from past-with-recording events for the tag filter UI
-    all_past_tags = set()
-    for event in past_with_recording_qs:
-        if event.tags:
-            all_past_tags.update(event.tags)
-    all_past_tags = sorted(all_past_tags)
-
-    # Apply tag filtering only on past-with-recording list.
-    past_filtered = _filter_by_tags(past_with_recording_qs, selected_tags)
-
-    # Paginate the public Past section in every mode that renders it.
-    page_obj = None
-    is_paginated = False
-    if filter_mode in ('all', 'past'):
-        past_queryset = past_filtered if filter_mode == 'past' else past_all_qs
-        paginator = Paginator(past_queryset, PUBLIC_EVENTS_PER_PAGE)
-        page_obj = paginator.get_page(request.GET.get('page'))
-        is_paginated = page_obj.has_other_pages()
-        past_events = page_obj
-    else:
-        # upcoming: we don't render past section
-        past_events = past_all_qs.none()
-
-    # Annotate events with registration info for authenticated users
     user = request.user
+    viewer_tz = _viewer_timezone(user)
+
+    # Registration info for authenticated viewers (drives the Registered pill).
     registered_event_ids = set()
     if user.is_authenticated:
         registered_event_ids = set(
@@ -429,24 +460,55 @@ def events_list(request):
             ).values_list('event_id', flat=True)
         )
 
-    # Issue #578: "Subscribe to all events" CTA on the view-toggle row.
-    # Three options resolved server-side so the template stays free of
-    # URL-encoding logic: Google deep-link, Apple webcal://, and the
-    # canonical https:// URL exposed for copy-paste into Outlook etc.
+    # Issue #578: "Subscribe to all events" affordance. Three options resolved
+    # server-side so the template stays free of URL-encoding logic.
     subscribe_urls = build_subscribe_urls()
 
-    # Issue #866: group a series' 2+ upcoming occurrences into a single
-    # "series card" in the Upcoming section. The grouping logic lives in the
-    # view; the template only renders the two row shapes (event or series).
-    upcoming_rows = _build_upcoming_rows(upcoming_events)
+    page_obj = None
+    is_paginated = False
+    upcoming_days = []
+    upcoming_rows = []
+    past_days = []
+    all_past_tags = []
+
+    if filter_mode == 'past':
+        # Published finished events with any recording field populated.
+        # Issue #863: cancelled occurrences are hidden from every public list.
+        past_with_recording_qs = (
+            past_recording_events_queryset(now=now)
+            .annotate(_attendee_count=Count('registrations'))
+            .select_related('workshop')
+            .order_by('-start_datetime')
+        )
+        all_past_tags_set = set()
+        for event in past_with_recording_qs:
+            if event.tags:
+                all_past_tags_set.update(event.tags)
+        all_past_tags = sorted(all_past_tags_set)
+
+        past_filtered = _filter_by_tags(past_with_recording_qs, selected_tags)
+        paginator = Paginator(past_filtered, PUBLIC_EVENTS_PER_PAGE)
+        page_obj = paginator.get_page(request.GET.get('page'))
+        is_paginated = page_obj.has_other_pages()
+        past_rows = [{'kind': 'past', 'event': event} for event in page_obj]
+        past_days = _group_timeline_days(past_rows, viewer_tz)
+    else:
+        upcoming_events = (
+            upcoming_events_queryset(now=now)
+            .annotate(_attendee_count=Count('registrations'))
+            .select_related('event_series')
+            .order_by('start_datetime')
+        )
+        # Issue #866: collapse a series' 2+ upcoming occurrences into one row.
+        upcoming_rows = _build_upcoming_rows(upcoming_events)
+        upcoming_days = _group_timeline_days(upcoming_rows, viewer_tz)
 
     context = {
         'filter_mode': filter_mode,
-        'show_upcoming': filter_mode in ('all', 'upcoming'),
-        'show_past': filter_mode in ('all', 'past'),
-        'upcoming_events': upcoming_events,
+        'upcoming_days': upcoming_days,
         'upcoming_rows': upcoming_rows,
-        'past_events': past_events,
+        'past_days': past_days,
+        'past_events': page_obj,
         'page_obj': page_obj,
         'is_paginated': is_paginated,
         'pagination_query_prefix': _pagination_query_prefix(request),

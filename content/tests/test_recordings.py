@@ -349,8 +349,12 @@ class RecordingsListDisplayTest(TestCase):
         self.assertContains(response, 'Workshop description here')
 
     def test_shows_date(self):
+        # Issue #1382: the timeline splits the date into a left rail
+        # ("Jul 20" + weekday) with the clock time on the card.
         response = self.client.get('/events?filter=past')
-        self.assertContains(response, 'Sun, Jul 20, 2025')
+        self.assertContains(response, 'data-testid="timeline-day-date"')
+        self.assertContains(response, 'Jul 20')
+        self.assertContains(response, 'Sunday')
 
     def test_shows_tags(self):
         response = self.client.get('/events?filter=past')

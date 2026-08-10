@@ -166,6 +166,30 @@ class EventSeries(TimestampedModelMixin, models.Model):
         return f'/studio/event-series/{self.pk}/'
 
     @property
+    def cadence_prefix(self):
+        """Short "Every Monday" style prefix for compact list cards.
+
+        Issue #1382: the public /events timeline shows a one-line cadence
+        hint under a series occurrence — e.g. "Every Monday · part of
+        <series name>". A weekly series with a stored ``day_of_week``
+        yields "Every <weekday>"; a "No fixed cadence" collection (or a
+        series missing its day) yields an empty string so the template
+        falls back to the plain "part of <name>" form.
+        """
+        if self.cadence == 'weekly' and self.day_of_week is not None:
+            return f'Every {self.get_day_of_week_display()}'
+        return ''
+
+    @property
+    def list_badge_label(self):
+        """Pill label for a series occurrence on the public timeline.
+
+        Issue #1382: "Weekly series" for the weekly cadence; the neutral
+        "Series" for a no-fixed-cadence collection.
+        """
+        return 'Weekly series' if self.cadence == 'weekly' else 'Series'
+
+    @property
     def event_count(self):
         return self.events.count()
 

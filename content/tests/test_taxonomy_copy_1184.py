@@ -179,11 +179,8 @@ class PublicTaxonomyCopy1184Test(TierSetupMixin, TestCase):
         calendar_response = self.client.get('/events/calendar')
 
         self.assertContains(events_response, 'Live community events')
-        self.assertContains(
-            events_response,
-            'live workshops, group coding sessions, and community calls',
-        )
-        self.assertContains(events_response, 'Past event recordings')
+        # Issue #1382: the default view is a clean Upcoming timeline; the SEO
+        # description still describes live sessions + past recordings.
         self.assertContains(
             events_response,
             'Scheduled live community sessions, registration, calendar view',

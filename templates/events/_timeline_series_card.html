@@ -1,0 +1,40 @@
+{% load member_badges %}
+{% comment %}
+Issue #1382 — grouped "series card" for the /events timeline, shown when a
+series has 2+ upcoming live occurrences (#866). The whole card is one anchor to
+the series page, where a visitor can register for all sessions or any single
+one. It previews only the NEXT occurrence's time/title plus a "N upcoming
+sessions" summary — it never lists every date. Layout mirrors the single event
+card: time -> title -> platform + registered meta -> badges (access first, then
+the Weekly-series pill + cadence line) -> the sessions summary / see-more hint.
+
+Required context: ``row`` with ``series``, ``next_occurrence``, ``count``,
+``remaining_count`` and the view-supplied ``display_time``.
+{% endcomment %}
+{% with series=row.series occ=row.next_occurrence %}
+<article class="group rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50" data-testid="event-series-card" data-series-slug="{{ series.slug }}">
+  <a href="{{ series.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="series-card-link">
+    <div class="min-w-0 flex-1">
+      <p class="text-sm font-medium text-muted-foreground" data-testid="event-card-time">{{ row.display_time }}</p>
+      <h3 class="mt-1 text-lg font-semibold text-foreground transition-colors group-hover:text-accent" data-testid="series-card-title">{{ occ.title }}</h3>
+      <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground" data-testid="series-card-date">
+        {% include "events/_timeline_platform_label.html" with event=occ %}
+        {% include "events/_timeline_registered_count.html" with event=occ %}
+      </div>
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        {% member_access_badge occ.required_level testid="event-tier-badge" %}
+        {% member_label_badge series.list_badge_label tone="accent_outline_strong" icon="repeat" testid="series-card-badge" %}
+        <span class="text-xs text-muted-foreground" data-testid="series-cadence-line">{% if series.cadence_prefix %}{{ series.cadence_prefix }} · {% endif %}part of {{ series.name }}</span>
+      </div>
+      <p class="mt-3 text-sm text-muted-foreground" data-testid="series-card-sessions">{{ row.count }} upcoming session{{ row.count|pluralize }}</p>
+      {% if row.remaining_count > 0 %}
+      <span class="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-accent" data-testid="series-card-see-more">
+        See more
+        <span class="text-muted-foreground">({{ row.remaining_count }} more)</span>
+        <i data-lucide="arrow-right" class="h-4 w-4"></i>
+      </span>
+      {% endif %}
+    </div>
+  </a>
+</article>
+{% endwith %}

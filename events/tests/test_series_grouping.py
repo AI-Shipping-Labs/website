@@ -202,7 +202,9 @@ class EventsListSeriesCardRenderTest(TestCase):
         self.assertContains(response, 'Office Hours Session 0')
         # Session-count meta line.
         self.assertContains(response, '4 upcoming sessions')
-        self.assertContains(response, 'Series: LLM Zoomcamp office hours')
+        # Issue #1382: the cadence line replaces the old "Series: <name>" text.
+        self.assertContains(response, 'part of LLM Zoomcamp office hours')
+        self.assertContains(response, 'data-testid="series-cadence-line"')
         self.assertContains(response, 'data-testid="series-card-date"')
         self.assertContains(response, 'data-testid="series-card-see-more"')
         self.assertContains(response, 'See more')
@@ -211,6 +213,13 @@ class EventsListSeriesCardRenderTest(TestCase):
         self.assertNotContains(response, 'data-testid="series-card-dates"')
 
     def test_signed_in_grouped_card_uses_viewer_preferred_timezone(self):
+        from zoneinfo import ZoneInfo
+
+        from events.views.pages import (
+            _event_local_datetime,
+            _format_time_label,
+        )
+
         user = User.objects.create_user(
             email='ny-list@example.com',
             password='pass',
@@ -220,7 +229,13 @@ class EventsListSeriesCardRenderTest(TestCase):
 
         response = self.client.get('/events')
 
-        self.assertContains(response, 'America/New_York')
+        # Issue #1382: the timeline converts times to the viewer's tz silently
+        # (Luma-style) — the next occurrence's clock label is in New York time.
+        first = self.series.events.order_by('start_datetime').first()
+        local = _event_local_datetime(
+            first.start_datetime, first.timezone, ZoneInfo('America/New_York'),
+        )
+        self.assertContains(response, _format_time_label(local))
         self.assertContains(response, 'data-testid="series-card-date"')
 
     def test_individual_occurrence_titles_not_repeated_as_cards(self):
@@ -335,9 +350,10 @@ class GroupedCardExcludesCancelledAndDraftTest(TestCase):
         # Only one live occurrence -> single event card, no grouped card.
         self.assertEqual([r['kind'] for r in rows], ['event'])
         self.assertNotContains(response, 'data-testid="event-series-card"')
-        # The single card keeps the "Series: <name>" membership link.
-        self.assertContains(response, 'data-testid="event-card-series-link"')
-        self.assertContains(response, 'Series: Mixed Status Series')
+        # Issue #1382: the single card keeps a series membership cue via the
+        # cadence line ("part of <name>").
+        self.assertContains(response, 'data-testid="series-cadence-line"')
+        self.assertContains(response, 'part of Mixed Status Series')
 
 
 class OneSessionSeriesShowsMembershipTest(TestCase):
@@ -359,8 +375,8 @@ class OneSessionSeriesShowsMembershipTest(TestCase):
         response = self.client.get('/events')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="event-series-card"')
-        self.assertContains(response, 'data-testid="event-card-series-link"')
-        self.assertContains(response, 'Series: Solo Series')
+        self.assertContains(response, 'data-testid="series-cadence-line"')
+        self.assertContains(response, 'part of Solo Series')
         self.assertContains(response, 'Solo Occurrence')
 
 

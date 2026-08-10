@@ -834,43 +834,41 @@ class UpcomingSeriesCardCadenceTest(TestCase):
             f'– {cls.irregular_dates[-1].strftime("%a, %b %d, %Y")}'
         )
 
-    def _meta(self, response, series_slug):
-        """Return the text inside the series-card-meta paragraph for a card."""
+    def _card(self, response, series_slug):
+        """Return the HTML segment for one series card."""
         html = response.content.decode()
-        # Isolate the card for this series, then its meta paragraph.
         card_marker = f'data-series-slug="{series_slug}"'
         start = html.index(card_marker)
-        segment = html[start:start + 4000]
-        match = re.search(
-            r'data-testid="series-card-meta"[^>]*>(.*?)</p>',
-            segment, re.DOTALL,
-        )
-        self.assertIsNotNone(match, 'series-card-meta paragraph not found')
-        return ' '.join(match.group(1).split())
+        return html[start:start + 4000]
 
     def test_regular_series_card_shows_weekly_label_and_suffix(self):
+        # Issue #1382: the timeline series card shows a "Weekly series" pill,
+        # a stored-day cadence line, and the upcoming-session count.
         response = self.client.get('/events')
-        meta = self._meta(response, 'regular-oh')
-        self.assertEqual(
-            meta,
-            'Weekly on Wednesday at 18:00 Europe/Berlin '
-            '· 3 upcoming sessions',
+        card = self._card(response, 'regular-oh')
+        self.assertIn('Weekly series', card)
+        self.assertIn(
+            'Every Wednesday · part of Regular Office Hours', card,
         )
+        self.assertIn('3 upcoming sessions', card)
 
     def test_irregular_series_card_shows_session_summary_not_weekly(self):
+        # The cadence line is derived from the stored cadence/day fields, so a
+        # drifted series still reads with its stored weekday plus the session
+        # count — the honest schedule-label detection lives on the series page.
         response = self.client.get('/events')
-        meta = self._meta(response, 'irregular-ws')
-        self.assertEqual(
-            meta,
-            f'3 sessions · {self.irregular_range} '
-            '· 3 upcoming sessions',
+        card = self._card(response, 'irregular-ws')
+        self.assertIn(
+            'Every Wednesday · part of Irregular Workshop', card,
         )
-        self.assertNotIn('Weekly on', meta)
+        self.assertIn('3 upcoming sessions', card)
 
-    def test_irregular_card_meta_matches_schedule_label(self):
+    def test_series_card_uses_stored_badge_and_cadence(self):
         response = self.client.get('/events')
-        meta = self._meta(response, 'irregular-ws')
-        self.assertTrue(meta.startswith(self.irregular.schedule_label))
+        card = self._card(response, 'regular-oh')
+        self.assertIn('data-testid="series-card-badge"', card)
+        self.assertIn('data-testid="series-cadence-line"', card)
+        self.assertIn('data-testid="series-card-sessions"', card)
 
 
 class PublicEventsListSeriesLinkTest(TestCase):
@@ -897,17 +895,19 @@ class PublicEventsListSeriesLinkTest(TestCase):
 
     def test_grouped_event_has_series_link(self):
         response = self.client.get('/events?filter=upcoming')
-        self.assertContains(response, 'Series: Grouped Series')
+        # Issue #1382: the series membership cue is the cadence line.
+        self.assertContains(response, 'part of Grouped Series')
         self.assertContains(response, self.series.get_absolute_url())
         self.assertNotContains(response, '/events/groups/grouped-series')
 
     def test_standalone_event_has_no_series_link(self):
         response = self.client.get('/events?filter=upcoming')
-        # The standalone event title is present but no "Series: " label
-        # is rendered for it.
+        # The standalone event title is present but no cadence line is
+        # rendered for it.
         self.assertContains(response, 'Standalone Event')
-        # The total "Series: " occurrences must equal the number of
-        # series-linked events on the page (1).
+        # Exactly one series-linked event on the page, so exactly one
+        # cadence line.
         self.assertEqual(
-            response.content.decode().count('Series:'), 1,
+            response.content.decode().count('data-testid="series-cadence-line"'),
+            1,
         )

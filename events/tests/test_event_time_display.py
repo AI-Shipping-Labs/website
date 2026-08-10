@@ -4,7 +4,6 @@ from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import User
-from accounts.templatetags.date_formatting import event_source_short_datetime
 from events.models import Event
 from events.services.display_time import format_event_time_range
 from integrations.config import clear_config_cache
@@ -254,6 +253,14 @@ class EventListAndCalendarScopeTest(TestCase):
         # Issue #673: links go to the canonical id+slug URL now.
         self.assertContains(list_response, event.get_absolute_url())
         self.assertContains(calendar_response, event.get_absolute_url())
-        self.assertContains(list_response, event_source_short_datetime(event))
+        # Issue #1382: the list shows a compact clock time (date in the rail);
+        # the calendar stays date-only.
+        from events.views.pages import (
+            _event_local_datetime,
+            _format_time_label,
+        )
+        local = _event_local_datetime(event.start_datetime, event.timezone, None)
+        self.assertContains(list_response, _format_time_label(local))
+        self.assertContains(list_response, 'data-testid="timeline-day-date"')
         self.assertNotContains(list_response, event.formatted_start())
         self.assertNotContains(calendar_response, event.formatted_time())

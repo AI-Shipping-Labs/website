@@ -32,15 +32,18 @@ class EventListArrowHiddenOnMobileTest(TestCase):
             status="upcoming",
         )
 
-    def test_upcoming_event_arrow_hidden_on_mobile(self):
+    def test_upcoming_event_card_has_no_nav_arrow(self):
+        # Issue #1382: Luma-style timeline cards drop the trailing navigation
+        # arrow; the whole card is still the click target.
         response = self.client.get("/events")
         content = response.content.decode()
-        self.assertIn('data-lucide="arrow-right"', content)
-        self.assertIn("hidden sm:block", content)
+        self.assertIn('data-testid="upcoming-event-card"', content)
+        self.assertNotIn('data-lucide="arrow-right"', content)
 
-    def test_upcoming_event_arrow_has_flex_shrink_0(self):
+    def test_upcoming_timeline_uses_flex_shrink_0_rail(self):
         response = self.client.get("/events")
         content = response.content.decode()
+        self.assertIn('data-testid="events-timeline"', content)
         self.assertIn("flex-shrink-0", content)
 
 

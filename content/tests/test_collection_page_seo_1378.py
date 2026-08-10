@@ -367,8 +367,10 @@ class EventsCollectionMetadataTest(TestCase):
         cases = [
             ('?page=1', f'{SITE_URL}/events'),
             ('?page=not-a-number', f'{SITE_URL}/events'),
-            ('?page=2', f'{SITE_URL}/events?page=2'),
-            ('?page=999', f'{SITE_URL}/events?page=2'),
+            # Issue #1382: the default Upcoming view is not paginated, so a
+            # stray ?page= param canonicalizes back to /events.
+            ('?page=2', f'{SITE_URL}/events'),
+            ('?page=999', f'{SITE_URL}/events'),
             (
                 '?filter=past&page=2',
                 f'{SITE_URL}/events?filter=past&page=2',

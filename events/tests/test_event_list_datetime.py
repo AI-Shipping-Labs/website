@@ -1,14 +1,25 @@
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import User
-from accounts.services.timezones import format_user_datetime
-from accounts.templatetags.date_formatting import event_source_short_datetime
 from events.models import Event, EventSeries
+from events.views.pages import _event_local_datetime, _format_time_label
 
-LIST_CARD_USER_FORMAT = '%a, %b %d, %Y, %H:%M'
+
+def _expected_time_label(event, tz_name=None):
+    """Return the timeline clock label the view would render for ``event``.
+
+    ``tz_name`` is the authenticated viewer's zone; ``None`` uses the event's
+    own stored timezone (anonymous behavior).
+    """
+    viewer_tz = ZoneInfo(tz_name) if tz_name else None
+    local = _event_local_datetime(
+        event.start_datetime, event.timezone, viewer_tz,
+    )
+    return _format_time_label(local)
 
 
 def _future_start(*, days=12, hour=16, minute=0):
@@ -46,7 +57,7 @@ def _create_event(title, slug, *, start_datetime, **overrides):
 
 
 class PublicEventListDatetimeTest(TestCase):
-    def test_anonymous_upcoming_standalone_card_uses_source_short_datetime(self):
+    def test_anonymous_upcoming_standalone_card_uses_event_timezone_clock(self):
         event = _create_event(
             'Mock Interviews for AI Engineering Roles',
             'mock-interviews-ai-engineering-roles',
@@ -55,11 +66,11 @@ class PublicEventListDatetimeTest(TestCase):
 
         all_response = self.client.get('/events')
         upcoming_response = self.client.get('/events?filter=upcoming')
-        expected = event_source_short_datetime(event)
+        expected = _expected_time_label(event)
 
         self.assertContains(all_response, expected)
         self.assertContains(upcoming_response, expected)
-        self.assertIn('·', expected)
+        self.assertContains(all_response, 'data-testid="timeline-day-date"')
 
     def test_authenticated_preferred_timezone_converts_standalone_card(self):
         user = User.objects.create_user(
@@ -75,13 +86,8 @@ class PublicEventListDatetimeTest(TestCase):
 
         response = self.client.get('/events')
 
-        expected = format_user_datetime(
-            event.start_datetime,
-            user,
-            fmt=LIST_CARD_USER_FORMAT,
-        )
+        expected = _expected_time_label(event, tz_name='America/New_York')
         self.assertContains(response, expected)
-        self.assertNotContains(response, event_source_short_datetime(event))
 
     def test_authenticated_without_valid_timezone_uses_utc_fallback(self):
         user = User.objects.create_user(
@@ -97,13 +103,10 @@ class PublicEventListDatetimeTest(TestCase):
 
         response = self.client.get('/events?filter=upcoming')
 
-        expected = format_user_datetime(
-            event.start_datetime,
-            user,
-            fmt=LIST_CARD_USER_FORMAT,
-        )
+        # start_datetime is 16:00 UTC; UTC fallback yields the 4:00 PM label.
+        expected = _expected_time_label(event, tz_name='UTC')
         self.assertContains(response, expected)
-        self.assertIn(' UTC', expected)
+        self.assertContains(response, '4:00 PM')
 
     def test_single_occurrence_series_fallback_uses_single_event_datetime(self):
         series = EventSeries.objects.create(
@@ -120,20 +123,12 @@ class PublicEventListDatetimeTest(TestCase):
 
         response = self.client.get('/events?filter=upcoming')
 
-        self.assertContains(response, 'data-testid="event-card-series-link"')
-        self.assertContains(response, 'Series: One Session Series')
-        self.assertContains(response, event_source_short_datetime(event))
+        self.assertContains(response, 'data-testid="series-cadence-line"')
+        self.assertContains(response, 'part of One Session Series')
+        self.assertContains(response, _expected_time_label(event))
         self.assertNotContains(response, 'data-testid="event-series-card"')
 
-    def test_past_list_cards_use_source_short_datetime(self):
-        compact_event = _create_event(
-            'Compact Past List Time',
-            'compact-past-list-time',
-            start_datetime=_past_start(days=4, hour=15),
-            end_datetime=_past_start(days=4, hour=16),
-            status='completed',
-            location='',
-        )
+    def test_past_list_cards_use_event_timezone_clock(self):
         rich_event = _create_event(
             'Rich Past Recording Time',
             'rich-past-recording-time',
@@ -145,17 +140,10 @@ class PublicEventListDatetimeTest(TestCase):
             published=True,
         )
 
-        all_response = self.client.get('/events')
         past_response = self.client.get('/events?filter=past')
 
-        self.assertContains(
-            all_response,
-            event_source_short_datetime(compact_event),
-        )
-        self.assertContains(
-            past_response,
-            event_source_short_datetime(rich_event),
-        )
+        self.assertContains(past_response, _expected_time_label(rich_event))
+        self.assertContains(past_response, 'data-testid="timeline-day-date"')
 
     def test_grouped_series_card_keeps_datetime_and_series_metadata(self):
         series = EventSeries.objects.create(
@@ -179,6 +167,6 @@ class PublicEventListDatetimeTest(TestCase):
         response = self.client.get('/events?filter=upcoming')
 
         self.assertContains(response, 'data-testid="event-series-card"')
-        self.assertContains(response, event_source_short_datetime(first))
+        self.assertContains(response, _expected_time_label(first))
         self.assertContains(response, '2 upcoming sessions')
         self.assertContains(response, 'data-testid="series-card-see-more"')

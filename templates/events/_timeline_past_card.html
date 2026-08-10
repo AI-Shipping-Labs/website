@@ -1,0 +1,68 @@
+{% load member_badges %}
+{% load accounts_extras %}
+{% comment %}
+Issue #1382 — Luma-style past recording card for the /events?filter=past
+timeline. The card body is one anchor (workshop page for linked workshops,
+else the event detail page) and the "Watch recording" CTA is a SIBLING anchor
+outside it (HTML5 forbids nested anchors), sitting to the right of the body.
+Layout: time -> title -> platform + attended meta -> badges (recording tier /
+workshop / Recording available / external) -> tag chips below the anchor.
+
+Required context: ``event`` and the view-supplied ``display_time``.
+{% endcomment %}
+<article class="group rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50" data-testid="past-recording-card">
+  <div class="flex items-start justify-between gap-4">
+    {% if event.kind == 'workshop' and event.workshop %}
+    <a href="{{ event.workshop.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %} min-w-0 flex-1" data-testid="past-card-workshop-link">
+    {% else %}
+    <a href="{{ event.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %} min-w-0 flex-1" data-testid="past-card-event-link">
+    {% endif %}
+      <p class="text-sm font-medium text-muted-foreground" data-testid="event-card-time">{{ display_time }}</p>
+      <h3 class="mt-1 text-lg font-semibold text-foreground transition-colors group-hover:text-accent">{{ event.title }}</h3>
+      {% if event.description_html %}
+      <p class="mt-2 line-clamp-2 text-sm text-muted-foreground">{{ event.description_html|striptags|truncatechars:160 }}</p>
+      {% endif %}
+      <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground" data-testid="event-card-meta">
+        {% include "events/_timeline_platform_label.html" with event=event %}
+        {% include "events/_timeline_registered_count.html" with event=event %}
+      </div>
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        {% if event.kind == 'workshop' and event.workshop %}
+        {% member_access_badge event.workshop.recording_required_level testid="past-card-recording-tier" %}
+        {% member_label_badge "Workshop" tone="accent_strong" icon="graduation-cap" testid="past-card-workshop-badge" %}
+        {% else %}
+        {% member_access_badge event.required_level testid="past-card-recording-tier" %}
+        {% endif %}
+        {% member_label_badge "Recording available" tone="neutral" icon="play" testid="past-card-recording-badge" %}
+        {% if event.is_external %}
+        {% with external_host_label="Hosted on "|add:event.external_host %}
+        {% member_label_badge external_host_label tone="accent_outline_strong" icon="external-link" testid="event-card-external-badge" %}
+        {% endwith %}
+        {% endif %}
+      </div>
+    </a>
+    <div class="flex-shrink-0">
+      {% if event.kind == 'workshop' and event.workshop %}
+      <a href="{% url 'workshop_video' event.workshop.url_key %}" class="{% button_classes 'primary' size='md' %}" data-testid="past-card-recording-cta">
+        <i data-lucide="play" class="h-4 w-4"></i>
+        Watch recording
+      </a>
+      {% else %}
+      <a href="{{ event.get_absolute_url }}" class="{% button_classes 'primary' size='md' %}" data-testid="past-card-recording-cta">
+        <i data-lucide="play" class="h-4 w-4"></i>
+        Watch recording
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% if event.tags %}
+  <div class="mt-3 flex flex-wrap gap-1.5" data-testid="event-card-tags">
+    {% for tag in event.tags|slice:":3" %}
+    <a href="/events?filter=past&amp;tag={{ tag }}" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ tag }}</a>
+    {% endfor %}
+    {% if event.tags|length > 3 %}
+    <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ event.tags|length|add:'-3' }} more event tags">+{{ event.tags|length|add:"-3" }}</span>
+    {% endif %}
+  </div>
+  {% endif %}
+</article>

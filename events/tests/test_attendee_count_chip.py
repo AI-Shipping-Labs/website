@@ -138,9 +138,10 @@ class EventListAttendeeChipTest(TestCase):
         response = self.client.get('/events')
         body = response.content.decode()
 
+        # Issue #1382: the timeline card shows a plain "N registered" count.
         self.assertEqual(body.count('data-testid="event-attendee-count"'), 1)
-        self.assertIn('5 people are going', body)
-        self.assertNotIn('4 people are going', body)
+        self.assertIn('5 registered', body)
+        self.assertNotIn('4 registered', body)
 
     def test_past_recordings_list_hides_low_counts_and_keeps_five_plus(self):
         self._make_event('past-low', status='completed', count=4, recording=True)
@@ -150,8 +151,8 @@ class EventListAttendeeChipTest(TestCase):
         body = response.content.decode()
 
         self.assertEqual(body.count('data-testid="event-attendee-count"'), 1)
-        self.assertIn('5 people attended', body)
-        self.assertNotIn('4 people attended', body)
+        self.assertIn('5 attended', body)
+        self.assertNotIn('4 attended', body)
 
 
 class EventSeriesAttendeeChipTest(TestCase):

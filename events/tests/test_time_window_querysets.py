@@ -138,6 +138,25 @@ class EventTimeWindowQuerysetTest(TestCase):
         )
 
 
+def _timeline_upcoming_event_ids(response):
+    """Collect anchor-event ids from the Upcoming timeline day buckets."""
+    ids = set()
+    for day in response.context['upcoming_days']:
+        for row in day['rows']:
+            anchor = row.get('event') or row.get('next_occurrence')
+            ids.add(anchor.id)
+    return ids
+
+
+def _timeline_past_event_ids(response):
+    """Collect event ids from the Past timeline day buckets."""
+    return {
+        row['event'].id
+        for day in response.context['past_days']
+        for row in day['rows']
+    }
+
+
 class EventsListTimeWindowTest(TestCase):
     def setUp(self):
         self.now = timezone.now().replace(microsecond=0)
@@ -203,48 +222,38 @@ class EventsListTimeWindowTest(TestCase):
             recording_url='https://video.test/cancelled',
         )
 
-    def test_all_filter_preserves_upcoming_and_past_contexts(self):
+    def test_all_filter_falls_back_to_upcoming_only(self):
+        # Issue #1382: the legacy ``all`` filter now resolves to the
+        # Upcoming-only timeline; no combined view exists.
         response = self.client.get('/events?filter=all')
 
-        upcoming_ids = {e.id for e in response.context['upcoming_events']}
-        past_ids = {e.id for e in response.context['past_events']}
+        upcoming_ids = _timeline_upcoming_event_ids(response)
 
+        self.assertEqual(response.context['filter_mode'], 'upcoming')
         self.assertEqual(upcoming_ids, {self.future.id})
-        self.assertEqual(
-            past_ids,
-            {
-                self.past_recorded.id,
-                self.past_without_recording.id,
-                self.stale_upcoming.id,
-            },
-        )
-        self.assertTrue(response.context['show_upcoming'])
-        self.assertTrue(response.context['show_past'])
-        self.assertIn('upcoming_rows', response.context)
+        self.assertEqual(response.context['past_days'], [])
         self.assertIn('all_past_tags', response.context)
-        self.assertNotIn(self.completed_future.id, upcoming_ids | past_ids)
-        self.assertNotIn(self.draft.id, upcoming_ids | past_ids)
-        self.assertNotIn(self.cancelled.id, upcoming_ids | past_ids)
+        self.assertNotIn(self.completed_future.id, upcoming_ids)
+        self.assertNotIn(self.draft.id, upcoming_ids)
+        self.assertNotIn(self.cancelled.id, upcoming_ids)
 
     def test_upcoming_filter_uses_effective_future_bucket(self):
         response = self.client.get('/events?filter=upcoming')
 
-        upcoming_ids = {e.id for e in response.context['upcoming_events']}
-        past_ids = {e.id for e in response.context['past_events']}
+        upcoming_ids = _timeline_upcoming_event_ids(response)
 
         self.assertEqual(upcoming_ids, {self.future.id})
-        self.assertEqual(past_ids, set())
-        self.assertTrue(response.context['show_upcoming'])
-        self.assertFalse(response.context['show_past'])
+        self.assertEqual(response.context['past_days'], [])
+        self.assertEqual(response.context['filter_mode'], 'upcoming')
 
     def test_past_filter_requires_recording_and_preserves_tag_filter(self):
         response = self.client.get('/events?filter=past&tag=agents')
 
-        past_ids = {e.id for e in response.context['past_events']}
+        past_ids = _timeline_past_event_ids(response)
 
         self.assertEqual(past_ids, {self.past_recorded.id, self.stale_upcoming.id})
-        self.assertFalse(response.context['show_upcoming'])
-        self.assertTrue(response.context['show_past'])
+        self.assertEqual(response.context['filter_mode'], 'past')
+        self.assertEqual(response.context['upcoming_days'], [])
         self.assertEqual(response.context['selected_tags'], ['agents'])
         self.assertEqual(response.context['current_tag'], 'agents')
         self.assertIn('agents', response.context['all_past_tags'])

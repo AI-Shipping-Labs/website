@@ -22,7 +22,6 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.utils import timezone
 
-from accounts.templatetags.date_formatting import event_source_short_datetime
 from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from content.models import Instructor, Workshop
 from events.models import (
@@ -262,7 +261,12 @@ class EventsListPageTest(TestCase):
         self.assertContains(response, 'Upcoming Workshop')
 
     def test_past_section_shows_completed_events(self):
-        response = self.client.get('/events')
+        # Issue #1382: past events only appear under the Past toggle now.
+        # A completed event needs a recording to surface on the Past
+        # recordings timeline, so publish one for this assertion.
+        self.past_event.recording_url = 'https://video.test/past-workshop'
+        self.past_event.save()
+        response = self.client.get('/events?filter=past')
         self.assertContains(response, 'Past Workshop')
 
     def test_draft_events_not_shown(self):
@@ -283,11 +287,11 @@ class EventsListPageTest(TestCase):
         self.assertNotContains(response, 'Async Event')
 
     def test_event_card_shows_list_datetime(self):
+        # Issue #1382: the timeline splits the date into a left rail and shows
+        # a compact clock time on each card.
         response = self.client.get('/events')
-        self.assertContains(
-            response,
-            event_source_short_datetime(self.upcoming_event),
-        )
+        self.assertContains(response, 'data-testid="timeline-day-date"')
+        self.assertContains(response, 'data-testid="event-card-time"')
         self.assertNotContains(response, self.upcoming_event.formatted_time())
 
     def test_event_card_shows_location(self):
@@ -296,7 +300,7 @@ class EventsListPageTest(TestCase):
 
 
 class EventsListDefaultPastPaginationTest(TestCase):
-    """Default ``/events`` paginates Past while keeping Upcoming visible."""
+    """Issue #1382: the Past toggle paginates the past recordings timeline."""
 
     @classmethod
     def setUpTestData(cls):
@@ -315,22 +319,24 @@ class EventsListDefaultPastPaginationTest(TestCase):
                 start_datetime=now - timedelta(days=index + 1),
                 end_datetime=now - timedelta(days=index + 1, hours=-1),
                 status='completed',
+                recording_url=f'https://video.test/history-{index:02d}',
             )
 
-    def test_default_view_caps_past_section_and_renders_pager(self):
-        response = self.client.get('/events')
+    def test_past_view_caps_section_and_renders_pager(self):
+        response = self.client.get('/events?filter=past')
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Upcoming Visible')
+        # Upcoming is a separate view now; it must not leak into Past.
+        self.assertNotContains(response, 'Upcoming Visible')
         self.assertContains(response, 'Page 1 of 2')
         self.assertContains(response, 'data-testid="events-past-pagination"')
         self.assertEqual(len(response.context['past_events']), 20)
         self.assertContains(response, 'History Event 00')
         self.assertNotContains(response, 'History Event 20')
 
-    def test_default_page_two_keeps_upcoming_and_shows_next_past_slice(self):
-        first_response = self.client.get('/events')
-        second_response = self.client.get('/events?page=2')
+    def test_past_page_two_shows_next_slice(self):
+        first_response = self.client.get('/events?filter=past')
+        second_response = self.client.get('/events?filter=past&page=2')
 
         first_titles = {event.title for event in first_response.context['past_events']}
         second_titles = {
@@ -338,23 +344,22 @@ class EventsListDefaultPastPaginationTest(TestCase):
         }
 
         self.assertEqual(second_response.status_code, 200)
-        self.assertContains(second_response, 'Upcoming Visible')
         self.assertContains(second_response, 'Page 2 of 2')
         self.assertTrue(second_titles)
         self.assertFalse(first_titles & second_titles)
         self.assertContains(second_response, 'History Event 20')
         self.assertNotContains(second_response, 'History Event 00')
 
-    def test_default_bad_page_values_clamp_to_valid_pages(self):
-        not_number = self.client.get('/events?page=not-a-number')
-        out_of_range = self.client.get('/events?page=9999')
+    def test_past_bad_page_values_clamp_to_valid_pages(self):
+        not_number = self.client.get('/events?filter=past&page=not-a-number')
+        out_of_range = self.client.get('/events?filter=past&page=9999')
 
         self.assertEqual(not_number.status_code, 200)
         self.assertEqual(not_number.context['page_obj'].number, 1)
         self.assertEqual(out_of_range.status_code, 200)
         self.assertEqual(out_of_range.context['page_obj'].number, 2)
 
-    def test_upcoming_filter_does_not_render_past_or_pager(self):
+    def test_upcoming_view_does_not_render_past_or_pager(self):
         response = self.client.get('/events?filter=upcoming')
 
         self.assertEqual(response.status_code, 200)
@@ -365,14 +370,20 @@ class EventsListDefaultPastPaginationTest(TestCase):
 
 
 class EventsListPublicEmptyStatesTest(TestCase):
-    """Public ``/events`` keeps both default empty states visible."""
+    """Issue #1382: each view shows only its own empty state."""
 
-    def test_default_view_renders_upcoming_and_past_empty_states(self):
+    def test_default_view_renders_upcoming_empty_state_only(self):
         response = self.client.get('/events')
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'No upcoming events scheduled.')
-        self.assertContains(response, 'No past events yet')
+        self.assertContains(response, 'No upcoming events yet')
+        self.assertNotContains(response, 'data-testid="events-past-section"')
+
+    def test_past_view_renders_past_empty_state(self):
+        response = self.client.get('/events?filter=past')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No past event recordings yet')
 
 
 class EventsListMarkdownRenderingTest(TestCase):
@@ -519,10 +530,10 @@ class EventsListRecordingLinkTest(TestCase):
             status='completed',
             recording_url='https://youtube.com/watch?v=test',
         )
-        response = self.client.get('/events')
+        # Issue #1382: past recordings live on the Past toggle now.
+        response = self.client.get('/events?filter=past')
         # The card itself already links to /events/<id>/<slug>. The past
-        # section shows a small "Recording available" indicator for
-        # such events.
+        # timeline shows a "Recording available" indicator for such events.
         self.assertContains(response, 'Recording available')
         self.assertContains(response, event.get_absolute_url())
         # Must not link out to the old standalone recording surface.
@@ -535,7 +546,7 @@ class EventsListRecordingLinkTest(TestCase):
             start_datetime=timezone.now() - timedelta(days=7),
             status='completed',
         )
-        response = self.client.get('/events')
+        response = self.client.get('/events?filter=past')
         self.assertNotContains(response, 'Recording available')
 
 

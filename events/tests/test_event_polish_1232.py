@@ -146,31 +146,29 @@ class EventsPresentationClassTest(TestCase):
         ):
             self.assertIn(expected, tag_match.group(1))
 
-    def test_event_card_partials_and_all_stacks_use_compact_rhythm(self):
-        # Issue #1339 — the event/series cards now render through the shared
-        # content/_content_card.html container, so the compact catalog padding
-        # (p-4 sm:p-5) is owned by that container rather than hand-rolled in
-        # each partial. Assert the container owns the rhythm, and that the
-        # event/series partials no longer hand-roll the old bg-card p-6 chrome.
-        container = (ROOT / "templates/content/_content_card.html").read_text()
-        single = (ROOT / "templates/events/_upcoming_event_card.html").read_text()
-        series = (ROOT / "templates/events/_upcoming_series_card.html").read_text()
-        listing = (ROOT / "templates/events/events_list.html").read_text()
+    def test_event_card_partials_and_timeline_use_compact_rhythm(self):
+        # Issue #1382 — the /events list renders a date-grouped timeline. The
+        # timeline partial owns the per-day card stack rhythm (space-y-4), and
+        # each card partial carries its own testid and the compact card chrome.
+        timeline = (ROOT / "templates/events/_events_timeline.html").read_text()
+        event_card = (
+            ROOT / "templates/events/_timeline_event_card.html"
+        ).read_text()
+        series_card = (
+            ROOT / "templates/events/_timeline_series_card.html"
+        ).read_text()
+        past_card = (
+            ROOT / "templates/events/_timeline_past_card.html"
+        ).read_text()
 
-        self.assertIn("p-4", container)
-        self.assertIn("sm:p-5", container)
-        for source in (single, series):
-            self.assertIn("_content_card.html", source)
+        # Day column stacks its cards with the compact catalog rhythm.
+        self.assertIn('class="space-y-4"', timeline)
+        self.assertIn('data-testid="events-timeline"', timeline)
+        self.assertIn('data-testid="upcoming-event-card"', event_card)
+        self.assertIn('data-testid="event-series-card"', series_card)
+        self.assertIn('data-testid="past-recording-card"', past_card)
+        for source in (event_card, series_card, past_card):
             self.assertNotIn("bg-card p-6", source)
-        for testid in (
-            "upcoming-events-stack",
-            "past-events-stack",
-            "past-recordings-stack",
-        ):
-            self.assertRegex(
-                listing,
-                rf'class="space-y-4" data-testid="{testid}"',
-            )
 
 
 class PastEventClosureStateTest(TestCase):
@@ -280,7 +278,8 @@ class UpcomingCardBehaviorPreservationTest(TestCase):
         self.assertContains(response, 'data-testid="upcoming-event-card"')
         self.assertContains(response, self.standalone.get_absolute_url())
         self.assertContains(response, "Hosted on Luma")
-        self.assertContains(response, "agents")
+        # Issue #1382: the Luma-style upcoming card is text-forward and no
+        # longer renders per-card tag chips.
         self.assertContains(response, 'data-testid="event-series-card"')
         self.assertContains(response, self.series.get_absolute_url())
         self.assertContains(response, "2 upcoming sessions")

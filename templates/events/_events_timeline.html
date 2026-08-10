@@ -1,0 +1,32 @@
+{% comment %}
+Issue #1382 — date-grouped events timeline (Luma-style). ``days`` is the
+ordered list built by the view: each entry has ``date_label`` (e.g. "Jul 6"),
+``weekday_label`` (e.g. "Monday"), and ``rows`` for that calendar date. A left
+date rail sits beside a timeline column (accent dot + left border) holding the
+day's stacked cards. Each row renders as an upcoming event card, a grouped
+series card, or a past recording card by ``row.kind``.
+{% endcomment %}
+<div class="space-y-2" data-testid="events-timeline">
+  {% for day in days %}
+  <div class="flex gap-5" data-testid="events-timeline-day">
+    <div class="w-20 flex-shrink-0 pt-1 text-right">
+      <p class="text-sm font-semibold text-foreground" data-testid="timeline-day-date">{{ day.date_label }}</p>
+      <p class="text-xs text-muted-foreground">{{ day.weekday_label }}</p>
+    </div>
+    <div class="relative flex-1 border-l border-border pb-8 pl-6">
+      <span class="absolute -left-[5px] top-2 h-2.5 w-2.5 rounded-full border-2 border-background bg-accent"></span>
+      <div class="space-y-4">
+        {% for row in day.rows %}
+        {% if row.kind == 'series' %}
+        {% include "events/_timeline_series_card.html" with row=row %}
+        {% elif row.kind == 'past' %}
+        {% include "events/_timeline_past_card.html" with event=row.event display_time=row.display_time %}
+        {% else %}
+        {% include "events/_timeline_event_card.html" with event=row.event display_time=row.display_time %}
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>

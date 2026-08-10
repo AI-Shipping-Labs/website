@@ -1,0 +1,10 @@
+{% comment %}
+Issue #1382 — plain "N registered" / "N attended" count for a timeline card's
+meta row. ``event`` is required. Privacy: only a raw number is exposed (never
+attendee identities), and only at or above the same 5-person threshold the
+public attendee-count chip already uses, so near-empty sign-ups are not
+revealed. Upcoming events read "registered"; finished events read "attended".
+{% endcomment %}
+{% if event.is_upcoming or event.is_past %}{% if event.attendee_count >= 5 %}
+<span data-testid="event-attendee-count">{{ event.attendee_count }} {% if event.is_upcoming %}registered{% else %}attended{% endif %}</span>
+{% endif %}{% endif %}

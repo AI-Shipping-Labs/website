@@ -38,11 +38,13 @@ class RecordingListArrowHiddenOnMobileTest(TestCase):
     def setUpTestData(cls):
         cls.recording = _create_recording('arrow-rec-test')
 
-    def test_arrow_icon_hidden_on_mobile(self):
+    def test_past_recording_card_has_no_nav_arrow(self):
+        # Issue #1382: Luma-style timeline cards drop the trailing navigation
+        # arrow; the past card leads with a "Watch recording" CTA instead.
         response = self.client.get('/events?filter=past')
         content = response.content.decode()
-        self.assertIn('data-lucide="arrow-right"', content)
-        self.assertIn('hidden sm:block', content)
+        self.assertIn('data-testid="past-recording-card"', content)
+        self.assertNotIn('data-lucide="arrow-right"', content)
 
     def test_arrow_icon_has_flex_shrink_0(self):
         response = self.client.get('/events?filter=past')

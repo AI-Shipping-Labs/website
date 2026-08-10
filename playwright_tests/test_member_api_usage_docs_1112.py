@@ -19,7 +19,7 @@ GITHUB_USAGE_GUIDE_URL = (
 )
 GITHUB_SKILL_URL = (
     "https://github.com/AI-Shipping-Labs/website/tree/main/"
-    "skills/ai-shipping-labs-plans-api"
+    "skills/ai-shipping-labs-member-api"
 )
 
 

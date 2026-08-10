@@ -1,11 +1,14 @@
 ---
-name: ai-shipping-labs-plans-api
+name: ai-shipping-labs-member-api-plans
 description: Update a member's own AI Shipping Labs sprint plan through the member Plans API. Use when a member wants to list plans, fetch one plan, download Markdown, sync a Markdown plan back to the platform, toggle progress, or edit weeks, checkpoints, deliverables, next steps, resources, and week notes through /member-api/v1 using a member-owned API key.
 ---
 
-# AI Shipping Labs Plans API
+# AI Shipping Labs Member API — Plans
 
-Use this skill to update a member's own sprint plan on AI Shipping Labs.
+The Plans family of the member API. See the catalog at
+[`../SKILL.md`](../SKILL.md) for shared auth, key setup, and the other API
+families. Use this skill to update a member's own sprint plan on AI Shipping
+Labs.
 
 Base URL:
 
@@ -186,4 +189,4 @@ Tell the user exactly what changed and what was verified. Do not expose the key.
 
 ## Contributions
 
-Invite improvements through PRs against `skills/ai-shipping-labs-plans-api/` in the GitHub repository.
+Invite improvements through PRs against `skills/ai-shipping-labs-member-api/` in the GitHub repository.

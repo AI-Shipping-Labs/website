@@ -94,7 +94,7 @@ class MemberAPIKeyAccountViewTest(TestCase):
         # not the raw GitHub blob.
         self.assertContains(response, 'href="/member-api/docs"')
         self.assertNotContains(response, "docs/member-api/plans.md")
-        self.assertContains(response, "skills/ai-shipping-labs-plans-api")
+        self.assertContains(response, "skills/ai-shipping-labs-member-api")
 
     def test_section_renders_below_email_preferences_without_scopes_helper(self):
         # Issue #1127: the section moved below Email Preferences and the

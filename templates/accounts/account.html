@@ -315,9 +315,13 @@
       </div>
 
       {% if not is_newsletter_only %}
-      <!-- Slack Community Card (shared partial, when eligible) -->
+      <!-- Slack Community Card (shared partial, when eligible). Wrapped with
+           mt-8 so it is spaced off the Email Preferences card above, matching
+           the gap the API Keys card below already carries. -->
       {% if not slack_connected %}
-      {% include "includes/_slack_account_card.html" %}
+      <div class="mt-8">
+        {% include "includes/_slack_account_card.html" %}
+      </div>
       {% endif %}
 
       <!-- Member API Keys Section (issue #1111; redesigned + moved below
@@ -330,7 +334,7 @@
             API keys
           </h2>
           <p class="mt-2 text-sm text-muted-foreground">
-            Create scoped member keys for plan tools. Keys cannot be used for Studio or staff API access.
+            Create scoped member keys to connect local tools to your own data through the member API — your sprint plans and your Book Club reading and notes. Keys act only on your own data; they cannot be used for Studio or staff API access.
           </p>
         </div>
 
@@ -663,7 +667,7 @@
 
           {% if user.is_staff or user.is_superuser %}
           <div class="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100" data-testid="privacy-staff-block">
-            Staff and admin accounts cannot be deleted from this self-service flow. Contact another operator for support.
+            Staff and admin accounts cannot be deleted from this self-service flow. Contact alexey@aishippinglabs.com for deletion.
           </div>
           {% else %}
           {% if has_subscription %}

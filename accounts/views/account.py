@@ -427,7 +427,7 @@ def _render_account_page(
         "member_api_usage_guide_url": "/member-api/docs",
         "member_api_skill_url": (
             "https://github.com/AI-Shipping-Labs/website/tree/main/"
-            "skills/ai-shipping-labs-plans-api"
+            "skills/ai-shipping-labs-member-api"
         ),
         "privacy_requires_password": user.has_usable_password(),
         "privacy_delete_error": privacy_delete_error,
@@ -532,7 +532,8 @@ def delete_account_view(request):
         elif result.blocker_reason == PrivacyRequestLog.BLOCKER_STAFF_ACCOUNT:
             error = (
                 "Staff and admin accounts cannot be deleted from this "
-                "self-service flow. Contact another operator for support."
+                "self-service flow. Contact alexey@aishippinglabs.com for "
+                "deletion."
             )
         else:
             error = "We could not delete this account from the self-service flow."

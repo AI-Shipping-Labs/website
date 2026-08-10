@@ -10,8 +10,11 @@ User = get_user_model()
 
 
 DOCS_PATH = Path("docs/member-api/plans.md")
-SKILL_PATH = Path("skills/ai-shipping-labs-plans-api/SKILL.md")
-SKILL_README_PATH = Path("skills/ai-shipping-labs-plans-api/README.md")
+SKILL_DIR = Path("skills/ai-shipping-labs-member-api")
+SKILL_PATH = SKILL_DIR / "SKILL.md"
+SKILL_README_PATH = SKILL_DIR / "README.md"
+PLANS_SKILL_PATH = SKILL_DIR / "plans" / "SKILL.md"
+BOOKS_SKILL_PATH = SKILL_DIR / "books" / "SKILL.md"
 
 
 @tag("core")
@@ -48,24 +51,51 @@ class MemberApiUsageDocsArtifactTest(TestCase):
         self.assertNotIn("/api/plans", text)
         self.assertNotIn("/studio/", text)
 
-    def test_downloadable_skill_is_present_and_safe(self):
+    def test_downloadable_skill_catalog_is_present_and_safe(self):
+        # The top-level SKILL.md is the catalog: shared auth + key setup, the
+        # safe-surface rules, and a pointer to each API family.
         self.assertTrue(SKILL_PATH.exists())
         self.assertTrue(SKILL_README_PATH.exists())
         text = SKILL_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("name: ai-shipping-labs-plans-api", text)
+        self.assertIn("name: ai-shipping-labs-member-api", text)
         self.assertIn("AI_SHIPPING_LABS_MEMBER_API_KEY", text)
         self.assertIn("Authorization: Token <asl_member_...>", text)
-        self.assertIn("GET /member-api/v1/plans", text)
-        self.assertIn("GET /member-api/v1/plans/{plan_id}", text)
-        self.assertIn("GET /member-api/v1/plans/{plan_id}/markdown", text)
-        self.assertIn("PATCH /member-api/v1/plans/{plan_id}/progress", text)
+        # Catalog points at every family.
+        self.assertIn("plans/SKILL.md", text)
+        self.assertIn("books/SKILL.md", text)
+        # Shared safe-surface rules live in the catalog.
         self.assertIn("Do not call `/api/`, `/studio/`, Django admin", text)
         self.assertIn("CRM notes", text)
         self.assertIn("onboarding answers", text)
         self.assertIn("staff context", text)
         self.assertIn("other members' data", text)
-        self.assertIn("PRs against `skills/ai-shipping-labs-plans-api/`", text)
+        self.assertIn("PRs against `skills/ai-shipping-labs-member-api/`", text)
+        self.assertNotIn("Bearer", text)
+        self.assertIsNone(re.search(r"asl_member_[A-Za-z0-9]{16,}", text))
+
+    def test_plans_family_skill_is_present_and_safe(self):
+        self.assertTrue(PLANS_SKILL_PATH.exists())
+        text = PLANS_SKILL_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("name: ai-shipping-labs-member-api-plans", text)
+        self.assertIn("GET /member-api/v1/plans", text)
+        self.assertIn("GET /member-api/v1/plans/{plan_id}", text)
+        self.assertIn("GET /member-api/v1/plans/{plan_id}/markdown", text)
+        self.assertIn("PATCH /member-api/v1/plans/{plan_id}/progress", text)
+        self.assertNotIn("Bearer", text)
+        self.assertIsNone(re.search(r"asl_member_[A-Za-z0-9]{16,}", text))
+
+    def test_books_family_skill_is_present_and_safe(self):
+        self.assertTrue(BOOKS_SKILL_PATH.exists())
+        text = BOOKS_SKILL_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("name: ai-shipping-labs-member-api-books", text)
+        self.assertIn("GET /member-api/v1/books/{slug}/reading", text)
+        self.assertIn(
+            "PUT    /member-api/v1/books/{slug}/chapters/{number}/note", text,
+        )
+        self.assertIn("other member's note", text)
         self.assertNotIn("Bearer", text)
         self.assertIsNone(re.search(r"asl_member_[A-Za-z0-9]{16,}", text))
 
@@ -93,7 +123,7 @@ class MemberApiUsageDocsLinkTest(TestCase):
         self.assertContains(
             response,
             "https://github.com/AI-Shipping-Labs/website/tree/main/"
-            "skills/ai-shipping-labs-plans-api",
+            "skills/ai-shipping-labs-member-api",
         )
 
     def test_member_api_docs_links_to_github_usage_guide(self):

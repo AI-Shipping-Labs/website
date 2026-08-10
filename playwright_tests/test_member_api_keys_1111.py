@@ -35,7 +35,7 @@ class TestMemberAPIKeysAccountUI:
         skill_link = page.locator('[data-testid="member-api-skill-link"]')
         expect(skill_link).to_have_attribute(
             "href",
-            "https://github.com/AI-Shipping-Labs/website/tree/main/skills/ai-shipping-labs-plans-api",
+            "https://github.com/AI-Shipping-Labs/website/tree/main/skills/ai-shipping-labs-member-api",
         )
         expect(skill_link).to_have_attribute("target", "_blank")
 
@@ -166,7 +166,7 @@ class TestMemberAPIKeysAccountUI:
         base = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "skills",
-            "ai-shipping-labs-plans-api",
+            "ai-shipping-labs-member-api",
         )
         assert os.path.isfile(os.path.join(base, "README.md"))
         assert os.path.isfile(os.path.join(base, "SKILL.md"))

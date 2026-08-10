@@ -93,6 +93,23 @@ def _can_skip_for_unchanged_head(source):
         return source.last_sync_status == 'success'
     if latest_terminal_log.status == 'success':
         return True
+    if latest_terminal_log.status == 'partial' and latest_terminal_log.errors:
+        # A controlled image that has been conclusively classified as corrupt,
+        # animated, unsupported, or over-limit remains an original-URL
+        # fallback. Re-cloning an unchanged repository cannot repair it. Keep
+        # retryable storage/decode-I/O failures and every unrelated warning on
+        # the normal full-sync path.
+        terminal_image_steps = {
+            'article_image_variant',
+            'cover_image_missing',
+            'image_reference_missing',
+        }
+        if all(
+            (error or {}).get('step') in terminal_image_steps
+            and (error or {}).get('retryable') is False
+            for error in latest_terminal_log.errors
+        ):
+            return True
     return (
         _is_head_unchanged_skip(latest_terminal_log)
         and latest_terminal_log.commit_sha == source.last_synced_commit
@@ -195,9 +212,20 @@ def _write_lock_skipped_log(source, batch_id):
 
 def _maybe_skip_unchanged_head(source, *, repo_dir, batch_id, force):
     """Write and return a skip log when the remote HEAD is unchanged."""
+    # A schema-first deployment deliberately marks legacy Article manifests
+    # incomplete. Do not let the repository HEAD fast-path suppress the next
+    # normal sync that fills eligible variants or explicitly classifies a
+    # coverless/external/unsupported reference as a completed fallback.
+    from content.models import Article
+    has_missing_article_manifests = Article.objects.filter(
+        source_repo=source.repo_name,
+        image_manifest_complete=False,
+    ).exists()
+
     if (
         repo_dir is not None
         or force
+        or has_missing_article_manifests
         or not _can_skip_for_unchanged_head(source)
     ):
         return None

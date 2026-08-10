@@ -38,6 +38,24 @@ class Article(
     content_markdown = models.TextField(blank=True, default='')
     content_html = models.TextField(blank=True, default='')
     cover_image_url = models.URLField(max_length=500, blank=True, default='')
+    image_manifest = models.JSONField(
+        default=dict,
+        blank=True,
+        editable=False,
+        help_text=(
+            'Machine-owned responsive variants keyed by authoritative image '
+            'URL. Populated by content sync; never author-edited.'
+        ),
+    )
+    image_manifest_complete = models.BooleanField(
+        default=False,
+        editable=False,
+        help_text=(
+            'Whether content sync has reconciled responsive image variants. '
+            'False keeps the unchanged-HEAD fast path disabled until missing '
+            'controlled variants have been generated or classified.'
+        ),
+    )
     auto_banner_url = models.URLField(
         max_length=500, blank=True, default='',
         help_text=(

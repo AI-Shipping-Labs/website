@@ -408,8 +408,14 @@ def _resolve_event_series(raw):
     return None, False
 
 
-def _collect_event_values(data, *, existing=None):
-    """Validate API payload and return model field values or error details."""
+def _collect_event_values(data, *, existing=None, require_description=True):
+    """Validate API payload and return model field values or error details.
+
+    ``require_description`` enforces the "no bare event card" rule on standalone
+    event create/update. The series-occurrence generator passes ``False``: an
+    occurrence inherits its parent series' description (which may itself be
+    blank) rather than demanding a hand-typed one per occurrence.
+    """
     errors = {}
     values = {}
 
@@ -432,10 +438,10 @@ def _collect_event_values(data, *, existing=None):
     # blank it.
     if "description" in data:
         description = coerce_optional_text(data["description"])
-        if not description:
+        if require_description and not description:
             errors["description"] = "Description is required."
         values["description"] = description
-    elif existing is None:
+    elif existing is None and require_description:
         errors["description"] = "Description is required."
 
     for field in ("timezone", "zoom_join_url", "location"):

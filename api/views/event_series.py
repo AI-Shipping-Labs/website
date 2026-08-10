@@ -806,8 +806,19 @@ def _create_series_occurrence(series, row, *, slug_position, index):
         row_payload.get("slug") or "",
     ).strip():
         row_payload["slug"] = f"{series.slug}-session-{slug_position}"
+    # An occurrence inherits the series' description when the row omits one, so
+    # the operator can pass just ``start_datetime``. The mandatory-description
+    # rule is scoped to standalone events (``require_description=False`` here):
+    # a series may legitimately carry a blank description, and the occurrence
+    # simply mirrors it rather than demanding a hand-typed one per session.
+    if "description" not in row_payload or not str(
+        row_payload.get("description") or "",
+    ).strip():
+        row_payload["description"] = series.description
 
-    values, errors = _collect_event_values(row_payload, existing=None)
+    values, errors = _collect_event_values(
+        row_payload, existing=None, require_description=False,
+    )
     if errors:
         details = {"index": index}
         details.update(errors)

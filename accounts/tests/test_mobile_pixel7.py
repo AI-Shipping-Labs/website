@@ -30,31 +30,13 @@ class SignupRedirectTest(TestCase):
         self.assertContains(response, 'id="register-email"')
 
 
-class BlogTagTouchTargetTest(TestCase):
-    """Blog tag links use the compact metadata contract from issue #1228."""
-
-    @tag("visual_regression")
-    def test_blog_list_tag_links_use_compact_clickable_treatment(self):
-        """Blog tags remain native links with the exact compact classes."""
-        from django.template.loader import get_template
-
-        template = get_template("content/blog_list.html")
-        source = template.template.source
-        tag_link_match = re.search(
-            r'<a\s+href="[^"]*tag_add_url.*?class="([^"]*)"',
-            source,
-        )
-        self.assertIsNotNone(tag_link_match, "Tag link not found in blog_list.html")
-        self.assertEqual(
-            tag_link_match.group(1),
-            "inline-flex items-center gap-1 rounded-full bg-secondary "
-            "px-2.5 py-0.5 text-xs font-medium text-muted-foreground "
-            "transition-colors hover:bg-secondary/80 "
-            "focus-visible:outline-none focus-visible:ring-2 "
-            "focus-visible:ring-accent focus-visible:ring-offset-2 "
-            "focus-visible:ring-offset-background",
-        )
-        self.assertNotIn("min-h-[44px]", tag_link_match.group(1))
+# BlogTagTouchTargetTest removed in the Fable blog-filter redesign: /blog no
+# longer renders per-card raw-tag chips (replaced by a non-clickable
+# primary-topic eyebrow), so there is no on-card tag_add_url link to audit.
+# The compact-clickable chip contract still holds for /downloads and
+# /resources (content/tests/test_catalog_tag_presentation_1228.py) and the
+# curated topic pills carry the 44px target contract
+# (accounts/tests/test_accessible_action_classes_1224.py).
 
 
 class PastEventTagChipTest(TestCase):

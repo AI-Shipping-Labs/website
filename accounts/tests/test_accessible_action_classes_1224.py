@@ -49,8 +49,8 @@ class AccessibleActionClassContractTest(SimpleTestCase):
             'data-testid="project-difficulty-{{ diff }}"',
         ),
         'content/blog_list.html': (
-            'data-testid="blog-tag-all"',
-            'data-testid="blog-tag-{{ tag }}"',
+            'data-testid="blog-topic-all"',
+            'data-testid="blog-topic-{{ topic.slug }}"',
         ),
         'content/peer_review/certificate.html': (
             'data-testid="certificate-pdf-link"',

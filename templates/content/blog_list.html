@@ -26,51 +26,28 @@
         </p>
       </div>
 
-      {% if all_tags %}
-      <div class="mb-8" data-testid="blog-tag-filter">
-        <p class="mb-2 text-sm font-medium text-muted-foreground">Filter by topic</p>
-        <div class="flex flex-wrap gap-2" aria-label="Filter articles by topic">
-          <a href="/blog"
-             class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if not selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
-             data-testid="blog-tag-all"
-             {% if not selected_tags %}aria-current="page"{% endif %}>All</a>
-          {% for tag in all_tags|slice:":12" %}
-          <a href="{% tag_add_url base_path selected_tags tag %}"
-             class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if tag in selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
-             data-testid="blog-tag-{{ tag }}"
-             {% if tag in selected_tags %}aria-current="page"{% endif %}>{{ tag }}</a>
-          {% endfor %}
-        </div>
-        {% if all_tags|length > 12 %}
-        {% with hidden_tags=all_tags|slice:"12:" %}
-        <details class="mt-2" {% if selected_tags|has_common:hidden_tags %}open{% endif %} data-testid="blog-tag-more">
-          <summary class="inline-flex min-h-[44px] cursor-pointer list-none items-center justify-center rounded-full bg-secondary px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background [&::-webkit-details-marker]:hidden"
-                   data-testid="blog-tag-more-toggle">
-            More topics (+{{ all_tags|length|add:"-12" }})
-          </summary>
-          <div class="mt-2 flex flex-wrap gap-2">
-            {% for tag in hidden_tags %}
-            <a href="{% tag_add_url base_path selected_tags tag %}"
-               class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if tag in selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
-               data-testid="blog-tag-{{ tag }}"
-               {% if tag in selected_tags %}aria-current="page"{% endif %}>{{ tag }}</a>
-            {% endfor %}
-          </div>
-        </details>
-        {% endwith %}
-        {% endif %}
-      </div>
+      {% if topic_filters %}
+      <nav class="mb-8 flex flex-wrap gap-2" aria-label="Filter articles by topic" data-testid="blog-tag-filter">
+        <a href="/blog"
+           class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if not selected_topic and not selected_tags %}bg-accent text-accent-foreground{% else %}border border-border bg-transparent text-muted-foreground hover:border-accent/50 hover:text-foreground{% endif %}"
+           data-testid="blog-topic-all"
+           {% if not selected_topic and not selected_tags %}aria-current="page"{% endif %}>All</a>
+        {% for topic in topic_filters %}
+        <a href="/blog?topic={{ topic.slug }}"
+           class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if topic.slug == selected_topic %}bg-accent text-accent-foreground{% else %}border border-border bg-transparent text-muted-foreground hover:border-accent/50 hover:text-foreground{% endif %}"
+           data-testid="blog-topic-{{ topic.slug }}"
+           {% if topic.slug == selected_topic %}aria-current="page"{% endif %}>{{ topic.label }}</a>
+        {% endfor %}
+      </nav>
       {% endif %}
 
       {% if articles %}
       <div class="space-y-8">
         {% for article in articles %}
         {% comment %}
-        Issue #523 — outer <a> wraps the cover + body so the entire card
-        is one click target. Tag chips are rendered as a sibling block
-        AFTER the closing </a> so they remain real <a> elements (no
-        nested anchors / no invalid HTML) and middle-click works on
-        both the article and the tag chips independently.
+        Issue #523 — the outer <a> wraps the whole card so it is one click
+        target. The topic eyebrow (inside the badge row) is a non-interactive
+        <span>, so there are no nested anchors / invalid HTML.
         {% endcomment %}
         <article class="group rounded-lg border border-border bg-card p-4 sm:p-6 transition-colors hover:border-accent/50">
           <a href="/blog/{{ article.slug }}" class="{% include 'content/_clickable_card_classes.html' %}">
@@ -87,6 +64,9 @@
               <div class="flex-1">
                 <div class="mb-3 flex flex-wrap items-center gap-2">
                   {% member_access_badge article.required_level testid="article-access-badge" %}
+                  {% if article.primary_topic_label %}
+                  <span class="text-xs font-medium uppercase tracking-wide text-accent" data-testid="blog-card-topic">{{ article.primary_topic_label }}</span>
+                  {% endif %}
                 </div>
                 <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
                   {{ article.title }}
@@ -114,20 +94,6 @@
               <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
             </div>
           </a>
-          {% if article.tags %}
-          {% comment %}
-          Tag chips live OUTSIDE the wrapping <a> so we can render them
-          as real anchors with destinations independent from the card body.
-          {% endcomment %}
-          <div class="mt-3 flex flex-wrap gap-1.5" data-testid="blog-card-tags">
-            {% for tag in article.tags|slice:":3" %}
-            <a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ tag }}</a>
-            {% endfor %}
-            {% if article.tags|length > 3 %}
-            <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ article.tags|length|add:'-3' }} more article tags">+{{ article.tags|length|add:"-3" }}</span>
-            {% endif %}
-          </div>
-          {% endif %}
         </article>
         {% endfor %}
       </div>

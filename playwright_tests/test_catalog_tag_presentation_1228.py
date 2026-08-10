@@ -91,7 +91,7 @@ def _curated_link(item_id, title, tags, required_level=0):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_reader_filters_blog_through_article_tag_chip(django_server, page):
+def test_reader_filters_blog_through_topic_pill(django_server, page):
     _clear_catalogs()
     _article(
         'agents-catalog-1228',
@@ -101,13 +101,17 @@ def test_reader_filters_blog_through_article_tag_chip(django_server, page):
     _article('unrelated-catalog-1228', 'Unrelated Catalog Article 1228', ['rust'])
 
     page.goto(f'{django_server}/blog', wait_until='domcontentloaded')
+    # Blog cards now carry a non-clickable primary-topic eyebrow (Fable
+    # redesign); the old per-card raw-tag chips are gone. Filtering happens
+    # through the curated topic pill row. 'agents' maps to AI Engineering.
     card = page.locator('article', has_text='Agents Catalog Article 1228')
-    expect(card.locator('[aria-label="1 more article tags"]')).to_have_text('+1')
-    card.get_by_test_id('blog-card-tags').get_by_role(
-        'link', name='agents', exact=True,
-    ).click()
+    eyebrow = card.get_by_test_id('blog-card-topic')
+    expect(eyebrow).to_contain_text('AI Engineering')
+    assert card.locator('[data-testid="blog-card-topic"] a').count() == 0
 
-    expect(page).to_have_url(re.compile(r'.*/blog\?tag=agents$'))
+    page.get_by_test_id('blog-topic-ai-engineering').click()
+
+    expect(page).to_have_url(re.compile(r'.*/blog\?topic=ai-engineering$'))
     expect(page.get_by_text('Agents Catalog Article 1228')).to_be_visible()
     expect(page.get_by_text('Unrelated Catalog Article 1228')).to_have_count(0)
     assert '/blog/agents-catalog-1228' not in page.url
@@ -278,17 +282,17 @@ def test_keyboard_reader_sees_focus_and_filters_blog_with_enter(django_server, p
     _article('keyboard-agents-1228', 'Keyboard Agents 1228', ['agents'])
 
     page.goto(f'{django_server}/blog', wait_until='networkidle')
-    chip = page.get_by_test_id('blog-card-tags').get_by_role(
-        'link', name='agents', exact=True,
-    )
+    # The keyboard reader tabs to the curated topic pill (agents -> AI
+    # Engineering) and activates it with Enter; card raw-tag chips are gone.
+    pill = page.get_by_test_id('blog-topic-ai-engineering')
     for _ in range(60):
         page.keyboard.press('Tab')
-        if chip.evaluate('(element) => document.activeElement === element'):
+        if pill.evaluate('(element) => document.activeElement === element'):
             break
-    expect(chip).to_be_focused()
-    box_shadow = chip.evaluate('(element) => getComputedStyle(element).boxShadow')
+    expect(pill).to_be_focused()
+    box_shadow = pill.evaluate('(element) => getComputedStyle(element).boxShadow')
     assert box_shadow != 'none'
     page.keyboard.press('Enter')
 
-    expect(page).to_have_url(re.compile(r'.*/blog\?tag=agents$'))
+    expect(page).to_have_url(re.compile(r'.*/blog\?topic=ai-engineering$'))
     expect(page.get_by_text('Keyboard Agents 1228')).to_be_visible()

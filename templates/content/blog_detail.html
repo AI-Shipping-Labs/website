@@ -4,6 +4,7 @@
 {% load download_tags %}
 {% load teaser_tags %}
 {% load article_images %}
+{% load tag_filters %}
 
 {% block title %}{{ article.title }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}{% seo_description article %}{% endblock %}
@@ -65,9 +66,9 @@
         </div>
 
         {% if article.tags %}
-        <div class="mt-4 flex flex-wrap gap-2">
-          {% for tag in article.tags %}
-          <a href="/blog?tag={{ tag }}" class="inline-flex items-center rounded-full bg-secondary px-3 py-2 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors min-h-[44px]">{{ tag }}</a>
+        <div class="mt-4 flex flex-wrap gap-2" data-testid="article-tags">
+          {% for tag in article.tags|slice:":5" %}
+          <a href="/blog?tag={{ tag }}" class="inline-flex min-h-[44px] items-center rounded-full border border-border bg-transparent px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ tag|humanize_tag }}</a>
           {% endfor %}
         </div>
         {% endif %}

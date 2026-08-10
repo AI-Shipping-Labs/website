@@ -25,6 +25,12 @@ from content.models import (
 )
 from content.services.related_content import build_related_content_rail
 from content.tier_config import get_curated_activities
+from content.topics import (
+    BLOG_TOPICS,
+    filter_by_topic,
+    primary_topic,
+    topics_with_matches,
+)
 from events.models.event import PUBLIC_EVENT_STATUSES
 from events.services.time_windows import upcoming_events_queryset
 from plans.models import Plan, Sprint, SprintEnrollment
@@ -351,23 +357,38 @@ def sprints_index(request):
 
 @ensure_csrf_cookie
 def blog_list(request):
-    """Blog listing page with optional tag filtering."""
-    articles = Article.objects.filter(published=True, page_type='blog')
+    """Blog listing page filtered by a curated topic (or legacy tags).
+
+    The filter row surfaces a small curated set of topics (content.topics)
+    rather than every raw tag. ``?topic=<slug>`` is the primary filter;
+    ``?tag=<slug>`` is still honored so inbound links and article-detail
+    tag chips keep working.
+    """
+    articles = list(Article.objects.filter(published=True, page_type='blog'))
     selected_tags = _get_selected_tags(request)
+    selected_topic = (request.GET.get('topic') or '').strip()
 
-    # Collect all tags from published articles for the tag filter UI
-    all_tags = set()
+    # Curated topic pills — only those matching at least one published article.
+    topic_filters = topics_with_matches(articles)
+    valid_topic = selected_topic if selected_topic in BLOG_TOPICS else ''
+
+    if valid_topic:
+        articles = filter_by_topic(articles, valid_topic)
+    elif selected_tags:
+        articles = list(_filter_by_tags(
+            Article.objects.filter(published=True, page_type='blog'),
+            selected_tags,
+        ))
+
+    # Attach the primary curated topic label for the per-card eyebrow.
     for article in articles:
-        if article.tags:
-            all_tags.update(article.tags)
-    all_tags = sorted(all_tags)
-
-    # Filter by tags if provided (AND logic)
-    articles = _filter_by_tags(articles, selected_tags)
+        match = primary_topic(article.tags)
+        article.primary_topic_label = match[1] if match else ''
 
     context = {
         'articles': articles,
-        'all_tags': all_tags,
+        'topic_filters': topic_filters,
+        'selected_topic': valid_topic,
         'selected_tags': selected_tags,
         'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
         'base_path': '/blog',

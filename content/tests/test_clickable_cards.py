@@ -129,34 +129,6 @@ class BlogListClickableCardTest(TestCase):
             f'nested hrefs: {scan.nested_anchor_hrefs}',
         )
 
-    def test_blog_card_tag_chips_remain_anchors_to_filter_url(self):
-        """Tag chips are still <a href> elements, just not nested."""
-        response = self.client.get('/blog')
-        scan = _scan_anchors(response.content.decode())
-        # Tag URL filter format: /blog?tag=mlops or similar — assert at least
-        # one anchor whose href contains the tag slug as a query param.
-        tag_anchors = [
-            a for a in scan.anchors
-            if 'tag=mlops' in a['href'] or a['href'].endswith('=mlops')
-        ]
-        self.assertGreaterEqual(
-            len(tag_anchors), 1,
-            'Tag chip for "mlops" should still render as a real <a> link, '
-            'just rendered outside the wrapping card anchor.',
-        )
-
-    def test_blog_card_caps_visible_tag_chips(self):
-        """Long tag lists should not dominate the compact listing card."""
-        self.article.tags = ['one', 'two', 'three', 'four', 'five']
-        self.article.save()
-        response = self.client.get('/blog')
-        body = response.content.decode()
-        tags_block = body.split('data-testid="blog-card-tags"', 1)[1].split('</div>', 1)[0]
-        self.assertIn('one', tags_block)
-        self.assertIn('three', tags_block)
-        self.assertIn('+2', tags_block)
-        self.assertNotIn('four', tags_block)
-
 
 class DownloadsListClickableCardTest(TestCase):
     """Download catalog cards consistently hand off to detail pages."""

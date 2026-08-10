@@ -37,6 +37,57 @@ def paren_count(value):
     return f" ({n})"
 
 
+# Curated display names for tag slugs whose default Title-casing would be
+# wrong (acronyms, proper nouns, mixed case). Keys are lower-cased slugs.
+_TAG_LABEL_OVERRIDES = {
+    'ai': 'AI',
+    'aws': 'AWS',
+    'llm': 'LLM',
+    'llms': 'LLMs',
+    'ml': 'ML',
+    'ci-cd': 'CI/CD',
+    'cicd': 'CI/CD',
+    'tts': 'TTS',
+    'rag': 'RAG',
+    'gpt-4': 'GPT-4',
+    'chatgpt': 'ChatGPT',
+    'openai': 'OpenAI',
+    'dall-e': 'DALL-E',
+    'claude-code': 'Claude Code',
+    'datatalks-club': 'DataTalks.Club',
+    'crisp-dm': 'CRISP-DM',
+    'ai-tools': 'AI Tools',
+    'ai-agents': 'AI Agents',
+    'ai-engineering': 'AI Engineering',
+    'ai-engineering-buildcamp': 'AI Engineering Buildcamp',
+    'ai-shipping-labs': 'AI Shipping Labs',
+    'ml-engineering': 'ML Engineering',
+    'llm-zoomcamp': 'LLM Zoomcamp',
+    'devops': 'DevOps',
+}
+
+
+@register.filter
+def humanize_tag(value):
+    """Render a raw tag slug as a human-readable label.
+
+    ``ai-engineering-buildcamp`` -> ``AI Engineering Buildcamp``; acronyms
+    and proper nouns come from ``_TAG_LABEL_OVERRIDES`` so we never show a
+    raw slug to a user. Safe on ``None``/blank (returns ``""``).
+
+    Usage: {{ tag|humanize_tag }}
+    """
+    if value is None:
+        return ''
+    slug = str(value).strip()
+    if not slug:
+        return ''
+    override = _TAG_LABEL_OVERRIDES.get(slug.lower())
+    if override:
+        return override
+    return slug.replace('-', ' ').replace('_', ' ').title()
+
+
 @register.filter
 def has_common(seq_a, seq_b):
     """Return True if the two sequences share at least one element.

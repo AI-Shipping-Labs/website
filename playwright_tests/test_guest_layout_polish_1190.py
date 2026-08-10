@@ -152,16 +152,15 @@ def test_blog_cards_keep_thumbnail_column_and_tag_links(django_server, page):
     page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
     expect(page.get_by_test_id("blog-card-thumbnail")).to_have_count(2)
     expect(page.get_by_test_id("blog-card-thumbnail-fallback")).to_have_count(1)
-    # The blog card tag chip links to the tag-filtered view (clickable since
-    # the #1228 catalog-tag unification). Scope to the card tag container so
-    # the assertion is not ambiguous with the top-of-page filter pill that
-    # shares the same /blog?tag=rag href.
-    card_tag_link = page.get_by_test_id("blog-card-tags").get_by_role(
-        "link", name="rag", exact=True,
-    )
-    expect(card_tag_link).to_have_count(1)
-    expect(card_tag_link).to_be_visible()
-    expect(card_tag_link).to_have_attribute("href", "/blog?tag=rag")
+    # The per-card raw-tag chips were replaced by a non-clickable primary-topic
+    # eyebrow (Fable redesign). Both articles (agents, rag) map to the AI
+    # Engineering topic, so each card carries the eyebrow and it is not a link.
+    card = page.locator('article:has-text("Coverless 1190 Article")')
+    eyebrow = card.get_by_test_id("blog-card-topic")
+    expect(eyebrow).to_have_count(1)
+    expect(eyebrow).to_be_visible()
+    expect(eyebrow).to_contain_text("AI Engineering")
+    assert card.locator('[data-testid="blog-card-topic"] a').count() == 0
     _shot(page, "blog-thumbnail-fallback")
 
 

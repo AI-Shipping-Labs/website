@@ -133,19 +133,17 @@ class CatalogTagPresentationTest(TestCase):
 
     @tag('visual_regression')
     def test_clickable_chips_use_exact_classes_and_native_destinations(self):
+        # /blog dropped per-card raw-tag chips for a non-clickable primary-topic
+        # eyebrow (Fable redesign), so it no longer participates in the shared
+        # clickable-chip contract; /downloads and /tags still do.
         cases = (
-            ('/blog', 'agents-1228', '/blog?tag=agents-1228'),
             ('/downloads', 'python-1228', '/downloads?tag=python-1228'),
             ('/tags/agents-1228', 'python-1228', '/tags/python-1228'),
         )
         for path, text, href in cases:
             with self.subTest(path=path):
                 parser = _parse(self.client.get(path))
-                # Scope to the CARD tag chip on every path. Templates are the
-                # source of truth: the page-level topic filter row (added to
-                # /blog in #1319) renders a 44px filter pill sharing the same
-                # href, so we must select on CLICKABLE_CHIP_CLASSES to land on
-                # the small card chip rather than the filter pill.
+                # Scope to the CARD tag chip via CLICKABLE_CHIP_CLASSES.
                 chip = next(
                     element for element in _elements_with_text(parser, text)
                     if element['tag'] == 'a'
@@ -155,9 +153,10 @@ class CatalogTagPresentationTest(TestCase):
                 self.assertEqual(chip['attrs'].get('class'), CLICKABLE_CHIP_CLASSES)
                 self.assertNotIn('min-h-[44px]', chip['attrs'].get('class', ''))
 
-    def test_blog_and_download_tag_links_preserve_additive_filters(self):
+    def test_download_tag_links_preserve_additive_filters(self):
+        # /blog no longer renders per-card tag chips (topic eyebrow only), so
+        # additive card-chip filtering is now a /downloads-only contract.
         for path, text, expected_href in (
-            ('/blog?tag=python-1228', 'agents-1228', '/blog?tag=python-1228&tag=agents-1228'),
             ('/downloads?tag=agents-1228', 'python-1228', '/downloads?tag=agents-1228&tag=python-1228'),
         ):
             with self.subTest(path=path):
@@ -165,10 +164,7 @@ class CatalogTagPresentationTest(TestCase):
                 chip = next(
                     element for element in _elements_with_text(parser, text)
                     if element['tag'] == 'a'
-                    and (
-                        not path.startswith('/downloads')
-                        or element['attrs'].get('class') == CLICKABLE_CHIP_CLASSES
-                    )
+                    and element['attrs'].get('class') == CLICKABLE_CHIP_CLASSES
                 )
                 self.assertEqual(chip['attrs'].get('href'), expected_href)
 
@@ -211,8 +207,9 @@ class CatalogTagPresentationTest(TestCase):
 
     @tag('visual_regression')
     def test_overflow_chips_are_static_accessible_and_keep_three_tag_cap(self):
+        # /blog dropped its per-card tag chips (and their overflow chip) for a
+        # topic eyebrow; /downloads and /resources still cap card chips at 3.
         cases = (
-            ('/blog', '1 more article tags', '+1', 'production-1228'),
             ('/downloads', '1 more download tags', '+1', 'extra-1228'),
             ('/resources', '1 more resource tags', '+1', 'extra-1228'),
             ('/resources', '2 more resource tags', '+2', 'extra-1228'),

@@ -308,8 +308,11 @@ class BlogListTagFilteringTest(TestCase):
             tags=['python', 'tutorial'],
             published=True,
         )
+        # Title deliberately avoids the string "AI Engineering", which is now
+        # the AI Engineering topic pill label / card eyebrow chrome, so these
+        # assertions stay specific to the article body (Rule 2).
         self.ai_article = Article.objects.create(
-            title='AI Engineering',
+            title='Neural Networks Intro',
             slug='ai-engineering',
             description='AI stuff',
             date=date(2025, 6, 14),
@@ -329,7 +332,7 @@ class BlogListTagFilteringTest(TestCase):
         response = self.client.get('/blog')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Python Tutorial')
-        self.assertContains(response, 'AI Engineering')
+        self.assertContains(response, 'Neural Networks Intro')
         self.assertContains(response, 'Python AI')
 
     def test_filter_by_python_tag(self):
@@ -337,12 +340,12 @@ class BlogListTagFilteringTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Python Tutorial')
         self.assertContains(response, 'Python AI')
-        self.assertNotContains(response, 'AI Engineering')
+        self.assertNotContains(response, 'Neural Networks Intro')
 
     def test_filter_by_ai_tag(self):
         response = self.client.get('/blog?tag=ai')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'AI Engineering')
+        self.assertContains(response, 'Neural Networks Intro')
         self.assertContains(response, 'Python AI')
         self.assertNotContains(response, 'Python Tutorial')
 
@@ -350,7 +353,7 @@ class BlogListTagFilteringTest(TestCase):
         response = self.client.get('/blog?tag=nonexistent')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Python Tutorial')
-        self.assertNotContains(response, 'AI Engineering')
+        self.assertNotContains(response, 'Neural Networks Intro')
 
     def test_filter_by_nonexistent_tag_shows_empty_state_and_reset_link(self):
         response = self.client.get('/blog?tag=rust')
@@ -362,17 +365,20 @@ class BlogListTagFilteringTest(TestCase):
         self.assertContains(response, 'View all articles')
         self.assertNotContains(response, 'Python Tutorial')
 
-    def test_tag_links_in_listing(self):
+    def test_topic_pills_link_to_topic_filter(self):
+        # The curated topic row links to ?topic=<slug>, not per-tag chips.
+        # python -> Production & Infra, ai -> AI Engineering.
         response = self.client.get('/blog')
         content = response.content.decode()
-        self.assertIn('?tag=python', content)
-        self.assertIn('?tag=ai', content)
+        self.assertIn('/blog?topic=ai-engineering', content)
+        self.assertIn('/blog?topic=production-infra', content)
 
-    def test_all_tags_displayed(self):
+    def test_card_shows_primary_topic_eyebrow(self):
         response = self.client.get('/blog')
-        content = response.content.decode()
-        # Tags shown on individual article cards
-        self.assertIn('python', content)
+        # Each card surfaces a non-clickable primary-topic eyebrow.
+        self.assertContains(response, 'data-testid="blog-card-topic"')
+        # both_article (python, ai) and ai_article map to AI Engineering.
+        self.assertContains(response, 'AI Engineering')
 
     def test_current_tag_in_context(self):
         response = self.client.get('/blog?tag=python')
@@ -393,11 +399,12 @@ def _opening_anchor(content, testid):
 
 
 @tag('core')
-class BlogTagFilterRowTest(TestCase):
-    """The /blog page renders a page-level "Filter by topic" pill row."""
+class BlogTopicFilterRowTest(TestCase):
+    """The /blog page renders a curated topic pill row (Fable redesign)."""
 
     def setUp(self):
         self.client = Client()
+        # python -> Production & Infra; tutorial -> no topic; ai -> AI Engineering.
         self.python_article = Article.objects.create(
             title='Python Tutorial', slug='python-tutorial-row',
             date=date(2025, 6, 15), tags=['python', 'tutorial'],
@@ -408,42 +415,53 @@ class BlogTagFilterRowTest(TestCase):
             date=date(2025, 6, 14), tags=['ai'], published=True,
         )
 
-    def test_filter_row_rendered_with_all_and_tag_pills(self):
+    def test_filter_row_rendered_with_all_and_topic_pills(self):
         response = self.client.get('/blog')
         self.assertContains(response, 'data-testid="blog-tag-filter"')
-        self.assertContains(response, 'Filter by topic')
-        self.assertContains(response, 'data-testid="blog-tag-all"')
-        # One pill per distinct tag.
-        self.assertContains(response, 'data-testid="blog-tag-python"')
-        self.assertContains(response, 'data-testid="blog-tag-ai"')
-        self.assertContains(response, 'data-testid="blog-tag-tutorial"')
+        self.assertContains(response, 'data-testid="blog-topic-all"')
+        # Curated topic pills, one per matching topic (not per raw tag).
+        self.assertContains(response, 'data-testid="blog-topic-ai-engineering"')
+        self.assertContains(response, 'data-testid="blog-topic-production-infra"')
+        self.assertContains(response, 'AI Engineering')
+        self.assertContains(response, 'Production &amp; Infra')
+        # The old per-tag pills and caption are gone.
+        self.assertNotContains(response, 'data-testid="blog-tag-python"')
+        self.assertNotContains(response, 'data-testid="blog-tag-all"')
+        self.assertNotContains(response, 'Filter by topic')
 
-    def test_all_pill_active_when_no_tag_selected(self):
+    def test_all_pill_active_when_no_topic_selected(self):
         response = self.client.get('/blog')
-        all_pill = _opening_anchor(response.content.decode(), 'blog-tag-all')
+        all_pill = _opening_anchor(response.content.decode(), 'blog-topic-all')
         self.assertIn('aria-current="page"', all_pill)
         self.assertIn('bg-accent', all_pill)
 
-    def test_selected_tag_pill_active_and_all_inactive(self):
-        response = self.client.get('/blog?tag=python')
+    def test_selected_topic_pill_active_and_all_inactive(self):
+        response = self.client.get('/blog?topic=ai-engineering')
         content = response.content.decode()
-        # The python pill is active.
-        python_pill = _opening_anchor(content, 'blog-tag-python')
-        self.assertIn('aria-current="page"', python_pill)
-        self.assertIn('bg-accent', python_pill)
+        # The selected topic pill is active.
+        topic_pill = _opening_anchor(content, 'blog-topic-ai-engineering')
+        self.assertIn('aria-current="page"', topic_pill)
+        self.assertIn('bg-accent', topic_pill)
         # The All pill is no longer active.
-        all_pill = _opening_anchor(content, 'blog-tag-all')
+        all_pill = _opening_anchor(content, 'blog-topic-all')
         self.assertNotIn('aria-current="page"', all_pill)
         self.assertNotIn('bg-accent', all_pill)
 
     def test_all_pill_links_to_unfiltered_blog(self):
-        response = self.client.get('/blog?tag=python')
-        all_pill = _opening_anchor(response.content.decode(), 'blog-tag-all')
+        response = self.client.get('/blog?topic=ai-engineering')
+        all_pill = _opening_anchor(response.content.decode(), 'blog-topic-all')
         self.assertIn('href="/blog"', all_pill)
+
+    def test_topic_pill_links_to_topic_filter(self):
+        response = self.client.get('/blog')
+        pill = _opening_anchor(
+            response.content.decode(), 'blog-topic-ai-engineering',
+        )
+        self.assertIn('href="/blog?topic=ai-engineering"', pill)
 
     def test_pills_use_accessible_focus_and_target_classes(self):
         response = self.client.get('/blog')
-        all_pill = _opening_anchor(response.content.decode(), 'blog-tag-all')
+        all_pill = _opening_anchor(response.content.decode(), 'blog-topic-all')
         for css in (
             'min-h-[44px]',
             'focus-visible:ring-accent',
@@ -451,58 +469,68 @@ class BlogTagFilterRowTest(TestCase):
         ):
             self.assertIn(css, all_pill)
 
-    def test_filter_row_hidden_when_no_tags(self):
+    def test_filter_row_hidden_when_no_topics_match(self):
         Article.objects.all().delete()
+        # Tag maps to no curated topic, so no pill should render.
         Article.objects.create(
             title='Untagged', slug='untagged-row',
-            date=date(2025, 6, 15), tags=[], published=True,
+            date=date(2025, 6, 15), tags=['some-unmapped-tag'], published=True,
         )
         response = self.client.get('/blog')
         self.assertNotContains(response, 'data-testid="blog-tag-filter"')
-        self.assertNotContains(response, 'Filter by topic')
+        self.assertNotContains(response, 'data-testid="blog-topic-all"')
+
+
+# --- Curated topic (?topic=) filtering tests ---
 
 
 @tag('core')
-class BlogTagFilterDisclosureTest(TestCase):
-    """The long-tail (>12 tags) disclosure behaviour on /blog."""
+class BlogTopicFilterTest(TestCase):
+    """`?topic=<slug>` is the primary single-select filter (Fable redesign)."""
 
     def setUp(self):
         self.client = Client()
-        # 15 distinct tags => 12 pills + 3 in the disclosure.
-        self.tags = [f'tag-{i:02d}' for i in range(15)]
-        for i, t in enumerate(self.tags):
-            Article.objects.create(
-                title=f'Article {i}', slug=f'disclosure-article-{i}',
-                date=date(2025, 6, 15), tags=[t], published=True,
-            )
+        self.ai_article = Article.objects.create(
+            title='Agents Deep Dive', slug='agents-deep-dive',
+            date=date(2026, 3, 3), tags=['ai'], published=True,
+        )
+        self.infra_article = Article.objects.create(
+            title='Cloud Infra Guide', slug='cloud-infra-guide',
+            date=date(2026, 3, 2), tags=['aws'], published=True,
+        )
+        self.career_article = Article.objects.create(
+            title='Landing A Role', slug='landing-a-role',
+            date=date(2026, 3, 1), tags=['careers'], published=True,
+        )
 
-    def test_disclosure_present_and_closed_without_active_hidden_tag(self):
-        response = self.client.get('/blog')
-        content = response.content.decode()
-        self.assertIn('data-testid="blog-tag-more"', content)
-        self.assertIn('More topics (+3)', content)
-        details = content[content.index('<details', content.index('data-testid="blog-tag-more"') - 200):]
-        details = details[:details.index('>')]
-        # The <details> tag must not carry the open attribute.
-        self.assertNotIn(' open', details)
+    def test_topic_filter_narrows_results(self):
+        response = self.client.get('/blog?topic=ai-engineering')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Agents Deep Dive')
+        self.assertNotContains(response, 'Cloud Infra Guide')
+        self.assertNotContains(response, 'Landing A Role')
 
-    def test_disclosure_open_when_hidden_tag_active(self):
-        # tag-14 is alphabetically last, so it lives in the hidden tail.
-        hidden_tag = self.tags[-1]
-        response = self.client.get(f'/blog?tag={hidden_tag}')
-        content = response.content.decode()
-        details = content[content.index('<details', content.index('data-testid="blog-tag-more"') - 200):]
-        details = details[:details.index('>')]
-        self.assertIn(' open', details)
+    def test_selected_topic_in_context(self):
+        response = self.client.get('/blog?topic=ai-engineering')
+        self.assertEqual(response.context['selected_topic'], 'ai-engineering')
 
-    def test_disclosure_closed_when_visible_tag_active(self):
-        # tag-00 is in the first 12, so the disclosure stays closed.
-        visible_tag = self.tags[0]
-        response = self.client.get(f'/blog?tag={visible_tag}')
+    def test_active_pill_highlighted_when_topic_selected(self):
+        response = self.client.get('/blog?topic=ai-engineering')
         content = response.content.decode()
-        details = content[content.index('<details', content.index('data-testid="blog-tag-more"') - 200):]
-        details = details[:details.index('>')]
-        self.assertNotIn(' open', details)
+        active = _opening_anchor(content, 'blog-topic-ai-engineering')
+        self.assertIn('aria-current="page"', active)
+        self.assertIn('bg-accent', active)
+        all_pill = _opening_anchor(content, 'blog-topic-all')
+        self.assertNotIn('aria-current="page"', all_pill)
+
+    def test_unknown_topic_treated_as_no_filter(self):
+        response = self.client.get('/blog?topic=does-not-exist')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['selected_topic'], '')
+        # All articles remain visible when the topic slug is invalid.
+        self.assertContains(response, 'Agents Deep Dive')
+        self.assertContains(response, 'Cloud Infra Guide')
+        self.assertContains(response, 'Landing A Role')
 
 
 # --- Related articles tests ---
@@ -638,10 +666,12 @@ class BlogListDisplayTest(TestCase):
         response = self.client.get('/blog')
         self.assertContains(response, 'June 15, 2025')
 
-    def test_shows_tags(self):
+    def test_shows_topic_eyebrow(self):
+        # Per-card raw-tag chips were replaced by a single primary-topic
+        # eyebrow (article tags python, ai -> AI Engineering).
         response = self.client.get('/blog')
-        self.assertContains(response, 'python')
-        self.assertContains(response, 'ai')
+        self.assertContains(response, 'data-testid="blog-card-topic"')
+        self.assertContains(response, 'AI Engineering')
 
     def test_shows_cover_image(self):
         response = self.client.get('/blog')
@@ -731,8 +761,13 @@ class BlogDetailDisplayTest(TestCase):
     def test_tag_links_point_to_filter(self):
         response = self.client.get('/blog/detail-article')
         content = response.content.decode()
+        # Detail chips still link to the legacy ?tag= filter, wrapped in the
+        # article-tags container and humanized for display.
+        self.assertContains(response, 'data-testid="article-tags"')
         self.assertIn('?tag=python', content)
         self.assertIn('?tag=tutorial', content)
+        self.assertIn('>Python</a>', content)
+        self.assertIn('>Tutorial</a>', content)
 
     def test_widget_directive_absent_from_header_metadata_and_excerpts(self):
         article = Article.objects.create(
@@ -1001,9 +1036,6 @@ class BlogTagFilterTest(TestCase):
         self.assertContains(all_articles, 'AI Overview')
         self.assertContains(all_articles, 'Python AI')
 
-        # Listing surfaces a chip whose href applies the python filter.
-        self.assertContains(all_articles, '?tag=python')
-
         # Following ?tag=python: only python-tagged articles remain.
         filtered = self.client.get('/blog?tag=python')
         self.assertContains(filtered, 'Python Basics')
@@ -1080,9 +1112,10 @@ class BlogTagFilterTest(TestCase):
             date=date(2026, 1, 2), tags=['go'], published=True,
         )
 
-        # Listing exposes the python chip whose href triggers the filter.
+        # The curated topic row links to ?topic=<slug> (python -> Production
+        # & Infra); the legacy ?tag= filter still resolves inbound links.
         listing = self.client.get('/blog')
-        self.assertContains(listing, '?tag=python')
+        self.assertContains(listing, '/blog?topic=production-infra')
 
         # Following that filter shows only the python article.
         filtered = self.client.get('/blog?tag=python')
@@ -1111,7 +1144,10 @@ class BlogTagFilterTest(TestCase):
         detail = self.client.get('/blog/ai-patterns')
         self.assertEqual(detail.status_code, 200)
         self.assertContains(detail, 'AI Patterns')
+        self.assertContains(detail, 'data-testid="article-tags"')
         self.assertContains(detail, '?tag=design-patterns')
+        # The chip label is humanized, not the raw slug.
+        self.assertContains(detail, '>Design Patterns</a>')
 
         # Following that link lands on a blog listing showing both
         # design-patterns articles.

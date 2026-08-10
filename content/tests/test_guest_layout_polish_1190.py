@@ -36,7 +36,10 @@ class GuestLayoutPolish1190Test(TestCase):
         self.assertEqual(
             html.count('data-testid="blog-card-thumbnail-fallback"'), 1,
         )
-        self.assertContains(response, 'href="/blog?tag=rag"')
+        # Per-card raw-tag chips were replaced by a non-clickable primary-topic
+        # eyebrow (Fable redesign); rag maps to the AI Engineering topic.
+        self.assertContains(response, 'data-testid="blog-card-topic"')
+        self.assertContains(response, 'AI Engineering')
 
     def test_workshop_description_gets_local_overflow_guard(self):
         workshop = Workshop.objects.create(

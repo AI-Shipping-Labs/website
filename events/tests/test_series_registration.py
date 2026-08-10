@@ -30,6 +30,7 @@ from events.models import (
 from events.services.series_registration import (
     enroll_series_registrants_in_event,
     enroll_user_in_series,
+    promote_event_registrations_to_series,
 )
 from tests.fixtures import TierSetupMixin
 
@@ -544,3 +545,72 @@ class StudioAddOccurrenceAutoEnrollTest(TierSetupMixin, TestCase):
                 event=draft, user=self.member,
             ).exists()
         )
+
+
+@tag('core')
+class PromoteEventRegistrationsToSeriesTest(TierSetupMixin, TestCase):
+    """Promoting an event's registrations widens them to the whole series."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.user = User.objects.create_user(
+            email='reg1@test.com', password='pass', email_verified=True,
+        )
+        cls.user.tier = cls.main_tier
+        cls.user.save()
+        cls.other = User.objects.create_user(
+            email='reg2@test.com', password='pass', email_verified=True,
+        )
+        cls.other.tier = cls.main_tier
+        cls.other.save()
+
+    def test_promotes_registrants_and_fans_out_to_siblings(self):
+        series = _make_series()
+        source = _make_occurrence(series, offset_days=7, position=1)
+        future = _make_occurrence(series, offset_days=14, position=2)
+        EventRegistration.objects.create(event=source, user=self.user)
+        EventRegistration.objects.create(event=source, user=self.other)
+
+        summary = promote_event_registrations_to_series(source)
+
+        self.assertEqual(summary['registrants'], 2)
+        self.assertEqual(summary['new_series_flags'], 2)
+        self.assertEqual(summary['already_series'], 0)
+        # Both users gain a registration for the sibling occurrence; the source
+        # already had them (skipped_already), so fanned_out counts the sibling.
+        self.assertEqual(summary['fanned_out'], 2)
+        for user in (self.user, self.other):
+            self.assertTrue(
+                SeriesRegistration.objects.filter(series=series, user=user).exists()
+            )
+            self.assertTrue(
+                EventRegistration.objects.filter(event=future, user=user).exists()
+            )
+        # Source registrations are left intact.
+        self.assertEqual(
+            EventRegistration.objects.filter(event=source).count(), 2,
+        )
+
+    def test_second_run_is_idempotent(self):
+        series = _make_series()
+        source = _make_occurrence(series, offset_days=7, position=1)
+        _make_occurrence(series, offset_days=14, position=2)
+        EventRegistration.objects.create(event=source, user=self.user)
+
+        promote_event_registrations_to_series(source)
+        summary = promote_event_registrations_to_series(source)
+
+        self.assertEqual(summary['new_series_flags'], 0)
+        self.assertEqual(summary['already_series'], 1)
+        self.assertEqual(summary['fanned_out'], 0)
+
+    def test_event_without_series_raises(self):
+        start = timezone.now() + timedelta(days=3)
+        solo = Event.objects.create(
+            title='Solo Event', slug='solo-event-x',
+            start_datetime=start, end_datetime=start + timedelta(hours=1),
+            status='upcoming', required_level=LEVEL_OPEN,
+        )
+        with self.assertRaises(ValueError):
+            promote_event_registrations_to_series(solo)

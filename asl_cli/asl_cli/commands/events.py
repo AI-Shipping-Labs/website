@@ -172,4 +172,23 @@ def events_sync_zoom(slug, fmt):
     emit(get_client().post(f"{API}/events/{slug}/sync-zoom"), fmt)
 
 
+@events.command("promote-registrations")
+@click.argument("slug")
+@format_option
+def events_promote_registrations(slug, fmt):
+    """Promote an event's registrations to its series.
+
+    For every user registered for the event, sets the standing series
+    registration and fans it out across the series' upcoming occurrences so
+    every event in the series shares the signups. The event's own
+    registrations are left intact. Requires the event to be linked to a series.
+    """
+    emit(
+        get_client().post(
+            f"{API}/events/{slug}/promote-registrations-to-series"
+        ),
+        fmt,
+    )
+
+
 groups = [events]

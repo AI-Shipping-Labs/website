@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 
 from accounts.models import Token
@@ -98,6 +98,12 @@ class EventsApiTestBase(TestCase):
         return {"HTTP_AUTHORIZATION": f"Token {token.key}"}
 
     def _post(self, payload, *, token=None):
+        # Description is required by the API (issue: an event without one reads
+        # as unfinished). Default one so create tests that exercise other
+        # fields don't each have to spell it out; tests that assert the
+        # requirement post directly without _post.
+        if isinstance(payload, dict) and "description" not in payload:
+            payload = {"description": "A test event description.", **payload}
         return self.client.post(
             "/api/events",
             data=json.dumps(payload),
@@ -610,7 +616,7 @@ class EventsCreateTest(EventsApiTestBase):
     def test_create_coerces_optional_text_fields(self):
         response = self._post({
             "title": "  Text Event  ",
-            "description": None,
+            "description": "A described event.",
             "location": "  Zoom Room  ",
             "zoom_join_url": None,
             "start_datetime": self.start.isoformat(),
@@ -619,9 +625,32 @@ class EventsCreateTest(EventsApiTestBase):
         self.assertEqual(response.status_code, 201)
         body = response.json()
         self.assertEqual(body["title"], "Text Event")
-        self.assertEqual(body["description"], "")
         self.assertEqual(body["location"], "Zoom Room")
         self.assertEqual(body["zoom_join_url"], "")
+
+    def test_create_without_description_is_rejected(self):
+        response = self.client.post(
+            "/api/events",
+            data=json.dumps({
+                "title": "No Description",
+                "start_datetime": self.start.isoformat(),
+            }),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("description", response.json().get("details", {}))
+        self.assertFalse(Event.objects.filter(title="No Description").exists())
+
+    def test_update_blanking_description_is_rejected(self):
+        create = self._post({
+            "title": "Has Description",
+            "start_datetime": self.start.isoformat(),
+        })
+        slug = create.json()["slug"]
+        response = self._patch(slug, {"description": "   "})
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("description", response.json().get("details", {}))
 
     def test_create_rejects_read_only_source_fields(self):
         before = Event.objects.count()
@@ -1707,3 +1736,84 @@ class EventsSkillDocSyncTest(TestCase):
         # Host auto-registration is documented via the --host-email flag.
         self.assertIn("--host-email", text)
         self.assertIn("auto-registers", text)
+
+
+@tag("core")
+class EventPromoteRegistrationsToSeriesApiTest(EventsApiTestBase):
+    """POST /api/events/<slug>/promote-registrations-to-series."""
+
+    def _series_with_events(self):
+        from events.models import EventSeries
+
+        series = EventSeries.objects.create(
+            name="Promote Series", slug="promote-series",
+            start_time=self.start.time(), timezone="UTC",
+        )
+        source = Event.objects.create(
+            title="Promote Source", slug="promote-source",
+            description="d", start_datetime=self.start,
+            end_datetime=self.start + timedelta(hours=1),
+            status="upcoming", required_level=0, event_series=series,
+        )
+        future = Event.objects.create(
+            title="Promote Future", slug="promote-future",
+            description="d", start_datetime=self.start + timedelta(days=7),
+            end_datetime=self.start + timedelta(days=7, hours=1),
+            status="upcoming", required_level=0, event_series=series,
+        )
+        return series, source, future
+
+    def test_promote_fans_out_to_series(self):
+        from events.models import SeriesRegistration
+
+        series, source, future = self._series_with_events()
+        EventRegistration.objects.create(event=source, user=self.member)
+
+        response = self.client.post(
+            f"/api/events/{source.slug}/promote-registrations-to-series",
+            **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["registrants"], 1)
+        self.assertEqual(body["new_series_flags"], 1)
+        self.assertEqual(body["fanned_out"], 1)
+        self.assertTrue(
+            SeriesRegistration.objects.filter(
+                series=series, user=self.member,
+            ).exists()
+        )
+        self.assertTrue(
+            EventRegistration.objects.filter(
+                event=future, user=self.member,
+            ).exists()
+        )
+
+    def test_unknown_event_returns_404(self):
+        response = self.client.post(
+            "/api/events/does-not-exist/promote-registrations-to-series",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_event_without_series_returns_422(self):
+        solo = Event.objects.create(
+            title="Solo", slug="solo-promote", description="d",
+            start_datetime=self.start,
+            end_datetime=self.start + timedelta(hours=1),
+            status="upcoming", required_level=0,
+        )
+        response = self.client.post(
+            f"/api/events/{solo.slug}/promote-registrations-to-series",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_non_staff_token_rejected(self):
+        _, source, _ = self._series_with_events()
+        response = self.client.post(
+            f"/api/events/{source.slug}/promote-registrations-to-series",
+            **self._auth(token=self.non_staff_token),
+        )
+        self.assertEqual(response.status_code, 401)

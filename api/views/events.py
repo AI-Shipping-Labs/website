@@ -48,6 +48,9 @@ from events.services.calendar_lifecycle import (
 )
 from events.services.display_time import resolve_event_creation_timezone
 from events.services.host_registration import maybe_register_host_as_attendee
+from events.services.series_registration import (
+    promote_event_registrations_to_series,
+)
 from events.services.timestamps import validate_event_timestamps_for_api
 from events.services.workshop_ready_notification import (
     WorkshopReadyNotReady,
@@ -424,7 +427,18 @@ def _collect_event_values(data, *, existing=None):
     elif existing is None:
         values["slug"] = ""
 
-    for field in ("description", "timezone", "zoom_join_url", "location"):
+    # Description is required: an event without one renders a bare card and
+    # reads as unfinished. Enforced on create, and on any update that would
+    # blank it.
+    if "description" in data:
+        description = coerce_optional_text(data["description"])
+        if not description:
+            errors["description"] = "Description is required."
+        values["description"] = description
+    elif existing is None:
+        errors["description"] = "Description is required."
+
+    for field in ("timezone", "zoom_join_url", "location"):
         if field in data:
             values[field] = coerce_optional_text(data[field])
     if "timezone" in values and not is_valid_timezone(values["timezone"]):
@@ -1274,6 +1288,61 @@ def event_detail(request, slug):
 
 
 @csrf_exempt
+@token_required
+@require_methods("POST")
+@openapi_spec(
+    tag="Events",
+    summary="Promote an event's registrations to its series",
+    methods={
+        "POST": {
+            "summary": "Promote registrations to the series",
+            "description": (
+                "For every user registered for this event, creates the standing "
+                "series-registration flag on the event's series and fans it out "
+                "into per-event registrations across the series' eligible "
+                "upcoming occurrences. The event's own registrations are left "
+                "intact. Idempotent: users already series-registered are "
+                "counted, not duplicated. Requires the event to be linked to a "
+                "series."
+            ),
+            "responses": {
+                200: {
+                    "description": "Promotion summary.",
+                    "example": {
+                        "series_slug": "inference-engineering-book-club",
+                        "registrants": 12,
+                        "new_series_flags": 10,
+                        "already_series": 2,
+                        "fanned_out": 9,
+                    },
+                },
+                401: {"description": "Missing, invalid, or non-staff token."},
+                404: {"description": "Event not found."},
+                422: {"description": "Event is not linked to a series."},
+            },
+        },
+    },
+)
+def event_promote_registrations_to_series(request, slug):
+    """POST ``/api/events/<slug>/promote-registrations-to-series``.
+
+    Widens each of the event's signups into a standing series registration and
+    fans it out across the series' upcoming occurrences. The event's own
+    registrations stay intact; sibling occurrences gain the audience.
+    """
+    event = Event.objects.filter(slug=slug).first()
+    if event is None:
+        return error_response("Event not found", "unknown_event", status=404)
+    if event.event_series_id is None:
+        return error_response(
+            "Event is not linked to a series",
+            "event_not_in_series",
+            status=422,
+        )
+    summary = promote_event_registrations_to_series(event)
+    return JsonResponse(summary)
+
+
 @token_required
 @require_methods("POST")
 @openapi_spec(

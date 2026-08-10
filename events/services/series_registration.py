@@ -133,6 +133,64 @@ def series_registration_summary(user, series):
     return summary
 
 
+def promote_event_registrations_to_series(event):
+    """Promote a single event's registrants to standing series registrants.
+
+    For every user registered for ``event``, create the ``SeriesRegistration``
+    standing flag on the event's series (idempotent) and fan it out into real
+    per-event ``EventRegistration`` rows across the series' eligible upcoming
+    occurrences. The source event's own registrations are left intact — this
+    widens each signup to the whole series so sibling occurrences (e.g. later
+    sessions in the same book club / cohort) share the same audience, and any
+    occurrence added later auto-enrolls them too.
+
+    Returns a structured summary::
+
+        {
+            'series_slug': str,
+            'registrants': int,       # users registered for the source event
+            'new_series_flags': int,  # SeriesRegistration rows created now
+            'already_series': int,    # users already series-registered
+            'fanned_out': int,        # new EventRegistration rows created
+        }
+
+    Raises ``ValueError`` if the event is not linked to a series.
+    """
+    from events.models import EventRegistration, SeriesRegistration
+
+    series = event.event_series
+    if series is None:
+        raise ValueError('Event is not linked to a series.')
+
+    user_ids = list(
+        EventRegistration.objects.filter(event=event)
+        .values_list('user_id', flat=True)
+    )
+    summary = {
+        'series_slug': series.slug,
+        'registrants': len(user_ids),
+        'new_series_flags': 0,
+        'already_series': 0,
+        'fanned_out': 0,
+    }
+    if not user_ids:
+        return summary
+
+    from accounts.models import User
+
+    for user in User.objects.filter(id__in=user_ids):
+        _, created = SeriesRegistration.objects.get_or_create(
+            series=series, user=user,
+        )
+        if created:
+            summary['new_series_flags'] += 1
+        else:
+            summary['already_series'] += 1
+        fan = enroll_user_in_series(user, series)
+        summary['fanned_out'] += fan['registered']
+    return summary
+
+
 def enroll_series_registrants_in_event(event):
     """Auto-enroll existing series registrants into a new occurrence.
 

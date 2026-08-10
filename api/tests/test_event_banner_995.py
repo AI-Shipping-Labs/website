@@ -69,6 +69,10 @@ class EventBannerApiTestBase(TestCase):
         return {"HTTP_AUTHORIZATION": f"Token {token.key}"}
 
     def _post(self, payload, *, token=None):
+        # Description is required by the API; default one so banner tests that
+        # exercise other fields don't each spell it out.
+        if isinstance(payload, dict) and "description" not in payload:
+            payload = {"description": "A test event description.", **payload}
         return self.client.post(
             "/api/events",
             data=json.dumps(payload),

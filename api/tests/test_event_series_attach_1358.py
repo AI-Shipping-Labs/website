@@ -155,6 +155,7 @@ class EventSeriesAttachApiTest(TestCase):
             "/api/events",
             data=json.dumps({
                 "title": "New Attached Event",
+                "description": "An attached event.",
                 "start_datetime": start.isoformat(),
                 "event_series": self.collection.pk,
             }),

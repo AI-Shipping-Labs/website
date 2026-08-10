@@ -313,6 +313,7 @@ class HostAutoRegistrationStudioTest(StaffUserMixin, TestCase):
         payload = {
             'title': 'Studio Host Auto Registration',
             'slug': '',
+            'description': 'Host auto-registration test event.',
             'event_date': start.strftime('%d/%m/%Y'),
             'event_time': start.strftime('%H:%M'),
             'duration_hours': '1',
@@ -398,6 +399,7 @@ class HostAutoRegistrationApiTest(TestCase):
         start = _future_start()
         payload = {
             'title': 'API Host Auto Registration',
+            'description': 'Host auto-registration test event.',
             'platform': 'zoom',
             'start_datetime': start.isoformat(),
             'end_datetime': (start + timedelta(hours=1)).isoformat(),

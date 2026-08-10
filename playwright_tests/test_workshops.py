@@ -26,9 +26,6 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     create_user as _create_user,
 )
-from playwright_tests.conftest import (
-    ensure_tiers,
-)
 
 os.environ.setdefault('DJANGO_ALLOW_ASYNC_UNSAFE', 'true')
 from django.db import connection  # noqa: E402
@@ -196,10 +193,13 @@ class TestVisitorBrowsesCatalog:
         assert 'step-by-step writeups or tutorial pages' in landing_text
         assert 'runnable code or materials' in landing_text
 
+        # The newest workshop is featured above the grid (mirrors the /books
+        # "Reading now" card); the remaining preview workshop renders below.
+        assert page.locator('[data-testid="featured-workshop-card"]').is_visible()
         preview_cards = page.locator(
             '[data-testid="workshops-preview"] [data-testid="workshop-card"]',
         )
-        assert preview_cards.count() == 2
+        assert preview_cards.count() == 1
         for index in range(preview_cards.count()):
             card = preview_cards.nth(index)
             assert card.locator('[data-testid^="workshop-card-preview"]').count() == 0
@@ -224,8 +224,12 @@ class TestVisitorBrowsesCatalog:
             }""",
         )
 
-        page.locator('[data-testid="browse-workshops-cta"]').click()
-        page.wait_for_url('**/workshops/catalog')
+        # The catalog now lives on the same page; the redundant "Browse all
+        # workshops" hero CTA was removed, so open the full archive directly.
+        page.goto(
+            f'{django_server}/workshops/catalog',
+            wait_until='domcontentloaded',
+        )
         assert page.url.endswith('/workshops/catalog')
         assert page.locator('[data-testid="workshop-catalog"]').is_visible()
         assert page.locator('[data-testid="workshops-landing"]').count() == 0
@@ -246,28 +250,10 @@ class TestVisitorBrowsesCatalog:
         assert 'Shipping Agents' in body
         assert 'data-testid="workshop-pages-list"' in body
 
-    def test_membership_options_cta_lands_on_pricing(
-        self, django_server, page,
-    ):
-        _clear_workshops()
-        ensure_tiers()
-        _create_workshop()
-
-        page.goto(
-            f'{django_server}/workshops',
-            wait_until='domcontentloaded',
-        )
-        page.locator('[data-testid="view-membership-options-cta"]').click()
-        page.wait_for_load_state('domcontentloaded')
-
-        assert page.url.endswith('/pricing')
-        expected_tiers = {'free', 'basic', 'main', 'premium'}
-        found_tiers = {
-            slug
-            for slug in expected_tiers
-            if page.locator(f'[data-tier-card="{slug}"]').count() >= 1
-        }
-        assert found_tiers == expected_tiers
+    # The "View membership options" hero CTA was removed from /workshops
+    # (Membership is a top-level nav link now), so the dedicated CTA->pricing
+    # E2E flow no longer applies; pricing-page coverage lives with the pricing
+    # tests.
 
     def test_filtered_catalog_clear_path_stays_on_catalog_route(
         self, django_server, page,
@@ -566,24 +552,14 @@ class TestVisitorBrowsesCatalog:
         assert metadata.locator('[data-lucide="user"]').count() == 1
         assert metadata.locator('[data-lucide="calendar"]').count() == 1
 
-        tools = scan_card.locator('[data-testid="workshop-card-tools"]')
-        tools_text = tools.inner_text()
-        assert 'tools' in tools_text.lower()
-        assert 'Claude Code' in tools_text
-        assert 'OpenAI API' in tools_text
-
-        deliverables = scan_card.locator('[data-testid="workshop-card-deliverables"]')
-        deliverable_text = deliverables.inner_text()
-        assert 'includes' in deliverable_text.lower()
-        assert 'Tutorial pages' in deliverable_text
-        assert 'Recording' in deliverable_text
-        assert 'Code' in deliverable_text
-        assert 'Materials' in deliverable_text
-
-        topics = scan_card.locator('[data-testid="workshop-card-topics"]')
-        assert 'topics' in topics.inner_text().lower()
-        agents_tag = topics.locator('a:has-text("agents")')
-        assert agents_tag.get_attribute('href') == '/workshops/catalog?tag=agents'
+        # The unified card matches the book card density: tool chips,
+        # deliverable ("Includes") pills, and topic chips no longer render on
+        # the card (they live on the workshop detail page).
+        assert scan_card.locator('[data-testid="workshop-card-tools"]').count() == 0
+        assert scan_card.locator(
+            '[data-testid="workshop-card-deliverables"]',
+        ).count() == 0
+        assert scan_card.locator('[data-testid="workshop-card-topics"]').count() == 0
 
         signin_access = page.locator(
             'article[data-workshop-slug="signin-workshop"] '
@@ -668,33 +644,13 @@ class TestVisitorBrowsesCatalog:
         assert paid_badge.get_attribute('data-required-level') == '10'
         assert paid_badge.locator('svg.lucide-lock').count() == 1
 
+        # Per-card topic chips were removed in the card-unification, so reach
+        # the access+tag filtered view through the query directly; the point of
+        # this test is that the access and tag filters preserve each other.
         page.goto(
-            f'{django_server}/workshops/catalog?access=paid',
+            f'{django_server}/workshops/catalog?access=paid&tag=python',
             wait_until='domcontentloaded',
         )
-        paid_python_card = page.locator(
-            'article:has(a[href="/workshops/paid-python"])',
-        )
-        python_tag = paid_python_card.locator(
-            '[data-testid="workshop-card-tags"] a:has-text("python")',
-        )
-        assert python_tag.get_attribute('href') == (
-            '/workshops/catalog?access=paid&tag=python'
-        )
-        assert python_tag.is_visible()
-        assert python_tag.evaluate(
-            """node => node.closest('a[href="/workshops/paid-python"]') === null""",
-        )
-        card_box = paid_python_card.bounding_box()
-        tag_box = python_tag.bounding_box()
-        assert card_box is not None
-        assert tag_box is not None
-        assert tag_box['y'] >= card_box['y']
-        assert tag_box['y'] + tag_box['height'] <= (
-            card_box['y'] + card_box['height'] + 1
-        )
-        python_tag.click()
-        page.wait_for_load_state('domcontentloaded')
 
         assert page.url.endswith('/workshops/catalog?access=paid&tag=python')
         python_body = page.content()
@@ -758,15 +714,13 @@ class TestVisitorBrowsesCatalog:
             wait_until='domcontentloaded',
         )
 
+        # Tool chips no longer render on the unified card; tools drive the
+        # Technologies filter facet, which is exercised below.
         claude_card = page.locator(
             'article:has(a[href="/workshops/claude-agents"])',
         )
-        assert claude_card.locator('[data-testid="workshop-card-tools"]').is_visible()
-        assert 'Claude Code' in claude_card.inner_text()
-        no_tools_card = page.locator(
-            'article:has(a[href="/workshops/no-tools"])',
-        )
-        assert no_tools_card.locator('[data-testid="workshop-card-tools"]').count() == 0
+        assert claude_card.is_visible()
+        assert claude_card.locator('[data-testid="workshop-card-tools"]').count() == 0
 
         page.locator('[data-testid="workshop-facet-technology"] summary').click()
         page.locator(

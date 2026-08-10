@@ -1,0 +1,20 @@
+{% load member_badges %}
+{% comment %}
+Workshop card header badge cluster for the shared content/_content_card.html.
+Reads the context/loop variable ``workshop``. Access badge (Free and
+Free-with-sign-in render as a green check; paid tiers render as an accent lock)
+plus an optional skill-level badge. Kept in a testid'd wrapper so catalog tests
+can assert the badge cluster precedes the card title.
+{% endcomment %}
+<div class="flex flex-wrap items-center gap-2" data-testid="workshop-card-primary-signals">
+  {% if workshop.pages_required_level >= 10 %}
+  {% member_access_badge workshop.pages_required_level testid="workshop-tier-badge" %}
+  {% else %}
+  {% member_access_badge workshop.pages_required_level testid="workshop-free-badge" %}
+  {% endif %}
+  {% if workshop.skill_level %}
+  <span class="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground" data-testid="workshop-skill-badge">
+    Skill: {{ workshop.skill_level_label }}
+  </span>
+  {% endif %}
+</div>

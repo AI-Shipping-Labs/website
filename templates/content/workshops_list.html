@@ -8,58 +8,61 @@
 {% block body %}
 {% include "includes/header.html" %}
 <main class="min-h-screen pt-24">
-  <section class="border-b border-border bg-secondary/20 py-10 sm:py-14 lg:py-16" data-testid="workshops-landing">
+  <section class="py-8 sm:py-16 lg:py-24" data-testid="workshops-landing">
     <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-      <div>
-        <div class="max-w-3xl">
-          <p class="text-sm font-medium uppercase tracking-widest text-accent">Workshops</p>
-          <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
-            Hands-on AI workshops
-          </h1>
-          <p class="mt-5 text-lg leading-8 text-muted-foreground">
-            Practical AI engineering sessions for builders who want to learn by building with AI Shipping Labs. Each workshop turns a concrete project into a guided path with the recording, step-by-step writeups or tutorial pages, and runnable code or materials when they are provided.
-          </p>
-          <p class="mt-4 text-base leading-7 text-muted-foreground">
-            Workshops start as live sessions on the events calendar. After the session, the recording, tutorial pages, and materials move here. Build at your own pace and come back when it's time to ship your own version.
-          </p>
-          <div class="mt-8 flex flex-col gap-3 sm:flex-row">
-            <a href="/workshops/catalog" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="browse-workshops-cta">
-              Browse all workshops
-              <i data-lucide="arrow-right" class="h-4 w-4"></i>
-            </a>
-            <a href="/pricing" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border bg-background px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="view-membership-options-cta">
-              View membership options
-            </a>
-          </div>
+      <header>
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Workshops</p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          Hands-on AI workshops
+        </h1>
+        <p class="mt-4 max-w-3xl text-lg text-muted-foreground">
+          Practical AI engineering sessions for builders who learn by building. Each workshop turns a concrete project into a guided path with the recording, step-by-step writeups or tutorial pages, and runnable code or materials when they are provided. Sessions start live on the events calendar, then the recording, tutorial pages, and materials move here so you can build at your own pace.
+        </p>
+      </header>
+
+      {% comment %}
+      Latest workshop — a prominent featured card, mirroring the /books
+      "Reading now" featured card. Renders through the same shared
+      content/_content_card.html component as the grid cards below.
+      {% endcomment %}
+      {% if featured_workshop %}
+      <div class="mt-12" data-testid="workshops-featured">
+        <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">Latest workshop</h2>
+        <div class="mt-5">
+          {% with workshop=featured_workshop %}
+          {% include "content/_content_card.html" with card_url=featured_workshop.get_absolute_url card_testid="featured-workshop-card" card_anchor_testid="featured-workshop-card-link" card_body_template="content/_workshop_card_body.html" card_badge_template="content/_workshop_card_badges.html" card_media_template="content/_workshop_card_media.html" card_aria_label=featured_workshop.title card_extra_attrs='data-workshop-slug="'|add:featured_workshop.slug|add:'"' %}
+          {% endwith %}
         </div>
-        <div class="mt-10 grid gap-4 sm:grid-cols-3" aria-label="Workshop value points">
-          <div class="rounded-lg border border-border bg-background p-4">
-            <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-md bg-accent/10 text-accent">
-              <i data-lucide="route" class="h-4 w-4"></i>
-            </div>
-            <h2 class="text-base font-semibold text-foreground">Guided build flow</h2>
-            <p class="mt-2 text-sm leading-6 text-muted-foreground">Follow a project from setup through implementation decisions and shipping checkpoints.</p>
-          </div>
-          <div class="rounded-lg border border-border bg-background p-4">
-            <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-md bg-accent/10 text-accent">
-              <i data-lucide="play-square" class="h-4 w-4"></i>
-            </div>
-            <h2 class="text-base font-semibold text-foreground">Replay and writeups</h2>
-            <p class="mt-2 text-sm leading-6 text-muted-foreground">Use recordings alongside step-by-step pages when you want to revisit the work.</p>
-          </div>
-          <div class="rounded-lg border border-border bg-background p-4">
-            <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-md bg-accent/10 text-accent">
-              <i data-lucide="package-check" class="h-4 w-4"></i>
-            </div>
-            <h2 class="text-base font-semibold text-foreground">Project outcomes</h2>
-            <p class="mt-2 text-sm leading-6 text-muted-foreground">Leave with code, materials, or project direction you can adapt to real AI systems.</p>
-          </div>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  {% include "content/_workshops_catalog.html" with hide_catalog_header=True suppress_empty_state=featured_workshop %}
+
+  {# How workshops work — static value-prop cards, mirroring the /books "How it works" trio. #}
+  <section class="py-8 sm:py-16 lg:py-24">
+    <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+      <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">How workshops work</h2>
+      <div class="mt-5 grid gap-6 sm:grid-cols-3" aria-label="Workshop value points">
+        <div class="{% include 'content/_info_card_classes.html' %} bg-card">
+          <div class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent"><i data-lucide="route" class="h-5 w-5" aria-hidden="true"></i></div>
+          <h3 class="mt-4 text-lg font-semibold text-foreground">Guided build flow</h3>
+          <p class="mt-1 text-sm text-muted-foreground">Follow a project from setup through implementation decisions and shipping checkpoints.</p>
+        </div>
+        <div class="{% include 'content/_info_card_classes.html' %} bg-card">
+          <div class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent"><i data-lucide="play-square" class="h-5 w-5" aria-hidden="true"></i></div>
+          <h3 class="mt-4 text-lg font-semibold text-foreground">Replay and writeups</h3>
+          <p class="mt-1 text-sm text-muted-foreground">Use recordings alongside step-by-step pages when you want to revisit the work.</p>
+        </div>
+        <div class="{% include 'content/_info_card_classes.html' %} bg-card">
+          <div class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent"><i data-lucide="package-check" class="h-5 w-5" aria-hidden="true"></i></div>
+          <h3 class="mt-4 text-lg font-semibold text-foreground">Project outcomes</h3>
+          <p class="mt-1 text-sm text-muted-foreground">Leave with code, materials, or project direction you can adapt to real AI systems.</p>
         </div>
       </div>
     </div>
   </section>
-
-  {% include "content/_workshops_catalog.html" %}
 </main>
 {% include "includes/footer.html" %}
 {% endblock %}

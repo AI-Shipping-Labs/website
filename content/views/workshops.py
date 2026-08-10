@@ -766,6 +766,15 @@ def workshops_list(request):
         catalog_testid='workshops-preview',
         limit=LANDING_PREVIEW_LIMIT,
     )
+    # Mirror the /books hub: feature the latest (newest) workshop as a
+    # prominent card above the grid, then render the remaining recent
+    # workshops in the standard grid below. The catalog context is already
+    # ordered newest-first and limited to the landing preview.
+    preview_workshops = context['workshops']
+    context['featured_workshop'] = (
+        preview_workshops[0] if preview_workshops else None
+    )
+    context['workshops'] = list(preview_workshops[1:])
     return render(request, 'content/workshops_list.html', context)
 
 

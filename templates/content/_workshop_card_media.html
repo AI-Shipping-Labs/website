@@ -1,0 +1,10 @@
+{% load access_tags %}
+{% comment %}
+Workshop card media band for the shared content/_content_card.html. Workshop
+media policy: render the cover band only when a real cover/custom image exists
+(``card_image_url`` excludes auto-generated banners); coverless and auto-only
+workshops omit the media slot entirely. Reads the context variable ``workshop``.
+{% endcomment %}
+{% if workshop.card_image_url %}
+{% include "content/_content_preview.html" with preview_cover_url=workshop.card_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label=workshop.pages_required_level|required_tier_label preview_instructor=workshop.card_primary_instructor.name preview_date=workshop.date|member_short_date preview_tags=workshop.tags preview_image_loading="lazy" %}
+{% endif %}

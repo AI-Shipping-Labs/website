@@ -273,8 +273,10 @@ def test_deep_links_card_tags_and_empty_state_keep_existing_journeys(
 
     page.locator('[data-testid="clear-workshop-filter"]').click()
     page.wait_for_load_state("domcontentloaded")
-    search_card = page.locator('[data-workshop-slug="free-search"]')
-    search_card.locator('[data-testid="workshop-card-topic"]', has_text="search").click()
+    # Per-card topic chips were removed in the card-unification; filter by a
+    # topic through the Topics facet accordion instead.
+    page.locator('[data-testid="workshop-facet-topic"] summary').click()
+    page.locator('[data-testid="workshop-topic-option-search"]').click()
     page.wait_for_load_state("domcontentloaded")
     expect(
         page.locator('[data-testid="workshop-topic-option-search"]')

@@ -186,8 +186,9 @@ def test_collection_filters_and_pricing_recovery_keep_ui_but_drop_queries(
         f'{site_url}/workshops',
         'Hands-on AI Workshops | AI Shipping Labs',
     )
-    page.get_by_test_id('browse-workshops-cta').click()
-    page.wait_for_url(f'{django_server}/workshops/catalog')
+    # The "Browse all workshops" hero CTA was removed (the catalog now lives on
+    # the same page); navigate to the full archive route directly.
+    goto_with_retry(page, f'{django_server}/workshops/catalog')
     _assert_page_head(
         page,
         f'{site_url}/workshops/catalog',

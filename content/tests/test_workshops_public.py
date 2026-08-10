@@ -246,6 +246,14 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Secret Topic Draft')
 
     def test_landing_renders_visitor_offer_preview_and_catalog_cta(self):
+        # A second published workshop (newer) so the landing features the
+        # latest one and still renders the remaining preview in the grid.
+        newest = _make_workshop(
+            slug='newest', title='Newest Workshop', tags=['python'],
+        )
+        newest.date = date(2026, 9, 1)
+        newest.save()
+
         response = self.client.get(WORKSHOPS_LANDING_URL)
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'content/workshops_list.html')
@@ -255,29 +263,40 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Practical AI engineering sessions')
         self.assertContains(response, 'step-by-step writeups or tutorial pages')
         self.assertContains(response, 'the recording, tutorial pages, and materials move here')
+        # Value props moved to the "How workshops work" trio at the bottom.
+        self.assertContains(response, 'How workshops work')
         self.assertContains(response, 'Guided build flow')
         self.assertContains(response, 'Replay and writeups')
         self.assertContains(response, 'Project outcomes')
+        # Latest workshop featured card (mirrors the /books "Reading now" card).
+        self.assertContains(response, 'Latest workshop')
+        self.assertContains(response, 'data-testid="featured-workshop-card"')
+        self.assertContains(response, 'Newest Workshop')
+        # Both hero CTAs are gone: the catalog is on the same page now and
+        # Membership is a top-level nav link.
+        self.assertNotContains(response, 'data-testid="browse-workshops-cta"')
+        self.assertNotContains(response, 'Browse all workshops')
+        self.assertNotContains(response, 'data-testid="view-membership-options-cta"')
+        self.assertNotContains(response, 'View membership options')
         self.assertContains(response, 'href="/workshops/catalog"')
-        self.assertContains(response, 'Browse all workshops')
-        self.assertContains(response, 'href="/pricing"')
-        self.assertContains(response, 'View membership options')
         self.assertContains(response, 'id="workshop-preview"')
         self.assertContains(response, 'data-testid="workshops-preview"')
-        self.assertContains(response, 'Start with recent workshop writeups')
+        # The embedded catalog header is suppressed on the landing.
+        self.assertNotContains(response, 'Start with recent workshop writeups')
         self.assertContains(response, 'data-testid="view-all-workshops-preview-cta"')
         self.assertNotContains(response, 'data-testid="workshop-access-filters"')
 
         body = response.content.decode()
         landing_index = body.index('data-testid="workshops-landing"')
+        featured_index = body.index('data-testid="featured-workshop-card"')
         preview_index = body.index('data-testid="workshops-preview"')
         card_index = body.index('data-testid="workshop-card"')
-        self.assertLess(landing_index, preview_index)
-        self.assertLess(preview_index, card_index)
-
-        browse_cta_index = body.index('data-testid="browse-workshops-cta"')
         value_points_index = body.index('aria-label="Workshop value points"')
-        self.assertLess(browse_cta_index, value_points_index)
+        self.assertLess(landing_index, featured_index)
+        self.assertLess(featured_index, preview_index)
+        self.assertLess(preview_index, card_index)
+        # The catalog/preview now precedes the value-prop trio at the bottom.
+        self.assertLess(card_index, value_points_index)
 
     @tag('visual_regression')
     def test_landing_uses_single_column_heading_and_value_point_layout(self):
@@ -289,7 +308,7 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         )
         self.assertContains(
             response,
-            'class="mt-10 grid gap-4 sm:grid-cols-3" '
+            'class="mt-5 grid gap-6 sm:grid-cols-3" '
             'aria-label="Workshop value points"',
         )
         self.assertNotContains(response, 'lg:grid-cols-[')
@@ -359,26 +378,25 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertIn('Apr 21, 2026', card)
         self.assertIn('data-testid="workshop-card-description"', card)
         self.assertIn('Description text.', card)
-        self.assertIn('data-testid="workshop-card-topics"', card)
-        self.assertIn('Topics', card)
-        self.assertIn('python', card)
-        self.assertIn('agents', card)
+        # The unified card matches the book card density: no per-card topic
+        # chips, tools, or deliverable ("Includes") rows — those live on the
+        # workshop detail page.
+        self.assertNotIn('data-testid="workshop-card-topics"', card)
+        self.assertNotIn('data-testid="workshop-card-tools"', card)
+        self.assertNotIn('data-testid="workshop-card-deliverables"', card)
 
+        # Order: badge cluster (header) -> title -> description -> bottom meta.
         self.assertLess(
             card.index('data-testid="workshop-card-primary-signals"'),
             card.index('data-testid="workshop-card-title"'),
         )
         self.assertLess(
             card.index('data-testid="workshop-card-title"'),
-            card.index('data-testid="workshop-card-metadata"'),
-        )
-        self.assertLess(
-            card.index('data-testid="workshop-card-metadata"'),
             card.index('data-testid="workshop-card-description"'),
         )
         self.assertLess(
             card.index('data-testid="workshop-card-description"'),
-            card.index('data-testid="workshop-card-topics"'),
+            card.index('data-testid="workshop-card-metadata"'),
         )
 
     def test_catalog_card_access_label_uses_pages_required_level(self):
@@ -436,7 +454,11 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
             'Premium', _workshop_card_html(response, 'premium-card'),
         )
 
-    def test_catalog_card_deliverable_signals_are_conditional(self):
+    def test_catalog_card_stays_at_book_card_density(self):
+        # The unified card (shared content/_content_card.html) matches the
+        # book card's clean density: badge + title + description + meta only.
+        # Deliverable ("Includes") pills, tool chips, and topic chips do NOT
+        # render on the card — they live on the workshop detail page.
         Workshop.objects.all().delete()
         complete = _make_workshop(
             slug='complete-signals',
@@ -445,6 +467,7 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
             materials=[{'title': 'Slides', 'url': 'https://example.com/slides'}],
             code_repo_url='https://github.com/example/workshop',
             tags=['agents'],
+            core_tools=['Django'],
         )
         _make_page(complete, 'intro', 'Intro', 1)
         _make_workshop(
@@ -458,38 +481,17 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
             materials=[],
             code_repo_url='',
         )
-        workshop_materials = _make_workshop(
-            slug='workshop-materials',
-            title='Workshop Materials',
-            description='',
-            instructor=None,
-            tags=[],
-            with_event=False,
-            code_repo_url='',
-        )
-        workshop_materials.materials = [
-            {'title': 'Workbook', 'url': 'https://example.com/workbook'},
-        ]
-        workshop_materials.save()
 
         response = self.client.get(WORKSHOPS_CATALOG_URL)
 
         complete_card = _workshop_card_html(response, 'complete-signals')
-        self.assertIn('data-testid="workshop-card-deliverables"', complete_card)
-        self.assertIn(
-            'data-testid="workshop-card-deliverable-pages"', complete_card,
-        )
-        self.assertIn(
-            'data-testid="workshop-card-deliverable-recording"',
-            complete_card,
-        )
-        self.assertIn(
-            'data-testid="workshop-card-deliverable-code"', complete_card,
-        )
-        self.assertIn(
-            'data-testid="workshop-card-deliverable-materials"',
-            complete_card,
-        )
+        self.assertIn('data-testid="workshop-card-title"', complete_card)
+        self.assertIn('Complete Signals', complete_card)
+        self.assertNotIn('data-testid="workshop-card-deliverables"', complete_card)
+        self.assertNotIn('data-testid="workshop-card-tools"', complete_card)
+        self.assertNotIn('data-testid="workshop-card-topics"', complete_card)
+        self.assertNotIn('data-testid="workshop-card-deliverable-pages"', complete_card)
+        self.assertNotIn('data-testid="workshop-card-deliverable-recording"', complete_card)
 
         no_signals_card = _workshop_card_html(response, 'no-signals')
         self.assertIn('data-testid="workshop-card-link"', no_signals_card)
@@ -498,16 +500,8 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertNotIn('data-testid="workshop-card-instructor"', no_signals_card)
         self.assertNotIn('data-testid="workshop-card-topics"', no_signals_card)
         self.assertNotIn('data-testid="workshop-card-deliverables"', no_signals_card)
-        self.assertNotIn('Recording', no_signals_card)
-        self.assertNotIn('Code', no_signals_card)
-        self.assertNotIn('Materials', no_signals_card)
 
-        self.assertIn(
-            'data-testid="workshop-card-deliverable-materials"',
-            _workshop_card_html(response, 'workshop-materials'),
-        )
-
-    def test_catalog_card_topic_links_stay_outside_detail_anchor(self):
+    def test_catalog_card_is_fully_clickable_without_nested_anchor(self):
         response = self.client.get(WORKSHOPS_CATALOG_URL)
         card = _workshop_card_html(response, 'one')
 
@@ -517,8 +511,9 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertFalse(parser.found_nested_anchor)
         self.assertIn('data-testid="workshop-card-link"', card)
         self.assertIn('href="/workshops/one"', card)
-        self.assertIn('data-testid="workshop-card-tags"', card)
-        self.assertIn('href="/workshops/catalog?tag=python"', card)
+        # The unified card matches book-card density: no per-card topic chips.
+        self.assertNotIn('data-testid="workshop-card-tags"', card)
+        self.assertNotIn('data-testid="workshop-card-topic"', card)
 
     def test_catalog_links_to_landing(self):
         response = self.client.get(WORKSHOPS_CATALOG_URL)
@@ -602,18 +597,11 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertIn('aria-current="page"', rag_topic)
         self.assertIn('href="/workshops/catalog?tag=agents"', rag_topic)
 
-    def test_catalog_card_topic_links_preserve_flow_without_nested_anchor(self):
+    def test_catalog_card_uses_shared_full_height_card_container(self):
         response = self.client.get(f'{WORKSHOPS_CATALOG_URL}?access=paid')
 
-        self.assertContains(response, 'data-testid="workshop-card-topic"', count=2)
-        self.assertContains(
-            response,
-            'href="/workshops/catalog?access=paid&amp;tag=python"',
-        )
-        self.assertContains(
-            response,
-            'href="/workshops/catalog?access=paid&amp;tag=agents"',
-        )
+        # No per-card topic chips on the unified (book-density) card.
+        self.assertNotContains(response, 'data-testid="workshop-card-topic"')
 
         body = response.content.decode()
         article_start = body.index('data-testid="workshop-card"')
@@ -625,12 +613,17 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         card_anchor_open = body[
             card_anchor_start:body.index('>', card_anchor_start)
         ]
-        card_tags = body.index('data-testid="workshop-card-tags"', article_start)
-        card_anchor_end = body.index('</a>', article_start)
+        # The shared content/_content_card.html stretches the card to full
+        # height (article) while the anchor fills it (flex flex-1 flex-col).
         self.assertIn('flex h-full flex-col', article_open)
         self.assertIn('flex flex-1 flex-col', card_anchor_open)
         self.assertNotIn(' h-full', card_anchor_open)
-        self.assertLess(card_anchor_end, card_tags)
+
+        # The fully-clickable card has no nested anchors.
+        card = _workshop_card_html(response, 'one')
+        parser = _NestedAnchorParser()
+        parser.feed(card)
+        self.assertFalse(parser.found_nested_anchor)
 
     def test_catalog_filter_no_match_shows_empty_state(self):
         response = self.client.get(
@@ -1234,7 +1227,9 @@ class WorkshopCatalogToolFilterTest(TierSetupMixin, TestCase):
             core_tools=['Private Tool'],
         )
 
-    def test_catalog_renders_tool_filter_group_and_card_chips(self):
+    def test_catalog_renders_tool_filter_group(self):
+        # Tools drive the Technologies filter facet; the unified (book-density)
+        # card no longer renders per-card tool chips.
         response = self.client.get(WORKSHOPS_CATALOG_URL)
 
         self.assertEqual(response.status_code, 200)
@@ -1246,19 +1241,7 @@ class WorkshopCatalogToolFilterTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'LangChain')
         self.assertContains(response, 'Python')
         self.assertNotContains(response, 'Private Tool')
-        self.assertContains(response, 'data-testid="workshop-card-tools"', count=3)
-        self.assertContains(response, 'aria-label="1 more tools and technologies"')
-
-        body = response.content.decode()
-        link_index = body.index('href="/workshops/claude-agents"')
-        card_start = body.rfind('<article', 0, link_index)
-        card_end = body.index('</article>', link_index)
-        card_html = body[card_start:card_end]
-        self.assertIn('Claude Code', card_html)
-        self.assertIn('OpenAI API', card_html)
-        self.assertIn('Django', card_html)
-        self.assertIn('Python', card_html)
-        self.assertNotIn('FastAPI', card_html)
+        self.assertNotContains(response, 'data-testid="workshop-card-tools"')
 
     def test_catalog_hides_tool_filter_group_when_no_published_tools_exist(self):
         Workshop.objects.filter(status='published').update(core_tools=[])

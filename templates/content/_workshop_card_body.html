@@ -1,0 +1,27 @@
+{% comment %}
+Workshop card body for the shared content/_content_card.html — kept at the same
+clean density as the book card body (templates/bookclub/_secondary_book_card_body.html):
+title, a 2-line description, then a bottom-pinned meta line. Reads the context
+variable ``workshop``.
+
+Row alignment: the title uses line-clamp-2 + min-h-[44px] so single- and
+two-line titles reserve the same height, and the meta row uses mt-auto so it
+bottom-pins across the equal-height cards the shared card container stretches.
+Workshop deliverables ("Includes") live on the workshop detail page, not the card.
+{% endcomment %}
+<h3 class="line-clamp-2 min-h-[44px] text-base font-semibold leading-snug text-foreground transition-colors group-hover:text-accent" data-testid="workshop-card-title">{{ workshop.title }}</h3>
+{% if workshop.description_html %}
+<p class="mt-2 line-clamp-2 text-sm text-muted-foreground" data-testid="workshop-card-description">{{ workshop.description_html|striptags|truncatechars:140 }}</p>
+{% endif %}
+<div class="mt-auto pt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground" data-testid="workshop-card-metadata">
+  <span class="flex items-center gap-1.5" data-testid="workshop-card-date">
+    <i data-lucide="calendar" class="h-3.5 w-3.5 flex-shrink-0"></i>
+    <time datetime="{{ workshop.date|form_date_value }}">{{ workshop.date|member_short_date }}</time>
+  </span>
+  {% if workshop.card_primary_instructor %}
+  <span class="flex min-w-0 max-w-full items-center gap-1.5" data-testid="workshop-card-instructor">
+    <i data-lucide="user" class="h-3.5 w-3.5 flex-shrink-0"></i>
+    <span class="truncate">{{ workshop.card_primary_instructor.name }}</span>
+  </span>
+  {% endif %}
+</div>

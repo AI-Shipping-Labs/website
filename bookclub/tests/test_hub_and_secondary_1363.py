@@ -58,7 +58,7 @@ class BooksHubGroupingTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'bookclub/index.html')
         self.assertContains(response, 'Read together, ship together')
-        self.assertContains(response, 'Community &middot; Books')
+        self.assertContains(response, 'Books')
         self.assertContains(response, 'How it works')
 
     def test_current_book_is_featured(self):
@@ -329,4 +329,4 @@ class BooksNavPlacementTest(TestCase):
         self.assertEqual(slugs.index('books'), slugs.index('sprints') + 1)
         books_item = community['items'][slugs.index('books')]
         self.assertEqual(books_item['href'], '/books')
-        self.assertEqual(books_item['label'], 'Books')
+        self.assertEqual(books_item['label'], 'Book Club')

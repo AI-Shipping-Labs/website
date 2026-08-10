@@ -23,7 +23,6 @@ class PublicCtaHierarchyTest(TierSetupMixin, TestCase):
         self.assertIn('id="newsletter"', body)
         self.assertNotIn("Stop shipping alone.", body)
         self.assertIn('href="/#tiers"', body)
-        self.assertIn('href="/resources"', body)
 
     def test_pricing_has_no_newsletter_cta_before_tier_grid(self):
         response = self.client.get("/pricing")

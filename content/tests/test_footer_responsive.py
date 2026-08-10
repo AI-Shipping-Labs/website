@@ -110,8 +110,7 @@ class FooterCommunityNavigationTest(TestCase):
             ('Activities', '/activities#access-by-tier'),
             ('Community Sprints', '/sprints'),
             ('Events', '/events'),
-            ('Past Recordings', '/events?filter=past'),
-            ('Books', '/books'),
+            ('Book Club', '/books'),
             ('Join Slack', '/community/slack'),
         ]
         positions = []

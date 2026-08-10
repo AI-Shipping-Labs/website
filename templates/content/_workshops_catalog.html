@@ -115,7 +115,7 @@
       {% endfor %}
       {% for tag_filter in selected_tag_filters %}
       <a
-        href="{% tag_remove_url base_path selected_tags tag_filter.label catalog_extra_params %}"
+        href="{% tag_remove_url base_path selected_tags tag_filter.label catalog_extra_params 2 %}"
         class="inline-flex min-h-[36px] items-center gap-1 rounded-full bg-background px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
         data-testid="workshop-active-tag"
         aria-label="{{ tag_filter.remove_label }}"
@@ -223,8 +223,19 @@
           <p class="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Topics</p>
           <div class="flex flex-wrap gap-1.5" data-testid="workshop-card-tags">
             {% for tag in workshop.tags|slice:":3" %}
+            {% if workshop_tag_limit_reached and tag not in selected_tags %}
+            <span
+              class="inline-flex max-w-full items-center truncate rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground opacity-60"
+              data-testid="workshop-card-topic"
+              aria-disabled="true"
+              aria-label="Remove a selected tag before adding {{ tag }}"
+              title="Remove a selected tag before adding {{ tag }}"
+            >
+              {{ tag }}
+            </span>
+            {% else %}
             <a
-              href="{% tag_add_url base_path selected_tags tag catalog_extra_params %}"
+              href="{% tag_add_url base_path selected_tags tag catalog_extra_params 2 %}"
               class="inline-flex max-w-full items-center truncate rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-secondary/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               data-testid="workshop-card-topic"
               aria-label="Browse {{ tag }} workshops"
@@ -232,6 +243,7 @@
             >
               {{ tag }}
             </a>
+            {% endif %}
             {% endfor %}
             {% if workshop.tags|length > 3 %}
             <span class="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ workshop.tags|length|add:'-3' }} more workshop tags">+{{ workshop.tags|length|add:"-3" }}</span>

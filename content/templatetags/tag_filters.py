@@ -52,25 +52,47 @@ def has_common(seq_a, seq_b):
     return bool(set(seq_a) & set(seq_b))
 
 
+def _bounded_tags(selected_tags, max_tags):
+    """Normalize/deduplicate tags only for an explicitly bounded caller."""
+    tags = []
+    for raw_tag in selected_tags or ():
+        tag = str(raw_tag or '').strip()
+        if not tag or tag in tags:
+            continue
+        tags.append(tag)
+        if len(tags) == max_tags:
+            break
+    return tags
+
+
 @register.simple_tag
-def tag_add_url(base_path, selected_tags, tag, extra_params=None):
+def tag_add_url(base_path, selected_tags, tag, extra_params=None, max_tags=None):
     """Build URL that adds a tag to the current selection.
 
     Usage: {% tag_add_url base_path selected_tags "python" %}
     """
-    tags = list(selected_tags) if selected_tags else []
-    if tag not in tags:
+    tags = (
+        _bounded_tags(selected_tags, int(max_tags))
+        if max_tags is not None
+        else list(selected_tags) if selected_tags else []
+    )
+    if tag not in tags and (max_tags is None or len(tags) < int(max_tags)):
         tags.append(tag)
     return _build_url(base_path, tags, extra_params)
 
 
 @register.simple_tag
-def tag_remove_url(base_path, selected_tags, tag, extra_params=None):
+def tag_remove_url(base_path, selected_tags, tag, extra_params=None, max_tags=None):
     """Build URL that removes a tag from the current selection.
 
     Usage: {% tag_remove_url base_path selected_tags "python" %}
     """
-    tags = [t for t in (selected_tags or []) if t != tag]
+    tags = (
+        _bounded_tags(selected_tags, int(max_tags))
+        if max_tags is not None
+        else list(selected_tags or [])
+    )
+    tags = [t for t in tags if t != tag]
     return _build_url(base_path, tags, extra_params)
 
 

@@ -1349,6 +1349,7 @@ def event_promote_registrations_to_series(request, slug):
     return JsonResponse(summary)
 
 
+@csrf_exempt
 @token_required
 @require_methods("POST")
 @openapi_spec(

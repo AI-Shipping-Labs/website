@@ -114,7 +114,8 @@ class FooterInformationArchitectureTest(TestCase):
         self.assertIn('href="/activities#access-by-tier"', col)
         self.assertIn('href="/sprints"', col)
         self.assertIn('href="/events"', col)
-        self.assertIn('href="/events?filter=past"', col)
+        # Past Recordings was dropped from the nav + footer (Aug 2026 redesign).
+        self.assertNotIn('href="/events?filter=past"', col)
         self.assertIn('href="/books"', col)
         self.assertIn('href="/community/slack"', col)
         # The old catch-all links must not live in the Community column.

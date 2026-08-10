@@ -54,13 +54,13 @@ class ActivitiesSprintHubTest(TestCase):
             content.index('<div class="hidden md:flex md:items-center md:gap-4">')
         ]
 
-        about_trigger = primary.index('id="about-dropdown-btn"')
         community_index = primary.index('id="community-dropdown-btn"')
-        resources_index = primary.index('id="resources-dropdown-btn"')
+        learning_index = primary.index('id="learning-dropdown-btn"')
+        about_trigger = primary.index('id="about-dropdown-btn"')
 
-        self.assertLess(about_trigger, community_index)
-        self.assertLess(community_index, resources_index)
-        self.assertNotIn('data-testid="nav-membership"', primary)
+        self.assertLess(community_index, learning_index)
+        self.assertLess(learning_index, about_trigger)
+        self.assertNotIn('id="resources-dropdown-btn"', primary)
         self.assertNotIn('data-testid="nav-sprints"', primary)
         self.assertNotIn('data-testid="nav-events"', primary)
 
@@ -68,12 +68,10 @@ class ActivitiesSprintHubTest(TestCase):
         self.assertIn('href="/pricing"', header)
         self.assertIn('href="/courses"', header)
         self.assertIn('href="/sprints"', header)
-        self.assertIn('href="/resources"', header)
         self.assertIn('href="/faq"', header)
         self.assertIn('href="/activities#access-by-tier"', header)
         self.assertIn('data-testid="nav-community-link-activities"', header)
         top_level_ids = [
-            'data-testid="nav-membership"',
             'data-testid="nav-sprints"',
             'data-testid="nav-events"',
         ]

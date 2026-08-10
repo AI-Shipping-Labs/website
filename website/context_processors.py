@@ -192,21 +192,29 @@ def _build_primary_nav(marketing_nav, has_published_downloads):
     ``templates/includes/header.html`` loop over this structure, so a link
     is declared exactly once and the two viewports can never drift.
 
-    Returns an ordered list of group dicts. Each dropdown group is
-    ``{'kind': 'dropdown', 'key', 'label', 'items': [...]}`` where every
-    item is ``{'label', 'href', 'slug'}``. The ``slug`` becomes the
-    ``data-testid`` suffix (``{prefix}-{key}-link-{slug}``); marketing
-    pages use ``marketing-{n}`` (1-based) to match the historical
-    ``forloop.counter`` testids.
+    Returns an ordered list of group dicts. A group is either:
 
-    The Downloads item is appended to Resources only when
+    - a dropdown: ``{'kind': 'dropdown', 'key', 'label', 'items': [...]}``
+      where every item is ``{'label', 'href', 'slug'}``. The ``slug``
+      becomes the ``data-testid`` suffix (``{prefix}-{key}-link-{slug}``);
+      marketing pages use ``marketing-{n}`` (1-based) to match the
+      historical ``forloop.counter`` testids.
+    - a top-level link: ``{'kind': 'link', 'key', 'label', 'href'}``,
+      rendered as a bare nav link with testid ``{prefix}-{key}-link``.
+
+    Structure (Aug 2026 redesign): the old eight-item Resources mega-menu
+    is split into a focused Learning dropdown; Blog and Membership are
+    promoted to top-level links; Books moves under Community as
+    ``Book Club``. Project Ideas and Curated Links are dropped from the
+    nav entirely (full page removal tracked in #1355), and Past Recordings
+    is dropped. The Downloads item is appended to Learning only when
     ``has_published_downloads`` is true, mirroring the prior template
-    ``{% if %}`` guard. Marketing pages assigned to a nav section are
-    appended after the static items for that section.
+    ``{% if %}`` guard.
 
-    Note: the ``#1355`` Project Ideas / Curated Links visibility work is
-    tracked separately; this structure renders the nav exactly as it
-    stands on ``main`` and does not un-hide or hide any item.
+    Marketing pages assigned to a nav section are appended after the
+    static items for that section. Pages historically tagged for the
+    now-dissolved ``resources`` section surface under Learning, its
+    successor, so no synced marketing page is orphaned.
     """
 
     def marketing_items(section):
@@ -219,32 +227,19 @@ def _build_primary_nav(marketing_nav, has_published_downloads):
             for index, page in enumerate(marketing_nav.get(section, []), start=1)
         ]
 
-    about_items = [
-        {'label': 'Team', 'href': '/about', 'slug': 'team'},
-        {'label': 'FAQ', 'href': '/faq', 'slug': 'faq'},
-        *marketing_items('about'),
-    ]
-
     community_items = [
-        {'label': 'Membership', 'href': '/pricing', 'slug': 'membership'},
         {
             'label': 'Activities',
             'href': '/activities#access-by-tier',
             'slug': 'activities',
         },
-        {'label': 'Community Sprints', 'href': '/sprints', 'slug': 'sprints'},
-        {'label': 'Books', 'href': '/books', 'slug': 'books'},
         {'label': 'Events', 'href': '/events', 'slug': 'events'},
-        {
-            'label': 'Past Recordings',
-            'href': '/events?filter=past',
-            'slug': 'past-recordings',
-        },
+        {'label': 'Community Sprints', 'href': '/sprints', 'slug': 'sprints'},
+        {'label': 'Book Club', 'href': '/books', 'slug': 'books'},
         *marketing_items('community'),
     ]
 
-    resources_items = [
-        {'label': 'Blog', 'href': '/blog', 'slug': 'blog'},
+    learning_items = [
         {'label': 'Courses', 'href': '/courses', 'slug': 'courses'},
         {'label': 'Workshops', 'href': '/workshops', 'slug': 'workshops'},
         {
@@ -252,23 +247,21 @@ def _build_primary_nav(marketing_nav, has_published_downloads):
             'href': '/learning-path/ai-engineer',
             'slug': 'learning-paths',
         },
-        {'label': 'Project Ideas', 'href': '/projects', 'slug': 'projects'},
         {'label': 'Interview Prep', 'href': '/interview', 'slug': 'interview'},
-        {'label': 'Curated Links', 'href': '/resources', 'slug': 'curated-links'},
     ]
     if has_published_downloads:
-        resources_items.append(
+        learning_items.append(
             {'label': 'Downloads', 'href': '/downloads', 'slug': 'downloads'}
         )
-    resources_items.extend(marketing_items('resources'))
+    learning_items.extend(marketing_items('resources'))
+
+    about_items = [
+        {'label': 'Team', 'href': '/about', 'slug': 'team'},
+        {'label': 'FAQ', 'href': '/faq', 'slug': 'faq'},
+        *marketing_items('about'),
+    ]
 
     return [
-        {
-            'kind': 'dropdown',
-            'key': 'about',
-            'label': 'About',
-            'items': about_items,
-        },
         {
             'kind': 'dropdown',
             'key': 'community',
@@ -277,9 +270,27 @@ def _build_primary_nav(marketing_nav, has_published_downloads):
         },
         {
             'kind': 'dropdown',
-            'key': 'resources',
-            'label': 'Resources',
-            'items': resources_items,
+            'key': 'learning',
+            'label': 'Learning',
+            'items': learning_items,
+        },
+        {
+            'kind': 'link',
+            'key': 'blog',
+            'label': 'Blog',
+            'href': '/blog',
+        },
+        {
+            'kind': 'link',
+            'key': 'membership',
+            'label': 'Membership',
+            'href': '/pricing',
+        },
+        {
+            'kind': 'dropdown',
+            'key': 'about',
+            'label': 'About',
+            'items': about_items,
         },
     ]
 

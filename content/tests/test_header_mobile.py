@@ -77,25 +77,26 @@ class HeaderMobileMenuTest(TestCase):
         self.assertIn('min-w-0', content)
 
     def test_mobile_nav_sections_have_chevron_indicators(self):
-        """The About, Community, and Resources sections should have chevron SVG indicators."""
+        """The Community, Learning, and About sections should have chevron SVG indicators."""
         response = self.client.get("/")
         content = response.content.decode()
-        self.assertIn('id="mobile-about-chevron"', content)
-        self.assertIn('id="mobile-about-toggle"', content)
         self.assertIn('id="mobile-community-chevron"', content)
         self.assertIn('id="mobile-community-toggle"', content)
-        self.assertIn('id="mobile-resources-chevron"', content)
-        self.assertIn('id="mobile-resources-toggle"', content)
-        self.assertNotIn('id="mobile-learn-toggle"', content)
+        self.assertIn('id="mobile-learning-chevron"', content)
+        self.assertIn('id="mobile-learning-toggle"', content)
+        self.assertIn('id="mobile-about-chevron"', content)
+        self.assertIn('id="mobile-about-toggle"', content)
+        # Resources dropdown was dissolved (Aug 2026 redesign).
+        self.assertNotIn('id="mobile-resources-toggle"', content)
 
     def test_mobile_nav_toggles_are_buttons(self):
-        """The About, Community, and Resources headings should be buttons."""
+        """The Community, Learning, and About headings should be buttons."""
         response = self.client.get("/")
         content = response.content.decode()
         for toggle_id in [
-            'mobile-about-toggle',
             'mobile-community-toggle',
-            'mobile-resources-toggle',
+            'mobile-learning-toggle',
+            'mobile-about-toggle',
         ]:
             toggle_pos = content.index(f'id="{toggle_id}"')
             tag_start = content.rfind("<", 0, toggle_pos)
@@ -114,23 +115,24 @@ class HeaderMobileMenuTest(TestCase):
         self.assertNotIn('href="/community"', content)
         self.assertIn('href="/pricing"', content)
         self.assertIn('href="/faq"', content)
-        self.assertIn('id="about-dropdown-btn"', content)
         self.assertIn('id="community-dropdown-btn"', content)
-        self.assertIn('id="resources-dropdown-btn"', content)
-        self.assertNotIn('id="learn-dropdown-btn"', content)
+        self.assertIn('id="learning-dropdown-btn"', content)
+        self.assertIn('id="about-dropdown-btn"', content)
+        self.assertNotIn('id="resources-dropdown-btn"', content)
         self.assertIn('href="/courses"', content)
         self.assertIn('href="/workshops"', content)
         self.assertIn('href="/learning-path/ai-engineer"', content)
-        self.assertIn('href="/projects"', content)
         self.assertIn('href="/interview"', content)
         self.assertIn('href="/blog"', content)
         self.assertIn('href="/sprints"', content)
         self.assertIn('href="/events"', content)
         self.assertIn('href="/activities#access-by-tier"', content)
         self.assertIn('data-testid="mobile-nav-community-link-activities"', content)
-        self.assertIn('href="/events?filter=past"', content)
-        self.assertIn('data-testid="mobile-nav-community-link-past-recordings"', content)
-        self.assertIn('href="/resources"', content)
+        self.assertIn('data-testid="mobile-nav-community-link-books"', content)
+        # Project Ideas, Curated Links, and Past Recordings were dropped.
+        self.assertNotIn('href="/projects"', content)
+        self.assertNotIn('href="/events?filter=past"', content)
+        self.assertNotIn('href="/resources"', content)
 
         header = content[:content.index("</header>")]
         primary = header[
@@ -138,15 +140,18 @@ class HeaderMobileMenuTest(TestCase):
             header.index('<div class="hidden md:flex md:items-center md:gap-4">')
         ]
         top_level_ids = re.findall(
-            r'data-testid="(nav-about-trigger|nav-membership|nav-community-trigger|nav-sprints|nav-events|nav-resources-trigger)"',
+            r'data-testid="(nav-community-trigger|nav-learning-trigger'
+            r'|nav-blog-link|nav-membership-link|nav-about-trigger)"',
             primary,
         )
         self.assertEqual(
             top_level_ids,
             [
-                'nav-about-trigger',
                 'nav-community-trigger',
-                'nav-resources-trigger',
+                'nav-learning-trigger',
+                'nav-blog-link',
+                'nav-membership-link',
+                'nav-about-trigger',
             ],
         )
 

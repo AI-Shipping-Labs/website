@@ -129,7 +129,7 @@ class HeaderAccountMenuTest(TestCase):
         self.assertIn("Notifications", html)
         self.assertIn("mobile-notification-badge", html)
         self.assertIn("mobile-community-toggle", html)
-        self.assertIn("mobile-resources-toggle", html)
+        self.assertIn("mobile-learning-toggle", html)
         # Theme row lives at the top of the mobile drawer (issue #623),
         # not inside the per-user account section. The mobile account
         # section must NOT carry its own duplicate Theme button.

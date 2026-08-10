@@ -12,9 +12,9 @@ URL renders:
 
 - the ``#mobile-menu-btn`` hamburger button (mobile-only via ``md:hidden``)
 - the ``#mobile-menu`` container
-- the ``#mobile-community-toggle`` and ``#mobile-resources-toggle`` buttons
+- the ``#mobile-community-toggle`` and ``#mobile-learning-toggle`` buttons
   with representative links (the accordion content)
-- the desktop ``#community-dropdown-btn`` and ``#resources-dropdown-btn``
+- the desktop ``#community-dropdown-btn`` and ``#learning-dropdown-btn``
 - the existing peer-review business-logic markup the page is supposed to
   render -- so we don't accidentally claim the chrome is fixed by deleting
   the page body.
@@ -48,13 +48,14 @@ HEADER_TOKENS = (
     'id="mobile-menu"',
     'id="mobile-community-toggle"',
     'id="mobile-community-list"',
-    'id="mobile-resources-toggle"',
-    'id="mobile-resources-list"',
+    'id="mobile-learning-toggle"',
+    'id="mobile-learning-list"',
     'id="community-dropdown-btn"',
-    'id="resources-dropdown-btn"',
+    'id="learning-dropdown-btn"',
 )
 
-# Representative links from inside the text-nav accordions.
+# Representative links: Blog is a top-level nav link, Sprints lives in the
+# Community accordion.
 RESOURCES_BLOG_LINK = '<a href="/blog"'
 COMMUNITY_SPRINTS_LINK = '<a href="/sprints"'
 

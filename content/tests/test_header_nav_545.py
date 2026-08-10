@@ -24,22 +24,17 @@ ABOUT_LINKS = [
 ]
 
 COMMUNITY_LINKS = [
-    ('Membership', '/pricing'),
     ('Activities', '/activities#access-by-tier'),
-    ('Community Sprints', '/sprints'),
-    ('Books', '/books'),
     ('Events', '/events'),
-    ('Past Recordings', '/events?filter=past'),
+    ('Community Sprints', '/sprints'),
+    ('Book Club', '/books'),
 ]
 
-RESOURCES_LINKS = [
-    ('Blog', '/blog'),
+LEARNING_LINKS = [
     ('Courses', '/courses'),
     ('Workshops', '/workshops'),
     ('Learning Paths', '/learning-path/ai-engineer'),
-    ('Project Ideas', '/projects'),
     ('Interview Prep', '/interview'),
-    ('Curated Links', '/resources'),
 ]
 
 
@@ -72,39 +67,47 @@ class HeaderTextNavigationIssue580Test(TestCase):
         ]
 
     def assert_public_navigation_ia(self, header):
-        # Three desktop dropdown triggers in the new order: about, community, resources.
+        # Aug 2026 redesign: three desktop dropdown triggers in order
+        # community, learning, about; Blog and Membership are top-level
+        # links (no dropdown). Resources dropdown dissolved.
         primary = self._primary_nav(header)
         self.assertEqual(
             re.findall(r'id="([^"]+-dropdown-btn)"', primary),
-            ['about-dropdown-btn', 'community-dropdown-btn', 'resources-dropdown-btn'],
+            ['community-dropdown-btn', 'learning-dropdown-btn', 'about-dropdown-btn'],
         )
+        self.assertNotIn('id="resources-dropdown-btn"', primary)
 
-        # Top-level test ids in left-to-right order. Membership, Sprints,
-        # and Events live only inside Community.
+        # Left-to-right sequence of interactive top-level items: the three
+        # dropdown triggers plus the two bare links, interleaved in order.
         top_level_ids = re.findall(
-            r'data-testid="(nav-about-trigger|nav-membership|nav-community-trigger|nav-sprints|nav-events|nav-resources-trigger)"',
+            r'data-testid="(nav-community-trigger|nav-learning-trigger'
+            r'|nav-blog-link|nav-membership-link|nav-about-trigger)"',
             primary,
         )
         self.assertEqual(
             top_level_ids,
             [
-                'nav-about-trigger',
                 'nav-community-trigger',
-                'nav-resources-trigger',
+                'nav-learning-trigger',
+                'nav-blog-link',
+                'nav-membership-link',
+                'nav-about-trigger',
             ],
         )
-        self.assertNotIn('data-testid="nav-membership"', primary)
-        self.assertNotIn('data-testid="nav-sprints"', primary)
-        self.assertNotIn('data-testid="nav-events"', primary)
 
-        # FAQ is no longer a top-level link — it only appears inside the
-        # About dropdown, never as a sibling of the trigger buttons.
+        # Blog and Membership are top-level links, not dropdown items.
+        self.assertIn('data-testid="nav-blog-link"', primary)
+        self.assertIn('href="/pricing"', primary)
+        membership_links = re.findall(
+            r'<a[^>]*href="([^"]+)"[^>]*>\s*Membership\s*</a>', primary
+        )
+        self.assertEqual(membership_links, ['/pricing'])
+
+        # FAQ is not a top-level link — it only appears inside the About
+        # dropdown, never as a sibling of the trigger buttons.
         self.assertNotIn('data-testid="nav-faq"', primary)
         faq_occurrences = re.findall(r'href="/faq"', primary)
         self.assertEqual(len(faq_occurrences), 1)
-        about_start = primary.index('id="about-dropdown"')
-        about_end = primary.index('id="community-dropdown-btn"')
-        self.assertIn('href="/faq"', primary[about_start:about_end])
 
         # Activities is grouped inside Community, not promoted as a top-level
         # nav link (regression check from #555).
@@ -115,9 +118,6 @@ class HeaderTextNavigationIssue580Test(TestCase):
         about_link_ids = re.findall(r'data-testid="(nav-about-link-[^"]+)"', about_panel)
         self.assertEqual(
             about_link_ids,
-            # "About" was dropped from the menu: it pointed at /about and
-            # "Team" points at /about#team, so the two entries were the
-            # same destination. Team wins because it is the specific one.
             ['nav-about-link-team', 'nav-about-link-faq'],
         )
         for label, href in ABOUT_LINKS:
@@ -132,63 +132,65 @@ class HeaderTextNavigationIssue580Test(TestCase):
         self.assertEqual(
             community_link_ids,
             [
-                'nav-community-link-membership',
                 'nav-community-link-activities',
+                'nav-community-link-events',
                 'nav-community-link-sprints',
                 'nav-community-link-books',
-                'nav-community-link-events',
-                'nav-community-link-past-recordings',
             ],
         )
         for label, href in COMMUNITY_LINKS:
             self.assertIn(f'href="{href}"', community_panel)
             self.assertIn(label, community_panel)
+        # Past Recordings and Membership were removed from Community.
+        self.assertNotIn('nav-community-link-past-recordings', community_panel)
+        self.assertNotIn('nav-community-link-membership', community_panel)
+        self.assertNotIn('/events?filter=past', community_panel)
 
-        # Resources dropdown contents and order — Blog is first, label is `Learning Paths`.
-        resources_panel = self._slice_block(primary, 'resources-dropdown')
-        resources_link_ids = re.findall(
-            r'data-testid="(nav-resources-link-[^"]+)"', resources_panel
+        # Learning dropdown contents and order.
+        learning_panel = self._slice_block(primary, 'learning-dropdown')
+        learning_link_ids = re.findall(
+            r'data-testid="(nav-learning-link-[^"]+)"', learning_panel
         )
         self.assertEqual(
-            resources_link_ids,
+            learning_link_ids,
             [
-                'nav-resources-link-blog',
-                'nav-resources-link-courses',
-                'nav-resources-link-workshops',
-                'nav-resources-link-learning-paths',
-                'nav-resources-link-projects',
-                'nav-resources-link-interview',
-                'nav-resources-link-curated-links',
+                'nav-learning-link-courses',
+                'nav-learning-link-workshops',
+                'nav-learning-link-learning-paths',
+                'nav-learning-link-interview',
             ],
         )
-        for label, href in RESOURCES_LINKS:
-            self.assertIn(f'href="{href}"', resources_panel)
-            self.assertIn(label, resources_panel)
-        self.assertNotIn('Past Recordings', resources_panel)
-        self.assertNotIn('Event Recordings', resources_panel)
-        self.assertNotIn('/events?filter=past', resources_panel)
+        for label, href in LEARNING_LINKS:
+            self.assertIn(f'href="{href}"', learning_panel)
+            self.assertIn(label, learning_panel)
 
-        # Mobile accordions: about, community, resources — in that order.
+        # Project Ideas and Curated Links were dropped entirely (#1355).
+        self.assertNotIn('/projects', primary)
+        self.assertNotIn('Project Ideas', primary)
+        self.assertNotIn('Curated Links', primary)
+        self.assertNotIn('href="/resources"', primary)
+
+        # Mobile accordions: community, learning, about — in that order.
         mobile_section = header[header.index('id="mobile-menu"'):]
         mobile_toggle_ids = re.findall(
-            r'id="(mobile-(?:about|community|resources)-toggle)"', mobile_section
+            r'id="(mobile-(?:community|learning|about)-toggle)"', mobile_section
         )
         self.assertEqual(
             mobile_toggle_ids,
-            ['mobile-about-toggle', 'mobile-community-toggle', 'mobile-resources-toggle'],
+            ['mobile-community-toggle', 'mobile-learning-toggle', 'mobile-about-toggle'],
         )
 
-        # Mobile order between accordions: Community follows About, then Resources.
-        # Membership, Sprints, and Events live only inside Community.
-        self.assertNotIn('data-testid="mobile-nav-membership"', mobile_section)
-        self.assertNotIn('data-testid="mobile-nav-sprints"', mobile_section)
-        self.assertNotIn('data-testid="mobile-nav-events"', mobile_section)
+        # Mobile top-level links for Blog and Membership (no accordion).
+        self.assertIn('data-testid="mobile-nav-blog-link"', mobile_section)
+        self.assertIn('data-testid="mobile-nav-membership-link"', mobile_section)
         idx_community = mobile_section.index('id="mobile-community-toggle"')
-        idx_resources = mobile_section.index('id="mobile-resources-toggle"')
-        self.assertLess(idx_community, idx_resources)
+        idx_learning = mobile_section.index('id="mobile-learning-toggle"')
+        idx_about = mobile_section.index('id="mobile-about-toggle"')
+        self.assertLess(idx_community, idx_learning)
+        self.assertLess(idx_learning, idx_about)
 
         mobile_community = mobile_section[
-            mobile_section.index('id="mobile-community-list"'):idx_resources
+            mobile_section.index('id="mobile-community-list"'):idx_learning
         ]
         mobile_community_link_ids = re.findall(
             r'data-testid="(mobile-nav-community-link-[^"]+)"',
@@ -197,48 +199,44 @@ class HeaderTextNavigationIssue580Test(TestCase):
         self.assertEqual(
             mobile_community_link_ids,
             [
-                'mobile-nav-community-link-membership',
                 'mobile-nav-community-link-activities',
+                'mobile-nav-community-link-events',
                 'mobile-nav-community-link-sprints',
                 'mobile-nav-community-link-books',
-                'mobile-nav-community-link-events',
-                'mobile-nav-community-link-past-recordings',
             ],
         )
-        self.assertIn('href="/events?filter=past"', mobile_community)
+        self.assertNotIn('href="/events?filter=past"', mobile_community)
 
-        mobile_resources = mobile_section[
-            mobile_section.index('id="mobile-resources-list"'):
+        mobile_learning = mobile_section[
+            mobile_section.index('id="mobile-learning-list"'):idx_about
         ]
-        mobile_resources_link_ids = re.findall(
-            r'data-testid="(mobile-nav-resources-link-[^"]+)"',
-            mobile_resources,
+        mobile_learning_link_ids = re.findall(
+            r'data-testid="(mobile-nav-learning-link-[^"]+)"',
+            mobile_learning,
         )
         self.assertEqual(
-            mobile_resources_link_ids[:7],
+            mobile_learning_link_ids[:4],
             [
-                'mobile-nav-resources-link-blog',
-                'mobile-nav-resources-link-courses',
-                'mobile-nav-resources-link-workshops',
-                'mobile-nav-resources-link-learning-paths',
-                'mobile-nav-resources-link-projects',
-                'mobile-nav-resources-link-interview',
-                'mobile-nav-resources-link-curated-links',
+                'mobile-nav-learning-link-courses',
+                'mobile-nav-learning-link-workshops',
+                'mobile-nav-learning-link-learning-paths',
+                'mobile-nav-learning-link-interview',
             ],
         )
-        self.assertNotIn('Past Recordings', mobile_resources)
-        self.assertNotIn('Event Recordings', mobile_resources)
-        self.assertNotIn('/events?filter=past', mobile_resources)
+        self.assertNotIn('Past Recordings', mobile_section)
+        self.assertNotIn('/events?filter=past', mobile_section)
 
     @staticmethod
     def _slice_block(html, dropdown_id):
         """Return the HTML slice for a single dropdown panel by id."""
         start = html.index(f'id="{dropdown_id}"')
-        # End at the next dropdown-btn or end of primary nav.
+        # End at the next dropdown trigger or top-level link, or end of nav.
         next_ids = [
-            html.find('id="about-dropdown-btn"', start + 1),
             html.find('id="community-dropdown-btn"', start + 1),
-            html.find('id="resources-dropdown-btn"', start + 1),
+            html.find('id="learning-dropdown-btn"', start + 1),
+            html.find('id="about-dropdown-btn"', start + 1),
+            html.find('data-testid="nav-blog-link"', start + 1),
+            html.find('data-testid="nav-membership-link"', start + 1),
         ]
         candidates = [i for i in next_ids if i != -1]
         end = min(candidates) if candidates else len(html)
@@ -283,7 +281,7 @@ class HeaderTextNavigationIssue580Test(TestCase):
         header = self._header_html()
         primary = self._primary_nav(header)
 
-        for dropdown_id in ['about', 'community', 'resources']:
+        for dropdown_id in ['community', 'learning', 'about']:
             with self.subTest(dropdown=dropdown_id):
                 button_match = re.search(
                     rf'<button[^>]*id="{dropdown_id}-dropdown-btn"[^>]*>',
@@ -364,9 +362,9 @@ class HeaderDownloadsNavigationTest(TestCase):
     def test_downloads_link_hidden_when_no_published_downloads_exist(self):
         header = self._header_html()
 
-        self.assertNotIn('data-testid="nav-resources-link-downloads"', header)
+        self.assertNotIn('data-testid="nav-learning-link-downloads"', header)
         self.assertNotIn(
-            'data-testid="mobile-nav-resources-link-downloads"', header,
+            'data-testid="mobile-nav-learning-link-downloads"', header,
         )
 
     def test_downloads_link_shown_on_desktop_and_mobile_when_published(self):
@@ -379,10 +377,10 @@ class HeaderDownloadsNavigationTest(TestCase):
 
         header = self._header_html()
 
-        self.assertIn('data-testid="nav-resources-link-downloads"', header)
+        self.assertIn('data-testid="nav-learning-link-downloads"', header)
         self.assertIn('href="/downloads"', header)
         self.assertIn(
-            'data-testid="mobile-nav-resources-link-downloads"', header,
+            'data-testid="mobile-nav-learning-link-downloads"', header,
         )
 
     def test_downloads_link_hidden_when_downloads_are_unpublished(self):
@@ -395,9 +393,9 @@ class HeaderDownloadsNavigationTest(TestCase):
 
         header = self._header_html()
 
-        self.assertNotIn('data-testid="nav-resources-link-downloads"', header)
+        self.assertNotIn('data-testid="nav-learning-link-downloads"', header)
         self.assertNotIn(
-            'data-testid="mobile-nav-resources-link-downloads"', header,
+            'data-testid="mobile-nav-learning-link-downloads"', header,
         )
 
     def test_downloads_link_updates_when_last_download_is_unpublished(self):
@@ -408,7 +406,7 @@ class HeaderDownloadsNavigationTest(TestCase):
             published=True,
         )
         self.assertIn(
-            'data-testid="nav-resources-link-downloads"',
+            'data-testid="nav-learning-link-downloads"',
             self._header_html(),
         )
 
@@ -416,9 +414,9 @@ class HeaderDownloadsNavigationTest(TestCase):
         download.save(update_fields=['published'])
 
         header = self._header_html()
-        self.assertNotIn('data-testid="nav-resources-link-downloads"', header)
+        self.assertNotIn('data-testid="nav-learning-link-downloads"', header)
         self.assertNotIn(
-            'data-testid="mobile-nav-resources-link-downloads"', header,
+            'data-testid="mobile-nav-learning-link-downloads"', header,
         )
 
     def test_authenticated_home_skips_downloads_nav_query(self):
@@ -433,7 +431,7 @@ class HeaderDownloadsNavigationTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'content/dashboard.html')
         header = response.content.decode().split('</header>', 1)[0]
-        self.assertNotIn('data-testid="nav-resources-link-downloads"', header)
+        self.assertNotIn('data-testid="nav-learning-link-downloads"', header)
         self.assertFalse(
             any(
                 'content_download' in query['sql']

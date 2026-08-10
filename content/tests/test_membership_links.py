@@ -39,16 +39,17 @@ class HeaderLinksAnonymousTest(TestCase):
         response = self.client.get("/")
         header = _extract_header(response.content.decode())
         primary = _extract_desktop_primary_nav(header)
-        # Membership appears as a top-level link AND inside the Community
-        # dropdown (per #580 grooming). Both must point at /pricing.
+        # Membership is a top-level nav link (Aug 2026 redesign promoted it
+        # out of the Community dropdown). It must point at /pricing.
         membership_links = re.findall(
             r'<a[^>]*href="([^"]+)"[^>]*>\s*Membership\s*</a>', primary
         )
         self.assertTrue(membership_links)
         self.assertTrue(all(href == "/pricing" for href in membership_links))
-        self.assertNotIn('id="learn-dropdown-btn"', primary)
         self.assertIn('id="community-dropdown-btn"', primary)
-        self.assertIn('id="resources-dropdown-btn"', primary)
+        self.assertIn('id="learning-dropdown-btn"', primary)
+        # Resources dropdown was dissolved in the redesign.
+        self.assertNotIn('id="resources-dropdown-btn"', primary)
 
     def test_faq_is_primary_header_link(self):
         response = self.client.get("/")
@@ -80,16 +81,17 @@ class HeaderLinksAuthenticatedTest(TestCase):
         response = self.client.get("/about")
         header = _extract_header(response.content.decode())
         primary = _extract_desktop_primary_nav(header)
-        # Membership appears as a top-level link AND inside the Community
-        # dropdown (per #580 grooming). Both must point at /pricing.
+        # Membership is a top-level nav link (Aug 2026 redesign promoted it
+        # out of the Community dropdown). It must point at /pricing.
         membership_links = re.findall(
             r'<a[^>]*href="([^"]+)"[^>]*>\s*Membership\s*</a>', primary
         )
         self.assertTrue(membership_links)
         self.assertTrue(all(href == "/pricing" for href in membership_links))
-        self.assertNotIn('id="learn-dropdown-btn"', primary)
         self.assertIn('id="community-dropdown-btn"', primary)
-        self.assertIn('id="resources-dropdown-btn"', primary)
+        self.assertIn('id="learning-dropdown-btn"', primary)
+        # Resources dropdown was dissolved in the redesign.
+        self.assertNotIn('id="resources-dropdown-btn"', primary)
 
     def test_authenticated_header_has_primary_faq_link(self):
         response = self.client.get("/about")

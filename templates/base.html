@@ -185,9 +185,9 @@
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  {# swap guarantees Inter actually renders once loaded. optional was permanently
+  {% comment %}swap guarantees Inter actually renders once loaded. optional was permanently
      dropping Inter to the system fallback when it did not load within ~100ms, which
-     made pages look smaller and more cramped than the Inter-rendered design. #}
+     made pages look smaller and more cramped than the Inter-rendered design.{% endcomment %}
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
   <!-- Lucide Icons -->

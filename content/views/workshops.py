@@ -31,7 +31,12 @@ from datetime import date as date_cls
 from urllib.parse import quote, urlencode
 
 from django.db.models import Exists, OuterRef, Prefetch
-from django.http import Http404, HttpResponsePermanentRedirect, JsonResponse
+from django.http import (
+    Http404,
+    HttpResponse,
+    HttpResponsePermanentRedirect,
+    JsonResponse,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.cache import patch_cache_control
@@ -66,7 +71,7 @@ from content.templatetags.video_utils import (
     parse_video_timestamp,
 )
 from content.utils.teaser import truncate_to_words
-from content.views.pages import _filter_by_tags, _get_selected_tags
+from content.views.pages import _filter_by_tags
 from content.workshop_facets import (
     FACET_EXCLUDED,
     FACET_TECHNOLOGY,
@@ -83,6 +88,60 @@ TEASER_WORD_LIMIT = 150
 WORKSHOPS_LANDING_PATH = '/workshops'
 WORKSHOPS_CATALOG_PATH = '/workshops/catalog'
 LANDING_PREVIEW_LIMIT = 3
+WORKSHOP_CATALOG_MAX_TAGS = 2
+WORKSHOP_CATALOG_MAX_TAG_LENGTH = 100
+WORKSHOP_CATALOG_BAD_TAG_RESPONSE = 'Invalid workshop tag filters.\n'
+
+
+class InvalidWorkshopCatalogTags(ValueError):
+    """Raised before catalog work when Workshop tag input is pathological."""
+
+
+def _normalize_workshop_catalog_tags(raw_tags):
+    """Return normalized Workshop tags and whether the request changed."""
+    selected = []
+    seen = set()
+    changed = False
+    for raw_tag in raw_tags:
+        raw_tag = str(raw_tag or '')
+        tag = raw_tag.strip()
+        if tag != raw_tag:
+            changed = True
+        if not tag:
+            changed = True
+            continue
+        if len(tag) > WORKSHOP_CATALOG_MAX_TAG_LENGTH:
+            raise InvalidWorkshopCatalogTags
+        if any(ord(character) < 32 or ord(character) == 127 for character in tag):
+            raise InvalidWorkshopCatalogTags
+        if tag in seen:
+            changed = True
+            continue
+        if len(selected) >= WORKSHOP_CATALOG_MAX_TAGS:
+            raise InvalidWorkshopCatalogTags
+        seen.add(tag)
+        selected.append(tag)
+    return selected, changed
+
+
+def _bounded_catalog_tags(selected_tags):
+    """Defensively bound generated Workshop URLs to accepted tag values."""
+    bounded = []
+    seen = set()
+    for raw_tag in selected_tags or ():
+        tag = str(raw_tag or '').strip()
+        if (
+            not tag
+            or tag in seen
+            or len(tag) > WORKSHOP_CATALOG_MAX_TAG_LENGTH
+            or any(ord(character) < 32 or ord(character) == 127 for character in tag)
+        ):
+            continue
+        seen.add(tag)
+        bounded.append(tag)
+        if len(bounded) == WORKSHOP_CATALOG_MAX_TAGS:
+            break
+    return bounded
 
 
 def _normalize_catalog_skill_level(value):
@@ -177,6 +236,8 @@ def _build_catalog_filter_url(
     base_path=WORKSHOPS_CATALOG_PATH,
 ):
     """Return a catalog URL preserving active public catalog filters."""
+    selected_tags = _bounded_catalog_tags(selected_tags)
+    selected_tools = list(dict.fromkeys(selected_tools))
     params = []
     if access_slug in (CATALOG_ACCESS_FREE, CATALOG_ACCESS_PAID):
         params.append(('access', access_slug))
@@ -368,14 +429,16 @@ def _build_catalog_topic_url(
     selected_skill_level,
 ):
     """Return a catalog URL that toggles ``tag`` in the topic selection."""
-    next_tags = list(selected_tags)
+    next_tags = _bounded_catalog_tags(selected_tags)
     if tag in next_tags:
         next_tags = [
             selected_tag for selected_tag in next_tags
             if selected_tag != tag
         ]
-    else:
+    elif len(next_tags) < WORKSHOP_CATALOG_MAX_TAGS:
         next_tags.append(tag)
+    else:
+        return None
     return _build_catalog_filter_url(
         selected_tags=next_tags,
         selected_tools=selected_tools,
@@ -388,8 +451,14 @@ def _build_tag_filter_options(*, tags, selected_tags, selected_tools,
                               selected_access, selected_skill_level,
                               facet):
     selected = set(selected_tags)
-    return [
-        {
+    options = []
+    for tag in tags:
+        is_active = tag in selected
+        is_disabled = (
+            not is_active
+            and len(selected_tags) >= WORKSHOP_CATALOG_MAX_TAGS
+        )
+        options.append({
             'slug': tag,
             'label': tag,
             'url': _build_catalog_topic_url(
@@ -399,12 +468,16 @@ def _build_tag_filter_options(*, tags, selected_tags, selected_tools,
                 selected_access=selected_access,
                 selected_skill_level=selected_skill_level,
             ),
-            'is_active': tag in selected,
+            'is_active': is_active,
+            'is_disabled': is_disabled,
+            'disabled_label': (
+                f'Remove a selected tag before adding {tag}'
+                if is_disabled else ''
+            ),
             'facet': facet,
             'source': 'tag',
-        }
-        for tag in tags
-    ]
+        })
+    return options
 
 
 def _build_technology_options(*, technology_tags, all_tools, selected_tags,
@@ -480,11 +553,14 @@ def _build_workshops_catalog_context(
     catalog_section_id,
     catalog_testid,
     limit=None,
+    validated_selected_tags=None,
 ):
     """Build shared context for workshop catalog cards and filters."""
     workshops = Workshop.objects.filter(status='published').order_by('-date')
     has_published_workshops = workshops.exists()
-    selected_tags = _get_selected_tags(request) if show_filters else []
+    selected_tags = (
+        list(validated_selected_tags or ()) if show_filters else []
+    )
     selected_tools = _get_selected_tools(request) if show_filters else []
     selected_access = (
         _normalize_catalog_access(request.GET.get('access'))
@@ -633,6 +709,9 @@ def _build_workshops_catalog_context(
         'technology_facet_open': bool(technology_active_count),
         'all_tools': all_tools,
         'selected_tags': selected_tags,
+        'workshop_tag_limit_reached': (
+            len(selected_tags) >= WORKSHOP_CATALOG_MAX_TAGS
+        ),
         'selected_tag_filters': _build_selected_tag_filters(
             selected_tags,
             all_tags,
@@ -692,6 +771,32 @@ def workshops_list(request):
 
 def workshops_catalog(request):
     """Catalog page: grid of all published workshops."""
+    try:
+        selected_tags, tags_changed = _normalize_workshop_catalog_tags(
+            request.GET.getlist('tag'),
+        )
+    except InvalidWorkshopCatalogTags:
+        return HttpResponse(
+            WORKSHOP_CATALOG_BAD_TAG_RESPONSE,
+            status=400,
+            content_type='text/plain; charset=utf-8',
+            headers={
+                'Cache-Control': 'no-store',
+                'X-Robots-Tag': 'noindex, nofollow',
+            },
+        )
+
+    if tags_changed:
+        location = _build_catalog_filter_url(
+            selected_tags=selected_tags,
+            selected_tools=_get_selected_tools(request),
+            access_slug=_normalize_catalog_access(request.GET.get('access')),
+            skill_level=_normalize_catalog_skill_level(
+                request.GET.get('skill_level'),
+            ),
+        )
+        return HttpResponsePermanentRedirect(location)
+
     context = _build_workshops_catalog_context(
         request,
         base_path=WORKSHOPS_CATALOG_PATH,
@@ -705,6 +810,7 @@ def workshops_catalog(request):
         ),
         catalog_section_id='workshop-catalog',
         catalog_testid='workshop-catalog',
+        validated_selected_tags=selected_tags,
     )
     context.update({
         # Standalone page: the catalog heading is the page h1. The

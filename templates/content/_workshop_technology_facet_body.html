@@ -5,6 +5,19 @@ in an always-expanded facet box; only the wrapper moved.
 {% endcomment %}
 <div class="flex flex-wrap gap-2" aria-label="Workshop technology filters">
   {% for technology in technology_options %}
+  {% if technology.is_disabled %}
+  <span
+    class="inline-flex min-h-[44px] max-w-full items-center justify-center rounded-full bg-secondary px-4 py-2 text-sm font-medium text-muted-foreground opacity-60"
+    data-testid="workshop-technology-option-{{ technology.slug }}"
+    data-facet="technology"
+    data-topic="{{ technology.slug }}"
+    aria-disabled="true"
+    aria-label="{{ technology.disabled_label }}"
+    title="{{ technology.disabled_label }}"
+  >
+    {{ technology.label }}
+  </span>
+  {% else %}
   <a
     href="{{ technology.url }}"
     class="inline-flex min-h-[44px] max-w-full items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if technology.is_active %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
@@ -18,5 +31,6 @@ in an always-expanded facet box; only the wrapper moved.
     <i data-lucide="x" class="ml-1.5 h-3.5 w-3.5"></i>
     {% endif %}
   </a>
+  {% endif %}
   {% endfor %}
 </div>

@@ -4742,6 +4742,50 @@
         ]
       }
     },
+    "/api/events/{slug}/promote-registrations-to-series": {
+      "post": {
+        "description": "For every user registered for this event, creates the standing series-registration flag on the event's series and fans it out into per-event registrations across the series' eligible upcoming occurrences. The event's own registrations are left intact. Idempotent: users already series-registered are counted, not duplicated. Requires the event to be linked to a series.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "already_series": 2,
+                  "fanned_out": 9,
+                  "new_series_flags": 10,
+                  "registrants": 12,
+                  "series_slug": "inference-engineering-book-club"
+                }
+              }
+            },
+            "description": "Promotion summary."
+          },
+          "401": {
+            "description": "Missing, invalid, or non-staff token."
+          },
+          "404": {
+            "description": "Event not found."
+          },
+          "422": {
+            "description": "Event is not linked to a series."
+          }
+        },
+        "summary": "Promote registrations to the series",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
     "/api/events/{slug}/regenerate-banner": {
       "post": {
         "description": "Force-enqueues a banner-generator render for an existing event and returns the django-q task id. The render runs as a background task; the resolved banner_url stays empty until the worker finishes, so poll GET /api/worker/tasks/<task_id> (or re-GET the event for banner_url). Regeneration is ALLOWED for synced/GitHub-origin events: the PATCH read-only rule protects content fields owned by the source repo, but the auto-banner is derived presentation state the platform owns regardless of origin (the sync pipeline itself enqueues renders for synced records), so there is no 409 here. Returns 422 banner_generator_not_configured (no enqueue) when the generator is not configured.",

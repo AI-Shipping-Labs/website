@@ -16,8 +16,11 @@ class TailwindSourceContractTest(SimpleTestCase):
         self.assertIn("{% static 'css/tailwind.css' %}", source)
         self.assertNotIn("cdn.tailwindcss.com", source)
         self.assertNotIn("tailwind.config =", source)
-        self.assertIn("display=optional", source)
-        self.assertNotIn("display=swap", source)
+        # swap (not optional): optional was permanently dropping Inter to the
+        # system fallback when it did not load within ~100ms, making pages look
+        # smaller and cramped. swap guarantees Inter renders once loaded.
+        self.assertIn("display=swap", source)
+        self.assertNotIn("display=optional", source)
         # The blocking pre-paint theme script remains before the stylesheet.
         self.assertLess(source.index("localStorage.getItem('theme')"), source.index("css/tailwind.css"))
 

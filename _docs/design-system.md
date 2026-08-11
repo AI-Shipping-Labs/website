@@ -139,11 +139,11 @@ Four tiers, chosen by content shape rather than per-page taste. These are the on
 | Tier | Class | Use for |
 |---|---|---|
 | Frame | `max-w-7xl` | Surfaces that visibly consume the full width: 3+ column card grids with enough items to fill them, the 4-column pricing grid, the month calendar, the member dashboard, sidebar-plus-content layouts, and multi-section marketing pages. Matches the header and footer chrome. Being an index page does not by itself earn the Frame — only the content shape does. |
-| Detail | `max-w-5xl` | Detail pages with mixed layout: media embed plus metadata plus cards or CTAs (event, course, workshop, sprint, plan, poll detail; account; notifications). Also the home for single-column row feeds and sparse 2-column hubs (blog, tutorials, downloads, interview, tags, workshops hero, events, vote, sprints), which read as empty on the right at 7xl and align better with their own 5xl detail page. |
-| Reader | `max-w-3xl` | Long-form `.prose` bodies and multi-step single-column forms. 48rem keeps the measure near the 65-75ch readable band while leaving code blocks usable width. |
+| Detail | `max-w-5xl` | Detail pages with mixed layout: media embed plus metadata plus cards or CTAs (course, plan, poll detail; account; notifications). Also the home for sparse 2-column hubs that read as empty on the right at 7xl. |
+| Reader | `max-w-3xl` | Long-form and single-column detail surfaces, including blog/article, tutorial, project, workshop, sprint, event, event-series, and interview; also text-first editorial listings such as blog, workshop catalog, and interview, plus multi-step single-column forms. 48rem keeps the measure near the 65-75ch readable band while leaving code blocks usable width. |
 | Narrow | `max-w-2xl` | Terminal status and confirmation interstitials, and single-purpose forms (subscribe, join-state, cancel registration, verify/unsubscribe result, peer review). |
 
-Pick the narrowest sanctioned tier that fits the widest repeated element on the page. Single-column row feeds and sparse 2-column hubs use `max-w-5xl` (aligning each list with its own 5xl detail page); reserve the 7xl Frame for genuine grids that fill it.
+Pick the narrowest sanctioned tier that fits the widest repeated element on the page. Text-first editorial feeds use `max-w-3xl`; mixed row feeds and sparse 2-column hubs use `max-w-5xl`. Reserve the 7xl Frame for genuine grids that fill it.
 
 Content listing/index pages are an exception to "choose by content shape": they are all `max-w-5xl` regardless of column count (including 3-column grids like `/courses`, `/projects`, and the events calendar), so every listing page is the same width and never changes width mid-page. See [Content Listing Pages](#content-listing-pages), which is authoritative for those routes.
 
@@ -222,7 +222,7 @@ Three principles:
 | Role | Radius | Surface | Padding | Hover / group | Shadow | Title | Interactive |
 |---|---|---|---|---|---|---|---|
 | Content-catalog (clickable; media optional; badges; chips; one CTA) | `rounded-lg` | `bg-card` default / `bg-background` on card bands | `p-4 sm:p-5` | `hover:border-accent/50` + `group`, `group-hover:text-accent` title | none | `text-lg font-semibold` | whole-card anchor |
-| Compact rail (related-content, dense grids) | `rounded-lg` | per band | `p-4` | same as catalog | none | `text-base font-semibold` | whole-card anchor |
+| Related-content row | none; `border-b border-border/70` | transparent | `py-4 sm:py-5` | `hover:bg-secondary/20` + title accent | none | `text-base sm:text-lg font-semibold` | whole-row anchor + arrow |
 | Info / static (feature bullets, activity blurbs, sprint-story, testimonials) | `rounded-lg` | per band | `p-6` | none | none | `text-lg font-semibold` | not a link, no CTA inside |
 | Callout / action (featured sprint, dashboard next-step, gated card, starting-soon; accent variant `border-accent/30 bg-accent/5`) | `rounded-lg` (spotlight exception) | `bg-card` / `bg-accent/5` | `p-6`; spotlight `p-5 sm:p-8` | none on container | none | `text-lg` / spotlight `text-2xl` | CTA is an explicit `{% button_classes %}` button |
 | Tier / pricing | `rounded-xl` | `bg-background` | `p-5 sm:p-8` | none | `shadow-xl` on the highlighted tier only | `text-lg font-semibold` | `Join` button, full width, no arrow |
@@ -239,11 +239,11 @@ Shadow rule: repeated cards never carry a shadow. Do not add `shadow-sm` to grid
 | `{% button_classes %}` button | Explicit action on a callout / tier / dashboard / gated card | `{% button_classes %}` from `accounts_extras` |
 | None | Info / static card | — |
 
-The canonical arrow markup, owned by `_content_card.html`, is `<i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent">`; badges cluster to its left in the header row, and `hidden sm:block` keeps the mobile arrow-count contract. Eliminated affordances: trailing "Read article ->" / "View download ->" text spans, the `pointer-events-none` fake-button span inside a clickable card, `arrow-up-right` on the gated CTA, and no-affordance clickable cards (they gain the top-right arrow).
+`_content_card.html` owns the only navigation arrow for both grid cards and editorial rows. Editorial arrows align to the far right of the first badge/status row so blog, workshop, interview, and sprint feeds share one scanning pattern. Eliminated affordances: trailing "Read article ->" / "View download ->" text spans, the `pointer-events-none` fake-button span inside a clickable card, `arrow-up-right` on the gated CTA, and no-affordance clickable cards.
 
 ### Owners
 
-Clickable cards render through `templates/content/_content_card.html` (the container: `<article>` shell, wrapping anchor, optional media band, header row with badge cluster + arrow, and post-anchor tag row). Static cards use the `templates/content/_info_card_classes.html` class string. Both are layered on the existing `templates/content/_clickable_card_classes.html` anchor a11y contract. See the [Partials and Component Index](#partials-and-component-index) for the canonical usage.
+Clickable cards render through `templates/content/_content_card.html` (the container: `<article>` shell, wrapping anchor, optional media band, badge cluster, title and arrow placement, and post-anchor tag row). Static cards use the `templates/content/_info_card_classes.html` class string. Both are layered on the existing `templates/content/_clickable_card_classes.html` anchor a11y contract. See the [Partials and Component Index](#partials-and-component-index) for the canonical usage.
 
 ## Card Media Slots
 
@@ -289,7 +289,7 @@ Exactly one `<section>`, one container, one width. No mid-page width changes, no
 
 ### Canonical width
 
-All listing pages use `max-w-5xl` (the `/events` list is the reference). Rationale: it matches each content type's own detail page, it is the width of the reference blog list, and at 64rem a `lg:grid-cols-3` grid still yields ~19.5rem cards — the compact-rail card width. `max-w-7xl` is no longer a listing width; it remains for the member dashboard, the pricing grid, marketing pages, and the events month **calendar** view. The calendar is the one deliberate exception to the shared listing width — a month grid genuinely needs the wider frame — so toggling List↔Calendar does change page width; that is accepted. Inner columns may be narrower (the subtitle is capped at `max-w-3xl`); the outer container never changes mid-page.
+Listing grids and mixed-layout indexes use `max-w-5xl` (the `/events` list is the reference). Text-first single-column editorial feeds may use `max-w-3xl` when readable line length and calm vertical scanning matter more than side-by-side comparison; `/blog` and `/workshops/catalog` are the reference feeds. `max-w-7xl` is no longer a listing width; it remains for the member dashboard, the pricing grid, marketing pages, and the events month **calendar** view. Inner columns may be narrower; the outer container never changes mid-page.
 
 Detail/content pages are narrower: prose/reader pages (a blog article, a book chapter, the learning path) use `max-w-3xl` (Reader tier); mixed-layout detail pages keep `max-w-5xl` (Detail tier). Only the listing/index widths change under this section.
 
@@ -353,7 +353,7 @@ Filtered-to-empty states use `{% member_empty_state ... kind='filter' %}` with a
 
 ### The content card
 
-Every listing item renders through `templates/content/_content_card.html` (the existing owner: `<article>` shell, whole-card anchor from `_clickable_card_classes.html`, `hover:border-accent/50`, `group-hover:text-accent` title, top-right translating arrow). One anatomy, ordered slots; every slot except title is optional per content type:
+Every listing item renders through `templates/content/_content_card.html` (the existing owner: `<article>` shell, whole-card anchor from `_clickable_card_classes.html`, title hover, and top-right translating arrow). Use its standard rounded-card mode for grids and `card_editorial=True` for calm divider-led feeds. Unavailable entries such as interview categories that are coming soon use `card_static=True`, retaining the same anatomy without a misleading link or hover state. One anatomy, ordered slots; every slot except title is optional per content type:
 
 1. Media — thumbnail per the Card Media Slots policy table. List rows: left-aligned `sm:w-48 sm:h-32 rounded-lg border border-border object-cover`. Grid cards: `_content_preview.html` band.
 2. Signal row — `mb-3 flex flex-wrap items-center gap-2`, in order: `{% member_access_badge %}` (always, `sm` size), at most one status/type badge (`Recording available`, `Cancelled`, `Enrolled`), then the topic eyebrow.
@@ -366,10 +366,10 @@ Every listing item renders through `templates/content/_content_card.html` (the e
 
 #### List vs grid
 
-- List rows (horizontal card, full container width, thumbnail left): time-ordered feeds where recency organizes the page — Blog, Events.
-- Grid cards (vertical, media on top): browsable catalogs where users compare options — Workshops, Courses, Projects, Books.
+- List rows (horizontal entry, full container width, optional thumbnail left): time-ordered or text-first feeds where recency and title scanning organize the page — Blog, Events, Workshops.
+- Grid cards (vertical, media on top): visual catalogs where side-by-side comparison organizes the page — Courses, Projects, Books.
 - Grid: `grid gap-6 sm:grid-cols-2 lg:grid-cols-3` (1 / 2 / 3 columns). A grid page with fewer than 3 items still uses the grid.
-- List: rows stack in `space-y-6` — the same 1.5rem rhythm as `gap-6`.
+- Editorial list: one `border-t border-border/70` wrapper; shared cards supply the matching bottom borders and `py-6 sm:py-7` row rhythm.
 
 ### Section rhythm and grouped listings
 
@@ -389,7 +389,8 @@ Every zero state renders `{% member_empty_state %}`: `kind='fresh'` when the col
 | Page | Layout | Toolbar rows | Type-specific slot |
 |---|---|---|---|
 | Blog | List | Topic | — |
-| Workshops | Grid | Topic (curated, replaces access/skill/tag facets) | `Includes` pills |
+| Workshops | Editorial list (`max-w-3xl`) | Topic (curated, replaces access/skill/tag facets) | — |
+| Interview | Editorial list (`max-w-3xl`) | — | section count for available categories |
 | Events | List | Mode (List/Calendar + Subscribe), Scope (All/Upcoming/Past recordings), Topic (recordings only) | `Watch recording` CTA |
 | Books | Grid (grouped) | — | schedule/progress line |
 | Courses | Grid | Topic (when >6 courses) | — |

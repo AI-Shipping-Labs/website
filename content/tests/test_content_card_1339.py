@@ -91,6 +91,34 @@ class ContentCardContainerTest(SimpleTestCase):
         self.assertEqual(_count_anchors(html), 1)
         self.assertNotIn(CANONICAL_ARROW, html)
 
+    def test_editorial_mode_owns_title_and_first_row_edge_arrow(self):
+        html = _render_card(
+            card_editorial=True,
+            card_title="Shared editorial title",
+            card_title_testid="editorial-title",
+        )
+
+        self.assertIn('border-b border-border/70', html)
+        arrow_index = html.index(CANONICAL_ARROW)
+        title_index = html.index('data-testid="editorial-title"')
+        self.assertLess(arrow_index, title_index)
+        self.assertIn('mb-3 flex items-start justify-between gap-3', html)
+        self.assertIn('data-testid="editorial-title"', html)
+        self.assertIn('Shared editorial title', html)
+        self.assertEqual(html.count(CANONICAL_ARROW), 1)
+        self.assertIn(ARROW_MOBILE_RULE, html)
+        self.assertIn('style="right: 1.25rem;"', html)
+
+    def test_editorial_mode_honours_arrow_false(self):
+        html = _render_card(
+            card_editorial=True,
+            card_title="Arrowless editorial title",
+            card_arrow=False,
+        )
+
+        self.assertEqual(_count_anchors(html), 1)
+        self.assertNotIn(CANONICAL_ARROW, html)
+
     def test_surface_defaults_to_bg_card(self):
         html = _render_card()
         self.assertIn("bg-card", html)

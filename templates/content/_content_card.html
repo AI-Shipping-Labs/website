@@ -3,29 +3,43 @@ Issue #1339 — shared clickable content-card CONTAINER.
 
 This is the one canonical owner of the fully-clickable card chrome: the
 <article> shell, the wrapping <a> (including the a11y contract from
-content/_clickable_card_classes.html), the optional media band, the body
-padding, the header row (badge cluster + top-right navigation arrow), and the
-post-anchor tag-chip row. Bind radius/surface/padding/hover to the card ROLE,
+content/_clickable_card_classes.html), the optional media band, body padding,
+badge cluster, title and navigation-arrow placement, and post-anchor tag-chip
+row. Bind radius/surface/padding/hover to the card ROLE,
 never to the page it sits on. New clickable catalog/preview cards render through
 this partial instead of hand-rolling the same chrome.
 
 Include-style API (matches the includes/_accordion.html body_template
 precedent). Every parameter is prefixed card_*:
 
-  card_url            (required) — anchor href.
+  card_url            (required unless card_static) — anchor href.
   card_body_template  (required) — path to the per-type body partial rendered
                                    after the header row, inside the anchor.
   card_testid         (required) — data-testid on the <article>.
   card_badge_template (optional) — badge-cluster partial for the header row.
   card_media_template (optional) — media-band partial (renders _content_preview).
+  card_editorial      (optional, default False) — render a calm horizontal
+                                   editorial row with divider rhythm instead
+                                   of the rounded grid-card shell.
+  card_title          (required for editorial rows) — title rendered by this
+                                   shared owner below the status row.
+  card_title_testid   (optional) — data-testid on the editorial title.
+  card_heading_tag    (optional, default h2) — pass "h3" for nested sections.
+  card_arrow_testid   (optional) — data-testid on the first-row navigation arrow.
+  card_static         (optional, default False) — render the same card body
+                                   without a link or interactive hover state;
+                                   intended for unavailable catalog entries.
+  card_media_present  (optional) — truthy when an editorial row has media;
+                                   prevents an empty thumbnail wrapper when a
+                                   conditional media partial renders nothing.
   card_tag_row_template (optional) — post-anchor tag-chip row partial (kept
                                    outside the anchor so chips can be links
                                    without producing nested anchors).
   card_surface_class  (optional, default bg-card) — band-contrast surface token;
                                    pass bg-background on bands that are bg-card.
   card_compact        (optional, default False) — compact-rail padding (p-4).
-  card_arrow          (optional, default True) — render the top-right arrow;
-                                   pass card_arrow=False for an arrow-less card.
+  card_arrow          (optional, default True) — render the shared navigation
+                                   arrow; pass False for an arrow-less card.
   card_aria_label     (optional) — accessible name for the anchor.
   card_anchor_testid  (optional) — data-testid on the wrapping <a>.
   card_extra_attrs    (optional) — pre-escaped extra attribute string rendered
@@ -38,22 +52,49 @@ included body/badge/media/tag partials render with the full parent context, so
 they can read the entity variable (project, event, workshop, ...) directly.
 {% endcomment %}
 {% firstof card_surface_class "bg-card" as content_card_surface %}
-<article class="group flex h-full flex-col overflow-hidden rounded-lg border border-border {{ content_card_surface }} transition-colors hover:border-accent/50" data-testid="{{ card_testid }}"{% if card_extra_attrs %} {{ card_extra_attrs|safe }}{% endif %}>
-  <a href="{{ card_url }}" class="{% include 'content/_clickable_card_classes.html' %} flex flex-1 flex-col"{% if card_aria_label %} aria-label="{{ card_aria_label }}"{% endif %}{% if card_anchor_testid %} data-testid="{{ card_anchor_testid }}"{% endif %}>
-    {% if card_media_template %}{% include card_media_template %}{% endif %}
-    <div class="flex min-w-0 flex-1 flex-col {% if card_compact %}p-4{% else %}p-4 sm:p-5{% endif %}">
+<article class="{% if not card_static %}group {% endif %}{% if card_editorial %}border-b border-border/70{% if not card_static %} transition-colors hover:bg-secondary/20{% endif %}{% else %}flex h-full flex-col overflow-hidden rounded-lg border border-border {{ content_card_surface }}{% if not card_static %} transition-colors hover:border-accent/50{% endif %}{% endif %}" data-testid="{{ card_testid }}"{% if card_extra_attrs %} {{ card_extra_attrs|safe }}{% endif %}>
+  {% if card_static %}
+  <div class="{% if card_editorial %}flex flex-col gap-4 py-6 sm:flex-row sm:items-start sm:gap-6 sm:py-7{% else %}flex flex-1 flex-col{% endif %}">
+  {% else %}
+  <a href="{{ card_url }}" class="{% include 'content/_clickable_card_classes.html' %} {% if card_editorial %}flex flex-col gap-4 py-6 sm:flex-row sm:items-start sm:gap-6 sm:py-7{% else %}flex flex-1 flex-col{% endif %}"{% if card_aria_label %} aria-label="{{ card_aria_label }}"{% endif %}{% if card_anchor_testid %} data-testid="{{ card_anchor_testid }}"{% endif %}>
+  {% endif %}
+    {% if card_media_template %}
+      {% if card_editorial %}
+        {% if card_media_present %}
+        <div class="w-full flex-shrink-0 overflow-hidden rounded-lg border border-border sm:w-40" data-testid="content-card-editorial-media">
+          {% include card_media_template %}
+        </div>
+        {% endif %}
+      {% else %}
+        {% include card_media_template %}
+      {% endif %}
+    {% endif %}
+    <div class="flex min-w-0 flex-1 flex-col {% if not card_editorial %}{% if card_compact %}p-4{% else %}p-4 sm:p-5{% endif %}{% endif %}">
       {% if card_badge_template or card_arrow != False %}
       <div class="mb-3 flex items-start justify-between gap-3">
         <div class="flex min-w-0 flex-wrap items-center gap-2">
           {% if card_badge_template %}{% include card_badge_template %}{% endif %}
         </div>
-        {% if card_arrow != False %}
-        <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
+        {% if card_arrow != False and not card_static %}
+        <i data-lucide="arrow-right" class="hidden sm:block {% if card_editorial %}relative {% endif %}h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"{% if card_editorial %} style="right: 1.25rem;"{% endif %} aria-hidden="true"{% if card_arrow_testid %} data-testid="{{ card_arrow_testid }}"{% endif %}></i>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% if card_editorial and card_title %}
+      <div>
+        {% if card_heading_tag == "h3" %}
+        <h3 class="min-w-0 line-clamp-2 text-lg font-semibold leading-snug text-foreground{% if not card_static %} transition-colors group-hover:text-accent{% endif %} sm:text-xl"{% if card_title_testid %} data-testid="{{ card_title_testid }}"{% endif %}>
+          {{ card_title }}
+        </h3>
+        {% else %}
+        <h2 class="min-w-0 line-clamp-2 text-lg font-semibold leading-snug text-foreground{% if not card_static %} transition-colors group-hover:text-accent{% endif %} sm:text-xl"{% if card_title_testid %} data-testid="{{ card_title_testid }}"{% endif %}>
+          {{ card_title }}
+        </h2>
         {% endif %}
       </div>
       {% endif %}
       {% include card_body_template %}
     </div>
-  </a>
+  {% if card_static %}</div>{% else %}</a>{% endif %}
   {% if card_tag_row_template %}{% include card_tag_row_template %}{% endif %}
 </article>

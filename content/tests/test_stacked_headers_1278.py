@@ -21,6 +21,7 @@ TECHNOLOGY_FACET_BODY = (
     BASE_DIR / 'templates' / 'content' / '_workshop_technology_facet_body.html'
 )
 DASHBOARD = BASE_DIR / 'templates' / 'content' / 'dashboard.html'
+DASHBOARD_ZONES = BASE_DIR / 'templates' / 'content' / '_dashboard_commitment_zones.html'
 NOTIFICATIONS = BASE_DIR / 'templates' / 'notifications' / 'notification_list.html'
 
 DISCOVERY_CLASSES = (
@@ -159,56 +160,29 @@ class PublicStackedHeaderStaticTest(TestCase):
             self.assertIn('focus-visible:ring-2', body_source)
         self.assertIn('{{ selected_topic_summary }}', _source(TOPIC_FACET_BODY))
 
-    def test_dashboard_five_headers_are_stacked_and_h1_is_unchanged(self):
+    def test_dashboard_headers_and_feed_destinations_are_stacked(self):
         source = _source(DASHBOARD)
+        zones = _source(DASHBOARD_ZONES)
         self.assertIn(
-            'header class="mb-8 flex flex-col gap-4 sm:flex-row '
+            'header class="mb-12 flex flex-col gap-4 sm:mb-16 sm:flex-row '
             'sm:items-end sm:justify-between" data-testid="dashboard-header"',
             source,
         )
-        self.assertIn('class="mt-1 flex flex-wrap gap-4 text-sm"', source)
-        courses = _opening_anchor(source, href='/courses')
-        workshops = _opening_anchor(source, href='/workshops')
-        self.assertLess(source.index(courses), source.index(workshops))
-
-        for heading, href, label in (
-            ('Upcoming events', '/events', 'View all events'),
-            ('{{ active_sprint_section_title }}', '{{ active_sprint_discovery_url }}', 'Activities'),
-            ('Recent content', '/blog', 'Browse blog'),
-        ):
-            with self.subTest(heading=heading):
-                heading_at = source.index(heading)
-                anchor = _opening_anchor(source[heading_at:], href=href)
-                self.assertIn('min-h-[44px]', anchor)
-                self.assertIn('focus-visible:ring-2', anchor)
-                self.assertNotIn('shrink-0', anchor)
-                self.assertIn(label, source[heading_at:heading_at + 1600])
-
-        checklist = source[source.index('data-testid="free-activation-checklist"'):]
-        checklist_header = checklist[:checklist.index('<div class="grid gap-3')]
-        self.assertLess(
-            checklist_header.index('Getting started'),
-            checklist_header.index('Start with open courses'),
-        )
-        self.assertNotIn('justify-between', checklist_header)
+        self.assertNotIn("Here's what to focus on this week.", source)
+        for heading in ('Your week', 'Continue learning', 'For you', 'Unlock more'):
+            self.assertIn(heading, zones)
+        for href in ('/courses', '/workshops', '/events', '/blog', '/sprints'):
+            self.assertIn(f'href="{href}"', zones)
+        self.assertLess(zones.index('Getting started'), zones.index('<ol'))
 
     def test_dashboard_justify_between_survivors_are_only_exempt_roles(self):
-        source = _source(DASHBOARD)
+        source = _source(DASHBOARD) + _source(DASHBOARD_ZONES)
         lines = [line.strip() for line in source.splitlines() if 'justify-between' in line]
-        self.assertEqual(len(lines), 12)
+        self.assertEqual(len(lines), 3)
         exempt_signatures = (
             'dismiss-success-banner',
             'dashboard-header',
-            'free-activation-complete-',
-            'free-plan-teaser',
-            'continue-learning-workshop',
-            'continue-learning-course',
-            'continue-learning-more',
-            'dashboard-upcoming-event-row',
-            'onboarding-prompt',
-            'dashboard-plan-preparing',
-            'dashboard-active-sprint-tier',
-            'mt-auto flex items-center justify-between',
+            'checkpoints done',
         )
         for line_number, line in enumerate(source.splitlines()):
             if 'justify-between' not in line:
@@ -248,7 +222,7 @@ class StackedHeaderRenderedBehaviorTest(TierSetupMixin, TestCase):
         self.client.force_login(user)
         response = self.client.get('/')
         self.assertTemplateUsed(response, 'content/dashboard.html')
-        self.assertContains(response, 'Continue learning')
+        self.assertContains(response, 'Getting started')
 
         self.client.logout()
         response = self.client.get('/notifications')

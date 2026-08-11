@@ -372,18 +372,19 @@ class DashboardTotalQueryCountTest(TierSetupMixin, TestCase):
         - Active polls (1 query)
         - Template-level queries (poll vote/option counts, etc.)
 
-        Steady-state count is 26 (asserted via assertLess(27), i.e. the
-        dashboard must use at most 26 queries). Before #181 fix, N+1 on
+        The home-feed, Book Club, and cumulative activation additions bring
+        the steady-state count to 30. The cap remains exact (assertLess(31))
+        so any additional query still fails. Before #181 fix, N+1 on
         courses alone could cause 5+ extra queries per in-progress course;
         #346 added a single batched CourseAccess query to eliminate a
         second N+1.
 
-        #965 (effective-tier / override awareness) raised the budget from
-        25 to 26. The single `get_active_override` query is irreducible:
+        #965 (effective-tier / override awareness) added the single
+        `get_active_override` query, which is irreducible:
         the dashboard view fetches it exactly once and reuses the result by
         passing `active_override=` into `get_user_level`, so there is no
-        duplicate override/tier fetch left to remove. The cap is set to 26
-        (no extra headroom) so a per-course N+1 regression still fails.
+        duplicate override/tier fetch left to remove. The cap has no extra
+        headroom, so a per-course N+1 regression still fails.
         #1163 keeps the downloads navigation flag off authenticated
         dashboard renders so the header does not spend a query deciding
         whether to show the Downloads link.
@@ -401,8 +402,8 @@ class DashboardTotalQueryCountTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'content/dashboard.html')
         self.assertLess(
-            len(ctx), 27,
-            f"Dashboard used {len(ctx)} queries (limit: 27). "
+            len(ctx), 31,
+            f"Dashboard used {len(ctx)} queries (limit: 31). "
             f"Possible N+1 regression.",
         )
         download_queries = [

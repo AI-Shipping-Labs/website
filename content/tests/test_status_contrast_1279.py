@@ -231,7 +231,7 @@ class StatusPaletteContractTest(SimpleTestCase):
         for path in (
             'templates/plans/sprint_detail.html',
             'templates/content/_sprint_card_badges.html',
-            'templates/content/dashboard.html',
+            'templates/content/_dashboard_commitment_zones.html',
         ):
             source = _source(path)
             self.assertIn('status=', source)

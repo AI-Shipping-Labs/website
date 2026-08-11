@@ -80,7 +80,7 @@ they can read the entity variable (project, event, workshop, ...) directly.
         <div class="flex shrink-0 items-center gap-3{% if card_editorial %} relative{% endif %}"{% if card_editorial %} style="right: 1.25rem;"{% endif %} data-testid="content-card-trailing-meta">
           {% if card_trailing_badge_template %}{% include card_trailing_badge_template %}{% endif %}
           {% if card_arrow != False and not card_static %}
-          <i data-lucide="arrow-right" class="hidden h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent sm:block" aria-hidden="true"{% if card_arrow_testid %} data-testid="{{ card_arrow_testid }}"{% endif %}></i>
+          <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent" aria-hidden="true"{% if card_arrow_testid %} data-testid="{{ card_arrow_testid }}"{% endif %}></i>
           {% endif %}
         </div>
       </div>

@@ -1,10 +1,4 @@
-"""Dashboard design-system conformance regressions (#1310, #1311, #1312).
-
-Covers the member dashboard surfaces that drifted from their owning
-components: the guidance grid layout for the Sprints and cohorts section,
-the light-theme contrast of the checkout banner and the Free activation
-checklist, and the badge/empty-state component owners.
-"""
+"""Dashboard design-system conformance regressions (#1310, #1311, #1312)."""
 
 import datetime
 import re
@@ -19,10 +13,6 @@ from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
 
-SPRINT_SECTION_OPEN_TAG = '<section class="lg:odd:last:col-span-2">'
-SPRINT_CARD_TRACK = 'grid-cols-[repeat(auto-fit,minmax(min(100%,17rem),1fr))]'
-
-
 def _active_sprint(name, slug, min_tier_level):
     return Sprint.objects.create(
         name=name,
@@ -35,7 +25,7 @@ def _active_sprint(name, slug, min_tier_level):
 
 
 class DashboardGuidanceGridLayoutTest(TierSetupMixin, TestCase):
-    """#1310: the tall sprint section must not leave a blank grid column."""
+    """Sprint discovery uses the single-column home feed."""
 
     def setUp(self):
         self.user = User.objects.create_user(
@@ -43,34 +33,30 @@ class DashboardGuidanceGridLayoutTest(TierSetupMixin, TestCase):
         )
         self.client.login(email='layout@test.com', password='pw')
 
-    def test_sprint_section_spans_both_columns_when_alone_in_its_row(self):
+    def test_sprint_opportunity_is_a_home_feed_row(self):
         _active_sprint('Free Open Sprint', 'free-open-sprint', LEVEL_OPEN)
 
         response = self.client.get('/')
 
         self.assertEqual(response.status_code, 200)
-        # The guidance grid is still two columns at lg...
-        self.assertContains(
-            response,
-            'class="grid gap-6 lg:grid-cols-2" '
-            'data-testid="dashboard-secondary-guidance"',
-        )
-        # ...and the sprint section opts into spanning both of them when it
-        # is an odd last child, which is the case that used to leave a blank
-        # column half a page tall.
-        self.assertContains(response, SPRINT_SECTION_OPEN_TAG)
+        self.assertContains(response, 'data-testid="dashboard-home-feed"')
+        self.assertContains(response, 'data-feed-kind="sprint"')
+        self.assertContains(response, 'Free Open Sprint')
+        self.assertNotContains(response, 'dashboard-secondary-guidance')
 
-    def test_sprint_cards_track_sizes_off_the_section_not_the_viewport(self):
+    def test_feed_uses_divider_rows_instead_of_a_card_grid(self):
         _active_sprint('Free Open Sprint', 'free-open-sprint', LEVEL_OPEN)
 
         response = self.client.get('/')
 
-        self.assertContains(response, SPRINT_CARD_TRACK)
-        # The viewport-keyed column utilities cannot express the widened
-        # section, so they must be gone.
+        self.assertContains(
+            response,
+            'class="border-t border-border/70" '
+            'data-testid="dashboard-feed-list"',
+        )
         self.assertNotContains(
             response,
-            'class="grid gap-3 sm:grid-cols-2 lg:grid-cols-1"',
+            'grid-cols-[repeat(auto-fit,minmax(min(100%,17rem),1fr))]',
         )
 
 
@@ -100,32 +86,31 @@ class DashboardBadgeOwnerTest(TierSetupMixin, TestCase):
         self.assertIn('border border-accent/40 bg-accent/10 text-accent', pill)
         self.assertIn('Free', pill)
 
-    def test_free_open_sprint_chip_uses_the_accent_badge_tone(self):
+    def test_free_open_sprint_is_an_accessible_feed_entry(self):
         _active_sprint('Free Open Sprint', 'free-open-sprint', LEVEL_OPEN)
 
         response = self.client.get('/')
 
-        chip = self._badge(response, 'dashboard-active-sprint-tier')
-        self.assertIn('data-component="member-badge"', chip)
-        self.assertIn('bg-accent/10 text-accent', chip)
-        self.assertNotIn('bg-secondary', chip)
-        self.assertIn('Free/open', chip)
+        self.assertContains(response, 'data-feed-kind="sprint"')
+        self.assertContains(response, 'data-feed-locked="false"')
+        self.assertContains(response, 'Active sprint')
+        self.assertContains(response, 'Free Open Sprint')
 
-    def test_paid_sprint_chip_keeps_the_required_tier_label(self):
+    def test_paid_member_sprint_is_an_accessible_feed_entry(self):
         self.user.tier = self.main_tier
         self.user.save(update_fields=['tier'])
         _active_sprint('Main Sprint', 'main-sprint', LEVEL_MAIN)
 
         response = self.client.get('/')
 
-        chip = self._badge(response, 'dashboard-active-sprint-tier')
-        self.assertIn('data-component="member-badge"', chip)
-        self.assertIn('Main', chip)
-        self.assertNotIn('Free/open', chip)
+        self.assertContains(response, 'data-feed-kind="sprint"')
+        self.assertContains(response, 'data-feed-locked="false"')
+        self.assertContains(response, 'Active sprint')
+        self.assertContains(response, 'Main Sprint')
 
 
 class DashboardEmptyStateOwnerTest(TierSetupMixin, TestCase):
-    """#1312 item 3: both stragglers render the shared empty state."""
+    """Empty feed lanes stay hidden while destinations remain available."""
 
     def setUp(self):
         self.user = User.objects.create_user(
@@ -133,40 +118,19 @@ class DashboardEmptyStateOwnerTest(TierSetupMixin, TestCase):
         )
         self.client.login(email='empty@test.com', password='pw')
 
-    def _empty_states(self, response):
-        """Return the markup of each shared empty-state card on the page."""
-        content = response.content.decode()
-        marker = (
-            '<div class="rounded-lg border border-border bg-card '
-            'p-8 text-center sm:p-10"'
-        )
-        starts = [m.start() for m in re.finditer(re.escape(marker), content)]
-        bounds = starts[1:] + [len(content)]
-        return [content[start:end] for start, end in zip(starts, bounds)]
-
-    def test_polls_empty_state_uses_the_component_and_keeps_its_cta(self):
+    def test_empty_poll_lane_is_hidden_and_destination_remains(self):
         response = self.client.get('/')
 
-        blocks = [b for b in self._empty_states(response)
-                  if 'No active polls right now' in b]
-        self.assertEqual(len(blocks), 1, 'polls empty state not rendered')
-        self.assertIn('data-lucide="bar-chart-3"', blocks[0])
-        self.assertIn('href="/vote"', blocks[0])
-        self.assertIn('View past polls', blocks[0])
-        # The hand-rolled icon-plus-copy card must be gone.
-        self.assertNotContains(
-            response, 'rounded-lg border border-border bg-card p-6 text-center',
-        )
+        self.assertNotContains(response, 'No active polls right now')
+        self.assertContains(response, 'href="/vote"')
+        self.assertContains(response, '>Polls <')
 
-    def test_sprint_empty_state_uses_the_component_and_keeps_its_cta(self):
+    def test_empty_sprint_lane_is_hidden_and_destination_remains(self):
         response = self.client.get('/')
 
-        blocks = [b for b in self._empty_states(response)
-                  if 'No active sprint openings for your tier' in b]
-        self.assertEqual(len(blocks), 1, 'sprint empty state not rendered')
-        self.assertIn('data-lucide="users"', blocks[0])
-        self.assertIn('href="/activities"', blocks[0])
-        self.assertIn('Browse activities', blocks[0])
+        self.assertNotContains(response, 'No active sprint openings for your tier')
+        self.assertContains(response, 'href="/sprints"')
+        self.assertContains(response, '>Sprints <')
 
 
 class DashboardLightThemeContrastTest(TierSetupMixin, TestCase):
@@ -210,7 +174,7 @@ class DashboardLightThemeContrastTest(TierSetupMixin, TestCase):
         content = response.content.decode()
 
         self.assertContains(
-            response, 'data-testid="free-activation-complete-ai-hero"',
+            response, 'data-testid="free-activation-item-ai-hero"',
         )
         checklist = re.search(
             r'data-testid="free-activation-checklist".*?'
@@ -218,7 +182,7 @@ class DashboardLightThemeContrastTest(TierSetupMixin, TestCase):
             content, re.S,
         ).group(0)
         self.assertEqual(
-            checklist.count('text-emerald-800 dark:text-emerald-300'), 2,
+            checklist.count('text-emerald-800 dark:text-emerald-300'), 1,
         )
         self.assertEqual(
             self._light_only_pale_tokens(checklist, 'emerald'), [],
@@ -239,13 +203,13 @@ class DashboardTypographyTest(TierSetupMixin, TestCase):
 
         self.assertContains(
             response,
-            '<p class="text-sm font-medium uppercase tracking-widest '
+            '<p class="text-xs font-medium uppercase tracking-widest '
             'text-accent">Getting started</p>',
             html=False,
         )
         self.assertContains(
             response,
-            '<h2 class="mt-1 text-xl font-semibold tracking-tight '
-            'text-foreground">Start building with your Free account</h2>',
+            '<h3 class="text-lg font-semibold tracking-tight '
+            'text-foreground">Set up your account</h3>',
             html=False,
         )

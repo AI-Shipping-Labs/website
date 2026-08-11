@@ -63,7 +63,7 @@ class DashboardSprintPlanLifecycleTest(TierSetupMixin, TestCase):
         self.assertIn("Ended", status_fragment)
 
         # Heading is reframed to past tense.
-        heading_idx = content.index('data-testid="account-sprint-plan-heading"')
+        heading_idx = content.index('data-testid="account-sprint-plan-eyebrow"')
         heading_fragment = content[heading_idx:heading_idx + 300]
         self.assertIn("Your latest sprint plan", heading_fragment)
         self.assertNotIn("Your sprint plan", heading_fragment)
@@ -88,7 +88,7 @@ class DashboardSprintPlanLifecycleTest(TierSetupMixin, TestCase):
         response = self.client.get("/")
         content = response.content.decode()
 
-        heading_idx = content.index('data-testid="account-sprint-plan-heading"')
+        heading_idx = content.index('data-testid="account-sprint-plan-eyebrow"')
         heading_fragment = content[heading_idx:heading_idx + 300]
         self.assertIn("Your sprint plan", heading_fragment)
         self.assertNotIn("Your latest sprint plan", heading_fragment)

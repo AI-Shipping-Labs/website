@@ -470,7 +470,6 @@ class DashboardEnrollmentSourceTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         self.assertContains(response, 'Dashboard Test Course')
         self.assertContains(response, '0/3 units completed')
-        self.assertContains(response, 'Just enrolled')
 
     def test_unenrolled_course_hidden_from_dashboard(self):
         enr = Enrollment.objects.create(user=self.user, course=self.course)
@@ -544,16 +543,10 @@ class DashboardEnrollmentSourceTest(TierSetupMixin, TestCase):
 
     def test_empty_state_copy_updated(self):
         response = self.client.get('/')
-        self.assertContains(
-            response,
-            'No courses or workshops in progress yet',
-        )
-        self.assertContains(response, 'data-testid="member-empty-state"')
-        self.assertContains(response, 'data-empty-kind="fresh"')
-        self.assertContains(
-            response,
-            'Start a course or workshop and it will appear here when you make progress.',
-        )
+        self.assertNotContains(response, 'No courses or workshops in progress yet')
+        self.assertNotContains(response, 'data-testid="member-empty-state"')
+        self.assertContains(response, 'href="/courses"')
+        self.assertContains(response, 'href="/workshops"')
 
 
 # ============================================================

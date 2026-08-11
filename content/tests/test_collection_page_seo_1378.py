@@ -101,9 +101,8 @@ class CollectionPageMetadataTest(TestCase):
         ),
         '/workshops': (
             'Hands-on AI Workshops | AI Shipping Labs',
-            'Hands-on AI workshops with recordings, step-by-step writeups, '
-            'tutorial pages, code, and materials for builders shipping real '
-            'projects.',
+            'Hands-on AI workshops with recordings, step-by-step tutorials, '
+            'code, and materials for builders shipping real projects.',
         ),
         '/workshops/catalog': (
             'All Workshops | AI Shipping Labs',
@@ -274,15 +273,13 @@ class CollectionFacetCanonicalTest(TestCase):
 
     def test_workshop_catalog_facets_keep_state_on_catalog_canonical(self):
         response = self.client.get(
-            '/workshops/catalog?tag=python&tool=Claude+Code&access=free'
-            '&skill_level=beginner&utm_source=test',
+            '/workshops/catalog?topic=production-apps&tag=python'
+            '&utm_source=test',
         )
 
         self.assert_query_free_metadata(response, '/workshops/catalog')
+        self.assertEqual(response.context['selected_topic'], 'production-apps')
         self.assertEqual(response.context['selected_tags'], ['python'])
-        self.assertEqual(response.context['selected_tools'], ['Claude Code'])
-        self.assertEqual(response.context['selected_access'], 'free')
-        self.assertEqual(response.context['selected_skill_level'], 'beginner')
         self.assertContains(response, 'Python Workshop')
 
     def test_pricing_recovery_state_survives_query_canonicalization(self):

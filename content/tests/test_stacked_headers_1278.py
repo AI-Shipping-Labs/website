@@ -14,12 +14,6 @@ BASE_DIR = Path(settings.BASE_DIR)
 HOME = BASE_DIR / 'templates' / 'home.html'
 ACTIVITIES = BASE_DIR / 'templates' / 'content' / 'activities.html'
 WORKSHOPS = BASE_DIR / 'templates' / 'content' / '_workshops_catalog.html'
-TOPIC_FACET_BODY = (
-    BASE_DIR / 'templates' / 'content' / '_workshop_topic_facet_body.html'
-)
-TECHNOLOGY_FACET_BODY = (
-    BASE_DIR / 'templates' / 'content' / '_workshop_technology_facet_body.html'
-)
 DASHBOARD = BASE_DIR / 'templates' / 'content' / 'dashboard.html'
 DASHBOARD_ZONES = BASE_DIR / 'templates' / 'content' / '_dashboard_commitment_zones.html'
 NOTIFICATIONS = BASE_DIR / 'templates' / 'notifications' / 'notification_list.html'
@@ -128,37 +122,27 @@ class PublicStackedHeaderStaticTest(TestCase):
                 self.assertIn(label, source[source.index(anchor):source.index(anchor) + 400])
                 self.assertNotIn('button_classes', anchor)
 
-    def test_workshop_main_and_topic_headers_are_stacked(self):
+    def test_workshop_header_and_curated_topics_are_stacked(self):
         source = _source(WORKSHOPS)
         self.assertNotIn('lg:justify-between', source)
         self.assertNotIn('sm:items-end', source)
-        self.assertIn('class="mt-4 flex flex-col items-start gap-3"', source)
-        self.assertLess(source.index('{{ catalog_intro }}'), source.index('{% if show_catalog_filters %}'))
-
-        for testid in (
+        self.assertIn('class="mb-8"', source)
+        self.assertLess(
+            source.index('{{ catalog_intro }}'),
+            source.index('data-testid="workshop-topic-filter"'),
+        )
+        self.assertIn('data-testid="workshop-topic-filter"', source)
+        self.assertIn('data-testid="workshop-topic-all"', source)
+        self.assertIn('data-testid="view-all-workshops-preview-cta"', source)
+        for retired_testid in (
             'workshop-access-filters',
             'workshop-skill-filters',
-            'clear-workshop-filter',
-            'view-all-workshops-preview-cta',
+            'workshop-facet-topic',
+            'workshop-facet-technology',
         ):
-            self.assertIn(f'data-testid="{testid}"', source)
-        # The Topics and Technologies pill rows moved into
-        # includes/_accordion.html bodies (37 expanded pills pushed the
-        # first card ~1.7 screens down on mobile), so their heading
-        # markup and pill classes now live in the facet body partials.
-        # The accordion supplies its own 44px summary and focus ring.
-        self.assertIn('includes/_accordion.html', source)
-        # The per-card topic-chip links (which each carried a focus ring) were
-        # removed when workshop cards moved onto the shared content card, so the
-        # catalog template now has one fewer focus-visible:ring-2 occurrence.
-        self.assertEqual(source.count('min-h-[44px]'), 4)
-        self.assertEqual(source.count('focus-visible:ring-2'), 4)
-
-        for body in (TOPIC_FACET_BODY, TECHNOLOGY_FACET_BODY):
-            body_source = _source(body)
-            self.assertIn('min-h-[44px]', body_source)
-            self.assertIn('focus-visible:ring-2', body_source)
-        self.assertIn('{{ selected_topic_summary }}', _source(TOPIC_FACET_BODY))
+            self.assertNotIn(f'data-testid="{retired_testid}"', source)
+        self.assertIn('min-h-[44px]', source)
+        self.assertIn('focus-visible:ring-2', source)
 
     def test_dashboard_headers_and_feed_destinations_are_stacked(self):
         source = _source(DASHBOARD)

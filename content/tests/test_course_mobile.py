@@ -121,13 +121,17 @@ class CourseUnitBreadcrumbMobileTest(CourseMobileSetupMixin, TestCase):
         response = self.client.get("/courses/long-course/module-1/unit-1")
         self.assertContains(response, 'data-testid="breadcrumb-course-short"')
         # The "..." link is visible on mobile, hidden on sm+
-        self.assertContains(response, 'sm:hidden flex-shrink-0')
+        self.assertContains(
+            response,
+            'class="flex-shrink-0 transition-colors hover:text-foreground '
+            'sm:hidden"',
+        )
 
     def test_breadcrumb_unit_title_truncates(self):
         self._login_main_user()
         response = self.client.get("/courses/long-course/module-1/unit-1")
         # The unit title span has truncate class
-        self.assertContains(response, '<span class="text-foreground truncate">')
+        self.assertContains(response, '<span class="truncate text-foreground">')
 
 
 class CourseUnitTopNavMobileTest(CourseMobileSetupMixin, TestCase):

@@ -140,8 +140,8 @@ class CourseUnitTouchTargetTest(TestCase):
         # The unit row div has min-h-[44px]
         self.assertIn("min-h-[44px]", source)
 
-    def test_unit_link_has_padding(self):
-        """Unit link in course detail has py-2 for adequate touch area."""
+    def test_unit_link_uses_row_owned_padding(self):
+        """The compact row owns padding while the link fills its text lane."""
         from django.template.loader import get_template
 
         template = get_template("content/course_detail.html")
@@ -151,4 +151,5 @@ class CourseUnitTouchTargetTest(TestCase):
             r'get_absolute_url.*?class="([^"]*)"', source
         )
         self.assertIsNotNone(link_match, "Unit link not found in course_detail.html")
-        self.assertIn("py-2", link_match.group(1))
+        self.assertIn("flex-1", link_match.group(1))
+        self.assertNotIn("py-2", link_match.group(1))

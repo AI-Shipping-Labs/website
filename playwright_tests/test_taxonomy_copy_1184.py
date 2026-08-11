@@ -206,7 +206,7 @@ def test_desktop_visitor_taxonomy_journey(django_server, page):
     page.goto(f"{django_server}/workshops", wait_until="domcontentloaded")
     expect(page.get_by_role("heading", name="Hands-on AI workshops")).to_be_visible()
     expect(page.locator("main")).to_contain_text(
-        "Workshops start as live sessions on the events calendar"
+        "the recording, a step-by-step tutorial, and runnable code or materials"
     )
 
     page.goto(f"{django_server}/resources", wait_until="domcontentloaded")

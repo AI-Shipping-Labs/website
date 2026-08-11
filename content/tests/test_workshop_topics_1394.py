@@ -1,6 +1,7 @@
 """Curated workshop-topic catalog coverage for issue #1394."""
 
 from datetime import date
+from pathlib import Path
 
 from django.test import TestCase, tag
 
@@ -181,6 +182,13 @@ class WorkshopCuratedTopicCatalogTest(TestCase):
         self.assertNotContains(response, 'data-testid="workshop-topic-filter"')
         self.assertContains(response, 'data-testid="view-all-workshops-preview-cta"')
         self.assertContains(response, f'href="{CATALOG_URL}"')
+        template = Path('templates/content/_workshops_catalog.html').read_text(
+            encoding='utf-8',
+        )
+        self.assertIn(
+            "{% button_classes 'secondary' extra='mt-6' %}",
+            template,
+        )
 
     def test_catalog_uses_reader_width_and_editorial_rows(self):
         response = self.client.get(CATALOG_URL)

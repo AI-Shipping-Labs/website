@@ -8,7 +8,6 @@ from playwright.sync_api import expect
 
 from playwright_tests.test_workshops import _clear_workshops, _create_workshop
 
-
 pytestmark = [
     pytest.mark.local_only,
     pytest.mark.django_db(transaction=True),
@@ -110,6 +109,28 @@ def test_visitor_filters_with_curated_topics(page, django_server):
     expect(agent_row).not_to_contain_text("function-calling")
     expect(agent_row).not_to_contain_text("personal-brand")
 
+    page.locator('[data-testid="workshop-topic-all"]').click()
+    page.wait_for_load_state("domcontentloaded")
+
+    expect(page).to_have_url(re.compile(r"/workshops/catalog$"))
+    expect(
+        page.locator('[data-testid="workshop-topic-all"]')
+    ).to_have_attribute("aria-current", "page")
+    expect(page.locator('[data-testid="workshop-card"]')).to_have_count(4)
+    expect(page.locator('[data-testid^="workshop-skill-filter-"]')).to_have_count(0)
+    expect(page.locator('[data-testid^="workshop-technology-option-"]')).to_have_count(0)
+    expect(page.locator('[data-testid="workshop-active-filters"]')).to_have_count(0)
+
+    page.locator('[data-testid="workshop-topic-ai-agents"]').click()
+    page.wait_for_load_state("domcontentloaded")
+    page.locator('[data-workshop-slug="agent-function"] a').first.click()
+    page.wait_for_load_state("domcontentloaded")
+
+    expect(page).to_have_url(re.compile(r"/workshops/agent-function$"))
+    expect(page.locator('[data-testid="workshop-title"]')).to_have_text(
+        "Function Calling Agents"
+    )
+
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
     page.screenshot(
         path=SCREENSHOT_DIR / "curated-topic-editorial-list.png",
@@ -133,6 +154,16 @@ def test_catalog_uses_3xl_editorial_rows_and_conditional_media(
         title="Workshop with Authored Cover",
         tags=["rag"],
         cover_image_url="https://example.com/workshop-cover.png",
+    )
+    _create_workshop(
+        slug="auto-only",
+        title="Workshop with Generated Banner Only",
+        tags=["python"],
+        pages_data=[],
+        with_event=False,
+        instructor="Alexey",
+        auto_banner_url="https://example.com/generated-workshop-banner.png",
+        code_repo_url="",
     )
 
     _open_catalog(page, django_server)
@@ -169,6 +200,89 @@ def test_catalog_uses_3xl_editorial_rows_and_conditional_media(
     expect(
         cover_row.locator('[data-testid="workshop-card-preview-image"]')
     ).to_have_attribute("src", "https://example.com/workshop-cover.png")
+    expect(
+        cover_row.locator('[data-testid="workshop-card-preview-image"]')
+    ).to_have_count(1)
+
+    auto_row = page.locator('[data-workshop-slug="auto-only"]')
+    expect(auto_row.locator('[data-testid^="workshop-card-preview"]')).to_have_count(0)
+    expect(auto_row.locator(".aspect-video")).to_have_count(0)
+    expect(
+        auto_row.locator('img[src="https://example.com/generated-workshop-banner.png"]')
+    ).to_have_count(0)
+
+
+def test_legacy_raw_tag_bookmark_filters_and_clears_without_raw_controls(
+    page, django_server,
+):
+    _clear_workshops()
+    _create_catalog_workshop(
+        slug="python-bookmark",
+        title="Python Bookmark Workshop",
+        tags=["python"],
+    )
+    _create_catalog_workshop(
+        slug="rag-bookmark",
+        title="RAG Bookmark Workshop",
+        tags=["rag"],
+    )
+
+    _open_catalog(page, django_server, "?tag=python")
+
+    expect(page.get_by_text("Python Bookmark Workshop", exact=True)).to_be_visible()
+    expect(page.get_by_text("RAG Bookmark Workshop", exact=True)).to_have_count(0)
+    expect(page.locator('[data-testid="workshop-active-filters"]')).to_have_count(0)
+    expect(page.locator('[data-testid="workshop-active-tag"]')).to_have_count(0)
+    expect(page.locator('[data-testid="workshop-facet-topic"]')).to_have_count(0)
+
+    all_topics = page.locator('[data-testid="workshop-topic-all"]')
+    expect(all_topics).to_have_attribute("href", "/workshops/catalog")
+    all_topics.click()
+    page.wait_for_load_state("domcontentloaded")
+
+    expect(page).to_have_url(re.compile(r"/workshops/catalog$"))
+    expect(page.get_by_text("Python Bookmark Workshop", exact=True)).to_be_visible()
+    expect(page.get_by_text("RAG Bookmark Workshop", exact=True)).to_be_visible()
+
+
+def test_retired_filter_parameters_leave_the_archive_discoverable(
+    page, django_server,
+):
+    _clear_workshops()
+    _create_catalog_workshop(
+        slug="free-beginner",
+        title="Free Beginner Workshop",
+        tags=["python"],
+        skill_level="beginner",
+    )
+    _create_catalog_workshop(
+        slug="paid-advanced",
+        title="Paid Advanced Workshop",
+        tags=["rag"],
+        pages=10,
+        skill_level="advanced",
+    )
+
+    _open_catalog(
+        page,
+        django_server,
+        "?access=free&skill_level=beginner&tool=Claude+Code",
+    )
+
+    expect(page.get_by_text("Free Beginner Workshop", exact=True)).to_be_visible()
+    expect(page.get_by_text("Paid Advanced Workshop", exact=True)).to_be_visible()
+    expect(
+        page.locator('[data-testid="workshop-topic-all"]')
+    ).to_have_attribute("aria-current", "page")
+    for retired_selector in (
+        '[data-testid="workshop-access-filters"]',
+        '[data-testid^="workshop-access-filter-"]',
+        '[data-testid^="workshop-skill-filter-"]',
+        '[data-testid="workshop-facet-technology"]',
+        '[data-testid^="workshop-technology-option-"]',
+        '[data-testid="workshop-active-filters"]',
+    ):
+        expect(page.locator(retired_selector)).to_have_count(0)
 
 
 def test_mobile_editorial_rows_wrap_topics_without_horizontal_overflow(
@@ -202,3 +316,15 @@ def test_mobile_editorial_rows_wrap_topics_without_horizontal_overflow(
     first_row = page.locator('[data-testid="workshop-card"]').first
     expect(first_row.locator('[data-testid="workshop-card-title"]')).to_be_visible()
     expect(first_row.locator('[data-testid="workshop-card-metadata"]')).to_be_visible()
+
+    page.locator('[data-testid="workshop-topic-ai-agents"]').click()
+    page.wait_for_load_state("domcontentloaded")
+    assert page.evaluate(
+        "() => document.documentElement.scrollWidth <= "
+        "document.documentElement.clientWidth"
+    )
+    page.locator('[data-workshop-slug="agents"] a').first.click()
+    page.wait_for_load_state("domcontentloaded")
+
+    expect(page).to_have_url(re.compile(r"/workshops/agents$"))
+    expect(page.locator('[data-testid="workshop-title"]')).to_be_visible()

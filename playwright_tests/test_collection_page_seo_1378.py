@@ -186,8 +186,8 @@ def test_collection_filters_and_pricing_recovery_keep_ui_but_drop_queries(
         f'{site_url}/workshops',
         'Hands-on AI Workshops | AI Shipping Labs',
     )
-    # The "Browse all workshops" hero CTA was removed (the catalog now lives on
-    # the same page); navigate to the full archive route directly.
+    # This mixed metadata journey seeds one Workshop, so the landing has no
+    # compact preview row or archive CTA to exercise here.
     goto_with_retry(page, f'{django_server}/workshops/catalog')
     _assert_page_head(
         page,
@@ -195,28 +195,17 @@ def test_collection_filters_and_pricing_recovery_keep_ui_but_drop_queries(
         'All Workshops | AI Shipping Labs',
     )
 
-    workshop_query = (
-        '/workshops/catalog?tag=python&tool=Claude+Code&access=free'
-        '&skill_level=beginner'
-    )
+    workshop_query = '/workshops/catalog?topic=production-apps&tag=python'
     goto_with_retry(page, f'{django_server}{workshop_query}')
     assert workshop_query.split('?', 1)[1] in page.url
     assert _canonical(page) == f'{site_url}/workshops/catalog'
     assert _meta(page, 'meta[property="og:url"]') == (
         f'{site_url}/workshops/catalog'
     )
-    assert page.get_by_test_id('workshop-access-filter-free').get_attribute(
+    assert page.get_by_test_id('workshop-topic-production-apps').get_attribute(
         'aria-current'
     ) == 'page'
-    assert page.get_by_test_id('workshop-skill-filter-beginner').get_attribute(
-        'aria-current'
-    ) == 'page'
-    assert page.get_by_test_id('workshop-active-tool').inner_text().strip() == (
-        'Claude Code'
-    )
-    assert page.get_by_test_id('workshop-active-tag').inner_text().strip() == (
-        'python'
-    )
+    assert page.locator('[data-testid="workshop-active-tag"]').count() == 0
     assert 'Python Browser Workshop' in page.locator('body').inner_text()
 
     goto_with_retry(

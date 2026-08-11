@@ -74,7 +74,7 @@
       {% include "content/_content_card.html" with card_url=workshop.get_absolute_url card_testid="workshop-card" card_anchor_testid="workshop-card-link" card_body_template="content/_workshop_card_body.html" card_badge_template="content/_workshop_card_badges.html" card_media_template="content/_workshop_card_media.html" card_compact=True card_aria_label=workshop.title card_extra_attrs='data-workshop-slug="'|add:workshop.slug|add:'"' %}
       {% endfor %}
     </div>
-    <a href="{{ catalog_all_url }}" class="mt-6 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="view-all-workshops-preview-cta">
+    <a href="{{ catalog_all_url }}" class="{% button_classes 'secondary' extra='mt-6' %}" data-testid="view-all-workshops-preview-cta">
       See all workshops
       <i data-lucide="arrow-right" class="h-4 w-4"></i>
     </a>

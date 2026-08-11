@@ -190,7 +190,7 @@ class TestVisitorBrowsesCatalog:
         assert 'Hands-on AI workshops' in landing_text
         assert 'Practical AI engineering sessions' in landing_text
         assert 'recording' in landing_text
-        assert 'step-by-step writeups or tutorial pages' in landing_text
+        assert 'a step-by-step tutorial' in landing_text
         assert 'runnable code or materials' in landing_text
 
         # The newest workshop is featured above the grid (mirrors the /books
@@ -224,16 +224,15 @@ class TestVisitorBrowsesCatalog:
             }""",
         )
 
-        # The catalog now lives on the same page; the redundant "Browse all
-        # workshops" hero CTA was removed, so open the full archive directly.
-        page.goto(
-            f'{django_server}/workshops/catalog',
-            wait_until='domcontentloaded',
-        )
+        catalog_cta = page.get_by_test_id('view-all-workshops-preview-cta')
+        assert catalog_cta.inner_text().strip() == 'See all workshops'
+        assert catalog_cta.get_attribute('href') == '/workshops/catalog'
+        catalog_cta.click()
+        page.wait_for_load_state('domcontentloaded')
+
         assert page.url.endswith('/workshops/catalog')
         assert page.locator('[data-testid="workshop-catalog"]').is_visible()
         assert page.locator('[data-testid="workshops-landing"]').count() == 0
-        assert page.locator('[data-testid="workshop-access-filter-all"]').is_visible()
         assert page.locator('article:has(a[href="/workshops/landing-ws"])').is_visible()
         assert page.locator(
             'article:has(a[href="/workshops/second-landing-ws"])',
@@ -254,235 +253,6 @@ class TestVisitorBrowsesCatalog:
     # (Membership is a top-level nav link now), so the dedicated CTA->pricing
     # E2E flow no longer applies; pricing-page coverage lives with the pricing
     # tests.
-
-    def test_filtered_catalog_clear_path_stays_on_catalog_route(
-        self, django_server, page,
-    ):
-        _clear_workshops()
-        agents_auto_url = 'https://example.com/generated-agents-filter.jpg'
-        _create_workshop(
-            slug='agents-ws',
-            title='Agent Workshop',
-            pages=0,
-            recording=0,
-            tags=['agents'],
-            auto_banner_url=agents_auto_url,
-        )
-        _create_workshop(
-            slug='python-ws',
-            title='Python Workshop',
-            pages=0,
-            recording=0,
-            tags=['python'],
-            cover_image_url='https://example.com/python-filter-cover.jpg',
-        )
-
-        page.goto(
-            f'{django_server}/workshops/catalog?tag=agents',
-            wait_until='domcontentloaded',
-        )
-
-        assert page.locator('[data-testid="workshops-landing"]').count() == 0
-        assert page.locator('[data-testid="workshop-catalog"]').is_visible()
-        assert page.locator('[data-testid="workshop-active-filters"]').is_visible()
-        assert 'agents' in page.locator(
-            '[data-testid="workshop-active-filters"]',
-        ).inner_text()
-        assert 'Agent Workshop' in page.content()
-        assert 'Python Workshop' not in page.content()
-        agent_card = page.locator('article:has(a[href="/workshops/agents-ws"])')
-        assert agent_card.locator(
-            '[data-testid^="workshop-card-preview"]',
-        ).count() == 0
-        assert agent_card.locator('.aspect-video').count() == 0
-        assert agent_card.locator(f'img[src="{agents_auto_url}"]').count() == 0
-
-        clear_link = page.locator('[data-testid="clear-workshop-filter"]')
-        assert clear_link.get_attribute('href') == '/workshops/catalog'
-        clear_link.click()
-        page.wait_for_load_state('domcontentloaded')
-
-        assert page.url.endswith('/workshops/catalog')
-        body = page.content()
-        assert 'Agent Workshop' in body
-        assert 'Python Workshop' in body
-
-    @pytest.mark.core
-    def test_visitor_browses_topics_filters_and_opens_detail(
-        self, django_server, page,
-    ):
-        _clear_workshops()
-        _create_workshop(
-            slug='agents-rag',
-            title='Agents RAG Systems',
-            pages=0,
-            recording=0,
-            tags=['agents', 'rag', 'evaluation'],
-        )
-        _create_workshop(
-            slug='agents-only',
-            title='Agents Debugging',
-            pages=0,
-            recording=0,
-            tags=['agents'],
-        )
-        _create_workshop(
-            slug='python-only',
-            title='Python Automation',
-            pages=0,
-            recording=0,
-            tags=['python'],
-        )
-        _create_workshop(
-            slug='secret-draft',
-            title='Secret Draft Workshop',
-            status='draft',
-            pages=0,
-            recording=0,
-            tags=['secret-topic'],
-        )
-
-        response = page.goto(
-            f'{django_server}/workshops/catalog',
-            wait_until='domcontentloaded',
-        )
-        assert response is not None and response.status == 200
-
-        assert page.locator('[data-testid="workshops-landing"]').count() == 0
-        assert page.locator('[data-testid="workshop-catalog"]').is_visible()
-        topics = page.locator('[data-testid="workshop-facet-topic"]')
-        assert topics.is_visible()
-        topics.locator('summary').click()
-        topic_text = topics.inner_text()
-        assert 'Topics' in topic_text
-        assert 'agents' in topic_text
-        assert 'rag' in topic_text
-        assert 'evaluation' in topic_text
-        assert 'secret-topic' not in topic_text
-
-        body = page.content()
-        assert 'Agents RAG Systems' in body
-        assert 'Agents Debugging' in body
-        assert 'Python Automation' in body
-        assert 'Secret Draft Workshop' not in body
-
-        page.locator('[data-testid="workshop-topic-option-agents"]').click()
-        page.wait_for_load_state('domcontentloaded')
-
-        assert page.url.endswith('/workshops/catalog?tag=agents')
-        agents_topic = page.locator('[data-testid="workshop-topic-option-agents"]')
-        assert agents_topic.get_attribute('aria-current') == 'page'
-        agents_body = page.content()
-        assert 'Agents RAG Systems' in agents_body
-        assert 'Agents Debugging' in agents_body
-        assert 'Python Automation' not in agents_body
-
-        page.locator('[data-testid="workshop-topic-option-rag"]').click()
-        page.wait_for_load_state('domcontentloaded')
-
-        assert page.url.endswith('/workshops/catalog?tag=agents&tag=rag')
-        narrowed_body = page.content()
-        assert 'Agents RAG Systems' in narrowed_body
-        assert 'Agents Debugging' not in narrowed_body
-        assert 'Python Automation' not in narrowed_body
-        assert 'Workshops matching selected topics' in narrowed_body
-        assert (
-            page.locator('[data-testid="workshop-topic-option-rag"]')
-            .get_attribute('aria-current') == 'page'
-        )
-
-        rag_filter = page.locator(
-            '[data-testid="workshop-active-tag"]',
-            has_text='rag',
-        )
-        assert rag_filter.get_attribute('href') == '/workshops/catalog?tag=agents'
-        rag_filter.click()
-        page.wait_for_load_state('domcontentloaded')
-
-        assert page.url.endswith('/workshops/catalog?tag=agents')
-        expanded_body = page.content()
-        assert 'Agents RAG Systems' in expanded_body
-        assert 'Agents Debugging' in expanded_body
-
-        page.locator('article:has(a[href="/workshops/agents-rag"]) a').first.click()
-        page.wait_for_load_state('domcontentloaded')
-
-        assert page.url.endswith('/workshops/agents-rag')
-        assert page.locator('[data-testid="workshop-title"]').inner_text() == (
-            'Agents RAG Systems'
-        )
-
-    @pytest.mark.core
-    def test_visitor_filters_free_catalog_and_opens_matching_workshop(
-        self, django_server, page,
-    ):
-        _clear_workshops()
-        _create_workshop(
-            slug='open-free-main-recording',
-            title='Open Free Workshop',
-            pages=0,
-            recording=20,
-            tags=['agents'],
-        )
-        _create_workshop(
-            slug='registered-free',
-            title='Registered Free Workshop',
-            pages=5,
-            recording=5,
-            tags=['agents'],
-        )
-        _create_workshop(
-            slug='paid-basic',
-            title='Paid Basic Workshop',
-            pages=10,
-            recording=20,
-            tags=['agents'],
-        )
-        _create_workshop(
-            slug='draft-free',
-            title='Draft Free Workshop',
-            status='draft',
-            pages=0,
-            recording=0,
-            tags=['agents'],
-        )
-
-        page.goto(
-            f'{django_server}/workshops/catalog',
-            wait_until='domcontentloaded',
-        )
-
-        all_filter = page.locator('[data-testid="workshop-access-filter-all"]')
-        assert all_filter.get_attribute('aria-current') == 'page'
-        body = page.content()
-        assert 'Open Free Workshop' in body
-        assert 'Registered Free Workshop' in body
-        assert 'Paid Basic Workshop' in body
-        assert 'Draft Free Workshop' not in body
-
-        page.locator('[data-testid="workshop-access-filter-free"]').click()
-        page.wait_for_load_state('domcontentloaded')
-
-        assert page.url.endswith('/workshops/catalog?access=free')
-        free_filter = page.locator('[data-testid="workshop-access-filter-free"]')
-        assert free_filter.get_attribute('aria-current') == 'page'
-
-        filtered_body = page.content()
-        assert 'Open Free Workshop' in filtered_body
-        assert 'Registered Free Workshop' in filtered_body
-        assert 'Paid Basic Workshop' not in filtered_body
-        assert 'Draft Free Workshop' not in filtered_body
-
-        page.locator('a[href="/workshops/open-free-main-recording"]').first.click()
-        page.wait_for_load_state('domcontentloaded')
-
-        assert page.url.endswith('/workshops/open-free-main-recording')
-        assert page.locator('[data-testid="workshop-title"]').inner_text() == (
-            'Open Free Workshop'
-        )
-        recording_lock = page.locator('[data-testid="workshop-video-locked"]')
-        assert recording_lock.is_visible()
-        assert 'Main or above' in recording_lock.inner_text()
 
     @pytest.mark.core
     def test_visitor_scans_redesigned_card_signals_before_opening(
@@ -596,92 +366,8 @@ class TestVisitorBrowsesCatalog:
         assert page.locator('[data-testid="workshop-pages-paywall"]').is_visible()
         assert 'Upgrade to Basic to access this workshop' in page.content()
 
-    def test_access_and_tag_filters_preserve_each_other(
-        self, django_server, page,
-    ):
-        _clear_workshops()
-        _create_workshop(
-            slug='free-agents',
-            title='Free Agents Workshop',
-            pages=0,
-            recording=0,
-            tags=['agents'],
-        )
-        _create_workshop(
-            slug='paid-agents',
-            title='Paid Agents Workshop',
-            pages=10,
-            recording=20,
-            tags=['agents'],
-        )
-        _create_workshop(
-            slug='paid-python',
-            title='Paid Python Workshop',
-            pages=20,
-            recording=20,
-            tags=['python'],
-        )
-
-        page.goto(
-            f'{django_server}/workshops/catalog?access=free&tag=agents',
-            wait_until='domcontentloaded',
-        )
-
-        paid_filter = page.locator('[data-testid="workshop-access-filter-paid"]')
-        assert paid_filter.get_attribute('href') == (
-            '/workshops/catalog?access=paid&tag=agents'
-        )
-        paid_filter.click()
-        page.wait_for_load_state('domcontentloaded')
-
-        assert page.url.endswith('/workshops/catalog?access=paid&tag=agents')
-        paid_agents_body = page.content()
-        assert 'Paid Agents Workshop' in paid_agents_body
-        assert 'Free Agents Workshop' not in paid_agents_body
-        assert 'Paid Python Workshop' not in paid_agents_body
-        paid_badge = page.locator('[data-testid="workshop-tier-badge"]')
-        assert paid_badge.count() == 1
-        assert paid_badge.get_attribute('data-required-level') == '10'
-        assert paid_badge.locator('svg.lucide-lock').count() == 1
-
-        # Per-card topic chips were removed in the card-unification, so reach
-        # the access+tag filtered view through the query directly; the point of
-        # this test is that the access and tag filters preserve each other.
-        page.goto(
-            f'{django_server}/workshops/catalog?access=paid&tag=python',
-            wait_until='domcontentloaded',
-        )
-
-        assert page.url.endswith('/workshops/catalog?access=paid&tag=python')
-        python_body = page.content()
-        assert 'Paid Python Workshop' in python_body
-        assert 'Paid Agents Workshop' not in python_body
-        assert page.locator('[data-testid="workshop-active-access"]').inner_text() == (
-            'Paid'
-        )
-
-        active_tag = page.locator('[data-testid="workshop-active-tag"]')
-        assert active_tag.get_attribute('href') == (
-            '/workshops/catalog?access=paid'
-        )
-        active_tag.click()
-        page.wait_for_load_state('domcontentloaded')
-
-        assert page.url.endswith('/workshops/catalog?access=paid')
-
-        # With access as the only active filter, the separate reset control is
-        # gone (commit c1d673a7) — the access row carries its own "All" option,
-        # so clear the access filter through that pill.
-        assert page.locator('[data-testid="clear-workshop-filter"]').count() == 0
-        all_access = page.locator('[data-testid="workshop-access-filter-all"]')
-        assert all_access.get_attribute('href') == '/workshops/catalog'
-        all_access.click()
-        page.wait_for_load_state('domcontentloaded')
-
-        assert page.url.endswith('/workshops/catalog')
-
     @pytest.mark.core
-    def test_visitor_filters_by_tool_and_opens_matching_workshop(
+    def test_visitor_opens_workshop_to_review_tools(
         self, django_server, page,
     ):
         _clear_workshops()
@@ -714,28 +400,14 @@ class TestVisitorBrowsesCatalog:
             wait_until='domcontentloaded',
         )
 
-        # Tool chips no longer render on the unified card; tools drive the
-        # Technologies filter facet, which is exercised below.
+        # Tools stay on the Workshop destination rather than becoming a
+        # catalog facet or a row-level chip wall.
         claude_card = page.locator(
             'article:has(a[href="/workshops/claude-agents"])',
         )
         assert claude_card.is_visible()
         assert claude_card.locator('[data-testid="workshop-card-tools"]').count() == 0
-
-        page.locator('[data-testid="workshop-facet-technology"] summary').click()
-        page.locator(
-            '[data-testid="workshop-technology-option-claude-code"]',
-        ).click()
-        page.wait_for_load_state('domcontentloaded')
-
-        assert page.url.endswith('/workshops/catalog?tool=Claude%20Code')
-        body = page.content()
-        assert 'Claude Agents Workshop' in body
-        assert 'LangChain Agents Workshop' not in body
-        assert 'No Tools Workshop' not in body
-        assert page.locator('[data-testid="workshop-active-tool"]').inner_text() == (
-            'Claude Code'
-        )
+        assert page.locator('[data-testid="workshop-facet-technology"]').count() == 0
 
         page.locator('a[href="/workshops/claude-agents"]').first.click()
         page.wait_for_load_state('domcontentloaded')
@@ -754,26 +426,7 @@ class TestVisitorBrowsesCatalog:
         self, django_server, page,
     ):
         _clear_workshops()
-        generated_url = 'https://example.com/generated-workshop-banner.jpg'
-        custom_url = 'https://example.com/operator-selected-workshop.jpg'
-        _create_workshop(auto_banner_url=generated_url)
-        _create_workshop(
-            slug='visual-workshop',
-            title='Visual Systems',
-            pages=0,
-            recording=0,
-            with_event=False,
-            cover_image_url='https://example.com/workshop-cover.jpg',
-        )
-        _create_workshop(
-            slug='custom-workshop',
-            title='Custom Visual Systems',
-            pages=0,
-            recording=0,
-            with_event=False,
-            custom_banner_url=custom_url,
-            auto_banner_url='https://example.com/generated-custom-workshop.jpg',
-        )
+        _create_workshop()
 
         page.goto(
             f'{django_server}/workshops/catalog',
@@ -787,36 +440,6 @@ class TestVisitorBrowsesCatalog:
         assert 'data-testid="workshop-tier-badge"' in body
         assert 'Basic or above' in body
         assert 'Basic+' not in body
-
-        production_card = page.locator(
-            'article:has(a[href="/workshops/ws"])',
-        )
-        assert production_card.locator(
-            '[data-testid^="workshop-card-preview"]',
-        ).count() == 0
-        assert production_card.locator('.aspect-video').count() == 0
-        assert production_card.locator(
-            '[data-testid="workshop-card-primary-signals"]',
-        ).is_visible()
-        assert production_card.locator('.h-12.w-12').count() == 0
-        assert production_card.locator(f'img[src="{generated_url}"]').count() == 0
-
-        visual_image = page.locator(
-            'img[src="https://example.com/workshop-cover.jpg"]',
-        )
-        assert visual_image.count() == 1
-        assert visual_image.get_attribute("alt") == (
-            "Cover image for Visual Systems"
-        )
-        assert visual_image.get_attribute("loading") == "lazy"
-
-        custom_card = page.locator(
-            'article:has(a[href="/workshops/custom-workshop"])',
-        )
-        assert custom_card.locator(f'img[src="{custom_url}"]').count() == 1
-        assert custom_card.locator(
-            'img[src="https://example.com/generated-custom-workshop.jpg"]',
-        ).count() == 0
 
         # Click the workshop card to land on the landing page.
         page.locator('a:has-text("Production Agents")').first.click()
@@ -832,11 +455,11 @@ class TestVisitorBrowsesCatalog:
         assert 'data-testid="workshop-detail-preview"' not in body
         assert 'data-testid="workshop-detail-preview-fallback"' not in body
 
-        # Pricing CTA goes to /pricing
+        # Pricing CTA goes to /membership
         upgrade_cta = page.locator(
             '[data-testid="workshop-pages-upgrade-cta"]',
         )
-        assert upgrade_cta.get_attribute('href') == '/pricing'
+        assert upgrade_cta.get_attribute('href') == '/membership'
 
     def test_mobile_catalog_cards_do_not_duplicate_metadata_or_overflow(
         self, django_server, page, tmp_path,
@@ -1002,9 +625,9 @@ class TestVisitorBrowsesCatalog:
 
 
 @pytest.mark.django_db(transaction=True)
-class TestWorkshopSkillFilters:
+class TestWorkshopSkillMetadata:
     @pytest.mark.core
-    def test_beginner_filter_keeps_skill_and_access_distinct_then_opens_detail(
+    def test_beginner_metadata_stays_quiet_and_distinct_from_access(
         self, django_server, page,
     ):
         _clear_workshops()
@@ -1042,17 +665,10 @@ class TestWorkshopSkillFilters:
         )
         assert beginner_card.is_visible()
         card_text = beginner_card.inner_text()
-        assert 'Skill: Beginner-friendly' in card_text
+        assert 'Beginner-friendly' in card_text
+        assert 'Skill:' not in card_text
         assert 'Main or above' in card_text
-
-        page.locator('[data-testid="workshop-skill-filter-beginner"]').click()
-        page.wait_for_load_state('domcontentloaded')
-
-        assert 'skill_level=beginner' in page.url
-        body = page.content()
-        assert 'Beginner Main Workshop' in body
-        assert 'Intermediate Python Workshop' not in body
-        assert 'Advanced Architecture Workshop' not in body
+        assert page.locator('[data-testid^="workshop-skill-filter-"]').count() == 0
 
         page.locator('a[href="/workshops/beginner-main"]').first.click()
         page.wait_for_load_state('domcontentloaded')
@@ -1063,59 +679,6 @@ class TestWorkshopSkillFilters:
         detail_text = detail.inner_text()
         assert 'Skill level: Beginner-friendly' in detail_text
         assert 'basic Python and command-line workflows' in detail_text
-
-    def test_switching_skill_filter_preserves_active_tag_context(
-        self, django_server, page,
-    ):
-        _clear_workshops()
-        _create_workshop(
-            slug='beginner-agents',
-            title='Beginner Agents Workshop',
-            pages=0,
-            recording=0,
-            skill_level='beginner',
-            tags=['agents'],
-        )
-        _create_workshop(
-            slug='advanced-agents',
-            title='Advanced Agents Workshop',
-            pages=0,
-            recording=0,
-            skill_level='advanced',
-            tags=['agents'],
-        )
-        _create_workshop(
-            slug='advanced-python',
-            title='Advanced Python Workshop',
-            pages=0,
-            recording=0,
-            skill_level='advanced',
-            tags=['python'],
-        )
-
-        page.goto(
-            f'{django_server}/workshops/catalog?tag=agents&skill_level=beginner',
-            wait_until='domcontentloaded',
-        )
-
-        assert 'Beginner Agents Workshop' in page.content()
-        advanced_href = page.locator(
-            '[data-testid="workshop-skill-filter-advanced"]',
-        ).get_attribute('href')
-        assert advanced_href == '/workshops/catalog?skill_level=advanced&tag=agents'
-
-        page.locator('[data-testid="workshop-skill-filter-advanced"]').click()
-        page.wait_for_load_state('domcontentloaded')
-
-        assert 'skill_level=advanced' in page.url
-        assert 'tag=agents' in page.url
-        body = page.content()
-        assert 'Advanced Agents Workshop' in body
-        assert 'Beginner Agents Workshop' not in body
-        assert 'Advanced Python Workshop' not in body
-        assert 'agents' in page.locator(
-            '[data-testid="workshop-active-filters"]',
-        ).inner_text()
 
 
 # ----------------------------------------------------------------------

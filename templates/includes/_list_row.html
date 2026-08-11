@@ -11,11 +11,14 @@ This partial is the canonical row template.
 
 Canonical scale
 ----------------
-- `flex items-center min-h-[44px] gap-2.5 rounded-md px-3 py-2`
+- Base/mobile: `flex items-center min-h-[44px] gap-2.5 rounded-md px-3 py-2`
+- Desktop reader sidebars: the shared `.reader-list-row` hook is compacted
+  by `content/reader/_styles.html` to match module-summary spacing. The
+  workshop landing keeps the base scale.
 - `text-sm` (14px), 400 weight (active rows: 500 / `font-medium`)
 - `text-foreground` (active: `text-accent`)
-- Sibling `<li>` entries should be wrapped in a parent with `space-y-0.5`
-  (no `mt-*` on individual `<li>`).
+- Reader-sidebar sibling `<li>` entries use the shared `.reader-nav-list`
+  component. Standalone landing lists may set their own vertical rhythm.
 
 Marker variants — the caller fills the leading `<span>` slot via the
 `marker_*` parameters:
@@ -60,7 +63,7 @@ Notes
   the row rhythm.
 {% endcomment %}
 <a href="{{ href }}"
-   class="group flex min-h-[44px] items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if is_current %}bg-accent/10 text-accent font-medium{% else %}text-foreground hover:bg-muted/50{% endif %}{% if extra_anchor_class %} {{ extra_anchor_class }}{% endif %}"
+   class="reader-list-row group flex min-h-[44px] items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if is_current %}bg-accent/10 text-accent font-medium{% else %}text-foreground hover:bg-muted/50{% endif %}{% if extra_anchor_class %} {{ extra_anchor_class }}{% endif %}"
    {% if testid %}data-testid="{{ testid }}"{% endif %}
    {% if extra_attrs %}{{ extra_attrs|safe }}{% endif %}>
   <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center">

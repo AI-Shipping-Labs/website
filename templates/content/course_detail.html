@@ -16,7 +16,7 @@
 {% include "includes/_studio_edit_button.html" with obj=course %}
 <main class="min-h-screen pt-24">
   <article class="py-8 sm:py-16 lg:py-24">
-    <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+    <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
       <a href="/courses" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
         <i data-lucide="arrow-left" class="h-4 w-4"></i>
         Back to Courses
@@ -201,16 +201,16 @@
         }
       </style>
       {% comment %}
-        Syllabus accordion — issue #483 tightens mobile spacing.
+        Syllabus accordion — issue #483 preserves mobile tap targets; issue
+        #1401 aligns lesson-row padding with the workshop list-row scale.
 
         - Module summary: padding tightens to px-3 py-2.5 on mobile and
           relaxes to sm:px-4 sm:py-3 on >=sm. min-h-[44px] keeps the row
           tappable. The numeric chip is h-7 w-7 on mobile so the row
           target is comfortable; sm:h-6 sm:w-6 restores the desktop chip.
-        - Unit row: still min-h-[44px] but the outer padding tightens
-          (mobile px-2 py-1.5; sm restores px-3 py-2.5). The clickable
-          link itself remains py-2 (so the underlying tap target is
-          still >=44px).
+        - Unit row: uses the workshop's canonical px-3 py-2 padding and
+          space-y-0.5 rhythm. min-h-[44px] keeps the row tappable without
+          stacking a second layer of vertical padding on the link.
         - Lesson count: hidden on mobile (hidden sm:inline). When a
           module has zero units we suppress the awkward "0 lessons"
           string entirely (issue #483 zero-count requirement).
@@ -230,7 +230,7 @@
               {% endwith %}
               <i data-lucide="chevron-down" class="h-4 w-4 transition-transform duration-200 module-chevron flex-shrink-0"></i>
             </summary>
-            <div class="px-2 pb-2 sm:px-4 sm:pb-3 space-y-0.5 sm:space-y-1">
+            <div class="space-y-0.5 px-1 pb-1">
               {% for unit in module.units.all %}
               {% comment %}
                 Issue #248: locked unit rows are clickable. The unit detail
@@ -238,7 +238,7 @@
                 we let them click through, see what they'd be unlocking,
                 and then convert. The lock icon sets expectation up-front.
               {% endcomment %}
-              <div class="flex items-center gap-3 rounded-lg px-2 py-1.5 sm:px-3 sm:py-2.5 hover:bg-muted/50 transition-colors min-h-[44px]" data-testid="syllabus-unit-row">
+              <div class="flex min-h-[44px] items-center gap-2.5 rounded-md px-3 py-2 transition-colors hover:bg-muted/50" data-testid="syllabus-unit-row">
                 {% if unit.pk in completed_unit_ids %}
                 <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0"></i>
                 {% elif unit.is_preview %}
@@ -248,7 +248,7 @@
                 {% else %}
                 <i data-lucide="circle" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
                 {% endif %}
-                <a href="{{ unit.get_absolute_url }}" class="flex-1 py-2 text-sm transition-colors hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if has_access or unit.is_preview %}text-foreground{% else %}text-muted-foreground{% endif %}" {% if not has_access and not unit.is_preview %}data-testid="syllabus-locked-link"{% endif %}>
+                <a href="{{ unit.get_absolute_url }}" class="flex-1 text-sm transition-colors hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if has_access or unit.is_preview %}text-foreground{% else %}text-muted-foreground{% endif %}" {% if not has_access and not unit.is_preview %}data-testid="syllabus-locked-link"{% endif %}>
                   {{ unit.title }}
                 </a>
                 {% if unit.is_preview and not has_access %}

@@ -1,0 +1,22 @@
+{% comment %}
+  Shared course-unit / workshop-tutorial reader shell.
+
+  Both page types use the same wide frame to make room for navigation, while
+  the reading column stays at the blog width in either sidebar state.
+  Page-specific content is supplied through `reader_content_template`;
+  navigation labels and data come from the top-level template.
+{% endcomment %}
+{% include "content/reader/_prepaint.html" %}
+{% include "content/reader/_styles.html" %}
+{% include "content/reader/_floating_toggle.html" with reader_sidebar_label=reader_sidebar_label %}
+<div class="py-8 lg:py-12">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-col gap-8 lg:flex-row" id="content-layout">
+      {% include "content/reader/_sidebar.html" with reader_back_url=reader_back_url reader_back_title=reader_back_title reader_back_testid=reader_back_testid reader_sidebar_label=reader_sidebar_label reader_mobile_label=reader_mobile_label reader_nav_aria_label=reader_nav_aria_label reader_nav_testid=reader_nav_testid reader_nav_kind=reader_nav_kind %}
+
+      <div class="order-1 min-w-0 flex-1 lg:order-2" id="content-sidebar-main">
+        {% include reader_content_template %}
+      </div>
+    </div>
+  </div>
+</div>

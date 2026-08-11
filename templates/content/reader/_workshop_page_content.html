@@ -1,0 +1,82 @@
+{% load teaser_tags %}
+
+{% if not is_gated %}
+{% include "content/reader/_mobile_progress_bar.html" %}
+{% else %}
+{% comment %}
+  Gated visitors get a progress-free mobile drawer toggle so they can open
+  the page-navigation list without seeing misleading progress copy.
+{% endcomment %}
+{% include "content/reader/_mobile_nav_toggle_gated.html" %}
+{% endif %}
+
+<!-- Breadcrumb -->
+<div class="mb-6 flex items-center gap-2 overflow-hidden text-sm text-muted-foreground" data-reader-breadcrumb data-testid="page-breadcrumb">
+  <a href="/workshops" class="flex-shrink-0 transition-colors hover:text-foreground">Workshops</a>
+  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
+  <a href="{{ workshop.get_absolute_url }}" class="hidden truncate transition-colors hover:text-foreground sm:inline">{{ workshop.title }}</a>
+  <a href="{{ workshop.get_absolute_url }}" class="flex-shrink-0 transition-colors hover:text-foreground sm:hidden">...</a>
+  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
+  <span class="truncate text-foreground">{{ page.title }}</span>
+</div>
+
+{% if is_gated %}
+<a href="{{ workshop.get_absolute_url }}" class="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" data-testid="teaser-back-link">
+  <i data-lucide="arrow-left" class="h-4 w-4"></i>
+  Back to {{ workshop.title }}
+</a>
+
+{% if workshop.pages_required_level < 10 %}
+<span class="mb-3 inline-flex items-center gap-1 rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="page-free-badge">
+  <i data-lucide="badge-check" class="h-3 w-3"></i>
+  Free
+</span>
+{% endif %}
+{% endif %}
+
+{% if show_watch_bar %}
+<a href="{{ watch_bar_url }}"
+   class="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-sm text-accent transition-colors hover:bg-accent/20"
+   data-testid="watch-this-section">
+  <i data-lucide="play" class="h-3.5 w-3.5"></i>
+  Watch this section ({{ watch_bar_label }})
+</a>
+{% endif %}
+
+{% if not is_gated %}
+{% include "content/reader/_top_nav.html" %}
+{% endif %}
+
+<h1 class="mb-8 text-2xl font-semibold tracking-tight sm:text-3xl" data-testid="page-title">{{ page.title }}</h1>
+
+{% if is_gated %}
+{% if gated_reason == "unverified_email" %}
+{% include "content/_verify_email_required.html" %}
+{% elif teaser_body_html %}
+<div class="relative mb-8" data-testid="teaser-body-wrapper">
+  <div class="prose reader-prose teaser-body max-w-full overflow-x-auto" data-testid="teaser-body">
+    {{ teaser_body_html|hide_code_blocks }}
+  </div>
+  <div class="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-background"></div>
+</div>
+
+<div class="mt-10">
+  {% include "content/_gated_access_card.html" %}
+</div>
+{% else %}
+{% include "content/_gated_access_card.html" %}
+{% endif %}
+{% include "events/_event_freestyle_evidence.html" %}
+{% else %}
+{% if page.body_html %}
+<div class="prose prose-tight reader-prose mb-12 max-w-full overflow-x-auto" data-testid="page-body">
+  {{ page.body_html|safe }}
+</div>
+{% endif %}
+
+{% include "content/reader/_bottom_nav.html" %}
+
+{% if page.content_id %}
+{% include "comments/_qa_section.html" with content_id=page.content_id user_authenticated=user.is_authenticated %}
+{% endif %}
+{% endif %}

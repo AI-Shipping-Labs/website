@@ -1,13 +1,33 @@
 <script>
   (function() {
     var STORAGE_KEY = 'content-sidebar-collapsed';
+    var TOP_STORAGE_KEY = 'content-sidebar-toggle-top';
     var collapseBtn = document.getElementById('content-sidebar-collapse-btn');
     var floatingBtn = document.getElementById('content-sidebar-floating-toggle');
+    var breadcrumb = document.querySelector('[data-reader-breadcrumb]');
     if (!collapseBtn && !floatingBtn) return;
 
     function getCollapsed() {
       try { return localStorage.getItem(STORAGE_KEY) === '1'; }
       catch (e) { return false; }
+    }
+    function getSavedTop() {
+      try {
+        var top = Number.parseFloat(localStorage.getItem(TOP_STORAGE_KEY));
+        return Number.isFinite(top) ? top : null;
+      } catch (e) {
+        return null;
+      }
+    }
+    function saveTop(top) {
+      try { localStorage.setItem(TOP_STORAGE_KEY, String(top)); }
+      catch (e) { /* localStorage disabled, current page still stays aligned */ }
+    }
+    function alignWithBreadcrumb() {
+      if (!floatingBtn || !breadcrumb) return;
+      /* The expanded control uses -mt-0.5, so mirror its two-pixel offset
+         from the top of the breadcrumb row. */
+      floatingBtn.style.top = (breadcrumb.getBoundingClientRect().top - 2) + 'px';
     }
     function setCollapsed(collapsed) {
       try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); }
@@ -19,9 +39,27 @@
       if (floatingBtn) floatingBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     }
 
-    setCollapsed(getCollapsed());
+    var initiallyCollapsed = getCollapsed();
+    if (initiallyCollapsed && floatingBtn) {
+      var savedTop = getSavedTop();
+      if (savedTop === null) {
+        alignWithBreadcrumb();
+      } else {
+        floatingBtn.style.top = savedTop + 'px';
+      }
+    }
+    setCollapsed(initiallyCollapsed);
     if (collapseBtn) {
-      collapseBtn.addEventListener('click', function() { setCollapsed(true); });
+      collapseBtn.addEventListener('click', function() {
+        /* Keep the restore control on the exact vertical line where the
+           collapse control was clicked, including from the sticky state. */
+        if (floatingBtn) {
+          var top = collapseBtn.getBoundingClientRect().top;
+          floatingBtn.style.top = top + 'px';
+          saveTop(top);
+        }
+        setCollapsed(true);
+      });
     }
     if (floatingBtn) {
       floatingBtn.addEventListener('click', function() { setCollapsed(false); });

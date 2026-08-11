@@ -87,7 +87,18 @@ def _seed_two_units():
         required_level=30,
     )
     mod = _create_module(course, "Module 1", sort_order=0)
-    u1 = _create_unit(mod, "Lesson One", sort_order=0, body="One body")
+    u1 = _create_unit(
+        mod,
+        "Lesson One",
+        sort_order=0,
+        body=(
+            "One body\n\n"
+            "| Module | Topic |\n"
+            "|---|---|\n"
+            "| 1 | Introduction |\n"
+            "| 2 | Functions |"
+        ),
+    )
     u2 = _create_unit(mod, "Lesson Two", sort_order=1, body="Two body")
     return u1.get_absolute_url(), u2.get_absolute_url()
 
@@ -112,6 +123,8 @@ class TestFoldableSidebarToggle:
         # Collapse via the in-sidebar button.
         collapse_btn = page.locator('[data-testid="content-sidebar-collapse-btn"]')
         assert collapse_btn.is_visible(), "Collapse button should be visible at lg+"
+        collapse_box = collapse_btn.bounding_box()
+        assert collapse_box is not None
         collapse_btn.click()
 
         # After click: collapsed state, localStorage written, floating toggle visible.
@@ -123,6 +136,10 @@ class TestFoldableSidebarToggle:
         assert stored == "1", f"Expected localStorage=1, got {stored!r}"
 
         floating = page.locator('[data-testid="content-sidebar-floating-toggle"]')
+        page.wait_for_function(
+            "getComputedStyle(document.getElementById("
+            "'content-sidebar-floating-toggle')).opacity === '1'"
+        )
         assert floating.is_visible(), "Floating toggle should appear when collapsed"
 
         # Aside has computed width 0 (or near it) when collapsed.
@@ -137,6 +154,29 @@ class TestFoldableSidebarToggle:
             "document.getElementById('content-sidebar-aside').getBoundingClientRect().width"
         )
         assert aside_width <= 1, f"Sidebar should be width=0 when collapsed, got {aside_width}"
+
+        floating_box = floating.bounding_box()
+        assert floating_box is not None
+        assert abs(floating_box["width"] - collapse_box["width"]) <= 1
+        assert abs(floating_box["height"] - collapse_box["height"]) <= 1
+        assert abs(floating_box["y"] - collapse_box["y"]) <= 1
+        assert 15 <= floating_box["x"] <= 17, (
+            f"Restore control should float 16px from the viewport edge, got "
+            f'{floating_box["x"]}px'
+        )
+
+        # A refresh keeps both the collapsed preference and the measured
+        # vertical position instead of falling back to a slightly different
+        # fixed offset.
+        page.reload(wait_until="domcontentloaded")
+        floating = page.locator(
+            '[data-testid="content-sidebar-floating-toggle"]'
+        )
+        assert floating.is_visible()
+        refreshed_box = floating.bounding_box()
+        assert refreshed_box is not None
+        assert abs(refreshed_box["y"] - collapse_box["y"]) <= 1
+        assert page.locator('[data-reader-breadcrumb]').is_visible()
 
         # Re-expand via floating toggle.
         floating.click()
@@ -205,30 +245,62 @@ class TestFoldableSidebarToggle:
 
         context.close()
 
-    def test_main_content_centers_when_collapsed(self, django_server, browser):
-        """When collapsed, the main column gets max-width and is centered."""
+    def test_main_content_stays_blog_width_when_collapsed(
+        self, django_server, browser,
+    ):
+        """The main column stays at max-w-3xl in both sidebar states."""
         u1_url, _ = _seed_two_units()
         context = _auth_context(browser, "foldable@test.com")
         page = context.new_page()
         page.goto(f"{django_server}{u1_url}", wait_until="domcontentloaded")
 
-        # Capture the main column's computed max-width before collapse.
+        main = page.locator('#content-sidebar-main')
         max_width_before = page.evaluate(
             "getComputedStyle(document.getElementById('content-sidebar-main')).maxWidth"
         )
-        # Default Tailwind: no max-width imposed -> 'none'.
-        assert max_width_before == "none"
+        assert max_width_before == "768px"
+        box_before = main.bounding_box()
+        assert box_before is not None
+        assert 767 <= box_before["width"] <= 769
 
         page.locator('[data-testid="content-sidebar-collapse-btn"]').click()
 
-        # After collapse: max-width is the centered prose width (56rem).
+        # After collapse: max-width matches the blog reader width (48rem).
         max_width_after = page.evaluate(
             "getComputedStyle(document.getElementById('content-sidebar-main')).maxWidth"
         )
         assert "px" in max_width_after, f"Expected pixel max-width, got {max_width_after!r}"
-        # 56rem at the default 16px font = 896px.
+        # 48rem at the default 16px root font = 768px (Tailwind max-w-3xl).
         px = float(max_width_after.replace("px", ""))
-        assert 800 <= px <= 1000, f"Expected ~896px max-width, got {px}"
+        assert 767 <= px <= 769, f"Expected 768px max-width, got {px}"
+        box_after = main.bounding_box()
+        assert box_after is not None
+        assert abs(box_after["width"] - box_before["width"]) <= 1, (
+            "Reader width changed while collapsing the sidebar"
+        )
+
+        context.close()
+
+    def test_course_reader_centers_markdown_tables(self, django_server, browser):
+        """Intrinsic-width lesson tables are centered in the reader prose."""
+        u1_url, _ = _seed_two_units()
+        context = _auth_context(browser, "foldable@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}{u1_url}", wait_until="domcontentloaded")
+
+        prose = page.locator('[data-testid="course-unit-body"]')
+        table = prose.locator("table")
+        prose_box = prose.bounding_box()
+        table_box = table.bounding_box()
+        assert prose_box is not None and table_box is not None
+        assert table_box["width"] < prose_box["width"]
+
+        prose_center = prose_box["x"] + prose_box["width"] / 2
+        table_center = table_box["x"] + table_box["width"] / 2
+        assert abs(prose_center - table_center) <= 1, (
+            f"Table center {table_center} does not match prose center "
+            f"{prose_center}"
+        )
 
         context.close()
 

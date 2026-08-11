@@ -107,6 +107,28 @@ class FoldableSidebarMarkupTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'id="content-sidebar-aside"')
         self.assertContains(response, 'id="content-sidebar-main"')
 
+    def test_course_unit_uses_shared_reader_layout_and_content_partial(self):
+        """Course lessons compose the shared shell with course content."""
+        response = self.client.get(self.url)
+        self.assertTemplateUsed(response, 'content/reader/_layout.html')
+        self.assertTemplateUsed(
+            response, 'content/reader/_course_unit_content.html',
+        )
+        self.assertContains(response, 'data-testid="course-unit-body"')
+        self.assertContains(response, 'reader-prose')
+
+    def test_course_unit_list_uses_module_section_gap(self):
+        """Both reader types use the shared navigation-list rhythm."""
+        response = self.client.get(self.url)
+        self.assertContains(response, '<ul class="reader-nav-list mt-1">')
+
+        workshop_response = self.client.get(
+            self.workshop_page.get_absolute_url(),
+        )
+        self.assertContains(
+            workshop_response, '<ul class="reader-nav-list">',
+        )
+
     def test_localstorage_key_referenced(self):
         """The collapse preference is persisted under content-sidebar-collapsed."""
         response = self.client.get(self.url)
@@ -190,6 +212,10 @@ class FoldableSidebarMarkupTest(TierSetupMixin, TestCase):
         """Accessible workshop tutorial pages use the same reader hooks."""
         response = self.client.get(self.workshop_page.get_absolute_url())
         self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'content/reader/_layout.html')
+        self.assertTemplateUsed(
+            response, 'content/reader/_workshop_page_content.html',
+        )
         self.assertContains(response, 'id="content-sidebar-collapse-btn"')
         self.assertContains(response, 'id="content-sidebar-floating-toggle"')
         self.assertContains(response, 'id="content-sidebar-aside"')

@@ -59,6 +59,7 @@ FRAME_DELEGATED_TO_INCLUDE = {
     "templates/accounts/register.html": "templates/accounts/includes/_auth_card.html",
     "templates/accounts/password_reset_request.html": "templates/accounts/includes/_auth_card.html",
     "templates/content/workshops_catalog.html": "templates/content/_workshops_catalog.html",
+    "templates/content/workshop_page_detail.html": "templates/content/reader/_layout.html",
 }
 
 # Pages the width audits pinned to a specific tier.
@@ -102,6 +103,9 @@ AUDITED_PAGE_WIDTHS = {
     "templates/content/tags_detail.html": "max-w-5xl",
     "templates/voting/poll_list.html": "max-w-5xl",
     "templates/content/workshops_list.html": "max-w-5xl",
+    # Course and workshop landing pages are both single-column learning
+    # surfaces, so they share the Reader width and line-length contract.
+    "templates/content/course_detail.html": "max-w-3xl",
     "templates/content/workshop_detail.html": "max-w-3xl",
     "templates/content/workshop_video.html": "max-w-3xl",
     # Was max-w-4xl, the only 4xl on the site.
@@ -115,6 +119,9 @@ AUDITED_PAGE_WIDTHS = {
     "templates/content/curated_link_verify_required.html": "max-w-2xl",
     # Frame-owning includes for the delegating pages above.
     "templates/accounts/includes/_auth_card.html": "max-w-7xl",
+    # The reader shell needs Frame width while its sidebar is open. Its shared
+    # collapsed main column is capped separately at Reader width (48rem).
+    "templates/content/reader/_layout.html": "max-w-7xl",
     # 2026-08-11: the workshop archive becomes a text-first editorial feed.
     # Reader width prevents long summary lines and removes the dense card-wall
     # feeling; the short /workshops preview shares the same 3xl frame.

@@ -4,9 +4,9 @@ Mobile accordion UI audit — workshop tutorial pages should render their
 list rows from the canonical `templates/includes/_list_row.html` partial
 so the workshop landing's "Tutorial pages" `<ol>`, the reader sidebar
 drawer (workshop pages and course unit lists), and the prose body lists
-all share the same row template (font, weight, color, padding,
-inter-row gap), with the only allowed visual difference being the
-leading marker icon.
+all share the same row template (font, weight, color, and mobile padding).
+Both reader sidebars use a shared 4px list rhythm and compact desktop rows;
+the standalone workshop landing keeps its roomier 44px row scale.
 
 Scenarios covered (8):
 
@@ -229,9 +229,8 @@ class TestLandingAndDrawerRowsMatchAnonymous:
             assert drawer_style["paddingRight"] == "12px"
             assert drawer_style["minHeight"] == "44px"
 
-            # Inter-row gap (Tailwind `space-y-0.5`) — first <li> has no
-            # margin; siblings get `margin-top: 2px` from the
-            # space-y-0.5 utility (`> :not([hidden]) ~ :not([hidden])`).
+            # Both course and workshop reader sidebars use the same shared
+            # 4px navigation-list rhythm.
             sibling_margin = page.evaluate(
                 """() => {
                     const ul = document.querySelector('#sidebar-nav ul');
@@ -241,8 +240,8 @@ class TestLandingAndDrawerRowsMatchAnonymous:
                     return getComputedStyle(items[1]).marginTop;
                 }"""
             )
-            assert sibling_margin == "2px", (
-                f"drawer inter-row gap {sibling_margin} != 2px"
+            assert sibling_margin == "4px", (
+                f"drawer inter-row gap {sibling_margin} != 4px"
             )
 
             _shot(page, "01-drawer-rows-mobile-anon")
@@ -548,12 +547,12 @@ class TestWalkthroughProseListInSameFamily:
 
 
 # ----------------------------------------------------------------------
-# Scenario 5: Desktop sidebar and main column unchanged
+# Scenario 5: Desktop sidebars use the shared compact rhythm
 # ----------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestDesktopUnchanged:
+class TestDesktopSidebarRhythm:
     def test_desktop_sidebar_row_uses_canonical_scale(
         self, browser, django_server,
     ):
@@ -574,15 +573,15 @@ class TestDesktopUnchanged:
                 '#sidebar-nav ul li:nth-child(2) > a',
             )
             assert row_style is not None
-            # Canonical scale matches the mobile drawer: 14px / 400 / 8px
-            # padding / 12px horizontal padding / 44px min-height.
+            # Desktop reader rows compact to the same px-2/py-1.5 rhythm as
+            # course module summaries; mobile keeps the 44px touch target.
             assert row_style["fontSize"] == "14px"
             assert row_style["fontWeight"] == "400"
-            assert row_style["paddingTop"] == "8px"
-            assert row_style["paddingBottom"] == "8px"
-            assert row_style["paddingLeft"] == "12px"
-            assert row_style["paddingRight"] == "12px"
-            assert row_style["minHeight"] == "44px"
+            assert row_style["paddingTop"] == "6px"
+            assert row_style["paddingBottom"] == "6px"
+            assert row_style["paddingLeft"] == "8px"
+            assert row_style["paddingRight"] == "8px"
+            assert row_style["minHeight"] == "0px"
 
             _shot(page, "05-desktop-sidebar")
         finally:
@@ -667,6 +666,21 @@ class TestCourseReaderInheritsTemplate:
             assert unit_style["paddingLeft"] == "12px"
             assert unit_style["paddingRight"] == "12px"
             assert unit_style["minHeight"] == "44px"
+
+            # Nested units use the same 4px rhythm as the `mt-1` gap
+            # between course module sections.
+            sibling_margin = page.evaluate(
+                """() => {
+                    const items = document.querySelectorAll(
+                        '#sidebar-nav details[open] ul li'
+                    );
+                    if (items.length < 2) return null;
+                    return getComputedStyle(items[1]).marginTop;
+                }"""
+            )
+            assert sibling_margin == "4px", (
+                f"course unit gap {sibling_margin} != module gap 4px"
+            )
 
             # Module <summary> is unchanged from #516: text-sm
             # font-medium text-foreground.

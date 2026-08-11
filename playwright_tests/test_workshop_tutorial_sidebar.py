@@ -564,6 +564,10 @@ class TestWorkshopSidebarTopAlignment:
             main = page.locator('#content-sidebar-main')
             main_before = main.bounding_box()
             assert main_before is not None
+            assert 767 <= main_before['width'] <= 769, (
+                f'Expanded workshop reader should be 768px wide, got '
+                f'{main_before["width"]}'
+            )
 
             collapse.click()
             page.wait_for_function(
@@ -573,19 +577,57 @@ class TestWorkshopSidebarTopAlignment:
             floating = page.locator(
                 '[data-testid="content-sidebar-floating-toggle"]',
             )
+            page.wait_for_function(
+                "getComputedStyle(document.getElementById("
+                "'content-sidebar-floating-toggle')).opacity === '1'"
+            )
             assert floating.is_visible()
             # Sidebar column collapses to zero width — no dead left column.
             aside = page.locator('#content-sidebar-aside')
+            page.wait_for_function(
+                "document.getElementById('content-sidebar-aside')"
+                ".getBoundingClientRect().width <= 1",
+                timeout=2000,
+            )
             aside_box = aside.bounding_box()
             # bounding_box is None when width/height collapse to 0.
             assert aside_box is None or aside_box['width'] < 2, (
                 f'Collapsed aside still has width '
                 f'{aside_box["width"] if aside_box else 0}'
             )
-            # Main content widened.
+            # The sidebar margin participates in the existing 200ms collapse
+            # transition. Wait for the reader to settle before measuring its
+            # final centered position.
+            page.wait_for_function(
+                """() => {
+                  const main = document.getElementById('content-sidebar-main');
+                  const layout = document.getElementById('content-layout');
+                  const mainBox = main.getBoundingClientRect();
+                  const layoutBox = layout.getBoundingClientRect();
+                  const mainCenter = mainBox.left + mainBox.width / 2;
+                  const layoutCenter = layoutBox.left + layoutBox.width / 2;
+                  return Math.abs(mainCenter - layoutCenter) <= 1;
+                }""",
+                timeout=2000,
+            )
+            # The shared collapsed reader matches blog max-w-3xl and is
+            # centered inside the wide shell that normally holds the sidebar.
             main_collapsed = main.bounding_box()
             assert main_collapsed is not None
-            assert main_collapsed['width'] >= main_before['width'] - 1
+            assert 767 <= main_collapsed['width'] <= 769, (
+                f'Collapsed workshop reader should be 768px wide, got '
+                f'{main_collapsed["width"]}'
+            )
+            assert abs(main_collapsed['width'] - main_before['width']) <= 1, (
+                'Workshop reader width changed during sidebar collapse'
+            )
+            layout_box = page.locator('#content-layout').bounding_box()
+            assert layout_box is not None
+            main_center = main_collapsed['x'] + main_collapsed['width'] / 2
+            layout_center = layout_box['x'] + layout_box['width'] / 2
+            assert abs(main_center - layout_center) <= 1, (
+                'Collapsed workshop reader is not centered in the layout'
+            )
 
             page.screenshot(
                 path=f'{SHOT_DIR_1080}/1080-workshop-collapsed.png',

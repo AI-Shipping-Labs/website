@@ -1,5 +1,22 @@
 <style>
+  /* Course lessons and workshop tutorials always use the blog reader width.
+     The surrounding frame remains wide only to make room for navigation. */
+  #content-sidebar-main {
+    width: 100%;
+    max-width: 48rem;
+    margin-left: auto;
+    margin-right: auto;
+  }
   @media (min-width: 1024px) {
+    #content-layout {
+      justify-content: center;
+    }
+    #content-sidebar-main {
+      flex: 0 1 48rem;
+      width: auto;
+      margin-left: 0;
+      margin-right: 0;
+    }
     #content-sidebar-aside {
       transition: width 200ms ease, opacity 200ms ease, margin 200ms ease;
     }
@@ -17,20 +34,40 @@
       opacity: 0;
       pointer-events: none;
       margin-right: -2rem;
-      flex-basis: 0;
       overflow: hidden;
     }
-    :root[data-content-sidebar="collapsed"] #content-sidebar-main {
-      flex: 0 1 56rem;
-      max-width: 56rem;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    #content-sidebar-floating-toggle { display: none; }
-    :root[data-content-sidebar="collapsed"] #content-sidebar-floating-toggle {
+    #content-sidebar-floating-toggle {
+      /* Keep the restore control out of the reading column at the left edge
+         of the viewport. The top value is a fallback for persisted collapsed
+         state; click handling preserves the exact y coordinate. */
       display: inline-flex;
+      top: calc(9rem - 0.125rem);
+      left: 1rem;
+      right: auto;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translateX(-3rem);
+      transition:
+        transform 120ms ease,
+        opacity 100ms ease,
+        visibility 0s linear 120ms;
+    }
+    :root[data-content-sidebar="collapsed"] #content-sidebar-floating-toggle {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transform: translateX(0);
+      transition-delay: 120ms, 120ms, 120ms;
     }
     #content-sidebar-collapse-btn { display: inline-flex; }
+    /* Course units and workshop pages share this compact desktop row. It
+       matches the module summaries' px-2/py-1.5 rhythm while mobile keeps
+       the base 44px touch target from `_list_row.html`. */
+    #sidebar-nav .reader-list-row {
+      min-height: 0;
+      padding: 0.375rem 0.5rem;
+    }
   }
   @media (max-width: 1023px) {
     #content-sidebar-collapse-btn,
@@ -39,8 +76,17 @@
   .sidebar-module > summary::-webkit-details-marker,
   .sidebar-module > summary::marker { display: none; }
   .sidebar-module[open] > div { animation: sidebarSlideDown 0.15s ease-out; }
+  .reader-nav-list > li + li { margin-top: 0.25rem; }
   @keyframes sidebarSlideDown {
     from { opacity: 0; transform: translateY(-2px); }
     to   { opacity: 1; transform: translateY(0); }
+  }
+  /* Markdown tables keep their intrinsic width and sit in the middle of the
+     reader column. Oversized tables still use the global horizontal scroll. */
+  .reader-prose table {
+    width: fit-content;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
   }
 </style>

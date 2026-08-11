@@ -1,0 +1,47 @@
+{% load video_tags %}
+
+{% include "content/reader/_mobile_progress_bar.html" %}
+
+<!-- Breadcrumb -->
+<div class="mb-6 flex items-center gap-2 overflow-hidden text-sm text-muted-foreground" data-reader-breadcrumb>
+  <a href="/courses" class="flex-shrink-0 transition-colors hover:text-foreground">Courses</a>
+  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
+  <a href="/courses/{{ course.slug }}" class="hidden truncate transition-colors hover:text-foreground sm:inline" data-testid="breadcrumb-course">{{ course.title }}</a>
+  <a href="/courses/{{ course.slug }}" class="flex-shrink-0 transition-colors hover:text-foreground sm:hidden" data-testid="breadcrumb-course-short">...</a>
+  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
+  <span class="truncate text-foreground">{{ unit.title }}</span>
+</div>
+
+{% include "content/reader/_top_nav.html" %}
+
+<h1 class="mb-8 text-2xl font-semibold tracking-tight sm:text-3xl">{{ unit.title }}</h1>
+
+{% if unit.video_url %}
+<div class="mb-8">
+  {% video_player video_url=unit.video_url timestamps=unit.timestamps %}
+</div>
+{% endif %}
+
+{% if unit.body_html %}
+<div class="prose reader-prose mb-12" data-testid="course-unit-body">
+  {{ unit.body_html|safe }}
+</div>
+{% endif %}
+
+{% if unit.homework_html %}
+<div class="mb-12 rounded-lg border border-border bg-card p-6">
+  <h2 class="mb-4 flex items-center gap-2 text-xl font-semibold tracking-tight">
+    <i data-lucide="clipboard-list" class="h-5 w-5 text-accent"></i>
+    Homework
+  </h2>
+  <div class="prose">
+    {{ unit.homework_html|safe }}
+  </div>
+</div>
+{% endif %}
+
+{% include "content/reader/_bottom_nav.html" %}
+
+{% if unit_content_id %}
+{% include "comments/_qa_section.html" with content_id=unit_content_id user_authenticated=user_authenticated %}
+{% endif %}

@@ -119,69 +119,7 @@
     </div>
   </div>
   {% else %}
-  {% include "content/reader/_prepaint.html" %}
-  {% include "content/reader/_styles.html" %}
-  {% include "content/reader/_floating_toggle.html" with reader_sidebar_label="course navigation" %}
-  <div class="py-8 lg:py-12">
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col lg:flex-row gap-8" id="content-layout">
-        {% include "content/reader/_sidebar.html" with reader_back_url=course.get_absolute_url reader_back_title=course.title reader_sidebar_label="course navigation" reader_mobile_label="Course Navigation" reader_nav_aria_label="Course navigation" reader_nav_kind="course" %}
-
-        <!-- Main content -->
-        <div class="flex-1 min-w-0 order-1 lg:order-2" id="content-sidebar-main">
-          {% include "content/reader/_mobile_progress_bar.html" %}
-
-          <!-- Breadcrumb -->
-          <div class="mb-6 flex items-center gap-2 text-sm text-muted-foreground overflow-hidden">
-            <a href="/courses" class="hover:text-foreground transition-colors flex-shrink-0">Courses</a>
-            <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
-            <a href="/courses/{{ course.slug }}" class="hover:text-foreground transition-colors truncate hidden sm:inline" data-testid="breadcrumb-course">{{ course.title }}</a>
-            <a href="/courses/{{ course.slug }}" class="hover:text-foreground transition-colors sm:hidden flex-shrink-0" data-testid="breadcrumb-course-short">...</a>
-            <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
-            <span class="text-foreground truncate">{{ unit.title }}</span>
-          </div>
-
-          {% include "content/reader/_top_nav.html" %}
-
-          <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl mb-8">{{ unit.title }}</h1>
-
-          <!-- Video Player -->
-          {% if unit.video_url %}
-          <div class="mb-8">
-            {% video_player video_url=unit.video_url timestamps=unit.timestamps %}
-          </div>
-          {% endif %}
-
-          <!-- Lesson Text -->
-          {% if unit.body_html %}
-          <div class="prose mb-12">
-            {{ unit.body_html|safe }}
-          </div>
-          {% endif %}
-
-          <!-- Homework Section -->
-          {% if unit.homework_html %}
-          <div class="mb-12 rounded-lg border border-border bg-card p-6">
-            <h2 class="mb-4 flex items-center gap-2 text-xl font-semibold tracking-tight">
-              <i data-lucide="clipboard-list" class="h-5 w-5 text-accent"></i>
-              Homework
-            </h2>
-            <div class="prose">
-              {{ unit.homework_html|safe }}
-            </div>
-          </div>
-          {% endif %}
-
-          {% include "content/reader/_bottom_nav.html" %}
-
-          <!-- Q&A Section -->
-          {% if unit_content_id %}
-          {% include "comments/_qa_section.html" with content_id=unit_content_id user_authenticated=user_authenticated %}
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  </div>
+  {% include "content/reader/_layout.html" with reader_content_template="content/reader/_course_unit_content.html" reader_back_url=course.get_absolute_url reader_back_title=course.title reader_sidebar_label="course navigation" reader_mobile_label="Course Navigation" reader_nav_aria_label="Course navigation" reader_nav_kind="course" %}
   {% endif %}
 </main>
 {% include "includes/footer.html" %}

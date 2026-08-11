@@ -14,7 +14,7 @@
         aria-label="Collapse {{ reader_sidebar_label }}"
         aria-expanded="true"
         aria-controls="content-sidebar-aside"
-        class="mb-4 -mt-0.5 items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
+        class="mb-4 -mt-0.5 h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         data-testid="content-sidebar-collapse-btn"
       >
         <i data-lucide="panel-left-close" class="h-4 w-4"></i>
@@ -50,7 +50,11 @@
               landing's "Tutorial pages" card. The module `<summary>`
               typography (issue #516) is unchanged.
             {% endcomment %}
-            <ul class="space-y-0.5 mt-1">
+            {% comment %}
+              The shared reader-nav-list keeps the same 4px rhythm inside an
+              expanded module and between sibling module sections.
+            {% endcomment %}
+            <ul class="reader-nav-list mt-1">
               {% for nav_unit in nav_module.units.all %}
               <li>
                 {% if nav_unit.pk in completed_unit_ids %}
@@ -76,7 +80,7 @@
           glyph still carries `data-testid="sidebar-completed-page"`.
           Auth-state divergence is limited to the marker icon.
         {% endcomment %}
-        <ul class="space-y-0.5">
+        <ul class="reader-nav-list">
           {% for nav_page in pages %}
           <li>
             {% if nav_page.pk == page.pk %}

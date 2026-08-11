@@ -90,18 +90,22 @@ class CourseSyllabusMobileSpacingTest(TierSetupMixin, TestCase):
         self.assertIn('px-3 py-2.5', window)
         self.assertIn('sm:px-4 sm:py-3', window)
 
-    def test_unit_row_keeps_44px_tap_target(self):
-        """Unit rows in the syllabus retain a 44px tap target floor."""
+    def test_unit_row_matches_workshop_padding_and_keeps_44px_tap_target(self):
+        """Syllabus units use the workshop row scale and stay tappable."""
         response = self.client.get("/courses/spacing-course")
         body = response.content.decode()
-        # Unit row class fragment contains both tightened mobile
-        # padding (px-2 py-1.5) and the min-h-[44px] tap target.
+        # Issue #1401: course units use the canonical workshop row padding
+        # without the old second layer of responsive vertical padding.
         idx = body.find('data-testid="syllabus-unit-row"')
         self.assertNotEqual(idx, -1)
         window = body[max(0, idx - 400):idx + 200]
         self.assertIn('min-h-[44px]', window)
-        self.assertIn('px-2 py-1.5', window)
-        self.assertIn('sm:px-3 sm:py-2.5', window)
+        self.assertIn('gap-2.5 rounded-md px-3 py-2', window)
+        self.assertNotIn('py-1.5', window)
+        self.assertNotIn('sm:py-2.5', window)
+
+        list_window = body[max(0, idx - 1600):idx]
+        self.assertIn('space-y-0.5 px-1 pb-1', list_window)
 
 
 class CourseSyllabusZeroCountSuppressionTest(TestCase):

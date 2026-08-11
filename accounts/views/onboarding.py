@@ -270,6 +270,7 @@ def _render_onboarding_fill(request, response):
                 'response': response,
                 'form_rows': form_rows,
                 'error': 'Please fix the highlighted answers.',
+                'chat_available': ai_onboarding_available(),
             }, status=400)
         messages.success(request, 'Saved. You can come back to finish.')
         return redirect('onboarding_questions')
@@ -282,6 +283,7 @@ def _render_onboarding_fill(request, response):
         'response': response,
         'form_rows': form_rows,
         'error': '',
+        'chat_available': ai_onboarding_available(),
     })
 
 

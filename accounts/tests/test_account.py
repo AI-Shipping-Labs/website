@@ -629,6 +629,8 @@ class AccountPageMembershipCardServingMembersTest(TestCase):
         self.assertContains(response, "course-topic voting")
         self.assertContains(response, "LinkedIn")
         self.assertContains(response, "GitHub teardowns")
+        self.assertContains(response, "Upgrade to Premium")
+        self.assertNotContains(response, "Compare Premium")
 
     def test_premium_member_gets_benefits_portal_and_no_upsell(self):
         response = self._account_response(
@@ -673,19 +675,19 @@ class AccountPageMembershipCardServingMembersTest(TestCase):
         self.assertContains(response, "05/06/2027")
         self.assertNotContains(response, "Billing Period Ends")
         self.assertNotContains(response, 'id="manage-subscription-btn"')
-        self.assertContains(response, 'id="paid-plan-pricing-btn"')
-        self.assertContains(response, "keep access after temporary access ends")
+        self.assertNotContains(response, 'id="paid-plan-pricing-btn"')
+        self.assertNotContains(response, 'id="paid-without-subscription-note"')
+        self.assertNotContains(response, "No Stripe subscription is connected")
 
-    def test_paid_member_without_subscription_gets_pricing_path_not_portal(self):
+    def test_paid_member_without_subscription_hides_billing_actions(self):
         response = self._account_response(
             self._user("comped-basic-1207@example.com", self.basic_tier)
         )
 
         self.assertContains(response, "Everything in Free")
-        self.assertContains(response, 'id="paid-without-subscription-note"')
-        self.assertContains(response, "No Stripe subscription is connected")
-        self.assertContains(response, 'id="paid-plan-pricing-btn"')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertNotContains(response, 'id="paid-without-subscription-note"')
+        self.assertNotContains(response, "No Stripe subscription is connected")
+        self.assertNotContains(response, 'id="paid-plan-pricing-btn"')
         self.assertNotContains(response, 'id="manage-subscription-btn"')
 
     def test_pending_cancellation_keeps_warning_and_portal_path(self):

@@ -175,8 +175,9 @@ def test_onboarding_fallback_sentence_and_questions_handoff(
 
             link.click()
             expect(
-                page.locator('[data-testid="questionnaire-response-form"]'),
+                page.locator('[data-testid="onboarding-identify-form"]'),
             ).to_be_visible()
-            assert page.url == f'{django_server}/onboarding/questions'
+            assert page.url == f'{django_server}/onboarding/?change=1'
+            expect(page.get_by_role('heading', name='Change your description')).to_be_visible()
     finally:
         context.close()

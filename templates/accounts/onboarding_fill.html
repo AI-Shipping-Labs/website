@@ -30,6 +30,14 @@
             Not the right fit? Change your answer / pick a different description
           </a>
         </p>
+        {% if chat_available %}
+        <p class="mt-2 text-xs text-muted-foreground">
+          Prefer a chat?
+          <a href="{% url 'onboarding_chat' %}"
+             class="underline hover:text-foreground"
+             data-testid="onboarding-switch-to-chat">Switch to chat</a>.
+        </p>
+        {% endif %}
       </header>
 
       {% if error %}

@@ -268,9 +268,19 @@ class TestSwitchToForm:
                 f"{django_server}/onboarding/chat", wait_until="domcontentloaded",
             )
             page.locator('[data-testid="onboarding-switch-to-form"]').click()
+            page.locator('[data-testid="onboarding-identify-form"]').wait_for(
+                state="visible",
+            )
+            page.locator(
+                '[data-testid="onboarding-option"] input[value="none"]'
+            ).check()
+            page.locator('[data-testid="onboarding-continue-button"]').click()
             page.locator('[data-testid="questionnaire-response-form"]').wait_for(
                 state="visible",
             )
+            assert page.locator(
+                '[data-testid="onboarding-switch-to-chat"]'
+            ).is_visible()
             _shot(page, "switched_to_form")
             # They can submit the form (generic questions are optional).
             page.locator('[data-testid="questionnaire-submit-button"]').click()

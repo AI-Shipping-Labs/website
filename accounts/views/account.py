@@ -156,7 +156,7 @@ _ACCOUNT_NEXT_TIER_UPSELLS = {
             "Unlock mini-courses, course-topic voting, and resume, LinkedIn, "
             "and GitHub teardowns."
         ),
-        "cta_label": "Compare Premium",
+        "cta_label": "Upgrade to Premium",
         "url": "/pricing",
     },
 }
@@ -313,25 +313,12 @@ def _render_account_page(
     is_effective_premium = (
         effective_tier is not None and effective_tier.slug == "premium"
     )
-    show_paid_plan_pricing_action = bool(
-        effective_tier is not None
-        and effective_tier.slug != "free"
-        and not has_subscription
-        and not is_effective_premium
-    )
+    # A paid tier may come from a comp, import, or temporary override rather
+    # than Stripe. That internal billing distinction is not an action for the
+    # member, so keep both the warning and pricing fallback out of the account
+    # page when no subscription exists.
+    show_paid_plan_pricing_action = False
     paid_without_subscription_note = ""
-    if show_paid_plan_pricing_action:
-        if active_override is not None:
-            paid_without_subscription_note = (
-                "No Stripe subscription is connected to this account. Use "
-                "pricing to choose a paid plan or keep access after temporary "
-                "access ends."
-            )
-        else:
-            paid_without_subscription_note = (
-                "No Stripe subscription is connected to this account. Use "
-                "pricing to choose or upgrade a paid plan."
-            )
 
     # Slack community card (issue #700). Issue #971: uses the effective
     # (override-aware) level via get_user_level — an active TierOverride
@@ -749,6 +736,12 @@ def email_preferences_view(request):
 # readers (content/views/home.py) branch on the same keys.
 DISMISSABLE_DASHBOARD_CARDS = frozenset({
     "free_activation_checklist",
+    "free_activation_sprint_guide_seen",
+    "getting_started_skip_ai_hero",
+    "getting_started_skip_events",
+    "getting_started_skip_sprints",
+    "getting_started_skip_onboarding",
+    "getting_started_skip_slack",
     "onboarding_prompt",
     "slack_join",
 })

@@ -585,6 +585,8 @@ class TestScenarioMainMemberDowngrade:
         assert "course-topic voting" in upsell_text
         assert "LinkedIn" in upsell_text
         assert "GitHub teardowns" in upsell_text
+        assert "Upgrade to Premium" in upsell_text
+        assert "Compare Premium" not in upsell_text
         assert page.locator("#upgrade-modal").count() == 0
         assert page.locator("#cancel-modal").count() == 0
         ctx.close()
@@ -647,7 +649,7 @@ class TestScenarioPremiumMemberHighestTier:
 
 @pytest.mark.django_db(transaction=True)
 class TestScenarioAccountMembershipNoSubscription:
-    """Comped/override members see status, expiry, and pricing paths."""
+    """Comped/override members see status without irrelevant billing paths."""
 
     @pytest.mark.core
     def test_override_main_member_sees_expiry_not_billing_or_portal(
@@ -674,11 +676,12 @@ class TestScenarioAccountMembershipNoSubscription:
         assert page.locator("#billing-period-end").count() == 0
         assert "Billing Period Ends" not in page.locator("body").inner_text()
         assert page.locator("#manage-subscription-btn").count() == 0
-        assert page.locator("#paid-plan-pricing-btn").get_attribute("href") == "/pricing"
+        assert page.locator("#paid-plan-pricing-btn").count() == 0
+        assert page.locator("#paid-without-subscription-note").count() == 0
         ctx.close()
 
     @pytest.mark.core
-    def test_paid_tier_without_subscription_gets_pricing_not_portal(
+    def test_paid_tier_without_subscription_hides_billing_actions(
         self, django_server, test_users, django_db_blocker, browser
     ):
         """Paid status without subscription_id does not show dead portal UI."""
@@ -689,10 +692,9 @@ class TestScenarioAccountMembershipNoSubscription:
         assert page.locator("#tier-name").inner_text().strip() == "Basic"
         assert "Everything in Free" in page.locator("#current-tier-benefits").inner_text()
         assert page.locator("#manage-subscription-btn").count() == 0
-        note = page.locator("#paid-without-subscription-note")
-        assert note.is_visible()
-        assert "No Stripe subscription is connected" in note.inner_text()
-        assert page.locator("#paid-plan-pricing-btn").get_attribute("href") == "/pricing"
+        assert page.locator("#paid-without-subscription-note").count() == 0
+        assert page.locator("#paid-plan-pricing-btn").count() == 0
+        assert "No Stripe subscription is connected" not in page.locator("body").inner_text()
         assert page.locator("#next-tier-upsell").is_visible()
         ctx.close()
 # ---------------------------------------------------------------

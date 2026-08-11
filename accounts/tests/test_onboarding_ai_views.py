@@ -16,7 +16,7 @@ from django.test import TestCase, override_settings, tag
 from django.urls import reverse
 
 from integrations.services.llm import LLMError, LLMResult
-from questionnaires.models import OnboardingConversation, Response
+from questionnaires.models import OnboardingConversation, Persona, Response
 from questionnaires.services_onboarding_ai import (
     TurnRequestError,
     get_or_create_ai_onboarding_response,
@@ -104,9 +104,52 @@ class RoutingGatingTest(TestCase):
         self.assertEqual(body[text_start:anchor_end], 'Switch to the questions')
         self.assertEqual(body[anchor_end:anchor_end + 5], '</a>.')
         self.assertIn(
-            f'href="{reverse("onboarding_questions")}"',
+            f'href="{reverse("onboarding_start")}?change=1"',
             body[anchor_start:text_start],
         )
+
+    def test_questions_offer_chat_and_preserve_started_conversation(self):
+        self.client.get('/onboarding/chat')
+        conversation = OnboardingConversation.objects.get(
+            response__respondent=self.member,
+        )
+        original_transcript = list(conversation.transcript)
+
+        questions = self.client.get('/onboarding/questions')
+        self.assertContains(
+            questions, 'data-testid="onboarding-switch-to-chat"',
+        )
+        self.assertContains(questions, 'Prefer a chat?')
+
+        back_to_chat = self.client.get(reverse('onboarding_chat'))
+        self.assertEqual(back_to_chat.status_code, 200)
+        conversation.refresh_from_db()
+        self.assertEqual(conversation.transcript, original_transcript)
+
+    def test_description_change_keeps_existing_chat_transcript(self):
+        self.client.get('/onboarding/chat')
+        conversation = OnboardingConversation.objects.get(
+            response__respondent=self.member,
+        )
+        conversation_id = conversation.pk
+        original_transcript = list(conversation.transcript)
+        persona = Persona.objects.filter(
+            is_active=True,
+            default_questionnaire__isnull=False,
+        ).first()
+
+        changed = self.client.post(
+            reverse('onboarding_identify'),
+            {'self_id': str(persona.pk)},
+        )
+        self.assertRedirects(changed, reverse('onboarding_questions'))
+
+        conversation.refresh_from_db()
+        self.assertEqual(conversation.pk, conversation_id)
+        self.assertEqual(conversation.transcript, original_transcript)
+        back_to_chat = self.client.get(reverse('onboarding_chat'))
+        self.assertEqual(back_to_chat.status_code, 200)
+        self.assertContains(back_to_chat, 'build the right plan')
 
     def test_chat_renders_logical_request_and_browser_deadline_controls(self):
         resp = self.client.get('/onboarding/chat')

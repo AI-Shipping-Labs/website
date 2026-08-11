@@ -333,7 +333,24 @@ Test: upload a recording to a workshop in `Studio > Recordings` and confirm the 
 
 Studio path: `Studio > Settings > Zoom`.
 
-Provider console: `https://marketplace.zoom.us/develop/create` (Server-to-Server OAuth app).
+Authoritative setup and verification guide:
+[`_docs/integrations/zoom.md`](integrations/zoom.md#server-to-server-oauth-app-setup).
+Use a Server-to-Server OAuth app owned by an account owner/admin (or a custom
+role with every matching admin permission). A licensed host, paid account,
+enabled Cloud Recording, available cloud storage, and
+`RecordingContent:Read` / **View recording content** are required for the
+recording pipeline.
+
+In Zoom Marketplace, open **Manage → Created Apps → the app → Scopes → Add
+Scopes**, add and save exactly these granular admin scopes, then activate or
+reactivate the app:
+
+- `meeting:write:meeting:admin`
+- `meeting:read:meeting:admin`
+- `meeting:update:meeting:admin`
+- `meeting:delete:meeting:admin`
+- `cloud_recording:read:recording:admin`
+- `cloud_recording:read:list_recording_files:admin`
 
 Keys to set in Studio:
 
@@ -344,9 +361,21 @@ Keys to set in Studio:
 | `ZOOM_ACCOUNT_ID` | secret | Zoom account ID (visible on the app's app credentials page). |
 | `ZOOM_WEBHOOK_SECRET_TOKEN` | secret | Token for verifying inbound webhook signatures. |
 
-Webhook endpoint: `{SITE_BASE_URL}/api/webhooks/zoom` (no trailing slash). Configure in the Zoom app's "Feature > Event Subscriptions" tab.
+Under **Features/Access → Event Subscriptions**, configure
+`{SITE_BASE_URL}/api/webhooks/zoom` (no trailing slash) and subscribe only to
+`recording.completed`. The event subscription's Secret Token becomes
+`ZOOM_WEBHOOK_SECRET_TOKEN`; it verifies webhook HMAC signatures and is not an
+OAuth scope or access token.
 
-Test: in `Studio > Events`, create an event with platform=zoom; confirm a join URL is generated and the meeting exists in your Zoom account.
+After adding scopes or reactivating the app, restart every web/gunicorn and
+Django-Q worker process so each process-local cache obtains a fresh token, or
+wait up to one hour before retrying. Never print tokens, secrets, download URLs,
+or Zoom join/start URLs.
+
+Test: use the guide's
+[disposable lifecycle and recording smoke checklist](integrations/zoom.md#disposable-lifecycle-and-recording-smoke-checklist).
+It requires an isolated non-production Zoom workspace and disposable storage;
+do not test against a real event or meeting.
 
 ## 11. End-to-end smoke test
 
@@ -358,7 +387,7 @@ Run this checklist after configuring everything. Each item is one click, end to 
 - [ ] Upgrade to a paid tier in Stripe test mode (`/pricing`); the user's tier reflects on `/account/`.
 - [ ] As a paid member, cancel the subscription via `{SITE_BASE_URL}/account/` (or the Stripe customer portal); confirm the user's tier on `/account/` drops to Free within a few seconds (Stripe webhook `customer.subscription.deleted` reaches `/api/webhooks/payments`).
 - [ ] Trigger a content sync at `/studio/sync/`; new articles appear at `/blog/` and their images load from the CDN domain.
-- [ ] Create an event with platform=zoom in `/studio/events/`; the join URL points at zoom.us and the meeting exists in the Zoom account.
+- [ ] Complete the Zoom guide's disposable lifecycle and recording smoke in an isolated non-production workspace; confirm create/read/update/repeat/delete and `recording.completed` download-to-S3 behavior using only redacted evidence.
 - [ ] Upload a workshop recording to S3 via `/studio/recordings/<id>/edit`; confirm it plays in the in-app player on the recording surface.
 - [ ] Trigger a Slack announcement from `/studio/articles/<id>/announce-slack`; the bot posts to the configured channel.
 - [ ] Send a test email campaign in `/studio/campaigns/`; confirm delivery to a verified SES recipient.

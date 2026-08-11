@@ -75,7 +75,16 @@ would break the editor. All are gated by `visible_plans_for(user)`.
 | `api/views/checkpoints.py` (`checkpoint_detail`) | a `Checkpoint`, re-packs |
 | `api/views/plan_items.py` (`resource_detail`, `deliverable_detail`, `next_step_detail`) | a plan item, re-packs |
 
-### 5. Previously-pending endpoints — now 405-protected (human decision)
+### 5. Relationship-guarded operator configuration (legitimate — keep)
+
+Small operator configuration records may be hard-deleted when the product
+explicitly requires API removal and the handler protects all related history.
+
+| Endpoint (view) | What it deletes |
+| --- | --- |
+| `api/views/call_profiles.py` (`call_profile_detail`) | an unused Call profile; returns 409 when any `BookedCall` history references it, and the model relation uses `PROTECT` as a final safeguard |
+
+### 6. Previously-pending endpoints — now 405-protected (human decision)
 
 Five endpoints were flagged as borderline during the original audit and left as
 hard-deletable pending a per-resource human decision. On 2026-06-13 Alexey
@@ -106,9 +115,10 @@ be changed with `PATCH status=...`); only the hard-`DELETE` is blocked.
    silently reintroduced.
 
 Current classification (issue #864, after the 2026-06-13 human decision, plus
-issue #1045's singleton week-note clear route and issue #1123's accountability
-partner assignment removal): 14 forbidden (405-protected) + 11 legitimate = 25
-`DELETE` handlers in `api/views/`.
+issue #1045's singleton week-note clear route, issue #1123's accountability
+partner assignment removal, and issue #1404's guarded Call profile removal):
+14 forbidden (405-protected) + 12 legitimate = 26 `DELETE` handlers in
+`api/views/`.
 
 When you add or change a `DELETE` handler, update both this document and the
 classification in `api/delete_policy.py`.

@@ -109,9 +109,11 @@ class CompletionScreenBookingCtasTest(TestCase):
         # The migration seeds valeria; alexey is backfilled by 0012. Set both
         # explicitly so the assertion pins the rendered href.
         CallHost.objects.filter(slug='valeria').update(
+            is_active=True,
             booking_url='https://example.com/valeria-book',
         )
         CallHost.objects.filter(slug='alexey').update(
+            is_active=True,
             booking_url='https://example.com/alexey-book',
         )
         resp = self.client.get(reverse('onboarding_start'))
@@ -129,9 +131,11 @@ class CompletionScreenBookingCtasTest(TestCase):
 
     def test_context_carries_both_booking_urls(self):
         CallHost.objects.filter(slug='valeria').update(
+            is_active=True,
             booking_url='https://example.com/v',
         )
         CallHost.objects.filter(slug='alexey').update(
+            is_active=True,
             booking_url='https://example.com/a',
         )
         resp = self.client.get(reverse('onboarding_start'))
@@ -144,9 +148,10 @@ class CompletionScreenBookingCtasTest(TestCase):
 
     def test_blank_booking_url_hides_only_that_cta(self):
         CallHost.objects.filter(slug='valeria').update(
+            is_active=True,
             booking_url='https://example.com/valeria-book',
         )
-        CallHost.objects.filter(slug='alexey').update(booking_url='')
+        CallHost.objects.filter(slug='alexey').update(is_active=True, booking_url='')
         resp = self.client.get(reverse('onboarding_start'))
         # Valeria CTA present, Alexey CTA hidden, block still shown.
         self.assertContains(resp, 'data-testid="onboarding-complete-book-block"')
@@ -157,8 +162,42 @@ class CompletionScreenBookingCtasTest(TestCase):
             resp, 'data-testid="onboarding-complete-book-alexey"',
         )
 
+    def test_hidden_founder_profile_hides_only_that_cta(self):
+        CallHost.objects.filter(slug='valeria').update(
+            is_active=False,
+            booking_url='https://example.com/valeria-book',
+        )
+        CallHost.objects.filter(slug='alexey').update(
+            is_active=True,
+            booking_url='https://example.com/alexey-book',
+        )
+        resp = self.client.get(reverse('onboarding_start'))
+        self.assertNotContains(
+            resp, 'data-testid="onboarding-complete-book-valeria"',
+        )
+        self.assertContains(
+            resp, 'data-testid="onboarding-complete-book-alexey"',
+        )
+
+    def test_unusable_legacy_founder_urls_do_not_render_ctas(self):
+        CallHost.objects.filter(slug='valeria').update(
+            is_active=True,
+            booking_url='   ',
+        )
+        CallHost.objects.filter(slug='alexey').update(
+            is_active=True,
+            booking_url='javascript:alert(1)',
+        )
+        resp = self.client.get(reverse('onboarding_start'))
+        self.assertEqual(resp.context['valeria_booking_url'], '')
+        self.assertEqual(resp.context['alexey_booking_url'], '')
+        self.assertNotContains(
+            resp, 'data-testid="onboarding-complete-book-block"',
+        )
+
     def test_both_blank_omits_whole_block(self):
         CallHost.objects.filter(slug__in=['valeria', 'alexey']).update(
+            is_active=True,
             booking_url='',
         )
         resp = self.client.get(reverse('onboarding_start'))

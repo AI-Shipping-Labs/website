@@ -243,9 +243,9 @@ class StudioGlobalSearchTest(TestCase):
 
     def test_host_aliases_use_clarified_labels(self):
         event_hosts = self._get_results('event hosts')['pages'][0]
-        call_hosts = self._get_results('call hosts')['pages'][0]
+        call_hosts = self._get_results('call profiles')['pages'][0]
         self.assertEqual(event_hosts['label'], 'Event hosts')
-        self.assertEqual(call_hosts['label'], 'Call hosts (scheduling)')
+        self.assertEqual(call_hosts['label'], 'Call profiles')
 
     def test_no_token_authenticated_global_search_api_is_added(self):
         self._login_staff()

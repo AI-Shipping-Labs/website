@@ -1,47 +1,67 @@
 {% extends "studio/base.html" %}
 {% load studio_filters %}
 
-{% block studio_title %}Call Hosts{% endblock %}
+{% block studio_title %}Call profiles{% endblock %}
 
 {% block studio_content %}
-{% studio_header_actions title="Call Hosts" subtitle="Manage the hosts shown on the member-facing Request a call page." %}{% endstudio_header_actions %}
+{% studio_header_actions title="Call profiles" subtitle="Manage the booking links shown on Request a call." %}
+  <a href="{% url 'studio_call_host_create' %}"
+     class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+    <i data-lucide="plus" class="h-4 w-4" aria-hidden="true"></i>
+    <span>New call profile</span>
+  </a>
+{% endstudio_header_actions %}
 
+{% if hosts %}
 <div class="{% studio_list_class 'wrapper' %}">
-  <table class="w-full">
-    <thead class="bg-secondary">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
       <tr>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Host</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Capacity</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Availability</th>
-        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+        <th class="{% studio_list_class 'th' %}">Profile</th>
+        <th class="{% studio_list_class 'th' %}">Booking link</th>
+        <th class="{% studio_list_class 'th' %}">Visibility</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-border">
+    <tbody class="{% studio_list_class 'tbody' %}">
       {% for host in hosts %}
-      <tr class="hover:bg-secondary/50 transition-colors" data-host-slug="{{ host.slug }}">
+      <tr class="{% studio_list_class 'row' %}" data-host-slug="{{ host.slug }}">
         <td class="px-6 py-4">
           <a href="{% url 'studio_call_host_edit' host_id=host.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ host.name }}</a>
           {% if host.role_label %}<p class="text-xs text-muted-foreground">{{ host.role_label }}</p>{% endif %}
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ host.current_load }} / {{ host.capacity }}</td>
+        <td class="px-6 py-4 text-sm">
+          {% if host.booking_url %}
+          <a href="{{ host.booking_url }}" target="_blank" rel="noopener noreferrer" class="text-accent hover:underline break-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="call-profile-booking-link">{{ host.booking_url }}</a>
+          {% else %}
+          <span class="text-muted-foreground">Not set</span>
+          {% endif %}
+        </td>
         <td class="px-6 py-4">
           {% if host.is_available %}
-            <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400" data-testid="host-availability">Available</span>
+          <span data-testid="call-profile-visibility">{% studio_status_badge 'active' 'Shown' %}</span>
           {% else %}
-            <span class="text-xs px-2 py-1 rounded-full bg-secondary text-muted-foreground" data-testid="host-availability">Not available</span>
+          <span data-testid="call-profile-visibility">{% studio_status_badge 'reviewed' 'Hidden' %}</span>
           {% endif %}
         </td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_call_host_edit' host_id=host.pk as host_edit_url %}
             {% studio_list_action host_edit_url 'Edit' 'secondary' %}
+            <form method="post" action="{% url 'studio_call_host_delete' host_id=host.pk %}" class="{% studio_list_class 'action_form' %}"
+                  onsubmit="return confirm('Delete call profile “{{ host.name|escapejs }}”? This removes its booking link from member pages and cannot be undone.');">
+              {% csrf_token %}
+              <button type="submit" class="{% studio_action_class 'destructive' %}">Delete</button>
+            </form>
           </div>
         </td>
       </tr>
-      {% empty %}
-        {% studio_empty_state 'fresh' entity_label='call host' entity_label_plural='call hosts' create_url=None colspan=4 %}
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% else %}
+  {% url 'studio_call_host_create' as call_profile_create_url %}
+  {% studio_empty_state 'fresh' entity_label='call profile' entity_label_plural='call profiles' create_url=call_profile_create_url %}
+{% endif %}
 {% endblock %}

@@ -1,82 +1,87 @@
 {% extends "studio/base.html" %}
 {% load studio_filters %}
 
-{% block studio_title %}Edit Call Host{% endblock %}
+{% block studio_title %}{% if host %}Edit call profile{% else %}New call profile{% endif %}{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8">
-  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
-    <a href="{% url 'studio_call_host_list' %}" class="hover:text-foreground">Call Hosts</a>
-    <i data-lucide="chevron-right" class="w-4 h-4"></i>
-    <span class="text-foreground">{{ host.name }}</span>
-  </div>
-  <h1 class="text-2xl font-semibold text-foreground">Edit Call Host</h1>
+{% if host %}
+{% studio_header_actions title='Edit call profile' back_url='/studio/call-hosts/' back_label='Back to call profiles' %}
+  {% studio_overflow_menu %}
+    <div class="border-t border-border">
+      <form method="post" action="{% url 'studio_call_host_delete' host_id=host.pk %}" class="w-full"
+            onsubmit="return confirm('Delete call profile “{{ host.name|escapejs }}”? This removes its booking link from member pages and cannot be undone.');">
+        {% csrf_token %}
+        <button type="submit" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-700 hover:bg-red-500/10 dark:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="call-profile-delete">
+          <i data-lucide="trash-2" class="h-4 w-4" aria-hidden="true"></i>
+          <span>Delete call profile</span>
+        </button>
+      </form>
+    </div>
+  {% endstudio_overflow_menu %}
+{% endstudio_header_actions %}
+{% else %}
+{% studio_header_actions title='New call profile' back_url='/studio/call-hosts/' back_label='Back to call profiles' %}{% endstudio_header_actions %}
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  <form id="call-profile-form" method="post" data-testid="call-profile-form">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-400">
+      {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <div class="mb-6">
+      <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-foreground mb-1">Name</label>
+      {{ form.name }}
+      {% for error in form.name.errors %}<p class="mt-1 text-xs text-red-600 dark:text-red-400" data-testid="error-name">{{ error }}</p>{% endfor %}
+    </div>
+
+    <div class="mb-6">
+      <label for="{{ form.slug.id_for_label }}" class="block text-sm font-medium text-foreground mb-1">Slug</label>
+      {{ form.slug }}
+      <p class="mt-1 text-xs text-muted-foreground">Leave blank to generate it from the name.</p>
+      {% for error in form.slug.errors %}<p class="mt-1 text-xs text-red-600 dark:text-red-400" data-testid="error-slug">{{ error }}</p>{% endfor %}
+    </div>
+
+    <div class="mb-6">
+      <label for="{{ form.role_label.id_for_label }}" class="block text-sm font-medium text-foreground mb-1">Role label</label>
+      {{ form.role_label }}
+      {% for error in form.role_label.errors %}<p class="mt-1 text-xs text-red-600 dark:text-red-400" data-testid="error-role-label">{{ error }}</p>{% endfor %}
+    </div>
+
+    <div class="mb-6">
+      <label for="{{ form.photo_url.id_for_label }}" class="block text-sm font-medium text-foreground mb-1">Photo URL</label>
+      {{ form.photo_url }}
+      <p class="mt-1 text-xs text-muted-foreground">Optional. Leave blank to omit the profile photo.</p>
+      {% for error in form.photo_url.errors %}<p class="mt-1 text-xs text-red-600 dark:text-red-400" data-testid="error-photo-url">{{ error }}</p>{% endfor %}
+    </div>
+
+    <div class="mb-6">
+      <label for="{{ form.booking_url.id_for_label }}" class="block text-sm font-medium text-foreground mb-1">Booking URL</label>
+      {{ form.booking_url }}
+      <p class="mt-1 text-xs text-muted-foreground">Required when the profile is shown on Request a call.</p>
+      {% for error in form.booking_url.errors %}<p class="mt-1 text-xs text-red-600 dark:text-red-400" data-testid="error-booking-url">{{ error }}</p>{% endfor %}
+    </div>
+
+    <div class="mb-6">
+      <label for="{{ form.order.id_for_label }}" class="block text-sm font-medium text-foreground mb-1">Display order</label>
+      {{ form.order }}
+      {% for error in form.order.errors %}<p class="mt-1 text-xs text-red-600 dark:text-red-400" data-testid="error-order">{{ error }}</p>{% endfor %}
+    </div>
+
+    <div>
+      <label for="{{ form.is_active.id_for_label }}" class="flex items-center gap-2 text-sm font-medium text-foreground">
+        {{ form.is_active }}
+        <span>Show on Request a call</span>
+      </label>
+      {% for error in form.is_active.errors %}<p class="mt-1 text-xs text-red-600 dark:text-red-400" data-testid="error-is-active">{{ error }}</p>{% endfor %}
+    </div>
+  </form>
 </div>
 
-{% url 'studio_call_host_list' as host_cancel_url %}
-<form method="post" class="space-y-6 max-w-3xl">
-  {% csrf_token %}
-
-  <div class="bg-card border border-border rounded-lg p-6 space-y-4">
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Name</label>
-      <input type="text" name="name" value="{{ host.name }}"
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-    </div>
-
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Slug</label>
-      <input type="text" name="slug" value="{{ host.slug }}"
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-    </div>
-
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Role label</label>
-      <input type="text" name="role_label" value="{{ host.role_label }}"
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-    </div>
-
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Photo URL</label>
-      <input type="text" name="photo_url" value="{{ host.photo_url }}"
-             placeholder="Leave blank to use the default photo"
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-    </div>
-
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Booking URL</label>
-      <input type="url" name="booking_url" value="{{ host.booking_url }}"
-             placeholder="https://calendly.com/... or https://calendar.app.google/..."
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-    </div>
-
-    <div class="grid grid-cols-3 gap-4">
-      <div>
-        <label class="block text-sm font-medium text-foreground mb-1">Capacity</label>
-        <input type="number" name="capacity" min="0" value="{{ host.capacity }}"
-               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-foreground mb-1">Current load</label>
-        <input type="number" name="current_load" min="0" value="{{ host.current_load }}"
-               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-foreground mb-1">Order</label>
-        <input type="number" name="order" min="0" value="{{ host.order }}"
-               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      </div>
-    </div>
-
-    <div>
-      <label class="flex items-center space-x-2">
-        <input type="checkbox" name="is_active" {% if host.is_active %}checked{% endif %}
-               class="rounded border-border text-accent focus:ring-accent">
-        <span class="text-sm text-foreground">Active (show on Request a call page)</span>
-      </label>
-    </div>
-  </div>
-
-  {% include "studio/includes/forms/action_row.html" with submit_label="Save Changes" cancel_url=host_cancel_url %}
-</form>
+{% url 'studio_call_host_list' as call_profile_cancel_url %}
+{% include "studio/includes/sticky_action_bar.html" with form_id="call-profile-form" title="Call profile changes" subtitle="Save remains available while you review the form." can_save=True primary_label=primary_label cancel_url=call_profile_cancel_url %}
 {% endblock %}

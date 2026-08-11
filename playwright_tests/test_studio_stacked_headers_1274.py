@@ -62,7 +62,6 @@ ACTIONLESS_ROUTES = {
     "/studio/courses/",
     "/studio/recordings/",
     "/studio/downloads/",
-    "/studio/call-hosts/",
     "/studio/ses-events/",
     "/studio/maven-events/",
 }

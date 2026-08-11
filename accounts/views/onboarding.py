@@ -218,8 +218,12 @@ def _founder_booking_urls():
     yields ``''`` so the template hides that founder's CTA cleanly.
     """
     by_slug = {
-        host.slug: (host.booking_url or '')
-        for host in CallHost.objects.filter(slug__in=['valeria', 'alexey'])
+        host.slug: host.usable_booking_url
+        for host in CallHost.objects.filter(
+            slug__in=['valeria', 'alexey'],
+            is_active=True,
+        )
+        if host.is_available
     }
     return {
         'valeria_booking_url': by_slug.get('valeria', ''),

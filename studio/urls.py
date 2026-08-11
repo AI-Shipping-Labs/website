@@ -52,7 +52,12 @@ from studio.views.books import (
     book_list,
 )
 from studio.views.calendly_oauth import calendly_callback, calendly_connect, calendly_sync
-from studio.views.call_hosts import call_host_edit, call_host_list
+from studio.views.call_hosts import (
+    call_host_create,
+    call_host_delete,
+    call_host_edit,
+    call_host_list,
+)
 from studio.views.campaigns import (
     campaign_create,
     campaign_delete,
@@ -759,9 +764,11 @@ urlpatterns = [
         name='studio_download_remove_banner',
     ),
 
-    # Call hosts (issue #870)
+    # Call profiles (internal CallHost model; issue #1404)
     path('call-hosts/', call_host_list, name='studio_call_host_list'),
+    path('call-hosts/new', call_host_create, name='studio_call_host_create'),
     path('call-hosts/<int:host_id>/edit', call_host_edit, name='studio_call_host_edit'),
+    path('call-hosts/<int:host_id>/delete', call_host_delete, name='studio_call_host_delete'),
     # Instructor account linking (issue #1345)
     path('instructors/', instructor_list, name='studio_instructor_list'),
     path(

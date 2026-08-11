@@ -578,7 +578,7 @@ class StudioSidebarStructureTest(TestCase):
 
         expected_order = [
             '<span>Users</span>',
-            '<span>Call hosts (scheduling)</span>',
+            '<span>Call profiles</span>',
             '<span>Imports</span>',
             '<span>Tier overrides</span>',
             '<span>Tags</span>',
@@ -604,7 +604,7 @@ class StudioSidebarStructureTest(TestCase):
             1,
         )
         self.assertIn('<span>Event hosts</span>', body)
-        self.assertIn('<span>Call hosts (scheduling)</span>', body)
+        self.assertIn('<span>Call profiles</span>', body)
         self.assertIn("var STORAGE_KEY = 'studio-nav-open';", body)
         self.assertIn('data-studio-active-section=""', body)
         for slug in (

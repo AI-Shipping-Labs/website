@@ -9,20 +9,34 @@ from community.models import CallHost
 class CallHostModelTest(TestCase):
     def test_is_available_truth_table(self):
         cases = [
-            # (is_active, capacity, current_load, expected)
-            (True, 5, 0, True),
-            (True, 1, 1, False),   # capacity reached
-            (True, 0, 0, False),   # zero capacity
-            (False, 5, 0, False),  # inactive but with capacity
-            (True, 5, 4, True),    # spare capacity
+            # (is_active, booking_url, capacity, current_load, expected)
+            (True, 'https://example.com/book', 5, 0, True),
+            (True, 'https://example.com/book', 1, 1, True),
+            (True, 'https://example.com/book', 0, 99, True),
+            (False, 'https://example.com/book', 5, 0, False),
+            (True, '', 5, 0, False),
+            (True, '   ', 5, 0, False),
+            (True, 'javascript:alert(1)', 5, 0, False),
+            (True, 'ftp://example.com/book', 5, 0, False),
+            (True, 'https://example.com/has space', 5, 0, False),
         ]
-        for is_active, capacity, current_load, expected in cases:
-            with self.subTest(is_active=is_active, capacity=capacity, load=current_load):
+        for is_active, booking_url, capacity, current_load, expected in cases:
+            with self.subTest(is_active=is_active, booking_url=booking_url):
                 host = CallHost(
                     slug='x', name='X', is_active=is_active,
-                    capacity=capacity, current_load=current_load,
+                    booking_url=booking_url,
+                    capacity=capacity,
+                    current_load=current_load,
                 )
                 self.assertEqual(host.is_available, expected)
+                self.assertEqual(
+                    host.usable_booking_url,
+                    booking_url if booking_url == 'https://example.com/book' else '',
+                )
+
+    def test_model_uses_call_profile_verbose_names(self):
+        self.assertEqual(CallHost._meta.verbose_name, 'Call profile')
+        self.assertEqual(CallHost._meta.verbose_name_plural, 'Call profiles')
 
     def test_display_photo_url_prefers_configured_photo(self):
         host = CallHost(slug='alexey', name='Alexey', photo_url='https://cdn.example/a.png')

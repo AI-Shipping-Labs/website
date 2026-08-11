@@ -67,6 +67,7 @@ class DeleteHandlerDiscoveryTest(TestCase):
         self.assertIn("events.event_detail", found)
         self.assertIn("plan_items.resource_detail", found)
         self.assertIn("aliases.user_aliases_remove", found)
+        self.assertIn("call_profiles.call_profile_detail", found)
 
 
 class DeleteHandlerClassificationGuardTest(TestCase):
@@ -102,6 +103,13 @@ class DeleteHandlerClassificationGuardTest(TestCase):
             "delete_policy.py lists handler(s) that no longer exist as DELETE "
             f"handlers in api/views/: {stale}",
         )
+
+    def test_call_profile_delete_is_relationship_guarded_configuration(self):
+        classification = LEGITIMATE_DELETE_HANDLERS[
+            'call_profiles.call_profile_detail'
+        ]
+        self.assertIn('relationship-guarded operator configuration', classification)
+        self.assertIn('no BookedCall history', classification)
 
 
 class ForbiddenDeleteRoutesTest(TestCase):

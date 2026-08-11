@@ -60,6 +60,49 @@ class BuildSpecTest(TestCase):
             {"get", "patch"},
         )
 
+    def test_call_profile_crud_paths_and_schemas_present(self):
+        collection = self.document['paths']['/api/call-profiles']
+        detail = self.document['paths']['/api/call-profiles/{slug}']
+        self.assertEqual(set(collection), {'get', 'post'})
+        self.assertEqual(set(detail), {'get', 'patch', 'delete'})
+        self.assertEqual(set(detail['delete']['responses']), {'204', '401', '404', '409'})
+        profile_schema = (
+            detail['get']['responses']['200']['content']['application/json']
+            ['schema']
+        )
+        self.assertEqual(
+            set(profile_schema['properties']),
+            {
+                'id', 'name', 'slug', 'role_label', 'photo_url',
+                'booking_url', 'is_active', 'order', 'created_at',
+                'updated_at',
+            },
+        )
+        self.assertNotIn('capacity', profile_schema['properties'])
+        self.assertNotIn('current_load', profile_schema['properties'])
+        self.assertEqual(
+            detail['delete']['responses']['409']['content']['application/json']
+            ['schema'],
+            {'$ref': '#/components/schemas/ErrorResponse'},
+        )
+        self.assertEqual(
+            detail['delete']['responses']['409']['content']['application/json']
+            ['example']['code'],
+            'call_profile_in_use',
+        )
+        properties = self._request_body_properties(
+            '/api/call-profiles/{slug}',
+            'patch',
+        )
+        self.assertEqual(
+            set(properties),
+            {
+                'name', 'slug', 'role_label', 'photo_url', 'booking_url',
+                'is_active', 'order',
+            },
+        )
+        self.assertNotIn('/api/call-hosts', self.document['paths'])
+
     def test_event_host_summary_example_includes_title(self):
         example = (
             self.document["paths"]["/api/events"]["get"]

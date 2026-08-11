@@ -30,6 +30,10 @@ from api.views.books import (
     book_detail as book_api_detail,
 )
 from api.views.boot_timing import boot_timing_diagnostics
+from api.views.call_profiles import (
+    call_profile_detail,
+    call_profiles_collection,
+)
 from api.views.campaigns import (
     campaign_detail,
     campaign_recipient_count,
@@ -241,6 +245,17 @@ urlpatterns = [
         "docs",
         docs_page,
         name="api_docs",
+    ),
+    # ---- Call profiles (internal CallHost model; issue #1404) ---------
+    path(
+        "call-profiles",
+        call_profiles_collection,
+        name="api_call_profiles_collection",
+    ),
+    path(
+        "call-profiles/<slug:slug>",
+        call_profile_detail,
+        name="api_call_profile_detail",
     ),
     # ---- Worker (issue #714) ------------------------------------------
     # Read-only worker task observability. Register the ``failed`` literal

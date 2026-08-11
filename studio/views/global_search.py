@@ -36,7 +36,7 @@ NAVIGATION_ITEMS = (
     ('Recordings', 'studio_recording_list', (), False),
     ('Downloads', 'studio_download_list', (), False),
     ('Users', 'studio_user_list', (), False),
-    ('Call hosts (scheduling)', 'studio_call_host_list', ('call hosts',), False),
+    ('Call profiles', 'studio_call_host_list', ('call profile', 'call hosts'), False),
     ('Imports', 'studio_import_batch_list', (), False),
     ('Tier overrides', 'studio_tier_overrides_list', (), False),
     ('Tags', 'studio_tag_list', (), False),

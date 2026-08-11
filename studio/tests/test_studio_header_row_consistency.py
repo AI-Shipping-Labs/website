@@ -51,7 +51,6 @@ ACTIONLESS_HEADERS = {
     'courses/list.html',
     'recordings/list.html',
     'downloads/list.html',
-    'call_hosts/list.html',
     'ses_events/list.html',
     'maven_events/list.html',
     'email_log/list.html',

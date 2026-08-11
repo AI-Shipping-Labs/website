@@ -315,7 +315,7 @@ def test_host_labels_routes_field_contract_and_visual_states(django_server, brow
     people = _toggle(page, "people")
     if people.get_attribute("aria-expanded") != "true":
         people.click()
-    assert page.get_by_role("link", name="Call hosts (scheduling)", exact=True).get_attribute("href") == "/studio/call-hosts/"
+    assert page.get_by_role("link", name="Call profiles", exact=True).get_attribute("href") == "/studio/call-hosts/"
     page.goto(f"{django_server}/studio/events/new", wait_until="domcontentloaded")
     host = page.locator('input[name="host_email"]')
     assert host.count() == 1

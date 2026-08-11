@@ -916,6 +916,604 @@
         ]
       }
     },
+    "/api/call-profiles": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "call_profiles": [
+                    {
+                      "booking_url": "https://calendar.app.google/example",
+                      "created_at": "2026-08-11T12:00:00+00:00",
+                      "id": 1,
+                      "is_active": true,
+                      "name": "Jordan Lee",
+                      "order": 10,
+                      "photo_url": "https://example.com/jordan.jpg",
+                      "role_label": "AI product coach",
+                      "slug": "jordan-lee",
+                      "updated_at": "2026-08-11T12:00:00+00:00"
+                    }
+                  ]
+                },
+                "schema": {
+                  "properties": {
+                    "call_profiles": {
+                      "items": {
+                        "properties": {
+                          "booking_url": {
+                            "format": "uri",
+                            "type": "string"
+                          },
+                          "created_at": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "integer"
+                          },
+                          "is_active": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "order": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "photo_url": {
+                            "format": "uri",
+                            "type": "string"
+                          },
+                          "role_label": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "format": "date-time",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "slug",
+                          "role_label",
+                          "photo_url",
+                          "booking_url",
+                          "is_active",
+                          "order",
+                          "created_at",
+                          "updated_at"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "call_profiles"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Call profiles ordered by display order, then name."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid staff token."
+          }
+        },
+        "summary": "List Call profiles",
+        "tags": [
+          "Call profiles"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "booking_url": "",
+                "is_active": false,
+                "name": "Jordan Lee",
+                "order": 10,
+                "slug": "jordan-lee"
+              },
+              "schema": {
+                "properties": {
+                  "booking_url": {
+                    "format": "uri",
+                    "type": "string"
+                  },
+                  "is_active": {
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "order": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "photo_url": {
+                    "format": "uri",
+                    "type": "string"
+                  },
+                  "role_label": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "booking_url": "https://calendar.app.google/example",
+                  "created_at": "2026-08-11T12:00:00+00:00",
+                  "id": 1,
+                  "is_active": true,
+                  "name": "Jordan Lee",
+                  "order": 10,
+                  "photo_url": "https://example.com/jordan.jpg",
+                  "role_label": "AI product coach",
+                  "slug": "jordan-lee",
+                  "updated_at": "2026-08-11T12:00:00+00:00"
+                },
+                "schema": {
+                  "properties": {
+                    "booking_url": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "created_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "is_active": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "order": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "photo_url": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "role_label": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "role_label",
+                    "photo_url",
+                    "booking_url",
+                    "is_active",
+                    "order",
+                    "created_at",
+                    "updated_at"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Call profile created."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed JSON or a non-object body."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid staff token."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error; no profile was created."
+          }
+        },
+        "summary": "Create a Call profile",
+        "tags": [
+          "Call profiles"
+        ]
+      }
+    },
+    "/api/call-profiles/{slug}": {
+      "delete": {
+        "description": "Deletes only profiles without booked-call history. Hide an in-use profile with PATCH is_active=false instead.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Unused Call profile deleted."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Call profile not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "call_profile_in_use",
+                  "error": "This call profile has booked-call history and can't be deleted. Hide it with PATCH is_active=false instead."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Call profile has booked-call history."
+          }
+        },
+        "summary": "Delete an unused Call profile",
+        "tags": [
+          "Call profiles"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "booking_url": "https://calendar.app.google/example",
+                  "created_at": "2026-08-11T12:00:00+00:00",
+                  "id": 1,
+                  "is_active": true,
+                  "name": "Jordan Lee",
+                  "order": 10,
+                  "photo_url": "https://example.com/jordan.jpg",
+                  "role_label": "AI product coach",
+                  "slug": "jordan-lee",
+                  "updated_at": "2026-08-11T12:00:00+00:00"
+                },
+                "schema": {
+                  "properties": {
+                    "booking_url": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "created_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "is_active": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "order": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "photo_url": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "role_label": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "role_label",
+                    "photo_url",
+                    "booking_url",
+                    "is_active",
+                    "order",
+                    "created_at",
+                    "updated_at"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Call profile."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Call profile not found."
+          }
+        },
+        "summary": "Retrieve a Call profile",
+        "tags": [
+          "Call profiles"
+        ]
+      },
+      "patch": {
+        "description": "Partially updates a Call profile. An active profile must have an HTTP(S) booking URL; hide it in the same request before clearing its booking URL.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "booking_url": "https://calendar.app.google/example",
+                "is_active": true
+              },
+              "schema": {
+                "properties": {
+                  "booking_url": {
+                    "format": "uri",
+                    "type": "string"
+                  },
+                  "is_active": {
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "order": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "photo_url": {
+                    "format": "uri",
+                    "type": "string"
+                  },
+                  "role_label": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "booking_url": "https://calendar.app.google/example",
+                  "created_at": "2026-08-11T12:00:00+00:00",
+                  "id": 1,
+                  "is_active": true,
+                  "name": "Jordan Lee",
+                  "order": 10,
+                  "photo_url": "https://example.com/jordan.jpg",
+                  "role_label": "AI product coach",
+                  "slug": "jordan-lee",
+                  "updated_at": "2026-08-11T12:00:00+00:00"
+                },
+                "schema": {
+                  "properties": {
+                    "booking_url": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "created_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "is_active": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "order": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "photo_url": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "role_label": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "role_label",
+                    "photo_url",
+                    "booking_url",
+                    "is_active",
+                    "order",
+                    "created_at",
+                    "updated_at"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Call profile updated."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed JSON or a non-object body."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Call profile not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error; no fields were changed."
+          }
+        },
+        "summary": "Update a Call profile",
+        "tags": [
+          "Call profiles"
+        ]
+      }
+    },
     "/api/campaigns": {
       "get": {
         "description": "Returns every ``EmailCampaign`` row ordered by ``-created_at``. Optional filters narrow the result.",

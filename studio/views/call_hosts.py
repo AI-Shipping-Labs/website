@@ -1,40 +1,87 @@
-"""Studio views for managing call hosts (#870).
+"""Studio CRUD for user-facing Call profiles (#1404)."""
 
-Staff can edit each host's booking link, capacity, current load, active
-flag, role label, photo, and display order without a deploy. The
-member-facing ``/request-a-call`` page reads these rows live.
-"""
-
+from django.contrib import messages
+from django.db import transaction
+from django.db.models.deletion import ProtectedError
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils.text import slugify
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from community.models import CallHost
 from studio.decorators import staff_required
+from studio.forms import CallProfileForm
+
+
+def _render_form(request, *, host, form):
+    return render(request, 'studio/call_hosts/form.html', {
+        'host': host,
+        'form': form,
+        'form_action': 'edit' if host is not None else 'create',
+        'primary_label': 'Save changes' if host is not None else 'Create call profile',
+    })
 
 
 @staff_required
+@require_GET
 def call_host_list(request):
-    """List all call hosts with their derived availability."""
-    hosts = CallHost.objects.all()
+    """List Call profiles in configured display order."""
+    hosts = CallHost.objects.order_by('order', 'name')
     return render(request, 'studio/call_hosts/list.html', {'hosts': hosts})
 
 
 @staff_required
-def call_host_edit(request, host_id):
-    """Edit a call host's booking link, capacity, and availability."""
-    host = get_object_or_404(CallHost, pk=host_id)
-
+@require_http_methods(['GET', 'POST'])
+def call_host_create(request):
+    """Create a Call profile without touching legacy capacity fields."""
     if request.method == 'POST':
-        host.name = request.POST.get('name', '').strip() or host.name
-        host.slug = request.POST.get('slug', '').strip() or slugify(host.name)
-        host.role_label = request.POST.get('role_label', '').strip()
-        host.photo_url = request.POST.get('photo_url', '').strip()
-        host.booking_url = request.POST.get('booking_url', '').strip()
-        host.is_active = request.POST.get('is_active') == 'on'
-        host.capacity = int(request.POST.get('capacity', 0) or 0)
-        host.current_load = int(request.POST.get('current_load', 0) or 0)
-        host.order = int(request.POST.get('order', 0) or 0)
-        host.save()
-        return redirect('studio_call_host_list')
+        form = CallProfileForm(request.POST)
+        if form.is_valid():
+            host = form.save()
+            messages.success(request, f'Call profile “{host.name}” created.')
+            return redirect('studio_call_host_list')
+    else:
+        form = CallProfileForm(instance=CallHost())
+    return _render_form(request, host=None, form=form)
 
-    return render(request, 'studio/call_hosts/form.html', {'host': host})
+
+@staff_required
+@require_http_methods(['GET', 'POST'])
+def call_host_edit(request, host_id):
+    """Edit a Call profile without changing legacy capacity/load data."""
+    host = get_object_or_404(CallHost, pk=host_id)
+    if request.method == 'POST':
+        form = CallProfileForm(request.POST, instance=host)
+        if form.is_valid():
+            host = form.save()
+            messages.success(request, f'Call profile “{host.name}” updated.')
+            return redirect('studio_call_host_list')
+    else:
+        form = CallProfileForm(instance=host)
+    return _render_form(request, host=host, form=form)
+
+
+@staff_required
+@require_POST
+def call_host_delete(request, host_id):
+    """Delete an unused profile while preserving all booked-call history."""
+    with transaction.atomic():
+        host = get_object_or_404(CallHost.objects.select_for_update(), pk=host_id)
+        name = host.name
+        if host.booked_calls.exists():
+            messages.error(
+                request,
+                "This call profile has booked-call history and can't be deleted. "
+                'Turn off “Show on Request a call” to hide it instead.',
+            )
+            return redirect('studio_call_host_edit', host_id=host.pk)
+        try:
+            host.delete()
+        except ProtectedError:
+            messages.error(
+                request,
+                "This call profile has booked-call history and can't be deleted. "
+                'Turn off “Show on Request a call” to hide it instead.',
+            )
+            return redirect('studio_call_host_edit', host_id=host.pk)
+
+    messages.success(request, f'Call profile “{name}” deleted.')
+    return redirect('studio_call_host_list')

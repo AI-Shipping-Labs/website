@@ -1,10 +1,4 @@
-"""Member-facing "Request a call" page (#870, Phase 1).
-
-Authenticated members who have completed onboarding can request a 1:1
-call with a host (Alexey or Valeria). Each host links out to their own
-external scheduler. Availability is derived from the host's capacity
-setting; unavailable hosts stay visible with a status, never hidden.
-"""
+"""Member-facing Request a call page (#870, #1404)."""
 
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
@@ -29,10 +23,12 @@ def request_a_call(request):
     onboarded = has_completed_onboarding(request.user)
 
     hosts = []
-    any_available = False
     if onboarded:
-        hosts = list(CallHost.objects.filter(is_active=True))
-        any_available = any(host.is_available for host in hosts)
+        hosts = list(
+            host
+            for host in CallHost.objects.filter(is_active=True).order_by('order', 'name')
+            if host.is_available
+        )
 
     # Issue #982: onboarding is paid-only. Only hand a "Finish onboarding"
     # CTA to a member who can actually enter the flow (effective tier >=
@@ -42,6 +38,5 @@ def request_a_call(request):
         'onboarded': onboarded,
         'can_access_onboarding': can_access_onboarding(request.user),
         'hosts': hosts,
-        'any_available': any_available,
     }
     return render(request, 'content/request_a_call.html', context)

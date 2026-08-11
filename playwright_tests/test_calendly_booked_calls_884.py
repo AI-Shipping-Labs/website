@@ -161,16 +161,15 @@ class TestBookedCallShowsOnCrmRecord:
 
 
 @pytest.mark.django_db(transaction=True)
-class TestBookingConsumesCapacity:
+class TestBookingHistoryDoesNotGateCallProfileLink:
     @pytest.mark.core
-    def test_booking_then_cancel_round_trips_availability(
+    def test_booking_then_cancel_keeps_link_visible(
         self, django_server, django_db_blocker, browser,
     ):
         with django_db_blocker.unblock():
             create_staff_user("admin-884b@test.com")
             create_user("alice-884b@test.com", tier_slug="free")
             _complete_onboarding("alice-884b@test.com")
-            # Capacity 1 so a single booking flips the host to full.
             _set_host(
                 "alexey", is_active=True, capacity=1, current_load=0,
                 booking_url=ALEXEY_URL,
@@ -190,7 +189,9 @@ class TestBookingConsumesCapacity:
             card.wait_for(state="visible")
             assert card.locator('[data-testid="call-host-book"]').count() == 1
 
-            # Book via the webhook -> capacity consumed.
+            # Book via the webhook. Legacy load bookkeeping may continue, but
+            # issue #1404 makes the operator-authored link the only member
+            # bookability signal.
             _post_webhook(
                 staff_ctx, django_server, "invitee.created",
                 "alice-884b@test.com", ALEXEY_URL,
@@ -198,10 +199,9 @@ class TestBookingConsumesCapacity:
             page.reload(wait_until="domcontentloaded")
             card = page.locator('[data-host-slug="alexey"]')
             card.wait_for(state="visible")
-            # Host is now full: no booking link is offered.
-            assert card.locator('[data-testid="call-host-book"]').count() == 0
+            assert card.locator('[data-testid="call-host-book"]').count() == 1
 
-            # Cancel via the webhook -> capacity restored.
+            # Cancellation preserves the same link-based behavior.
             _post_webhook(
                 staff_ctx, django_server, "invitee.canceled",
                 "alice-884b@test.com", ALEXEY_URL,

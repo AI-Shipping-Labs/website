@@ -35,7 +35,7 @@ class BookedCall(models.Model):
 
     host = models.ForeignKey(
         'community.CallHost',
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='booked_calls',
     )
     member = models.ForeignKey(

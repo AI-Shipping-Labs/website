@@ -594,7 +594,7 @@ class TestPlanningSection:
         people_labels = page.locator("#studio-section-people a span").all_inner_texts()
         assert [label.strip() for label in people_labels if label.strip()] == [
             "Users",
-            "Call hosts (scheduling)",
+            "Call profiles",
             "Imports",
             "Instructors",
             "Tier overrides",

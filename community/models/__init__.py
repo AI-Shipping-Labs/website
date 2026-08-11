@@ -4,5 +4,5 @@ from .booked_call import (
     STATUS_CANCELED,
     BookedCall,
 )
-from .call_host import CallHost
+from .call_host import CallHost, is_usable_http_url
 from .unmatched_booked_call import UnmatchedBookedCall

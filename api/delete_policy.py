@@ -63,4 +63,9 @@ LEGITIMATE_DELETE_HANDLERS = {
     "plan_items.resource_detail": "member-owned plan edit: deletes a plan resource, re-packs",
     "plan_items.deliverable_detail": "member-owned plan edit: deletes a plan deliverable, re-packs",
     "plan_items.next_step_detail": "member-owned plan edit: deletes a plan next-step, re-packs",
+    # 5. Relationship-guarded operator configuration
+    "call_profiles.call_profile_detail": (
+        "relationship-guarded operator configuration: deletes only a Call profile "
+        "with no BookedCall history"
+    ),
 }

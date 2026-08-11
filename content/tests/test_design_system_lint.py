@@ -187,7 +187,6 @@ BASELINE: dict[str, dict[str, int]] = {
     },
     "public_font_bold": {  # Initial legacy debt: #1240.
         "templates/base.html": 1,
-        "templates/content/request_a_call.html": 1,
         "templates/includes/header.html": 2,
         "templates/integrations/admin_sync.html": 1,
         "templates/integrations/admin_sync_history.html": 1,

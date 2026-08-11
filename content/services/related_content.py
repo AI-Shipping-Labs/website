@@ -18,6 +18,7 @@ DEFAULT_RELATED_LIMIT = 3
 RELATED_TITLE = 'Related content'
 FALLBACK_TITLE = 'More from AI Shipping Labs'
 DESCRIPTION_CHARS = 180
+WORKSHOP_RELATED_TYPES = frozenset({'article', 'workshop'})
 
 
 @dataclass(frozen=True)
@@ -68,7 +69,14 @@ def build_related_content_rail(
     current object is untagged or no tag matches exist, the rail falls back to
     the newest published internal content pages.
     """
-    candidates = list(_iter_candidates(current))
+    allowed_content_types = (
+        WORKSHOP_RELATED_TYPES
+        if _model_key(current) == 'content.workshop'
+        else None
+    )
+    candidates = list(
+        _iter_candidates(current, allowed_content_types=allowed_content_types)
+    )
     if limit <= 0 or not candidates:
         return RelatedContentRail(
             title=FALLBACK_TITLE,
@@ -117,7 +125,11 @@ def build_related_content_rail(
     )
 
 
-def _iter_candidates(current: Any):
+def _iter_candidates(
+    current: Any,
+    *,
+    allowed_content_types: frozenset[str] | None = None,
+):
     from content.models import Article, Course, Project, Tutorial, Workshop
     from events.models import Event
     from events.models.event import HIDDEN_FROM_PUBLIC_STATUSES
@@ -167,11 +179,22 @@ def _iter_candidates(current: Any):
 
     collected: list[tuple[Any, str, str, str]] = []
     for queryset, content_type, content_type_label, icon in definitions:
+        if (
+            allowed_content_types is not None
+            and content_type not in allowed_content_types
+        ):
+            continue
         for obj in queryset:
             if (
                 current_pk is not None
                 and _model_key(obj) == current_model_key
                 and obj.pk == current_pk
+            ):
+                continue
+            if (
+                content_type == 'event'
+                and obj.is_past
+                and not _past_event_has_durable_content(obj)
             ):
                 continue
             collected.append((obj, content_type, content_type_label, icon))
@@ -240,6 +263,22 @@ def _dropped_pair_keys(
                 dropped.add((_model_key(obj), obj.pk))
 
     return dropped
+
+
+def _past_event_has_durable_content(event: Any) -> bool:
+    """Return whether a finished event merits evergreen recommendation.
+
+    A recording by itself belongs in the Past events feed, not in related
+    content. Recaps, materials, and transcripts make the event useful beyond
+    the original live session. Linked workshop artifacts are collected as
+    Workshops and win through the event/workshop deduplication rule.
+    """
+    return bool(
+        getattr(event, 'has_recap', False)
+        or getattr(event, 'materials', None)
+        or getattr(event, 'transcript_text', '')
+        or getattr(event, 'transcript_url', '')
+    )
 
 
 def _build_card(

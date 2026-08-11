@@ -728,6 +728,10 @@ class TestPreferForm:
             page.locator(
                 '[data-testid="questionnaire-response-form"]'
             ).wait_for(state="visible")
+            assert page.url == f"{django_server}/onboarding/questions"
+            expect(
+                page.locator('[data-testid="onboarding-identify-form"]')
+            ).to_have_count(0)
             _shot(page, "stream_switch_to_form")
             page.locator('[data-testid="questionnaire-submit-button"]').click()
             page.wait_for_load_state("domcontentloaded")

@@ -93,7 +93,16 @@ def test_capture_homepage_ia_review_matrix(
                 )
                 assert centered_delta.json_value() < 60
         else:
-            expect(page.get_by_role("heading", name="Recent content", exact=True)).to_be_visible()
+            expect(page.get_by_test_id("dashboard-heading")).to_be_visible()
+            expect(
+                page.get_by_test_id("dashboard-commitment-zones")
+            ).to_be_visible()
+            expect(
+                page.get_by_role("heading", name="For you", exact=True)
+            ).to_be_visible()
+            expect(
+                page.get_by_test_id("dashboard-feed-destinations")
+            ).to_be_visible()
             expect(page.locator("#join-free, #register-form")).to_have_count(0)
 
         SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)

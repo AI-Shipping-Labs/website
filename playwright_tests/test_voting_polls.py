@@ -22,6 +22,7 @@ Usage:
 import os
 
 import pytest
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -583,9 +584,7 @@ class TestScenario10NavigateFromDashboard:
         """Given a user logged in as main@test.com (Main tier), an open
         topic poll exists.
         1. Navigate to / (the member dashboard)
-        2. Find and click the active polls section or link to /vote
-        Then: User arrives at /vote and sees the open topic poll
-        3. Click into the poll
+        2. Find and click the poll's actionable For you feed row
         Then: User can view options, vote counts, and cast their
               votes."""
         _clear_polls()
@@ -607,18 +606,27 @@ class TestScenario10NavigateFromDashboard:
             f"{django_server}/",
             wait_until="domcontentloaded",
         )
-        body = page.content()
+        expect(
+            page.get_by_role("heading", name="For you", exact=True)
+        ).to_be_visible()
+        feed = page.locator('[data-testid="dashboard-home-feed"]')
+        poll_row = feed.locator(
+            f'[data-testid="dashboard-feed-entry"]:has(a[href="/vote/{poll.id}"])'
+        )
+        expect(poll_row).to_have_count(1)
+        expect(poll_row).to_contain_text("Active poll")
+        expect(poll_row).to_contain_text("Dashboard Poll Test")
+        destinations = page.locator(
+            '[data-testid="dashboard-feed-destinations"]'
+        )
+        expect(destinations.locator('a[href="/vote"]')).to_have_text("Polls")
 
-        # Then: The dashboard shows the Active polls section
-        assert "Active polls" in body
-        assert "Dashboard Poll Test" in body
-
-        # Step 2: Click the poll link on the dashboard
-        poll_link = page.locator(
+        # Step 2: Click the poll's feed row on the dashboard
+        poll_link = poll_row.locator(
             f'a[href="/vote/{poll.id}"]'
         )
-        assert poll_link.count() >= 1
-        poll_link.first.click()
+        expect(poll_link).to_have_count(1)
+        poll_link.click()
         page.wait_for_load_state("domcontentloaded")
 
         # Then: User arrives at the poll detail page
@@ -633,7 +641,13 @@ class TestScenario10NavigateFromDashboard:
         vote_btn = page.locator(
             f'button.vote-btn[data-option-id="{opt1.id}"]'
         )
-        assert vote_btn.count() >= 1
+        expect(vote_btn).to_have_count(1)
+        vote_count = page.locator(
+            f'.vote-count[data-option-id="{opt1.id}"]'
+        )
+        expect(vote_count).to_have_text("0")
+        vote_btn.click()
+        expect(vote_count).to_have_text("1")
 # ---------------------------------------------------------------
 # Scenario 11: Member submits a proposal with missing title and
 #               gets validation feedback

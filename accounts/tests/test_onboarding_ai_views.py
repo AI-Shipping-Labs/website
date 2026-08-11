@@ -104,27 +104,56 @@ class RoutingGatingTest(TestCase):
         self.assertEqual(body[text_start:anchor_end], 'Switch to the questions')
         self.assertEqual(body[anchor_end:anchor_end + 5], '</a>.')
         self.assertIn(
-            f'href="{reverse("onboarding_start")}?change=1"',
+            f'href="{reverse("onboarding_questions")}"',
             body[anchor_start:text_start],
         )
+        self.assertNotIn('?change=1', body[anchor_start:text_start])
 
     def test_questions_offer_chat_and_preserve_started_conversation(self):
         self.client.get('/onboarding/chat')
         conversation = OnboardingConversation.objects.get(
             response__respondent=self.member,
         )
+        response_id = conversation.response_id
         original_transcript = list(conversation.transcript)
+        text_question = conversation.response.response_questions.filter(
+            question_type__in=('text', 'long_text'),
+        ).first()
+        self.assertIsNotNone(text_question)
+
+        saved = self.client.post(
+            reverse('onboarding_questions'),
+            {f'question_{text_question.pk}': 'Keep this saved form answer'},
+        )
+        self.assertRedirects(saved, reverse('onboarding_questions'))
 
         questions = self.client.get('/onboarding/questions')
+        self.assertEqual(questions.status_code, 200)
+        self.assertTemplateUsed(questions, 'accounts/onboarding_fill.html')
+        self.assertContains(
+            questions, 'data-testid="questionnaire-response-form"',
+        )
+        self.assertNotContains(
+            questions, 'data-testid="onboarding-identify-form"',
+        )
         self.assertContains(
             questions, 'data-testid="onboarding-switch-to-chat"',
         )
         self.assertContains(questions, 'Prefer a chat?')
+        self.assertContains(questions, 'Keep this saved form answer')
 
         back_to_chat = self.client.get(reverse('onboarding_chat'))
         self.assertEqual(back_to_chat.status_code, 200)
         conversation.refresh_from_db()
+        self.assertEqual(conversation.response_id, response_id)
         self.assertEqual(conversation.transcript, original_transcript)
+        self.assertEqual(
+            Response.objects.filter(
+                respondent=self.member,
+                questionnaire__purpose='onboarding',
+            ).count(),
+            1,
+        )
 
     def test_description_change_keeps_existing_chat_transcript(self):
         self.client.get('/onboarding/chat')

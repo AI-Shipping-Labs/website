@@ -3,12 +3,10 @@
 Covers:
 - Anonymous users see the public marketing homepage (no change)
 - Authenticated users see the personalized dashboard at /
-- Continue learning section with in-progress courses
-- Upcoming events section with registered events
-- Recent content section with accessible articles/recordings
-- Active polls section
-- Quick actions section (community link for Main+ only)
-- Empty states for all sections
+- Continue learning with in-progress courses and workshops
+- The actionable For you feed, including articles and active polls
+- Browse destinations that keep the dashboard useful with an empty feed
+- Commitment-first onboarding, sprint, event, and activation zones
 """
 
 import json
@@ -87,8 +85,14 @@ class HomepageRoutingTest(TierSetupMixin, TestCase):
         self.client.login(email='test@example.com', password='testpass123')
         response = self.client.get('/')
         content = response.content.decode()
+        self.assertIn('data-testid="dashboard-heading"', content)
         self.assertIn('data-testid="dashboard-commitment-zones"', content)
+        self.assertIn('data-testid="dashboard-home-feed"', content)
+        self.assertIn('data-testid="dashboard-feed-destinations"', content)
+        self.assertIn('For you', content)
         self.assertIn('Welcome back, Alice', content)
+        self.assertNotIn('id="join-free"', content)
+        self.assertNotIn('id="register-form"', content)
 
 
 # ============================================================
@@ -858,12 +862,12 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
 
 
 # ============================================================
-# Recent Content
+# Article feed entries
 # ============================================================
 
 
 class RecentContentTest(TierSetupMixin, TestCase):
-    """Test the recent content section."""
+    """Test article entries in the unified For you feed."""
 
     def setUp(self):
         self.user = User.objects.create_user(
@@ -952,12 +956,12 @@ class RecentContentTest(TierSetupMixin, TestCase):
 
 
 # ============================================================
-# Active Polls
+# Poll feed entries
 # ============================================================
 
 
 class ActivePollsTest(TierSetupMixin, TestCase):
-    """Test the active polls section."""
+    """Test active poll entries in the unified For you feed."""
 
     def setUp(self):
         self.user = User.objects.create_user(
@@ -973,6 +977,9 @@ class ActivePollsTest(TierSetupMixin, TestCase):
         self.assertEqual(response.context['active_polls'], [])
         self.assertNotIn('No active polls right now', content)
         self.assertNotIn('data-feed-kind="poll"', content)
+        self.assertIn('data-testid="dashboard-home-feed"', content)
+        self.assertIn('data-testid="dashboard-feed-destinations"', content)
+        self.assertIn('href="/vote"', content)
 
     def test_shows_open_poll(self):
         Poll.objects.create(
@@ -981,6 +988,8 @@ class ActivePollsTest(TierSetupMixin, TestCase):
         )
         response = self.client.get('/')
         self.assertContains(response, 'Favorite Framework')
+        self.assertContains(response, 'data-feed-kind="poll"')
+        self.assertContains(response, 'href="/vote/')
 
     def test_does_not_show_closed_poll(self):
         Poll.objects.create(

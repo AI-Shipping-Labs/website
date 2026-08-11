@@ -348,8 +348,14 @@ def test_authenticated_member_keeps_dashboard_path(
         assert page.locator('#register-form').count() == 0
         assert page.locator('[data-testid="home-upcoming-events-section"]').count() == 0
         assert page.locator('[data-testid="home-sprint-story-section"]').count() == 0
+        expect(page.get_by_test_id("dashboard-heading")).to_be_visible()
+        expect(page.get_by_test_id("dashboard-commitment-zones")).to_be_visible()
         expect(
-            page.get_by_role("heading", name="Recent content", exact=True)
+            page.get_by_role("heading", name="For you", exact=True)
         ).to_be_visible()
+        destinations = page.get_by_test_id("dashboard-feed-destinations")
+        expect(destinations).to_be_visible()
+        expect(destinations.get_by_role("link", name="Courses")).to_be_visible()
+        expect(destinations.get_by_role("link", name="Polls")).to_be_visible()
     finally:
         context.close()

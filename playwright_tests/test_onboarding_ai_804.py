@@ -24,6 +24,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -268,16 +269,13 @@ class TestSwitchToForm:
                 f"{django_server}/onboarding/chat", wait_until="domcontentloaded",
             )
             page.locator('[data-testid="onboarding-switch-to-form"]').click()
-            page.locator('[data-testid="onboarding-identify-form"]').wait_for(
-                state="visible",
-            )
-            page.locator(
-                '[data-testid="onboarding-option"] input[value="none"]'
-            ).check()
-            page.locator('[data-testid="onboarding-continue-button"]').click()
             page.locator('[data-testid="questionnaire-response-form"]').wait_for(
                 state="visible",
             )
+            assert page.url == f"{django_server}/onboarding/questions"
+            expect(
+                page.locator('[data-testid="onboarding-identify-form"]')
+            ).to_have_count(0)
             assert page.locator(
                 '[data-testid="onboarding-switch-to-chat"]'
             ).is_visible()

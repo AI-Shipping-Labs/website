@@ -12,4 +12,4 @@ can register for all upcoming sessions or any single one (#673 keeps the
 event.get_absolute_url source of truth). Every data-testid is preserved.
 {% endcomment %}
 {% firstof event.event_series.get_absolute_url event.get_absolute_url as event_card_href %}
-{% include "content/_content_card.html" with card_url=event_card_href card_testid="upcoming-event-card" card_anchor_testid="event-card-link" card_badge_template="events/_upcoming_event_card_badges.html" card_body_template="events/_upcoming_event_card_body.html" %}
+{% include "content/_content_card.html" with card_url=event_card_href card_testid="upcoming-event-card" card_anchor_testid="event-card-link" card_badge_template="events/_upcoming_event_card_badges.html" card_body_template="events/_upcoming_event_card_body.html" card_tag_row_template="events/_upcoming_event_card_tags.html" %}

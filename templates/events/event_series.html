@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load tz static access_tags %}
+{% load static access_tags date_formatting %}
 {% load member_badges %}
 
 {% block title %}{{ series.name }} | AI Shipping Labs{% endblock %}
@@ -132,7 +132,7 @@
             </a>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span data-testid="series-event-date">
-                {% timezone series_display_timezone %}{{ event.start_datetime|date:'D, M j, Y · H:i' }}{% endtimezone %}
+                {% if user.is_authenticated %}{% user_event_datetime event.start_datetime user fmt="%a, %b %d, %Y · %H:%M" %}{% else %}{{ event|event_source_short_datetime }}{% endif %}
               </span>
               {# Issue #668: per-occurrence social-proof chip. View annotates #}
               {# _attendee_count so this renders in a single SQL pass. #}

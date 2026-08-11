@@ -74,7 +74,7 @@ Required context: ``card_variant`` ("upcoming", "series", or "past") plus
         {% endif %}
         <div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground" data-testid="event-card-meta">
           {% include "events/_timeline_platform_label.html" with event=event %}
-          <span data-testid="event-card-time">{{ display_time }}</span>
+          <span data-testid="event-card-time">{% if display_time %}{{ display_time }}{% else %}{% include "events/_event_list_datetime.html" with event=event %}{% endif %}</span>
           <span aria-hidden="true">·</span>
           {% include "events/_timeline_registered_count.html" with event=event %}
         </div>
@@ -99,6 +99,7 @@ Required context: ``card_variant`` ("upcoming", "series", or "past") plus
     </div>
   </a>
   {% if card_variant == 'past' %}
+    {% include "events/_upcoming_event_card_tags.html" with tag_row_class="mt-3 flex flex-wrap gap-1.5" %}
     {% if event.kind == 'workshop' and event.workshop %}
     <a href="{% url 'workshop_video' event.workshop.url_key %}" class="mt-3 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="past-card-recording-cta">
     {% else %}

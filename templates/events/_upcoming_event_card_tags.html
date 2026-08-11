@@ -1,0 +1,20 @@
+{% comment %}
+Tag chips live outside the card anchor so past-event filters remain valid
+links without creating nested anchors. Other surfaces keep the same chips
+static because their listing does not support tag filtering.
+{% endcomment %}
+{% if event.tags %}
+{% firstof tag_row_class "flex flex-wrap gap-1.5 px-4 pb-4 sm:px-5 sm:pb-5" as resolved_tag_row_class %}
+<div class="{{ resolved_tag_row_class }}" data-testid="event-card-tags">
+  {% for tag in event.tags|slice:":3" %}
+    {% if filter_mode == "past" %}
+    <a href="/events?filter=past&amp;tag={{ tag|urlencode }}" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ tag }}</a>
+    {% else %}
+    <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">{{ tag }}</span>
+    {% endif %}
+  {% endfor %}
+  {% if event.tags|length > 3 %}
+  <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ event.tags|length|add:'-3' }} more event tags">+{{ event.tags|length|add:"-3" }}</span>
+  {% endif %}
+</div>
+{% endif %}

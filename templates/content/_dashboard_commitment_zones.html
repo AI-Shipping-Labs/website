@@ -1,0 +1,276 @@
+{% load accounts_extras %}
+{% load member_badges %}
+{% load teaser_tags %}
+{% load sprint_extras %}
+
+<div class="space-y-12 sm:space-y-16" data-testid="dashboard-commitment-zones">
+  {% if show_free_activation_checklist %}
+  <section data-testid="dashboard-getting-started">
+    <div class="overflow-hidden rounded-lg border border-border bg-card" data-testid="free-activation-checklist" data-dismiss-card-container>
+      <div class="relative border-b border-border p-6 pr-16">
+        <button type="button"
+                class="absolute right-3 top-3 inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                aria-label="Dismiss getting started"
+                data-testid="free-activation-dismiss"
+                data-dismiss-card="free_activation_checklist">
+          <i data-lucide="x" class="h-4 w-4" aria-hidden="true"></i>
+        </button>
+        <p class="text-xs font-medium uppercase tracking-widest text-accent">Getting started</p>
+        <div class="mt-1 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div class="min-w-0">
+            <h3 class="text-lg font-semibold tracking-tight text-foreground">Set up your account</h3>
+            <p class="mt-1 text-sm text-muted-foreground">Three useful steps to start learning and building with the community.</p>
+          </div>
+          <p class="shrink-0 text-sm font-medium text-foreground" data-testid="free-activation-progress-copy">
+            {{ free_activation_completed_count }} of {{ free_activation_total_count }} complete
+          </p>
+        </div>
+        <div class="mt-4 h-2 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
+          <div class="h-full rounded-full bg-accent transition-all" style="width: {{ free_activation_percentage }}%"></div>
+        </div>
+      </div>
+      <ol class="divide-y divide-border">
+        {% for item in free_activation_checklist_items %}
+        <li class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:px-6" data-testid="free-activation-item-{{ item.key }}" data-complete="{{ item.completed|yesno:'true,false' }}">
+          <div class="flex min-w-0 flex-1 items-start gap-3">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border {% if item.completed %}border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300{% else %}border-border bg-secondary text-muted-foreground{% endif %}">
+              {% if item.completed %}<i data-lucide="check" class="h-4 w-4" aria-hidden="true"></i>{% else %}<span class="text-xs font-semibold">{{ forloop.counter }}</span>{% endif %}
+            </span>
+            <div class="min-w-0 pt-0.5">
+              <h4 class="text-sm font-semibold text-foreground">{{ item.title }}</h4>
+              {% if not item.completed %}<p class="mt-0.5 text-sm text-muted-foreground">{{ item.description }}</p>{% endif %}
+            </div>
+          </div>
+          <div class="shrink-0 pl-11 sm:pl-0">
+            {% if item.completed %}
+            <span class="inline-flex min-h-[44px] items-center text-xs font-medium text-emerald-800 dark:text-emerald-300" data-testid="free-activation-complete-{{ item.key }}">Done</span>
+            {% else %}
+            <a href="{{ item.url }}" class="{% button_classes 'secondary' 'w-full justify-center sm:w-auto' %}" data-testid="free-activation-action-{{ item.key }}">
+              {{ item.cta_label }}
+              <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
+            </a>
+            {% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if plan or show_onboarding_prompt or show_plan_preparing or dashboard_upcoming_events or dashboard_book_club.next_deadline_is_soon %}
+  <section class="space-y-4" data-testid="dashboard-this-week">
+    <h2 class="text-xl font-semibold tracking-tight text-foreground">This week</h2>
+
+    {% if plan %}
+    <div class="rounded-lg border border-accent/30 bg-card p-6" id="sprint-plan-section" data-testid="account-sprint-plan-card">
+      <p class="text-xs font-medium uppercase tracking-widest text-accent">
+        {% if plan_has_ended %}Your latest sprint plan{% else %}Your sprint plan{% endif %}
+      </p>
+      <h3 class="mt-2 text-2xl font-semibold tracking-tight text-foreground" data-testid="account-sprint-plan-heading">{{ plan.sprint.name }}</h3>
+      <p class="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" data-testid="account-sprint-plan-meta">
+        <span data-testid="account-sprint-plan-dates">{% sprint_date_range plan.sprint %}</span>
+        <span aria-hidden="true">&middot;</span>
+        {% member_status_badge plan.sprint.sprint_badge_current.label status=plan.sprint.sprint_badge_current.state size="xs" testid="account-sprint-plan-status" %}
+      </p>
+      {% if plan_progress_total %}
+      <div class="mt-4" data-testid="account-sprint-plan-progress">
+        <div class="flex items-center justify-between gap-4 text-sm">
+          <span class="text-foreground">{{ plan_progress_done }} of {{ plan_progress_total }} checkpoints done</span>
+          <span class="text-muted-foreground">{% widthratio plan_progress_done plan_progress_total 100 %}%</span>
+        </div>
+        <div class="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
+          <div class="h-full rounded-full bg-accent" style="width: {% widthratio plan_progress_done plan_progress_total 100 %}%"></div>
+        </div>
+      </div>
+      {% endif %}
+      {% if plan_has_ended %}
+      <p class="mt-4 text-sm text-muted-foreground" data-testid="account-sprint-plan-recap">Review what shipped, share feedback, or carry the work into your next sprint.</p>
+      {% endif %}
+      <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <a href="{% url 'my_plan_detail' sprint_slug=plan.sprint.slug plan_id=plan.pk %}" class="{% button_classes 'primary' size='lg' extra='justify-center' %}" data-testid="account-sprint-plan-open">
+          Open my plan
+          <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
+        </a>
+        {% if cohort_has_other_members %}
+        <a href="{% url 'cohort_board' sprint_slug=plan.sprint.slug %}" class="{% button_classes 'secondary' %}" data-testid="account-sprint-plan-cohort">View cohort</a>
+        {% endif %}
+        {% if plan_has_ended and sprint_end_feedback_url %}
+        <a href="{{ sprint_end_feedback_url }}" class="{% button_classes 'secondary' %}" data-testid="account-sprint-plan-feedback">{{ sprint_end_feedback_label }}</a>
+        {% endif %}
+        {% if plan_has_ended and sprint_end_next_action %}
+        <a href="{{ sprint_end_next_action.url }}" class="{% button_classes 'secondary' %}" data-testid="account-sprint-plan-next-action">{{ sprint_end_next_action.label }}</a>
+        {% endif %}
+      </div>
+    </div>
+    {% elif show_onboarding_prompt %}
+    <div class="relative rounded-lg border border-accent/40 bg-accent/10 p-6" data-testid="onboarding-prompt" data-dismiss-card-container>
+      <button type="button" class="absolute right-3 top-3 inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" aria-label="Dismiss" data-testid="onboarding-prompt-dismiss" data-dismiss-card="onboarding_prompt">
+        <i data-lucide="x" class="h-4 w-4" aria-hidden="true"></i>
+      </button>
+      <div class="pr-12">
+        <p class="text-xs font-medium uppercase tracking-widest text-accent">Your next step</p>
+        <h3 class="mt-2 text-lg font-semibold tracking-tight text-foreground">Tell us a bit about you so we can build your plan</h3>
+        <p class="mt-1 text-sm text-muted-foreground">It takes a few minutes and helps us prepare the right plan for you.</p>
+      </div>
+      <a href="{% url 'onboarding_start' %}" class="{% button_classes 'primary' 'mt-5' %}" data-testid="onboarding-prompt-cta">Start onboarding</a>
+    </div>
+    {% elif show_plan_preparing %}
+    <div class="rounded-lg border border-border bg-card p-6" data-testid="dashboard-plan-preparing-section">
+      <div data-testid="dashboard-plan-preparing-card">
+        <p class="text-xs font-medium uppercase tracking-widest text-accent">Your sprint plan</p>
+        <h3 class="mt-2 text-lg font-semibold tracking-tight text-foreground" data-testid="dashboard-plan-preparing-heading">Your plan is being prepared</h3>
+        <p class="mt-2 text-sm text-muted-foreground" data-testid="dashboard-plan-preparing-copy">Alexey and Valeria are using your onboarding answers to prepare your sprint plan. This usually takes 1-2 business days. We will notify you when it is ready.</p>
+        <a href="{% url 'onboarding_start' %}" class="{% button_classes 'secondary' 'mt-5' %}" data-testid="dashboard-plan-preparing-cta">Review onboarding answers</a>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if dashboard_upcoming_events or dashboard_book_club.next_deadline_is_soon %}
+    <div class="divide-y divide-border border-y border-border" data-testid="dashboard-commitment-list">
+      {% for event in dashboard_upcoming_events %}
+      <a href="{{ event.get_absolute_url }}" class="group flex min-h-[72px] min-w-0 items-center gap-4 px-3 py-3 transition-colors hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent" data-testid="dashboard-upcoming-event-row">
+        <span class="min-w-0 flex-1">
+          <span class="flex flex-wrap items-center gap-2">
+            <span class="text-base font-semibold leading-snug text-foreground">{{ event.title }}</span>
+            {% if event.dashboard_is_happening_now %}<span class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:text-emerald-300" data-testid="dashboard-event-live-badge">Happening now</span>{% endif %}
+            {% if event.dashboard_is_event_series %}<span class="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent" data-testid="dashboard-event-series-badge">Event series</span>{% endif %}
+          </span>
+          <span class="mt-1 block text-sm text-muted-foreground" data-testid="dashboard-event-date">{% if event.dashboard_is_happening_now %}Started {% endif %}{{ event.dashboard_formatted_start }}{% if event.dashboard_series_remaining_count > 0 %} &middot; {{ event.dashboard_series_remaining_count }} more session{{ event.dashboard_series_remaining_count|pluralize }}{% endif %}</span>
+        </span>
+        <i data-lucide="arrow-right" class="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent" aria-hidden="true"></i>
+      </a>
+      {% endfor %}
+      {% if dashboard_book_club.next_deadline_is_soon %}
+      <a href="{{ dashboard_book_club.next_url }}" class="group flex min-h-[72px] min-w-0 items-center gap-4 px-3 py-3 transition-colors hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent" data-testid="dashboard-book-club-deadline">
+        <span class="min-w-0 flex-1">
+          <span class="text-xs font-medium uppercase tracking-widest text-accent">Book Club &middot; Due {{ dashboard_book_club.next_chapter.deadline|date:"M j" }}</span>
+          <span class="mt-1 block text-base font-semibold leading-snug text-foreground">Chapter {{ dashboard_book_club.next_chapter.number }} &middot; {{ dashboard_book_club.next_chapter.title }}</span>
+          <span class="mt-1 block text-sm text-muted-foreground">{{ dashboard_book_club.book.title }}</span>
+        </span>
+        <i data-lucide="arrow-right" class="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent" aria-hidden="true"></i>
+      </a>
+      {% endif %}
+    </div>
+    {% if dashboard_upcoming_events %}
+    <a href="/events" class="inline-flex min-h-[44px] items-center gap-1 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+      View all events
+      <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
+    </a>
+    {% endif %}
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if in_progress_learning or dashboard_book_club %}
+  <section class="space-y-4" data-testid="dashboard-continue-learning-section">
+    <h2 class="text-xl font-semibold tracking-tight text-foreground">Pick up where you left off</h2>
+    <div class="divide-y divide-border border-y border-border" data-testid="continue-learning-list">
+      {% for item in in_progress_learning %}
+      <div class="flex min-w-0 flex-col gap-4 px-3 py-4 sm:flex-row sm:items-center" data-testid="continue-learning-{{ item.kind }}">
+        <div class="min-w-0 flex-1">
+          {% if item.kind == 'workshop' %}
+          <h3 class="truncate text-base font-semibold leading-snug text-foreground">{{ item.workshop.title }}</h3>
+          <p class="mt-1 text-sm text-muted-foreground">{{ item.completed_count }}/{{ item.total_units }} pages completed{% if item.last_page %} &middot; Last: {{ item.last_page.title }}{% endif %}</p>
+          {% else %}
+          <h3 class="truncate text-base font-semibold leading-snug text-foreground">{{ item.course.title }}</h3>
+          <p class="mt-1 text-sm text-muted-foreground">{{ item.completed_count }}/{{ item.total_units }} units completed{% if item.last_unit %} &middot; Last: {{ item.last_unit.title }}{% endif %}</p>
+          {% endif %}
+          <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-secondary"><div class="h-full rounded-full bg-accent" style="width: {{ item.percentage }}%"></div></div>
+        </div>
+        {% if item.kind == 'workshop' %}
+        <a href="{% if item.next_page %}{{ item.next_page.get_absolute_url }}{% else %}{{ item.workshop.get_absolute_url }}{% endif %}" class="{% button_classes 'secondary' 'shrink-0' %}" data-testid="continue-learning-workshop-cta">Continue</a>
+        {% else %}
+        <a href="{% if item.next_unit %}{{ item.next_unit.get_absolute_url }}{% else %}{{ item.course.get_absolute_url }}{% endif %}" class="{% button_classes 'secondary' 'shrink-0' %}">Continue</a>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% if dashboard_book_club %}
+      <div class="flex min-w-0 flex-col gap-4 px-3 py-4 sm:flex-row sm:items-center" data-testid="dashboard-book-club-card">
+        <div class="min-w-0 flex-1">
+          <p class="text-xs font-medium uppercase tracking-widest text-accent">Book Club</p>
+          <h3 class="mt-1 truncate text-base font-semibold leading-snug text-foreground" data-testid="dashboard-book-club-title">{{ dashboard_book_club.book.title }}</h3>
+          <p class="mt-1 text-sm text-muted-foreground"><span data-testid="dashboard-book-club-progress">{{ dashboard_book_club.completed_count }}/{{ dashboard_book_club.total_chapters }} chapters read</span>{% if dashboard_book_club.next_chapter %} &middot; <span data-testid="dashboard-book-club-next">Next: Chapter {{ dashboard_book_club.next_chapter.number }} &middot; {{ dashboard_book_club.next_chapter.title }}</span>{% endif %}</p>
+          <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-secondary"><div class="h-full rounded-full bg-accent" style="width: {{ dashboard_book_club.percentage }}%"></div></div>
+        </div>
+        <a href="{{ dashboard_book_club.next_url }}" class="{% button_classes 'secondary' 'shrink-0' %}" data-testid="dashboard-book-club-cta">{{ dashboard_book_club.cta_label }}</a>
+      </div>
+      {% endif %}
+    </div>
+    {% if hidden_learning_count %}
+    <p class="text-sm text-muted-foreground" data-testid="continue-learning-more">{{ hidden_learning_count }} more started item{{ hidden_learning_count|pluralize }}. <a href="/courses" class="font-medium text-accent hover:underline">See all learning</a></p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if active_polls or recent_content %}
+  <section class="space-y-4" data-testid="dashboard-new-for-you">
+    <h2 class="text-xl font-semibold tracking-tight text-foreground">New for you</h2>
+    <div class="divide-y divide-border border-y border-border">
+      {% if active_polls %}
+      {% with poll=active_polls.0 %}
+      <a href="{{ poll.get_absolute_url }}" class="group flex min-h-[72px] min-w-0 items-center gap-4 px-3 py-3 transition-colors hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent" data-testid="dashboard-active-poll">
+        <span class="min-w-0 flex-1">
+          <span class="text-xs font-medium uppercase tracking-widest text-accent">Active poll</span>
+          <span class="mt-1 block text-base font-semibold leading-snug text-foreground">{{ poll.title }}</span>
+          {% if poll.closes_at %}<span class="mt-1 block text-sm text-muted-foreground">Closes {{ poll.closes_at|member_compact_date }}</span>{% endif %}
+        </span>
+        <i data-lucide="arrow-right" class="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent" aria-hidden="true"></i>
+      </a>
+      {% endwith %}
+      {% endif %}
+      {% for item in recent_content %}
+      <a href="{{ item.url }}" class="group flex min-h-[72px] min-w-0 items-center gap-4 px-3 py-3 transition-colors hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent" data-testid="recent-content-card">
+        <span class="min-w-0 flex-1">
+          <span class="text-xs font-medium uppercase tracking-widest text-muted-foreground">{{ item.type }}</span>
+          <span class="mt-1 block text-base font-semibold leading-snug text-foreground">{{ item.title }}</span>
+          <span class="mt-1 block truncate text-sm text-muted-foreground">{{ item.description|strip_markdown|truncatechars:100 }}</span>
+        </span>
+        <span class="hidden shrink-0 text-xs text-muted-foreground sm:block">{{ item.date|member_compact_date }}</span>
+        <i data-lucide="arrow-right" class="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent" aria-hidden="true"></i>
+      </a>
+      {% endfor %}
+    </div>
+    <div class="flex flex-wrap gap-x-5 gap-y-2">
+      {% if recent_content %}<a href="/blog" class="inline-flex min-h-[44px] items-center gap-1 text-sm font-medium text-accent hover:underline">View all articles <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+      {% if active_polls %}<a href="/vote" class="inline-flex min-h-[44px] items-center gap-1 text-sm font-medium text-accent hover:underline">View all polls <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if show_free_plan_teaser %}
+  <section class="space-y-4" data-testid="dashboard-unlock-more">
+    <h2 class="text-xl font-semibold tracking-tight text-foreground">Unlock more</h2>
+    <div class="rounded-lg border border-border bg-card p-6" data-testid="free-plan-teaser">
+      <h3 class="text-lg font-semibold tracking-tight text-foreground">What paid members are doing this month</h3>
+      <ul class="mt-4 space-y-3 text-sm text-foreground">
+        {% if free_unlock_sprint %}<li class="flex items-start gap-3"><i data-lucide="lock" class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true"></i><span><span class="font-medium">Sprint cohort:</span> {{ free_unlock_sprint.name }} &middot; {% sprint_date_range free_unlock_sprint compact=True %}</span></li>{% endif %}
+        {% if free_unlock_book %}<li class="flex items-start gap-3"><i data-lucide="lock" class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true"></i><span><span class="font-medium">Book Club:</span> {{ free_unlock_book.title }} &middot; {{ free_unlock_book.get_required_level_display }}</span></li>{% endif %}
+        {% if free_unlock_event_count %}<li class="flex items-start gap-3"><i data-lucide="lock" class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true"></i><span>{{ free_unlock_event_count }} member-only event{{ free_unlock_event_count|pluralize }} in the next 30 days</span></li>{% endif %}
+        {% if not free_unlock_sprint and not free_unlock_book and not free_unlock_event_count %}<li class="flex items-start gap-3"><i data-lucide="lock" class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true"></i><span>Personal sprint plans, cohorts, and community support.</span></li>{% endif %}
+      </ul>
+      <a href="/pricing" class="{% button_classes 'secondary' 'mt-5' %}" data-testid="free-plan-teaser-cta">View paid memberships</a>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="space-y-5" data-testid="dashboard-resources">
+    {% if show_slack_join %}
+    <div class="relative rounded-lg border border-border bg-card p-4 pr-16" data-testid="dashboard-slack-callout" data-dismiss-card-container>
+      <button type="button" class="absolute right-2 top-2 inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" aria-label="Dismiss Slack invitation" data-testid="slack-account-card-dismiss" data-dismiss-card="slack_join"><i data-lucide="x" class="h-4 w-4" aria-hidden="true"></i></button>
+      <h3 class="text-base font-semibold leading-snug text-foreground">Join the member Slack workspace</h3>
+      <p class="mt-1 text-sm text-muted-foreground">Ask questions and connect with other builders.</p>
+      <a href="{{ slack_join_url }}" rel="noopener" class="{% button_classes 'secondary' 'mt-4' %}" data-testid="slack-account-card-join">Join Slack</a>
+    </div>
+    {% endif %}
+
+    <nav class="flex flex-wrap gap-x-5 gap-y-2 border-t border-border pt-4" aria-label="More dashboard destinations" data-testid="dashboard-quick-actions">
+      {% for action in quick_actions %}
+      <a href="{{ action.url }}" class="inline-flex min-h-[44px] items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-quick-action">{{ action.title }} <i data-lucide="arrow-right" class="h-3.5 w-3.5" aria-hidden="true"></i></a>
+      {% endfor %}
+      {% if not plan and not show_free_plan_teaser %}
+      <a href="{{ active_sprint_discovery_url }}" class="inline-flex min-h-[44px] items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-sprint-discovery">Sprints &amp; cohorts <i data-lucide="arrow-right" class="h-3.5 w-3.5" aria-hidden="true"></i></a>
+      {% endif %}
+    </nav>
+  </section>
+</div>

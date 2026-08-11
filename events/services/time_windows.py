@@ -81,18 +81,20 @@ def past_recording_events_queryset(queryset=None, *, now=None):
     )
 
 
-def _annotate_dashboard_series_event(event, count):
+def _annotate_dashboard_series_event(event, count, *, now):
     """Attach dashboard-only series metadata to a registered event row."""
     event.dashboard_is_event_series = bool(event.event_series_id)
     event.dashboard_series_total_count = count
     event.dashboard_series_remaining_count = max(0, count - 1)
+    event.dashboard_is_happening_now = event.start_datetime <= now
     return event
 
 
 def registered_upcoming_events(user, *, now=None, limit=3):
-    """Return registered future events for the member dashboard.
+    """Return registered events that have not finished for the dashboard.
 
-    Series-linked registrations collapse to the earliest upcoming registered
+    Ongoing events stay visible until their effective end. Series-linked
+    registrations collapse to the earliest active or future registered
     occurrence, then the dashboard row limit is applied. Standalone events
     remain independent rows.
     """
@@ -104,7 +106,6 @@ def registered_upcoming_events(user, *, now=None, limit=3):
         .filter(
             user=user,
             event__status='upcoming',
-            event__start_datetime__gt=now,
         )
         .filter(upcoming_window_q(now, field_prefix='event__'))
         .exclude(event__status__in=HIDDEN_FROM_PUBLIC_STATUSES)
@@ -129,11 +130,15 @@ def registered_upcoming_events(user, *, now=None, limit=3):
             seen_series.add(event.event_series_id)
             collapsed.append(
                 _annotate_dashboard_series_event(
-                    event, series_counts[event.event_series_id],
+                    event,
+                    series_counts[event.event_series_id],
+                    now=now,
                 )
             )
         else:
-            collapsed.append(_annotate_dashboard_series_event(event, 0))
+            collapsed.append(
+                _annotate_dashboard_series_event(event, 0, now=now)
+            )
 
         if limit is not None and len(collapsed) >= limit:
             break

@@ -1,4 +1,5 @@
-from datetime import timedelta
+from datetime import UTC, timedelta
+from zoneinfo import ZoneInfo
 
 from django.contrib import messages
 from django.db.models import Count, Exists, OuterRef, Q
@@ -9,7 +10,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 
 from accounts.gating import is_newsletter_only_user
 from accounts.oauth_context import get_oauth_provider_context
-from accounts.services.timezones import format_user_datetime
+from accounts.services.timezones import format_user_datetime, is_valid_timezone
 from bookclub.models import BOOK_STATUS_CURRENT, Book, ChapterRead
 from community.services.slack_links import build_slack_profile_url
 from content.access import (
@@ -339,8 +340,13 @@ def _dashboard(request):
     ]
 
     # --- Upcoming events ---
-    upcoming_events = _get_upcoming_events(user)
-    dashboard_upcoming_events = upcoming_events[:2]
+    dashboard_now = timezone.now()
+    upcoming_events = _get_upcoming_events(user, now=dashboard_now)
+    dashboard_upcoming_events = _get_this_week_events(
+        upcoming_events,
+        user,
+        now=dashboard_now,
+    )
 
     # --- Starting soon card (issue #705) ---
     # The same imminent event continues to appear in ``upcoming_events`` —
@@ -449,6 +455,9 @@ def _dashboard(request):
         active_override=active_override,
         upcoming_events=upcoming_events,
     )
+    free_unlock_context = _get_free_unlock_context(
+        enabled=free_activation_context['show_free_plan_teaser'],
+    )
 
     context = {
         'tier_name': tier_name,
@@ -458,6 +467,7 @@ def _dashboard(request):
         'show_onboarding_prompt': show_onboarding_prompt,
         'show_plan_preparing': show_plan_preparing,
         **free_activation_context,
+        **free_unlock_context,
         'in_progress_courses': in_progress_courses,
         'in_progress_learning': in_progress_learning,
         'hidden_learning_count': hidden_learning_count,
@@ -818,6 +828,12 @@ def _get_dashboard_book_club(user, user_level):
         (chapter for chapter in chapters if not chapter.viewer_has_read),
         None,
     )
+    next_deadline = next_chapter.deadline if next_chapter is not None else None
+    today = timezone.localdate()
+    next_deadline_is_soon = bool(
+        next_deadline
+        and today <= next_deadline <= today + timedelta(days=7)
+    )
 
     if next_chapter is not None:
         next_url = reverse(
@@ -835,14 +851,15 @@ def _get_dashboard_book_club(user, user_level):
         'total_chapters': total,
         'percentage': percentage,
         'next_chapter': next_chapter,
+        'next_deadline_is_soon': next_deadline_is_soon,
         'next_url': next_url,
         'cta_label': cta_label,
     }
 
 
-def _get_upcoming_events(user):
-    """Return the next 3 upcoming events the user is registered for."""
-    events = registered_upcoming_events(user)
+def _get_upcoming_events(user, *, now=None):
+    """Return registered events that have not reached their effective end."""
+    events = registered_upcoming_events(user, now=now, limit=None)
     for event in events:
         event.dashboard_formatted_start = format_user_datetime(
             event.start_datetime,
@@ -850,6 +867,24 @@ def _get_upcoming_events(user):
             fmt=DASHBOARD_EVENT_DATETIME_FORMAT,
         )
     return events
+
+
+def _get_this_week_events(events, user, *, now=None):
+    """Return active and future events through Sunday in the user's zone."""
+    now = now or timezone.now()
+    timezone_name = getattr(user, 'preferred_timezone', '')
+    user_timezone = (
+        ZoneInfo(timezone_name) if is_valid_timezone(timezone_name) else UTC
+    )
+    local_now = now.astimezone(user_timezone)
+    end_of_week = (
+        local_now + timedelta(days=6 - local_now.weekday())
+    ).replace(hour=23, minute=59, second=59, microsecond=999999)
+    return [
+        event
+        for event in events
+        if event.start_datetime.astimezone(user_timezone) <= end_of_week
+    ]
 
 
 def _get_featured_homepage_sprint(today=None):
@@ -1034,31 +1069,31 @@ def _get_free_activation_context(*, user, user_level, active_override, upcoming_
 
     checklist_items = [
         {
-                'key': 'ai-hero',
-                'title': 'Start AI Hero',
-                'description': 'Begin with the open course for building AI products.',
-                'url': '/courses/aihero',
-                'cta_label': 'Open course',
-                'icon': 'book-open',
-                'completed': ai_hero_started,
+            'key': 'ai-hero',
+            'title': 'Start AI Hero',
+            'description': 'Begin with the open course for building AI products.',
+            'url': '/courses/aihero',
+            'cta_label': 'Open course',
+            'icon': 'book-open',
+            'completed': ai_hero_started,
         },
         {
-                'key': 'events',
-                'title': 'Register for a free event',
-                'description': 'Join a live session or workshop you can attend.',
-                'url': '/events',
-                'cta_label': 'Browse events',
-                'icon': 'calendar',
-                'completed': event_registered,
+            'key': 'events',
+            'title': 'Register for a free event',
+            'description': 'Join a live session or workshop you can attend.',
+            'url': '/events',
+            'cta_label': 'Browse events',
+            'icon': 'calendar',
+            'completed': event_registered,
         },
         {
-                'key': 'sprints',
-                'title': 'Learn how sprints and plans work',
-                'description': 'See how members use plans, cohorts, and accountability.',
-                'url': '/activities#community-sprints',
-                'cta_label': 'View sprints',
-                'icon': 'map',
-                'completed': sprint_engaged,
+            'key': 'sprints',
+            'title': 'Learn how sprints and plans work',
+            'description': 'See how members use plans, cohorts, and accountability.',
+            'url': '/activities#community-sprints',
+            'cta_label': 'View sprints',
+            'icon': 'map',
+            'completed': sprint_engaged,
         },
     ]
     completed_count = sum(item['completed'] for item in checklist_items)
@@ -1071,6 +1106,56 @@ def _get_free_activation_context(*, user, user_level, active_override, upcoming_
         'free_activation_percentage': round(
             completed_count / len(checklist_items) * 100,
         ),
+    }
+
+
+def _get_free_unlock_context(*, enabled):
+    """Return concrete paid-member activity for the Free unlock callout."""
+    empty_context = {
+        'free_unlock_sprint': None,
+        'free_unlock_book': None,
+        'free_unlock_event_count': 0,
+    }
+    if not enabled:
+        return empty_context
+
+    from content.access import LEVEL_BASIC
+
+    today = timezone.localdate()
+    locked_sprint = next(
+        (
+            sprint
+            for sprint in Sprint.objects.filter(
+                status='active',
+                min_tier_level__gte=LEVEL_BASIC,
+            ).order_by('start_date')
+            if not sprint.has_ended(today)
+        ),
+        None,
+    )
+    locked_book = (
+        Book.objects
+        .filter(
+            status=BOOK_STATUS_CURRENT,
+            required_level__gte=LEVEL_BASIC,
+        )
+        .order_by('-start_date', '-created_at')
+        .first()
+    )
+    now = timezone.now()
+    locked_event_count = (
+        upcoming_events_queryset(now=now)
+        .filter(
+            published=True,
+            required_level__gte=LEVEL_BASIC,
+            start_datetime__lte=now + timedelta(days=30),
+        )
+        .count()
+    )
+    return {
+        'free_unlock_sprint': locked_sprint,
+        'free_unlock_book': locked_book,
+        'free_unlock_event_count': locked_event_count,
     }
 
 

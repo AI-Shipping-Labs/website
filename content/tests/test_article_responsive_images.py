@@ -43,29 +43,21 @@ class ArticleResponsiveImageTemplateTest(TestCase):
             published=True,
         )
 
-    def test_index_picture_sizes_dimensions_geometry_and_priority(self):
+    def test_index_is_text_first_without_cover_media(self):
         response = self.client.get("/blog")
-        self.assertContains(response, "<picture>", html=False)
-        self.assertContains(response, 'type="image/webp"')
-        self.assertContains(
-            response,
-            'sizes="(min-width: 640px) 12rem, calc(100vw - 2rem)"',
-        )
-        self.assertContains(response, 'width="1200" height="800"')
-        self.assertContains(response, 'alt="Responsive &amp; safe"')
-        self.assertContains(response, 'fetchpriority="high"')
-        self.assertContains(response, "sm:h-32 object-cover")
+        self.assertContains(response, "Responsive &amp; safe")
+        self.assertNotContains(response, "<picture>", html=False)
+        self.assertNotContains(response, "https://cdn.example/cover/320.webp")
 
     def test_detail_preserves_inline_alt_title_order_and_social_original(self):
         response = self.client.get(self.article.get_absolute_url())
         body = response.content.decode()
-        self.assertGreaterEqual(body.count("<picture>"), 2)
+        self.assertEqual(body.count("<picture>"), 1)
         self.assertIn('alt="Exact alt"', body)
         self.assertIn('title="Exact title"', body)
         self.assertLess(body.index("Before"), body.index("Exact alt"))
         self.assertNotEqual(body.find("After", body.index("Exact alt")), -1)
         self.assertIn('loading="lazy" decoding="async"', body)
-        self.assertIn("max-h-[400px]", body)
         self.assertIn(f'property="og:image" content="{self.url}"', body)
         self.assertNotIn('property="og:image" content="https://cdn.example/v/', body)
 
@@ -74,7 +66,7 @@ class ArticleResponsiveImageTemplateTest(TestCase):
         self.article.save(update_fields=["required_level"])
         response = self.client.get(self.article.get_absolute_url())
         body = response.content.decode()
-        self.assertEqual(body.count("<picture>"), 1)
+        self.assertEqual(body.count("<picture>"), 0)
         self.assertNotIn("Exact alt", body)
         self.assertNotIn("https://cdn.example/inline/320.webp", body)
 
@@ -91,11 +83,14 @@ class ArticleResponsiveImageTemplateTest(TestCase):
         self.assertIn('alt="A &amp; B"', rendered)
         self.assertNotIn("width=", rendered)
 
-    def test_coverless_placeholder_unchanged(self):
+    def test_coverless_article_keeps_text_first_row_without_placeholder(self):
         Article.objects.create(
             title="No cover",
             slug="no-cover-responsive",
             date=date(2026, 7, 1),
         )
         response = self.client.get("/blog")
-        self.assertContains(response, 'data-testid="blog-card-thumbnail-fallback"')
+        self.assertContains(response, "No cover")
+        self.assertNotContains(
+            response, 'data-testid="blog-card-thumbnail-fallback"',
+        )

@@ -43,7 +43,7 @@ class BlogListMobileArrowTest(TestCase):
 
 
 class BlogListMobileCoverImageTest(TestCase):
-    """Cover images should use responsive aspect ratio on mobile."""
+    """The text-first archive should not reserve mobile media space."""
 
     @classmethod
     def setUpTestData(cls):
@@ -56,28 +56,17 @@ class BlogListMobileCoverImageTest(TestCase):
             published=True,
         )
 
-    def test_cover_image_uses_aspect_video_on_mobile(self):
+    def test_cover_image_is_omitted_from_archive_row(self):
         response = self.client.get("/blog")
         content = response.content.decode()
-        # On mobile, image uses aspect-video for consistent sizing
-        self.assertIn("aspect-video", content)
+        self.assertNotIn('src="https://example.com/cover.jpg"', content)
+        self.assertNotIn("aspect-video", content)
 
-    def test_cover_image_fixed_height_only_on_sm(self):
+    def test_archive_row_has_no_fixed_thumbnail_height(self):
         response = self.client.get("/blog")
         content = response.content.decode()
-        # Fixed height should only apply at sm: breakpoint
-        self.assertIn("sm:h-32", content)
-        # Should not have bare h-32 (without sm: prefix) on the cover image
-        # Find the img tag for the cover image
-        img_start = content.index('src="https://example.com/cover.jpg"')
-        # Go back to find the img tag start
-        img_tag_start = content.rfind("<img", 0, img_start)
-        img_tag_end = content.index(">", img_start)
-        img_tag = content[img_tag_start : img_tag_end + 1]
-        # The img tag should not have bare `h-32` without `sm:` prefix
-        # It should have `sm:h-32` but the class list should use aspect-video for mobile
-        self.assertIn("aspect-video", img_tag)
-        self.assertIn("sm:h-32", img_tag)
+        self.assertNotIn("sm:h-32", content)
+        self.assertNotIn('data-testid="content-card-editorial-media"', content)
 
 
 class BlogListMobileNoOverflowTest(TestCase):
@@ -178,15 +167,11 @@ class BlogDetailRelatedArticlesMobileTest(TestCase):
             published=True,
         )
 
-    def test_related_grid_uses_responsive_columns(self):
+    def test_related_content_uses_single_column_editorial_rows(self):
         response = self.client.get("/blog/main-mobile-test")
         content = response.content.decode()
-        # Grid should use sm:grid-cols-2 (not grid-cols-2),
-        # meaning single column by default on mobile
-        self.assertIn("sm:grid-cols-2", content)
-        # Should not have bare grid-cols-2 without sm: prefix on the related grid
         grid_start = content.index('data-testid="related-content-rail"')
-        grid_section = content[grid_start : grid_start + 500]
-        self.assertIn("sm:grid-cols-2", grid_section)
-        # Verify it does not force multi-column on mobile
-        self.assertNotIn('"grid-cols-2', grid_section)
+        rail_section = content[grid_start : grid_start + 1600]
+        self.assertIn("border-t border-border/70", rail_section)
+        self.assertIn('data-testid="related-content-card"', rail_section)
+        self.assertNotIn("grid-cols-2", rail_section)

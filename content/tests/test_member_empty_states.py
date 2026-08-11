@@ -10,7 +10,6 @@ ROOT = Path(__file__).resolve().parents[2]
 class MemberEmptyStateTemplateUsageTest(SimpleTestCase):
     def test_first_batch_templates_use_member_empty_state_tag(self):
         template_paths = [
-            'templates/content/dashboard.html',
             'templates/notifications/notification_list.html',
             'templates/content/tutorials_list.html',
             'templates/content/blog_list.html',

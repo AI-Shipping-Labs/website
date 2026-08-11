@@ -262,7 +262,7 @@ class EventsListTimeWindowTest(TestCase):
 
 
 class DashboardRegisteredUpcomingEventsTest(TestCase):
-    def test_returns_next_three_registered_eligible_future_events(self):
+    def test_returns_all_registered_eligible_unfinished_events(self):
         now = timezone.now().replace(microsecond=0)
         user = User.objects.create_user(email='dash1022@test.com', password='x')
 
@@ -316,6 +316,11 @@ class DashboardRegisteredUpcomingEventsTest(TestCase):
 
         self.assertEqual(
             [event.title for event in results],
-            ['Dash Eligible 0', 'Dash Eligible 1', 'Dash Eligible 2'],
+            [
+                'Dash Eligible 0',
+                'Dash Eligible 1',
+                'Dash Eligible 2',
+                'Dash Eligible 3',
+            ],
         )
         self.assertNotIn(completed_future.id, [event.id for event in results])

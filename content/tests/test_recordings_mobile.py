@@ -31,20 +31,21 @@ def _create_recording(slug, **kwargs):
     return Event.objects.create(**defaults)
 
 
-class RecordingListArrowHiddenOnMobileTest(TestCase):
-    """Arrow icons on recording list cards should be hidden on mobile."""
+class RecordingListArrowAffordanceTest(TestCase):
+    """Past recording rows keep one explicit recording affordance."""
 
     @classmethod
     def setUpTestData(cls):
         cls.recording = _create_recording('arrow-rec-test')
 
-    def test_past_recording_card_has_no_nav_arrow(self):
-        # Issue #1382: Luma-style timeline cards drop the trailing navigation
-        # arrow; the past card leads with a "Watch recording" CTA instead.
+    def test_past_recording_cta_has_nav_arrow(self):
+        # The past row avoids a second top-right arrow, but its explicit
+        # recording CTA retains the shared directional indicator.
         response = self.client.get('/events?filter=past')
         content = response.content.decode()
         self.assertIn('data-testid="past-recording-card"', content)
-        self.assertNotIn('data-lucide="arrow-right"', content)
+        self.assertIn('data-testid="past-card-recording-cta"', content)
+        self.assertEqual(content.count('data-lucide="arrow-right"'), 1)
 
     def test_arrow_icon_has_flex_shrink_0(self):
         response = self.client.get('/events?filter=past')

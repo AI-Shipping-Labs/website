@@ -337,10 +337,12 @@ class StartingSoonDashboardViewTest(TierSetupMixin, TestCase):
         EventRegistration.objects.create(user=self.user, event=event)
 
         response = self.client.get('/')
-        # Title rendered AT LEAST twice — once in the card, once in the list.
-        # The card has the data-testid; the list has the "View event" CTA.
-        self.assertContains(response, 'Both Surfaces', count=2)
-        self.assertContains(response, 'View event')
+        # The title appears in both the urgency card and the weekly row. The
+        # exact raw-string count is intentionally not fixed because the whole
+        # row also uses the title for its accessible label.
+        self.assertContains(response, 'Both Surfaces')
+        self.assertContains(response, 'data-testid="starting-soon-card"')
+        self.assertContains(response, 'data-testid="dashboard-upcoming-event-row"')
 
     def test_unregistered_user_with_imminent_event_sees_no_card(self):
         # Event exists in the window but the user is not registered.

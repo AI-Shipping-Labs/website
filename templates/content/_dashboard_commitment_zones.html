@@ -172,14 +172,15 @@
   </section>
   {% endif %}
 
-  {% if dashboard_feed %}
   <section class="space-y-4" data-testid="dashboard-home-feed">
     <h2 class="text-xl font-semibold tracking-tight text-foreground">For you</h2>
+    {% if dashboard_feed %}
     <div class="border-t border-border/70" data-testid="dashboard-feed-list">
       {% for item in dashboard_feed %}
       {% include "content/_content_card.html" with card_url=item.url card_testid="dashboard-feed-entry" card_anchor_testid="dashboard-feed-entry-link" card_body_template="content/_dashboard_editorial_card_body.html" card_badge_template="content/_dashboard_editorial_card_badges.html" card_editorial=True card_title=item.title card_heading_tag="h3" card_aria_label=item.title card_extra_attrs=item.card_extra_attrs dashboard_card_variant="feed" %}
       {% endfor %}
     </div>
+    {% endif %}
     <nav class="flex flex-wrap gap-x-5 gap-y-2" aria-label="Browse learning and community content" data-testid="dashboard-feed-destinations">
       {% for action in quick_actions %}
       <a href="{{ action.url }}" class="inline-flex min-h-[44px] items-center gap-1 text-sm font-medium text-accent hover:underline" data-testid="dashboard-feed-destination">{{ action.title }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
@@ -190,7 +191,6 @@
       <a href="/vote" class="inline-flex min-h-[44px] items-center gap-1 text-sm font-medium text-accent hover:underline" data-testid="dashboard-feed-destination">Polls <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
     </nav>
   </section>
-  {% endif %}
 
   {% if show_free_plan_teaser %}
   <section class="space-y-4" data-testid="dashboard-unlock-more">

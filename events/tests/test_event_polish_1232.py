@@ -56,7 +56,7 @@ class CalendarAccessibilityMarkupTest(TestCase):
             )
             self.assertIn(f'id="day-events-2026-3-{day}"', html)
             self.assertIn(
-                f'aria-labelledby="calendar-day-2026-3-{day}"',
+                f'aria-labelledby="day-events-title-2026-3-{day}"',
                 html,
             )
 
@@ -67,17 +67,11 @@ class CalendarAccessibilityMarkupTest(TestCase):
     def test_each_panel_is_between_its_week_row_and_the_next_week(self):
         html = self.client.get("/events/calendar/2026/3").content.decode()
 
-        week_two = html.index('class="grid grid-cols-7 border-b border-border/50" data-calendar-week="2"')
+        week_two = html.index('data-calendar-week="2"')
         panel_two = html.index('id="day-events-2026-3-2"')
-        week_three = html.index(
-            'class="grid grid-cols-7 border-b border-border/50" data-calendar-week="3"',
-            week_two + 1,
-        )
+        week_three = html.index('data-calendar-week="3"', panel_two + 1)
         panel_ten = html.index('id="day-events-2026-3-10"')
-        week_four = html.index(
-            'class="grid grid-cols-7 border-b border-border/50" data-calendar-week="4"',
-            week_three + 1,
-        )
+        week_four = html.index('data-calendar-week="4"', panel_ten + 1)
 
         self.assertLess(week_two, panel_two)
         self.assertLess(panel_two, week_three)
@@ -102,20 +96,21 @@ class EventsPresentationClassTest(TestCase):
     def test_calendar_controls_use_pill_and_minimum_target_classes(self):
         html = self.client.get("/events/calendar/2026/3").content.decode()
 
-        for label in ("List", "Calendar"):
-            match = re.search(rf'<a[^>]+class="([^"]+)"[^>]*>{label}</a>', html)
-            self.assertIsNotNone(match)
-            classes = match.group(1)
-            for expected in (
-                "inline-flex",
-                "min-h-[44px]",
-                "rounded-full",
-                "px-4",
-                "py-2",
-                "text-sm",
-                "font-medium",
-            ):
-                self.assertIn(expected, classes)
+        match = re.search(r'<a[^>]+class="([^"]+)"[^>]*>List</a>', html)
+        self.assertIsNotNone(match)
+        classes = match.group(1)
+        for expected in (
+            "inline-flex",
+            "min-h-[44px]",
+            "rounded-full",
+            "px-4",
+            "py-2",
+            "text-sm",
+            "font-medium",
+        ):
+            self.assertIn(expected, classes)
+        self.assertNotRegex(html, r'<a[^>]*>Calendar</a>')
+        self.assertIn('data-testid="calendar-heading"', html)
 
         for label in ("Previous month", "Next month"):
             match = re.search(
@@ -131,11 +126,11 @@ class EventsPresentationClassTest(TestCase):
     def test_interactive_days_have_inset_focus_ring_classes(self):
         _event(
             slug="focusable-calendar-day",
-            start_datetime=timezone.make_aware(datetime.datetime(2026, 3, 15, 14)),
+            start_datetime=timezone.make_aware(datetime.datetime(2026, 3, 13, 14)),
             status="upcoming",
         )
         html = self.client.get("/events/calendar/2026/3").content.decode()
-        tag_match = re.search(r'<div class="([^"]+)"[^>]+data-calendar-day="15"', html)
+        tag_match = re.search(r'<div class="([^"]+)"[^>]+data-calendar-day="13"', html)
 
         self.assertIsNotNone(tag_match)
         for expected in (

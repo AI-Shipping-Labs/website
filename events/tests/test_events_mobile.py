@@ -32,13 +32,14 @@ class EventListArrowHiddenOnMobileTest(TestCase):
             status="upcoming",
         )
 
-    def test_upcoming_event_card_has_no_nav_arrow(self):
-        # Issue #1382: Luma-style timeline cards drop the trailing navigation
-        # arrow; the whole card is still the click target.
+    def test_upcoming_event_card_has_consistent_moving_nav_arrow(self):
+        # The whole timeline card is clickable and uses the same directional
+        # affordance as the other home and catalog cards.
         response = self.client.get("/events")
         content = response.content.decode()
         self.assertIn('data-testid="upcoming-event-card"', content)
-        self.assertNotIn('data-lucide="arrow-right"', content)
+        self.assertIn('data-lucide="arrow-right"', content)
+        self.assertIn("group-hover:translate-x-0.5", content)
 
     def test_upcoming_timeline_uses_flex_shrink_0_rail(self):
         response = self.client.get("/events")

@@ -200,14 +200,14 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         self.client.login(email='main-sprint@test.com', password='pw')
         response = self.client.get('/')
 
-        self.assertContains(response, 'Sprints and cohorts')
+        self.assertContains(response, 'data-feed-kind="sprint"')
         self.assertContains(response, 'Main Sprint')
         self.assertContains(
             response,
             reverse('sprint_detail', kwargs={'sprint_slug': sprint.slug}),
         )
-        self.assertContains(response, 'Main')
-        self.assertContains(response, 'View cohort')
+        self.assertContains(response, 'Active sprint')
+        self.assertContains(response, '6-week cohort')
 
     def test_ineligible_user_does_not_see_locked_active_sprint(self):
         User.objects.create_user(
@@ -225,8 +225,8 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
 
         self.assertNotContains(response, 'Premium Sprint')
-        self.assertContains(response, 'No active sprint openings for your tier')
-        self.assertContains(response, 'href="/activities"')
+        self.assertNotContains(response, 'No active sprint openings for your tier')
+        self.assertContains(response, 'href="/sprints"')
 
     def test_free_visible_sprint_has_free_open_label(self):
         User.objects.create_user(
@@ -251,9 +251,10 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
 
         self.assertContains(response, 'Open Sprint')
-        self.assertContains(response, 'Free/open')
-        self.assertContains(response, 'Open to Free members')
-        self.assertNotContains(response, 'Main Only Sprint')
+        self.assertContains(response, 'Main Only Sprint')
+        self.assertContains(response, 'data-feed-locked="false"')
+        self.assertContains(response, 'data-feed-locked="true"')
+        self.assertContains(response, 'Unlock with Main')
 
     def test_enrolled_user_without_plan_links_active_sprint_to_cohort(self):
         user = User.objects.create_user(
@@ -276,9 +277,9 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
             response,
             reverse('cohort_board', kwargs={'sprint_slug': sprint.slug}),
         )
-        self.assertContains(response, 'View cohort')
+        self.assertContains(response, 'data-feed-kind="sprint"')
 
-    def test_user_with_plan_keeps_plan_card_and_can_see_other_sprint(self):
+    def test_user_with_plan_keeps_plan_card_without_duplicate_sprint_feed(self):
         user = User.objects.create_user(
             email='planned-sprint@test.com', password='pw', tier=self.main_tier,
         )
@@ -314,16 +315,9 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
                 kwargs={'sprint_slug': current.slug, 'plan_id': plan.pk},
             ),
         )
-        self.assertContains(response, 'Other cohorts')
-        self.assertContains(response, 'Other Sprint')
-        self.assertContains(
-            response,
-            reverse('sprint_detail', kwargs={'sprint_slug': other.slug}),
-        )
-        active_sprints = response.content.decode().split(
-            'data-testid="dashboard-active-sprints"', 1,
-        )[1]
-        self.assertNotIn('Current Sprint', active_sprints)
+        self.assertNotContains(response, 'Other cohorts')
+        self.assertNotContains(response, 'Other Sprint')
+        self.assertNotContains(response, 'data-feed-kind="sprint"')
         self.assertNotContains(response, 'Current cohort')
 
     def test_user_with_plan_and_no_other_opportunities_has_no_duplicate_cohort(self):

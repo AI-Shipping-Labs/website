@@ -120,8 +120,9 @@ class DashboardRecentContentTeaserTest(TierSetupMixin, TestCase):
         )
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
-        # Scope to the recent-content section so the assertion is element-bound.
-        self.assertContains(response, 'data-testid="dashboard-recent-content"')
+        # Scope to the unified home feed so the assertion is element-bound.
+        self.assertContains(response, 'data-testid="dashboard-home-feed"')
+        self.assertContains(response, 'data-feed-kind="article"')
         self.assertContains(
             response,
             'We take the FAQ agent from the End-to-End Agent Deployment tutorial',

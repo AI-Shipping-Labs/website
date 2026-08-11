@@ -31,12 +31,6 @@
       </div>
       {% endif %}
 
-      {% if article.cover_image_url %}
-      <div class="mb-8">
-        {% article_cover_image article "(min-width: 768px) 48rem, calc(100vw - 2rem)" "w-full max-h-[400px] rounded-lg border border-border object-cover" True %}
-      </div>
-      {% endif %}
-
       <header class="mb-12">
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
           {{ article.title }}
@@ -66,9 +60,12 @@
         </div>
 
         {% if article.tags %}
-        <div class="mt-4 flex flex-wrap gap-2" data-testid="article-tags">
+        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-0.5" data-testid="article-tags">
           {% for tag in article.tags|slice:":5" %}
-          <a href="/blog?tag={{ tag }}" class="inline-flex min-h-[44px] items-center rounded-full border border-border bg-transparent px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ tag|humanize_tag }}</a>
+          <a href="/blog?tag={{ tag }}" class="inline-flex items-center gap-1 py-0.5 text-xs font-normal leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            <span class="opacity-40" aria-hidden="true">#</span>
+            {{ tag|humanize_tag }}
+          </a>
           {% endfor %}
         </div>
         {% endif %}

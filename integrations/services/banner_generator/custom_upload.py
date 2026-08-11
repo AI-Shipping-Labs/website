@@ -284,7 +284,10 @@ def safe_delete_custom_banner(content_type, url):
     try:
         client = _s3_client()
         client.delete_object(Bucket=bucket, Key=key)
-    except (BotoCoreError, ClientError) as exc:
+    # Botocore credential refresh can surface an expired refreshed token as
+    # RuntimeError rather than BotoCoreError. Cleanup is deliberately
+    # best-effort, so treat that storage-path failure the same way (#1409).
+    except (BotoCoreError, ClientError, RuntimeError) as exc:
         logger.warning(
             'safe_delete_custom_banner: failed to delete %s: %s', key, exc,
         )

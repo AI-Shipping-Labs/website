@@ -11,8 +11,10 @@ import datetime as dt
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
+from django.urls import reverse
 
 from content.models import Article, Course, Download, Project, Workshop
 from events.models import Event, EventSeries
@@ -22,6 +24,7 @@ User = get_user_model()
 
 CDN_BASE = 'https://cdn.example.com'
 BUCKET = 'content-bucket'
+GENERATED_URL = f'{CDN_BASE}/banners/article/generated.jpg'
 S3_CLIENT_PATH = (
     'integrations.services.banner_generator.custom_upload._s3_client'
 )
@@ -96,6 +99,65 @@ def _make_series():
     )
 
 
+def _set_banner_state(record, content_type):
+    """Give a record distinct cover/custom/generated values for mutation tests."""
+    values = {
+        'custom_banner_url': (
+            f'{CDN_BASE}/custom-banners/{content_type}/{record.pk}-custom.png'
+        ),
+        'auto_banner_url': (
+            f'{CDN_BASE}/banners/{content_type}/{record.pk}-generated.jpg'
+        ),
+    }
+    if hasattr(record, 'cover_image_url'):
+        values['cover_image_url'] = (
+            f'{CDN_BASE}/content-repo/{content_type}/{record.pk}-cover.png'
+        )
+    type(record).objects.filter(pk=record.pk).update(**values)
+    record.refresh_from_db()
+    return values
+
+
+def _assert_banner_state(test_case, record, expected):
+    record.refresh_from_db()
+    for field, value in expected.items():
+        test_case.assertEqual(getattr(record, field), value)
+
+
+def _remove_cases():
+    return [
+        (
+            'article', _make_article(), 'studio_article_remove_banner',
+            'article_id', 'studio_article_edit',
+        ),
+        (
+            'course', _make_course(), 'studio_course_remove_banner',
+            'course_id', 'studio_course_edit',
+        ),
+        (
+            'project', _make_project(), 'studio_project_remove_banner',
+            'project_id', 'studio_project_review',
+        ),
+        (
+            'download', _make_download(), 'studio_download_remove_banner',
+            'download_id', 'studio_download_edit',
+        ),
+        (
+            'workshop', _make_workshop(), 'studio_workshop_remove_banner',
+            'workshop_id', 'studio_workshop_edit',
+        ),
+        (
+            'event', _make_event(), 'studio_event_remove_banner',
+            'event_id', 'studio_event_edit',
+        ),
+        (
+            'event_series', _make_series(),
+            'studio_event_series_remove_banner', 'series_id',
+            'studio_event_series_detail',
+        ),
+    ]
+
+
 @enabled_config
 class UploadAccessTest(_ConfigCleanupMixin, TestCase):
     """Access matrix across all 7 content types for upload + remove."""
@@ -119,23 +181,22 @@ class UploadAccessTest(_ConfigCleanupMixin, TestCase):
             f'/studio/event-series/{_make_series().pk}/upload-banner',
         ]
 
-    def _remove_urls(self):
-        return [
-            f'/studio/articles/{_make_article().pk}/remove-banner',
-            f'/studio/courses/{_make_course().pk}/remove-banner',
-            f'/studio/projects/{_make_project().pk}/remove-banner',
-            f'/studio/downloads/{_make_download().pk}/remove-banner',
-            f'/studio/workshops/{_make_workshop().pk}/remove-banner',
-            f'/studio/events/{_make_event().pk}/remove-banner',
-            f'/studio/event-series/{_make_series().pk}/remove-banner',
-        ]
-
     def test_anonymous_upload_redirects_to_login(self):
         for url in self._upload_urls():
             with self.subTest(url=url):
                 response = self.client.post(url)
                 self.assertEqual(response.status_code, 302)
                 self.assertIn('/accounts/login/', response.url)
+
+    def test_anonymous_remove_redirects_without_mutation(self):
+        for content_type, record, url_name, id_kwarg, _ in _remove_cases():
+            expected = _set_banner_state(record, content_type)
+            url = reverse(url_name, kwargs={id_kwarg: record.pk})
+            with self.subTest(content_type=content_type):
+                response = self.client.post(url)
+                self.assertEqual(response.status_code, 302)
+                self.assertIn('/accounts/login/', response.url)
+                _assert_banner_state(self, record, expected)
 
     def test_non_staff_upload_returns_403(self):
         self.client.login(email='user@test.com', password='pw')
@@ -145,9 +206,12 @@ class UploadAccessTest(_ConfigCleanupMixin, TestCase):
 
     def test_non_staff_remove_returns_403(self):
         self.client.login(email='user@test.com', password='pw')
-        for url in self._remove_urls():
-            with self.subTest(url=url):
+        for content_type, record, url_name, id_kwarg, _ in _remove_cases():
+            expected = _set_banner_state(record, content_type)
+            url = reverse(url_name, kwargs={id_kwarg: record.pk})
+            with self.subTest(content_type=content_type):
                 self.assertEqual(self.client.post(url).status_code, 403)
+                _assert_banner_state(self, record, expected)
 
     def test_get_upload_returns_405(self):
         self.client.login(email='staff@test.com', password='pw')
@@ -157,9 +221,25 @@ class UploadAccessTest(_ConfigCleanupMixin, TestCase):
 
     def test_get_remove_returns_405(self):
         self.client.login(email='staff@test.com', password='pw')
-        for url in self._remove_urls():
-            with self.subTest(url=url):
+        for content_type, record, url_name, id_kwarg, _ in _remove_cases():
+            expected = _set_banner_state(record, content_type)
+            url = reverse(url_name, kwargs={id_kwarg: record.pk})
+            with self.subTest(content_type=content_type):
                 self.assertEqual(self.client.get(url).status_code, 405)
+                _assert_banner_state(self, record, expected)
+
+    def test_remove_requires_csrf_token_without_mutation(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.login(email='staff@test.com', password='pw')
+        article = _make_article()
+        expected = _set_banner_state(article, 'article')
+
+        response = csrf_client.post(
+            f'/studio/articles/{article.pk}/remove-banner',
+        )
+
+        self.assertEqual(response.status_code, 403)
+        _assert_banner_state(self, article, expected)
 
 
 @enabled_config
@@ -240,20 +320,89 @@ class UploadFlowTest(_ConfigCleanupMixin, TestCase):
         self.assertEqual(project.custom_banner_url, '')
 
     @patch(S3_CLIENT_PATH)
-    def test_remove_clears_and_deletes(self, mock_client):
+    def test_remove_clears_only_custom_banner_for_all_supported_types(
+        self, mock_client,
+    ):
         s3 = MagicMock()
         mock_client.return_value = s3
-        course = _make_course()
-        Course.objects.filter(pk=course.pk).update(
-            custom_banner_url=f'{CDN_BASE}/custom-banners/course/{course.pk}-x.png',
+        cases = _remove_cases()
+
+        for content_type, record, remove_name, id_kwarg, redirect_name in cases:
+            expected = _set_banner_state(record, content_type)
+            label = getattr(record, 'title', getattr(record, 'name', ''))
+            with self.subTest(content_type=content_type):
+                response = self.client.post(
+                    reverse(remove_name, kwargs={id_kwarg: record.pk}),
+                )
+                self.assertRedirects(
+                    response,
+                    reverse(redirect_name, kwargs={id_kwarg: record.pk}),
+                    fetch_redirect_response=False,
+                )
+                expected['custom_banner_url'] = ''
+                _assert_banner_state(self, record, expected)
+                self.assertEqual(
+                    getattr(record, 'title', getattr(record, 'name', '')),
+                    label,
+                )
+
+        self.assertEqual(s3.delete_object.call_count, len(cases))
+
+    @patch(S3_CLIENT_PATH)
+    def test_remove_survives_expired_credential_refresh_and_shows_fallback(
+        self, mock_client,
+    ):
+        s3 = MagicMock()
+        s3.delete_object.side_effect = RuntimeError(
+            'Credentials were refreshed, but the refreshed credentials '
+            'are still expired.',
         )
+        mock_client.return_value = s3
+        article = _make_article()
+        Article.objects.filter(pk=article.pk).update(
+            custom_banner_url=(
+                f'{CDN_BASE}/custom-banners/article/{article.pk}-custom.png'
+            ),
+            auto_banner_url=GENERATED_URL,
+        )
+
         response = self.client.post(
-            f'/studio/courses/{course.pk}/remove-banner',
+            f'/studio/articles/{article.pk}/remove-banner',
+            follow=True,
         )
+
+        self.assertEqual(response.status_code, 200)
+        article.refresh_from_db()
+        self.assertEqual(article.custom_banner_url, '')
+        self.assertEqual(article.auto_banner_url, GENERATED_URL)
+        self.assertContains(
+            response,
+            'Custom banner removed. Showing the generated banner.',
+        )
+        self.assertContains(response, f'src="{GENERATED_URL}"')
+        self.assertContains(response, 'Generated')
+        self.assertNotContains(response, 'data-testid="banner-remove-button"')
+
+    @patch('studio.views.banner_upload.safe_delete_custom_banner')
+    def test_remove_stays_successful_when_cleanup_returns_false(
+        self, mock_delete,
+    ):
+        mock_delete.return_value = False
+        article = _make_article()
+        expected = _set_banner_state(article, 'article')
+
+        response = self.client.post(
+            f'/studio/articles/{article.pk}/remove-banner',
+        )
+
         self.assertEqual(response.status_code, 302)
-        course.refresh_from_db()
-        self.assertEqual(course.custom_banner_url, '')
-        s3.delete_object.assert_called_once()
+        expected['custom_banner_url'] = ''
+        _assert_banner_state(self, article, expected)
+        messages = [str(message) for message in get_messages(response.wsgi_request)]
+        self.assertEqual(
+            messages,
+            ['Custom banner removed. Showing the generated banner.'],
+        )
 
 
 @disabled_config

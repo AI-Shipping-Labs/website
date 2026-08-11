@@ -308,6 +308,7 @@ class TestCustomBannerPanel:
             custom_banner_url=CUSTOM_URL,
             auto_banner_url=GENERATED_URL,
         )
+        _publish(article)
 
         context = _auth_context(browser, "cb-staff-remove@test.com")
         page = context.new_page()
@@ -319,7 +320,16 @@ class TestCustomBannerPanel:
         page.wait_for_url(
             f"**/studio/articles/{article.pk}/edit", timeout=10000,
         )
-        assert "Custom banner removed" in page.content()
+        assert (
+            "Custom banner removed. Showing the generated banner."
+            in page.content()
+        )
+        image = page.locator('[data-testid="banner-generator-image"]')
+        assert image.get_attribute("src") == GENERATED_URL
+        badge = page.locator('[data-testid="banner-source-badge"]')
+        assert badge.inner_text().strip() == "Generated"
+        assert page.locator('[data-testid="banner-remove-button"]').count() == 0
+
         # Reload — now the generated banner is the effective preview.
         page.goto(
             f"{django_server}/studio/articles/{article.pk}/edit",
@@ -327,7 +337,26 @@ class TestCustomBannerPanel:
         )
         badge = page.locator('[data-testid="banner-source-badge"]')
         assert badge.inner_text().strip() == "Generated"
+        image = page.locator('[data-testid="banner-generator-image"]')
+        assert image.get_attribute("src") == GENERATED_URL
         assert page.locator('[data-testid="banner-remove-button"]').count() == 0
+
+        article.refresh_from_db()
+        assert article.custom_banner_url == ""
+        assert article.auto_banner_url == GENERATED_URL
+        connection.close()
+
+        # Public social metadata resolves through the same persisted fallback.
+        page.goto(
+            f"{django_server}/blog/{article.slug}",
+            wait_until="domcontentloaded",
+        )
+        og = page.locator('meta[property="og:image"]').get_attribute("content")
+        twitter = page.locator(
+            'meta[name="twitter:image"]'
+        ).get_attribute("content")
+        assert og == GENERATED_URL
+        assert twitter == GENERATED_URL
 
     # NOTE: the "upload control disabled when CDN/bucket unconfigured"
     # scenario is covered authoritatively by the Django view test

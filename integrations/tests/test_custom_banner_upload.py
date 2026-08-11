@@ -189,6 +189,31 @@ class SafeDeleteTest(_ConfigCleanupMixin, TestCase):
         )
 
     @patch(S3_CLIENT_PATH)
+    def test_credential_refresh_runtime_error_is_cleanup_failure(
+        self, mock_client,
+    ):
+        s3 = MagicMock()
+        s3.delete_object.side_effect = RuntimeError(
+            'Credentials were refreshed, but the refreshed credentials '
+            'are still expired.',
+        )
+        mock_client.return_value = s3
+        url = f'{CDN_BASE}/custom-banners/article/1-abc.png'
+
+        with self.assertLogs(
+            'integrations.services.banner_generator.custom_upload',
+            level='WARNING',
+        ) as log_cm:
+            result = safe_delete_custom_banner('article', url)
+
+        self.assertFalse(result)
+        self.assertIn(
+            'Credentials were refreshed, but the refreshed credentials '
+            'are still expired.',
+            '\n'.join(log_cm.output),
+        )
+
+    @patch(S3_CLIENT_PATH)
     def test_refuses_to_delete_frontmatter_cover(self, mock_client):
         # A non custom-banners/ URL must never be deleted.
         url = f'{CDN_BASE}/content-repo/images/cover.png'

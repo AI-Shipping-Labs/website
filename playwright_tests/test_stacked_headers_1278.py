@@ -1,4 +1,8 @@
-"""Core user journeys for public/member stacked headers (issue #1278)."""
+"""Core user journeys for public/member stacked headers (issue #1278).
+
+Historical node names are retained for the exact #1406 regression rerun while
+their assertions follow Membership and the commitment-first dashboard.
+"""
 
 import datetime
 import os
@@ -186,35 +190,9 @@ def _assert_control_below(
 def _assert_route_headers(page, route):
     if route == '/':
         if page.get_by_test_id('dashboard-heading').count():
-            _assert_control_below(
-                page,
-                '[data-testid="dashboard-continue-learning-section"]',
-                'h2',
-                'a[href="/courses"]',
-            )
-            _assert_control_below(
-                page,
-                '[data-testid="dashboard-upcoming-events-section"]',
-                'h2',
-                'a[href="/events"]',
-            )
-            _assert_control_below(
-                page,
-                '[data-testid="dashboard-discovery-sections"] section:first-child',
-                'h2',
-                'a[href="/blog"]',
-            )
-            checklist = page.get_by_test_id('free-activation-checklist')
-            expect(checklist).to_be_visible()
-            assert checklist.locator('p').nth(1).bounding_box()['y'] > checklist.locator('h2').bounding_box()['y']
-            sprints = page.locator('section:has(h2:has-text("Sprints and cohorts"))')
-            _assert_control_below(
-                page,
-                'section:has(h2:has-text("Sprints and cohorts"))',
-                'h2',
-                'a[href="/activities"]',
-            )
-            expect(sprints).to_be_visible()
+            feed = page.get_by_test_id('dashboard-home-feed')
+            expect(feed.get_by_role('heading', name='For you')).to_be_visible()
+            expect(page.get_by_test_id('dashboard-feed-destinations')).to_be_visible()
         else:
             for section, heading, control in (
                 ('#activities', 'h2', '[data-testid="home-activities-tier-link"]'),
@@ -223,32 +201,16 @@ def _assert_route_headers(page, route):
                 ('#blog', 'h2', 'a[href="/blog"]'),
             ):
                 _assert_control_below(page, section, heading, control)
-    elif route == '/activities':
-        _assert_control_below(
-            page,
-            '[data-testid="activities-live-events-section"]',
-            'h2',
-            '[data-testid="activities-view-all-events"]',
-        )
-        _assert_control_below(
-            page,
-            '[data-testid="activities-workshops-section"]',
-            'h2',
-            '[data-testid="activities-view-all-workshops"]',
-        )
+    elif route in ('/activities', '/membership'):
+        expect(page.get_by_test_id('membership-benefits-section')).to_be_visible()
+        expect(page.get_by_test_id('membership-view-all-events')).to_be_visible()
+        expect(page.get_by_test_id('membership-view-all-workshops')).to_be_visible()
     elif route == '/workshops/catalog':
         _assert_control_below(
             page,
             '[data-testid="workshop-catalog"]',
             'h1',
-            '[data-testid="workshop-access-filters"]',
-        )
-        _assert_control_below(
-            page,
-            '[data-testid="workshop-facet-topic"]',
-            'summary',
-            '[data-testid="workshop-topic-summary"]',
-            require_focus=False,
+            '[data-testid="workshop-topic-filter"]',
         )
     elif route == '/notifications':
         _assert_control_below(page, 'main > div', 'h1', '#mark-all-btn')
@@ -258,8 +220,8 @@ def _assert_route_headers(page, route):
     ('route', 'name', 'email'),
     [
         ('/', 'home', None),
-        ('/activities', 'activities', None),
-        ('/workshops/catalog?tag=agents', 'workshops-catalog', None),
+        ('/membership#activities', 'membership-activities', None),
+        ('/workshops/catalog?topic=rag-search', 'workshops-catalog', None),
         ('/', 'free-dashboard', 'stacked-free-1278@example.com'),
         ('/notifications', 'notifications-unread', 'stacked-free-1278@example.com'),
     ],
@@ -312,7 +274,7 @@ def test_homepage_discovery_paths_and_quiet_event_state(
 
     page.goto(f'{django_server}/', wait_until='domcontentloaded')
     expected = (
-        ('home-activities-tier-link', '/activities#access-by-tier'),
+        ('home-activities-tier-link', '/membership#activities'),
         ('home-sprints-index-link', '/sprints'),
         ('home-upcoming-events-link', '/events?filter=upcoming'),
         ('home-workshops-link', '/workshops'),
@@ -351,8 +313,10 @@ def test_activities_discovery_links_survive_populated_and_empty_previews(
     with django_db_blocker.unblock():
         _seed_representative_state()
     page.goto(f'{django_server}/activities', wait_until='domcontentloaded')
-    events = page.get_by_test_id('activities-view-all-events')
-    workshops = page.get_by_test_id('activities-view-all-workshops')
+    page.wait_for_url('**/membership#activities')
+    expect(page.get_by_test_id('membership-benefits-section')).to_be_visible()
+    events = page.get_by_test_id('membership-view-all-events')
+    workshops = page.get_by_test_id('membership-view-all-workshops')
     expect(events).to_have_attribute('href', '/events')
     expect(workshops).to_have_attribute('href', '/workshops')
     assert events.locator('[data-lucide="arrow-right"][aria-hidden="true"]').count() == 1
@@ -370,8 +334,8 @@ def test_activities_discovery_links_survive_populated_and_empty_previews(
     page.reload(wait_until='domcontentloaded')
     expect(events).to_have_attribute('href', '/events')
     expect(workshops).to_have_attribute('href', '/workshops')
-    expect(page.get_by_test_id('activities-live-events-empty')).to_be_visible()
-    expect(page.get_by_test_id('activities-workshops-empty')).to_be_visible()
+    expect(page.get_by_test_id('membership-live-events-empty')).to_be_visible()
+    expect(page.get_by_test_id('membership-workshops-empty')).to_be_visible()
 
 
 @pytest.mark.core
@@ -389,23 +353,20 @@ def test_both_workshop_branches_and_filters_keep_behavior(
     expect(preview).to_have_attribute('href', '/workshops/catalog')
     preview.click()
     page.wait_for_url('**/workshops/catalog')
-    expect(page.get_by_test_id('workshop-access-filters')).to_be_visible()
-
-    page.get_by_test_id('workshop-access-filter-paid').click()
-    page.wait_for_url('**/workshops/catalog?access=paid')
-    expect(page.get_by_test_id('workshop-access-filter-paid')).to_have_attribute('aria-current', 'page')
-    page.get_by_test_id('workshop-skill-filter-advanced').click()
-    page.wait_for_url('**access=paid**skill_level=advanced**')
-    expect(page.get_by_test_id('workshop-skill-filter-advanced')).to_have_attribute('aria-current', 'page')
-    page.get_by_test_id('workshop-facet-topic').locator('summary').click()
-    page.get_by_test_id('workshop-topic-option-rag').click()
-    page.wait_for_url('**tag=rag**')
-    expect(page.get_by_test_id('workshop-topic-option-rag')).to_have_attribute('aria-current', 'page')
-    expect(page.get_by_test_id('workshop-topic-summary')).to_contain_text('rag')
-    clear = page.get_by_test_id('clear-workshop-filter')
-    expect(clear).to_have_attribute('href', '/workshops/catalog')
-    clear.click()
-    page.wait_for_url('**/workshops/catalog')
+    topics = page.get_by_test_id('workshop-topic-filter')
+    expect(topics).to_be_visible()
+    expect(page.get_by_test_id('workshop-topic-all')).to_have_attribute(
+        'aria-current', 'page'
+    )
+    rag = page.get_by_test_id('workshop-topic-rag-search')
+    expect(rag).to_have_attribute('href', '/workshops/catalog?topic=rag-search')
+    rag.click()
+    page.wait_for_url('**/workshops/catalog?topic=rag-search')
+    expect(rag).to_have_attribute('aria-current', 'page')
+    expect(page.get_by_test_id('workshop-card')).to_have_count(1)
+    expect(page.get_by_test_id('workshop-card-title')).to_have_text(
+        'Advanced retrieval systems'
+    )
 
 
 @pytest.mark.parametrize(
@@ -426,18 +387,24 @@ def test_member_dashboard_header_links_keep_destinations_and_order(
     try:
         page.goto(f'{django_server}/', wait_until='domcontentloaded')
         expect(page.get_by_test_id('dashboard-header')).to_contain_text(tier)
-        learning = page.get_by_test_id('dashboard-continue-learning-section')
-        links = learning.locator(':scope > div:first-child a')
-        assert links.evaluate_all("nodes => nodes.map(node => node.getAttribute('href'))") == ['/courses', '/workshops']
-        for label, href in (
-            ('View all events', '/events'),
-            ('Activities', '/activities'),
-            ('Browse blog', '/blog'),
-        ):
-            link = page.get_by_role('link', name=label, exact=True).first
-            expect(link).to_have_attribute('href', href)
-            assert link.evaluate('el => el.getBoundingClientRect().height >= 44')
-            assert 'focus-visible:ring-2' in (link.get_attribute('class') or '')
+        expect(page.get_by_role('heading', name='For you')).to_be_visible()
+        destinations = page.get_by_test_id('dashboard-feed-destinations')
+        links = destinations.get_by_test_id('dashboard-feed-destination')
+        assert links.evaluate_all(
+            "nodes => nodes.map(node => [node.textContent.trim(), node.getAttribute('href')])"
+        ) == [
+            ['Courses', '/courses'],
+            ['Workshops', '/workshops'],
+            ['Events', '/events'],
+            ['Articles', '/blog'],
+            ['Sprints', '/sprints'],
+            ['Book Club', '/books'],
+            ['Polls', '/vote'],
+        ]
+        for index in range(links.count()):
+            assert links.nth(index).evaluate(
+                'el => el.getBoundingClientRect().height >= 44'
+            )
     finally:
         context.close()
 

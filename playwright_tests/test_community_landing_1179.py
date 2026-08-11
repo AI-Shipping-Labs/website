@@ -25,13 +25,16 @@ def test_community_navigation_starts_with_membership_and_has_no_overview(
     django_server, page
 ):
     goto_with_retry(page, f"{django_server}/")
+    membership = page.get_by_test_id("nav-membership-link")
+    expect(membership).to_have_attribute("href", "/membership")
     page.get_by_test_id("nav-community-trigger").hover()
     menu = page.get_by_test_id("nav-community-menu")
     expect(menu).to_be_visible()
     links = menu.locator("a[data-testid]")
-    expect(links.first).to_have_attribute("href", "/pricing")
-    expect(links.first).to_have_text("Membership")
+    expect(links.first).to_have_attribute("href", "/events")
+    expect(links.first).to_have_text("Events")
     expect(menu.locator('[data-testid$="overview"]')).to_have_count(0)
+    expect(menu.locator('[data-testid$="activities"]')).to_have_count(0)
     expect(menu.locator('a[href="/community"]')).to_have_count(0)
 
 
@@ -48,6 +51,8 @@ def test_authenticated_community_bookmark_redirects_to_dashboard(
         goto_with_retry(page, f"{django_server}/community")
         assert page.url == f"{django_server}/"
         expect(page.locator("#join-free")).to_have_count(0)
-        expect(page.get_by_role("heading", name="Recent content")).to_be_visible()
+        expect(page.get_by_test_id("dashboard-heading")).to_be_visible()
+        expect(page.get_by_role("heading", name="For you")).to_be_visible()
+        expect(page.get_by_test_id("dashboard-feed-destinations")).to_be_visible()
     finally:
         context.close()

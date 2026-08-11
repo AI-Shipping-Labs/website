@@ -112,12 +112,12 @@ def _assert_no_horizontal_overflow(page):
 def _assert_footer_targets(page):
     page.locator("footer").scroll_into_view_if_needed()
     # Issue #1356 removed footer Manage Subscription and regrouped the
-    # columns; the About-column links (/about, /pricing, /faq) and Legal
+    # columns; the About-column links (/about, /membership, /faq) and Legal
     # links keep their 44px mobile tap targets.
     targets = [
         ('footer a[href="/"]', "footer logo/home"),
         ('footer a[href="/about"]', "footer Team"),
-        ('footer a[href="/pricing"]', "footer Membership Tiers"),
+        ('footer a[href="/membership"]', "footer Membership Tiers"),
         ('footer a[href="/faq"]', "footer FAQ"),
         ('footer a[href="/community/slack"]', "footer Join Slack"),
         ('footer a[href="/terms/"]', "footer Terms of Service"),
@@ -182,12 +182,12 @@ def test_anonymous_mobile_menu_targets_and_navigation(django_server, browser):
         ] == ["/about", "/faq"]
 
         _expand_mobile_section(page, "community")
-        resources = _expand_mobile_section(page, "resources")
+        learning = _expand_mobile_section(page, "learning")
         for testid in (
-            "mobile-nav-resources-link-courses",
-            "mobile-nav-resources-link-workshops",
+            "mobile-nav-learning-link-courses",
+            "mobile-nav-learning-link-workshops",
         ):
-            assert resources.locator(f'[data-testid="{testid}"]').is_visible()
+            assert learning.locator(f'[data-testid="{testid}"]').is_visible()
 
         _assert_min_height_for_visible(
             page,
@@ -211,19 +211,15 @@ def test_anonymous_mobile_menu_links_reach_existing_destinations(
     try:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
         _open_mobile_menu(page)
-        _expand_mobile_section(page, "community")
-
-        membership = page.locator(
-            '[data-testid="mobile-nav-community-link-membership"]'
-        )
+        membership = page.get_by_test_id("mobile-nav-membership-link")
         _assert_target_size(membership, "mobile Membership link")
         membership.click()
-        page.wait_for_url(f"{django_server}/pricing", timeout=5000)
+        page.wait_for_url(f"{django_server}/membership", timeout=5000)
 
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
         _open_mobile_menu(page)
-        _expand_mobile_section(page, "resources")
-        courses = page.locator('[data-testid="mobile-nav-resources-link-courses"]')
+        _expand_mobile_section(page, "learning")
+        courses = page.get_by_test_id("mobile-nav-learning-link-courses")
         _assert_target_size(courses, "mobile Courses link")
         courses.click()
         page.wait_for_url(f"{django_server}/courses", timeout=5000)
@@ -239,7 +235,7 @@ def test_expanded_mobile_menu_has_no_horizontal_overflow_and_scrolls(
     try:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
         _open_mobile_menu(page)
-        for section in ("about", "community", "resources"):
+        for section in ("community", "learning", "about"):
             _expand_mobile_section(page, section)
 
         _assert_min_height_for_visible(
@@ -339,7 +335,7 @@ def test_mobile_footer_targets_navigation_and_newsletter_suppression(
         _assert_no_horizontal_overflow(page)
 
         page.get_by_role("link", name="Membership Tiers").click()
-        page.wait_for_url(f"{django_server}/pricing", timeout=5000)
+        page.wait_for_url(f"{django_server}/membership", timeout=5000)
 
         page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
         page.locator("footer").scroll_into_view_if_needed()

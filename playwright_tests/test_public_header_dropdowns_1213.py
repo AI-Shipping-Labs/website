@@ -1,9 +1,14 @@
-"""Keyboard accessibility coverage for public header dropdowns (issue #1213)."""
+"""Keyboard accessibility coverage for public header dropdowns (issue #1213).
+
+Historical node names are retained so issue #1406 can rerun the exact release
+failures; their assertions follow the current Community/Learning taxonomy.
+"""
 
 import os
 import uuid
 
 import pytest
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import auth_context, create_user
 
@@ -92,11 +97,16 @@ def test_anonymous_keyboard_community_menu_reaches_membership(
         page,
         "community",
         [
-            "nav-community-link-membership",
+            "nav-community-link-events",
+            "nav-community-link-sprints",
+            "nav-community-link-books",
         ],
     )
+    page.keyboard.press("Shift+Tab")
+    page.keyboard.press("Shift+Tab")
+    assert _active_test_id(page) == "nav-community-link-events"
     page.keyboard.press("Enter")
-    page.wait_for_url(f"{django_server}/pricing", timeout=5000)
+    page.wait_for_url(f"{django_server}/events", timeout=5000)
 
 
 def test_anonymous_keyboard_resources_menu_reaches_workshops(
@@ -105,20 +115,24 @@ def test_anonymous_keyboard_resources_menu_reaches_workshops(
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
-    _tab_to_test_id(page, "nav-resources-trigger")
-    _assert_open(page, "resources")
+    _tab_to_test_id(page, "nav-learning-trigger")
+    _assert_open(page, "learning")
     page.keyboard.press("Enter")
-    _assert_open(page, "resources")
+    _assert_open(page, "learning")
 
     _tab_through_links(
         page,
-        "resources",
+        "learning",
         [
-            "nav-resources-link-blog",
-            "nav-resources-link-courses",
-            "nav-resources-link-workshops",
+            "nav-learning-link-courses",
+            "nav-learning-link-workshops",
+            "nav-learning-link-learning-paths",
+            "nav-learning-link-interview",
         ],
     )
+    page.keyboard.press("Shift+Tab")
+    page.keyboard.press("Shift+Tab")
+    assert _active_test_id(page) == "nav-learning-link-workshops"
     page.keyboard.press("Enter")
     page.wait_for_url(f"{django_server}/workshops", timeout=5000)
 
@@ -129,31 +143,28 @@ def test_resources_menu_stays_open_until_focus_leaves_or_escape(
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
-    _tab_to_test_id(page, "nav-resources-trigger")
-    _assert_open(page, "resources")
+    _tab_to_test_id(page, "nav-learning-trigger")
+    _assert_open(page, "learning")
     _tab_through_links(
         page,
-        "resources",
+        "learning",
         [
-            "nav-resources-link-blog",
-            "nav-resources-link-courses",
-            "nav-resources-link-workshops",
-            "nav-resources-link-learning-paths",
-            "nav-resources-link-projects",
-            "nav-resources-link-interview",
-            "nav-resources-link-curated-links",
+            "nav-learning-link-courses",
+            "nav-learning-link-workshops",
+            "nav-learning-link-learning-paths",
+            "nav-learning-link-interview",
         ],
     )
 
     page.keyboard.press("Tab")
-    _assert_closed(page, "resources")
+    _assert_closed(page, "learning")
 
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
-    _tab_to_test_id(page, "nav-about-trigger")
-    _assert_open(page, "about")
+    _tab_to_test_id(page, "nav-learning-trigger")
+    _assert_open(page, "learning")
     page.keyboard.press("Escape")
-    _assert_closed(page, "about")
-    assert _active_test_id(page) == "nav-about-trigger"
+    _assert_closed(page, "learning")
+    assert _active_test_id(page) == "nav-learning-trigger"
 
 
 def test_public_dropdowns_switch_and_close_on_outside_click(django_server, page):
@@ -162,7 +173,7 @@ def test_public_dropdowns_switch_and_close_on_outside_click(django_server, page)
 
     _tab_to_test_id(page, "nav-about-trigger")
     _assert_open(page, "about")
-    _tab_to_test_id(page, "nav-community-trigger", max_tabs=8)
+    page.get_by_test_id("nav-community-trigger").focus()
     _assert_closed(page, "about")
     _assert_open(page, "community")
 
@@ -184,15 +195,15 @@ def test_signed_in_header_dropdowns_are_mutually_exclusive(
     try:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
-        _tab_to_test_id(page, "nav-resources-trigger")
-        _assert_open(page, "resources")
+        _tab_to_test_id(page, "nav-learning-trigger")
+        _assert_open(page, "learning")
 
         account_trigger = page.locator("#account-menu-trigger")
         account_trigger.click()
         page.locator("#account-menu-dropdown").wait_for(
             state="visible", timeout=3000
         )
-        _assert_closed(page, "resources")
+        _assert_closed(page, "learning")
         assert account_trigger.get_attribute("aria-expanded") == "true"
 
         notification_trigger = page.locator("#notification-bell-btn")
@@ -238,26 +249,23 @@ def test_mobile_public_nav_accordions_keep_existing_aria_and_links(
         expected = {
             "about": ["Team", "FAQ"],
             "community": [
-                "Membership",
-                "Activities",
-                "Community Sprints",
                 "Events",
-                "Past Recordings",
+                "Community Sprints",
+                "Book Club",
             ],
-            "resources": [
-                "Blog",
+            "learning": [
                 "Courses",
                 "Workshops",
                 "Learning Paths",
-                "Project Ideas",
                 "Interview Prep",
-                "Curated Links",
             ],
         }
         for section, labels in expected.items():
             trigger = page.locator(f'[data-testid="mobile-nav-{section}-trigger"]')
             menu = page.locator(f'[data-testid="mobile-nav-{section}-menu"]')
             assert trigger.get_attribute("aria-expanded") == "false"
+            assert trigger.get_attribute("aria-controls") == f"mobile-{section}-list"
+            assert menu.get_attribute("id") == f"mobile-{section}-list"
             assert not menu.is_visible()
 
             trigger.click()
@@ -269,5 +277,15 @@ def test_mobile_public_nav_accordions_keep_existing_aria_and_links(
             trigger.click()
             assert trigger.get_attribute("aria-expanded") == "false"
             assert not menu.is_visible()
+
+        primary = page.locator("#mobile-menu")
+        expect(primary.get_by_test_id("mobile-nav-blog-link")).to_have_attribute(
+            "href", "/blog"
+        )
+        expect(
+            primary.get_by_test_id("mobile-nav-membership-link")
+        ).to_have_attribute("href", "/membership")
+        for retired_label in ("Activities", "Past Recordings", "Resources"):
+            expect(primary.get_by_text(retired_label, exact=True)).to_have_count(0)
     finally:
         context.close()

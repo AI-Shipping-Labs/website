@@ -137,6 +137,32 @@ def _seed_taxonomy_fixtures():
 def test_desktop_visitor_taxonomy_journey(django_server, page):
     _seed_taxonomy_fixtures()
 
+    page.goto(f"{django_server}/", wait_until="domcontentloaded")
+    primary = page.get_by_test_id("desktop-primary-nav")
+    top_level = primary.locator(
+        ":scope > div > button[data-testid], :scope > a[data-testid]"
+    )
+    assert top_level.evaluate_all("nodes => nodes.map(node => node.dataset.testid)") == [
+        "nav-community-trigger",
+        "nav-learning-trigger",
+        "nav-blog-link",
+        "nav-membership-link",
+        "nav-about-trigger",
+    ]
+    page.get_by_test_id("nav-community-trigger").hover()
+    community_menu = page.get_by_test_id("nav-community-menu")
+    expect(community_menu).to_contain_text("Events")
+    expect(community_menu).to_contain_text("Community Sprints")
+    expect(community_menu).to_contain_text("Book Club")
+    expect(community_menu).not_to_contain_text("Activities")
+    page.get_by_test_id("nav-learning-trigger").hover()
+    learning_menu = page.get_by_test_id("nav-learning-menu")
+    expect(learning_menu).to_contain_text("Courses")
+    expect(learning_menu).to_contain_text("Workshops")
+    expect(primary.get_by_test_id("nav-membership-link")).to_have_attribute(
+        "href", "/membership"
+    )
+
     page.goto(f"{django_server}/events", wait_until="domcontentloaded")
     expect(
         page.get_by_role("heading", name="Live community events")
@@ -190,11 +216,12 @@ def test_desktop_visitor_taxonomy_journey(django_server, page):
     expect(page.locator("main")).not_to_contain_text("community activities")
 
     page.goto(f"{django_server}/activities#access-by-tier", wait_until="domcontentloaded")
-    expect(page.get_by_role("heading", name="Membership benefits by tier")).to_be_visible()
-    anchor_nav = page.locator('[data-testid="activities-anchor-nav"]')
-    for label in ["Community sprints", "Live events", "Workshops"]:
-        expect(anchor_nav.get_by_role("link", name=label)).to_be_visible()
-    expect(page.get_by_test_id("activities-pricing-cta")).to_be_visible()
+    page.wait_for_url("**/membership#activities")
+    benefits = page.get_by_test_id("membership-benefits-section")
+    expect(benefits.get_by_text("Member benefits", exact=True)).to_be_visible()
+    expect(page.get_by_role("heading", name="Choose your level of engagement")).to_be_visible()
+    assert page.locator('[data-testid="activities-anchor-nav"]').count() == 0
+    expect(benefits).to_be_visible()
 
     page.goto(f"{django_server}/sprints", wait_until="domcontentloaded")
     expect(page.get_by_role("heading", name="Community Sprints")).to_be_visible()
@@ -210,21 +237,26 @@ def test_mobile_taxonomy_navigation_and_past_recordings(django_server, browser):
     page.locator("#mobile-menu-btn").click()
     page.wait_for_selector("#mobile-menu:not(.hidden)", timeout=2000)
     page.locator("#mobile-community-toggle").click()
-    page.locator("#mobile-resources-toggle").click()
+    page.locator("#mobile-learning-toggle").click()
 
     community_menu = page.locator('[data-testid="mobile-nav-community-menu"]')
-    resources_menu = page.locator('[data-testid="mobile-nav-resources-menu"]')
+    learning_menu = page.locator('[data-testid="mobile-nav-learning-menu"]')
     for label in [
-        "Membership",
-        "Activities",
-        "Community Sprints",
         "Events",
-        "Past Recordings",
+        "Community Sprints",
+        "Book Club",
     ]:
         expect(community_menu.get_by_text(label, exact=True)).to_be_visible()
     expect(community_menu.get_by_text("Overview", exact=True)).to_have_count(0)
-    for label in ["Blog", "Courses", "Workshops", "Curated Links"]:
-        expect(resources_menu.get_by_text(label, exact=True)).to_be_visible()
+    expect(community_menu.get_by_text("Activities", exact=True)).to_have_count(0)
+    for label in ["Courses", "Workshops", "Learning Paths", "Interview Prep"]:
+        expect(learning_menu.get_by_text(label, exact=True)).to_be_visible()
+    expect(page.get_by_test_id("mobile-nav-blog-link")).to_have_attribute(
+        "href", "/blog"
+    )
+    expect(page.get_by_test_id("mobile-nav-membership-link")).to_have_attribute(
+        "href", "/membership"
+    )
 
     page.goto(f"{django_server}/events?filter=past", wait_until="domcontentloaded")
     expect(

@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from django.contrib import messages
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -10,6 +10,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from accounts.gating import is_newsletter_only_user
 from accounts.oauth_context import get_oauth_provider_context
 from accounts.services.timezones import format_user_datetime
+from bookclub.models import BOOK_STATUS_CURRENT, Book, ChapterRead
 from community.services.slack_links import build_slack_profile_url
 from content.access import (
     get_active_override,
@@ -320,7 +321,12 @@ def _dashboard(request):
     # the merged list short-circuits the workshop branch when the user has
     # no workshop completions.
     all_in_progress_learning = _get_in_progress_learning(user, user_level)
-    in_progress_learning = all_in_progress_learning[:3]
+    dashboard_book_club = _get_dashboard_book_club(user, user_level)
+    # The approved dashboard hierarchy has at most three resumable items.
+    # A current Book Club read occupies one slot; otherwise learning keeps the
+    # historical three-item limit.
+    learning_limit = 2 if dashboard_book_club is not None else 3
+    in_progress_learning = all_in_progress_learning[:learning_limit]
     hidden_learning_count = max(
         0, len(all_in_progress_learning) - len(in_progress_learning),
     )
@@ -334,6 +340,7 @@ def _dashboard(request):
 
     # --- Upcoming events ---
     upcoming_events = _get_upcoming_events(user)
+    dashboard_upcoming_events = upcoming_events[:2]
 
     # --- Starting soon card (issue #705) ---
     # The same imminent event continues to appear in ``upcoming_events`` —
@@ -455,7 +462,9 @@ def _dashboard(request):
         'in_progress_learning': in_progress_learning,
         'hidden_learning_count': hidden_learning_count,
         'in_progress_learning_total_count': len(all_in_progress_learning),
+        'dashboard_book_club': dashboard_book_club,
         'upcoming_events': upcoming_events,
+        'dashboard_upcoming_events': dashboard_upcoming_events,
         'starting_soon': starting_soon,
         'recent_content': recent_content,
         'active_polls': active_polls,
@@ -779,6 +788,58 @@ def _get_in_progress_learning(user, user_level):
     return merged
 
 
+def _get_dashboard_book_club(user, user_level):
+    """Return the current accessible Book Club read for the dashboard.
+
+    Book progress is derived, never persisted: one query selects the newest
+    current book and one annotated chapter query marks the viewer's read rows.
+    The query count is constant regardless of chapter count.
+    """
+    books = Book.objects.filter(status=BOOK_STATUS_CURRENT)
+    if not user.is_staff:
+        books = books.filter(required_level__lte=user_level)
+    book = books.order_by('-start_date', '-created_at').first()
+    if book is None:
+        return None
+
+    viewer_read = ChapterRead.objects.filter(
+        user=user,
+        chapter_id=OuterRef('pk'),
+    )
+    chapters = list(
+        book.chapters.annotate(
+            viewer_has_read=Exists(viewer_read),
+        ).order_by('number')
+    )
+    total = len(chapters)
+    completed = sum(1 for chapter in chapters if chapter.viewer_has_read)
+    percentage = round(completed / total * 100) if total else 0
+    next_chapter = next(
+        (chapter for chapter in chapters if not chapter.viewer_has_read),
+        None,
+    )
+
+    if next_chapter is not None:
+        next_url = reverse(
+            'bookclub_chapter_detail',
+            kwargs={'slug': book.slug, 'number': next_chapter.number},
+        )
+        cta_label = 'Start reading' if completed == 0 else 'Continue reading'
+    else:
+        next_url = book.get_absolute_url()
+        cta_label = 'View book'
+
+    return {
+        'book': book,
+        'completed_count': completed,
+        'total_chapters': total,
+        'percentage': percentage,
+        'next_chapter': next_chapter,
+        'next_url': next_url,
+        'cta_label': cta_label,
+    }
+
+
 def _get_upcoming_events(user):
     """Return the next 3 upcoming events the user is registered for."""
     events = registered_upcoming_events(user)
@@ -877,7 +938,7 @@ def _get_starting_soon_event(user):
 
 
 def _get_recent_content(user_level):
-    """Return latest 5 published articles/recordings the user can access."""
+    """Return latest 3 published articles/recordings the user can access."""
     # Get accessible articles
     articles = list(
         Article.objects.filter(
@@ -898,7 +959,8 @@ def _get_recent_content(user_level):
         ).order_by('-start_datetime')[:5]
     )
 
-    # Merge and sort by date, take top 5
+    # Merge and sort by date, take the three calm editorial rows used by the
+    # member dashboard.
     combined = []
     for article in articles:
         combined.append({
@@ -928,7 +990,7 @@ def _get_recent_content(user_level):
             return dt.datetime.combine(val, dt.time.min, tzinfo=dt.timezone.utc)
         return dt.datetime.min.replace(tzinfo=dt.timezone.utc)
     combined.sort(key=_sort_key, reverse=True)
-    return combined[:5]
+    return combined[:3]
 
 
 def _get_active_polls(user_level):
@@ -952,6 +1014,9 @@ def _get_free_activation_context(*, user, user_level, active_override, upcoming_
         'show_free_activation_checklist': False,
         'show_free_plan_teaser': False,
         'free_activation_checklist_items': [],
+        'free_activation_completed_count': 0,
+        'free_activation_total_count': 0,
+        'free_activation_percentage': 0,
     }
     if user_level != LEVEL_OPEN or active_override is not None:
         return empty_context
@@ -963,12 +1028,12 @@ def _get_free_activation_context(*, user, user_level, active_override, upcoming_
     ai_hero_started = _has_started_ai_hero(user)
     event_registered = bool(upcoming_events)
     sprint_engaged = _has_active_sprint_engagement(user)
+    checklist_dismissed = (
+        'free_activation_checklist' in user.dashboard_dismissals
+    )
 
-    return {
-        'show_free_activation_checklist': True,
-        'show_free_plan_teaser': True,
-        'free_activation_checklist_items': [
-            {
+    checklist_items = [
+        {
                 'key': 'ai-hero',
                 'title': 'Start AI Hero',
                 'description': 'Begin with the open course for building AI products.',
@@ -976,8 +1041,8 @@ def _get_free_activation_context(*, user, user_level, active_override, upcoming_
                 'cta_label': 'Open course',
                 'icon': 'book-open',
                 'completed': ai_hero_started,
-            },
-            {
+        },
+        {
                 'key': 'events',
                 'title': 'Register for a free event',
                 'description': 'Join a live session or workshop you can attend.',
@@ -985,8 +1050,8 @@ def _get_free_activation_context(*, user, user_level, active_override, upcoming_
                 'cta_label': 'Browse events',
                 'icon': 'calendar',
                 'completed': event_registered,
-            },
-            {
+        },
+        {
                 'key': 'sprints',
                 'title': 'Learn how sprints and plans work',
                 'description': 'See how members use plans, cohorts, and accountability.',
@@ -994,8 +1059,18 @@ def _get_free_activation_context(*, user, user_level, active_override, upcoming_
                 'cta_label': 'View sprints',
                 'icon': 'map',
                 'completed': sprint_engaged,
-            },
-        ],
+        },
+    ]
+    completed_count = sum(item['completed'] for item in checklist_items)
+    return {
+        'show_free_activation_checklist': not checklist_dismissed,
+        'show_free_plan_teaser': True,
+        'free_activation_checklist_items': checklist_items,
+        'free_activation_completed_count': completed_count,
+        'free_activation_total_count': len(checklist_items),
+        'free_activation_percentage': round(
+            completed_count / len(checklist_items) * 100,
+        ),
     }
 
 
@@ -1035,19 +1110,25 @@ def _has_active_sprint_engagement(user):
 
 
 def _get_quick_actions(user_level):
-    """Build quick action cards based on user's tier level."""
+    """Build the compact Explore destinations for the member dashboard."""
     actions = [
         {
-            'title': 'Browse courses',
+            'title': 'Courses',
             'description': 'Explore structured learning paths',
             'url': '/courses',
             'icon': 'book-open',
         },
         {
-            'title': 'Browse workshops',
+            'title': 'Workshops',
             'description': 'Practice with focused workshop material',
             'url': '/workshops',
             'icon': 'monitor-play',
+        },
+        {
+            'title': 'Events',
+            'description': 'Register live or catch up on recordings',
+            'url': '/events',
+            'icon': 'video',
         },
         {
             'title': 'Resources',
@@ -1056,22 +1137,10 @@ def _get_quick_actions(user_level):
             'icon': 'link',
         },
         {
-            'title': 'Events and recordings',
-            'description': 'Register live or catch up on recordings',
-            'url': '/events',
-            'icon': 'video',
-        },
-        {
             'title': 'Projects',
             'description': 'Find ideas or submit your shipped work',
             'url': '/projects',
             'icon': 'rocket',
-        },
-        {
-            'title': 'Activities',
-            'description': 'Discover sprints and community activities',
-            'url': '/activities',
-            'icon': 'users',
         },
     ]
     return actions

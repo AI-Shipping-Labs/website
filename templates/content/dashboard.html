@@ -23,7 +23,7 @@
 {% block body %}
 {% include "includes/header.html" %}
 <main class="min-h-screen overflow-x-hidden pt-24">
-  <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
+  <div class="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
 
     <!-- Checkout Success Banner (shown via JS when ?checkout=success is present) -->
     <div id="checkout-success-banner" class="mb-6 hidden rounded-xl border border-green-500/30 bg-green-500/10 p-4" role="alert">
@@ -43,6 +43,7 @@
         <h1 class="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl" data-testid="dashboard-heading">
           {% if request.user.first_name %}Welcome back, {{ request.user.first_name }}{% else %}Welcome back{% endif %}
         </h1>
+        <p class="mt-2 text-sm text-muted-foreground">Here's what to focus on this week.</p>
       </div>
       <div class="flex items-center">
         {% if dashboard_tier_is_override %}
@@ -59,53 +60,63 @@
 
     {% if show_free_activation_checklist %}
     <!-- Free activation checklist (issue #1161). -->
-    <section class="mb-8" data-testid="free-activation-checklist">
-      <div class="mb-4">
-          <p class="text-sm font-medium uppercase tracking-widest text-accent">Getting started</p>
-          <h2 class="mt-1 text-xl font-semibold tracking-tight text-foreground">Start building with your Free account</h2>
-        <p class="mt-2 max-w-xl text-sm text-muted-foreground">Start with open courses and live events, then learn how sprints and plans work.</p>
+    <section class="mb-8 overflow-hidden rounded-xl border border-border bg-card" data-testid="free-activation-checklist" data-dismiss-card-container>
+      <div class="relative border-b border-border p-5 pr-16 sm:p-6 sm:pr-16">
+        <button type="button"
+                class="absolute right-3 top-3 inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                aria-label="Dismiss getting started"
+                data-testid="free-activation-dismiss"
+                data-dismiss-card="free_activation_checklist">
+          <i data-lucide="x" class="h-4 w-4" aria-hidden="true"></i>
+        </button>
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div class="min-w-0">
+            <p class="text-xs font-medium uppercase tracking-widest text-accent">Getting started</p>
+            <h2 class="mt-1 text-xl font-semibold tracking-tight text-foreground">Set up your account</h2>
+            <p class="mt-1 text-sm text-muted-foreground">Three useful steps to start learning and building with the community.</p>
+          </div>
+          <p class="shrink-0 text-sm font-medium text-foreground" data-testid="free-activation-progress-copy">
+            {{ free_activation_completed_count }} of {{ free_activation_total_count }} complete
+          </p>
+        </div>
+        <div class="mt-4 h-2 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
+          <div class="h-full rounded-full bg-accent transition-all" style="width: {{ free_activation_percentage }}%"></div>
+        </div>
       </div>
-      <div class="grid gap-3 md:grid-cols-3">
+      <ol class="divide-y divide-border">
         {% for item in free_activation_checklist_items %}
-        <article class="flex min-h-48 flex-col rounded-lg border p-4 transition-colors {% if item.completed %}border-emerald-500/30 bg-emerald-500/10{% else %}border-border bg-card hover:border-accent/50{% endif %}"
-                 data-testid="free-activation-item-{{ item.key }}"
-                 data-complete="{{ item.completed|yesno:'true,false' }}">
-          <div class="flex items-start gap-3">
-            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {% if item.completed %}bg-emerald-500/15 text-emerald-800 dark:text-emerald-300{% else %}bg-secondary text-accent{% endif %}">
-              <i data-lucide="{% if item.completed %}check-circle{% else %}{{ item.icon }}{% endif %}" class="h-5 w-5"></i>
+        <li class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:px-6" data-testid="free-activation-item-{{ item.key }}" data-complete="{{ item.completed|yesno:'true,false' }}">
+          <div class="flex min-w-0 flex-1 items-start gap-3">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border {% if item.completed %}border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300{% else %}border-border bg-secondary text-muted-foreground{% endif %}">
+              {% if item.completed %}
+              <i data-lucide="check" class="h-4 w-4" aria-hidden="true"></i>
+              {% else %}
+              <span class="text-xs font-semibold">{{ forloop.counter }}</span>
+              {% endif %}
             </span>
-            <div class="min-w-0">
+            <div class="min-w-0 pt-0.5">
               <h3 class="text-sm font-semibold text-foreground">{{ item.title }}</h3>
-              <p class="mt-1 text-sm leading-relaxed text-muted-foreground">{{ item.description }}</p>
+              <p class="mt-0.5 text-sm text-muted-foreground">{{ item.description }}</p>
             </div>
           </div>
-          <div class="mt-auto pt-4">
+          <div class="shrink-0 pl-11 sm:pl-0">
             {% if item.completed %}
-            <div class="flex items-center justify-between gap-3">
-              <span class="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-800 dark:text-emerald-300"
-                    data-testid="free-activation-complete-{{ item.key }}">
-                <i data-lucide="check" class="h-3.5 w-3.5"></i>
-                Done
-              </span>
-              <a href="{{ item.url }}"
-                 class="inline-flex min-h-[44px] items-center gap-1 rounded-md px-2 text-sm font-medium text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                 data-testid="free-activation-action-{{ item.key }}">
-                Open
-                <i data-lucide="arrow-right" class="h-3.5 w-3.5"></i>
-              </a>
-            </div>
+            <span class="inline-flex min-h-[44px] items-center text-xs font-medium text-emerald-800 dark:text-emerald-300"
+                  data-testid="free-activation-complete-{{ item.key }}">
+              Done
+            </span>
             {% else %}
             <a href="{{ item.url }}"
-               class="{% button_classes 'secondary' 'w-full justify-center' %}"
+               class="{% button_classes 'secondary' 'w-full justify-center sm:w-auto' %}"
                data-testid="free-activation-action-{{ item.key }}">
               {{ item.cta_label }}
               <i data-lucide="arrow-right" class="h-4 w-4"></i>
             </a>
             {% endif %}
           </div>
-        </article>
+        </li>
         {% endfor %}
-      </div>
+      </ol>
     </section>
     {% endif %}
 
@@ -130,8 +141,81 @@
     </section>
     {% endif %}
 
-    <div class="space-y-10">
-      <div class="grid gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]" data-testid="dashboard-primary-sections">
+    {% if plan %}
+    <section class="mb-8 rounded-xl border border-accent/30 bg-card p-5 sm:p-6" id="sprint-plan-section" data-testid="account-sprint-plan-card">
+      <div class="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)] lg:items-center">
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-accent">
+            {% if plan_has_ended %}Your latest sprint plan{% else %}Your next step{% endif %}
+          </p>
+          <div class="mt-2 flex min-w-0 items-start gap-4">
+            <span class="hidden h-12 w-12 shrink-0 items-center justify-center rounded-full border border-accent/40 bg-accent/10 text-accent sm:flex">
+              <i data-lucide="flag" class="h-5 w-5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0 flex-1">
+              <h2 class="text-2xl font-semibold tracking-tight text-foreground" data-testid="account-sprint-plan-heading">
+                {{ plan.sprint.name }}
+              </h2>
+              <p class="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" data-testid="account-sprint-plan-meta">
+                <span data-testid="account-sprint-plan-dates">{% sprint_date_range plan.sprint %}</span>
+                <span aria-hidden="true">&middot;</span>
+                {% member_status_badge plan.sprint.sprint_badge_current.label status=plan.sprint.sprint_badge_current.state size="xs" testid="account-sprint-plan-status" %}
+              </p>
+              {% if plan_progress_total %}
+              <div class="mt-4 max-w-2xl" data-testid="account-sprint-plan-progress">
+                <div class="flex items-center justify-between gap-4 text-sm">
+                  <span class="text-foreground">{{ plan_progress_done }} of {{ plan_progress_total }} checkpoints done</span>
+                  <span class="text-muted-foreground">{% widthratio plan_progress_done plan_progress_total 100 %}%</span>
+                </div>
+                <div class="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
+                  <div class="h-full rounded-full bg-accent" style="width: {% widthratio plan_progress_done plan_progress_total 100 %}%"></div>
+                </div>
+              </div>
+              {% endif %}
+              {% if plan_has_ended %}
+              <p class="mt-4 text-sm text-muted-foreground" data-testid="account-sprint-plan-recap">Review what shipped, share feedback, or carry the work into your next sprint.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="flex flex-col gap-3 lg:items-end">
+          <a href="{% url 'my_plan_detail' sprint_slug=plan.sprint.slug plan_id=plan.pk %}"
+             class="{% button_classes 'primary' size='lg' extra='w-full justify-center lg:w-auto' %}"
+             data-testid="account-sprint-plan-open">
+            Open my plan
+            <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          </a>
+          <div class="flex flex-wrap gap-2 lg:justify-end">
+            {% if cohort_has_other_members %}
+            <a href="{% url 'cohort_board' sprint_slug=plan.sprint.slug %}"
+               class="{% button_classes 'secondary' %}"
+               data-testid="account-sprint-plan-cohort">
+              View cohort
+              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </a>
+            {% endif %}
+            {% if plan_has_ended and sprint_end_feedback_url %}
+            <a href="{{ sprint_end_feedback_url }}"
+               class="{% button_classes 'secondary' %}"
+               data-testid="account-sprint-plan-feedback">
+              {{ sprint_end_feedback_label }}
+            </a>
+            {% endif %}
+            {% if plan_has_ended and sprint_end_next_action %}
+            <a href="{{ sprint_end_next_action.url }}"
+               class="{% button_classes 'secondary' %}"
+               data-testid="account-sprint-plan-next-action">
+              {{ sprint_end_next_action.label }}
+            </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
+    <div class="space-y-8">
+      <div class="space-y-8" data-testid="dashboard-primary-sections">
         <!-- Continue Learning -->
         <section class="min-w-0" data-testid="dashboard-continue-learning-section">
           <div class="mb-4">
@@ -139,12 +223,8 @@
               <i data-lucide="book-open" class="h-5 w-5 shrink-0 text-accent"></i>
               Continue learning
             </h2>
-            <div class="mt-1 flex flex-wrap gap-4 text-sm">
-              <a href="/courses" class="inline-flex min-h-[44px] items-center rounded-md px-2 text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Courses</a>
-              <a href="/workshops" class="inline-flex min-h-[44px] items-center rounded-md px-2 text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Workshops</a>
-            </div>
           </div>
-          {% if in_progress_learning %}
+          {% if in_progress_learning or dashboard_book_club %}
           <div class="space-y-4" data-testid="continue-learning-list">
             {% for item in in_progress_learning %}
             {% if item.kind == 'workshop' %}
@@ -213,6 +293,44 @@
             </div>
             {% endif %}
             {% endfor %}
+            {% if dashboard_book_club %}
+            <div class="rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50" data-testid="dashboard-book-club-card">
+              <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
+                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                  <i data-lucide="book-marked" class="h-5 w-5" aria-hidden="true"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-xs font-medium uppercase tracking-widest text-accent">Book Club</p>
+                  <h3 class="mt-1 truncate font-medium text-foreground" data-testid="dashboard-book-club-title">{{ dashboard_book_club.book.title }}</h3>
+                  <p class="mt-1 text-sm text-muted-foreground">{{ dashboard_book_club.book.author }}</p>
+                  <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <span data-testid="dashboard-book-club-progress">{{ dashboard_book_club.completed_count }}/{{ dashboard_book_club.total_chapters }} chapters read</span>
+                    {% if dashboard_book_club.next_chapter %}
+                    <span aria-hidden="true">&middot;</span>
+                    <span data-testid="dashboard-book-club-next">Next: Chapter {{ dashboard_book_club.next_chapter.number }} &middot; {{ dashboard_book_club.next_chapter.title }}</span>
+                    {% if dashboard_book_club.next_chapter.deadline %}
+                    <span aria-hidden="true">&middot;</span>
+                    <span>Due {{ dashboard_book_club.next_chapter.deadline|date:"M j" }}</span>
+                    {% endif %}
+                    {% endif %}
+                    {% if dashboard_book_club.book.meeting_cadence %}
+                    <span aria-hidden="true">&middot;</span>
+                    <span>{{ dashboard_book_club.book.meeting_cadence }}</span>
+                    {% endif %}
+                  </div>
+                  <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-secondary">
+                    <div class="h-full rounded-full bg-accent transition-all" style="width: {{ dashboard_book_club.percentage }}%"></div>
+                  </div>
+                </div>
+                <a href="{{ dashboard_book_club.next_url }}"
+                   class="{% button_classes 'primary' 'shrink-0 justify-center' %}"
+                   data-testid="dashboard-book-club-cta">
+                  {{ dashboard_book_club.cta_label }}
+                  <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
+                </a>
+              </div>
+            </div>
+            {% endif %}
           </div>
           {% if hidden_learning_count %}
           <div class="mt-4 flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between" data-testid="continue-learning-more">
@@ -243,13 +361,13 @@
           <div class="mb-4">
             <h2 class="flex min-w-0 items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
               <i data-lucide="calendar" class="h-5 w-5 shrink-0 text-accent"></i>
-              Upcoming events
+              Up next
             </h2>
             <a href="/events" class="inline-flex min-h-[44px] items-center rounded-md px-2 text-sm text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">View all events</a>
           </div>
-          {% if upcoming_events %}
+          {% if dashboard_upcoming_events %}
           <div class="space-y-4">
-            {% for event in upcoming_events %}
+            {% for event in dashboard_upcoming_events %}
             <div class="rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50" data-testid="dashboard-upcoming-event-row">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0 flex-1">
@@ -289,27 +407,7 @@
         </section>
       </div>
 
-      <!-- Quick Actions -->
-      <section data-testid="dashboard-quick-actions-section">
-        <h2 class="mb-4 flex items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
-          <i data-lucide="zap" class="h-5 w-5 text-accent"></i>
-          Quick actions
-        </h2>
-        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6" data-testid="dashboard-quick-actions">
-          {% for action in quick_actions %}
-          <a href="{{ action.url }}" class="flex min-h-[88px] items-start gap-3 rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-quick-action">
-            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
-              <i data-lucide="{{ action.icon }}" class="h-5 w-5 text-accent"></i>
-            </div>
-            <div class="min-w-0">
-              <p class="text-sm font-medium text-foreground">{{ action.title }}</p>
-              <p class="mt-1 text-xs leading-relaxed text-muted-foreground">{{ action.description }}</p>
-            </div>
-          </a>
-          {% endfor %}
-        </div>
-      </section>
-
+      {% if show_onboarding_prompt or show_plan_preparing %}
       <div class="grid gap-6 lg:grid-cols-2" data-testid="dashboard-secondary-guidance">
         {% if show_onboarding_prompt %}
         <!-- Onboarding prompt banner (issue #802). Dismiss control: issue #1129. -->
@@ -369,147 +467,71 @@
         </section>
         {% endif %}
 
-        {% if plan %}
-        <!-- Sprint Plan Section (issue #442) -->
-        <section class="rounded-lg border border-border bg-card p-5" id="sprint-plan-section" data-testid="account-sprint-plan-card">
-          <div class="flex h-full flex-col gap-4">
-            <div class="min-w-0">
-              <h2 class="flex items-center gap-2 text-xl font-semibold tracking-tight text-foreground" data-testid="account-sprint-plan-heading">
-                <i data-lucide="map" class="h-5 w-5 text-accent"></i>
-                {% if plan.sprint.has_ended %}Your latest sprint plan{% else %}Your sprint plan{% endif %}
-              </h2>
-              <p class="mt-3 text-sm text-muted-foreground" data-testid="account-sprint-plan-name">
-                {{ plan.sprint.name }}
-              </p>
-              <p class="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" data-testid="account-sprint-plan-meta">
-                <span data-testid="account-sprint-plan-dates">{% sprint_date_range plan.sprint %}</span>
-                <span aria-hidden="true">&middot;</span>
-                {% member_status_badge plan.sprint.sprint_badge_current.label status=plan.sprint.sprint_badge_current.state size="xs" testid="account-sprint-plan-status" %}
-              </p>
-              {% if plan_has_ended %}
-              <div class="mt-4 rounded-md border border-accent/30 bg-accent/10 p-3" data-testid="account-sprint-plan-recap">
-                <p class="text-sm font-medium text-foreground">
-                  Sprint recap
-                </p>
-                <p class="mt-1 text-sm text-muted-foreground" data-testid="account-sprint-plan-progress">
-                  {{ plan_progress_done }} of {{ plan_progress_total }} checkpoints done
-                </p>
-              </div>
-              {% elif plan_progress_total %}
-              <p class="mt-3 text-sm text-foreground" data-testid="account-sprint-plan-progress">
-                {{ plan_progress_done }} of {{ plan_progress_total }} checkpoints done
-              </p>
-              {% endif %}
-            </div>
-            <div class="mt-auto flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <a href="{% url 'my_plan_detail' sprint_slug=plan.sprint.slug plan_id=plan.pk %}"
-                 class="{% button_classes 'primary' %}"
-                 data-testid="account-sprint-plan-open">
-                <i data-lucide="arrow-right-circle" class="h-4 w-4"></i>
-                Open my plan
-              </a>
-              {% if cohort_has_other_members %}
-              <a href="{% url 'cohort_board' sprint_slug=plan.sprint.slug %}"
-                 class="{% button_classes 'secondary' %}"
-                 data-testid="account-sprint-plan-cohort">
-                <i data-lucide="users" class="h-4 w-4"></i>
-                View cohort
-              </a>
-              {% endif %}
-              {% if plan_has_ended and sprint_end_feedback_url %}
-              <a href="{{ sprint_end_feedback_url }}"
-                 class="{% button_classes 'secondary' %}"
-                 data-testid="account-sprint-plan-feedback">
-                <i data-lucide="message-square-text" class="h-4 w-4"></i>
-                {{ sprint_end_feedback_label }}
-              </a>
-              {% endif %}
-              {% if plan_has_ended and sprint_end_next_action %}
-              <a href="{{ sprint_end_next_action.url }}"
-                 class="{% button_classes 'secondary' %}"
-                 data-testid="account-sprint-plan-next-action">
-                <i data-lucide="move-right" class="h-4 w-4"></i>
-                {{ sprint_end_next_action.label }}
-              </a>
-              {% endif %}
-            </div>
-          </div>
-        </section>
-        {% endif %}
-
-        <!-- Slack Community Section (shared partial - issue #700) -->
-        {# Issue #729: hide the "Connected to Slack" card on the dashboard. The #}
-        {# partial still renders on /account/ for the connected state. #}
-        {% if not slack_connected %}
-        {% include "includes/_slack_account_card.html" %}
-        {% endif %}
-
-        {% if active_sprint_opportunities or not plan %}
-        {% comment %}
-          Issue #1310: this section is the tallest child of the guidance grid.
-          When it lands in an odd position as the last child it would otherwise
-          sit alone in its row and leave half the page blank at lg+, so it
-          spans both columns in exactly that case. When it is an even last
-          child it already shares a row with a sibling and stays half-width.
-        {% endcomment %}
-        <section class="lg:odd:last:col-span-2">
-          <div class="mb-4">
-            <h2 class="flex min-w-0 items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
-              <i data-lucide="users" class="h-5 w-5 shrink-0 text-accent"></i>
-              {{ active_sprint_section_title }}
-            </h2>
-            <a href="{{ active_sprint_discovery_url }}" class="inline-flex min-h-[44px] items-center rounded-md px-2 text-sm text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Activities</a>
-          </div>
-          {% if active_sprint_opportunities %}
-          {% comment %}
-            Issue #1310: the card track sizes off the section's own width, so
-            the cards stay stacked while the section is half-width and go
-            two-up once it spans the full guidance grid. Column-count utility
-            classes cannot express that because they key off the viewport.
-          {% endcomment %}
-          <div class="grid gap-3 grid-cols-[repeat(auto-fit,minmax(min(100%,17rem),1fr))]" data-testid="dashboard-active-sprints">
-            {% for item in active_sprint_opportunities %}
-            <a href="{{ item.url }}" class="block min-h-[112px] rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-active-sprint">
-              <div class="flex h-full flex-col gap-3">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0">
-                    <p class="text-sm font-medium text-foreground">{{ item.sprint.name }}</p>
-                    <p class="mt-1 text-xs text-muted-foreground">
-                      {% sprint_date_range item.sprint compact=True %}
-                    </p>
-                  </div>
-                  {% if item.is_free_open %}{% member_label_badge "Free/open" testid="dashboard-active-sprint-tier" %}{% else %}{% member_label_badge item.required_tier_label testid="dashboard-active-sprint-tier" %}{% endif %}
-                </div>
-                <div class="mt-auto flex items-center justify-between gap-3">
-                  <p class="text-xs text-muted-foreground">
-                    {% if item.is_free_open %}Open to Free members{% else %}{{ item.required_tier_label }} members and above{% endif %}
-                  </p>
-                  <span class="inline-flex min-h-[44px] items-center gap-1 rounded-md px-2 text-sm font-medium text-accent">
-                    {{ item.cta_label }}
-                    <i data-lucide="arrow-right" class="h-4 w-4"></i>
-                  </span>
-                </div>
-              </div>
-            </a>
-            {% endfor %}
-          </div>
-          {% else %}
-          {% button_classes 'secondary' as secondary_cta_classes %}
-          {% member_empty_state title='No active sprint openings for your tier right now' body='New sprints open regularly. Browse activities to see what is coming up.' icon='users' kind='fresh' primary_cta_label='Browse activities' primary_cta_url=active_sprint_discovery_url primary_cta_icon='arrow-right' primary_cta_class=secondary_cta_classes %}
-          {% endif %}
-        </section>
-        {% endif %}
       </div>
+      {% endif %}
 
-      <div class="grid gap-8 lg:grid-cols-2" data-testid="dashboard-discovery-sections">
-        <!-- Recent Content -->
+      <section class="rounded-xl border border-border bg-card p-5 sm:p-6" data-testid="dashboard-community-strip">
+        <div class="mb-4">
+          <h2 class="flex items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
+            <i data-lucide="users" class="h-5 w-5 text-accent" aria-hidden="true"></i>
+            Community
+          </h2>
+          <p class="mt-1 text-sm text-muted-foreground">Stay connected without losing your place.</p>
+        </div>
+        <div class="grid gap-3 md:grid-cols-3">
+          {% if active_polls %}
+          {% with poll=active_polls.0 %}
+          <a href="{{ poll.get_absolute_url }}" class="group flex min-h-[92px] items-center gap-3 rounded-lg border border-border bg-background p-4 transition-colors hover:border-accent/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-community-poll">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-accent"><i data-lucide="bar-chart-3" class="h-5 w-5" aria-hidden="true"></i></span>
+            <span class="min-w-0 flex-1"><span class="block text-xs font-medium uppercase tracking-wider text-muted-foreground">Active poll</span><span class="mt-1 block truncate text-sm font-medium text-foreground">{{ poll.title }}</span></span>
+            <i data-lucide="arrow-right" class="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent" aria-hidden="true"></i>
+          </a>
+          {% endwith %}
+          {% else %}
+          <a href="/vote" class="group flex min-h-[92px] items-center gap-3 rounded-lg border border-border bg-background p-4 transition-colors hover:border-accent/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-community-poll">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-accent"><i data-lucide="bar-chart-3" class="h-5 w-5" aria-hidden="true"></i></span>
+            <span class="min-w-0 flex-1"><span class="block text-xs font-medium uppercase tracking-wider text-muted-foreground">Polls</span><span class="mt-1 block text-sm font-medium text-foreground">See community votes</span></span>
+            <i data-lucide="arrow-right" class="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent" aria-hidden="true"></i>
+          </a>
+          {% endif %}
+
+          {% if show_slack_join %}
+          <a href="{{ slack_join_url }}" rel="noopener" class="group flex min-h-[92px] items-center gap-3 rounded-lg border border-border bg-background p-4 transition-colors hover:border-accent/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-community-slack">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-accent"><i data-lucide="message-square" class="h-5 w-5" aria-hidden="true"></i></span>
+            <span class="min-w-0 flex-1"><span class="block text-xs font-medium uppercase tracking-wider text-muted-foreground">Slack</span><span class="mt-1 block text-sm font-medium text-foreground">Join the workspace</span></span>
+            <i data-lucide="arrow-right" class="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent" aria-hidden="true"></i>
+          </a>
+          {% elif slack_connected %}
+          <a href="/account" class="group flex min-h-[92px] items-center gap-3 rounded-lg border border-border bg-background p-4 transition-colors hover:border-accent/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-community-slack">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-accent"><i data-lucide="message-square-check" class="h-5 w-5" aria-hidden="true"></i></span>
+            <span class="min-w-0 flex-1"><span class="block text-xs font-medium uppercase tracking-wider text-muted-foreground">Slack</span><span class="mt-1 block text-sm font-medium text-foreground">Workspace connected</span></span>
+            <i data-lucide="arrow-right" class="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent" aria-hidden="true"></i>
+          </a>
+          {% else %}
+          <a href="/books" class="group flex min-h-[92px] items-center gap-3 rounded-lg border border-border bg-background p-4 transition-colors hover:border-accent/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-accent focus-visible:ring-offset-background" data-testid="dashboard-community-book-club">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-accent"><i data-lucide="book-marked" class="h-5 w-5" aria-hidden="true"></i></span>
+            <span class="min-w-0 flex-1"><span class="block text-xs font-medium uppercase tracking-wider text-muted-foreground">Book Club</span><span class="mt-1 block text-sm font-medium text-foreground">Read with members</span></span>
+            <i data-lucide="arrow-right" class="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent" aria-hidden="true"></i>
+          </a>
+          {% endif %}
+
+          <a href="{{ active_sprint_discovery_url }}" class="group flex min-h-[92px] items-center gap-3 rounded-lg border border-border bg-background p-4 transition-colors hover:border-accent/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-community-sprints">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-accent"><i data-lucide="flag" class="h-5 w-5" aria-hidden="true"></i></span>
+            <span class="min-w-0 flex-1"><span class="block text-xs font-medium uppercase tracking-wider text-muted-foreground">Build together</span><span class="mt-1 block text-sm font-medium text-foreground">Sprints &amp; cohorts</span></span>
+            <i data-lucide="arrow-right" class="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent" aria-hidden="true"></i>
+          </a>
+        </div>
+      </section>
+
+      <div class="space-y-8" data-testid="dashboard-discovery-sections">
+        <!-- Latest community content -->
         <section class="min-w-0">
           <div class="mb-4">
             <h2 class="flex min-w-0 items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
               <i data-lucide="newspaper" class="h-5 w-5 shrink-0 text-accent"></i>
-              Recent content
+              Latest from the community
             </h2>
-            <a href="/blog" class="inline-flex min-h-[44px] items-center rounded-md px-2 text-sm text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Browse blog</a>
+            <a href="/blog" class="inline-flex min-h-[44px] items-center rounded-md px-2 text-sm text-accent transition-colors hover:bg-secondary hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">View all</a>
           </div>
           {% if recent_content %}
           <div class="space-y-3" data-testid="dashboard-recent-content">
@@ -532,35 +554,22 @@
           {% endif %}
         </section>
 
-        <!-- Active Polls -->
-        <section class="min-w-0">
+        <!-- Compact destination index -->
+        <section class="min-w-0" data-testid="dashboard-quick-actions-section">
           <h2 class="mb-4 flex items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
-            <i data-lucide="bar-chart-3" class="h-5 w-5 text-accent"></i>
-            Active polls
+            <i data-lucide="compass" class="h-5 w-5 text-accent" aria-hidden="true"></i>
+            Explore
           </h2>
-          {% if active_polls %}
-          <div class="space-y-4">
-            {% for poll in active_polls %}
-            <a href="{{ poll.get_absolute_url }}" class="block min-h-[96px] rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-active-poll">
-              <h3 class="font-medium text-foreground">{{ poll.title }}</h3>
-              {% if poll.description %}
-              <p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{{ poll.description|truncatechars:100 }}</p>
-              {% endif %}
-              <div class="mt-3 flex items-center gap-3 text-xs text-muted-foreground" data-testid="poll-counts">
-                {% if poll.total_votes %}
-                <span>{{ poll.total_votes }} vote{{ poll.total_votes|pluralize }}</span>
-                {% endif %}
-                {% if poll.options_count %}
-                <span>{{ poll.options_count }} option{{ poll.options_count|pluralize }}</span>
-                {% endif %}
-              </div>
+          <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" data-testid="dashboard-quick-actions">
+            {% for action in quick_actions %}
+            <a href="{{ action.url }}" class="group flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card p-3 text-center transition-colors hover:border-accent/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="dashboard-quick-action">
+              <span class="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-accent transition-colors group-hover:bg-accent/10">
+                <i data-lucide="{{ action.icon }}" class="h-5 w-5" aria-hidden="true"></i>
+              </span>
+              <span class="text-sm font-medium text-foreground">{{ action.title }}</span>
             </a>
             {% endfor %}
           </div>
-          {% else %}
-          {% button_classes 'secondary' as secondary_cta_classes %}
-          {% member_empty_state title='No active polls right now' body='Community polls appear here while they are open for voting.' icon='bar-chart-3' kind='fresh' primary_cta_label='View past polls' primary_cta_url='/vote' primary_cta_icon='arrow-right' primary_cta_class=secondary_cta_classes %}
-          {% endif %}
         </section>
       </div>
     </div>

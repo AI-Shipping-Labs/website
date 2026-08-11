@@ -747,7 +747,11 @@ def email_preferences_view(request):
 # Allow-list of dismissable dashboard card keys (issue #1129). A dismiss
 # POST is accepted only for these stable keys; anything else is a 400. The
 # readers (content/views/home.py) branch on the same keys.
-DISMISSABLE_DASHBOARD_CARDS = frozenset({"onboarding_prompt", "slack_join"})
+DISMISSABLE_DASHBOARD_CARDS = frozenset({
+    "free_activation_checklist",
+    "onboarding_prompt",
+    "slack_join",
+})
 PLAN_CARRY_OVER_DISMISS_PREFIX = "plan_carry_over_prompt:"
 
 

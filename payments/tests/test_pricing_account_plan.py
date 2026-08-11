@@ -49,17 +49,21 @@ class PricingAccountPlanStateTest(TestCase):
             self.assertEqual(states[slug]["action_kind"], "checkout")
         self.assertContains(response, 'data-link-monthly')
         self.assertContains(response, 'data-link-annual')
+        self.assertNotContains(response, "Newsletter and open resources")
 
     def test_free_member_sees_free_current_and_paid_upgrades(self):
         user = self._user("free-pricing@test.com", self.free)
         states, response = self._pricing_states(user)
 
-        self.assertEqual(states["free"]["badge"], "Current free plan")
+        self.assertEqual(states["free"]["badge"], "")
+        self.assertEqual(states["free"]["note"], "")
+        self.assertEqual(states["free"]["action_label"], "Current plan")
         self.assertEqual(states["free"]["action_kind"], "disabled")
         for slug in ("basic", "main", "premium"):
             self.assertEqual(states[slug]["action_label"], "Upgrade")
             self.assertEqual(states[slug]["action_kind"], "checkout")
-        self.assertContains(response, "Current free plan")
+        self.assertNotContains(response, "Current free plan")
+        self.assertNotContains(response, "You are on the free membership.")
 
     def test_basic_member_sees_current_basic_and_higher_upgrades(self):
         user = self._user("basic-pricing@test.com", self.basic, "sub_basic")
@@ -146,7 +150,8 @@ class PricingAccountPlanStateTest(TestCase):
         states, response = self._pricing_states(user)
 
         self.assertFalse(response.context["is_paid_member"])
-        self.assertEqual(states["free"]["badge"], "Current free plan")
+        self.assertEqual(states["free"]["badge"], "")
+        self.assertEqual(states["free"]["note"], "")
         self.assertEqual(states["premium"]["badge"], "Temporary access")
 
     def test_stale_subscription_uses_safe_management_for_paid_tiers(self):

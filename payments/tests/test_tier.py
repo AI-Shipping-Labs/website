@@ -127,6 +127,7 @@ class TierPricingViewTest(TestCase):
 
         response = self.client.get("/pricing")
         content = response.content.decode()
+        self.assertIn('class="mb-6 line-clamp-3 ', content)
         for desc in sync_descriptions.values():
             self.assertIn(desc, content)
 

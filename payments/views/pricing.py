@@ -43,6 +43,17 @@ def pricing(request):
         payment_links = stripe_links.get(tier.slug, {})
         monthly_link = payment_links.get("monthly", "#")
         annual_link = payment_links.get("annual", "#")
+        tier_state = build_tier_state(tier, user, active_override)
+
+        # The disabled button already identifies the signed-in member's free
+        # tier as their current plan. Keep that single status indicator rather
+        # than repeating it in a badge and explanatory note above the button.
+        if (
+            tier.slug == "free"
+            and tier_state["action_kind"] == "disabled"
+            and tier_state["action_label"] == "Current plan"
+        ):
+            tier_state = {**tier_state, "badge": "", "note": ""}
 
         checkout_is_bound = bool(locked_prefilled_email and tier.level > 0)
         if checkout_is_bound:
@@ -60,7 +71,7 @@ def pricing(request):
             "payment_link_monthly": monthly_link,
             "payment_link_annual": annual_link,
             "checkout_is_bound": checkout_is_bound,
-            "state": build_tier_state(tier, user, active_override),
+            "state": tier_state,
         })
 
     context = {

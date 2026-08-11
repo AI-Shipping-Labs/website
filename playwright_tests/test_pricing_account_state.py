@@ -161,7 +161,12 @@ def test_signed_in_pricing_uses_server_bound_checkout_posts(
         page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
 
         assert "/api/checkout/create" not in page.content()
-        assert page.locator("text=Current free plan").is_visible()
+        free_card = _tier_card(page, "free")
+        free_card_text = free_card.inner_text()
+        assert "Current free plan" not in free_card_text
+        assert "You are on the free membership." not in free_card_text
+        assert "Newsletter and open resources" not in free_card_text
+        assert free_card.locator("span", has_text="Current plan").is_visible()
 
         for tier_slug in ("basic", "main", "premium"):
             form = _tier_card(page, tier_slug).locator(".tier-cta-form")

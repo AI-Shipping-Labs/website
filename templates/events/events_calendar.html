@@ -8,21 +8,17 @@
 {% include "includes/header.html" %}
 <main class="min-h-screen pt-24">
   <section class="py-8 sm:py-16 lg:py-24">
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
       <div class="mb-12">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Events</p>
         <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
           Live community events calendar
         </h1>
-        <p class="mt-4 text-lg text-muted-foreground">
-          Browse live workshops, group coding sessions, and community calls by month. Use the calendar to plan registration and attendance.
-        </p>
       </div>
 
-      <!-- View Toggle + Subscribe CTA -->
+      <!-- Link back to the list + Subscribe CTA -->
       <div class="flex flex-wrap items-center gap-2 mb-6" data-testid="events-view-toggle-row">
         <a href="{% url 'events_list' %}" class="inline-flex min-h-[44px] items-center rounded-full bg-secondary px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">List</a>
-        <a href="{% url 'events_calendar' %}" class="inline-flex min-h-[44px] items-center rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" aria-current="page">Calendar</a>
         {% include "events/_subscribe_popover.html" %}
       </div>
 
@@ -51,22 +47,22 @@
 
       <!-- Desktop Calendar Grid -->
       <div class="hidden sm:block">
+        <div class="overflow-hidden rounded-lg border border-border/50">
         <!-- Day Headers -->
-        <div class="grid grid-cols-7 border-b border-border mb-1">
+        <div class="grid grid-cols-6 divide-x divide-border/50 border-b border-border">
           <div class="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">Mon</div>
           <div class="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">Tue</div>
           <div class="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">Wed</div>
           <div class="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">Thu</div>
           <div class="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">Fri</div>
-          <div class="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">Sat</div>
-          <div class="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">Sun</div>
+          <div class="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">Sat/Sun</div>
         </div>
 
         <!-- Calendar Weeks -->
         {% for week in weeks %}
-        <div class="grid grid-cols-7 border-b border-border/50" data-calendar-week="{{ forloop.counter }}">
-          {% for cell in week %}
-          <div class="min-h-[5rem] p-1.5 {% if cell.day == 0 %}bg-secondary/30{% endif %} {% if cell.is_today %}bg-accent/10 ring-1 ring-inset ring-accent/40{% endif %}{% if cell.events %} cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent{% endif %}"
+        <div class="grid grid-cols-6 divide-x divide-border/50 {% if not forloop.last %}border-b border-border/50{% endif %}" data-calendar-week="{{ forloop.counter }}">
+          {% for cell in week|slice:":5" %}
+          <div class="min-h-[6rem] p-1.5 {% if cell.day == 0 %}bg-secondary/30{% endif %} {% if cell.is_today %}bg-accent/10 ring-1 ring-inset ring-accent/40{% endif %}{% if cell.events %} cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent{% endif %}"
                {% if cell.events %}id="calendar-day-{{ year }}-{{ month }}-{{ cell.day }}" data-calendar-day="{{ cell.day }}" onclick="toggleDayEvents(this)" onkeydown="handleDayEventsKeydown(event, this)" role="button" tabindex="0" aria-label="{{ month_name }} {{ cell.day }}, {{ year }}: {{ cell.events|length }} event{{ cell.events|length|pluralize }}" aria-expanded="false" aria-controls="day-events-{{ year }}-{{ month }}-{{ cell.day }}"{% endif %}>
             {% if cell.day != 0 %}
             <div class="flex items-start justify-between">
@@ -92,13 +88,49 @@
             {% endif %}
           </div>
           {% endfor %}
+          <div class="min-h-[6rem] min-w-0 p-1.5 {% if week.5.day == 0 and week.6.day == 0 %}bg-secondary/30{% endif %} {% if week.5.is_today or week.6.is_today %}bg-accent/10 ring-1 ring-inset ring-accent/40{% endif %}{% if week.5.events or week.6.events %} cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent{% endif %}"
+               {% if week.5.events or week.6.events %}id="calendar-weekend-{{ year }}-{{ month }}-{{ forloop.counter }}" data-calendar-day="weekend-{{ forloop.counter }}" onclick="toggleDayEvents(this)" onkeydown="handleDayEventsKeydown(event, this)" role="button" tabindex="0" aria-label="{{ month_name }} {% if week.5.day %}{{ week.5.day }}{% if week.6.day %} and {{ week.6.day }}{% endif %}{% else %}{{ week.6.day }}{% endif %}, {{ year }}: weekend events" aria-expanded="false" aria-controls="weekend-events-{{ year }}-{{ month }}-{{ forloop.counter }}"{% endif %}>
+            {% if week.5.day or week.6.day %}
+            <div class="flex items-start justify-between">
+              <span class="inline-flex h-6 items-center rounded-full px-1.5 text-xs text-muted-foreground">
+                {% if week.5.day and week.6.day %}{{ week.5.day }}/{{ week.6.day }}{% elif week.5.day %}{{ week.5.day }}{% else %}{{ week.6.day }}{% endif %}
+              </span>
+              {% if week.5.events or week.6.events %}
+              <span class="h-2 w-2 rounded-full bg-accent" data-testid="event-dot"></span>
+              {% endif %}
+            </div>
+            {% if week.5.events or week.6.events %}
+            <div class="mt-1 min-w-0 space-y-0.5">
+              {% for event in week.5.events %}
+              <div class="truncate text-xs text-muted-foreground">{{ event.title }}</div>
+              {% endfor %}
+              {% for event in week.6.events %}
+              <div class="truncate text-xs text-muted-foreground">{{ event.title }}</div>
+              {% endfor %}
+            </div>
+            {% endif %}
+            {% endif %}
+          </div>
         </div>
-        <!-- The expanded panel belongs to this week and precedes the next row. -->
-        {% for cell in week %}
+        <!-- Day details open as dialogs so the calendar grid never reflows. -->
+        {% for cell in week|slice:":5" %}
         {% if cell.day != 0 and cell.events %}
-        <div id="day-events-{{ year }}-{{ month }}-{{ cell.day }}" class="hidden border border-border rounded-lg bg-card p-4 mt-2 mb-2" data-day-panel="{{ cell.day }}" data-calendar-week="{{ forloop.parentloop.counter }}" role="region" aria-labelledby="calendar-day-{{ year }}-{{ month }}-{{ cell.day }}">
-          <h3 class="text-sm font-semibold text-foreground mb-3">{{ month_name }} {{ cell.day }}, {{ year }}</h3>
-          <div class="space-y-3">
+        <dialog id="day-events-{{ year }}-{{ month }}-{{ cell.day }}"
+                class="m-auto w-[calc(100%-2rem)] max-w-lg rounded-xl border border-border bg-card p-0 text-foreground shadow-2xl backdrop:bg-black/70"
+                data-day-panel="{{ cell.day }}"
+                data-calendar-week="{{ forloop.parentloop.counter }}"
+                aria-labelledby="day-events-title-{{ year }}-{{ month }}-{{ cell.day }}">
+          <div class="p-5 sm:p-6">
+            <div class="mb-4 flex items-center justify-between gap-4">
+              <h3 id="day-events-title-{{ year }}-{{ month }}-{{ cell.day }}" class="text-lg font-semibold text-foreground">{{ month_name }} {{ cell.day }}, {{ year }}</h3>
+              <button type="button"
+                      class="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      aria-label="Close event details"
+                      onclick="this.closest('dialog').close()">
+                <i data-lucide="x" class="h-4 w-4" aria-hidden="true"></i>
+              </button>
+            </div>
+            <div class="space-y-3">
             {% for event in cell.events %}
             {# Issue #673 — canonical event URL via get_absolute_url. #}
             <a href="{{ event.get_absolute_url }}" class="block rounded-lg border border-border bg-secondary/50 p-3 hover:border-accent/50 transition-colors">
@@ -108,11 +140,54 @@
               <div class="font-medium text-foreground">{{ event.title }}</div>
             </a>
             {% endfor %}
+            </div>
           </div>
-        </div>
+        </dialog>
         {% endif %}
         {% endfor %}
+        {% if week.5.events or week.6.events %}
+        <dialog id="weekend-events-{{ year }}-{{ month }}-{{ forloop.counter }}"
+                class="m-auto w-[calc(100%-2rem)] max-w-lg rounded-xl border border-border bg-card p-0 text-foreground shadow-2xl backdrop:bg-black/70"
+                data-day-panel="weekend-{{ forloop.counter }}"
+                data-calendar-week="{{ forloop.counter }}"
+                aria-labelledby="weekend-events-title-{{ year }}-{{ month }}-{{ forloop.counter }}">
+          <div class="p-5 sm:p-6">
+            <div class="mb-4 flex items-center justify-between gap-4">
+              <h3 id="weekend-events-title-{{ year }}-{{ month }}-{{ forloop.counter }}" class="text-lg font-semibold text-foreground">
+                {{ month_name }} {% if week.5.day and week.6.day %}{{ week.5.day }}/{{ week.6.day }}{% elif week.5.day %}{{ week.5.day }}{% else %}{{ week.6.day }}{% endif %}, {{ year }}
+              </h3>
+              <button type="button"
+                      class="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      aria-label="Close event details"
+                      onclick="this.closest('dialog').close()">
+                <i data-lucide="x" class="h-4 w-4" aria-hidden="true"></i>
+              </button>
+            </div>
+            <div class="space-y-3">
+              {% for event in week.5.events %}
+              <a href="{{ event.get_absolute_url }}" class="block rounded-lg border border-border bg-secondary/50 p-3 transition-colors hover:border-accent/50">
+                <div class="mb-1 flex flex-wrap items-center gap-2">
+                  <span class="text-xs font-medium uppercase tracking-wide text-accent">Sat {{ week.5.day }}</span>
+                  {% member_access_badge event.required_level testid="calendar-event-access-badge" %}
+                </div>
+                <div class="font-medium text-foreground">{{ event.title }}</div>
+              </a>
+              {% endfor %}
+              {% for event in week.6.events %}
+              <a href="{{ event.get_absolute_url }}" class="block rounded-lg border border-border bg-secondary/50 p-3 transition-colors hover:border-accent/50">
+                <div class="mb-1 flex flex-wrap items-center gap-2">
+                  <span class="text-xs font-medium uppercase tracking-wide text-accent">Sun {{ week.6.day }}</span>
+                  {% member_access_badge event.required_level testid="calendar-event-access-badge" %}
+                </div>
+                <div class="font-medium text-foreground">{{ event.title }}</div>
+              </a>
+              {% endfor %}
+            </div>
+          </div>
+        </dialog>
+        {% endif %}
         {% endfor %}
+        </div>
 
         {% if not events_list %}
         <div class="rounded-lg border border-border bg-card p-8 text-center mt-4">
@@ -160,20 +235,21 @@
 <script>
 function toggleDayEvents(trigger) {
   var targetId = trigger.getAttribute('aria-controls');
-  var shouldOpen = trigger.getAttribute('aria-expanded') !== 'true';
+  var panel = document.getElementById(targetId);
 
-  // Keep exactly one day open and synchronize every trigger's ARIA state.
-  document.querySelectorAll('[data-day-panel]').forEach(function(panel) {
-    panel.classList.add('hidden');
+  document.querySelectorAll('dialog[data-day-panel][open]').forEach(function(openPanel) {
+    openPanel.close();
   });
   document.querySelectorAll('[data-calendar-day]').forEach(function(dayTrigger) {
     dayTrigger.setAttribute('aria-expanded', 'false');
   });
 
-  var panel = document.getElementById(targetId);
-  if (panel && shouldOpen) {
-    panel.classList.remove('hidden');
+  if (panel) {
+    panel.showModal();
     trigger.setAttribute('aria-expanded', 'true');
+    panel.addEventListener('close', function() {
+      trigger.setAttribute('aria-expanded', 'false');
+    }, {once: true});
   }
 }
 

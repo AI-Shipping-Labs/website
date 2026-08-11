@@ -1,12 +1,10 @@
 {% comment %}
-Issue #1382 — compact platform label for a timeline event card's meta row.
-``event`` is required. Zoom events show a "Zoom" label; custom-platform events
-show their location (if any) or a neutral "Online" fallback.
+Issue #1382 — compact location label for a timeline event card's meta row.
+``event`` is required. Zoom is the default for our events and adds no useful
+information, so only custom-platform events render a location or "Online".
 {% endcomment %}
-{% if event.platform == 'zoom' %}
-<span class="inline-flex items-center gap-1.5" data-testid="event-card-platform"><i data-lucide="video" class="h-3.5 w-3.5"></i>Zoom</span>
-{% elif event.location %}
+{% if event.platform != 'zoom' %}{% if event.location %}
 <span class="inline-flex items-center gap-1.5" data-testid="event-card-platform"><i data-lucide="map-pin" class="h-3.5 w-3.5"></i>{{ event.location }}</span>
 {% else %}
 <span class="inline-flex items-center gap-1.5" data-testid="event-card-platform"><i data-lucide="link" class="h-3.5 w-3.5"></i>Online</span>
-{% endif %}
+{% endif %}{% endif %}

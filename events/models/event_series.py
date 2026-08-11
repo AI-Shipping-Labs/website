@@ -184,10 +184,10 @@ class EventSeries(TimestampedModelMixin, models.Model):
     def list_badge_label(self):
         """Pill label for a series occurrence on the public timeline.
 
-        Issue #1382: "Weekly series" for the weekly cadence; the neutral
-        "Series" for a no-fixed-cadence collection.
+        The cadence is already represented by the series schedule. A neutral
+        label keeps public list cards concise regardless of recurrence rules.
         """
-        return 'Weekly series' if self.cadence == 'weekly' else 'Series'
+        return 'Series'
 
     @property
     def event_count(self):

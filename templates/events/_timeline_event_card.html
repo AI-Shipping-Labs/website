@@ -4,8 +4,8 @@ Issue #1382 — Luma-style upcoming event card for the /events timeline. The
 whole card is one anchor (#523 focus ring). A series occurrence routes to the
 series page (#857); a standalone event routes to its own detail page (#673
 keeps get_absolute_url as the source of truth). Layout: time -> title ->
-(optional description) -> platform + registered meta -> badges (access first,
-then the Weekly-series pill + cadence line, Registered, and external host).
+(optional description) -> useful location + registered meta -> badges (access
+first, then Series, Registered, and external host).
 A right-side thumbnail renders ONLY for an authored ``cover_image_url`` (never
 the busy auto-generated banner).
 
@@ -22,15 +22,16 @@ view), ``registered_event_ids``.
         {% if event.description_html %}
         <p class="mt-2 line-clamp-2 text-sm text-muted-foreground">{{ event.description_html|striptags|truncatechars:160 }}</p>
         {% endif %}
+        {% if event.platform != 'zoom' or event.attendee_count >= 5 %}
         <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground" data-testid="event-card-meta">
           {% include "events/_timeline_platform_label.html" with event=event %}
           {% include "events/_timeline_registered_count.html" with event=event %}
         </div>
+        {% endif %}
         <div class="mt-3 flex flex-wrap items-center gap-2">
           {% member_access_badge event.required_level testid="event-tier-badge" %}
           {% if event.event_series %}
           {% member_label_badge event.event_series.list_badge_label tone="accent_outline_strong" icon="repeat" testid="series-card-badge" %}
-          <span class="text-xs text-muted-foreground" data-testid="series-cadence-line">{% if event.event_series.cadence_prefix %}{{ event.event_series.cadence_prefix }} · {% endif %}part of {{ event.event_series.name }}</span>
           {% endif %}
           {% if event.id in registered_event_ids %}
           {% member_status_badge "Registered" status="registered" icon="check" %}

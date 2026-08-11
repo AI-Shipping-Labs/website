@@ -94,6 +94,7 @@ def _seed_listings():
     )
     from events.models import Event
     from notifications.models import Notification
+    from plans.models import Sprint
     from voting.models import Poll, PollOption
 
     # Wipe existing rows in the relevant tables to ensure tests are
@@ -109,6 +110,7 @@ def _seed_listings():
     Notification.objects.all().delete()
     CuratedLink.objects.all().delete()
     InterviewCategory.objects.all().delete()
+    Sprint.objects.all().delete()
 
     Article.objects.create(
         title='Sample Article',
@@ -209,6 +211,15 @@ def _seed_listings():
         body_markdown='# Theory Questions',
     )
 
+    Sprint.objects.create(
+        name='Sample Sprint',
+        slug='sample-sprint',
+        start_date=datetime.date(2026, 1, 1),
+        duration_weeks=4,
+        status='active',
+        min_tier_level=20,
+    )
+
     # Issue #673: canonical event URL is ``/events/<id>/<slug>``.
     event_path = sample_event.get_absolute_url()
     connection.close()
@@ -224,6 +235,7 @@ def _seed_listings():
         'event_slug': 'sample-event',
         'event_path': event_path,
         'poll_uuid': str(poll.id),
+        'sprint_slug': 'sample-sprint',
     }
 
 
@@ -319,7 +331,6 @@ LISTINGS_NARROW = [
     ('/downloads', 'max-w-5xl', None),
     ('/workshops', 'max-w-5xl', None),
     ('/events', 'max-w-5xl', None),
-    ('/sprints', 'max-w-5xl', None),
     ('/vote', 'max-w-5xl', None),
     ('/tags', 'max-w-5xl', None),
     ('/interview', 'max-w-5xl', None),
@@ -334,6 +345,8 @@ DETAIL_MEDIUM = [
 ]
 
 READER_NARROW = [
+    ('/sprints', 'max-w-3xl'),
+    ('/sprints/{sprint_slug}', 'max-w-3xl'),
     ('/blog/{article_slug}', 'max-w-3xl'),
     ('/tutorials/{tutorial_slug}', 'max-w-3xl'),
     ('/projects/{project_slug}', 'max-w-3xl'),

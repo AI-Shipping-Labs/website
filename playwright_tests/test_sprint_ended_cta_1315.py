@@ -1,8 +1,7 @@
-"""Playwright coverage for ended-sprint CTAs on /sprints (#1315).
+"""Playwright coverage for ended-sprint navigation on /sprints (#1315).
 
-An anonymous visitor must not be lured into joining a finished sprint: the
-card CTA reads ``View sprint`` (not ``Log in to join``) and lands on the
-detail page, which explains the sprint has ended.
+The shared editorial row opens the sprint detail without a separate action
+footer; the detail page explains that a finished sprint can no longer be joined.
 """
 
 import datetime
@@ -88,12 +87,13 @@ def test_anonymous_visitor_cannot_be_lured_into_joining_finished_sprint(
     card = _card_for_slug(page, "finished-premium-sprint")
     assert "ENDED" in card.inner_text()
 
-    cta = card.locator('[data-testid="sprints-sprint-cta"]')
-    assert cta.inner_text().strip().startswith("View sprint")
+    link = card.locator('[data-testid="sprints-sprint-link"]')
+    assert link.get_attribute("href") == "/sprints/finished-premium-sprint"
+    assert card.locator('[data-testid="sprints-sprint-cta"]').count() == 0
     assert "Log in to join" not in card.inner_text()
     _shot(page, "01-anon-ended-card")
 
-    cta.click()
+    link.click()
     page.wait_for_url("**/sprints/finished-premium-sprint")
     detail_text = page.locator("body").inner_text()
     assert "This sprint has ended and is no longer open to join." in detail_text

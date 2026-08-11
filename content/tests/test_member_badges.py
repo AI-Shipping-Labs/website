@@ -160,7 +160,8 @@ class MemberBadgeTemplateUsageTest(SimpleTestCase):
             # member badges now live in the dedicated badge partial.
             'templates/content/_workshop_card_badges.html',
             'templates/content/workshop_detail.html',
-            'templates/content/sprints_index.html',
+            # Sprint catalog badges moved into the shared content-card slot.
+            'templates/content/_sprint_card_badges.html',
             'templates/home.html',
             'templates/plans/sprint_detail.html',
             'templates/events/_event_header.html',

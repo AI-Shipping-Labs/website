@@ -8,9 +8,9 @@
 <main class="min-h-screen">
   {% include "includes/header.html" %}
 
-  {% comment %} Books hub (issue #1363): a public discovery page, never gated
-  (like /sprints). Books are grouped by the operator-set Book.status. Kept at
-  Detail width (max-w-5xl), matching /sprints. {% endcomment %}
+  {% comment %} Books hub (issue #1363): a public discovery page, never gated.
+  The collection grid uses Detail width (max-w-5xl); actual book reading and
+  lifecycle pages use Reader width (max-w-3xl). {% endcomment %}
   <section class="relative overflow-hidden pt-24">
     <div class="absolute inset-0 hero-gradient"></div>
     <div class="relative mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">

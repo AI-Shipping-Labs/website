@@ -160,7 +160,9 @@ def test_visitor_sees_plural_current_heading_and_sorted_current_cards(
     _shot(page, "02-plural-current-sorted")
 
 
-def test_member_ctas_survive_grouping(django_server, browser, django_db_blocker):
+def test_member_actions_move_to_detail_while_grouping_stays_consistent(
+    django_server, browser, django_db_blocker
+):
     today = _today()
     with django_db_blocker.unblock():
         ensure_tiers()
@@ -192,12 +194,19 @@ def test_member_ctas_survive_grouping(django_server, browser, django_db_blocker)
     page.goto(f"{django_server}/sprints", wait_until="domcontentloaded")
 
     current_card = _card_for_slug(page, "current-enrolled-sprint")
-    assert current_card.locator('[data-testid="sprints-sprint-cta"]').inner_text().strip().startswith(
-        "Open my plan"
-    )
-    assert "Upgrade to Premium" in _card_for_slug(page, "premium-future-sprint").inner_text()
+    assert "You're enrolled" in current_card.inner_text()
+    assert current_card.locator('[data-testid="sprints-sprint-cta"]').count() == 0
+    future_card = _card_for_slug(page, "premium-future-sprint")
+    assert "Premium" in future_card.inner_text()
+    assert "Upgrade to Premium" not in future_card.inner_text()
 
-    current_card.locator('[data-testid="sprints-sprint-cta"]').click()
+    current_card.locator('[data-testid="sprints-sprint-link"]').click()
+    page.wait_for_url("**/sprints/current-enrolled-sprint")
+    open_plan = page.locator('[data-testid="sprint-cta-open-plan"]')
+    assert open_plan.get_attribute("href") == (
+        f"/sprints/current-enrolled-sprint/plan/{plan.pk}"
+    )
+    open_plan.click()
     page.wait_for_url(f"**/sprints/current-enrolled-sprint/plan/{plan.pk}")
     _shot(page, "03-member-open-my-plan")
     context.close()

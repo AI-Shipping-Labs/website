@@ -10,11 +10,11 @@
 
   {% comment %} Secondary book page (issue #1363): the lighter lifecycle page for
   an upcoming or finished book — the group is not reading it right now, so there
-  is no participation body and no gate, just public lifecycle info. Detail-tier
-  width (max-w-5xl). {% endcomment %}
+  is no participation body and no gate, just public lifecycle info. All public
+  Book Club pages share the Reader width (max-w-3xl). {% endcomment %}
   <section class="relative overflow-hidden pt-24">
     <div class="absolute inset-0 hero-gradient"></div>
-    <div class="relative mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+    <div class="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
 
       <a href="{% url 'bookclub_index' %}" class="inline-flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="book-back-link">
         <i data-lucide="arrow-left" class="h-4 w-4"></i> Books

@@ -50,6 +50,16 @@ def _section_markup(response, section_key):
     return content[start:next_start]
 
 
+def _sprint_card_markup(response, slug):
+    """Return the single fully-clickable sprint card for ``slug``."""
+    content = response.content.decode()
+    needle = f'href="/sprints/{slug}"'
+    anchor = content.index(needle)
+    start = content.rindex('<article', 0, anchor)
+    end = content.index('</article>', anchor) + len('</article>')
+    return content[start:end]
+
+
 class SprintsIndexTest(TestCase):
     @staticmethod
     def _membership_queries(queries):
@@ -293,7 +303,14 @@ class SprintsIndexTest(TestCase):
         )
 
         response = self.client.get('/sprints')
+        card = _sprint_card_markup(response, sprint.slug)
 
+        self.assertTemplateUsed(response, 'content/_content_card.html')
+        self.assertTemplateUsed(response, 'content/_sprint_card_badges.html')
+        self.assertTemplateUsed(response, 'content/_sprint_card_body.html')
+        self.assertContains(response, 'mx-auto max-w-3xl')
+        self.assertContains(response, 'border-b border-border/70')
+        self.assertNotContains(response, 'shadow-sm')
         self.assertContains(response, 'data-testid="sprints-sprint-card"')
         self.assertContains(response, sprint.name)
         self.assertContains(response, 'Active')
@@ -307,19 +324,16 @@ class SprintsIndexTest(TestCase):
             'A sprint is a time-bound shipping cohort with project structure',
         )
         self.assertContains(response, 'data-testid="sprints-sprint-context"')
-        self.assertContains(response, 'Joining requires Main membership')
-        self.assertContains(response, 'Log in to join')
-        self.assertContains(
-            response,
-            f'href="{reverse("account_login")}?next=/sprints/{sprint.slug}"',
-        )
-        self.assertContains(
-            response,
+        self.assertNotIn('Joining requires', card)
+        self.assertNotIn('Log in to join', card)
+        self.assertNotIn('data-testid="sprints-sprint-cta"', card)
+        self.assertIn(
             f'href="{reverse("sprint_detail", kwargs={"sprint_slug": sprint.slug})}"',
+            card,
         )
 
-    def test_member_cta_points_to_pricing_when_under_required_tier(self):
-        _create_sprint(
+    def test_below_tier_member_card_links_to_sprint_detail(self):
+        sprint = _create_sprint(
             'Premium Sprint',
             'premium-sprint',
             min_tier_level=30,
@@ -330,11 +344,14 @@ class SprintsIndexTest(TestCase):
 
         self.client.force_login(member)
         response = self.client.get('/sprints')
+        card = _sprint_card_markup(response, sprint.slug)
 
-        self.assertContains(response, 'Upgrade to Premium')
-        self.assertContains(response, f'href="{reverse("pricing")}"')
+        self.assertIn('Premium', card)
+        self.assertIn(f'href="/sprints/{sprint.slug}"', card)
+        self.assertNotIn('Upgrade to Premium', card)
+        self.assertNotIn(f'href="{reverse("pricing")}"', card)
 
-    def test_enrolled_member_cta_points_to_existing_plan(self):
+    def test_enrolled_member_with_plan_keeps_badge_and_detail_link(self):
         sprint = _create_sprint('Main Sprint', 'main-sprint')
         member = User.objects.create_user(email='main545@example.com', password='pw')
         member.tier = Tier.objects.get(slug='main')
@@ -344,19 +361,20 @@ class SprintsIndexTest(TestCase):
 
         self.client.force_login(member)
         response = self.client.get('/sprints')
+        card = _sprint_card_markup(response, sprint.slug)
 
-        self.assertContains(response, 'Open my plan')
-        self.assertContains(response, "You're enrolled")
-        self.assertNotContains(response, 'Use the next step below to continue')
-        self.assertContains(
-            response,
+        self.assertIn("You're enrolled", card)
+        self.assertIn(f'href="/sprints/{sprint.slug}"', card)
+        self.assertNotIn('Open my plan', card)
+        self.assertNotIn(
             reverse(
                 'my_plan_detail',
                 kwargs={'sprint_slug': sprint.slug, 'plan_id': plan.pk},
             ),
+            card,
         )
 
-    def test_enrolled_member_without_plan_cta_points_to_board(self):
+    def test_enrolled_member_without_plan_keeps_badge_and_detail_link(self):
         sprint = _create_sprint('Board Sprint', 'board-sprint')
         member = User.objects.create_user(email='board545@example.com', password='pw')
         member.tier = Tier.objects.get(slug='main')
@@ -365,13 +383,14 @@ class SprintsIndexTest(TestCase):
 
         self.client.force_login(member)
         response = self.client.get('/sprints')
+        card = _sprint_card_markup(response, sprint.slug)
 
-        self.assertContains(response, 'Open cohort board')
-        self.assertContains(response, "You're enrolled")
-        self.assertNotContains(response, 'Use the next step below to continue')
-        self.assertContains(
-            response,
+        self.assertIn("You're enrolled", card)
+        self.assertIn(f'href="/sprints/{sprint.slug}"', card)
+        self.assertNotIn('Open cohort board', card)
+        self.assertNotIn(
             reverse('cohort_board', kwargs={'sprint_slug': sprint.slug}),
+            card,
         )
 
     def test_sprint_detail_route_still_resolves_after_index_route(self):
@@ -384,6 +403,7 @@ class SprintsIndexTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'plans/sprint_detail.html')
         self.assertContains(response, 'data-testid="sprint-detail-name"')
+        self.assertContains(response, 'mx-auto max-w-3xl')
 
     def test_member_membership_queries_are_constant_across_all_sections(self):
         today = timezone.localdate()
@@ -405,7 +425,7 @@ class SprintsIndexTest(TestCase):
         )
         member.tier = Tier.objects.get(slug='main')
         member.save(update_fields=['tier'])
-        plan = Plan.objects.create(
+        Plan.objects.create(
             member=member, sprint=current, visibility='cohort',
         )
         SprintEnrollment.objects.create(sprint=future, user=member)
@@ -426,9 +446,10 @@ class SprintsIndexTest(TestCase):
             ),
             1,
         )
-        self.assertContains(response, 'Open my plan')
-        self.assertContains(response, 'Open cohort board')
-        self.assertContains(response, str(plan.pk))
+        self.assertContains(response, "You're enrolled", count=2)
+        self.assertNotContains(response, 'Open my plan')
+        self.assertNotContains(response, 'Open cohort board')
+        self.assertNotContains(response, 'data-testid="sprints-sprint-cta"')
 
         for index in range(5):
             _create_sprint(
@@ -454,7 +475,8 @@ class SprintsIndexTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self._membership_queries(queries), [])
-        self.assertContains(response, 'Log in to join')
+        self.assertContains(response, 'href="/sprints/anonymous-current"')
+        self.assertNotContains(response, 'Log in to join')
 
     def test_authenticated_empty_index_issues_no_membership_queries(self):
         member = User.objects.create_user(
@@ -470,8 +492,8 @@ class SprintsIndexTest(TestCase):
         self.assertContains(response, 'data-testid="sprints-empty"')
 
 
-class EndedSprintCtaTest(TestCase):
-    """Issue #1315: ended sprints must not advertise join/upgrade CTAs."""
+class SprintCardNavigationTest(TestCase):
+    """Sprint index rows always navigate to detail, regardless of viewer state."""
 
     @staticmethod
     def _past_start(duration_weeks=4, days_after_end=14):
@@ -487,17 +509,7 @@ class EndedSprintCtaTest(TestCase):
             f'href="{reverse("sprint_detail", kwargs={"sprint_slug": slug})}"'
         )
 
-    @staticmethod
-    def _card_markup(response, slug):
-        """Return the single sprint card article markup for ``slug``."""
-        content = response.content.decode()
-        needle = f'href="/sprints/{slug}"'
-        anchor = content.index(needle)
-        start = content.rindex('<article', 0, anchor)
-        end = content.index('</article>', anchor) + len('</article>')
-        return content[start:end]
-
-    def test_ended_sprint_anonymous_shows_view_sprint_not_login(self):
+    def test_ended_sprint_anonymous_links_to_detail_without_cta(self):
         sprint = _create_sprint(
             'Ended Anon Sprint',
             'ended-anon-sprint',
@@ -507,18 +519,19 @@ class EndedSprintCtaTest(TestCase):
         )
 
         response = self.client.get('/sprints')
-        card = self._card_markup(response, sprint.slug)
+        card = _sprint_card_markup(response, sprint.slug)
 
         self.assertIn(sprint.name, card)
-        self.assertIn('View sprint', card)
         self.assertIn(self._detail_href(sprint.slug), card)
         self.assertNotIn('Log in to join', card)
+        self.assertNotIn('View sprint', card)
+        self.assertNotIn('sprints-sprint-cta', card)
         self.assertNotIn(
             f'href="{reverse("account_login")}?next=/sprints/{sprint.slug}"',
             card,
         )
 
-    def test_ended_sprint_below_tier_member_shows_view_sprint_not_upgrade(self):
+    def test_ended_sprint_below_tier_member_links_to_detail_without_cta(self):
         sprint = _create_sprint(
             'Ended Premium Sprint',
             'ended-premium-sprint',
@@ -534,15 +547,14 @@ class EndedSprintCtaTest(TestCase):
 
         self.client.force_login(member)
         response = self.client.get('/sprints')
-        card = self._card_markup(response, sprint.slug)
+        card = _sprint_card_markup(response, sprint.slug)
 
         self.assertIn(sprint.name, card)
-        self.assertIn('View sprint', card)
         self.assertIn(self._detail_href(sprint.slug), card)
         self.assertNotIn('Upgrade to', card)
         self.assertNotIn(f'href="{reverse("pricing")}"', card)
 
-    def test_ended_sprint_eligible_nonenrolled_member_shows_view_sprint(self):
+    def test_ended_sprint_eligible_member_links_to_detail_without_cta(self):
         sprint = _create_sprint(
             'Ended Eligible Sprint',
             'ended-eligible-sprint',
@@ -558,15 +570,14 @@ class EndedSprintCtaTest(TestCase):
 
         self.client.force_login(member)
         response = self.client.get('/sprints')
-        card = self._card_markup(response, sprint.slug)
+        card = _sprint_card_markup(response, sprint.slug)
 
         self.assertIn(sprint.name, card)
-        self.assertIn('View sprint', card)
         self.assertIn(self._detail_href(sprint.slug), card)
         self.assertNotIn('Log in to join', card)
         self.assertNotIn('Upgrade to', card)
 
-    def test_ended_sprint_enrolled_with_plan_keeps_open_my_plan(self):
+    def test_ended_sprint_enrolled_with_plan_links_to_detail(self):
         sprint = _create_sprint(
             'Ended Enrolled Plan Sprint',
             'ended-enrolled-plan-sprint',
@@ -586,11 +597,13 @@ class EndedSprintCtaTest(TestCase):
 
         self.client.force_login(member)
         response = self.client.get('/sprints')
-        card = self._card_markup(response, sprint.slug)
+        card = _sprint_card_markup(response, sprint.slug)
 
-        self.assertIn('Open my plan', card)
+        self.assertIn("You're enrolled", card)
+        self.assertIn(self._detail_href(sprint.slug), card)
+        self.assertNotIn('Open my plan', card)
         self.assertNotIn('View sprint', card)
-        self.assertIn(
+        self.assertNotIn(
             reverse(
                 'my_plan_detail',
                 kwargs={'sprint_slug': sprint.slug, 'plan_id': plan.pk},
@@ -598,7 +611,7 @@ class EndedSprintCtaTest(TestCase):
             card,
         )
 
-    def test_ended_sprint_enrolled_without_plan_keeps_open_cohort_board(self):
+    def test_ended_sprint_enrolled_without_plan_links_to_detail(self):
         sprint = _create_sprint(
             'Ended Enrolled Board Sprint',
             'ended-enrolled-board-sprint',
@@ -615,16 +628,18 @@ class EndedSprintCtaTest(TestCase):
 
         self.client.force_login(member)
         response = self.client.get('/sprints')
-        card = self._card_markup(response, sprint.slug)
+        card = _sprint_card_markup(response, sprint.slug)
 
-        self.assertIn('Open cohort board', card)
+        self.assertIn("You're enrolled", card)
+        self.assertIn(self._detail_href(sprint.slug), card)
+        self.assertNotIn('Open cohort board', card)
         self.assertNotIn('View sprint', card)
-        self.assertIn(
+        self.assertNotIn(
             reverse('cohort_board', kwargs={'sprint_slug': sprint.slug}),
             card,
         )
 
-    def test_active_sprint_anonymous_still_shows_login_to_join(self):
+    def test_active_sprint_anonymous_links_to_detail_without_cta(self):
         sprint = _create_sprint(
             'Active Join Sprint',
             'active-join-sprint',
@@ -634,16 +649,17 @@ class EndedSprintCtaTest(TestCase):
         )
 
         response = self.client.get('/sprints')
-        card = self._card_markup(response, sprint.slug)
+        card = _sprint_card_markup(response, sprint.slug)
 
-        self.assertIn('Log in to join', card)
-        self.assertIn(
+        self.assertIn(self._detail_href(sprint.slug), card)
+        self.assertNotIn('Log in to join', card)
+        self.assertNotIn(
             f'href="{reverse("account_login")}?next=/sprints/{sprint.slug}"',
             card,
         )
         self.assertNotIn('View sprint', card)
 
-    def test_active_sprint_below_tier_member_still_shows_upgrade(self):
+    def test_active_sprint_below_tier_member_links_to_detail_without_cta(self):
         sprint = _create_sprint(
             'Active Premium Sprint',
             'active-premium-sprint',
@@ -659,13 +675,15 @@ class EndedSprintCtaTest(TestCase):
 
         self.client.force_login(member)
         response = self.client.get('/sprints')
-        card = self._card_markup(response, sprint.slug)
+        card = _sprint_card_markup(response, sprint.slug)
 
-        self.assertIn('Upgrade to Premium', card)
-        self.assertIn(f'href="{reverse("pricing")}"', card)
+        self.assertIn('Premium', card)
+        self.assertIn(self._detail_href(sprint.slug), card)
+        self.assertNotIn('Upgrade to Premium', card)
+        self.assertNotIn(f'href="{reverse("pricing")}"', card)
         self.assertNotIn('View sprint', card)
 
-    def test_exact_end_date_boundary_shows_view_sprint_not_login(self):
+    def test_exact_end_date_boundary_links_to_detail_without_cta(self):
         # end_date == today: still grouped in the Current section, but
         # has_ended() is already True and joins are already rejected.
         today = timezone.localdate()
@@ -682,11 +700,11 @@ class EndedSprintCtaTest(TestCase):
         response = self.client.get('/sprints')
         # The sprint stays in the Current section on its exact end date.
         self.assertIn(sprint.name, _section_markup(response, 'current'))
-        card = self._card_markup(response, sprint.slug)
+        card = _sprint_card_markup(response, sprint.slug)
 
-        self.assertIn('View sprint', card)
         self.assertIn(self._detail_href(sprint.slug), card)
         self.assertNotIn('Log in to join', card)
+        self.assertNotIn('View sprint', card)
 
     def test_past_section_has_no_join_or_upgrade_anchor(self):
         for index, tier_level in enumerate((0, 20, 30)):
@@ -705,4 +723,5 @@ class EndedSprintCtaTest(TestCase):
         self.assertNotIn('Log in to join', past)
         self.assertNotIn('Upgrade to', past)
         self.assertNotIn('>Upgrade to', past)
-        self.assertEqual(past.count('View sprint'), 3)
+        self.assertNotIn('View sprint', past)
+        self.assertEqual(past.count('data-testid="sprints-sprint-link"'), 3)

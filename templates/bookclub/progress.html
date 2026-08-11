@@ -11,10 +11,11 @@
   members reading this book together, ordered by chapters read. Mirrors the
   sibling sprint cohort board (templates/plans/cohort_board.html) — the pattern
   owner for member progress lists — de-gamified: no rank/points/streak/medal
-  chrome. Detail tier (max-w-5xl): one comparison table plus a header. {% endcomment %}
+  chrome. All public Book Club pages share the Reader width (max-w-3xl).
+  {% endcomment %}
   <section class="relative overflow-hidden pt-24">
     <div class="absolute inset-0 hero-gradient"></div>
-    <div class="relative mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+    <div class="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
 
       <a href="{% url 'bookclub_book_detail' slug=book.slug %}" class="inline-flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="progress-back-link">
         <i data-lucide="arrow-left" class="h-4 w-4"></i> {{ book.title }}

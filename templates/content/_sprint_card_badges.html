@@ -1,0 +1,6 @@
+{% load member_badges %}
+{% member_status_badge item.sprint.sprint_badge_current.label status=item.sprint.sprint_badge_current.state size="sm" uppercase=True testid="sprints-sprint-status" %}
+{% member_access_badge item.required_tier_level testid="sprints-sprint-tier" %}
+{% if item.enrolled %}
+{% member_status_badge "You're enrolled" status="registered" icon="check" size="sm" testid="sprints-sprint-enrolled" %}
+{% endif %}

@@ -106,7 +106,7 @@ class ActivitiesSprintHubTest(TestCase):
         self.assertContains(response, 'Main or above')
         self.assertContains(response, 'data-testid="activities-sprint-tier"')
         self.assertContains(response, 'data-component="member-badge"')
-        self.assertContains(response, 'Joining requires Main membership')
+        self.assertNotContains(response, 'Joining requires Main membership')
         self.assertContains(
             response,
             'time-bound shipping cohort: use the window for project structure',
@@ -153,7 +153,6 @@ class ActivitiesSprintHubTest(TestCase):
         card_row_index = content.index('data-testid="activities-sprints-card-row"')
         card_index = content.index('data-testid="activities-sprint-card"')
         facts_index = content.index('data-testid="activities-sprint-facts"')
-        guidance_index = content.index('data-testid="activities-sprint-guidance"')
         cta_index = content.index('data-testid="activities-sprint-cta"')
         detail_link_index = content.index(
             'data-testid="activities-sprint-detail-link"'
@@ -162,14 +161,13 @@ class ActivitiesSprintHubTest(TestCase):
         self.assertLess(intro_index, card_row_index)
         self.assertLess(card_row_index, card_index)
         self.assertLess(card_index, facts_index)
-        self.assertLess(facts_index, guidance_index)
-        self.assertLess(guidance_index, detail_link_index)
-        self.assertLess(guidance_index, cta_index)
+        self.assertLess(facts_index, detail_link_index)
+        self.assertLess(facts_index, cta_index)
         self.assertNotIn(
             'lg:grid-cols-[minmax(0,0.78fr)_minmax(420px,1fr)]',
             content,
         )
-        facts_markup = content[facts_index:guidance_index]
+        facts_markup = content[facts_index:detail_link_index]
         self.assertNotIn('sm:grid-cols-2', facts_markup)
         self.assertNotIn('sm:flex-row sm:items-start sm:justify-between', content)
 

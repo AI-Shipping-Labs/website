@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% load member_badges %}
+{% load accounts_extras %}
+{% load member_empty_state %}
 {% load sprint_extras %}
 
 {% block title %}Community Sprints | AI Shipping Labs{% endblock %}
@@ -10,7 +11,7 @@
   {% include "includes/header.html" %}
 
   <section class="border-t border-border bg-background pt-24 pb-16 sm:pt-28 sm:pb-20 lg:pt-32" data-testid="sprints-index-page">
-    <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+    <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
       <div class="max-w-3xl">
         <p class="inline-flex items-center gap-2 text-sm font-medium uppercase tracking-widest text-accent">
           <i data-lucide="timer" class="h-4 w-4"></i>
@@ -29,49 +30,13 @@
         <div class="space-y-8">
           {% for section in sprint_sections %}
           <section data-testid="sprints-section-{{ section.key }}">
-            <h2 class="text-2xl font-semibold tracking-tight text-foreground" data-testid="sprints-section-heading">
+            <h2 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl" data-testid="sprints-section-heading">
               {{ section.title }}
             </h2>
             {% if section.items %}
-            <div class="mt-4 grid gap-4">
+            <div class="mt-6 border-t border-border/70">
               {% for item in section.items %}
-              <article class="rounded-lg border border-border bg-card p-5 shadow-sm sm:p-6" data-testid="sprints-sprint-card">
-                <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-                  <div class="min-w-0">
-                    <div class="flex flex-wrap items-center gap-2">
-                      {% member_status_badge item.sprint.sprint_badge_current.label status=item.sprint.sprint_badge_current.state size="sm" uppercase=True testid="sprints-sprint-status" %}
-                      {% member_access_badge item.required_tier_level testid="sprints-sprint-tier" %}
-                      {% if item.enrolled %}
-                      <span class="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-300" data-testid="sprints-sprint-enrolled">
-                        <i data-lucide="check" class="h-3.5 w-3.5"></i>
-                        You're enrolled
-                      </span>
-                      {% endif %}
-                    </div>
-                    <h3 class="mt-4 text-xl font-semibold text-foreground" data-testid="sprints-sprint-name">
-                      <a href="{% url 'sprint_detail' sprint_slug=item.sprint.slug %}" class="hover:text-accent">{{ item.sprint.name }}</a>
-                    </h3>
-                    <dl class="mt-4 text-sm text-muted-foreground">
-                      <div>
-                        <dt class="font-medium text-foreground">Sprint window</dt>
-                        <dd data-testid="sprints-sprint-dates">{% sprint_date_range item.sprint %}</dd>
-                      </div>
-                    </dl>
-                    <p class="mt-4 text-sm leading-relaxed text-muted-foreground" data-testid="sprints-sprint-context">
-                      A sprint is a time-bound shipping cohort with project structure, accountability check-ins, and community progress.
-                    </p>
-                    <p class="mt-4 text-sm leading-relaxed text-muted-foreground">
-                      Joining requires {{ item.required_tier_name }} membership.
-                    </p>
-                  </div>
-                  <a href="{{ item.cta_url }}"
-                     class="inline-flex min-h-[44px] w-full shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 sm:w-auto"
-                     data-testid="sprints-sprint-cta">
-                    {{ item.cta_label }}
-                    <i data-lucide="arrow-right" class="h-4 w-4"></i>
-                  </a>
-                </div>
-              </article>
+              {% include "content/_content_card.html" with card_url=item.detail_url card_testid="sprints-sprint-card" card_anchor_testid="sprints-sprint-link" card_body_template="content/_sprint_card_body.html" card_badge_template="content/_sprint_card_badges.html" card_editorial=True card_title=item.sprint.name card_title_testid="sprints-sprint-name" card_heading_tag="h3" card_aria_label=item.sprint.name %}
               {% endfor %}
             </div>
             {% else %}
@@ -83,23 +48,8 @@
           {% endfor %}
         </div>
         {% else %}
-        <div class="rounded-lg border border-border bg-card p-6 shadow-sm sm:p-8" data-testid="sprints-empty">
-          <i data-lucide="timer-off" class="h-9 w-9 text-muted-foreground"></i>
-          <h2 class="mt-4 text-xl font-semibold text-foreground">Next sprint coming soon</h2>
-          <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
-            There are no active community sprints open right now. You can still join live events and workshops while the next cohort window is prepared.
-          </p>
-          <div class="mt-5 flex flex-wrap gap-3">
-            <a href="/events" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80">
-              <i data-lucide="calendar-days" class="h-4 w-4"></i>
-              Events
-            </a>
-            <a href="/workshops" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80">
-              <i data-lucide="presentation" class="h-4 w-4"></i>
-              Workshops
-            </a>
-          </div>
-        </div>
+        {% button_classes 'secondary' as empty_cta_class %}
+        {% member_empty_state title='Next sprint coming soon' body='There are no active community sprints open right now. You can still join live events and workshops while the next cohort window is prepared.' icon='timer-off' kind='fresh' primary_cta_label='Events' primary_cta_url='/events' primary_cta_icon='calendar-days' primary_cta_class=empty_cta_class secondary_cta_label='Workshops' secondary_cta_url='/workshops' secondary_cta_icon='presentation' secondary_cta_class=empty_cta_class testid='sprints-empty' %}
         {% endif %}
       </div>
     </div>

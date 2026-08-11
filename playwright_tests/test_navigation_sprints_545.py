@@ -642,9 +642,10 @@ def test_sprints_page_lists_active_sprint(django_server, page, django_db_blocker
     assert "ACTIVE" in text
     assert "(4 weeks)" in text
     assert "Main or above" in text
-    assert card.locator('[data-testid="sprints-sprint-cta"]').get_attribute("href") == (
-        "/accounts/login/?next=/sprints/may-shipping-sprint"
+    assert card.locator('[data-testid="sprints-sprint-link"]').get_attribute("href") == (
+        "/sprints/may-shipping-sprint"
     )
+    assert card.locator('[data-testid="sprints-sprint-cta"]').count() == 0
 
 
 def test_sprints_page_empty_state(django_server, page, django_db_blocker):

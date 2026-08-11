@@ -230,7 +230,7 @@ class StatusPaletteContractTest(SimpleTestCase):
 
         for path in (
             'templates/plans/sprint_detail.html',
-            'templates/content/sprints_index.html',
+            'templates/content/_sprint_card_badges.html',
             'templates/content/dashboard.html',
         ):
             source = _source(path)

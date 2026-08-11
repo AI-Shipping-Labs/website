@@ -74,15 +74,18 @@ AUDITED_PAGE_WIDTHS = {
     # so the right half of the frame no longer reads empty.  /sprints and
     # /events move together to preserve the sibling consistency that the
     # 2026-07-21 widening was originally protecting.
-    "templates/content/sprints_index.html": "max-w-5xl",
+    "templates/content/sprints_index.html": "max-w-3xl",
+    "templates/plans/sprint_detail.html": "max-w-3xl",
     "templates/events/events_list.html": "max-w-5xl",
-    # Book Club (issue #1363): the hub and secondary (upcoming/finished)
-    # lifecycle pages are sparse hubs at Detail width; the full detail is a
-    # single-column reader page at max-w-3xl.
+    # Book Club: the collection hub has room for its grid; once a book is
+    # opened, every lifecycle and reader surface shares the Reader width.
     "templates/bookclub/index.html": "max-w-5xl",
-    "templates/bookclub/book_secondary.html": "max-w-5xl",
-    "templates/bookclub/progress.html": "max-w-5xl",
+    "templates/bookclub/book_secondary.html": "max-w-3xl",
+    "templates/bookclub/progress.html": "max-w-3xl",
     "templates/bookclub/book_detail.html": "max-w-3xl",
+    "templates/bookclub/book_chapter.html": "max-w-3xl",
+    "templates/bookclub/book_summary.html": "max-w-3xl",
+    "templates/bookclub/reader_profile.html": "max-w-3xl",
     "templates/content/blog_list.html": "max-w-5xl",
     # 2026-08-10: content listing pages standardise on Detail (max-w-5xl), the
     # /events list at 1024px being the reference.  projects/courses/workshop

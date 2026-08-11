@@ -1,0 +1,6 @@
+{% load member_badges %}
+{% if cat.status == "coming-soon" %}
+  {% member_status_badge "Coming soon" tone="muted" testid="interview-coming-soon-badge" %}
+{% else %}
+  {% member_access_badge 0 testid="interview-access-badge" %}
+{% endif %}

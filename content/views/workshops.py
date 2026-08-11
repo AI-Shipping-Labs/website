@@ -17,9 +17,8 @@ Every section gates against its own field, so a Workshop with
 Basic+ members read the tutorial, and Main+ members watch the recording.
 
 The catalog defaults to every published workshop (with a tier badge) so
-users see what they would unlock by upgrading. Issue #1166 adds the
-optional ``?access=free|paid`` filter for the public catalog while
-keeping the canonical unfiltered URL at ``/workshops/catalog``.
+users see what they would unlock by upgrading. A small curated topic row
+organizes discovery without exposing the long tail of raw workshop tags.
 
 Slug-only workshop routes are canonical. Legacy dated routes validate the
 ``(date, slug)`` pair against a published workshop, then 301 to the canonical
@@ -28,7 +27,7 @@ slug-only URL while preserving the query string.
 
 import re
 from datetime import date as date_cls
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 
 from django.db.models import Exists, OuterRef, Prefetch
 from django.http import (
@@ -40,7 +39,6 @@ from django.http import (
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.cache import patch_cache_control
-from django.utils.text import slugify
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
@@ -54,12 +52,9 @@ from content.access import (
     get_user_level,
 )
 from content.models import (
-    SKILL_LEVEL_METADATA,
     Instructor,
     Workshop,
     WorkshopPage,
-    get_workshop_skill_level_label,
-    normalize_workshop_skill_level,
 )
 from content.services import completion as completion_service
 from content.services.related_content import build_related_content_rail
@@ -70,14 +65,14 @@ from content.templatetags.video_utils import (
     get_video_thumbnail_url,
     parse_video_timestamp,
 )
+from content.topics import (
+    WORKSHOP_TOPICS,
+    filter_by_topic,
+    primary_topic,
+    topics_with_matches,
+)
 from content.utils.teaser import truncate_to_words
 from content.views.pages import _filter_by_tags
-from content.workshop_facets import (
-    FACET_EXCLUDED,
-    FACET_TECHNOLOGY,
-    FACET_TOPIC,
-    facet_for_tag,
-)
 from events.services.freestyle_evidence import build_freestyle_evidence
 
 # Approximate word budget for the locked-page teaser body. Mirrors the
@@ -87,7 +82,7 @@ TEASER_WORD_LIMIT = 150
 
 WORKSHOPS_LANDING_PATH = '/workshops'
 WORKSHOPS_CATALOG_PATH = '/workshops/catalog'
-LANDING_PREVIEW_LIMIT = 3
+LANDING_PREVIEW_LIMIT = 4
 WORKSHOP_CATALOG_MAX_TAGS = 2
 WORKSHOP_CATALOG_MAX_TAG_LENGTH = 100
 WORKSHOP_CATALOG_BAD_TAG_RESPONSE = 'Invalid workshop tag filters.\n'
@@ -144,31 +139,6 @@ def _bounded_catalog_tags(selected_tags):
     return bounded
 
 
-def _normalize_catalog_skill_level(value):
-    """Return a valid skill-level filter slug or ``''`` for no filter."""
-    try:
-        return normalize_workshop_skill_level(value)
-    except ValueError:
-        return ''
-
-
-def _filter_workshops_by_skill_level(queryset, selected_skill_level):
-    """Apply the public workshop skill-level catalog filter."""
-    if selected_skill_level:
-        return queryset.filter(skill_level=selected_skill_level)
-    return queryset
-
-
-CATALOG_ACCESS_ALL = 'all'
-CATALOG_ACCESS_FREE = 'free'
-CATALOG_ACCESS_PAID = 'paid'
-CATALOG_ACCESS_OPTIONS = (
-    (CATALOG_ACCESS_ALL, 'All'),
-    (CATALOG_ACCESS_FREE, 'Free'),
-    (CATALOG_ACCESS_PAID, 'Paid'),
-)
-
-
 def _freestyle_evidence_for_workshop(workshop, *reasons):
     if "insufficient_tier" not in reasons:
         return []
@@ -203,54 +173,18 @@ def _gated_reason_for_level(user, required_level):
     return 'insufficient_tier'
 
 
-def _normalize_catalog_access(value):
-    """Return the canonical workshop catalog access filter slug.
-
-    Supported values are ``free`` and ``paid``. Missing, blank, ``all``,
-    or unknown values all collapse to ``all`` so the canonical
-    no-filter state remains ``/workshops/catalog``.
-    """
-    normalized = (value or '').strip().lower()
-    if normalized == CATALOG_ACCESS_FREE:
-        return CATALOG_ACCESS_FREE
-    if normalized == CATALOG_ACCESS_PAID:
-        return CATALOG_ACCESS_PAID
-    return CATALOG_ACCESS_ALL
-
-
-def _filter_workshops_by_catalog_access(queryset, selected_access):
-    """Apply the public paid/free catalog filter to ``queryset``."""
-    if selected_access == CATALOG_ACCESS_FREE:
-        return queryset.filter(pages_required_level__lt=LEVEL_BASIC)
-    if selected_access == CATALOG_ACCESS_PAID:
-        return queryset.filter(pages_required_level__gte=LEVEL_BASIC)
-    return queryset
-
-
 def _build_catalog_filter_url(
     *,
     selected_tags,
-    selected_tools=(),
-    access_slug=CATALOG_ACCESS_ALL,
-    skill_level='',
     base_path=WORKSHOPS_CATALOG_PATH,
 ):
-    """Return a catalog URL preserving active public catalog filters."""
+    """Return a bounded legacy raw-tag URL for inbound-link compatibility."""
     selected_tags = _bounded_catalog_tags(selected_tags)
-    selected_tools = list(dict.fromkeys(selected_tools))
-    params = []
-    if access_slug in (CATALOG_ACCESS_FREE, CATALOG_ACCESS_PAID):
-        params.append(('access', access_slug))
-    if skill_level:
-        params.append(('skill_level', skill_level))
-    for tool in selected_tools:
-        params.append(('tool', tool))
-    for tag in selected_tags:
-        params.append(('tag', tag))
-    query = urlencode(params, doseq=True, quote_via=quote)
-    if not query:
+    if not selected_tags:
         return base_path
-    return f'{base_path}?{query}'
+    return f'{base_path}?' + '&'.join(
+        f'tag={quote(tag, safe="")}' for tag in selected_tags
+    )
 
 
 def _prepare_catalog_card_workshops(queryset, *, limit=None):
@@ -294,252 +228,9 @@ def _prepare_catalog_card_workshops(queryset, *, limit=None):
             workshop.card_has_code,
             workshop.card_has_materials,
         ))
+        topic = primary_topic(workshop.tags, WORKSHOP_TOPICS)
+        workshop.primary_topic_label = topic[1] if topic else ''
     return prepared
-
-
-def _tool_key(value):
-    """Case-insensitive comparison key for authored tool labels."""
-    return str(value or '').strip().casefold()
-
-
-def _get_selected_tools(request):
-    """Extract selected tool filters from ``?tool=X&tool=Y``."""
-    selected = []
-    seen = set()
-    for raw in request.GET.getlist('tool'):
-        tool = raw.strip()
-        if not tool:
-            continue
-        key = _tool_key(tool)
-        if key in seen:
-            continue
-        seen.add(key)
-        selected.append(tool)
-    return selected
-
-
-def _collect_catalog_tools(workshops):
-    """Return unique tool labels from published workshops, sorted by label."""
-    tools_by_key = {}
-    for workshop in workshops:
-        for raw_tool in workshop.core_tools or []:
-            if not isinstance(raw_tool, str):
-                continue
-            tool = raw_tool.strip()
-            if not tool:
-                continue
-            tools_by_key.setdefault(_tool_key(tool), tool)
-    return sorted(tools_by_key.values(), key=lambda value: value.casefold())
-
-
-def _canonicalize_selected_tools(selected_tools, available_tools):
-    """Use stored casing for selected tools when the label is known."""
-    labels_by_key = {_tool_key(tool): tool for tool in available_tools}
-    return [
-        labels_by_key.get(_tool_key(tool), tool)
-        for tool in selected_tools
-    ]
-
-
-def _filter_workshops_by_tools(queryset, selected_tools):
-    """Filter workshops by selected tools with AND semantics."""
-    if not selected_tools:
-        return queryset
-    selected_keys = {_tool_key(tool) for tool in selected_tools}
-    matching_ids = []
-    for workshop in queryset:
-        workshop_tool_keys = {
-            _tool_key(tool)
-            for tool in (workshop.core_tools or [])
-            if isinstance(tool, str) and tool.strip()
-        }
-        if selected_keys.issubset(workshop_tool_keys):
-            matching_ids.append(workshop.pk)
-    return queryset.filter(pk__in=matching_ids)
-
-
-def _build_catalog_extra_params(*, selected_access, selected_skill_level,
-                                selected_tools):
-    """Return extra params for tag-filter template helpers."""
-    params = {}
-    if selected_access in (CATALOG_ACCESS_FREE, CATALOG_ACCESS_PAID):
-        params['access'] = selected_access
-    if selected_skill_level:
-        params['skill_level'] = selected_skill_level
-    if selected_tools:
-        params['tool'] = selected_tools
-    return params or None
-
-
-def _build_tool_filter_options(*, all_tools, selected_tools, selected_tags,
-                               selected_access, selected_skill_level):
-    """Build toggle links for the public Tools filter group."""
-    selected_keys = {_tool_key(tool) for tool in selected_tools}
-    options = []
-    for tool in all_tools:
-        is_active = _tool_key(tool) in selected_keys
-        next_tools = (
-            [
-                selected_tool for selected_tool in selected_tools
-                if _tool_key(selected_tool) != _tool_key(tool)
-            ]
-            if is_active
-            else [*selected_tools, tool]
-        )
-        options.append({
-            'label': tool,
-            'url': _build_catalog_filter_url(
-                selected_tags=selected_tags,
-                selected_tools=next_tools,
-                access_slug=selected_access,
-                skill_level=selected_skill_level,
-            ),
-            'is_active': is_active,
-        })
-    return options
-
-
-def _build_selected_tool_filters(*, selected_tools, selected_tags,
-                                 selected_access, selected_skill_level):
-    """Build removable chips for active tool filters."""
-    filters = []
-    for tool in selected_tools:
-        next_tools = [
-            selected_tool for selected_tool in selected_tools
-            if _tool_key(selected_tool) != _tool_key(tool)
-        ]
-        filters.append({
-            'label': tool,
-            'url': _build_catalog_filter_url(
-                selected_tags=selected_tags,
-                selected_tools=next_tools,
-                access_slug=selected_access,
-                skill_level=selected_skill_level,
-            ),
-        })
-    return filters
-
-
-def _build_catalog_topic_url(
-    *,
-    selected_tags,
-    tag,
-    selected_tools,
-    selected_access,
-    selected_skill_level,
-):
-    """Return a catalog URL that toggles ``tag`` in the topic selection."""
-    next_tags = _bounded_catalog_tags(selected_tags)
-    if tag in next_tags:
-        next_tags = [
-            selected_tag for selected_tag in next_tags
-            if selected_tag != tag
-        ]
-    elif len(next_tags) < WORKSHOP_CATALOG_MAX_TAGS:
-        next_tags.append(tag)
-    else:
-        return None
-    return _build_catalog_filter_url(
-        selected_tags=next_tags,
-        selected_tools=selected_tools,
-        access_slug=selected_access,
-        skill_level=selected_skill_level,
-    )
-
-
-def _build_tag_filter_options(*, tags, selected_tags, selected_tools,
-                              selected_access, selected_skill_level,
-                              facet):
-    selected = set(selected_tags)
-    options = []
-    for tag in tags:
-        is_active = tag in selected
-        is_disabled = (
-            not is_active
-            and len(selected_tags) >= WORKSHOP_CATALOG_MAX_TAGS
-        )
-        options.append({
-            'slug': tag,
-            'label': tag,
-            'url': _build_catalog_topic_url(
-                selected_tags=selected_tags,
-                tag=tag,
-                selected_tools=selected_tools,
-                selected_access=selected_access,
-                selected_skill_level=selected_skill_level,
-            ),
-            'is_active': is_active,
-            'is_disabled': is_disabled,
-            'disabled_label': (
-                f'Remove a selected tag before adding {tag}'
-                if is_disabled else ''
-            ),
-            'facet': facet,
-            'source': 'tag',
-        })
-    return options
-
-
-def _build_technology_options(*, technology_tags, all_tools, selected_tags,
-                              selected_tools, selected_access,
-                              selected_skill_level):
-    """Combine technology tags and authored tools, preferring tool labels."""
-    tool_keys = {_tool_key(tool) for tool in all_tools}
-    tag_options = _build_tag_filter_options(
-        tags=[
-            tag for tag in technology_tags
-            if _tool_key(tag) not in tool_keys
-        ],
-        selected_tags=selected_tags,
-        selected_tools=selected_tools,
-        selected_access=selected_access,
-        selected_skill_level=selected_skill_level,
-        facet=FACET_TECHNOLOGY,
-    )
-    tool_options = _build_tool_filter_options(
-        all_tools=all_tools,
-        selected_tools=selected_tools,
-        selected_tags=selected_tags,
-        selected_access=selected_access,
-        selected_skill_level=selected_skill_level,
-    )
-    for option in tool_options:
-        option.update({
-            'slug': slugify(option['label']),
-            'facet': FACET_TECHNOLOGY,
-            'source': 'tool',
-        })
-    return sorted(
-        [*tag_options, *tool_options],
-        key=lambda option: option['label'].casefold(),
-    )
-
-
-def _build_selected_topic_summary(selected_tags):
-    if len(selected_tags) == 1:
-        return f'Workshops about {selected_tags[0]}'
-    if selected_tags:
-        return 'Workshops matching selected topics'
-    return ''
-
-
-def _build_selected_tag_filters(selected_tags, published_tags):
-    """Describe selected tags without mislabeling their public facet."""
-    published_tags = set(published_tags)
-    filters = []
-    for tag in selected_tags:
-        facet = facet_for_tag(tag) if tag in published_tags else None
-        if facet == FACET_TOPIC:
-            remove_label = f'Remove {tag} topic filter'
-        elif facet == FACET_TECHNOLOGY:
-            remove_label = f'Remove {tag} technology filter'
-        else:
-            remove_label = f'Remove {tag} filter'
-        filters.append({
-            'label': tag,
-            'remove_label': remove_label,
-        })
-    return filters
 
 
 def _build_workshops_catalog_context(
@@ -555,188 +246,38 @@ def _build_workshops_catalog_context(
     limit=None,
     validated_selected_tags=None,
 ):
-    """Build shared context for workshop catalog cards and filters."""
-    workshops = Workshop.objects.filter(status='published').order_by('-date')
-    has_published_workshops = workshops.exists()
+    """Build shared curated-topic context for workshop cards and catalog."""
+    published = Workshop.objects.filter(status='published').order_by('-date')
+    has_published_workshops = published.exists()
     selected_tags = (
         list(validated_selected_tags or ()) if show_filters else []
     )
-    selected_tools = _get_selected_tools(request) if show_filters else []
-    selected_access = (
-        _normalize_catalog_access(request.GET.get('access'))
-        if show_filters else CATALOG_ACCESS_ALL
+    requested_topic = (
+        (request.GET.get('topic') or '').strip() if show_filters else ''
     )
-    selected_skill_level = (
-        _normalize_catalog_skill_level(request.GET.get('skill_level'))
-        if show_filters else ''
+    selected_topic = (
+        requested_topic if requested_topic in WORKSHOP_TOPICS else ''
     )
 
-    # Collect options from all published workshops before active filters are
-    # applied. That keeps the filter surface stable while visitors switch
-    # between access/tag/tool combinations. Draft workshop tags must not leak
-    # into public topic filters.
-    all_tags = set()
-    all_tools = _collect_catalog_tools(workshops)
-    selected_tools = _canonicalize_selected_tools(selected_tools, all_tools)
-    for workshop in workshops:
-        if workshop.tags:
-            all_tags.update(workshop.tags)
-    all_tags = sorted(all_tags, key=str.casefold)
-    tags_by_facet = {
-        FACET_TOPIC: [],
-        FACET_TECHNOLOGY: [],
-        FACET_EXCLUDED: [],
-    }
-    for tag in all_tags:
-        tags_by_facet[facet_for_tag(tag)].append(tag)
+    topic_filters = (
+        topics_with_matches(list(published), WORKSHOP_TOPICS)
+        if show_filters else []
+    )
+    if selected_topic:
+        matching = filter_by_topic(list(published), selected_topic, WORKSHOP_TOPICS)
+        published = published.filter(pk__in=[workshop.pk for workshop in matching])
+    elif selected_tags:
+        published = _filter_by_tags(published, selected_tags)
 
-    access_filtered_workshops = _filter_workshops_by_catalog_access(
-        workshops, selected_access,
-    )
-    tool_filtered_workshops = _filter_workshops_by_tools(
-        access_filtered_workshops, selected_tools,
-    )
-    tag_filtered_workshops = _filter_by_tags(
-        tool_filtered_workshops, selected_tags,
-    )
-    available_skill_levels = set(
-        tag_filtered_workshops
-        .exclude(skill_level='')
-        .values_list('skill_level', flat=True)
-        .distinct()
-    )
-    skill_filter_options = [
-        {
-            'slug': slug,
-            'label': metadata['label'],
-            'url': _build_catalog_filter_url(
-                selected_tags=selected_tags,
-                selected_tools=selected_tools,
-                access_slug=selected_access,
-                skill_level=slug,
-            ),
-            'is_active': selected_skill_level == slug,
-        }
-        for slug, metadata in SKILL_LEVEL_METADATA.items()
-        if slug in available_skill_levels
-    ]
-    workshops = _filter_workshops_by_skill_level(
-        tag_filtered_workshops, selected_skill_level,
-    )
-    has_active_filters = (
-        bool(selected_tags)
-        or bool(selected_tools)
-        or selected_access != CATALOG_ACCESS_ALL
-        or bool(selected_skill_level)
-    )
-    # Access and skill level are pill rows that already contain their own
-    # "All" option, so a separate reset control is redundant when one of
-    # them is the only thing filtering. Topic/technology/tag selections
-    # have no such affordance, so they still need the reset.
-    has_resettable_filters = bool(selected_tags) or bool(selected_tools)
-    selected_topic_tags = [
-        tag for tag in selected_tags
-        if tag in tags_by_facet[FACET_TOPIC]
-    ]
-
-    workshops = _prepare_catalog_card_workshops(workshops, limit=limit)
-
-    access_filter_options = [
-        {
-            'slug': slug,
-            'label': label,
-            'url': _build_catalog_filter_url(
-                selected_tags=selected_tags,
-                selected_tools=selected_tools,
-                access_slug=slug,
-                base_path=base_path,
-                skill_level=selected_skill_level,
-            ),
-            'is_active': selected_access == slug,
-        }
-        for slug, label in CATALOG_ACCESS_OPTIONS
-    ]
-    selected_tool_filters = _build_selected_tool_filters(
-        selected_tools=selected_tools,
-        selected_tags=selected_tags,
-        selected_access=selected_access,
-        selected_skill_level=selected_skill_level,
-    )
-    topic_options = _build_tag_filter_options(
-        tags=tags_by_facet[FACET_TOPIC],
-        selected_tags=selected_tags,
-        selected_tools=selected_tools,
-        selected_access=selected_access,
-        selected_skill_level=selected_skill_level,
-        facet=FACET_TOPIC,
-    )
-    technology_options = _build_technology_options(
-        technology_tags=tags_by_facet[FACET_TECHNOLOGY],
-        all_tools=all_tools,
-        selected_tags=selected_tags,
-        selected_tools=selected_tools,
-        selected_access=selected_access,
-        selected_skill_level=selected_skill_level,
-    )
-    catalog_extra_params = _build_catalog_extra_params(
-        selected_access=selected_access,
-        selected_skill_level=selected_skill_level,
-        selected_tools=selected_tools,
-    )
-
-    # The facet pill rows are collapsed by default (37 pills pushed the
-    # first card ~1.7 screens down on mobile), so the summary line has to
-    # carry the active-selection count — otherwise a filtered catalog
-    # looks unfiltered while the evidence is hidden inside the accordion.
-    topic_active_count = sum(1 for option in topic_options if option['is_active'])
-    technology_active_count = sum(
-        1 for option in technology_options if option['is_active']
-    )
-    context = {
+    workshops = _prepare_catalog_card_workshops(published, limit=limit)
+    return {
         'workshops': workshops,
-        'all_tags': all_tags,
-        'topic_options': topic_options,
-        'technology_options': technology_options,
-        'topic_facet_label': (
-            f'Topics ({topic_active_count} selected)'
-            if topic_active_count else 'Topics'
-        ),
-        'technology_facet_label': (
-            f'Technologies ({technology_active_count} selected)'
-            if technology_active_count else 'Technologies'
-        ),
-        'topic_facet_open': bool(topic_active_count),
-        'technology_facet_open': bool(technology_active_count),
-        'all_tools': all_tools,
+        'topic_filters': topic_filters,
+        'selected_topic': selected_topic,
         'selected_tags': selected_tags,
-        'workshop_tag_limit_reached': (
-            len(selected_tags) >= WORKSHOP_CATALOG_MAX_TAGS
-        ),
-        'selected_tag_filters': _build_selected_tag_filters(
-            selected_tags,
-            all_tags,
-        ),
-        'selected_topic_summary': _build_selected_topic_summary(
-            selected_topic_tags,
-        ),
-        'selected_filter_summary': (
-            'Workshops matching selected filters' if has_active_filters else ''
-        ),
-        'selected_tools': selected_tools,
-        'selected_access': selected_access,
-        'selected_access_label': dict(CATALOG_ACCESS_OPTIONS)[selected_access],
-        'access_filter_options': access_filter_options,
-        'selected_skill_level': selected_skill_level,
-        'selected_skill_level_label': get_workshop_skill_level_label(
-            selected_skill_level,
-        ),
-        'has_published_workshops': has_published_workshops,
-        'skill_filter_options': skill_filter_options,
-        'selected_tool_filters': selected_tool_filters,
-        'has_active_filters': has_active_filters,
-        'has_resettable_filters': has_resettable_filters,
-        'catalog_extra_params': catalog_extra_params,
         'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
+        'has_published_workshops': has_published_workshops,
+        'has_active_filters': bool(selected_tags),
         'base_path': base_path,
         'clear_filters_url': base_path,
         'catalog_all_url': WORKSHOPS_CATALOG_PATH,
@@ -747,7 +288,6 @@ def _build_workshops_catalog_context(
         'catalog_section_id': catalog_section_id,
         'catalog_testid': catalog_testid,
     }
-    return context
 
 
 def workshops_list(request):
@@ -756,20 +296,13 @@ def workshops_list(request):
         request,
         base_path=WORKSHOPS_CATALOG_PATH,
         show_filters=False,
-        catalog_eyebrow='Latest workshops',
-        catalog_heading='Start with recent workshop writeups',
-        catalog_intro=(
-            'Preview the newest published workshops, then open the full '
-            'archive when you want to filter by topic or access level.'
-        ),
+        catalog_eyebrow='',
+        catalog_heading='More workshops',
+        catalog_intro='',
         catalog_section_id='workshop-preview',
         catalog_testid='workshops-preview',
         limit=LANDING_PREVIEW_LIMIT,
     )
-    # Mirror the /books hub: feature the latest (newest) workshop as a
-    # prominent card above the grid, then render the remaining recent
-    # workshops in the standard grid below. The catalog context is already
-    # ordered newest-first and limited to the landing preview.
     preview_workshops = context['workshops']
     context['featured_workshop'] = (
         preview_workshops[0] if preview_workshops else None
@@ -798,11 +331,6 @@ def workshops_catalog(request):
     if tags_changed:
         location = _build_catalog_filter_url(
             selected_tags=selected_tags,
-            selected_tools=_get_selected_tools(request),
-            access_slug=_normalize_catalog_access(request.GET.get('access')),
-            skill_level=_normalize_catalog_skill_level(
-                request.GET.get('skill_level'),
-            ),
         )
         return HttpResponsePermanentRedirect(location)
 
@@ -814,7 +342,7 @@ def workshops_catalog(request):
         catalog_heading='All workshops',
         catalog_intro=(
             'Browse the full AI Shipping Labs workshop archive, newest first, '
-            'with recordings, writeups, tutorial pages, materials, and '
+            'with recordings, step-by-step tutorials, materials, and '
             'membership access labels.'
         ),
         catalog_section_id='workshop-catalog',

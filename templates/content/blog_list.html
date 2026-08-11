@@ -1,11 +1,6 @@
 {% extends "base.html" %}
-{% load access_tags %}
-{% load member_badges %}
 {% load member_empty_state %}
-{% load tag_filters %}
-{% load teaser_tags %}
 {% load seo_tags %}
-{% load article_images %}
 
 {% block title %}Blog | AI Shipping Labs{% endblock %}
 {% block meta_description %}Articles on AI engineering, MLOps, production systems, and building with data.{% endblock %}
@@ -42,59 +37,14 @@
       {% endif %}
 
       {% if articles %}
-      <div class="space-y-8">
+      <div class="border-t border-border/70" data-testid="blog-list">
         {% for article in articles %}
         {% comment %}
-        Issue #523 — the outer <a> wraps the whole card so it is one click
-        target. The topic eyebrow (inside the badge row) is a non-interactive
-        <span>, so there are no nested anchors / invalid HTML.
+        Blog and workshop archives share the canonical editorial-row mode:
+        whole-entry navigation, restrained signals, no boxed card wall, and no
+        thumbnail/fallback slot for these text-first feeds.
         {% endcomment %}
-        <article class="group rounded-lg border border-border bg-card p-4 sm:p-6 transition-colors hover:border-accent/50">
-          <a href="/blog/{{ article.slug }}" class="{% include 'content/_clickable_card_classes.html' %}">
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div class="sm:w-48 sm:flex-shrink-0" data-testid="blog-card-thumbnail">
-                {% if article.cover_image_url %}
-                {% article_cover_image article "(min-width: 640px) 12rem, calc(100vw - 2rem)" "w-full aspect-video sm:aspect-auto sm:h-32 object-cover rounded-lg border border-border" forloop.first %}
-                {% else %}
-                <div class="flex aspect-video w-full items-center justify-center rounded-lg border border-border bg-secondary sm:h-32 sm:aspect-auto" data-testid="blog-card-thumbnail-fallback" aria-hidden="true">
-                  <i data-lucide="file-text" class="h-8 w-8 text-muted-foreground/50"></i>
-                </div>
-                {% endif %}
-              </div>
-              <div class="flex-1">
-                <div class="mb-3 flex flex-wrap items-center gap-2">
-                  {% member_access_badge article.required_level testid="article-access-badge" %}
-                  {% if article.primary_topic_label %}
-                  <span class="text-xs font-medium uppercase tracking-wide text-accent" data-testid="blog-card-topic">{{ article.primary_topic_label }}</span>
-                  {% endif %}
-                </div>
-                <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
-                  {{ article.title }}
-                </h2>
-                <p class="mt-2 text-sm sm:text-base text-muted-foreground line-clamp-2">{{ article.description|strip_markdown }}</p>
-                <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                  {% if article.author %}
-                  <span class="flex items-center gap-1.5">
-                    <i data-lucide="user" class="h-4 w-4"></i>
-                    {{ article.author }}
-                  </span>
-                  {% endif %}
-                  <span class="flex items-center gap-1.5">
-                    <i data-lucide="calendar" class="h-4 w-4"></i>
-                    {{ article.formatted_date }}
-                  </span>
-                  {% if article.reading_time %}
-                  <span class="flex items-center gap-1.5">
-                    <i data-lucide="clock" class="h-4 w-4"></i>
-                    {{ article.reading_time }}
-                  </span>
-                  {% endif %}
-                </div>
-              </div>
-              <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
-            </div>
-          </a>
-        </article>
+        {% include "content/_content_card.html" with card_url='/blog/'|add:article.slug card_testid="blog-card" card_body_template="content/_blog_card_body.html" card_badge_template="content/_blog_card_badges.html" card_editorial=True card_title=article.title card_title_testid="blog-card-title" card_aria_label=article.title %}
         {% endfor %}
       </div>
       {% else %}

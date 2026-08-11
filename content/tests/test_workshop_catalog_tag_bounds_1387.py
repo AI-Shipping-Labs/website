@@ -53,16 +53,12 @@ class WorkshopCatalogTagNormalizerTest(SimpleTestCase):
 
     def test_catalog_url_builder_bounds_and_deduplicates_adversarial_tags(self):
         url = _build_catalog_filter_url(
-            access_slug='paid',
-            skill_level='intermediate',
-            selected_tools=['Python', 'Python', 'Docker'],
             selected_tags=['rag', 'rag', 'agents', 'third'],
         )
 
         self.assertEqual(
             url,
-            '/workshops/catalog?access=paid&skill_level=intermediate&'
-            'tool=Python&tool=Docker&tag=rag&tag=agents',
+            '/workshops/catalog?tag=rag&tag=agents',
         )
 
 
@@ -92,8 +88,7 @@ class WorkshopCatalogEarlyBoundResponseTest(TestCase):
         self.assertEqual(response.status_code, 301)
         self.assertEqual(
             response['Location'],
-            '/workshops/catalog?access=paid&skill_level=intermediate&'
-            'tool=Python&tag=rag',
+            '/workshops/catalog?tag=rag',
         )
         self.assertTrue(response['Location'].startswith('/'))
 
@@ -190,7 +185,7 @@ class WorkshopCatalogBoundedRenderingTest(TestCase):
             tags=['agents', 'rag'],
         )
 
-    def test_two_tag_request_keeps_and_semantics_and_disables_third_tag_links(self):
+    def test_two_tag_request_keeps_and_semantics_without_raw_tag_controls(self):
         response = self.client.get(
             f'{self.url}?tag=agents&tag=rag',
         )
@@ -199,12 +194,9 @@ class WorkshopCatalogBoundedRenderingTest(TestCase):
         self.assertContains(response, 'Agents and RAG')
         self.assertNotContains(response, 'Agents only')
         self.assertNotContains(response, 'Hidden draft')
-        self.assertContains(response, 'aria-disabled="true"')
-        self.assertContains(
-            response,
-            'Remove a selected tag before adding python',
-        )
-        self.assertNotContains(response, 'tag=agents&amp;tag=rag&amp;tag=python')
+        self.assertNotContains(response, 'data-testid="workshop-active-tag"')
+        self.assertNotContains(response, 'workshop-topic-option-')
+        self.assertNotContains(response, 'workshop-technology-option-')
 
         body = response.content.decode()
         for href in _extract_workshop_catalog_hrefs(body):

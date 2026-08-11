@@ -1,0 +1,11 @@
+{% load member_badges %}
+{% comment %}
+Primary signals for a blog editorial row. The topic is a non-interactive
+eyebrow so the wrapping article link remains the row's only navigation target.
+{% endcomment %}
+<div class="flex flex-wrap items-center gap-2" data-testid="blog-card-primary-signals">
+  {% member_access_badge article.required_level testid="article-access-badge" %}
+  {% if article.primary_topic_label %}
+  <span class="text-xs font-medium uppercase tracking-wide text-accent" data-testid="blog-card-topic">{{ article.primary_topic_label }}</span>
+  {% endif %}
+</div>

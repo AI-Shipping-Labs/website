@@ -86,7 +86,7 @@ AUDITED_PAGE_WIDTHS = {
     "templates/bookclub/book_chapter.html": "max-w-3xl",
     "templates/bookclub/book_summary.html": "max-w-3xl",
     "templates/bookclub/reader_profile.html": "max-w-3xl",
-    "templates/content/blog_list.html": "max-w-5xl",
+    "templates/content/blog_list.html": "max-w-3xl",
     # 2026-08-10: content listing pages standardise on Detail (max-w-5xl), the
     # /events list at 1024px being the reference.  projects/courses/workshop
     # catalog move down from 7xl so every index shares one listing width; the
@@ -95,11 +95,13 @@ AUDITED_PAGE_WIDTHS = {
     "templates/content/courses_list.html": "max-w-5xl",
     "templates/content/tutorials_list.html": "max-w-5xl",
     "templates/content/downloads_list.html": "max-w-5xl",
-    "templates/content/interview_hub.html": "max-w-5xl",
+    "templates/content/interview_hub.html": "max-w-3xl",
     "templates/content/tags_index.html": "max-w-5xl",
     "templates/content/tags_detail.html": "max-w-5xl",
     "templates/voting/poll_list.html": "max-w-5xl",
     "templates/content/workshops_list.html": "max-w-5xl",
+    "templates/content/workshop_detail.html": "max-w-3xl",
+    "templates/content/workshop_video.html": "max-w-3xl",
     # Was max-w-4xl, the only 4xl on the site.
     "templates/events/host_management.html": "max-w-5xl",
     # Were max-w-lg, off the scale entirely.
@@ -111,10 +113,10 @@ AUDITED_PAGE_WIDTHS = {
     "templates/content/curated_link_verify_required.html": "max-w-2xl",
     # Frame-owning includes for the delegating pages above.
     "templates/accounts/includes/_auth_card.html": "max-w-7xl",
-    # 2026-08-10: the workshop catalog partial owns the frame for both /workshops
-    # (a 5xl page) and /workshops/catalog.  It moves to the content-listing
-    # standard (max-w-5xl) so /workshops no longer changes width mid-page.
-    "templates/content/_workshops_catalog.html": "max-w-5xl",
+    # 2026-08-11: the workshop archive becomes a text-first editorial feed.
+    # Reader width prevents long summary lines and removes the dense card-wall
+    # feeling; the short /workshops preview shares the same 3xl frame.
+    "templates/content/_workshops_catalog.html": "max-w-3xl",
 }
 
 EXTENDS_BASE_RE = re.compile(r"\{%\s*extends\s+[\"']base\.html[\"']\s*%\}")

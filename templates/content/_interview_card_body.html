@@ -1,0 +1,11 @@
+{% if cat.description %}
+<p class="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground sm:text-base" data-testid="interview-card-description">
+  {{ cat.description }}
+</p>
+{% endif %}
+{% if cat.sections and cat.status != "coming-soon" %}
+<div class="mt-4 flex items-center gap-1.5 text-sm text-muted-foreground" data-testid="interview-card-metadata">
+  <i data-lucide="list" class="h-4 w-4 flex-shrink-0"></i>
+  {{ cat.sections|length }} section{{ cat.sections|length|pluralize }}
+</div>
+{% endif %}

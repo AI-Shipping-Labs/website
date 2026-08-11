@@ -11,6 +11,8 @@ from django.test import SimpleTestCase, tag
 
 from content.templatetags.tag_filters import humanize_tag
 from content.topics import (
+    BLOG_TOPICS,
+    WORKSHOP_TOPICS,
     filter_by_topic,
     primary_topic,
     topics_with_matches,
@@ -83,6 +85,90 @@ class FilterByTopicTest(SimpleTestCase):
     def test_unknown_slug_returns_all_items(self):
         items = [_item('ai'), _item('aws')]
         self.assertEqual(filter_by_topic(items, 'no-such-topic'), items)
+
+
+@tag('core')
+class WorkshopTopicsTest(SimpleTestCase):
+    def test_taxonomy_has_exact_order_labels_and_memberships(self):
+        self.assertEqual(
+            list(WORKSHOP_TOPICS.items()),
+            [
+                ('ai-agents', {
+                    'label': 'AI Agents',
+                    'tags': [
+                        'ai-agents', 'coding-agents', 'agent-systems',
+                        'agentic-loop', 'function-calling', 'tool-calling',
+                        'async-control', 'guardrails', 'agent-safety', 'mcp',
+                    ],
+                }),
+                ('rag-search', {
+                    'label': 'RAG & Search',
+                    'tags': [
+                        'rag', 'search', 'information-retrieval',
+                        'elasticsearch',
+                    ],
+                }),
+                ('ai-engineering', {
+                    'label': 'AI Engineering',
+                    'tags': [
+                        'llm-engineering', 'ai-engineering', 'open-models',
+                        'vllm', 'runpod', 'gpu', 'comparison',
+                    ],
+                }),
+                ('coding-with-ai', {
+                    'label': 'Coding with AI',
+                    'tags': [
+                        'vibe-coding', 'coding-assistants', 'ai-tools',
+                        'developer-tools', 'claude-code',
+                    ],
+                }),
+                ('production-apps', {
+                    'label': 'Production & Apps',
+                    'tags': [
+                        'data-engineering', 'production-systems',
+                        'tooling-architecture', 'full-stack', 'django',
+                        'python', 'fastapi', 'react', 'temporal', 'ci-cd',
+                    ],
+                }),
+                ('career', {
+                    'label': 'Career',
+                    'tags': [
+                        'career', 'careers', 'personal-brand', 'linkedin',
+                        'writing', 'portfolio', 'job-search',
+                        'project-selection', 'cv',
+                    ],
+                }),
+            ],
+        )
+
+    def test_helpers_accept_surface_taxonomy_without_changing_blog_default(self):
+        items = [_item('function-calling'), _item('python'), _item('aws')]
+
+        self.assertEqual(
+            primary_topic(items[0].tags, WORKSHOP_TOPICS),
+            ('ai-agents', 'AI Agents'),
+        )
+        self.assertEqual(
+            [topic['slug'] for topic in topics_with_matches(
+                items, WORKSHOP_TOPICS,
+            )],
+            ['ai-agents', 'production-apps'],
+        )
+        self.assertEqual(
+            filter_by_topic(items, 'production-apps', WORKSHOP_TOPICS),
+            [items[1]],
+        )
+        self.assertEqual(
+            primary_topic(['aws']),
+            ('production-infra', BLOG_TOPICS['production-infra']['label']),
+        )
+
+    def test_first_matching_workshop_topic_wins_and_unknown_stays_unmapped(self):
+        self.assertEqual(
+            primary_topic(['python', 'rag'], WORKSHOP_TOPICS),
+            ('rag-search', 'RAG & Search'),
+        )
+        self.assertIsNone(primary_topic(['new-unmapped-tag'], WORKSHOP_TOPICS))
 
 
 @tag('core')

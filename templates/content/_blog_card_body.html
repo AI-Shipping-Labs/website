@@ -1,0 +1,28 @@
+{% load teaser_tags %}
+{% comment %}
+Text-first body for the shared editorial-row card. Full article content and raw
+tags remain on the detail page; the archive keeps only scan-critical metadata.
+{% endcomment %}
+{% if article.description %}
+<p class="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground sm:text-base" data-testid="blog-card-description">
+  {{ article.description|strip_markdown }}
+</p>
+{% endif %}
+<div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground" data-testid="blog-card-metadata">
+  {% if article.author %}
+  <span class="flex items-center gap-1.5" data-testid="blog-card-author">
+    <i data-lucide="user" class="h-4 w-4 flex-shrink-0"></i>
+    {{ article.author }}
+  </span>
+  {% endif %}
+  <span class="flex items-center gap-1.5" data-testid="blog-card-date">
+    <i data-lucide="calendar" class="h-4 w-4 flex-shrink-0"></i>
+    {{ article.formatted_date }}
+  </span>
+  {% if article.reading_time %}
+  <span class="flex items-center gap-1.5" data-testid="blog-card-reading-time">
+    <i data-lucide="clock" class="h-4 w-4 flex-shrink-0"></i>
+    {{ article.reading_time }}
+  </span>
+  {% endif %}
+</div>

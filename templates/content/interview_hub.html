@@ -8,7 +8,7 @@
 {% include "includes/header.html" %}
 <main class="min-h-screen pt-24">
   <section class="py-8 sm:py-16 lg:py-24">
-    <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+    <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
       <div class="mb-12">
         <a href="/" class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground mb-8">
           <i data-lucide="arrow-left" class="h-4 w-4"></i>
@@ -24,38 +24,12 @@
       </div>
 
       {% if categories %}
-      <div class="grid gap-6 sm:grid-cols-2">
+      <div class="border-t border-border/70" data-testid="interview-list">
         {% for cat in categories %}
         {% if cat.status == "coming-soon" %}
-        <div class="rounded-lg border border-border bg-card p-6">
-          <div class="flex items-start justify-between">
-            <div>
-              <h2 class="text-lg font-semibold text-muted-foreground">{{ cat.title }}</h2>
-              <p class="mt-2 text-sm text-muted-foreground">{{ cat.description }}</p>
-            </div>
-          </div>
-          <div class="mt-4">
-            <span class="inline-flex items-center rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground">
-              Coming soon
-            </span>
-          </div>
-        </div>
+        {% include "content/_content_card.html" with card_static=True card_testid="interview-card" card_body_template="content/_interview_card_body.html" card_badge_template="content/_interview_card_badges.html" card_editorial=True card_title=cat.title card_title_testid="interview-card-title" card_aria_label=cat.title %}
         {% else %}
-        {# Issue #523 — keyboard-focus ring on the clickable category card. #}
-        <a href="/interview/{{ cat.slug }}" class="{% include 'content/_clickable_card_classes.html' %} rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
-          <div class="flex items-start justify-between">
-            <div>
-              <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">{{ cat.title }}</h2>
-              <p class="mt-2 text-sm text-muted-foreground">{{ cat.description }}</p>
-            </div>
-            <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
-          </div>
-          {% if cat.sections %}
-          <div class="mt-4 text-xs text-muted-foreground">
-            {{ cat.sections|length }} section{{ cat.sections|length|pluralize }}
-          </div>
-          {% endif %}
-        </a>
+        {% include "content/_content_card.html" with card_url='/interview/'|add:cat.slug card_testid="interview-card" card_anchor_testid="interview-card-link" card_body_template="content/_interview_card_body.html" card_badge_template="content/_interview_card_badges.html" card_editorial=True card_title=cat.title card_title_testid="interview-card-title" card_aria_label=cat.title %}
         {% endif %}
         {% endfor %}
       </div>

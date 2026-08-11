@@ -1,144 +1,84 @@
 {% load accounts_extras %}
 {% load member_empty_state %}
-{% load tag_filters %}
 
-<section id="{{ catalog_section_id|default:"workshop-catalog" }}" class="scroll-mt-24 py-8 sm:py-16 lg:py-24" data-testid="{{ catalog_testid|default:"workshop-catalog" }}">
+<section id="{{ catalog_section_id|default:"workshop-catalog" }}" class="scroll-mt-24 {% if show_catalog_filters %}py-8 sm:py-16 lg:py-24{% elif hide_catalog_header %}pt-6 pb-6 sm:pb-8 lg:pb-10{% else %}pt-8 pb-6 sm:pt-12 sm:pb-8 lg:pt-16 lg:pb-10{% endif %}" data-testid="{{ catalog_testid|default:"workshop-catalog" }}">
+  {% if show_catalog_filters %}
+  <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+  {% else %}
   <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+  {% endif %}
+    {% if not hide_catalog_header %}
     <div class="mb-8">
       {% comment %}
-      /workshops embeds this catalog under its own page hero and passes
-      hide_catalog_header=True to suppress this redundant eyebrow/heading/intro
-      block. The standalone /workshops/catalog route omits the flag and keeps
-      the header (with catalog_heading_tag="h1" as its page h1).
+      The standalone /workshops/catalog route uses its archive eyebrow, h1,
+      and intro. The /workshops landing passes a compact "Latest workshops"
+      h2 with blank eyebrow/intro values above its three-card preview.
       {% endcomment %}
-      {% if not hide_catalog_header %}
       <div class="max-w-2xl">
+        {% if catalog_eyebrow %}
         <p class="text-sm font-medium uppercase tracking-widest text-accent">{{ catalog_eyebrow }}</p>
+        {% endif %}
         {% if catalog_heading_tag == "h1" %}
-        <h1 class="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+        <h1 class="{% if catalog_eyebrow %}mt-3 {% endif %}text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
           {{ catalog_heading }}
         </h1>
         {% else %}
-        <h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+        <h2 class="{% if catalog_eyebrow %}mt-3 {% endif %}text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
           {{ catalog_heading }}
         </h2>
         {% endif %}
+        {% if catalog_intro %}
         <p class="mt-3 max-w-2xl text-base leading-7 text-muted-foreground">
           {{ catalog_intro }}
         </p>
+        {% endif %}
       </div>
-      {% endif %}
       {% if show_catalog_filters %}
-      <div class="mt-4 flex flex-col items-start gap-3">
-        <div class="inline-flex flex-wrap items-center gap-2" aria-label="Workshop access filters" data-testid="workshop-access-filters">
-          {% for option in access_filter_options %}
-          <a
-            href="{{ option.url }}"
-            class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if option.is_active %}bg-accent text-accent-foreground{% else %}border border-border bg-transparent text-muted-foreground hover:border-accent/50 hover:text-foreground{% endif %}"
-            data-testid="workshop-access-filter-{{ option.slug }}"
-            {% if option.is_active %}aria-current="page"{% endif %}
-          >
-            {{ option.label }}
-          </a>
-          {% endfor %}
-        </div>
-        {% if skill_filter_options %}
-        <div class="inline-flex flex-wrap items-center gap-2" aria-label="Workshop skill-level filters" data-testid="workshop-skill-filters">
-          {% for option in skill_filter_options %}
-          <a
-            href="{{ option.url }}"
-            class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if option.is_active %}bg-accent text-accent-foreground{% else %}border border-border bg-transparent text-muted-foreground hover:border-accent/50 hover:text-foreground{% endif %}"
-            data-testid="workshop-skill-filter-{{ option.slug }}"
-            {% if option.is_active %}aria-current="page"{% endif %}
-          >
-            {{ option.label }}
-          </a>
-          {% endfor %}
-        </div>
-        {% endif %}
-        {% if has_published_workshops and has_resettable_filters %}
-        <a href="{{ clear_filters_url }}" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="clear-workshop-filter">
-          Clear filters
-        </a>
-        {% endif %}
-      </div>
-      {% else %}
-      <a href="{{ catalog_all_url }}" class="mt-4 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="view-all-workshops-preview-cta">
-        View all workshops
-        <i data-lucide="arrow-right" class="h-4 w-4"></i>
-      </a>
+      {% if topic_filters %}
+      <nav class="mt-4 flex flex-wrap gap-2" aria-label="Filter workshops by topic" data-testid="workshop-topic-filter">
+        <a href="{{ base_path }}"
+           class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if not selected_topic and not selected_tags %}bg-accent text-accent-foreground{% else %}border border-border bg-transparent text-muted-foreground hover:border-accent/50 hover:text-foreground{% endif %}"
+           data-testid="workshop-topic-all"
+           {% if not selected_topic and not selected_tags %}aria-current="page"{% endif %}>All</a>
+        {% for topic in topic_filters %}
+        <a href="{{ base_path }}?topic={{ topic.slug }}"
+           class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if topic.slug == selected_topic %}bg-accent text-accent-foreground{% else %}border border-border bg-transparent text-muted-foreground hover:border-accent/50 hover:text-foreground{% endif %}"
+           data-testid="workshop-topic-{{ topic.slug }}"
+           {% if topic.slug == selected_topic %}aria-current="page"{% endif %}>{{ topic.label }}</a>
+        {% endfor %}
+      </nav>
       {% endif %}
-    </div>
-
-    {% comment %}
-    Topics (24 pills) and Technologies (13) used to render fully
-    expanded, pushing the first card ~1428px down on a 390px screen —
-    roughly 1.7 screens of filter chrome before any content. They are
-    collapsed into the shared native details/summary accordion, and
-    auto-open when that facet has an active selection so a filtered
-    catalog never hides why it is filtered.
-    {% endcomment %}
-    {% if show_catalog_filters and topic_options %}
-    {% include "includes/_accordion.html" with summary=topic_facet_label body_template="content/_workshop_topic_facet_body.html" testid="workshop-facet-topic" open=topic_facet_open details_extra_class="mb-6" %}
-    {% endif %}
-
-    {% if show_catalog_filters and technology_options %}
-    {% include "includes/_accordion.html" with summary=technology_facet_label body_template="content/_workshop_technology_facet_body.html" testid="workshop-facet-technology" open=technology_facet_open details_extra_class="mb-6" %}
-    {% endif %}
-
-    {% if show_catalog_filters and has_published_workshops and has_active_filters %}
-    <div class="mb-6 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-secondary/30 px-4 py-3 text-sm" data-testid="workshop-active-filters">
-      <span class="font-medium text-foreground">Filters</span>
-      {% if selected_filter_summary %}
-      <span class="text-muted-foreground" data-testid="workshop-selected-filter-summary">{{ selected_filter_summary }}</span>
       {% endif %}
-      {% if selected_access != "all" %}
-      <span class="inline-flex min-h-[36px] items-center rounded-full bg-background px-3 py-1 text-xs font-medium text-foreground" data-testid="workshop-active-access">
-        {{ selected_access_label }}
-      </span>
-      {% endif %}
-      {% if selected_skill_level %}
-      <span class="inline-flex min-h-[36px] items-center rounded-full bg-background px-3 py-1 text-xs font-medium text-foreground" data-testid="workshop-active-skill">
-        {{ selected_skill_level_label }}
-      </span>
-      {% endif %}
-      {% for tool in selected_tool_filters %}
-      <a
-        href="{{ tool.url }}"
-        class="inline-flex min-h-[36px] items-center gap-1 rounded-full border border-accent/30 bg-background px-3 py-1 text-xs text-accent transition-colors hover:border-accent hover:bg-accent/10"
-        data-testid="workshop-active-tool"
-        aria-label="Remove {{ tool.label }} tool filter"
-      >
-        {{ tool.label }}
-        <i data-lucide="x" class="h-3 w-3"></i>
-      </a>
-      {% endfor %}
-      {% for tag_filter in selected_tag_filters %}
-      <a
-        href="{% tag_remove_url base_path selected_tags tag_filter.label catalog_extra_params 2 %}"
-        class="inline-flex min-h-[36px] items-center gap-1 rounded-full bg-background px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
-        data-testid="workshop-active-tag"
-        aria-label="{{ tag_filter.remove_label }}"
-      >
-        {{ tag_filter.label }}
-        <i data-lucide="x" class="h-3 w-3"></i>
-      </a>
-      {% endfor %}
     </div>
     {% endif %}
 
     {% if workshops %}
+    {% if show_catalog_filters %}
     {% comment %}
-    Workshop cards render through the shared content/_content_card.html
-    component (the same card books use), with the workshop-specific chrome
-    supplied as card_*_template partials. data-workshop-slug is threaded through
-    card_extra_attrs.
+    The full archive uses the shared content-card owner in editorial-row mode:
+    one calm scanning column, subtle dividers, and no repeated box wall. Real
+    authored media remains conditional; coverless workshops reserve no slot.
+    {% endcomment %}
+    <div class="border-t border-border/70" data-testid="workshops-list">
+      {% for workshop in workshops %}
+      {% include "content/_content_card.html" with card_url=workshop.get_absolute_url card_testid="workshop-card" card_anchor_testid="workshop-card-link" card_body_template="content/_workshop_card_body.html" card_badge_template="content/_workshop_card_badges.html" card_media_template="content/_workshop_card_media.html" card_media_present=workshop.card_image_url card_editorial=True card_title=workshop.title card_title_testid="workshop-card-title" card_heading_tag="h3" card_arrow_testid="workshop-card-arrow" card_aria_label=workshop.title card_extra_attrs='data-workshop-slug="'|add:workshop.slug|add:'"' %}
+      {% endfor %}
+    </div>
+    {% else %}
+    {% comment %}
+    The short landing-page preview remains a compact, left-aligned grid in the
+    landing page's 5xl frame. Only the standalone archive becomes a 3xl feed.
     {% endcomment %}
     <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" data-testid="workshops-grid">
       {% for workshop in workshops %}
       {% include "content/_content_card.html" with card_url=workshop.get_absolute_url card_testid="workshop-card" card_anchor_testid="workshop-card-link" card_body_template="content/_workshop_card_body.html" card_badge_template="content/_workshop_card_badges.html" card_media_template="content/_workshop_card_media.html" card_compact=True card_aria_label=workshop.title card_extra_attrs='data-workshop-slug="'|add:workshop.slug|add:'"' %}
       {% endfor %}
     </div>
+    <a href="{{ catalog_all_url }}" class="mt-6 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="view-all-workshops-preview-cta">
+      See all workshops
+      <i data-lucide="arrow-right" class="h-4 w-4"></i>
+    </a>
+    {% endif %}
     {% elif suppress_empty_state %}
     {% comment %}
     /workshops features the latest workshop as a prominent card above this

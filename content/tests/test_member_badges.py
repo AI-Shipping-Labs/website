@@ -150,7 +150,7 @@ class MemberBadgeTemplateUsageTest(SimpleTestCase):
     def test_first_batch_templates_load_member_badges(self):
         template_paths = [
             'templates/accounts/account.html',
-            'templates/content/blog_list.html',
+            'templates/content/_blog_card_badges.html',
             'templates/content/courses_list.html',
             # Issue #1339 — the project card rebased onto _content_card.html; its
             # member badges now live in the dedicated badge partial.

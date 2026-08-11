@@ -2,8 +2,8 @@
 {% load seo_tags %}
 
 {% block title %}Hands-on AI Workshops | AI Shipping Labs{% endblock %}
-{% block meta_description %}Hands-on AI workshops with recordings, step-by-step writeups, tutorial pages, code, and materials for builders shipping real projects.{% endblock %}
-{% block page_head_metadata %}{% page_seo_tags "Hands-on AI Workshops | AI Shipping Labs" "Hands-on AI workshops with recordings, step-by-step writeups, tutorial pages, code, and materials for builders shipping real projects." "/workshops" %}{% endblock %}
+{% block meta_description %}Hands-on AI workshops with recordings, step-by-step tutorials, code, and materials for builders shipping real projects.{% endblock %}
+{% block page_head_metadata %}{% page_seo_tags "Hands-on AI Workshops | AI Shipping Labs" "Hands-on AI workshops with recordings, step-by-step tutorials, code, and materials for builders shipping real projects." "/workshops" %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}
@@ -16,21 +16,16 @@
           Hands-on AI workshops
         </h1>
         <p class="mt-4 max-w-3xl text-lg text-muted-foreground">
-          Practical AI engineering sessions for builders who learn by building. Each workshop turns a concrete project into a guided path with the recording, step-by-step writeups or tutorial pages, and runnable code or materials when they are provided. Workshops start as live sessions on the events calendar; after the session, the recording, tutorial pages, and materials move here so you can build at your own pace.
+          Practical AI engineering sessions for builders who learn by building. In each workshop we turn an idea into a concrete guided path with the recording, a step-by-step tutorial, and runnable code or materials when they are provided.
         </p>
       </header>
 
-      {% comment %}
-      Latest workshop — a prominent featured card, mirroring the /books
-      "Reading now" featured card. Renders through the same shared
-      content/_content_card.html component as the grid cards below.
-      {% endcomment %}
       {% if featured_workshop %}
       <div class="mt-12" data-testid="workshops-featured">
-        <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">Latest workshop</h2>
+        <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">Latest workshops</h2>
         <div class="mt-5">
           {% with workshop=featured_workshop %}
-          {% include "content/_content_card.html" with card_url=featured_workshop.get_absolute_url card_testid="featured-workshop-card" card_anchor_testid="featured-workshop-card-link" card_body_template="content/_workshop_card_body.html" card_badge_template="content/_workshop_card_badges.html" card_media_template="content/_workshop_card_media.html" card_aria_label=featured_workshop.title card_extra_attrs='data-workshop-slug="'|add:featured_workshop.slug|add:'"' %}
+          {% include "content/_content_card.html" with card_url=featured_workshop.get_absolute_url card_testid="featured-workshop-card" card_anchor_testid="featured-workshop-card-link" card_body_template="content/_workshop_card_body.html" card_badge_template="content/_workshop_card_badges.html" card_media_template="content/_workshop_card_media.html" card_featured=True card_aria_label=featured_workshop.title card_extra_attrs='data-workshop-slug="'|add:featured_workshop.slug|add:'"' %}
           {% endwith %}
         </div>
       </div>
@@ -38,10 +33,10 @@
     </div>
   </section>
 
-  {% include "content/_workshops_catalog.html" with hide_catalog_header=True suppress_empty_state=featured_workshop %}
+  {% include "content/_workshops_catalog.html" with suppress_empty_state=featured_workshop hide_catalog_header=True %}
 
   {# How workshops work — static value-prop cards, mirroring the /books "How it works" trio. #}
-  <section class="py-8 sm:py-16 lg:py-24">
+  <section class="pt-0 pb-8 sm:pb-16 lg:pb-24">
     <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
       <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">How workshops work</h2>
       <div class="mt-5 grid gap-6 sm:grid-cols-3" aria-label="Workshop value points">
@@ -52,8 +47,8 @@
         </div>
         <div class="{% include 'content/_info_card_classes.html' %} bg-card">
           <div class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent"><i data-lucide="play-square" class="h-5 w-5" aria-hidden="true"></i></div>
-          <h3 class="mt-4 text-lg font-semibold text-foreground">Replay and writeups</h3>
-          <p class="mt-1 text-sm text-muted-foreground">Use recordings alongside step-by-step pages when you want to revisit the work.</p>
+          <h3 class="mt-4 text-lg font-semibold text-foreground">Replay and tutorials</h3>
+          <p class="mt-1 text-sm text-muted-foreground">Use recordings alongside step-by-step tutorials when you want to revisit the work.</p>
         </div>
         <div class="{% include 'content/_info_card_classes.html' %} bg-card">
           <div class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent"><i data-lucide="package-check" class="h-5 w-5" aria-hidden="true"></i></div>

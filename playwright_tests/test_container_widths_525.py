@@ -323,23 +323,20 @@ LISTINGS_WIDE = [
 # 2026-08-06 addendum (issue #1340): at 7xl their content filled only ~55-70%
 # of the column and the right half read empty. Each now aligns with its own
 # detail page. See _docs/audits/2026-07-21-container-widths.md -> "2026-08-06
-# addendum". /workshops here is the hero wrapper (the first mx-auto max-w-* in
-# <main>); the included catalog grid below it stays max-w-7xl.
+# addendum". /workshops here is the 5xl landing-page hero; its standalone
+# archive and the other text-first editorial feeds use Reader width below.
 LISTINGS_NARROW = [
-    ('/blog', 'max-w-5xl', None),
     ('/tutorials', 'max-w-5xl', None),
     ('/downloads', 'max-w-5xl', None),
     ('/workshops', 'max-w-5xl', None),
     ('/events', 'max-w-5xl', None),
     ('/vote', 'max-w-5xl', None),
     ('/tags', 'max-w-5xl', None),
-    ('/interview', 'max-w-5xl', None),
 ]
 
 DETAIL_MEDIUM = [
     ('/courses/{course_slug}', 'max-w-5xl'),
     ('/courses/{course_slug}/{module_slug}', 'max-w-5xl'),
-    ('/workshops/{workshop_slug}', 'max-w-5xl'),
     ('{event_path}', 'max-w-5xl'),
     ('/vote/{poll_uuid}', 'max-w-5xl'),
 ]
@@ -347,7 +344,11 @@ DETAIL_MEDIUM = [
 READER_NARROW = [
     ('/sprints', 'max-w-3xl'),
     ('/sprints/{sprint_slug}', 'max-w-3xl'),
+    ('/blog', 'max-w-3xl'),
     ('/blog/{article_slug}', 'max-w-3xl'),
+    ('/interview', 'max-w-3xl'),
+    ('/workshops/catalog', 'max-w-3xl'),
+    ('/workshops/{workshop_slug}', 'max-w-3xl'),
     ('/tutorials/{tutorial_slug}', 'max-w-3xl'),
     ('/projects/{project_slug}', 'max-w-3xl'),
     ('/about', 'max-w-3xl'),

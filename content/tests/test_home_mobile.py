@@ -1,8 +1,12 @@
 import re
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
 from django.test import TestCase
+from django.utils import timezone
+
+from events.models import Event
 
 
 class HomepageMobileLayoutTest(TestCase):
@@ -46,21 +50,29 @@ class HomepageMobileLayoutTest(TestCase):
 
     # -- View all links have adequate tap targets --
 
-    def test_view_all_past_recordings_link_has_tap_target(self):
-        """Past recordings link should have py-2 and px-3 for adequate mobile tap target."""
+    def test_view_all_upcoming_events_link_has_tap_target(self):
+        """The upcoming-events CTA uses the shared touch-sized button."""
+        Event.objects.create(
+            title="Upcoming mobile event",
+            slug="upcoming-mobile-event",
+            start_datetime=timezone.now() + timedelta(days=1),
+            status="upcoming",
+            published=True,
+        )
         content = self._get_homepage_content()
-        match = re.search(r'<a[^>]*href="/events\?filter=past"[^>]*>', content)
-        self.assertIsNotNone(match, "View all past recordings link not found")
-        self.assertIn("py-2", match.group(0))
-        self.assertIn("px-3", match.group(0))
+        match = re.search(r'<a[^>]*href="/events\?filter=upcoming"[^>]*>', content)
+        self.assertIsNotNone(match, "View all upcoming events link not found")
+        self.assertIn("min-h-[44px]", match.group(0))
 
     def test_view_all_posts_link_has_tap_target(self):
-        """View all posts link should have py-2 and px-3 for adequate mobile tap target."""
+        """View all posts uses the shared touch-sized button."""
         content = self._get_homepage_content()
-        match = re.search(r'<a[^>]*href="/blog"[^>]*>', content)
+        match = re.search(
+            r'<a[^>]*href="/blog"[^>]*data-testid="home-blog-link"[^>]*>',
+            content,
+        )
         self.assertIsNotNone(match, "View all posts link not found")
-        self.assertIn("py-2", match.group(0))
-        self.assertIn("px-3", match.group(0))
+        self.assertIn("min-h-[44px]", match.group(0))
 
     def test_view_all_workshops_is_a_touch_sized_button(self):
         """The workshop collection CTA uses the shared touch-sized button."""

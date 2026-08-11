@@ -9,7 +9,7 @@ from content.models import Article, Course, CuratedLink, Workshop
 
 
 class GuestLayoutPolish1190Test(TestCase):
-    def test_blog_cards_always_render_thumbnail_slot_with_fallback(self):
+    def test_blog_cards_use_text_first_editorial_rows(self):
         Article.objects.create(
             title="Covered article",
             slug="covered-1190",
@@ -32,10 +32,11 @@ class GuestLayoutPolish1190Test(TestCase):
         html = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(html.count('data-testid="blog-card-thumbnail"'), 2)
+        self.assertEqual(html.count('data-testid="blog-card-thumbnail"'), 0)
         self.assertEqual(
-            html.count('data-testid="blog-card-thumbnail-fallback"'), 1,
+            html.count('data-testid="blog-card-thumbnail-fallback"'), 0,
         )
+        self.assertEqual(html.count('data-testid="blog-card"'), 2)
         # Per-card raw-tag chips were replaced by a non-clickable primary-topic
         # eyebrow (Fable redesign); rag maps to the AI Engineering topic.
         self.assertContains(response, 'data-testid="blog-card-topic"')

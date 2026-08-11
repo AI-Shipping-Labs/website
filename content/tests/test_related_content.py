@@ -136,6 +136,7 @@ class RelatedContentBuilderTest(TestCase):
             status='completed',
             published=True,
             tags=['agents'],
+            materials=[{'label': 'Notes', 'url': 'https://example.com/notes'}],
         )
 
         rail = build_related_content_rail(current)
@@ -440,6 +441,7 @@ class RelatedContentPairDedupTest(TestCase):
             status='completed',
             published=True,
             tags=['agents'],
+            materials=[{'label': 'Notes', 'url': 'https://example.com/notes'}],
         )
         Workshop.objects.create(
             title='Standalone Workshop',
@@ -510,6 +512,7 @@ class RelatedContentPairDedupTest(TestCase):
             status='completed',
             published=True,
             tags=['dates'],
+            materials=[{'label': 'Notes', 'url': 'https://example.com/notes'}],
         )
         Workshop.objects.create(
             title='Single Digit Workshop',

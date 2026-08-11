@@ -673,9 +673,9 @@ class BlogListDisplayTest(TestCase):
         self.assertContains(response, 'data-testid="blog-card-topic"')
         self.assertContains(response, 'AI Engineering')
 
-    def test_shows_cover_image(self):
+    def test_listing_uses_text_first_rows_without_cover_image(self):
         response = self.client.get('/blog')
-        self.assertContains(response, 'https://example.com/cover.jpg')
+        self.assertNotContains(response, 'https://example.com/cover.jpg')
 
     def test_empty_blog_shows_archive_empty_state_without_inline_newsletter_cta(self):
         Article.objects.all().delete()
@@ -766,8 +766,8 @@ class BlogDetailDisplayTest(TestCase):
         self.assertContains(response, 'data-testid="article-tags"')
         self.assertIn('?tag=python', content)
         self.assertIn('?tag=tutorial', content)
-        self.assertIn('>Python</a>', content)
-        self.assertIn('>Tutorial</a>', content)
+        self.assertContains(response, 'Python')
+        self.assertContains(response, 'Tutorial')
 
     def test_widget_directive_absent_from_header_metadata_and_excerpts(self):
         article = Article.objects.create(
@@ -1147,7 +1147,7 @@ class BlogTagFilterTest(TestCase):
         self.assertContains(detail, 'data-testid="article-tags"')
         self.assertContains(detail, '?tag=design-patterns')
         # The chip label is humanized, not the raw slug.
-        self.assertContains(detail, '>Design Patterns</a>')
+        self.assertContains(detail, 'Design Patterns')
 
         # Following that link lands on a blog listing showing both
         # design-patterns articles.

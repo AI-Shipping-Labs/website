@@ -1,13 +1,11 @@
-"""E2E: dismissable / stale dashboard cards (issue #1129).
+"""E2E: dashboard getting-started and sprint lifecycle surfaces.
 
 Covers the user-visible contract for the three returning-member dashboard
 cleanups, all rendered from ``templates/content/dashboard.html``:
 
-- Part 1: the onboarding nudge has a dismiss control; dismissing it removes
-  the card without a navigation and it stays gone across reloads/sessions
-  (persisted server-side, not localStorage).
-- Part 2: the Join-Slack card has a dismiss control ONLY on the dashboard;
-  dismissing it does not touch the /account/ Slack surface.
+- Part 1: unfinished onboarding remains a non-dismissible checklist row.
+- Part 2: Join Slack is another non-dismissible checklist row while the
+  account page keeps its independent Slack access surface.
 - Part 3: a plan on an ended sprint is framed as a past plan (``Ended``
   label, ``Your latest sprint plan`` heading), while an active-sprint plan
   keeps the live framing.
@@ -85,7 +83,9 @@ def _create_plan(email, *, start_offset_days, duration_weeks, status):
 @pytest.mark.django_db(transaction=True)
 class TestOnboardingDismiss:
     @pytest.mark.core
-    def test_dismiss_hides_and_persists(self, django_server, browser):
+    def test_unfinished_onboarding_has_no_close_control(
+        self, django_server, browser,
+    ):
         _ensure_tiers()
         _create_user("ob-dismiss@test.com", tier_slug="basic")
         ctx = _auth_context(browser, "ob-dismiss@test.com")
@@ -94,30 +94,16 @@ class TestOnboardingDismiss:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
         prompt = page.locator('[data-testid="onboarding-prompt"]')
         prompt.wait_for(state="visible")
-        dismiss = page.locator('[data-testid="onboarding-prompt-dismiss"]')
-        assert dismiss.count() == 1
-        _shot(page, "onboarding_before_dismiss")
-
-        dismiss.click()
-        # Removed without a navigation (URL unchanged).
-        prompt.wait_for(state="detached")
-        assert page.url.rstrip("/") == django_server.rstrip("/")
-
-        # Persisted server-side: a full reload keeps it gone (this is the
-        # actual behaviour under test — persistence across a real reload,
-        # not a JS-only hide). Kept config-independent: we do not navigate
-        # into the /onboarding/ redirect chain here, whose target depends
-        # on global AI-onboarding config that other core tests mutate.
-        page.reload(wait_until="domcontentloaded")
-        assert page.locator('[data-testid="onboarding-prompt"]').count() == 0
-        _shot(page, "onboarding_after_reload")
-
-        # Persisted on the user row (the dismiss only hides this nudge; the
-        # member keeps every other onboarding entry point).
-        assert "onboarding_prompt" in _get_dismissals("ob-dismiss@test.com")
+        assert page.locator(
+            '[data-testid="free-activation-dismiss"]'
+        ).count() == 0
+        assert page.locator('[data-testid="onboarding-prompt-cta"]').count() == 1
+        _shot(page, "onboarding_checklist")
 
     @pytest.mark.core
-    def test_predismissed_absent_on_first_render(self, django_server, browser):
+    def test_legacy_predismissal_does_not_hide_unfinished_onboarding(
+        self, django_server, browser,
+    ):
         _ensure_tiers()
         _create_user("ob-pre@test.com", tier_slug="basic")
         _set_dismissals("ob-pre@test.com", ["onboarding_prompt"])
@@ -125,11 +111,10 @@ class TestOnboardingDismiss:
         page = ctx.new_page()
 
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
-        # Absent on the very first render (server-side, not shown-then-hidden).
-        assert page.locator('[data-testid="onboarding-prompt"]').count() == 0
+        assert page.locator('[data-testid="onboarding-prompt"]').count() == 1
 
     @pytest.mark.core
-    def test_not_dismissed_shows_cta_and_dismiss(self, django_server, browser):
+    def test_not_dismissed_shows_cta_without_close(self, django_server, browser):
         _ensure_tiers()
         _create_user("ob-show@test.com", tier_slug="basic")
         ctx = _auth_context(browser, "ob-show@test.com")
@@ -140,16 +125,17 @@ class TestOnboardingDismiss:
             state="visible",
         )
         assert page.locator('[data-testid="onboarding-prompt-cta"]').count() == 1
-        assert (
-            page.locator('[data-testid="onboarding-prompt-dismiss"]').count()
-            == 1
-        )
+        assert page.locator(
+            '[data-testid="free-activation-dismiss"]'
+        ).count() == 0
 
 
 @pytest.mark.django_db(transaction=True)
 class TestSlackDismiss:
     @pytest.mark.core
-    def test_dashboard_dismiss_only(self, django_server, browser, settings):
+    def test_dashboard_slack_is_checklist_task_and_account_link_remains(
+        self, django_server, browser, settings,
+    ):
         settings.SLACK_INVITE_URL = SLACK_INVITE_URL
         _ensure_tiers()
         _create_user("sl-dismiss@test.com", tier_slug="main")
@@ -159,22 +145,15 @@ class TestSlackDismiss:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
         join = page.locator('[data-testid="slack-account-card-join"]')
         join.wait_for(state="visible")
-        dismiss = page.locator('[data-testid="slack-account-card-dismiss"]')
-        assert dismiss.count() == 1
-        _shot(page, "slack_before_dismiss")
+        assert page.locator(
+            '[data-testid="slack-account-card-dismiss"]'
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="free-activation-dismiss"]'
+        ).count() == 0
+        _shot(page, "slack_checklist_task")
 
-        dismiss.click()
-        page.locator('[data-testid="slack-account-card"]').wait_for(
-            state="detached",
-        )
-
-        # Gone on dashboard reload.
-        page.reload(wait_until="domcontentloaded")
-        assert (
-            page.locator('[data-testid="slack-account-card-join"]').count() == 0
-        )
-
-        # /account/ Slack card is untouched — still shown, no dismiss control.
+        # /account/ keeps the independent Slack access surface.
         page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
         assert (
             page.locator('[data-testid="slack-account-card-join"]').count() == 1
@@ -246,8 +225,8 @@ class TestSprintPlanLifecycle:
         card.wait_for(state="visible")
         _shot(page, "sprint_ended")
 
-        heading = page.locator('[data-testid="account-sprint-plan-heading"]')
-        assert "Your latest sprint plan" in heading.inner_text()
+        eyebrow = page.locator('[data-testid="account-sprint-plan-eyebrow"]')
+        assert "your latest sprint plan" in eyebrow.inner_text().lower()
         status = page.locator('[data-testid="account-sprint-plan-status"]')
         assert "Ended" in status.inner_text()
         assert (
@@ -272,11 +251,11 @@ class TestSprintPlanLifecycle:
         page = ctx.new_page()
 
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
-        heading = page.locator('[data-testid="account-sprint-plan-heading"]')
-        heading.wait_for(state="visible")
+        eyebrow = page.locator('[data-testid="account-sprint-plan-eyebrow"]')
+        eyebrow.wait_for(state="visible")
         _shot(page, "sprint_active")
-        assert "Your sprint plan" in heading.inner_text()
-        assert "latest" not in heading.inner_text()
+        assert "your sprint plan" in eyebrow.inner_text().lower()
+        assert "latest" not in eyebrow.inner_text().lower()
         status = page.locator('[data-testid="account-sprint-plan-status"]')
         assert "Active" in status.inner_text()
         assert (

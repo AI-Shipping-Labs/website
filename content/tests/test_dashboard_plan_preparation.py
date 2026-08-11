@@ -159,7 +159,7 @@ class DashboardPlanPreparationStateTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'data-testid="onboarding-prompt"')
         self.assertNotContains(response, "New unshared staff draft")
 
-    def test_any_existing_plan_suppresses_onboarding_prompt_before_submit(self):
+    def test_existing_plan_does_not_suppress_onboarding_before_submit(self):
         user = self._member("draft-before-onboarding@test.com")
         sprint = self._sprint("draft-before-onboarding", status="completed")
         Plan.objects.create(member=user, sprint=sprint)
@@ -169,7 +169,7 @@ class DashboardPlanPreparationStateTest(TierSetupMixin, TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context["has_any_plan"])
-        self.assertNotContains(response, 'data-testid="onboarding-prompt"')
+        self.assertContains(response, 'data-testid="onboarding-prompt"')
         self.assertNotContains(
             response, 'data-testid="dashboard-plan-preparing-card"',
         )

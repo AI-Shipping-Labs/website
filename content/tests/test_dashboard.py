@@ -11,6 +11,7 @@ Covers:
 - Empty states for all sections
 """
 
+import json
 import re
 from datetime import UTC, date, datetime, time, timedelta
 from urllib.parse import urlparse
@@ -22,6 +23,7 @@ from django.utils import timezone
 from freezegun import freeze_time
 
 from accounts.models import TierOverride
+from bookclub.models import BOOK_STATUS_CURRENT, Book
 from content.access import LEVEL_PREMIUM
 from content.models import (
     Article,
@@ -85,7 +87,7 @@ class HomepageRoutingTest(TierSetupMixin, TestCase):
         self.client.login(email='test@example.com', password='testpass123')
         response = self.client.get('/')
         content = response.content.decode()
-        self.assertIn('Continue learning', content)
+        self.assertIn('data-testid="dashboard-commitment-zones"', content)
         self.assertIn('Welcome back, Alice', content)
 
 
@@ -212,12 +214,11 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
     def test_empty_state_when_no_courses_in_progress(self):
         response = self.client.get('/')
         content = response.content.decode()
-        self.assertIn('No courses or workshops in progress yet', content)
-        self.assertIn('Browse courses', content)
-        self.assertIn('Browse workshops', content)
-        self.assertIn('data-testid="member-empty-state"', content)
-        self.assertIn('href="/courses"', content)
-        self.assertIn('href="/workshops"', content)
+        self.assertEqual(response.context['in_progress_learning'], [])
+        self.assertNotIn(
+            'data-testid="dashboard-continue-learning-section"', content,
+        )
+        self.assertNotIn('No courses or workshops in progress yet', content)
 
     def test_shows_in_progress_course(self):
         # Enroll + complete 2 of 4 units
@@ -276,7 +277,9 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         content = response.content.decode()
         self.assertNotIn('AI Basics', content)
-        self.assertIn('No courses or workshops in progress yet', content)
+        self.assertNotIn(
+            'data-testid="dashboard-continue-learning-section"', content,
+        )
 
     def test_continue_button_links_to_next_unfinished_unit(self):
         # Complete units 1-3 of 4 → Continue should link to unit 4.
@@ -312,8 +315,8 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         self.assertEqual(item['next_unit'], self.units[1])
         self.assertContains(response, self.units[1].get_absolute_url())
 
-    def test_continue_button_aria_label_names_module_and_unit(self):
-        # Aria label gives screen-reader users the destination unit name.
+    def test_continue_card_aria_label_names_course(self):
+        # The whole learning row is one link with the course as its name.
         self._enroll(self.user, self.course)
         now = timezone.now()
         UserCourseProgress.objects.create(
@@ -321,8 +324,7 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
             completed_at=now,
         )
         response = self.client.get('/')
-        # Next unfinished unit is units[1] = "Unit 2" in "Module 1".
-        expected_label = 'aria-label="Continue with Module 1 — Unit 2"'
+        expected_label = 'aria-label="AI Basics"'
         self.assertContains(response, expected_label)
 
     def test_fully_completed_course_stays_filtered_from_in_progress(self):
@@ -478,7 +480,7 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         self.assertNotIn('Recent Course 3', content)
         self.assertContains(
             response,
-            '2 more started items hidden here',
+            '2 more started items.',
         )
         self.assertContains(
             response,
@@ -599,13 +601,13 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
     def test_empty_state_when_no_events(self):
         response = self.client.get('/')
         content = response.content.decode()
-        self.assertIn('No upcoming events', content)
-        self.assertIn('Browse events', content)
-        self.assertIn('data-testid="member-empty-state"', content)
-        self.assertIn('href="/events"', content)
+        self.assertEqual(response.context['upcoming_events'], [])
+        self.assertEqual(response.context['dashboard_upcoming_events'], [])
+        self.assertNotIn('data-testid="dashboard-commitment-list"', content)
+        self.assertNotIn('No upcoming events', content)
 
     def test_shows_registered_upcoming_events(self):
-        future = timezone.now() + timedelta(days=3)
+        future = timezone.now() + timedelta(hours=3)
         event = Event.objects.create(
             slug='workshop-1', title='AI Workshop',
             start_datetime=future, status='upcoming',
@@ -616,7 +618,7 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'AI Workshop')
 
     def test_shows_event_date(self):
-        future = timezone.now() + timedelta(days=3)
+        future = timezone.now() + timedelta(hours=3)
         event = Event.objects.create(
             slug='dated-event', title='Dated Event',
             start_datetime=future, status='upcoming',
@@ -634,7 +636,7 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         event = Event.objects.create(
             slug='berlin-dashboard-event',
             title='Berlin Dashboard Event',
-            start_datetime=datetime(2026, 6, 24, 16, 0, tzinfo=UTC),
+            start_datetime=datetime(2026, 6, 19, 16, 0, tzinfo=UTC),
             status='upcoming',
         )
         EventRegistration.objects.create(user=self.user, event=event)
@@ -643,13 +645,13 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
 
         self.assertContains(
             response,
-            'Wed, Jun 24, 2026, 18:00 Europe/Berlin',
+            'Fri, Jun 19, 2026, 18:00 Europe/Berlin',
         )
         self.assertEqual(
             response.context['upcoming_events'][0].dashboard_formatted_start,
-            'Wed, Jun 24, 2026, 18:00 Europe/Berlin',
+            'Fri, Jun 19, 2026, 18:00 Europe/Berlin',
         )
-        self.assertNotContains(response, 'June 24, 2026 at 16:00 UTC')
+        self.assertNotContains(response, 'June 19, 2026 at 16:00 UTC')
 
     @freeze_time('2026-06-17T12:00:00Z')
     def test_event_date_falls_back_to_explicit_utc_without_valid_timezone(self):
@@ -658,14 +660,14 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         event = Event.objects.create(
             slug='utc-dashboard-event',
             title='UTC Dashboard Event',
-            start_datetime=datetime(2026, 6, 24, 16, 0, tzinfo=UTC),
+            start_datetime=datetime(2026, 6, 19, 16, 0, tzinfo=UTC),
             status='upcoming',
         )
         EventRegistration.objects.create(user=self.user, event=event)
 
         response = self.client.get('/')
 
-        self.assertContains(response, 'Wed, Jun 24, 2026, 16:00 UTC')
+        self.assertContains(response, 'Fri, Jun 19, 2026, 16:00 UTC')
         self.assertNotContains(response, 'Europe/Berlin')
 
     def test_does_not_show_past_events(self):
@@ -679,16 +681,19 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         self.assertNotContains(response, 'Past Event')
 
-    def test_does_not_show_unregistered_events(self):
-        future = timezone.now() + timedelta(days=3)
+    def test_unregistered_event_is_not_in_your_week(self):
+        future = timezone.now() + timedelta(hours=3)
         Event.objects.create(
             slug='other-event', title='Other Event',
-            start_datetime=future, status='upcoming',
+            start_datetime=future, status='upcoming', published=True,
         )
         response = self.client.get('/')
-        self.assertNotContains(response, 'Other Event')
+        self.assertEqual(response.context['dashboard_upcoming_events'], [])
+        self.assertContains(response, 'Other Event')
+        self.assertContains(response, 'data-feed-kind="event"')
 
-    def test_max_3_events(self):
+    @freeze_time('2026-08-11T10:00:00Z')
+    def test_shows_all_registered_events_through_end_of_week(self):
         now = timezone.now()
         for i in range(5):
             event = Event.objects.create(
@@ -700,13 +705,14 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
 
         response = self.client.get('/')
         content = response.content.decode()
-        # Should show first 3 (soonest)
-        self.assertIn('Event 0', content)
-        self.assertIn('Event 1', content)
-        self.assertIn('Event 2', content)
-        self.assertNotIn('Event 3', content)
-        self.assertNotIn('Event 4', content)
+        self.assertEqual(
+            [event.title for event in response.context['dashboard_upcoming_events']],
+            [f'Event {i}' for i in range(5)],
+        )
+        for i in range(5):
+            self.assertIn(f'Event {i}', content)
 
+    @freeze_time('2026-08-11T10:00:00Z')
     def test_collapses_registered_series_to_earliest_occurrence(self):
         now = timezone.now()
         series = EventSeries.objects.create(
@@ -729,20 +735,13 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
 
         response = self.client.get('/')
 
-        rows = response.context['upcoming_events']
+        rows = response.context['dashboard_upcoming_events']
         self.assertEqual([event.pk for event in rows], [occurrences[0].pk])
         self.assertContains(response, 'LLM Office Hours Session 1')
         self.assertNotContains(response, 'LLM Office Hours Session 2')
         self.assertNotContains(response, 'LLM Office Hours Session 3')
-        self.assertContains(response, 'data-testid="dashboard-event-series-badge"')
-        self.assertContains(
-            response,
-            'data-testid="dashboard-event-series-see-more"',
-        )
-        self.assertContains(
-            response,
-            f'href="{series.get_absolute_url()}"',
-        )
+        self.assertContains(response, 'Event series')
+        self.assertContains(response, '2 more sessions')
 
     @freeze_time('2026-06-17T12:00:00Z')
     def test_collapsed_series_date_uses_preferred_timezone_with_weekday(self):
@@ -754,8 +753,8 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
             start_time=time(18, 0),
         )
         starts = [
-            datetime(2026, 6, 24, 16, 0, tzinfo=UTC),
-            datetime(2026, 7, 1, 16, 0, tzinfo=UTC),
+            datetime(2026, 6, 19, 16, 0, tzinfo=UTC),
+            datetime(2026, 6, 26, 16, 0, tzinfo=UTC),
         ]
         for index, start_datetime in enumerate(starts, start=1):
             event = Event.objects.create(
@@ -774,10 +773,11 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'LLM Series Timezone Session 2')
         self.assertContains(
             response,
-            'Wed, Jun 24, 2026, 18:00 Europe/Berlin',
+            'Fri, Jun 19, 2026, 18:00 Europe/Berlin',
         )
 
-    def test_applies_limit_after_collapsing_series(self):
+    @freeze_time('2026-08-10T10:00:00Z')
+    def test_shows_entire_week_after_collapsing_series(self):
         now = timezone.now()
         series = EventSeries.objects.create(
             name='Dashboard Series', slug='dashboard-series',
@@ -815,7 +815,10 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
             EventRegistration.objects.create(user=self.user, event=event)
 
         response = self.client.get('/')
-        titles = [event.title for event in response.context['upcoming_events']]
+        titles = [
+            event.title
+            for event in response.context['dashboard_upcoming_events']
+        ]
 
         self.assertEqual(
             titles,
@@ -823,10 +826,11 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
                 'Dashboard Series Session 1',
                 'Standalone After Series 1',
                 'Standalone After Series 2',
+                'Standalone After Series 3',
             ],
         )
         self.assertNotContains(response, 'Dashboard Series Session 2')
-        self.assertNotContains(response, 'Standalone After Series 3')
+        self.assertContains(response, 'Standalone After Series 3')
 
     def test_single_registered_series_occurrence_has_marker_without_see_more(self):
         series = EventSeries.objects.create(
@@ -846,10 +850,10 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
 
         self.assertContains(response, 'One Session Series Event')
-        self.assertContains(response, 'data-testid="dashboard-event-series-badge"')
+        self.assertContains(response, 'Event series')
         self.assertNotContains(
             response,
-            'data-testid="dashboard-event-series-see-more"',
+            '1 more session',
         )
 
 
@@ -870,10 +874,9 @@ class RecentContentTest(TierSetupMixin, TestCase):
     def test_empty_state_when_no_content(self):
         response = self.client.get('/')
         content = response.content.decode()
-        self.assertIn('No content available yet', content)
-        self.assertIn('Browse blog', content)
-        self.assertIn('data-testid="member-empty-state"', content)
-        self.assertIn('href="/blog"', content)
+        self.assertEqual(response.context['recent_content'], [])
+        self.assertNotIn('No content available yet', content)
+        self.assertNotIn('data-testid="recent-content-card"', content)
 
     def test_shows_published_articles(self):
         Article.objects.create(
@@ -884,23 +887,25 @@ class RecentContentTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         self.assertContains(response, 'New Article')
 
-    def test_shows_published_recordings(self):
+    def test_recordings_are_not_mixed_into_articles(self):
         Event.objects.create(
             title='New Recording', slug='new-recording',
             description='Recording desc', start_datetime=timezone.now(), status='completed', recording_url='https://youtube.com/watch?v=test',
             published=True,
         )
         response = self.client.get('/')
-        self.assertContains(response, 'New Recording')
+        self.assertNotContains(response, 'New Recording')
 
-    def test_does_not_show_gated_content_for_free_user(self):
+    def test_free_user_sees_gated_content_as_upgrade_opportunity(self):
         Article.objects.create(
             title='Premium Article', slug='premium-article',
             description='Premium desc', date=date.today(),
             published=True, required_level=LEVEL_PREMIUM,
         )
         response = self.client.get('/')
-        self.assertNotContains(response, 'Premium Article')
+        self.assertContains(response, 'Premium Article')
+        self.assertContains(response, 'data-feed-locked="true"')
+        self.assertContains(response, 'Unlock with Premium')
 
     def test_shows_gated_content_for_premium_user(self):
         self.user.tier = self.premium_tier
@@ -913,7 +918,7 @@ class RecentContentTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         self.assertContains(response, 'Premium Article')
 
-    def test_max_5_items(self):
+    def test_max_3_articles(self):
         for i in range(8):
             Article.objects.create(
                 title=f'Article {i}', slug=f'article-{i}',
@@ -923,27 +928,27 @@ class RecentContentTest(TierSetupMixin, TestCase):
             )
         response = self.client.get('/')
         content = response.content.decode()
-        # Should show only 5 most recent
+        # The article source contributes only the three most recent entries.
         self.assertIn('Article 0', content)
-        self.assertIn('Article 4', content)
-        self.assertNotIn('Article 5', content)
+        self.assertIn('Article 2', content)
+        self.assertNotIn('Article 3', content)
 
-    def test_mixed_articles_and_recordings_sorted_by_date(self):
+    def test_articles_are_sorted_by_date(self):
         Article.objects.create(
             title='Older Article', slug='older-article',
             description='Desc', date=date.today() - timedelta(days=5),
             published=True,
         )
-        Event.objects.create(
-            title='Newer Recording', slug='newer-recording',
-            description='Desc', start_datetime=timezone.now(), status='completed', recording_url='https://youtube.com/watch?v=test',
+        Article.objects.create(
+            title='Newer Article', slug='newer-article',
+            description='Desc', date=date.today(),
             published=True,
         )
         response = self.client.get('/')
         content = response.content.decode()
-        pos_recording = content.index('Newer Recording')
+        pos_newer = content.index('Newer Article')
         pos_article = content.index('Older Article')
-        self.assertLess(pos_recording, pos_article)
+        self.assertLess(pos_newer, pos_article)
 
 
 # ============================================================
@@ -965,8 +970,9 @@ class ActivePollsTest(TierSetupMixin, TestCase):
     def test_empty_state_when_no_polls(self):
         response = self.client.get('/')
         content = response.content.decode()
-        self.assertIn('No active polls right now', content)
-        self.assertIn('View past polls', content)
+        self.assertEqual(response.context['active_polls'], [])
+        self.assertNotIn('No active polls right now', content)
+        self.assertNotIn('data-feed-kind="poll"', content)
 
     def test_shows_open_poll(self):
         Poll.objects.create(
@@ -1000,9 +1006,11 @@ class ActivePollsTest(TierSetupMixin, TestCase):
             )
         response = self.client.get('/')
         content = response.content.decode()
-        # Should show at most 2 polls
+        # Two polls are available to downstream surfaces, while the home feed
+        # stays social and varied by rendering only the newest one.
+        self.assertEqual(len(response.context['active_polls']), 2)
         poll_count = sum(1 for i in range(4) if f'Poll {i}' in content)
-        self.assertEqual(poll_count, 2)
+        self.assertEqual(poll_count, 1)
 
     def test_does_not_show_expired_poll(self):
         past = timezone.now() - timedelta(days=1)
@@ -1023,17 +1031,32 @@ class QuickActionsTest(TierSetupMixin, TestCase):
     """Test the quick actions section."""
 
     def test_free_user_sees_browse_courses(self):
+        Article.objects.create(
+            title='Feed article', slug='feed-article',
+            description='A useful article', date=date.today(), published=True,
+        )
         User.objects.create_user(
             email='free@example.com', password='testpass',
         )
         self.client.login(email='free@example.com', password='testpass')
         response = self.client.get('/')
-        self.assertContains(response, 'Browse courses')
-        self.assertContains(response, 'Browse workshops')
-        self.assertContains(response, 'Resources')
-        self.assertContains(response, 'Events and recordings')
-        self.assertContains(response, 'Projects')
-        self.assertContains(response, 'Activities')
+        self.assertEqual(
+            [action['title'] for action in response.context['quick_actions']],
+            ['Courses', 'Workshops', 'Events'],
+        )
+        for destination in [
+            'Courses', 'Workshops', 'Events', 'Articles',
+            'Sprints', 'Book Club', 'Polls',
+        ]:
+            self.assertContains(response, destination)
+        destinations = re.search(
+            r'<nav[^>]+data-testid="dashboard-feed-destinations".*?</nav>',
+            response.content.decode(),
+            re.DOTALL,
+        )
+        self.assertIsNotNone(destinations)
+        self.assertNotIn('>Resources<', destinations.group(0))
+        self.assertNotIn('>Projects<', destinations.group(0))
 
     def test_free_user_does_not_see_community(self):
         User.objects.create_user(
@@ -1047,6 +1070,10 @@ class QuickActionsTest(TierSetupMixin, TestCase):
         self.assertNotIn('Connect with other builders', content)
 
     def test_main_user_sees_activity_discovery(self):
+        Article.objects.create(
+            title='Main feed article', slug='main-feed-article',
+            description='A useful article', date=date.today(), published=True,
+        )
         user = User.objects.create_user(
             email='main@example.com', password='testpass',
         )
@@ -1054,7 +1081,8 @@ class QuickActionsTest(TierSetupMixin, TestCase):
         user.save()
         self.client.login(email='main@example.com', password='testpass')
         response = self.client.get('/')
-        self.assertContains(response, 'Discover sprints and community activities')
+        self.assertContains(response, '>Sprints <')
+        self.assertContains(response, 'href="/sprints"')
 
     def test_quick_action_urls_resolve_to_existing_routes(self):
         User.objects.create_user(
@@ -1122,7 +1150,7 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
             min_tier_level=0,
         )
 
-    def test_brand_new_free_member_sees_checklist_before_empty_states(self):
+    def test_brand_new_free_member_sees_checklist_before_unlock_more(self):
         user = User.objects.create_user(
             email='free-activation@test.com',
             password='testpass',
@@ -1137,18 +1165,19 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
         self.assertFalse(response.context['show_onboarding_prompt'])
         content = response.content.decode()
         self.assertIn('data-testid="free-activation-checklist"', content)
+        self.assertNotIn('data-testid="free-activation-dismiss"', content)
         self.assertIn('data-testid="free-plan-teaser"', content)
         self.assertLess(
             content.index('data-testid="free-activation-checklist"'),
-            content.index('data-testid="member-empty-state"'),
+            content.index('data-testid="free-plan-teaser"'),
         )
         self.assertContains(response, 'href="/courses/aihero"')
         self.assertContains(response, 'href="/events"')
-        self.assertContains(response, 'href="/activities#community-sprints"')
+        self.assertContains(response, 'href="/sprints"')
         self.assertContains(response, 'href="/pricing"')
-        self.assertContains(response, 'personal plan')
-        self.assertContains(response, 'sprint with accountability')
-        self.assertContains(response, 'Slack/community support')
+        self.assertContains(
+            response, 'What community members are doing this month',
+        )
 
         for item in response.context['free_activation_checklist_items']:
             path = urlparse(item['url']).path
@@ -1187,12 +1216,13 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
         self.assertFalse(items['sprints']['completed'])
         self.assertContains(
             response,
-            'data-testid="free-activation-complete-ai-hero"',
+            'data-testid="free-activation-completed-action-ai-hero"',
         )
         self.assertContains(
             response,
-            'data-testid="free-activation-complete-events"',
+            'data-testid="free-activation-completed-action-events"',
         )
+        self.assertNotContains(response, '>Done<')
 
         sprint = self._create_active_sprint(slug='engaged-sprint')
         SprintEnrollment.objects.create(sprint=sprint, user=user)
@@ -1202,8 +1232,52 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
             for item in response.context['free_activation_checklist_items']
         }
         self.assertTrue(items['sprints']['completed'])
+        self.assertTrue(response.context['activation_checklist_all_complete'])
+        self.assertContains(
+            response, 'data-testid="free-activation-dismiss"',
+        )
 
-    def test_active_sprint_plan_hides_free_activation_surface(self):
+    def test_member_can_skip_an_individual_checklist_row(self):
+        user = User.objects.create_user(
+            email='free-skip@test.com',
+            password='testpass',
+            tier=self.free_tier,
+        )
+        self._login_user(user)
+
+        initial = self.client.get('/')
+        self.assertContains(
+            initial, 'data-testid="free-activation-skip-ai-hero"',
+        )
+
+        skipped = self.client.post(
+            '/account/api/dismiss-card',
+            data=json.dumps({'card': 'getting_started_skip_ai_hero'}),
+            content_type='application/json',
+        )
+        self.assertEqual(skipped.status_code, 200)
+
+        response = self.client.get('/')
+        items = {
+            item['key']: item
+            for item in response.context['free_activation_checklist_items']
+        }
+        self.assertTrue(items['ai-hero']['completed'])
+        self.assertTrue(items['ai-hero']['skipped'])
+        self.assertFalse(items['events']['completed'])
+        self.assertEqual(response.context['free_activation_completed_count'], 1)
+        self.assertContains(
+            response,
+            'data-testid="free-activation-completed-action-ai-hero"',
+        )
+        self.assertNotContains(
+            response, 'data-testid="free-activation-skip-ai-hero"',
+        )
+        self.assertContains(
+            response, 'data-testid="free-activation-skip-events"',
+        )
+
+    def test_active_sprint_plan_completes_sprint_checklist_item(self):
         user = User.objects.create_user(
             email='free-plan@test.com',
             password='testpass',
@@ -1215,12 +1289,17 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
 
         response = self.client.get('/')
 
-        self.assertFalse(response.context['show_free_activation_checklist'])
-        self.assertFalse(response.context['show_free_plan_teaser'])
-        self.assertNotContains(response, 'data-testid="free-activation-checklist"')
-        self.assertNotContains(response, 'data-testid="free-plan-teaser"')
+        self.assertTrue(response.context['show_free_activation_checklist'])
+        self.assertTrue(response.context['show_free_plan_teaser'])
+        items = {
+            item['key']: item
+            for item in response.context['free_activation_checklist_items']
+        }
+        self.assertTrue(items['sprints']['completed'])
+        self.assertContains(response, 'data-testid="free-activation-checklist"')
+        self.assertContains(response, 'data-testid="free-plan-teaser"')
 
-    def test_paid_members_keep_paid_onboarding_prompt_only(self):
+    def test_basic_members_start_paid_checklist_with_onboarding(self):
         user = User.objects.create_user(
             email='basic-activation@test.com',
             password='testpass',
@@ -1232,9 +1311,95 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
 
         self.assertTrue(response.context['show_onboarding_prompt'])
         self.assertFalse(response.context['show_free_activation_checklist'])
+        self.assertTrue(response.context['show_activation_checklist'])
         self.assertFalse(response.context['show_free_plan_teaser'])
         self.assertContains(response, 'data-testid="onboarding-prompt"')
-        self.assertNotContains(response, 'data-testid="free-activation-checklist"')
+        self.assertContains(response, 'data-testid="free-activation-checklist"')
+        self.assertEqual(
+            [
+                item['key']
+                for item in response.context['free_activation_checklist_items']
+            ],
+            ['onboarding', 'ai-hero', 'events', 'sprints'],
+        )
+
+    def test_paid_member_with_plan_still_sees_onboarding_prompt(self):
+        user = User.objects.create_user(
+            email='planned-onboarding@test.com',
+            password='testpass',
+            tier=self.main_tier,
+        )
+        sprint = self._create_active_sprint(slug='planned-onboarding')
+        Plan.objects.create(member=user, sprint=sprint, shared_at=timezone.now())
+        self._login_user(user)
+
+        response = self.client.get('/')
+
+        self.assertTrue(response.context['show_onboarding_prompt'])
+        self.assertContains(response, 'data-testid="onboarding-prompt"')
+        self.assertContains(response, 'data-testid="account-sprint-plan-card"')
+
+    def test_completed_free_checklist_reappears_with_paid_tasks_after_upgrade(self):
+        user = User.objects.create_user(
+            email='upgrade-checklist@test.com',
+            password='testpass',
+            tier=self.free_tier,
+            dashboard_dismissals=['free_activation_sprint_guide_seen'],
+        )
+        course, _unit = self._create_ai_hero()
+        Enrollment.objects.create(user=user, course=course)
+        event = Event.objects.create(
+            title='Free checklist event',
+            slug='free-checklist-event',
+            start_datetime=timezone.now() + timedelta(days=2),
+            status='upcoming',
+            required_level=0,
+        )
+        EventRegistration.objects.create(user=user, event=event)
+        self._login_user(user)
+
+        completed = self.client.get('/')
+        self.assertTrue(completed.context['activation_checklist_all_complete'])
+        self.assertContains(
+            completed, 'data-testid="free-activation-dismiss"',
+        )
+
+        dismissed = self.client.post(
+            '/account/api/dismiss-card',
+            data=json.dumps({'card': 'free_activation_checklist'}),
+            content_type='application/json',
+        )
+        self.assertEqual(dismissed.status_code, 200)
+        self.assertNotContains(
+            self.client.get('/'), 'data-testid="free-activation-checklist"',
+        )
+
+        user.tier = self.main_tier
+        user.save(update_fields=['tier'])
+        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
+            upgraded = self.client.get('/')
+
+        self.assertTrue(upgraded.context['show_activation_checklist'])
+        items = {
+            item['key']: item
+            for item in upgraded.context['free_activation_checklist_items']
+        }
+        self.assertEqual(
+            list(items),
+            ['onboarding', 'slack', 'ai-hero', 'events', 'sprints'],
+        )
+        self.assertFalse(items['onboarding']['completed'])
+        self.assertFalse(items['slack']['completed'])
+        self.assertTrue(items['ai-hero']['completed'])
+        self.assertTrue(items['events']['completed'])
+        self.assertTrue(items['sprints']['completed'])
+        self.assertEqual(upgraded.context['free_activation_completed_count'], 3)
+        self.assertEqual(upgraded.context['free_activation_total_count'], 5)
+        self.assertContains(upgraded, 'data-testid="onboarding-prompt"')
+        self.assertContains(upgraded, 'data-testid="dashboard-slack-callout"')
+        self.assertNotContains(
+            upgraded, 'data-testid="free-activation-dismiss"',
+        )
 
     def test_free_user_with_active_paid_override_uses_paid_dashboard(self):
         user = User.objects.create_user(
@@ -1255,8 +1420,41 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
 
         self.assertFalse(response.context['show_free_activation_checklist'])
         self.assertFalse(response.context['show_free_plan_teaser'])
-        self.assertNotContains(response, 'data-testid="free-activation-checklist"')
+        self.assertTrue(response.context['show_activation_checklist'])
+        self.assertContains(response, 'data-testid="free-activation-checklist"')
         self.assertNotContains(response, 'data-testid="free-plan-teaser"')
+
+
+# ============================================================
+# Free Unlock Preview
+# ============================================================
+
+
+class FreeUnlockPreviewTest(TierSetupMixin, TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='free-unlock@test.com', password='testpass',
+            tier=self.free_tier,
+        )
+        self.client.login(email=self.user.email, password='testpass')
+
+    def test_current_book_uses_together_copy(self):
+        Book.objects.create(
+            title='Inference Engineering', slug='inference-engineering',
+            author='Philip Kiely', required_level=20,
+            status=BOOK_STATUS_CURRENT, start_date=date.today(),
+        )
+
+        response = self.client.get('/')
+
+        self.assertEqual(response.context['free_unlock_book_count'], 1)
+        self.assertContains(response, 'Book Club:</span> We read 1 book together')
+
+    def test_zero_current_books_omits_book_club_unlock_row(self):
+        response = self.client.get('/')
+
+        self.assertEqual(response.context['free_unlock_book_count'], 0)
+        self.assertNotContains(response, 'Book Club:</span>')
 
 
 # ============================================================
@@ -1283,14 +1481,12 @@ class DashboardTemplateTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'AI Shipping Labs')
         self.assertContains(response, 'Version')
 
-    def test_dashboard_has_all_sections(self):
+    def test_dashboard_has_baseline_sections(self):
         response = self.client.get('/')
         content = response.content.decode()
-        self.assertIn('Continue learning', content)
-        self.assertIn('Upcoming events', content)
-        self.assertIn('Recent content', content)
-        self.assertIn('Active polls', content)
-        self.assertIn('Quick actions', content)
+        self.assertIn('data-testid="dashboard-commitment-zones"', content)
+        self.assertIn('data-testid="dashboard-getting-started"', content)
+        self.assertIn('data-testid="dashboard-unlock-more"', content)
 
     def test_dashboard_body_has_no_duplicate_notifications_section(self):
         Notification.objects.create(
@@ -1308,7 +1504,7 @@ class DashboardTemplateTest(TierSetupMixin, TestCase):
         self.assertFalse(
             any('notifications' in context for context in response.context),
         )
-        self.assertContains(response, 'Quick actions')
+        self.assertContains(response, 'data-testid="dashboard-commitment-zones"')
 
     def test_dashboard_extends_base(self):
         response = self.client.get('/')
@@ -1344,7 +1540,7 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
         with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
             response = self.client.get('/')
         content = response.content.decode()
-        self.assertIn('Join our Slack community', content)
+        self.assertIn('Join the member Slack workspace', content)
         self.assertIn('Join Slack', content)
 
     def test_premium_user_without_slack_sees_join_card(self):
@@ -1354,7 +1550,7 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
         with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
             response = self.client.get('/')
         content = response.content.decode()
-        self.assertIn('Join our Slack community', content)
+        self.assertIn('Join the member Slack workspace', content)
 
     def test_join_button_links_to_gated_endpoint_not_raw_invite(self):
         """Issue #953: the Join Slack button links to /community/slack and
@@ -1446,17 +1642,17 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
             response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertIn('Continue learning', content)
+        self.assertIn('data-testid="dashboard-commitment-zones"', content)
         self.assertIn('Welcome back', content)
 
-    def test_auto_linking_note_shown(self):
-        """The join card includes a note about automatic linking."""
+    def test_join_card_has_compact_explanatory_copy(self):
+        """The join card explains the member workspace in one sentence."""
         self._create_user('main-note@test.com', tier=self.main_tier)
         self.client.login(email='main-note@test.com', password='testpass')
         with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
             response = self.client.get('/')
         content = response.content.decode()
-        self.assertIn('up to an hour', content)
+        self.assertIn('Ask questions and connect with other builders.', content)
 
     def test_context_variables_show_slack_join(self):
         """The show_slack_join context variable is True for qualifying users."""
@@ -1510,15 +1706,32 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
         self.assertTrue(response.context['show_slack_join'])
         self.assertFalse(response.context['slack_connected'])
 
-    def test_slack_section_position_after_continue(self):
-        """The Slack section is secondary, after Continue learning."""
-        self._create_user('main-pos@test.com', tier=self.main_tier)
+    def test_slack_is_part_of_getting_started_before_continue(self):
+        """The Slack task lives in Main member onboarding."""
+        user = self._create_user('main-pos@test.com', tier=self.main_tier)
+        course = Course.objects.create(
+            title='Position Course', slug='position-course', status='published',
+        )
+        module = Module.objects.create(
+            course=course, title='Position Module', slug='position-module',
+            sort_order=1,
+        )
+        completed = Unit.objects.create(
+            module=module, title='Completed Unit', slug='completed-unit',
+            sort_order=1,
+        )
+        Unit.objects.create(
+            module=module, title='Next Unit', slug='next-unit', sort_order=2,
+        )
+        Enrollment.objects.create(user=user, course=course)
+        UserCourseProgress.objects.create(
+            user=user, unit=completed, completed_at=timezone.now(),
+        )
         self.client.login(email='main-pos@test.com', password='testpass')
         with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
             response = self.client.get('/')
         content = response.content.decode()
-        pos_slack = content.index('Join our Slack community')
+        pos_slack = content.index('Join the member Slack workspace')
         pos_continue = content.index('Continue learning')
-        pos_upcoming = content.index('Upcoming events')
-        self.assertGreater(pos_slack, pos_continue)
-        self.assertGreater(pos_slack, pos_upcoming)
+        self.assertContains(response, 'data-testid="dashboard-getting-started"')
+        self.assertLess(pos_slack, pos_continue)

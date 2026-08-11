@@ -674,7 +674,7 @@ class DashboardDisplayTest(TierOverrideTestBase):
         self.assertContains(account_response, "Temporary Premium access")
 
     def test_33_free_user_with_main_override_quick_actions(self):
-        """#33: Free user with Main override -> quick actions include Activities."""
+        """#33: Main override exposes the sprint discovery destination."""
         user = self._make_user(email="dash33@example.com", password="testpass")
         self._make_override(user, self.main_tier, granted_by=self.admin)
 
@@ -684,13 +684,11 @@ class DashboardDisplayTest(TierOverrideTestBase):
 
         quick_actions = response.context["quick_actions"]
         action_titles = [a["title"] for a in quick_actions]
-        self.assertIn("Activities", action_titles)
+        self.assertEqual(action_titles, ["Courses", "Workshops", "Events"])
         self.assertNotIn("Community", action_titles)
-
-        activities_action = next(
-            action for action in quick_actions if action["title"] == "Activities"
+        self.assertEqual(
+            response.context["active_sprint_discovery_url"], "/activities",
         )
-        self.assertEqual(activities_action["url"], "/activities")
 
     def test_34_free_user_with_premium_override_sees_premium_content(self):
         """#34: Free user with Premium override -> Premium articles appear

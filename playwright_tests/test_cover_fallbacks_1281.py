@@ -249,25 +249,21 @@ def test_stale_dashboard_and_account_controls_remain_usable(
         page.goto(f"{django_server}/", wait_until="networkidle")
         _dismiss_consent(page)
         onboarding = page.get_by_test_id("onboarding-prompt")
-        onboarding_dismiss = page.get_by_test_id("onboarding-prompt-dismiss")
-        slack = page.get_by_test_id("slack-account-card")
-        slack_dismiss = page.get_by_test_id("slack-account-card-dismiss")
-        for button in (onboarding_dismiss, slack_dismiss):
+        onboarding_cta = page.get_by_test_id("onboarding-prompt-cta")
+        slack = page.get_by_test_id("dashboard-slack-callout")
+        slack_cta = page.get_by_test_id("slack-account-card-join")
+        for button in (onboarding_cta, slack_cta):
             box = button.bounding_box()
             assert box["width"] >= 44 and box["height"] >= 44
-            assert button.get_attribute("aria-label") == "Dismiss"
         expect(onboarding).to_be_visible()
         expect(slack).to_be_visible()
-        slack_dismiss.focus()
-        assert ":focus-visible" in slack_dismiss.evaluate(
+        expect(page.get_by_test_id("free-activation-dismiss")).to_have_count(0)
+        slack_cta.focus()
+        assert ":focus-visible" in slack_cta.evaluate(
             "node => node.matches(':focus-visible') ? ':focus-visible' : ''"
         )
         assert _no_body_overflow(page)
-        _shot(page, "dashboard-dismiss-focus-320x720")
-        page.keyboard.press("Enter")
-        expect(slack).to_be_hidden()
-        page.reload(wait_until="domcontentloaded")
-        expect(page.get_by_test_id("slack-account-card")).to_have_count(0)
+        _shot(page, "dashboard-checklist-focus-320x720")
 
         page.set_viewport_size({"width": 1280, "height": 900})
         page.goto(f"{django_server}/account/#api-keys", wait_until="networkidle")

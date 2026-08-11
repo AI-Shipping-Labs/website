@@ -1,0 +1,5 @@
+{% load member_badges %}
+
+{% if dashboard_card_variant == "registered_event" %}
+  {% member_status_badge "Registered" status="registered" icon="check" size="sm" testid="dashboard-event-registration-badge" %}
+{% endif %}

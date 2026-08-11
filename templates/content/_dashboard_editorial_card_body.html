@@ -1,0 +1,40 @@
+{% load accounts_extras %}
+{% load teaser_tags %}
+
+{% if dashboard_card_variant == "feed" %}
+  {% if item.description %}
+  <p class="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground sm:text-base">{{ item.description|strip_markdown }}</p>
+  {% endif %}
+  {% if item.date or item.meta %}
+  <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+    {% if item.date %}
+    <span class="flex items-center gap-1.5">
+      <i data-lucide="calendar" class="h-4 w-4 shrink-0" aria-hidden="true"></i>
+      {% if item.date_prefix %}{{ item.date_prefix }} {% endif %}{{ item.date|member_compact_date }}
+    </span>
+    {% endif %}
+    {% if item.meta %}<span>{{ item.meta }}</span>{% endif %}
+  </div>
+  {% endif %}
+{% elif dashboard_card_variant == "learning" %}
+  <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
+    <div class="h-full rounded-full bg-accent" style="width: {{ item.percentage }}%"></div>
+  </div>
+  <p class="mt-2 text-sm text-muted-foreground">
+    {{ item.completed_count }}/{{ item.total_units }} {% if item.kind == "workshop" %}pages{% else %}units{% endif %} completed{% if item.kind == "workshop" and item.last_page %} &middot; Last: {{ item.last_page.title }}{% elif item.last_unit %} &middot; Last: {{ item.last_unit.title }}{% endif %}
+  </p>
+{% elif dashboard_card_variant == "registered_event" %}
+  <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+    <span class="flex items-center gap-1.5" data-testid="dashboard-event-date">
+      <i data-lucide="calendar" class="h-4 w-4 shrink-0" aria-hidden="true"></i>
+      {% if event.dashboard_is_happening_now %}Started {% endif %}{{ event.dashboard_formatted_start }}
+    </span>
+    {% if event.dashboard_series_remaining_count > 0 %}<span>{{ event.dashboard_series_remaining_count }} more session{{ event.dashboard_series_remaining_count|pluralize }}</span>{% endif %}
+  </div>
+{% elif dashboard_card_variant == "book_deadline" %}
+  <p class="mt-2 text-sm leading-6 text-muted-foreground sm:text-base">{{ dashboard_book_club.book.title }}</p>
+  <div class="mt-4 flex items-center gap-1.5 text-sm text-muted-foreground">
+    <i data-lucide="calendar" class="h-4 w-4 shrink-0" aria-hidden="true"></i>
+    Due {{ dashboard_book_club.next_chapter.deadline|member_compact_date }}
+  </div>
+{% endif %}

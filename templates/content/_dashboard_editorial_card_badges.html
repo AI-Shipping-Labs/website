@@ -1,0 +1,22 @@
+{% load member_badges %}
+
+{% if dashboard_card_variant == "feed" %}
+  <span class="text-xs font-medium uppercase tracking-wide {% if item.locked %}text-muted-foreground{% else %}text-accent{% endif %}">{{ item.label }}</span>
+  {% if item.locked %}
+  <span class="inline-flex items-center gap-1 text-xs text-muted-foreground">
+    <i data-lucide="lock" class="h-3 w-3" aria-hidden="true"></i>
+    Unlock with {{ item.required_tier }}
+  </span>
+  {% endif %}
+{% elif dashboard_card_variant == "learning" %}
+  <span class="text-xs font-medium uppercase tracking-wide text-accent">{{ item.kind }}</span>
+{% elif dashboard_card_variant == "registered_event" %}
+  {% if event.dashboard_is_happening_now %}
+  {% member_status_badge "Happening now" status="active" size="sm" %}
+  {% endif %}
+  {% if event.dashboard_is_event_series %}
+  <span class="text-xs font-medium uppercase tracking-wide text-accent" data-testid="dashboard-event-series-badge">Event series</span>
+  {% endif %}
+{% elif dashboard_card_variant == "book_deadline" %}
+  <span class="text-xs font-medium uppercase tracking-wide text-accent">Book Club</span>
+{% endif %}

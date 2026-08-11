@@ -176,10 +176,11 @@ class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(f'class="{PRODUCT_BUTTON_CLASSES["secondary"]}"', html)
-        self.assertIn(f'class="{PRODUCT_BUTTON_CLASSES["primary"]}"', html)
         self.assertEqual(
             _tag_class(html, 'data-testid="account-sprint-plan-open"'),
-            PRODUCT_BUTTON_CLASSES['primary'],
+            button_classes(
+                'primary', size='lg', extra='justify-center',
+            ),
         )
         self.assertContains(
             response,

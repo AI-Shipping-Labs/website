@@ -64,6 +64,15 @@ class DismissDashboardCardEndpointTest(TestCase):
         self.user.refresh_from_db()
         self.assertIn("slack_join", self.user.dashboard_dismissals)
 
+    def test_getting_started_skip_marker_persists(self):
+        response = self._post({"card": "getting_started_skip_ai_hero"})
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertIn(
+            "getting_started_skip_ai_hero",
+            self.user.dashboard_dismissals,
+        )
+
     def test_plan_carry_over_prompt_for_owned_plan_persists(self):
         plan = self._make_plan()
         card = f"plan_carry_over_prompt:{plan.pk}"

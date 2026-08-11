@@ -31,7 +31,6 @@ from content.models import (
 )
 from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
 from content.tier_config import get_tiers_with_features
-from events.models import Event
 from events.services.time_windows import (
     registered_upcoming_events,
     upcoming_events_queryset,
@@ -323,10 +322,10 @@ def _dashboard(request):
     # no workshop completions.
     all_in_progress_learning = _get_in_progress_learning(user, user_level)
     dashboard_book_club = _get_dashboard_book_club(user, user_level)
-    # The approved dashboard hierarchy has at most three resumable items.
-    # A current Book Club read occupies one slot; otherwise learning keeps the
-    # historical three-item limit.
-    learning_limit = 2 if dashboard_book_club is not None else 3
+    # Keep the personal-resume lane focused on courses and workshops. Book
+    # Club activity is represented once in the home feed (or in This week
+    # when a chapter deadline is close).
+    learning_limit = 3
     in_progress_learning = all_in_progress_learning[:learning_limit]
     hidden_learning_count = max(
         0, len(all_in_progress_learning) - len(in_progress_learning),
@@ -374,6 +373,12 @@ def _dashboard(request):
     # prompt for members who already have any plan row.
     sprint_plan_context = build_sprint_plan_card_context(user)
     has_any_plan = sprint_plan_context['has_any_plan']
+    sprint_opportunities_context = build_active_sprint_opportunities_context(
+        user,
+        user_level,
+        plan=sprint_plan_context['plan'],
+        has_any_plan=has_any_plan,
+    )
 
     from content.access import LEVEL_BASIC
 
@@ -405,15 +410,10 @@ def _dashboard(request):
     # Issue #358: gate on the verified ``slack_member`` boolean rather
     # than ``slack_user_id`` (which is populated by Slack OAuth even
     # for users who never joined the workspace).
-    # Issue #1129: a persisted per-user dismissal hides the Join-Slack card
-    # on every future dashboard load (any device). Dashboard-only — the
-    # /account/ Slack card ignores this flag.
-    slack_join_dismissed = "slack_join" in user.dashboard_dismissals
     show_slack_join = bool(
         slack_invite_configured
         and has_qualifying_tier
         and not user.slack_member
-        and not slack_join_dismissed
     )
     slack_connected = bool(has_qualifying_tier and user.slack_member)
     # Issue #700: surface the user's Slack ID + deep-link to their Slack
@@ -432,31 +432,44 @@ def _dashboard(request):
     # no extra DB query — it is the same threshold the shared
     # ``can_access_onboarding`` predicate applies (``get_user_level >=
     # LEVEL_BASIC``).
-    # Issue #1129: a persisted dismissal hides the nudge for good, even
-    # while onboarding stays incomplete (the member keeps other onboarding
-    # entry points).
-    onboarding_prompt_dismissed = (
-        "onboarding_prompt" in user.dashboard_dismissals
-    )
+    # Onboarding remains useful even when staff has already attached a plan.
+    # Keep it as an independent getting-started task rather than letting an
+    # existing plan silently suppress the member's setup flow.
     show_onboarding_prompt = (
         not onboarding_complete
-        and not has_any_plan
         and user_level >= LEVEL_BASIC
-        and not onboarding_prompt_dismissed
     )
     show_plan_preparing = (
         onboarding_complete
         and user_level >= LEVEL_BASIC
         and sprint_plan_context['plan'] is None
     )
-    free_activation_context = _get_free_activation_context(
+    free_activation_context = _get_activation_context(
         user=user,
         user_level=user_level,
-        active_override=active_override,
         upcoming_events=upcoming_events,
+        onboarding_complete=onboarding_complete,
+        slack_invite_configured=slack_invite_configured,
+        slack_join_url=slack_join_url,
     )
     free_unlock_context = _get_free_unlock_context(
         enabled=free_activation_context['show_free_plan_teaser'],
+    )
+    dashboard_feed = _get_dashboard_feed(
+        user=user,
+        user_level=user_level,
+        current_book=dashboard_book_club,
+        active_polls=active_polls,
+        recent_articles=recent_content,
+        sprint_opportunities=(
+            sprint_opportunities_context['active_sprint_opportunities']
+        ),
+        has_plan=sprint_plan_context['plan'] is not None,
+        in_progress_learning=in_progress_learning,
+        registered_events=upcoming_events,
+        weekly_events=dashboard_upcoming_events,
+        free_unlock_context=free_unlock_context,
+        include_locked=free_activation_context['show_free_plan_teaser'],
     )
 
     context = {
@@ -478,6 +491,7 @@ def _dashboard(request):
         'starting_soon': starting_soon,
         'recent_content': recent_content,
         'active_polls': active_polls,
+        'dashboard_feed': dashboard_feed,
         'quick_actions': quick_actions,
         'show_slack_join': show_slack_join,
         'slack_connected': slack_connected,
@@ -490,14 +504,7 @@ def _dashboard(request):
         'slack_card_dismissable': True,
     }
     context.update(sprint_plan_context)
-    context.update(
-        build_active_sprint_opportunities_context(
-            user,
-            user_level,
-            plan=sprint_plan_context['plan'],
-            has_any_plan=has_any_plan,
-        )
-    )
+    context.update(sprint_opportunities_context)
     return render(request, 'content/dashboard.html', context)
 
 
@@ -852,6 +859,11 @@ def _get_dashboard_book_club(user, user_level):
         'percentage': percentage,
         'next_chapter': next_chapter,
         'next_deadline_is_soon': next_deadline_is_soon,
+        'next_title': (
+            f'Chapter {next_chapter.number} · {next_chapter.title}'
+            if next_chapter is not None
+            else book.title
+        ),
         'next_url': next_url,
         'cta_label': cta_label,
     }
@@ -973,59 +985,25 @@ def _get_starting_soon_event(user):
 
 
 def _get_recent_content(user_level):
-    """Return latest 3 published articles/recordings the user can access."""
-    # Get accessible articles
-    articles = list(
+    """Return the latest three published articles the member can read."""
+    articles = (
         Article.objects.filter(
             published=True,
             required_level__lte=user_level,
-        ).order_by('-date')[:5]
+        )
+        .order_by('-date')[:3]
     )
-
-    # Get accessible recordings (events with recording_url)
-    recordings = list(
-        Event.objects.filter(
-            published=True,
-            required_level__lte=user_level,
-        ).exclude(
-            recording_url='',
-        ).exclude(
-            recording_url__isnull=True,
-        ).order_by('-start_datetime')[:5]
-    )
-
-    # Merge and sort by date, take the three calm editorial rows used by the
-    # member dashboard.
-    combined = []
-    for article in articles:
-        combined.append({
+    return [
+        {
             'type': 'article',
             'title': article.title,
             'description': article.description,
             'url': article.get_absolute_url(),
             'date': article.date,
             'icon': 'file-text',
-        })
-    for recording in recordings:
-        combined.append({
-            'type': 'recording',
-            'title': recording.title,
-            'description': recording.description,
-            'url': recording.get_absolute_url(),
-            'date': recording.start_datetime.date(),
-            'icon': 'video',
-        })
-
-    import datetime as dt
-    def _sort_key(x):
-        val = x['date']
-        if isinstance(val, dt.datetime):
-            return val
-        if isinstance(val, dt.date):
-            return dt.datetime.combine(val, dt.time.min, tzinfo=dt.timezone.utc)
-        return dt.datetime.min.replace(tzinfo=dt.timezone.utc)
-    combined.sort(key=_sort_key, reverse=True)
-    return combined[:3]
+        }
+        for article in articles
+    ]
 
 
 def _get_active_polls(user_level):
@@ -1041,11 +1019,368 @@ def _get_active_polls(user_level):
     return list(polls)
 
 
-def _get_free_activation_context(*, user, user_level, active_override, upcoming_events):
-    """Return Free-only dashboard activation checklist and teaser context."""
-    from content.access import LEVEL_OPEN
+def _get_dashboard_feed(
+    *,
+    user,
+    user_level,
+    current_book,
+    active_polls,
+    recent_articles,
+    sprint_opportunities,
+    has_plan,
+    in_progress_learning,
+    registered_events,
+    weekly_events,
+    free_unlock_context,
+    include_locked,
+):
+    """Build the compact, actionable home feed shown below weekly focus."""
+    feed = []
+
+    if not has_plan and sprint_opportunities:
+        today = timezone.localdate()
+        opportunity = next(
+            (
+                candidate
+                for candidate in sprint_opportunities
+                if not candidate['sprint'].has_ended(today)
+            ),
+            None,
+        )
+    else:
+        opportunity = None
+    if opportunity is not None:
+        sprint = opportunity['sprint']
+        feed.append({
+            'kind': 'sprint',
+            'label': 'Active sprint',
+            'title': sprint.name,
+            'description': sprint.description or sprint.outcomes,
+            'meta': f'{sprint.duration_weeks}-week cohort',
+            'date': sprint.start_date,
+            'date_prefix': 'Started',
+            'icon': 'target',
+            'url': opportunity['url'],
+            'action_url': opportunity['url'],
+            'cta_label': (
+                opportunity['cta_label']
+                if opportunity['enrolled']
+                else 'Explore sprint'
+            ),
+            'locked': False,
+        })
+
+    if current_book and not current_book['next_deadline_is_soon']:
+        book = current_book['book']
+        feed.append({
+            'kind': 'book',
+            'label': 'Book Club',
+            'title': book.title,
+            'description': book.subtitle or book.description,
+            'meta': (
+                f"{current_book['completed_count']}/"
+                f"{current_book['total_chapters']} chapters read"
+            ),
+            'date': book.start_date,
+            'date_prefix': 'Started',
+            'icon': 'book-open',
+            'url': current_book['next_url'],
+            'action_url': current_book['next_url'],
+            'cta_label': current_book['cta_label'],
+            'locked': False,
+        })
+
+    weekly_event_ids = {event.pk for event in weekly_events}
+    weekly_series_ids = {
+        event.event_series_id
+        for event in weekly_events
+        if event.event_series_id
+    }
+    registered_event_ids = {event.pk for event in registered_events}
+    accessible_events = (
+        upcoming_events_queryset(now=timezone.now())
+        .filter(
+            published=True,
+            required_level__lte=user_level,
+        )
+        .order_by('start_datetime')
+    )
+    feed_event_candidates = accessible_events.exclude(pk__in=weekly_event_ids)
+    if weekly_series_ids:
+        feed_event_candidates = feed_event_candidates.exclude(
+            event_series_id__in=weekly_series_ids,
+        )
+    feed_event = feed_event_candidates.first()
+    if feed_event is None:
+        feed_event = accessible_events.first()
+    if feed_event is not None:
+        is_registered = feed_event.pk in registered_event_ids
+        feed.append({
+            'kind': 'event',
+            'label': 'Upcoming event',
+            'title': feed_event.title,
+            'description': feed_event.description,
+            'meta': '',
+            'date': feed_event.start_datetime,
+            'date_prefix': 'Starts',
+            'icon': 'calendar',
+            'url': feed_event.get_absolute_url(),
+            'action_url': feed_event.get_absolute_url(),
+            'cta_label': 'View event' if is_registered else 'Register',
+            'locked': False,
+        })
+
+    progressed_workshop_ids = {
+        item['workshop'].pk
+        for item in in_progress_learning
+        if item['kind'] == 'workshop'
+    }
+    latest_workshop = _get_latest_accessible_feed_workshop(
+        user,
+        exclude_ids=progressed_workshop_ids,
+    )
+    if latest_workshop is not None:
+        is_recent_workshop = (
+            latest_workshop.date >= timezone.localdate() - timedelta(days=30)
+        )
+        feed.append({
+            'kind': 'workshop',
+            'label': 'New workshop' if is_recent_workshop else 'Workshop',
+            'title': latest_workshop.title,
+            'description': latest_workshop.description,
+            'meta': latest_workshop.skill_level_label,
+            'date': latest_workshop.date,
+            'date_prefix': '',
+            'icon': 'presentation',
+            'url': latest_workshop.get_absolute_url(),
+            'action_url': latest_workshop.get_absolute_url(),
+            'cta_label': 'Start workshop',
+            'locked': False,
+        })
+
+    if active_polls:
+        poll = active_polls[0]
+        feed.append({
+            'kind': 'poll',
+            'label': 'Active poll',
+            'title': poll.title,
+            'description': poll.description,
+            'meta': '',
+            'date': poll.closes_at,
+            'date_prefix': 'Closes',
+            'icon': 'list-checks',
+            'url': poll.get_absolute_url(),
+            'action_url': poll.get_absolute_url(),
+            'cta_label': 'Vote',
+            'locked': False,
+        })
+
+    for article in recent_articles:
+        feed.append({
+            'kind': 'article',
+            'label': 'Article',
+            'title': article['title'],
+            'description': article['description'],
+            'meta': '',
+            'date': article['date'],
+            'date_prefix': '',
+            'icon': 'file-text',
+            'url': article['url'],
+            'action_url': article['url'],
+            'cta_label': 'Read article',
+            'locked': False,
+        })
+
+    locked_feed = []
+    if include_locked:
+        locked_feed = _get_locked_dashboard_feed(
+            user=user,
+            user_level=user_level,
+            free_unlock_context=free_unlock_context,
+        )
+
+    # Two accessible entries followed by one upgrade opportunity keeps the
+    # Free feed useful while still making paid activity concrete.
+    blended = []
+    available = list(feed)
+    locked = list(locked_feed)
+    while available or locked:
+        blended.extend(available[:2])
+        available = available[2:]
+        if locked:
+            blended.append(locked.pop(0))
+        if len(blended) >= 8:
+            break
+    result = blended[:8]
+    for item in result:
+        item['card_extra_attrs'] = (
+            f'data-feed-kind="{item["kind"]}" '
+            f'data-feed-locked="{str(item["locked"]).lower()}"'
+        )
+    return result
+
+
+def _get_latest_accessible_feed_workshop(user, *, exclude_ids):
+    workshops = (
+        Workshop.objects
+        .filter(status='published')
+        .exclude(pk__in=exclude_ids)
+        .order_by('-date', '-created_at')
+    )
+    return next(
+        (
+            workshop
+            for workshop in workshops
+            if workshop.user_can_access_pages(user)
+        ),
+        None,
+    )
+
+
+def _get_locked_dashboard_feed(*, user, user_level, free_unlock_context):
+    """Return up to three concrete paid items for a Free member's feed."""
+    locked = []
+
+    sprint = free_unlock_context['free_unlock_sprint']
+    if sprint is not None:
+        locked.append(_locked_feed_item(
+            kind='sprint',
+            label='Active sprint',
+            title=sprint.name,
+            description=sprint.description or sprint.outcomes,
+            meta=f'{sprint.duration_weeks}-week cohort',
+            date=sprint.start_date,
+            date_prefix='Started',
+            icon='target',
+            detail_url=sprint.get_absolute_url(),
+            required_level=sprint.min_tier_level,
+        ))
+
+    book = free_unlock_context['free_unlock_book']
+    if book is not None:
+        locked.append(_locked_feed_item(
+            kind='book',
+            label='Book Club',
+            title=book.title,
+            description=book.subtitle or book.description,
+            meta=book.author,
+            date=book.start_date,
+            date_prefix='Started',
+            icon='book-open',
+            detail_url=book.get_absolute_url(),
+            required_level=book.required_level,
+        ))
+
+    workshop = free_unlock_context['free_unlock_workshop']
+    if workshop is not None and not workshop.user_can_access_pages(user):
+        locked.append(_locked_feed_item(
+            kind='workshop',
+            label='Member workshop',
+            title=workshop.title,
+            description=workshop.description,
+            meta=workshop.skill_level_label,
+            date=workshop.date,
+            date_prefix='',
+            icon='presentation',
+            detail_url=workshop.get_absolute_url(),
+            required_level=workshop.pages_required_level,
+        ))
+
+    if len(locked) < 3:
+        event = free_unlock_context['free_unlock_event']
+        if event is not None:
+            locked.append(_locked_feed_item(
+                kind='event',
+                label='Member event',
+                title=event.title,
+                description=event.description,
+                meta='',
+                date=event.start_datetime,
+                date_prefix='Starts',
+                icon='calendar',
+                detail_url=event.get_absolute_url(),
+                required_level=event.required_level,
+            ))
+
+    if len(locked) < 3:
+        article = (
+            Article.objects
+            .filter(
+                published=True,
+                required_level__gt=user_level,
+            )
+            .order_by('-date')
+            .first()
+        )
+        if article is not None:
+            locked.append(_locked_feed_item(
+                kind='article',
+                label='Member article',
+                title=article.title,
+                description=article.description,
+                meta='',
+                date=article.date,
+                date_prefix='',
+                icon='file-text',
+                detail_url=article.get_absolute_url(),
+                required_level=article.required_level,
+            ))
+
+    return locked[:3]
+
+
+def _locked_feed_item(
+    *,
+    kind,
+    label,
+    title,
+    description,
+    meta,
+    date,
+    date_prefix,
+    icon,
+    detail_url,
+    required_level,
+):
+    required_tier = get_required_tier_name(required_level)
+    return {
+        'kind': kind,
+        'label': label,
+        'title': title,
+        'description': description,
+        'meta': meta,
+        'date': date,
+        'date_prefix': date_prefix,
+        'icon': icon,
+        'url': detail_url,
+        'action_url': '/pricing',
+        'cta_label': f'Unlock with {required_tier}',
+        'required_tier': required_tier,
+        'locked': True,
+    }
+
+
+def _get_activation_context(
+    *,
+    user,
+    user_level,
+    upcoming_events,
+    onboarding_complete,
+    slack_invite_configured,
+    slack_join_url,
+):
+    """Return the cumulative dashboard getting-started checklist.
+
+    Every member keeps the three open activation tasks. Paid tasks come first:
+    Basic adds onboarding, while Main/Premium add onboarding plus Slack. A
+    completed-and-dismissed list becomes visible again whenever a tier upgrade
+    introduces unfinished work.
+    """
+    from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN
 
     empty_context = {
+        'show_activation_checklist': False,
+        'activation_checklist_all_complete': False,
         'show_free_activation_checklist': False,
         'show_free_plan_teaser': False,
         'free_activation_checklist_items': [],
@@ -1053,53 +1388,107 @@ def _get_free_activation_context(*, user, user_level, active_override, upcoming_
         'free_activation_total_count': 0,
         'free_activation_percentage': 0,
     }
-    if user_level != LEVEL_OPEN or active_override is not None:
+    if user_level < LEVEL_OPEN:
         return empty_context
 
-    has_active_sprint_plan = _has_active_sprint_plan(user)
-    if has_active_sprint_plan:
-        return empty_context
-
-    ai_hero_started = _has_started_ai_hero(user)
-    event_registered = bool(upcoming_events)
-    sprint_engaged = _has_active_sprint_engagement(user)
     checklist_dismissed = (
         'free_activation_checklist' in user.dashboard_dismissals
     )
+    is_free = user_level == LEVEL_OPEN
+    checklist_items = []
 
-    checklist_items = [
-        {
-            'key': 'ai-hero',
-            'title': 'Start AI Hero',
-            'description': 'Begin with the open course for building AI products.',
-            'url': '/courses/aihero',
-            'cta_label': 'Open course',
-            'icon': 'book-open',
-            'completed': ai_hero_started,
-        },
-        {
-            'key': 'events',
-            'title': 'Register for a free event',
-            'description': 'Join a live session or workshop you can attend.',
-            'url': '/events',
-            'cta_label': 'Browse events',
-            'icon': 'calendar',
-            'completed': event_registered,
-        },
-        {
-            'key': 'sprints',
-            'title': 'Learn how sprints and plans work',
-            'description': 'See how members use plans, cohorts, and accountability.',
-            'url': '/activities#community-sprints',
-            'cta_label': 'View sprints',
-            'icon': 'map',
-            'completed': sprint_engaged,
-        },
-    ]
+    def checklist_item(
+        *, key, title, description, url, cta_label, icon, completed,
+    ):
+        dismissal_key = f'getting_started_skip_{key.replace("-", "_")}'
+        skipped = (
+            not completed and dismissal_key in user.dashboard_dismissals
+        )
+        return {
+            'key': key,
+            'title': title,
+            'description': description,
+            'url': url,
+            'cta_label': cta_label,
+            'icon': icon,
+            'completed': completed or skipped,
+            'skipped': skipped,
+            'dismissal_key': dismissal_key,
+        }
+
+    if user_level >= LEVEL_BASIC:
+        checklist_items.append(checklist_item(
+            key='onboarding',
+            title='Tell us a bit about you so we can build your plan',
+            description='We will need it to prepare the right plan for you.',
+            url=reverse('onboarding_start'),
+            cta_label=(
+                'Review onboarding answers'
+                if onboarding_complete
+                else 'Start onboarding'
+            ),
+            icon='clipboard-check',
+            completed=onboarding_complete,
+        ))
+    if user_level >= LEVEL_MAIN and slack_invite_configured:
+        checklist_items.append(checklist_item(
+            key='slack',
+            title='Join the member Slack workspace',
+            description='Ask questions and connect with other builders.',
+            url=slack_join_url,
+            cta_label='Open Slack' if user.slack_member else 'Join Slack',
+            icon='message-square',
+            completed=user.slack_member,
+        ))
+    checklist_items.extend([
+        checklist_item(
+            key='ai-hero',
+            title='Start AI Hero',
+            description=(
+                'Begin with the open course for building AI products.'
+            ),
+            url='/courses/aihero',
+            cta_label='Open course',
+            icon='book-open',
+            completed=_has_started_ai_hero(user),
+        ),
+        checklist_item(
+            key='events',
+            title='Register for an event',
+            description='Join a live session or workshop.',
+            url='/events',
+            cta_label='Browse events',
+            icon='calendar',
+            completed=bool(upcoming_events),
+        ),
+        checklist_item(
+            key='sprints',
+            title='Learn how sprints and plans work',
+            description=(
+                'See how members use plans, cohorts, and accountability.'
+            ),
+            url='/sprints',
+            cta_label='View sprints',
+            icon='map',
+            completed=(
+                _has_active_sprint_engagement(user)
+                or _has_active_sprint_plan(user)
+                or 'free_activation_sprint_guide_seen'
+                in user.dashboard_dismissals
+            ),
+        ),
+    ])
+
     completed_count = sum(item['completed'] for item in checklist_items)
+    all_complete = completed_count == len(checklist_items)
+    show_checklist = not (checklist_dismissed and all_complete)
     return {
-        'show_free_activation_checklist': not checklist_dismissed,
-        'show_free_plan_teaser': True,
+        'show_activation_checklist': show_checklist,
+        'activation_checklist_all_complete': all_complete,
+        # Kept as a Free-specific compatibility flag for callers/tests that
+        # distinguish activation from paid onboarding.
+        'show_free_activation_checklist': is_free and show_checklist,
+        'show_free_plan_teaser': is_free,
         'free_activation_checklist_items': checklist_items,
         'free_activation_completed_count': completed_count,
         'free_activation_total_count': len(checklist_items),
@@ -1113,7 +1502,13 @@ def _get_free_unlock_context(*, enabled):
     """Return concrete paid-member activity for the Free unlock callout."""
     empty_context = {
         'free_unlock_sprint': None,
+        'free_unlock_sprint_count': 0,
         'free_unlock_book': None,
+        'free_unlock_book_count': 0,
+        'free_unlock_workshop': None,
+        'free_unlock_workshop_count_30d': 0,
+        'free_unlock_workshop_total_count': 0,
+        'free_unlock_event': None,
         'free_unlock_event_count': 0,
     }
     if not enabled:
@@ -1122,39 +1517,55 @@ def _get_free_unlock_context(*, enabled):
     from content.access import LEVEL_BASIC
 
     today = timezone.localdate()
-    locked_sprint = next(
-        (
-            sprint
-            for sprint in Sprint.objects.filter(
-                status='active',
-                min_tier_level__gte=LEVEL_BASIC,
-            ).order_by('start_date')
-            if not sprint.has_ended(today)
-        ),
-        None,
-    )
-    locked_book = (
+    locked_sprints = [
+        sprint
+        for sprint in Sprint.objects.filter(
+            status='active',
+            min_tier_level__gte=LEVEL_BASIC,
+        ).order_by('start_date')
+        if not sprint.has_ended(today)
+    ]
+    locked_sprint = locked_sprints[0] if locked_sprints else None
+    locked_books = (
         Book.objects
         .filter(
             status=BOOK_STATUS_CURRENT,
             required_level__gte=LEVEL_BASIC,
         )
         .order_by('-start_date', '-created_at')
-        .first()
     )
+    locked_book = locked_books.first()
+    paid_workshops = Workshop.objects.filter(
+        status='published',
+        pages_required_level__gte=LEVEL_BASIC,
+    )
+    locked_workshop = paid_workshops.order_by('-date', '-created_at').first()
+    workshop_count_30d = paid_workshops.filter(
+        date__gte=today - timedelta(days=30),
+        date__lte=today,
+    ).count()
+    workshop_total_count = paid_workshops.count()
     now = timezone.now()
-    locked_event_count = (
+    locked_events = (
         upcoming_events_queryset(now=now)
         .filter(
             published=True,
             required_level__gte=LEVEL_BASIC,
             start_datetime__lte=now + timedelta(days=30),
         )
-        .count()
+        .order_by('start_datetime')
     )
+    locked_event = locked_events.first()
+    locked_event_count = locked_events.count()
     return {
         'free_unlock_sprint': locked_sprint,
+        'free_unlock_sprint_count': len(locked_sprints),
         'free_unlock_book': locked_book,
+        'free_unlock_book_count': locked_books.count(),
+        'free_unlock_workshop': locked_workshop,
+        'free_unlock_workshop_count_30d': workshop_count_30d,
+        'free_unlock_workshop_total_count': workshop_total_count,
+        'free_unlock_event': locked_event,
         'free_unlock_event_count': locked_event_count,
     }
 
@@ -1214,18 +1625,6 @@ def _get_quick_actions(user_level):
             'description': 'Register live or catch up on recordings',
             'url': '/events',
             'icon': 'video',
-        },
-        {
-            'title': 'Resources',
-            'description': 'Use curated links, tools, and references',
-            'url': '/resources',
-            'icon': 'link',
-        },
-        {
-            'title': 'Projects',
-            'description': 'Find ideas or submit your shipped work',
-            'url': '/projects',
-            'icon': 'rocket',
         },
     ]
     return actions

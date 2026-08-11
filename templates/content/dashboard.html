@@ -38,12 +38,11 @@
       </div>
     </div>
 
-    <header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between" data-testid="dashboard-header">
+    <header class="mb-12 flex flex-col gap-4 sm:mb-16 sm:flex-row sm:items-end sm:justify-between" data-testid="dashboard-header">
       <div class="min-w-0">
         <h1 class="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl" data-testid="dashboard-heading">
           {% if request.user.first_name %}Welcome back, {{ request.user.first_name }}{% else %}Welcome back{% endif %}
         </h1>
-        <p class="mt-2 text-sm text-muted-foreground">Here's what to focus on this week.</p>
       </div>
       <div class="flex items-center">
         {% if dashboard_tier_is_override %}
@@ -164,6 +163,52 @@
         } else {
           button.disabled = false;
         }
+      })
+      .catch(function() {
+        button.disabled = false;
+      });
+    });
+  });
+
+  var completionLinks = document.querySelectorAll('[data-complete-card]');
+  completionLinks.forEach(function(link) {
+    link.addEventListener('click', function(event) {
+      event.preventDefault();
+      var destination = link.href;
+      var card = link.getAttribute('data-complete-card');
+      link.setAttribute('aria-disabled', 'true');
+      fetch('/account/api/dismiss-card', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify({ card: card }),
+      })
+      .then(function() { window.location.assign(destination); })
+      .catch(function() {
+        link.removeAttribute('aria-disabled');
+        window.location.assign(destination);
+      });
+    });
+  });
+
+  var skipButtons = document.querySelectorAll('[data-skip-activation]');
+  skipButtons.forEach(function(button) {
+    button.addEventListener('click', function() {
+      var card = button.getAttribute('data-skip-activation');
+      button.disabled = true;
+      fetch('/account/api/dismiss-card', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify({ card: card }),
+      })
+      .then(function(resp) {
+        if (!resp.ok) throw new Error('Skip failed');
+        window.location.reload();
       })
       .catch(function() {
         button.disabled = false;

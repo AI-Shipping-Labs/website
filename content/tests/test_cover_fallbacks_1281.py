@@ -96,13 +96,22 @@ class PublicPolishTemplateContractTest(SimpleTestCase):
 
     def test_stale_controls_keep_accessible_existing_contracts(self):
         dashboard = self._read("templates/content/dashboard.html")
+        getting_started = self._read(
+            "templates/content/_dashboard_commitment_zones.html"
+        )
         slack = self._read("templates/includes/_slack_account_card.html")
         account = self._read("templates/accounts/account.html")
 
         self.assertIn('id="dismiss-success-banner"', dashboard)
-        self.assertGreaterEqual(dashboard.count("h-11 w-11"), 2)
-        self.assertGreaterEqual(dashboard.count('aria-label="Dismiss"'), 2)
-        self.assertIn('data-testid="onboarding-prompt-dismiss"', dashboard)
+        self.assertGreaterEqual(dashboard.count("h-11 w-11"), 1)
+        self.assertGreaterEqual(dashboard.count('aria-label="Dismiss"'), 1)
+        self.assertIn('data-testid="free-activation-dismiss"', getting_started)
+        self.assertIn(
+            "{% if activation_checklist_all_complete %}", getting_started,
+        )
+        self.assertNotIn(
+            'data-testid="onboarding-prompt-dismiss"', getting_started,
+        )
         self.assertIn("focus-visible:ring-2", dashboard)
         self.assertIn("relative h-full", slack)
         self.assertIn("absolute right-3 top-3", slack)

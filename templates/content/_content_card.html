@@ -17,6 +17,8 @@ precedent). Every parameter is prefixed card_*:
                                    after the header row, inside the anchor.
   card_testid         (required) — data-testid on the <article>.
   card_badge_template (optional) — badge-cluster partial for the header row.
+  card_trailing_badge_template (optional) — status rendered beside the shared
+                                   right-side arrow in the header row.
   card_media_template (optional) — media-band partial (renders _content_preview).
   card_editorial      (optional, default False) — render a calm horizontal
                                    editorial row with divider rhythm instead
@@ -70,14 +72,17 @@ they can read the entity variable (project, event, workshop, ...) directly.
       {% endif %}
     {% endif %}
     <div class="flex min-w-0 flex-1 flex-col {% if not card_editorial %}{% if card_compact %}p-4{% else %}p-4 sm:p-5{% endif %}{% endif %}">
-      {% if card_badge_template or card_arrow != False %}
+      {% if card_badge_template or card_trailing_badge_template or card_arrow != False %}
       <div class="mb-3 flex items-start justify-between gap-3">
         <div class="flex min-w-0 flex-wrap items-center gap-2">
           {% if card_badge_template %}{% include card_badge_template %}{% endif %}
         </div>
-        {% if card_arrow != False and not card_static %}
-        <i data-lucide="arrow-right" class="hidden sm:block {% if card_editorial %}relative {% endif %}h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"{% if card_editorial %} style="right: 1.25rem;"{% endif %} aria-hidden="true"{% if card_arrow_testid %} data-testid="{{ card_arrow_testid }}"{% endif %}></i>
-        {% endif %}
+        <div class="flex shrink-0 items-center gap-3{% if card_editorial %} relative{% endif %}"{% if card_editorial %} style="right: 1.25rem;"{% endif %} data-testid="content-card-trailing-meta">
+          {% if card_trailing_badge_template %}{% include card_trailing_badge_template %}{% endif %}
+          {% if card_arrow != False and not card_static %}
+          <i data-lucide="arrow-right" class="hidden h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent sm:block" aria-hidden="true"{% if card_arrow_testid %} data-testid="{{ card_arrow_testid }}"{% endif %}></i>
+          {% endif %}
+        </div>
       </div>
       {% endif %}
       {% if card_editorial and card_title %}

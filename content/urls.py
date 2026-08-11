@@ -23,6 +23,7 @@ from content.views.home import home
 from content.views.interview import interview_detail, interview_hub
 from content.views.legal import impressum, privacy, terms
 from content.views.marketing_pages import marketing_page_preview
+from content.views.membership import membership
 from content.views.pages import (
     about,
     activities,
@@ -65,6 +66,7 @@ from content.views.workshops import (
 
 urlpatterns = [
     path('', home, name='home'),
+    path('membership', membership, name='pricing'),
     path('about', about, name='about'),
     # Legal pages (issue #368) — public, no auth required.
     path('terms', terms, name='terms'),

@@ -996,7 +996,7 @@ class TestScenario2FreeMemberHitsBasicGatedArticle:
         self, django_server
     , browser):
         """Free member sees the title, teaser, but not full body, and
-        an upgrade CTA linking to /pricing."""
+        an upgrade CTA linking to /membership."""
         _clear_all_content()
         _create_user("free@test.com", tier_slug="free")
         _create_article(
@@ -1051,8 +1051,8 @@ class TestScenario2FreeMemberHitsBasicGatedArticle:
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 
-        # Navigated to /pricing with all four tiers
-        assert "/pricing" in page.url
+        # Navigated to /membership with all four tiers
+        assert "/membership" in page.url
         pricing_body = page.content()
         assert "Free" in pricing_body
         assert "Basic" in pricing_body
@@ -1135,7 +1135,7 @@ class TestScenario3BasicMemberReadsBasicBlockedOnMain:
         pricing_link = page.get_by_test_id("gated-pricing-link")
         assert pricing_link.count() >= 1
         href = pricing_link.first.get_attribute("href")
-        assert "/pricing" in href
+        assert "/membership" in href
 # ---------------------------------------------------------------
 # Scenario 4: Main member reads all up to their level, blocked on Premium
 # ---------------------------------------------------------------
@@ -1527,7 +1527,7 @@ class TestScenario8AnonymousEvaluatesGatedCourseSyllabus:
         assert pricing_link.count() == 1
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/pricing" in page.url
+        assert "/membership" in page.url
 # ---------------------------------------------------------------
 # Scenario 9: Main member navigates a course, reads a unit, marks complete
 # ---------------------------------------------------------------
@@ -1751,7 +1751,7 @@ class TestScenario11FreeMemberGatedDownloads:
         # Click View Pricing
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/pricing" in page.url
+        assert "/membership" in page.url
 # ---------------------------------------------------------------
 # Scenario 12: Free member tries to register for Main-gated event
 # ---------------------------------------------------------------
@@ -1809,4 +1809,4 @@ class TestScenario12FreeMemberGatedEvent:
         # Click View Pricing
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/pricing" in page.url
+        assert "/membership" in page.url

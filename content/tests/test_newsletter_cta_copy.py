@@ -167,14 +167,14 @@ class BlogEmptyStateCopyTest(TierSetupMixin, TestCase):
 
 
 class PricingFreeTierPostLaunchCTATest(TierSetupMixin, TestCase):
-    """Anonymous visitor on /pricing sees the rewritten free-tier CTA."""
+    """Anonymous visitor on /membership sees the rewritten free-tier CTA."""
 
     def test_free_tier_cta_links_to_signup(self):
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         # The free-tier card is a single Join button linking to the
         # standalone register page (the inline form was retired).
         self.assertContains(response, 'data-testid="pricing-free-signup-cta"')
-        self.assertContains(response, 'href="/accounts/register/?next=/pricing"')
+        self.assertContains(response, 'href="/accounts/register/?next=/membership"')
         self.assertNotContains(response, 'data-testid="inline-register-card"')
         # Old newsletter CTA must be gone.
         self.assertNotContains(response, 'href="/#newsletter"')

@@ -153,13 +153,13 @@ def test_pricing_desktop_cards_share_baseline_with_free_join_cta(
         _seed_pricing(oauth=True)
 
     page.set_viewport_size(DESKTOP)
-    page.goto(f"{django_server}/pricing", wait_until="networkidle")
+    page.goto(f"{django_server}/membership", wait_until="networkidle")
     free_card = page.locator('[data-tier-card="free"]')
     # The Free tier is a single Join button that links to the register
     # page (the inline register form / email toggle were removed).
     signup_cta = free_card.locator('[data-testid="pricing-free-signup-cta"]')
     expect(signup_cta).to_be_visible()
-    assert signup_cta.get_attribute("href") == "/accounts/register/?next=/pricing"
+    assert signup_cta.get_attribute("href") == "/accounts/register/?next=/membership"
     assert free_card.locator("#register-email").count() == 0
 
     metrics = {slug: _card_metrics(page, slug) for slug in ("free", "basic", "main", "premium")}
@@ -180,7 +180,7 @@ def test_pricing_mobile_indicator_controls_scroll_without_overflow(
         _seed_pricing(oauth=True)
 
     page.set_viewport_size(MOBILE)
-    page.goto(f"{django_server}/pricing", wait_until="networkidle")
+    page.goto(f"{django_server}/membership", wait_until="networkidle")
     page.wait_for_function(
         "() => document.querySelector('[data-testid=\"pricing-tier-carousel\"]').scrollLeft > 0",
         timeout=SETTLE_TIMEOUT_MS,
@@ -200,15 +200,47 @@ def test_pricing_mobile_indicator_controls_scroll_without_overflow(
     assert _body_overflow(page) <= 1
 
     indicators = page.locator('[data-testid="pricing-tier-indicator"]')
+    dots = page.locator('[data-testid="pricing-tier-indicator-dot"]')
     assert indicators.count() == 4
+    assert dots.count() == 4
+    indicator_boxes = []
     for tier in ("Free", "Basic", "Main", "Premium"):
-        expect(
-            page.get_by_role("button", name=f"Show {tier} tier")
-        ).to_be_visible()
+        indicator = page.get_by_role("button", name=f"Show {tier} tier")
+        expect(indicator).to_be_visible()
+        box = indicator.bounding_box()
+        assert box is not None
+        assert box["width"] >= 44
+        assert box["height"] >= 44
+        indicator_boxes.append(box)
+    for dot_index in range(dots.count()):
+        dot_box = dots.nth(dot_index).bounding_box()
+        assert dot_box is not None
+        assert 10 <= dot_box["width"] <= 14
+        assert 10 <= dot_box["height"] <= 14
+    assert max(box["y"] for box in indicator_boxes) - min(
+        box["y"] for box in indicator_boxes
+    ) <= 1
+    group_box = page.get_by_role("group", name="Pricing tiers").bounding_box()
+    assert group_box is not None
+    assert abs((group_box["x"] + group_box["width"] / 2) - MOBILE["width"] / 2) <= 1
     assert (
         page.get_by_role("button", name="Show Main tier").get_attribute("aria-current")
         == "true"
     )
+
+    most_popular = page.get_by_test_id("pricing-most-popular-badge")
+    expect(most_popular).to_have_count(1)
+    expect(most_popular).to_have_attribute("data-component", "member-badge")
+    expect(most_popular.locator('[data-lucide="star"]')).to_have_count(1)
+    most_popular_classes = most_popular.get_attribute("class").split()
+    assert "bg-accent" in most_popular_classes
+    assert "text-accent-foreground" in most_popular_classes
+    assert "bg-accent/10" not in most_popular_classes
+    for slug in ("free", "basic", "premium"):
+        expect(
+            page.locator(f'[data-tier-card="{slug}"]')
+            .get_by_test_id("pricing-most-popular-badge")
+        ).to_have_count(0)
 
     page.get_by_role("button", name="Show Free tier").click()
     page.wait_for_function(
@@ -239,15 +271,15 @@ def test_pricing_free_join_cta_routes_to_register_with_pricing_return_url(
     with django_db_blocker.unblock():
         _seed_pricing(oauth=True)
 
-    page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+    page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
     free_card = page.locator('[data-tier-card="free"]')
     signup_cta = free_card.locator('[data-testid="pricing-free-signup-cta"]')
     expect(signup_cta).to_be_visible()
-    # Clicking Join sends the visitor to the register page with next=/pricing
+    # Clicking Join sends the visitor to the register page with next=/membership
     # so they return here after creating a free account.
     signup_cta.click()
     page.wait_for_url(
-        f"{django_server}/accounts/register/?next=/pricing", timeout=10000
+        f"{django_server}/accounts/register/?next=/membership", timeout=10000
     )
 
 
@@ -265,7 +297,7 @@ def test_authenticated_pricing_keeps_account_state_and_no_inline_register(
     page = context.new_page()
     try:
         page.set_viewport_size(MOBILE)
-        page.goto(f"{django_server}/pricing", wait_until="networkidle")
+        page.goto(f"{django_server}/membership", wait_until="networkidle")
         assert page.locator('[data-testid="inline-register-card"]').count() == 0
         expect(page.locator('[data-tier-card="main"]')).to_contain_text("Current plan")
         expect(page.locator('[data-tier-card="basic"]')).to_contain_text("Downgrade")

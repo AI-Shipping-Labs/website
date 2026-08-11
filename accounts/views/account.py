@@ -93,6 +93,7 @@ from accounts.services.timezones import (
 )
 from community.services.slack_links import build_slack_profile_url
 from content.access import LEVEL_MAIN, get_active_override, get_user_level
+from content.tier_config import get_tiers_with_features
 from integrations.config import get_config
 from payments.models import Tier
 from payments.tier_state import build_tier_state
@@ -120,19 +121,20 @@ _ACCOUNT_TIER_BENEFIT_FALLBACKS = {
         "Account dashboard and email preferences",
     ],
     "basic": [
-        "Everything in Free",
-        "Exclusive articles, tutorials with code, AI tool breakdowns, and research notes",
-        "Basic gated curated links and downloads",
+        "Exclusive written content",
+        "Workshop content",
     ],
     "main": [
         "Everything in Basic",
-        "Slack community, group coding sessions, and guided project work",
-        "Accountability through sprints, topic voting, and community activities",
+        "Community sprints",
+        "Live events",
+        "Private Slack community",
     ],
     "premium": [
         "Everything in Main",
-        "All mini-courses and course-topic voting",
-        "Resume, LinkedIn, and GitHub teardowns",
+        "Courses",
+        "Resume and LinkedIn teardown",
+        "GitHub feedback",
     ],
 }
 
@@ -142,22 +144,21 @@ _ACCOUNT_NEXT_TIER_UPSELLS = {
         "target_name": "Main",
         "title": "Main adds the community layer",
         "description": (
-            "Join the private community, live and group work, accountability "
-            "sprints, and topic voting."
+            "Join community sprints and live events, use the private Slack "
+            "workspace, get personalized onboarding, and vote on topics."
         ),
         "cta_label": "Compare Main",
-        "url": "/pricing",
+        "url": "/membership",
     },
     "main": {
         "target_slug": "premium",
         "target_name": "Premium",
         "title": "Premium adds deeper career support",
         "description": (
-            "Unlock mini-courses, course-topic voting, and resume, LinkedIn, "
-            "and GitHub teardowns."
+            "Unlock courses, resume and LinkedIn teardown, and GitHub feedback."
         ),
         "cta_label": "Upgrade to Premium",
-        "url": "/pricing",
+        "url": "/membership",
     },
 }
 
@@ -165,6 +166,19 @@ _ACCOUNT_NEXT_TIER_UPSELLS = {
 def _account_tier_benefits(tier):
     """Return a concise account-card benefit summary for ``tier``."""
     slug = tier.slug if tier else "free"
+    for configured_tier in get_tiers_with_features():
+        if configured_tier.get("stripe_key") != slug:
+            continue
+        configured_features = [
+            str(feature.get("text", "")).strip()
+            for feature in configured_tier.get("features", [])
+            if str(feature.get("text", "")).strip()
+        ]
+        if configured_features:
+            return configured_features[:4]
+
+    # Rolling-deploy compatibility for environments that have not synced the
+    # new benefits records yet.
     synced_features = []
     if tier and isinstance(tier.features, list):
         synced_features = [

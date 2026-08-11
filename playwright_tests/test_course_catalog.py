@@ -866,12 +866,12 @@ class TestScenario9FreeCourseAnonymousSignupCTA:
 
 @pytest.mark.django_db(transaction=True)
 class TestPaidCourseAnonymousUpgradeCTA:
-    """Anonymous visitor on a paid course sees the Upgrade CTA -> /pricing.
+    """Anonymous visitor on a paid course sees the Upgrade CTA -> /membership.
 
     Migrated from the retired test_inline_register_652 suite: a paid
     (required_level > 0) course must NOT offer a free-signup form to an
     anonymous visitor — a free account grants no paid access. The gated
-    card renders a single "Upgrade" CTA that links to /pricing.
+    card renders a single "Upgrade" CTA that links to /membership.
     """
 
     def test_anonymous_on_paid_course_sees_upgrade_cta_to_pricing(
@@ -901,8 +901,8 @@ class TestPaidCourseAnonymousUpgradeCTA:
         )
         assert upgrade.count() == 1
         assert "Upgrade" in upgrade.inner_text()
-        assert upgrade.get_attribute("href") == "/pricing"
+        assert upgrade.get_attribute("href") == "/membership"
 
-        # Clicking it lands on /pricing.
+        # Clicking it lands on /membership.
         upgrade.click()
-        page.wait_for_url(f"{django_server}/pricing", timeout=10000)
+        page.wait_for_url(f"{django_server}/membership", timeout=10000)

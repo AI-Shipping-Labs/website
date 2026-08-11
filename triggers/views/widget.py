@@ -110,7 +110,7 @@ def _build_state(request, widget):
         return "claimed", {"claimed_label": widget.claimed_label}
 
     if not is_eligible(user, widget):
-        return "under_level", {"pricing_url": "/pricing"}
+        return "under_level", {"pricing_url": "/membership"}
 
     return "claimable", {
         "claim_label": widget.claim_label,
@@ -171,7 +171,7 @@ def widget_claim(request, slug):
                 "slug": slug,
                 "state": "under_level",
                 "error": "Your membership level is not eligible for this claim.",
-                "pricing_url": "/pricing",
+                "pricing_url": "/membership",
             },
             status=403,
         )

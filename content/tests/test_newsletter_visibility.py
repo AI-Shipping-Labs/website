@@ -61,24 +61,24 @@ class PricingFreeTierCTATest(TierSetupMixin, TestCase):
         )
 
     def test_anonymous_user_sees_free_tier_signup_cta(self):
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         # The free tier is a single Join button linking to the standalone
         # register page (the inline register form was retired).
         self.assertContains(response, 'data-testid="pricing-free-signup-cta"')
-        self.assertContains(response, 'href="/accounts/register/?next=/pricing"')
+        self.assertContains(response, 'href="/accounts/register/?next=/membership"')
         self.assertNotContains(response, 'data-testid="inline-register-card"')
         self.assertNotContains(response, 'href="/#newsletter"')
 
     def test_authenticated_user_does_not_see_free_tier_subscribe_button(self):
         self.client.login(email="member@test.com", password="testpass123")
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         self.assertNotContains(response, 'href="/#newsletter"')
         self.assertNotContains(response, 'data-testid="inline-register-card"')
-        self.assertContains(response, "Current free plan")
+        self.assertNotContains(response, 'data-testid="pricing-free-signup-cta"')
 
     def test_authenticated_user_still_sees_paid_tier_upgrade_buttons(self):
         self.client.login(email="member@test.com", password="testpass123")
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         # Paid tiers should still offer a paid upgrade path.
         self.assertContains(response, "Upgrade")
 

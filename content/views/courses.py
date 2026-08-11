@@ -145,7 +145,7 @@ def course_detail(request, slug):
                     cta_message = f'Unlock with {tier_name}'
             except Tier.DoesNotExist:
                 cta_message = f'Unlock with {tier_name}'
-            cta_url = '/pricing'
+            cta_url = '/membership'
     elif course.is_free and not user.is_authenticated:
         cta_message = 'Sign up free to start this course'
         cta_url = f'/accounts/signup/?{urlencode({"next": course_url})}'
@@ -440,7 +440,7 @@ def module_overview(request, course_slug, module_slug):
     if not has_access:
         tier_name = get_required_tier_name(course.required_level)
         cta_message = f'Upgrade to {tier_name} to access this module'
-        cta_url = '/pricing'
+        cta_url = '/membership'
 
     context = {
         'course': course,

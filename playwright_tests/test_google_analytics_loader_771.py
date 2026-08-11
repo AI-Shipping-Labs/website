@@ -5,7 +5,7 @@ Scenarios mirror the spec on the GitHub issue:
 1. Anonymous visitor on a vanilla install does not get tracked (no GA
    markup on / or /blog).
 2. Operator configures GA via Studio and the loader appears site-wide
-   on /, /pricing.
+   on /, /membership.
 3. Operator clears the measurement ID and tracking stops on the next
    request.
 """
@@ -121,8 +121,8 @@ class TestGoogleAnalyticsLoader:
         # The ID also appears in the `gtag('config', ...)` call.
         assert html_home.count("G-TEST123456") >= 2
 
-        # And on another public page (/pricing).
-        anon_page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+        # And on another public page (/membership).
+        anon_page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
         html_pricing = anon_page.content()
         assert "G-TEST123456" in html_pricing
 

@@ -113,7 +113,7 @@ class HeaderMobileMenuTest(TestCase):
         self.assertIn('href="/about"', content)
         self.assertNotIn('href="/about#team"', content)
         self.assertNotIn('href="/community"', content)
-        self.assertIn('href="/pricing"', content)
+        self.assertIn('href="/membership"', content)
         self.assertIn('href="/faq"', content)
         self.assertIn('id="community-dropdown-btn"', content)
         self.assertIn('id="learning-dropdown-btn"', content)
@@ -126,8 +126,7 @@ class HeaderMobileMenuTest(TestCase):
         self.assertIn('href="/blog"', content)
         self.assertIn('href="/sprints"', content)
         self.assertIn('href="/events"', content)
-        self.assertIn('href="/activities#access-by-tier"', content)
-        self.assertIn('data-testid="mobile-nav-community-link-activities"', content)
+        self.assertNotIn('mobile-nav-community-link-activities', content)
         self.assertIn('data-testid="mobile-nav-community-link-books"', content)
         # Project Ideas, Curated Links, and Past Recordings were dropped.
         self.assertNotIn('href="/projects"', content)

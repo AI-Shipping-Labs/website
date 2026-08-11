@@ -343,7 +343,7 @@ def test_home_peer_tiers_reachable_via_swipe(django_server, page):
 
 
 # ---------------------------------------------------------------------------
-# Scenario 3: Most Popular badge fully visible on /pricing on mobile
+# Scenario 3: Most Popular badge fully visible on /membership on mobile
 # ---------------------------------------------------------------------------
 
 
@@ -351,7 +351,7 @@ def test_home_peer_tiers_reachable_via_swipe(django_server, page):
 def test_pricing_main_dominant_and_badge_visible_on_mobile(django_server, page):
     _ensure_pricing_tiers()
     page.set_viewport_size(PIXEL_7)
-    page.goto(f"{django_server}/pricing", wait_until="networkidle")
+    page.goto(f"{django_server}/membership", wait_until="networkidle")
     page.wait_for_timeout(200)
 
     main_h = _get_card_height(page, "main")
@@ -409,7 +409,7 @@ def test_pricing_logged_in_main_member_account_states(
     page = context.new_page()
     page.set_viewport_size(PIXEL_7)
     try:
-        page.goto(f"{django_server}/pricing", wait_until="networkidle")
+        page.goto(f"{django_server}/membership", wait_until="networkidle")
         page.wait_for_timeout(200)
 
         # Account-aware state: Main shows "Current plan"; paid users with
@@ -498,7 +498,7 @@ def test_home_tiers_section_height_under_threshold(django_server, page):
 
 
 # ---------------------------------------------------------------------------
-# Scenario 6: No body overflow at multiple widths on / and /pricing
+# Scenario 6: No body overflow at multiple widths on / and /membership
 # ---------------------------------------------------------------------------
 
 
@@ -508,7 +508,7 @@ def test_no_horizontal_body_overflow_across_widths(django_server, page):
     _ensure_pricing_tiers()
     for width in (320, 393, 768, 1024):
         page.set_viewport_size({"width": width, "height": 851})
-        for path in ("/", "/pricing"):
+        for path in ("/", "/membership"):
             page.goto(f"{django_server}{path}", wait_until="networkidle")
             overflow = page.evaluate(
                 "() => document.documentElement.scrollWidth - "
@@ -572,7 +572,7 @@ def test_desktop_layout_unchanged(django_server, page):
 
     _screenshot(page, "home_tiers_desktop_unchanged")
 
-    page.goto(f"{django_server}/pricing", wait_until="networkidle")
+    page.goto(f"{django_server}/membership", wait_until="networkidle")
     pricing_carousel = page.locator(
         '[data-testid="pricing-tier-carousel"]'
     )
@@ -598,7 +598,7 @@ def test_main_auto_centered_on_mobile_load(django_server, page):
 
     for path, selector in (
         ("/", '[data-testid="home-tier-carousel"]'),
-        ("/pricing", '[data-testid="pricing-tier-carousel"]'),
+        ("/membership", '[data-testid="pricing-tier-carousel"]'),
     ):
         page.goto(f"{django_server}{path}", wait_until="networkidle")
         max_delta = 60

@@ -8,7 +8,7 @@ Local-mode hardening (Issue #786): when the suite runs against the
 in-process Django test DB, an earlier ``@pytest.mark.django_db(
 transaction=True)`` test can truncate the ``Tier`` table between
 fixtures. The ``_ensure_tiers_seeded`` fixture re-seeds the four
-bootstrap tiers before this test runs so ``/pricing`` always finds
+bootstrap tiers before this test runs so ``/membership`` always finds
 data. The fixture is a no-op when ``PLAYWRIGHT_BASE_URL`` points at a
 deployed host — the dev/prod databases must not be written to from
 the Playwright runner.
@@ -38,9 +38,9 @@ def _ensure_tiers_seeded(django_db_blocker):
 
 @pytest.mark.django_db
 def test_pricing_page_renders_tier_grid(django_server, page):
-    """/pricing renders the tier comparison grid with all four tier cards."""
-    response = goto_with_retry(page, f"{django_server}/pricing")
-    assert response.status == 200, f"/pricing returned {response.status}"
+    """/membership renders the tier comparison grid with all four tier cards."""
+    response = goto_with_retry(page, f"{django_server}/membership")
+    assert response.status == 200, f"/membership returned {response.status}"
     # The pricing template renders one ``[data-tier-card]`` per tier.
     expected_tiers = {"free", "basic", "main", "premium"}
     found_tiers = set()

@@ -1,0 +1,84 @@
+{% load accounts_extras member_empty_state sprint_extras %}
+{% button_classes 'secondary' as membership_secondary_button_classes %}
+
+<section id="community-sprints" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28" data-testid="membership-sprints-section">
+  <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+    <div class="space-y-8">
+      <div class="mx-auto max-w-3xl text-center" data-testid="membership-sprints-intro">
+        <p class="inline-flex items-center gap-2 text-sm font-medium uppercase tracking-widest text-accent">
+          <i data-lucide="timer" class="h-4 w-4" aria-hidden="true"></i>
+          Community sprints
+        </p>
+        <h2 class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
+          Active community sprints
+        </h2>
+        <p class="mt-5 text-base leading-relaxed text-muted-foreground sm:text-lg">
+          Sprints are time-bound cohorts for shipping projects with structure, accountability,
+          and a clear window for making visible progress with the community.
+        </p>
+      </div>
+
+      <div class="min-w-0" data-testid="membership-sprints-card-row">
+        {% if activity_sprints %}
+        <div class="border-t border-border/70">
+          {% for item in activity_sprints %}
+          {% include "content/_content_card.html" with card_url=item.detail_url card_testid="membership-sprint-card" card_anchor_testid="membership-sprint-detail-link" card_body_template="content/_sprint_card_body.html" card_badge_template="content/_sprint_card_badges.html" card_editorial=True card_title=item.sprint.name card_title_testid="membership-sprint-name" card_heading_tag="h3" card_aria_label=item.sprint.name %}
+          {% endfor %}
+        </div>
+        {% else %}
+        {% member_empty_state title='Next sprint coming soon' body='The next community sprint is not open yet. Live events and workshops are still available while the next cohort window is prepared.' icon='timer-off' kind='fresh' primary_cta_label='Events' primary_cta_url='/events' primary_cta_icon='calendar-days' primary_cta_class=membership_secondary_button_classes secondary_cta_label='Workshops' secondary_cta_url='/workshops' secondary_cta_icon='presentation' secondary_cta_class=membership_secondary_button_classes testid='membership-sprints-empty' %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="live-events" class="border-t border-border bg-card py-12 sm:py-20 lg:py-28" data-testid="membership-live-events-section">
+  <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+    <div class="mx-auto max-w-3xl text-center">
+      <p class="text-sm font-medium uppercase tracking-widest text-accent">Live events</p>
+      <h2 class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Upcoming community sessions</h2>
+      <p class="mt-4 text-base leading-relaxed text-muted-foreground">See the next building sessions, office hours, mock interviews, and career conversations on the community calendar.</p>
+      <a href="/events" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="membership-view-all-events">
+        View all events
+        <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
+      </a>
+    </div>
+
+    {% if upcoming_days %}
+    <div class="mt-10" data-testid="membership-live-events-list">
+      {% include "events/_events_timeline.html" with days=upcoming_days %}
+    </div>
+    {% else %}
+    <div class="mt-10">
+      {% member_empty_state title='No live events scheduled yet' body='New community sessions will appear here as soon as they are announced.' icon='calendar-days' kind='fresh' primary_cta_label='View events' primary_cta_url='/events' primary_cta_icon='arrow-right' primary_cta_class=membership_secondary_button_classes testid='membership-live-events-empty' %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<section id="workshops" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28" data-testid="membership-workshops-section">
+  <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+    <div class="mx-auto max-w-3xl text-center">
+      <p class="text-sm font-medium uppercase tracking-widest text-accent">Workshops</p>
+      <h2 class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Recent hands-on workshops</h2>
+      <p class="mt-4 text-base leading-relaxed text-muted-foreground">Preview recent workshops with recordings, step-by-step tutorials, and practical materials.</p>
+      <a href="/workshops" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="membership-view-all-workshops">
+        View all workshops
+        <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
+      </a>
+    </div>
+
+    {% if recent_workshops %}
+    <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3" data-testid="membership-workshops-grid">
+      {% for workshop in recent_workshops %}
+      {% include "content/_content_card.html" with card_url=workshop.get_absolute_url card_testid="workshop-card" card_anchor_testid="workshop-card-link" card_body_template="content/_workshop_card_body.html" card_badge_template="content/_workshop_card_badges.html" card_media_template="content/_workshop_card_media.html" card_compact=True card_aria_label=workshop.title card_extra_attrs='data-workshop-slug="'|add:workshop.slug|add:'"' %}
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="mt-10">
+      {% member_empty_state title='No workshops published yet' body='New hands-on workshop materials will appear here when they are ready.' icon='presentation' kind='fresh' primary_cta_label='View workshops' primary_cta_url='/workshops' primary_cta_icon='arrow-right' primary_cta_class=membership_secondary_button_classes testid='membership-workshops-empty' %}
+    </div>
+    {% endif %}
+  </div>
+</section>

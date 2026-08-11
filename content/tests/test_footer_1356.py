@@ -111,7 +111,7 @@ class FooterInformationArchitectureTest(TestCase):
 
     def test_community_column_contents(self):
         col = _column_ul(self._get_footer(), 'Community')
-        self.assertIn('href="/activities#access-by-tier"', col)
+        self.assertIn('href="/membership#activities"', col)
         self.assertIn('href="/sprints"', col)
         self.assertIn('href="/events"', col)
         # Past Recordings was dropped from the nav + footer (Aug 2026 redesign).
@@ -148,7 +148,7 @@ class FooterInformationArchitectureTest(TestCase):
         self.assertIn('>Team<', col)
         self.assertIn('href="/faq"', col)
         self.assertIn('Membership Tiers', col)
-        self.assertIn('href="/pricing"', col)
+        self.assertIn('href="/membership"', col)
 
     def test_legal_column_unchanged(self):
         col = _column_ul(self._get_footer(), 'Legal')

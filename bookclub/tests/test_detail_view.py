@@ -66,7 +66,7 @@ class BookDetailGatingTest(TestCase):
 
     def test_upgrade_cta_targets_pricing(self):
         response = self.client.get('/books/inference-engineering')
-        self.assertContains(response, '/pricing')
+        self.assertContains(response, '/membership')
 
     def test_draft_book_404s_for_the_public(self):
         Book.objects.create(

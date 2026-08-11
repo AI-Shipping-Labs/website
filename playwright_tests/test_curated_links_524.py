@@ -319,7 +319,7 @@ class TestScenario5EmptyCategoriesNotRendered:
 @pytest.mark.django_db(transaction=True)
 class TestScenario6FreeUserGatedWorkshopUpgradeCTA:
     """A free member sees a lock + upgrade CTA on a Basic-gated workshop
-    and `View Plans` lands on /pricing."""
+    and `View Plans` lands on /membership."""
 
     def test_gated_workshop_shows_upgrade_cta(
         self, django_server, browser
@@ -362,12 +362,12 @@ class TestScenario6FreeUserGatedWorkshopUpgradeCTA:
         assert "Upgrade to Basic to access this resource" in cta.inner_text()
 
         # `View membership tiers` link (renamed from `View Plans`, commit
-        # bc89c683) still lands on /pricing.
+        # bc89c683) still lands on /membership.
         view_plans = cta.locator('a:has-text("View membership tiers")')
         assert view_plans.count() >= 1
         view_plans.first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/pricing" in page.url
+        assert "/membership" in page.url
 
 
 # ---------------------------------------------------------------

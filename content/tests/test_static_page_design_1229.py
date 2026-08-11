@@ -182,6 +182,6 @@ class StaticPageBehaviorPreservationTest(TestCase):
         self.assertNotIn('id="newsletter"', html)
 
     def test_footer_newsletter_remains_hidden_on_suppressed_surface(self):
-        html = self.client.get("/pricing").content.decode()
+        html = self.client.get("/membership").content.decode()
         self.assertNotIn('<div class="subscribe-form-container"', html)
         self.assertNotIn('id="newsletter"', html)

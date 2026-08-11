@@ -421,7 +421,7 @@ class TestScenario4FreeMemberCannotEnroll:
     def test_free_member_sees_cohort_no_enroll_button(self, django_server, browser):
         """Given a Free-tier user and a course with required_level=20.
         The cohort info is visible but no Enroll button is shown.
-        An upgrade CTA links to /pricing."""
+        An upgrade CTA links to /membership."""
         _clear_courses()
         _ensure_tiers()
         _create_user("free@test.com", tier_slug="free")
@@ -464,11 +464,11 @@ class TestScenario4FreeMemberCannotEnroll:
         )
         assert enroll_btn.count() == 0
 
-        # Then: Upgrade CTA links to /pricing
+        # Then: Upgrade CTA links to /membership
         pricing_link = page.get_by_test_id("course-gated-cta-button")
         assert pricing_link.count() >= 1
         href = pricing_link.first.get_attribute("href")
-        assert "/pricing" in href
+        assert "/membership" in href
 # ---------------------------------------------------------------
 # Scenario 5: Anonymous visitor browses a course with cohorts and
 #              sees the sign-up path
@@ -482,7 +482,7 @@ class TestScenario5AnonymousVisitorSeesCohortAndPricing:
     def test_anonymous_sees_cohort_info_and_pricing_cta(self, django_server, page):
         """Given an anonymous visitor and a course with required_level=20
         and an active cohort. The cohort info is visible, no Enroll button
-        is shown, and a View Pricing CTA links to /pricing."""
+        is shown, and a View Pricing CTA links to /membership."""
         _clear_courses()
         _ensure_tiers()
 
@@ -530,8 +530,8 @@ class TestScenario5AnonymousVisitorSeesCohortAndPricing:
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 
-        # Then: Lands on /pricing
-        assert "/pricing" in page.url
+        # Then: Lands on /membership
+        assert "/membership" in page.url
 # ---------------------------------------------------------------
 # Scenario 6: Enrolled cohort member accesses a drip-locked unit
 #              and sees the unlock date

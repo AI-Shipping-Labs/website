@@ -92,7 +92,7 @@ def test_guest_events_use_canonical_tier_badges_and_gated_card(
     # Pricing — a free account grants no paid access, so there is no
     # signup/sign-in companion on the paid card.
     expect(page.get_by_test_id("event-anonymous-pricing-cta")).to_have_attribute(
-        "href", "/pricing",
+        "href", "/membership",
     )
     expect(page.get_by_test_id("event-anonymous-signin-cta")).to_have_count(0)
 

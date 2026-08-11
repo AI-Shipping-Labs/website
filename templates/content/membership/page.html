@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
+{% load member_badges %}
 {% load seo_tags %}
 
-{% block title %}Pricing | {{ site_name }}{% endblock %}
-{% block meta_description %}Choose your membership tier. Free newsletter, or paid access to exclusive content, community, courses, and personalized feedback.{% endblock %}
-{% block page_head_metadata %}{% page_seo_tags "Pricing | AI Shipping Labs" "Choose your membership tier. Free newsletter, or paid access to exclusive content, community, courses, and personalized feedback." "/pricing" %}{% endblock %}
+{% block title %}Membership | {{ site_name }}{% endblock %}
+{% block meta_description %}Compare AI Shipping Labs membership plans and explore the structure, community, courses, and personalized feedback included with each tier.{% endblock %}
+{% block page_head_metadata %}{% page_seo_tags "Membership | AI Shipping Labs" "Compare AI Shipping Labs membership plans and explore the structure, community, courses, and personalized feedback included with each tier." "/membership" %}{% endblock %}
 
 {% block body %}
 <main class="min-h-screen">
@@ -36,8 +37,8 @@
             <i data-lucide="circle-alert" class="h-5 w-5 text-amber-400"></i>
             <p class="text-sm font-medium text-amber-200">Checkout was cancelled. You can try again anytime.</p>
           </div>
-          <button type="button" id="dismiss-cancelled-banner" class="text-amber-300 transition-colors hover:text-amber-200" aria-label="Dismiss">
-            <i data-lucide="x" class="h-4 w-4"></i>
+          <button type="button" id="dismiss-cancelled-banner" class="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md text-amber-300 transition-colors hover:text-amber-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" aria-label="Dismiss">
+            <i data-lucide="x" class="h-4 w-4" aria-hidden="true"></i>
           </button>
         </div>
       </div>
@@ -52,13 +53,6 @@
           Each tier is designed for a different type of builder. More investment means more structure,
           accountability, and support to help you ship your AI projects consistently.
         </p>
-        <a href="/activities#access-by-tier"
-           class="mt-4 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80 sm:mt-6"
-           data-testid="pricing-activities-compare-link">
-          Compare activities by tier
-          <i data-lucide="arrow-right" class="h-4 w-4"></i>
-        </a>
-
         <!-- Monthly / Yearly Toggle -->
         <div class="mt-4 flex items-center justify-center gap-4 sm:mt-8">
           <span class="whitespace-nowrap text-sm text-muted-foreground" id="monthly-label">Monthly</span>
@@ -94,16 +88,13 @@
         {# Issue #1339 — tier / pricing role: singular spotlight surface keeps rounded-xl, #}
         {# p-5 sm:p-8, shadow-xl on the highlighted tier only, and a full-width Join button #}
         {# with no navigation arrow. Mirrors home.html; no visual change here. #}
-        <div class="relative overflow-visible flex flex-col rounded-xl border p-5 sm:p-8 transition-all max-lg:flex-none max-lg:snap-center {% if item.tier.slug == 'free' %}pricing-free-tier-card {% endif %}{% if item.tier.slug == 'main' %}border-accent bg-background shadow-xl ring-2 ring-accent/20 mt-4 sm:mt-0 max-lg:w-[min(82vw,22rem)]{% else %}border-border bg-background {% if item.tier.slug == 'free' %}max-lg:w-[min(82vw,22rem)]{% else %}max-lg:w-[min(72vw,18rem)]{% endif %} max-lg:p-4{% endif %}"
+        <div class="{% include 'content/membership/_tier_card_classes.html' with tier_slug=item.tier.slug %}"
              data-tier-card="{{ item.tier.slug }}"
              data-testid="pricing-tier-card"
              {% if item.tier.slug == 'main' %}style="box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);"{% endif %}>
           {% if item.tier.slug == 'main' %}
           <div class="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
-            <span class="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground whitespace-nowrap">
-              <i data-lucide="star" class="h-3 w-3"></i>
-              Most popular
-            </span>
+            {% member_label_badge "Most popular" tone="accent_solid" size="sm" icon="star" testid="pricing-most-popular-badge" extra_class="whitespace-nowrap" %}
           </div>
           {% endif %}
 
@@ -112,9 +103,7 @@
             <div class="flex min-h-[28px] items-start justify-between gap-3">
               <h2 class="text-lg font-semibold text-foreground">{{ item.tier.name }}</h2>
               {% if item.state.badge %}
-              <span class="shrink-0 rounded-full border border-border bg-secondary/60 px-2 py-1 text-[11px] font-medium leading-none text-muted-foreground">
-                {{ item.state.badge }}
-              </span>
+              {% member_label_badge item.state.badge tone="neutral" %}
               {% endif %}
             </div>
           </div>
@@ -137,7 +126,7 @@
           </div>
 
           <!-- Description -->
-          <p class="mb-6 line-clamp-3 text-sm text-muted-foreground max-lg:mb-4 {% if item.tier.slug != 'main' %}max-lg:hidden{% endif %}">{{ item.tier.description }}</p>
+          <p class="mb-6 text-sm leading-6 text-muted-foreground max-lg:mb-4 lg:min-h-[4.5rem] {% if item.tier.slug != 'main' %}max-lg:hidden{% endif %}">{{ item.tier.description }}</p>
           {% if item.state.note %}
           <p class="-mt-3 mb-6 rounded-md border border-border bg-secondary/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
             {{ item.state.note }}
@@ -146,11 +135,11 @@
 
           <!-- Features -->
           <ul class="mb-8 flex-1 space-y-3 max-lg:mb-4 max-lg:space-y-2">
-            {% for feature in item.tier.features %}
+            {% for feature in item.pricing_features %}
             {# Issues #510/#1188: keep peer cards compact on mobile; Free shows two visible benefits before social signup. #}
             <li class="flex items-start gap-3 {% if item.tier.slug == 'free' and forloop.counter > 2 %}max-lg:hidden{% elif item.tier.slug != 'main' and forloop.counter > 3 %}max-lg:hidden{% endif %}">
               <i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent"></i>
-              <span class="text-sm text-foreground">{{ feature }}</span>
+              <span class="text-sm text-foreground">{{ feature.title }}</span>
             </li>
             {% endfor %}
           </ul>
@@ -158,20 +147,20 @@
           <!-- CTA Button -->
           <div class="mt-auto">
             {% if item.state.action_kind == 'disabled' %}
-            <span class="block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium bg-secondary/50 text-muted-foreground min-h-[44px] flex items-center justify-center">
+            <span class="{% button_classes 'secondary' size='lg' extra='w-full cursor-not-allowed bg-secondary/50 text-muted-foreground hover:bg-secondary/50' %}">
               {{ item.state.action_label }}
             </span>
             {% elif item.state.action_kind == 'signup' %}
             {% comment %}Free tier: a single Join button that sends the visitor to the
                register page (the inline register form was removed here).{% endcomment %}
-            <a href="{% url 'account_register' %}?next=/pricing"
+            <a href="{% url 'account_register' %}?next=/membership"
                class="{% button_classes 'secondary' size='lg' extra='w-full' %}"
                data-testid="pricing-free-signup-cta">
               {{ item.state.action_label }}
             </a>
             {% elif item.state.action_kind == 'portal' %}
             <a href="{{ stripe_customer_portal_url }}"
-               class="block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors bg-secondary text-foreground hover:bg-secondary/80 min-h-[44px] flex items-center justify-center"
+               class="{% button_classes 'secondary' size='lg' extra='w-full' %}"
                data-action="manage-subscription">
               {{ item.state.action_label }}
             </a>
@@ -202,14 +191,15 @@
       </div>
 
       <div class="mt-2 flex justify-center lg:hidden" data-pricing-tier-indicators data-testid="pricing-tier-indicators">
-        <div class="inline-flex min-h-[44px] items-center gap-2" role="group" aria-label="Pricing tiers">
+        <div class="inline-flex items-center justify-center" role="group" aria-label="Pricing tiers">
           {% for item in tiers_data %}
           <button type="button"
-                  class="h-3 w-3 rounded-full border border-border bg-muted transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  class="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   data-tier-indicator="{{ item.tier.slug }}"
                   data-testid="pricing-tier-indicator"
                   aria-label="Show {{ item.tier.name }} tier"
                   aria-current="false">
+            <span class="h-3 w-3 rounded-full border border-border bg-muted transition-transform transition-colors" data-tier-indicator-dot data-testid="pricing-tier-indicator-dot" aria-hidden="true"></span>
             <span class="sr-only">{{ item.tier.name }}</span>
           </button>
           {% endfor %}
@@ -217,6 +207,9 @@
       </div>
     </div>
   </section>
+
+  {% include "content/membership/_benefits.html" %}
+  {% include "content/membership/_previews.html" %}
 
   {% include "includes/footer.html" %}
 </main>
@@ -301,12 +294,14 @@ document.getElementById('billing-toggle').addEventListener('click', function() {
   function setActiveIndicator(slug) {
     document.querySelectorAll('[data-tier-indicator]').forEach(function(indicator) {
       var isActive = indicator.dataset.tierIndicator === slug;
+      var dot = indicator.querySelector('[data-tier-indicator-dot]');
       indicator.setAttribute('aria-current', isActive ? 'true' : 'false');
+      if (!dot) return;
       activeIndicatorClasses.forEach(function(className) {
-        indicator.classList.toggle(className, isActive);
+        dot.classList.toggle(className, isActive);
       });
       inactiveIndicatorClasses.forEach(function(className) {
-        indicator.classList.toggle(className, !isActive);
+        dot.classList.toggle(className, !isActive);
       });
     });
   }

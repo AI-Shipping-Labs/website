@@ -1689,7 +1689,7 @@ class CourseDetailFreeSignupActionsTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'data-testid="course-gated-cta-button"')
         self.assertContains(response, 'Upgrade')
         self.assertNotContains(response, 'View Pricing')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
         self.assertNotContains(response, 'data-testid="teaser-signup-cta"')
         self.assertNotContains(response, 'data-testid="inline-register-card"')
 

@@ -175,7 +175,7 @@ def test_visitor_understands_paid_course_requirement(django_server, page):
     _assert_no_horizontal_overflow(page)
     _capture(page, "course-mobile-dark")
     page.get_by_test_id("course-gated-cta-button").click()
-    page.wait_for_url(f"{django_server}/pricing")
+    page.wait_for_url(f"{django_server}/membership")
 
 
 @pytest.mark.core
@@ -217,7 +217,7 @@ def test_free_member_gets_module_upgrade_path(django_server, browser):
         _assert_no_horizontal_overflow(page)
         _capture(page, "module-desktop-dark")
         page.get_by_test_id("module-cta-button").click()
-        page.wait_for_url(f"{django_server}/pricing")
+        page.wait_for_url(f"{django_server}/membership")
     finally:
         context.close()
 
@@ -392,7 +392,7 @@ def test_guest_project_shows_upgrade_only(django_server, page):
     _capture(page, "project-mobile-light")
     # The upgrade CTA routes to Pricing.
     page.get_by_test_id("project-upgrade-cta").click()
-    page.wait_for_url(f"{django_server}/pricing")
+    page.wait_for_url(f"{django_server}/membership")
 
 
 @pytest.mark.core
@@ -471,7 +471,7 @@ def test_free_member_topic_poll_shows_main_requirement(django_server, browser):
         expect(page.locator("button.vote-btn")).to_have_count(0)
         _capture(page, "poll-desktop-light")
         page.get_by_test_id("poll-pricing-cta").click()
-        page.wait_for_url(f"{django_server}/pricing")
+        page.wait_for_url(f"{django_server}/membership")
     finally:
         context.close()
 
@@ -495,7 +495,7 @@ def test_main_member_course_poll_shows_terminal_premium_tier(
         _assert_no_horizontal_overflow(page)
         _capture(page, "poll-mobile-dark")
         expect(page.get_by_test_id("poll-pricing-cta")).to_have_attribute(
-            "href", "/pricing"
+            "href", "/membership"
         )
     finally:
         context.close()

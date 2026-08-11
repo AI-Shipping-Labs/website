@@ -1,44 +1,38 @@
 - name: Basic
   stripe_key: basic
+  level: 10
   tagline: Content only
   price_monthly: 20
   price_annual: 200
-  hook: Educational content without community access.
+  hook: Learn independently with practical member resources.
   description: >
-    Access curated educational content, tutorials, and research.
-    Perfect for self-directed builders who learn at their own pace.
+    Learn independently with exclusive written content and practical workshop
+    materials.
   positioning: >
     Best for independent builders who prefer self-paced learning.
     Upgrade to Main for structure, accountability, and community support.
   highlighted: false
-  activities:
-    - title: Exclusive Substack Content
-      icon: book-open
+  benefits:
+    - title: Exclusive written content
+      icon: file-text
       description: >
-        Full access to premium paywalled articles with practical AI insights,
-        hands-on tutorials with code examples you can implement, and curated
-        breakdowns of new AI tools and workflows to accelerate your projects.
-      features:
-        - Full access to exclusive Substack content
-        - Hands-on tutorials with code examples you can implement
-        - Curated breakdowns of new AI tools and workflows
-    - title: Behind-the-Scenes Research
-      icon: eye
+        Read exclusive articles, practical tutorials with code examples,
+        research notes, and curated breakdowns of useful AI tools and
+        workflows you can apply to your own projects.
+      action_label: Browse member articles
+      action_url: /blog
+    - title: Workshop content
+      icon: presentation
       description: >
-        Get exclusive access to ongoing research and experiments.
-        See work-in-progress findings and early-stage ideas not available publicly.
-      features:
-        - Behind-the-scenes access to ongoing research and experiments
-    - title: Curated Social Content Collection
-      icon: file-edit
-      description: >
-        Never miss valuable educational posts again. Get a curated collection
-        of evergreen social media content you can reference anytime.
-      features:
-        - Curated collection of valuable social posts you might have missed
+        Access recordings, step-by-step tutorials, and practical materials
+        from most AI Shipping Labs workshops, then work through them at your
+        own pace whenever you need them.
+      action_label: Browse workshops
+      action_url: /workshops
 
 - name: Main
   stripe_key: main
+  level: 20
   tagline: Live learning + community
   price_monthly: 50
   price_annual: 500
@@ -46,121 +40,84 @@
     Build with the community and get the accountability and direction
     you need to make progress.
   description: >
-    Everything in Basic, plus the structure, accountability, and peer support
-    to ship your AI projects consistently.
+    Add live participation, accountability, and peer support to keep shipping
+    consistently.
   positioning: >
     Best for builders who need structure and accountability to turn project
     ideas into reality alongside motivated peers.
   highlighted: true
-  activities:
-    - title: Closed Community Access
-      icon: users
+  benefits:
+    - title: Community sprints
+      icon: timer
       description: >
-        Connect with action-oriented builders who are shipping practical AI products.
-        Network with motivated peers, collaborate on projects, and learn from
-        practitioners who convert ideas into tangible contributions.
-      features:
-        - Closed community access to connect and interact with practitioners
-    - title: Collaborative Problem-Solving & Mentorship
-      icon: message-circle-question
+        Join time-boxed cohorts with check-ins, deadlines, and accountability
+        for shipping one project while making your progress visible to the
+        community.
+      action_label: Explore community sprints
+      action_url: /sprints
+    - title: Live events
+      icon: calendar-days
       description: >
-        Get help with implementation challenges and complex issues. Learn from
-        practitioners at various career stages and receive guidance on technical
-        problems you're facing.
-      features:
-        - Collaborative problem-solving and mentorship for implementation challenges
-    - title: Interactive Group Coding Sessions
-      icon: video
+        Take part in live building sessions, office hours, mock interviews,
+        and career conversations where you can ask questions and learn with
+        other members.
+      action_label: View live events
+      action_url: /events
+    - title: Private Slack community
+      icon: messages-square
       description: >
-        Join sessions where community members and hosts code live, working through
-        real problems. Watch, participate, and engage with comments as you learn.
-      features:
-        - Interactive group coding sessions led by a host
-    - title: Guided Project-Based Learning
-      icon: folder-kanban
+        Ask questions, get feedback, learn with other builders, and follow
+        practical discussions in a private workspace focused on making
+        meaningful progress.
+      action_label: ""
+      action_url: ""
+    - title: Personalized onboarding plan
+      icon: list-checks
       description: >
-        Get the structure and direction you need to make consistent progress.
-        Follow curated project frameworks, share your progress with the community,
-        and build practical AI products with clear milestones.
-      features:
-        - Guided project-based learning with curated resources
-    - title: Community Hackathons
-      icon: trophy
+        We talk with you about your career plans and ambitions, then develop
+        a personalized plan that gives your membership a clear direction
+        from the start.
+      action_label: ""
+      action_url: ""
+    - title: Topic voting
+      icon: vote
       description: >
-        Turn ideas into shipped projects through focused hackathons. Get gentle
-        external pressure and accountability to build, share your work, and learn
-        from other builders' approaches. Many members emerge from hackathons as
-        active contributors.
-      features:
-        - Community hackathons
-    - title: Career Advancement Discussions
-      icon: briefcase
-      description: >
-        Discuss your career questions and get feedback from experienced practitioners
-        in the community. Share experiences, get advice on job searches, interviews,
-        and career growth.
-      features:
-        - Career advancement discussions and feedback
-    - title: Personal Brand Development
-      icon: star
-      description: >
-        Share your project results publicly and strengthen your professional presence.
-        Get guidance on showcasing your work, building in public, and demonstrating
-        real-world impact. Especially valuable for career transitioners and early
-        career professionals.
-      features:
-        - Personal brand development guidance and content
-    - title: Developer Productivity Tips & Workflows
-      icon: percent
-      description: >
-        Get tips, workflows, and best practices to boost your productivity as a
-        developer. Learn techniques to work more efficiently and effectively.
-      features:
-        - Developer productivity tips and workflows
-    - title: Propose and Vote on Topics
-      icon: file-edit
-      description: >
-        Have a voice in the community's direction. Propose ideas and vote on future
-        topics for content, workshops, and sessions.
-      features:
-        - Propose and vote on future topics
+        Help choose the course topics the community develops next and make
+        the learning roadmap reflect the practical skills members want to
+        build.
+      action_label: Vote on topics
+      action_url: /vote
 
 - name: Premium
   stripe_key: premium
+  level: 30
   tagline: Courses + personalized feedback
   price_monthly: 100
   price_annual: 1000
   hook: Accelerate your growth with structured courses and personalized feedback.
   description: >
-    Everything in Main, plus structured learning paths through mini-courses
-    and personalized career guidance to accelerate your growth.
+    Add structured courses and personal career feedback to sharpen your
+    direction.
   positioning: >
     Best for builders seeking structured learning paths to complement hands-on
     projects, plus personalized career guidance.
   highlighted: false
-  activities:
-    - title: Mini-Courses on Specialized Topics
+  benefits:
+    - title: Courses
       icon: book-open
       description: >
-        Access all mini-courses covering specialized topics like Python for Data
-        & AI Engineering, and more. The collection is regularly updated with new
-        courses.
-      features:
-        - Access to all mini-courses on specialized topics
-        - Collection regularly updated with new courses
-        - "Upcoming: Python for Data and AI Engineering"
-    - title: Vote on Course Topics
-      icon: file-edit
-      description: >
-        Have a say in what gets taught next. Propose ideas and vote on upcoming
-        mini-course topics to shape the curriculum.
-      features:
-        - Propose and vote on mini-course topics
-    - title: Profile Teardowns
-      icon: users
-      description: >
-        Get detailed feedback on your resume, LinkedIn, and GitHub profiles.
-        Understand what works, what doesn't, and how to improve your professional
-        presence.
-      features:
-        - "Resume, LinkedIn, and GitHub teardowns"
+        Follow structured courses on specialized topics, build skills through
+        practical learning paths, and return to the materials whenever you
+        need a focused way to deepen your knowledge.
+      action_label: Browse courses
+      action_url: /courses
+    - title: Resume and LinkedIn teardown
+      icon: contact-round
+      description: ""
+      action_label: ""
+      action_url: ""
+    - title: GitHub feedback
+      icon: github
+      description: ""
+      action_label: ""
+      action_url: ""

@@ -222,7 +222,7 @@ class LegacyIsPreviewStillWorksTest(TierSetupMixin, TestCase):
         self.assertContains(
             response, 'Upgrade to Basic to read this lesson', status_code=403,
         )
-        self.assertContains(response, 'href="/pricing"', status_code=403)
+        self.assertContains(response, 'href="/membership"', status_code=403)
         self.assertNotContains(
             response, 'Create a free account', status_code=403,
         )

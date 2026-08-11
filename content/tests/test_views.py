@@ -1,8 +1,10 @@
 from datetime import date
+from pathlib import Path
 
+import yaml
 from django.test import Client, TestCase
 
-from content.models import Article, CuratedLink, Project, Tutorial, Workshop
+from content.models import Article, CuratedLink, Project, SiteConfig, Tutorial, Workshop
 from events.models import Event
 
 
@@ -153,18 +155,27 @@ class AboutViewTest(TestCase):
 
 
 class ActivitiesViewTest(TestCase):
-    def test_activities_template(self):
-        response = self.client.get('/activities')
-        self.assertTemplateUsed(response, 'content/activities.html')
+    @classmethod
+    def setUpTestData(cls):
+        fixture_path = Path(__file__).parent / "fixtures" / "tiers.yaml"
+        with open(fixture_path) as handle:
+            tiers_data = yaml.safe_load(handle)
+        SiteConfig.objects.create(key="tiers", data=tiers_data)
 
-    def test_activities_contains_content(self):
+    def test_activities_redirects_to_membership_benefits(self):
         response = self.client.get('/activities')
-        self.assertContains(response, 'Membership benefits by tier')
-        self.assertContains(response, 'data-testid="activity-card"', count=7)
-        self.assertContains(response, 'data-activity="community-sprints"')
+
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response['Location'], '/membership#activities')
+
+    def test_membership_contains_plans_benefits_and_previews(self):
+        response = self.client.get('/membership')
+
+        self.assertContains(response, 'Choose your level of engagement')
+        self.assertContains(response, 'Member benefits')
+        self.assertContains(response, 'data-testid="membership-benefit-row"', count=8)
         self.assertContains(response, 'Active community sprints')
         self.assertContains(response, 'Next sprint coming soon')
-        self.assertNotContains(response, 'Membership activities are being updated')
 
 
 class BlogListViewTest(TestCase):

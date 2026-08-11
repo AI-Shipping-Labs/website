@@ -12,14 +12,16 @@ from tests.fixtures import TierSetupMixin
 
 BASE_DIR = Path(settings.BASE_DIR)
 HOME = BASE_DIR / 'templates' / 'home.html'
-ACTIVITIES = BASE_DIR / 'templates' / 'content' / 'activities.html'
+MEMBERSHIP_PREVIEWS = (
+    BASE_DIR / 'templates' / 'content' / 'membership' / '_previews.html'
+)
 WORKSHOPS = BASE_DIR / 'templates' / 'content' / '_workshops_catalog.html'
 DASHBOARD = BASE_DIR / 'templates' / 'content' / 'dashboard.html'
 DASHBOARD_ZONES = BASE_DIR / 'templates' / 'content' / '_dashboard_commitment_zones.html'
 NOTIFICATIONS = BASE_DIR / 'templates' / 'notifications' / 'notification_list.html'
 
 DISCOVERY_CLASSES = (
-    'mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent '
+    'mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent '
     'hover:underline focus-visible:outline-none focus-visible:ring-2 '
     'focus-visible:ring-accent focus-visible:ring-offset-2 '
     'focus-visible:ring-offset-background'
@@ -28,8 +30,8 @@ DISCOVERY_CLASSES = (
 HOME_DISCOVERY = {
     'home-activities-tier-link': (
         'Build momentum with people who ship',
-        '/activities#access-by-tier',
-        'Compare activities by tier',
+        '/membership#activities',
+        'Explore membership benefits',
     ),
     # Sprint story is an explainer section (3 steps + one featured card),
     # not a collection of content cards, so its CTA is a discovery link
@@ -98,17 +100,17 @@ class PublicStackedHeaderStaticTest(TestCase):
 
         self.assertGreaterEqual(source.count('sm:items-end sm:justify-between'), 3)
 
-    def test_activities_two_headers_share_discovery_treatment(self):
-        source = _source(ACTIVITIES)
+    def test_membership_preview_headers_share_discovery_treatment(self):
+        source = _source(MEMBERSHIP_PREVIEWS)
         for testid, heading, href, label in (
             (
-                'activities-view-all-events',
+                'membership-view-all-events',
                 'Upcoming community sessions',
                 '/events',
                 'View all events',
             ),
             (
-                'activities-view-all-workshops',
+                'membership-view-all-workshops',
                 'Recent hands-on workshops',
                 '/workshops',
                 'View all workshops',

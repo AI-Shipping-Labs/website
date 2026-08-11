@@ -21,10 +21,8 @@ from content.models import (
     Project,
     TagRule,
     Tutorial,
-    Workshop,
 )
 from content.services.related_content import build_related_content_rail
-from content.tier_config import get_curated_activities
 from content.topics import (
     BLOG_TOPICS,
     filter_by_topic,
@@ -32,7 +30,6 @@ from content.topics import (
     topics_with_matches,
 )
 from events.models.event import PUBLIC_EVENT_STATUSES
-from events.services.time_windows import upcoming_events_queryset
 from plans.models import Plan, Sprint, SprintEnrollment
 
 
@@ -236,7 +233,7 @@ def _get_activity_sprints(user):
             Sprint.objects.filter(status='draft').order_by('start_date', 'name')
         )
 
-    return _build_sprint_summaries(sprints, user)
+    return _build_sprint_summaries(sprints[:1], user)
 
 
 def _sprint_section_title(label, count):
@@ -307,37 +304,8 @@ def about(request):
 
 
 def activities(request):
-    """Activities page."""
-    all_activities = get_curated_activities()
-    activity_sprints = _get_activity_sprints(request.user)
-    upcoming_events = list(
-        upcoming_events_queryset()
-        .filter(published=True)
-        .select_related('event_series')
-        .order_by('start_datetime')[:3]
-    )
-    recent_workshops = list(
-        Workshop.objects.filter(status='published').order_by('-date')[:3]
-    )
-
-    # Count activities per tier
-    basic_activities = [a for a in all_activities if 'basic' in a['tiers']]
-    main_activities = [a for a in all_activities if 'main' in a['tiers']]
-    premium_activities = [a for a in all_activities if 'premium' in a['tiers']]
-
-    context = {
-        'activities': all_activities,
-        'basic_activities': basic_activities,
-        'main_activities': main_activities,
-        'premium_activities': premium_activities,
-        'basic_count': len(basic_activities),
-        'main_count': len(main_activities),
-        'premium_count': len(premium_activities),
-        'activity_sprints': activity_sprints,
-        'upcoming_events': upcoming_events,
-        'recent_workshops': recent_workshops,
-    }
-    return render(request, 'content/activities.html', context)
+    """Redirect the retired Activities page to Membership benefits."""
+    return redirect('/membership#activities', permanent=True)
 
 
 def sprints_index(request):
@@ -632,7 +600,7 @@ def curated_link_go(request, link_id):
             'content/curated_link_verify_required.html',
             {'link': link, **gating},
         )
-    return redirect('/pricing')
+    return redirect('/membership')
 
 
 def tutorials_list(request):
@@ -748,7 +716,7 @@ def download_detail(request, slug):
             f'{get_required_tier_name(download.required_level)} access is '
             'required to download this resource.'
         ),
-        'gated_cta_url': '/pricing',
+        'gated_cta_url': '/membership',
         'gated_cta_label': 'Upgrade',
         'gated_cta_testid': 'download-pricing-cta',
         'signin_cta_url': (

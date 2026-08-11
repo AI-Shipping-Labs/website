@@ -138,7 +138,7 @@ Four tiers, chosen by content shape rather than per-page taste. These are the on
 
 | Tier | Class | Use for |
 |---|---|---|
-| Frame | `max-w-7xl` | Surfaces that visibly consume the full width: 3+ column card grids with enough items to fill them, the 4-column pricing grid, the month calendar, the member dashboard, sidebar-plus-content layouts, and multi-section marketing pages. Matches the header and footer chrome. Being an index page does not by itself earn the Frame — only the content shape does. |
+| Frame | `max-w-7xl` | Surfaces that visibly consume the full width: 3+ column card grids with enough items to fill them, the 4-column membership grid, the member dashboard, sidebar-plus-content layouts, and multi-section marketing pages. Matches the header and footer chrome. Being an index page does not by itself earn the Frame — only the content shape does. |
 | Detail | `max-w-5xl` | Detail pages with mixed layout: media embed plus metadata plus cards or CTAs (course, plan, poll detail; account; notifications). Also the home for sparse 2-column hubs that read as empty on the right at 7xl. |
 | Reader | `max-w-3xl` | Long-form and single-column detail surfaces, including blog/article, tutorial, project, workshop, sprint, event, event-series, and interview; also text-first editorial listings such as blog, workshop catalog, and interview, plus multi-step single-column forms. 48rem keeps the measure near the 65-75ch readable band while leaving code blocks usable width. |
 | Narrow | `max-w-2xl` | Terminal status and confirmation interstitials, and single-purpose forms (subscribe, join-state, cancel registration, verify/unsubscribe result, peer review). |
@@ -227,7 +227,7 @@ Three principles:
 | Callout / action (featured sprint, dashboard next-step, gated card, starting-soon; accent variant `border-accent/30 bg-accent/5`) | `rounded-lg` (spotlight exception) | `bg-card` / `bg-accent/5` | `p-6`; spotlight `p-5 sm:p-8` | none on container | none | `text-lg` / spotlight `text-2xl` | CTA is an explicit `{% button_classes %}` button |
 | Tier / pricing | `rounded-xl` | `bg-background` | `p-5 sm:p-8` | none | `shadow-xl` on the highlighted tier only | `text-lg font-semibold` | `Join` button, full width, no arrow |
 
-Spotlight exception: only tier/pricing cards and the home featured-sprint card keep `rounded-xl` (hero-scale, singular). Everything repeated in a grid is `rounded-lg`.
+Spotlight exception: only tier/membership cards and the home featured-sprint card keep `rounded-xl` (hero-scale, singular). Everything repeated in a grid is `rounded-lg`.
 
 Shadow rule: repeated cards never carry a shadow. Do not add `shadow-sm` to grid cards (testimonials, sprint cards, etc.); `shadow-xl` is reserved for the highlighted tier card.
 
@@ -465,7 +465,7 @@ Canonical call:
 
 ```django
 {% load accounts_extras %}
-<a href="/pricing" class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}">View pricing</a>
+<a href="/membership" class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}">View pricing</a>
 ```
 
 There are exactly three sizes. The button tag, not a padding pair, is the unit of reuse. `px-5 py-2.5`, bare `py-2.5`, and `px-4 py-2.5` button chrome are forbidden everywhere.
@@ -501,7 +501,7 @@ Additional use examples:
 <a href="..." class="{% button_classes 'primary' %}">Open</a>
 <a href="..." class="{% button_classes 'secondary' 'shrink-0' %}">View</a>
 <button type="button" class="{% button_classes 'destructive' %}">Cancel</button>
-<a href="/pricing" class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}">Upgrade</a>
+<a href="/membership" class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}">Upgrade</a>
 <button type="button" class="{% button_classes 'primary' size='sm' %}">Ping</button>
 ```
 
@@ -666,6 +666,7 @@ Canonical badge shape: `inline-flex items-center gap-1 rounded-full px-2.5 py-0.
 | Meaning | Tone |
 |---|---|
 | Access or tier, including Free | Accent |
+| Highlighted recommendation labels such as Membership's `Most popular` | Solid accent (`accent_solid`) |
 | Success, completed, registered, or live-positive | Green |
 | Finished, past, or expired | Neutral/muted |
 | Upcoming or informational schedule state | Blue |

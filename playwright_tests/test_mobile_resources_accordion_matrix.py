@@ -187,7 +187,7 @@ def _matrix_urls(fx):
         ("course-detail",            f"/courses/{fx['course_slug']}",                    False),
         ("article-detail",           f"/blog/{fx['article_slug']}",                      False),
         ("event-detail",             fx['event_path'],                                   False),
-        ("pricing",                  "/pricing",                                         False),
+        ("pricing",                  "/membership",                                         False),
         ("account",                  "/account/",                                        True),
         ("peer-review-submit",       f"/courses/{fx['course_slug']}/submit",             True),
         ("peer-review-dashboard",    f"/courses/{fx['course_slug']}/reviews",            True),

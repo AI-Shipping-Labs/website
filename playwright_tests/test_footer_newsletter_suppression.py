@@ -6,7 +6,7 @@ register card from #652 already invites the visitor to sign up:
 
 - /courses/<slug>           (free course + anonymous visitor)
 - /workshops/<slug>         (pages-level paywall on a registered wall)
-- /pricing                  (free-tier card, anonymous visitor)
+- /membership                  (free-tier card, anonymous visitor)
 
 Discovery pages (/, /blog) keep the footer block — they don't render
 an inline register form and the newsletter is the only signup CTA.
@@ -145,13 +145,13 @@ class TestFooterNewsletterSuppression:
     def test_anonymous_visitor_on_pricing_sees_no_footer_newsletter(
         self, django_server, page, django_db_blocker,
     ):
-        """Anonymous visitor on /pricing sees no footer newsletter
+        """Anonymous visitor on /membership sees no footer newsletter
         block, but the footer's site map / copyright still render."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
 
-        page.goto(f'{django_server}/pricing', wait_until='domcontentloaded')
+        page.goto(f'{django_server}/membership', wait_until='domcontentloaded')
         # Footer newsletter block is gone.
         assert page.get_by_role(
             'heading', name=FOOTER_HEADING, exact=True,

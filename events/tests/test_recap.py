@@ -163,7 +163,7 @@ class SyncEventsRecapFileTest(TestCase):
                 '  {% for topic in data.topics %}\n'
                 '  <article><h3>{{ topic.title }}</h3><p>{{ topic.summary }}</p></article>\n'
                 '  {% endfor %}\n'
-                '  <a href="/pricing">{{ data.cta_label }}</a>\n'
+                '  <a href="/membership">{{ data.cta_label }}</a>\n'
                 '</section>\n'
             ))
 

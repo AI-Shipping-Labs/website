@@ -82,14 +82,14 @@ class AccountPageFreeUserTest(TestCase):
         self.assertNotContains(response, "Level 0")
 
     def test_shows_upgrade_button(self):
-        """Free users see 'Upgrade' button linking to /pricing."""
+        """Free users see 'Upgrade' button linking to /membership."""
         response = self.client.get("/account/")
         self.assertContains(response, 'id="upgrade-btn"')
 
     def test_upgrade_links_to_pricing(self):
-        """Free users' Upgrade button links to /pricing."""
+        """Free users' Upgrade button links to /membership."""
         response = self.client.get("/account/")
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
 
     def test_no_downgrade_button(self):
         """Free users do not see 'Downgrade' button."""
@@ -423,11 +423,11 @@ class AccountPageMembershipActionStateTest(TestCase):
         )
 
         # Issue #581: the steady-state ``Current free plan`` frame was
-        # suppressed; the upgrade CTA still points to /pricing.
+        # suppressed; the upgrade CTA still points to /membership.
         self.assertNotContains(response, "Current free plan")
         self.assertNotContains(response, 'id="account-plan-state"')
         self.assertContains(response, 'id="upgrade-btn"')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
         self.assertNotContains(response, 'id="manage-subscription-btn"')
 
     def test_premium_member_has_no_upgrade_cta(self):
@@ -573,7 +573,7 @@ class AccountPageMembershipCardServingMembersTest(TestCase):
         self.assertContains(response, 'id="current-tier-benefits"')
         self.assertContains(response, "Newsletter updates")
         self.assertContains(response, 'id="upgrade-btn"')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
         self.assertNotContains(response, 'id="manage-subscription-btn"')
         self.assertNotContains(response, "Billing Period Ends")
         self.assertNotContains(response, "Temporary Access Expires")
@@ -594,17 +594,42 @@ class AccountPageMembershipCardServingMembersTest(TestCase):
             response.context["next_tier_upsell"]["target_slug"],
             "main",
         )
-        self.assertContains(response, "Everything in Free")
+        self.assertContains(response, "Exclusive written content")
+        self.assertContains(response, "Workshop content")
         self.assertContains(response, "March 15, 2026")
         self.assertContains(response, 'id="manage-subscription-btn"')
         self.assertContains(response, "https://billing.example.test/portal")
         self.assertContains(response, 'id="next-tier-upsell"')
         self.assertContains(response, "community")
-        self.assertContains(response, "live and group work")
-        self.assertContains(response, "accountability")
-        self.assertContains(response, "topic voting")
+        self.assertContains(response, "community sprints")
+        self.assertContains(response, "live events")
+        self.assertContains(response, "personalized onboarding")
+        self.assertContains(response, "vote on topics")
         self.assertContains(response, 'id="next-tier-upsell-btn"')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
+
+    def test_paid_account_benefits_prefer_synced_tiers_yaml_records(self):
+        from content.models import SiteConfig
+
+        SiteConfig.objects.create(
+            key="tiers",
+            data=[
+                {
+                    "name": "Basic",
+                    "stripe_key": "basic",
+                    "benefits": [{"title": "Benefit sourced from tiers YAML"}],
+                }
+            ],
+        )
+        response = self._account_response(
+            self._user("yaml-basic-1207@example.com", self.basic_tier)
+        )
+
+        self.assertEqual(
+            response.context["membership_benefits"],
+            ["Benefit sourced from tiers YAML"],
+        )
+        self.assertContains(response, "Benefit sourced from tiers YAML")
 
     def test_main_member_gets_benefits_billing_portal_and_premium_upsell(self):
         user = self._user(
@@ -625,10 +650,9 @@ class AccountPageMembershipCardServingMembersTest(TestCase):
         self.assertContains(response, "April 1, 2026")
         self.assertContains(response, 'id="manage-subscription-btn"')
         self.assertContains(response, 'id="next-tier-upsell"')
-        self.assertContains(response, "mini-courses")
-        self.assertContains(response, "course-topic voting")
+        self.assertContains(response, "courses")
         self.assertContains(response, "LinkedIn")
-        self.assertContains(response, "GitHub teardowns")
+        self.assertContains(response, "GitHub feedback")
         self.assertContains(response, "Upgrade to Premium")
         self.assertNotContains(response, "Compare Premium")
 
@@ -684,7 +708,7 @@ class AccountPageMembershipCardServingMembersTest(TestCase):
             self._user("comped-basic-1207@example.com", self.basic_tier)
         )
 
-        self.assertContains(response, "Everything in Free")
+        self.assertContains(response, "Exclusive written content")
         self.assertNotContains(response, 'id="paid-without-subscription-note"')
         self.assertNotContains(response, "No Stripe subscription is connected")
         self.assertNotContains(response, 'id="paid-plan-pricing-btn"')

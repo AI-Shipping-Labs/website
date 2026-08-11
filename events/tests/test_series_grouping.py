@@ -22,7 +22,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from events.models import Event, EventSeries
-from events.views.pages import _build_upcoming_rows
+from events.services.timeline import build_upcoming_rows
 
 User = get_user_model()
 
@@ -82,7 +82,7 @@ class UpcomingRowsBuilderTest(TestCase):
             event_series=self.series,
         ).order_by('start_datetime')
 
-        rows = _build_upcoming_rows(upcoming)
+        rows = build_upcoming_rows(upcoming)
 
         self.assertEqual(len(rows), 1)
         row = rows[0]
@@ -99,7 +99,7 @@ class UpcomingRowsBuilderTest(TestCase):
             event_series=self.series,
         ).order_by('start_datetime')
 
-        rows = _build_upcoming_rows(upcoming)
+        rows = build_upcoming_rows(upcoming)
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['count'], 5)
@@ -112,7 +112,7 @@ class UpcomingRowsBuilderTest(TestCase):
             event_series=self.series,
         ).order_by('start_datetime')
 
-        rows = _build_upcoming_rows(upcoming)
+        rows = build_upcoming_rows(upcoming)
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['kind'], 'event')
@@ -123,7 +123,7 @@ class UpcomingRowsBuilderTest(TestCase):
         self._make('standalone-b', 3)
         upcoming = Event.objects.all().order_by('start_datetime')
 
-        rows = _build_upcoming_rows(upcoming)
+        rows = build_upcoming_rows(upcoming)
 
         self.assertEqual([r['kind'] for r in rows], ['event', 'event'])
 
@@ -136,7 +136,7 @@ class UpcomingRowsBuilderTest(TestCase):
         self._make('standalone-late', 30)
         upcoming = Event.objects.all().order_by('start_datetime')
 
-        rows = _build_upcoming_rows(upcoming)
+        rows = build_upcoming_rows(upcoming)
 
         self.assertEqual(len(rows), 3)
         self.assertEqual(rows[0]['kind'], 'event')
@@ -211,9 +211,9 @@ class EventsListSeriesCardRenderTest(TestCase):
     def test_signed_in_grouped_card_uses_viewer_preferred_timezone(self):
         from zoneinfo import ZoneInfo
 
-        from events.views.pages import (
-            _event_local_datetime,
-            _format_time_label,
+        from events.services.timeline import (
+            event_local_datetime,
+            format_time_label,
         )
 
         user = User.objects.create_user(
@@ -228,10 +228,10 @@ class EventsListSeriesCardRenderTest(TestCase):
         # Issue #1382: the timeline converts times to the viewer's tz silently
         # (Luma-style) — the next occurrence's clock label is in New York time.
         first = self.series.events.order_by('start_datetime').first()
-        local = _event_local_datetime(
+        local = event_local_datetime(
             first.start_datetime, first.timezone, ZoneInfo('America/New_York'),
         )
-        self.assertContains(response, _format_time_label(local))
+        self.assertContains(response, format_time_label(local))
         self.assertContains(response, 'data-testid="series-card-date"')
 
     def test_individual_occurrence_titles_not_repeated_as_cards(self):

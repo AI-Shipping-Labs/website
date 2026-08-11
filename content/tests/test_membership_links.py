@@ -40,12 +40,12 @@ class HeaderLinksAnonymousTest(TestCase):
         header = _extract_header(response.content.decode())
         primary = _extract_desktop_primary_nav(header)
         # Membership is a top-level nav link (Aug 2026 redesign promoted it
-        # out of the Community dropdown). It must point at /pricing.
+        # out of the Community dropdown). It must point at /membership.
         membership_links = re.findall(
             r'<a[^>]*href="([^"]+)"[^>]*>\s*Membership\s*</a>', primary
         )
         self.assertTrue(membership_links)
-        self.assertTrue(all(href == "/pricing" for href in membership_links))
+        self.assertTrue(all(href == "/membership" for href in membership_links))
         self.assertIn('id="community-dropdown-btn"', primary)
         self.assertIn('id="learning-dropdown-btn"', primary)
         # Resources dropdown was dissolved in the redesign.
@@ -82,12 +82,12 @@ class HeaderLinksAuthenticatedTest(TestCase):
         header = _extract_header(response.content.decode())
         primary = _extract_desktop_primary_nav(header)
         # Membership is a top-level nav link (Aug 2026 redesign promoted it
-        # out of the Community dropdown). It must point at /pricing.
+        # out of the Community dropdown). It must point at /membership.
         membership_links = re.findall(
             r'<a[^>]*href="([^"]+)"[^>]*>\s*Membership\s*</a>', primary
         )
         self.assertTrue(membership_links)
-        self.assertTrue(all(href == "/pricing" for href in membership_links))
+        self.assertTrue(all(href == "/membership" for href in membership_links))
         self.assertIn('id="community-dropdown-btn"', primary)
         self.assertIn('id="learning-dropdown-btn"', primary)
         # Resources dropdown was dissolved in the redesign.
@@ -113,7 +113,7 @@ class FooterLinksTest(TestCase):
             r'<a[^>]*href="([^"]+)"[^>]*>\s*Membership Tiers\s*</a>', footer
         )
         self.assertIsNotNone(match, "Membership Tiers link missing in footer")
-        self.assertEqual(match.group(1), "/pricing")
+        self.assertEqual(match.group(1), "/membership")
 
     def test_faq_link_points_to_standalone_faq_page(self):
         response = self.client.get("/")
@@ -126,7 +126,7 @@ class FooterLinksTest(TestCase):
 
 
 class AboutPageMembershipCtaTest(TestCase):
-    """About page CTA goes to /pricing, not the marketing-only anchor."""
+    """About page CTA goes to /membership, not the marketing-only anchor."""
 
     def test_view_membership_tiers_cta_points_to_pricing(self):
         response = self.client.get("/about")
@@ -138,7 +138,7 @@ class AboutPageMembershipCtaTest(TestCase):
         self.assertIsNotNone(
             match, "View Membership Tiers CTA missing on about page"
         )
-        self.assertEqual(match.group(1), "/pricing")
+        self.assertEqual(match.group(1), "/membership")
 
 
 class HomepageTiersAnchorStillWorksTest(TestCase):

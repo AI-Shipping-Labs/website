@@ -158,7 +158,7 @@ endpoint must match — otherwise events are dropped silently.
 ## STRIPE_PAYMENT_LINKS
 
 Purpose: Complete JSON matrix of the public Stripe Payment Links used by
-the anonymous homepage and `/pricing`. A Studio or API override takes
+the anonymous homepage and `/membership`. A Studio or API override takes
 effect on the next request without a deploy.
 
 The value must be valid JSON with exactly these tiers and billing periods;

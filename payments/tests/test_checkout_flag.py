@@ -48,12 +48,12 @@ class PricingPaymentLinksTest(TierSetupMixin, TestCase):
     """Pricing page always renders Payment Links."""
 
     def test_context_reports_local_checkout_disabled(self):
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context["stripe_checkout_enabled"])
 
     def test_anonymous_user_sees_payment_links(self):
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "/api/checkout/create")
 
@@ -89,7 +89,7 @@ class PricingPaymentLinksTest(TierSetupMixin, TestCase):
             password="testpass123",
         )
         self.client.login(email="prefill+stripe@test.com", password="testpass123")
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
 
         tiers_data = {
             item["tier"].slug: item
@@ -121,7 +121,7 @@ class PricingPaymentLinksTest(TierSetupMixin, TestCase):
         user.save(update_fields=["tier", "subscription_id"])
         self.client.login(email="paid-pricing@test.com", password="testpass123")
 
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         states = {
             item["tier"].slug: item["state"]
             for item in response.context["tiers_data"]

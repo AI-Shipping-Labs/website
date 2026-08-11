@@ -1,136 +1,92 @@
 import datetime
-import re
+from pathlib import Path
 
+import yaml
+from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import resolve
 from django.utils import timezone
 
-from content.models import SiteConfig, Workshop
-from events.models import Event
+from content.models import Workshop
+from events.models import Event, EventRegistration, EventSeries
 
-CURATED_SLUGS = [
-    "community-sprints",
-    "live-events",
-    "workshops",
-    "slack-community",
-    "personal-plans",
-    "exclusive-content",
-    "courses",
+User = get_user_model()
+
+EXPLAINED_BENEFITS = [
+    "Exclusive written content",
+    "Workshop content",
+    "Community sprints",
+    "Live events",
+    "Private Slack community",
+    "Personalized onboarding plan",
+    "Topic voting",
+    "Courses",
 ]
 
 
 class ActivitiesCuration1243Test(TestCase):
-    def _card_markup(self, response, slug):
+    @classmethod
+    def setUpTestData(cls):
+        fixture_path = Path(__file__).parent / "fixtures" / "tiers.yaml"
+        with open(fixture_path) as handle:
+            tiers_data = yaml.safe_load(handle)
+        from content.models import SiteConfig
+
+        SiteConfig.objects.create(key="tiers", data=tiers_data)
+
+    def _card_markup(self, response, title):
         content = response.content.decode()
-        marker = f'data-activity="{slug}"'
-        marker_index = content.index(marker)
+        benefits_index = content.index('id="activities"')
+        marker_index = content.index(title, benefits_index)
         card_start = content.rfind("<article", 0, marker_index)
         return content[card_start : content.index("</article>", marker_index)]
 
-    def test_page_uses_exact_curated_list_independent_of_site_config(self):
-        SiteConfig.objects.create(
-            key="tiers",
-            data=[
-                {
-                    "name": "Basic",
-                    "stripe_key": "basic",
-                    "activities": [
-                        {
-                            "title": "Community Hackathons",
-                            "icon": "x",
-                            "description": "Stale configuration.",
-                        }
-                    ],
-                }
-            ],
-        )
-
-        response = self.client.get("/activities")
+    def test_page_uses_membership_benefit_records(self):
+        response = self.client.get("/membership")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            [activity["slug"] for activity in response.context["activities"]],
-            CURATED_SLUGS,
+            [benefit["title"] for benefit in response.context["membership_benefits"]],
+            EXPLAINED_BENEFITS,
         )
-        self.assertContains(response, 'data-testid="activity-card"', count=7)
-        for slug in CURATED_SLUGS:
-            self.assertContains(response, f'data-activity="{slug}"', count=1)
-        for stale_title in [
-            "Community Hackathons",
-            "Personal Brand Development",
-            "Developer Productivity Tips",
-            "Curated Social Content Collection",
-            "Behind-the-Scenes Research",
-            "Exclusive Substack Content",
-            "Profile Teardowns",
-        ]:
-            self.assertNotContains(response, stale_title)
+        self.assertContains(response, 'data-testid="membership-benefit-row"', count=8)
 
-    def test_card_badges_and_comparison_match_exact_tier_mapping(self):
-        response = self.client.get("/activities")
+    def test_card_badges_match_the_benefit_owner_tier(self):
+        response = self.client.get("/membership")
         expected = {
-            "community-sprints": (False, True, True),
-            "live-events": (False, True, True),
-            "workshops": (False, True, True),
-            "slack-community": (False, True, True),
-            "personal-plans": (False, True, True),
-            "exclusive-content": (True, True, True),
-            "courses": (False, False, True),
+            "Exclusive written content": 10,
+            "Workshop content": 10,
+            "Community sprints": 20,
+            "Personalized onboarding plan": 20,
+            "Courses": 30,
         }
 
-        for slug, inclusions in expected.items():
-            card = self._card_markup(response, slug)
-            for tier, included in zip(
-                ("basic", "main", "premium"),
-                inclusions,
-                strict=True,
-            ):
-                self.assertIn(
-                    f'data-tier="{tier}" data-included="{str(included).lower()}"',
-                    card,
-                )
+        for title, required_level in expected.items():
+            card = self._card_markup(response, title)
+            self.assertEqual(card.count('data-testid="membership-benefit-tier-badge"'), 1)
+            self.assertIn(f'data-required-level="{required_level}"', card)
 
-        self.assertEqual(response.context["basic_count"], 1)
-        self.assertEqual(response.context["main_count"], 6)
-        self.assertEqual(response.context["premium_count"], 7)
-        self.assertEqual(
-            [item["slug"] for item in response.context["basic_activities"]],
-            ["exclusive-content"],
-        )
-
-    def test_intro_navigation_is_exactly_three_same_page_anchors(self):
-        response = self.client.get("/activities")
+    def test_plans_come_first_then_centered_three_xl_benefit_rows(self):
+        response = self.client.get("/membership")
         content = response.content.decode()
-        intro = content[
-            content.index('data-testid="activities-access-by-tier-intro"') : content.index(
-                'data-testid="activities-grid"'
-            )
-        ]
 
-        nav = re.search(
-            r'<nav[^>]*data-testid="activities-anchor-nav"[^>]*>(.*?)</nav>',
-            intro,
-            flags=re.DOTALL,
+        benefits_section = content[content.index('id="activities"') :]
+        self.assertIn('Member benefits', benefits_section)
+        self.assertIn('mx-auto mt-10 max-w-3xl', benefits_section)
+        self.assertIn('border-t border-border/70', benefits_section)
+        self.assertLess(
+            content.index('data-testid="pricing-tier-carousel"'),
+            content.index('data-testid="membership-benefits-list"'),
         )
-        self.assertIsNotNone(nav)
-        hrefs = re.findall(r'href="([^"]+)"', nav.group(1))
-        self.assertEqual(
-            hrefs,
-            ["#community-sprints", "#live-events", "#workshops"],
-        )
-        for fragment in hrefs:
-            self.assertIn(f'id="{fragment[1:]}"', content)
-        self.assertEqual(re.findall(r'href="([^"]+)"', intro), hrefs)
-        self.assertNotIn("Compare pricing", nav.group(1))
 
     def test_obsolete_filters_empty_branch_and_secondary_nav_are_removed(self):
-        response = self.client.get("/activities")
+        response = self.client.get("/membership")
 
         self.assertNotContains(response, 'data-testid="activities-tier-filter"')
         self.assertNotContains(response, "filterActivities")
         self.assertNotContains(response, 'data-testid="activities-tier-empty"')
         self.assertNotContains(response, 'data-testid="activities-secondary-nav"')
-        self.assertContains(response, 'data-testid="activities-pricing-cta"')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertNotContains(response, 'data-testid="activities-access-by-tier-section"')
 
 
 class ActivitiesPreviewSections1243Test(TestCase):
@@ -154,7 +110,7 @@ class ActivitiesPreviewSections1243Test(TestCase):
             slug="unpublished-event",
             start_datetime=now + datetime.timedelta(hours=12),
             end_datetime=now + datetime.timedelta(hours=13),
-            status="upcoming",
+            status="draft",
             published=False,
         )
 
@@ -175,12 +131,13 @@ class ActivitiesPreviewSections1243Test(TestCase):
             status="draft",
         )
 
-    def test_previews_are_public_published_ordered_and_limited_to_three(self):
-        response = self.client.get("/activities")
+    def test_previews_reuse_first_canonical_event_row_and_three_workshops(self):
+        response = self.client.get("/membership")
+        events_response = self.client.get("/events")
 
         self.assertEqual(
-            [event.slug for event in response.context["upcoming_events"]],
-            ["published-event-1", "published-event-2", "published-event-3"],
+            response.context["upcoming_rows"],
+            events_response.context["upcoming_rows"][:1],
         )
         self.assertEqual(
             [workshop.slug for workshop in response.context["recent_workshops"]],
@@ -192,19 +149,21 @@ class ActivitiesPreviewSections1243Test(TestCase):
         )
         self.assertContains(
             response,
-            'data-testid="activities-live-event-card"',
-            count=3,
+            'data-testid="upcoming-event-card"',
+            count=1,
         )
         self.assertContains(
             response,
-            'data-testid="activities-workshop-card"',
+            'data-testid="workshop-card"',
             count=3,
         )
         self.assertNotContains(response, "Published event 4")
+        self.assertNotContains(response, "Published event 2")
+        self.assertNotContains(response, "Published event 3")
         self.assertNotContains(response, "Unpublished event")
         self.assertNotContains(response, "Published workshop 1")
         self.assertNotContains(response, "Draft workshop")
-        for event_slug in ("published-event-1", "published-event-2", "published-event-3"):
+        for event_slug in ("published-event-1",):
             event = Event.objects.get(slug=event_slug)
             self.assertContains(response, f'href="{event.get_absolute_url()}"')
         for workshop_slug in (
@@ -213,17 +172,122 @@ class ActivitiesPreviewSections1243Test(TestCase):
             "published-workshop-2",
         ):
             self.assertContains(response, f'href="/workshops/{workshop_slug}"')
-        self.assertContains(response, 'data-testid="activities-view-all-events"')
-        self.assertContains(response, 'data-testid="activities-view-all-workshops"')
+        self.assertContains(response, 'data-testid="membership-view-all-events"')
+        self.assertContains(response, 'data-testid="membership-view-all-workshops"')
+        self.assertContains(response, 'data-testid="membership-live-events-list"')
+        self.assertContains(response, 'data-testid="events-timeline"')
+        self.assertContains(response, 'data-testid="timeline-day-date"')
+        self.assertContains(response, 'mx-auto max-w-3xl px-4 sm:px-6 lg:px-8')
+
+
+class MembershipOwnershipAndTimeline1402Test(TestCase):
+    def test_content_owns_membership_and_payments_keeps_checkout(self):
+        membership_match = resolve('/membership')
+        checkout_match = resolve('/payments/checkout/basic/monthly')
+        response = self.client.get('/membership')
+
+        self.assertEqual(
+            membership_match.func.__module__,
+            'content.views.membership',
+        )
+        self.assertEqual(
+            checkout_match.func.__module__,
+            'payments.views.pricing',
+        )
+        self.assertTemplateUsed(response, 'content/membership/page.html')
+        self.assertNotIn(
+            'payments/pricing.html',
+            [template.name for template in response.templates],
+        )
+
+    def test_membership_template_includes_complete_timeline_owner(self):
+        previews_path = (
+            Path(__file__).parents[2]
+            / 'templates/content/membership/_previews.html'
+        )
+        source = previews_path.read_text()
+
+        self.assertIn('events/_events_timeline.html', source)
+        self.assertNotIn('events/_timeline_listing_card.html', source)
+
+    def test_series_is_collapsed_before_membership_preview_limit(self):
+        series = EventSeries.objects.create(
+            name='Canonical Membership Series',
+            slug='canonical-membership-series',
+        )
+        now = timezone.now()
+        for position, days in enumerate((1, 8), start=1):
+            Event.objects.create(
+                title=f'Series occurrence {position}',
+                slug=f'membership-series-occurrence-{position}',
+                start_datetime=now + datetime.timedelta(days=days),
+                end_datetime=now + datetime.timedelta(days=days, hours=1),
+                timezone='Europe/Berlin',
+                status='upcoming',
+                event_series=series,
+                series_position=position,
+            )
+        Event.objects.create(
+            title='Later standalone event',
+            slug='later-membership-standalone',
+            start_datetime=now + datetime.timedelta(days=12),
+            status='upcoming',
+        )
+
+        response = self.client.get('/membership')
+
+        self.assertEqual(len(response.context['upcoming_rows']), 1)
+        row = response.context['upcoming_rows'][0]
+        self.assertEqual(row['kind'], 'series')
+        self.assertEqual(row['series'], series)
+        self.assertEqual(row['count'], 2)
+        self.assertContains(response, 'data-testid="events-timeline-day"')
+        self.assertContains(response, 'data-testid="event-series-card"')
+        self.assertContains(response, '2 upcoming sessions')
+        self.assertContains(response, f'href="{series.get_absolute_url()}"')
+        self.assertNotContains(response, 'Later standalone event')
+
+    def test_member_timezone_registration_and_attendee_count_match_events(self):
+        member = User.objects.create_user(
+            email='membership-timeline@example.com',
+            password='pw',
+            preferred_timezone='Asia/Kolkata',
+        )
+        other = User.objects.create_user(
+            email='membership-attendee@example.com',
+            password='pw',
+        )
+        event = Event.objects.create(
+            title='Registered Membership Event',
+            slug='registered-membership-event',
+            start_datetime=timezone.now() + datetime.timedelta(days=2),
+            timezone='UTC',
+            status='upcoming',
+        )
+        EventRegistration.objects.create(user=member, event=event)
+        EventRegistration.objects.create(user=other, event=event)
+        self.client.force_login(member)
+
+        membership = self.client.get('/membership')
+        events = self.client.get('/events')
+
+        self.assertEqual(membership.context['events_display_timezone'], 'Asia/Kolkata')
+        self.assertEqual(
+            membership.context['upcoming_days'],
+            events.context['upcoming_days'][:1],
+        )
+        self.assertIn(event.id, membership.context['registered_event_ids'])
+        self.assertContains(membership, 'Registered')
+        self.assertContains(membership, '2 registered')
 
 
 class ActivitiesPreviewEmptyStates1243Test(TestCase):
     def test_empty_previews_render_friendly_shared_empty_states(self):
-        response = self.client.get("/activities")
+        response = self.client.get("/membership")
 
-        self.assertContains(response, 'data-testid="activities-live-events-empty"')
+        self.assertContains(response, 'data-testid="membership-live-events-empty"')
         self.assertContains(response, "No live events scheduled yet")
-        self.assertContains(response, 'data-testid="activities-workshops-empty"')
+        self.assertContains(response, 'data-testid="membership-workshops-empty"')
         self.assertContains(response, "No workshops published yet")
         self.assertContains(response, 'data-testid="member-empty-state"', count=3)
         self.assertContains(response, 'href="/events"')

@@ -234,7 +234,7 @@ class TestGatedContentMessaging:
         assert "Main+ required" not in body
         assert "Current access: Free member" in body
         assert body.count('data-testid="teaser-upgrade-cta"') == 1
-        assert page.locator('[data-testid="teaser-upgrade-cta"]').get_attribute("href") == "/pricing"
+        assert page.locator('[data-testid="teaser-upgrade-cta"]').get_attribute("href") == "/membership"
         _capture_responsive(page, "course_unit_gate")
         free_ctx.close()
 

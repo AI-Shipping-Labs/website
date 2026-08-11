@@ -24,6 +24,8 @@ ARROW_CLASSES = (
     'hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground '
     'transition-transform group-hover:translate-x-1 group-hover:text-accent'
 )
+CATALOG_TITLE_CLASSES = {'text-lg', 'font-semibold', 'text-foreground'}
+CATALOG_BODY_CLASSES = {'text-sm', 'sm:text-base'}
 
 
 class _ElementParser(HTMLParser):
@@ -281,12 +283,22 @@ class CatalogTagPresentationTest(TestCase):
                     item for item in _elements_with_text(parser, title)
                     if item['tag'] == 'h2'
                 )
-                self.assertIn('text-lg font-semibold text-foreground', heading['attrs']['class'])
+                self.assertTrue(
+                    CATALOG_TITLE_CLASSES.issubset(
+                        set(heading['attrs'].get('class', '').split())
+                    ),
+                    heading['attrs'].get('class', ''),
+                )
                 body = next(
                     item for item in _elements_with_text(parser, description)
                     if item['tag'] == 'p'
                 )
-                self.assertIn('text-sm sm:text-base', body['attrs']['class'])
+                self.assertTrue(
+                    CATALOG_BODY_CLASSES.issubset(
+                        set(body['attrs'].get('class', '').split())
+                    ),
+                    body['attrs'].get('class', ''),
+                )
 
         tag_parser = _parse(self.client.get('/tags/agents-1228'))
         eyebrow = next(

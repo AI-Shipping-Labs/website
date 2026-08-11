@@ -27,143 +27,28 @@ def get_tiers_with_features():
     for tier in tiers:
         tier_copy = dict(tier)
 
-        # Collect feature bullets from this tier's activities
+        # The benefit title is the compact plan-card bullet.  Its optional
+        # description is reserved for the expanded Membership explanation.
         features = []
         if prev_tier_name:
             features.append({'text': f'Everything in {prev_tier_name}', 'included': True})
-        for activity in tier.get('activities', []):
-            for feat in activity.get('features', []):
-                features.append({'text': feat, 'included': True})
+        if 'benefits' in tier:
+            for benefit in _tier_benefits(tier):
+                title = str(benefit.get('title', '')).strip()
+                if title:
+                    features.append({'text': title, 'included': True})
+        else:
+            # Older synced revisions used activities with nested feature
+            # bullets. Keep rendering them during a rolling content deploy.
+            for activity in tier.get('activities', []):
+                for feature in activity.get('features', []):
+                    features.append({'text': feature, 'included': True})
 
         tier_copy['features'] = features
         result.append(tier_copy)
         prev_tier_name = tier['name']
 
     return result
-
-
-CURATED_ACTIVITIES = (
-    {
-        'slug': 'community-sprints',
-        'icon': 'timer',
-        'title': 'Community sprints',
-        'description': (
-            'Time-boxed cohorts with check-ins, deadlines, and accountability '
-            'for shipping one project per sprint.'
-        ),
-        'tiers': ('main', 'premium'),
-        'action_label': 'Explore community sprints',
-        'action_url': '/sprints',
-        'destination_context': (
-            'Browse current, upcoming, and past sprints. Each sprint page '
-            'explains the format and schedule before you decide to join.'
-        ),
-    },
-    {
-        'slug': 'live-events',
-        'icon': 'calendar-days',
-        'title': 'Live events',
-        'description': (
-            'Regular live building sessions, office hours, mock interviews, '
-            'and career sessions.'
-        ),
-        'tiers': ('main', 'premium'),
-        'action_label': 'View live events',
-        'action_url': '/events',
-        'destination_context': (
-            'Browse published schedules and event details. Registration and '
-            'access depend on the event and your membership.'
-        ),
-    },
-    {
-        'slug': 'workshops',
-        'icon': 'presentation',
-        'title': 'Hands-on workshops',
-        'description': (
-            'Hands-on workshops with recordings, step-by-step tutorials, and '
-            'materials for putting ideas into practice.'
-        ),
-        'tiers': ('main', 'premium'),
-        'action_label': 'Browse workshops',
-        'action_url': '/workshops',
-        'destination_context': (
-            'Browse workshop write-ups, recordings, tutorials, and materials. '
-            'Some individual materials require membership.'
-        ),
-    },
-    {
-        'slug': 'slack-community',
-        'icon': 'messages-square',
-        'title': 'Private Slack community',
-        'description': (
-            'A private Slack space for questions, feedback, group learning, '
-            'and trend breakdowns.'
-        ),
-        'tiers': ('main', 'premium'),
-        'action_label': 'Compare community membership',
-        'action_url': '/pricing',
-        'destination_context': (
-            'Private Slack access is included with Main and Premium '
-            'membership. Compare tiers to find the right fit.'
-        ),
-    },
-    {
-        'slug': 'personal-plans',
-        'icon': 'list-checks',
-        'title': 'Personalized plans and accountability',
-        'description': (
-            'A personalized plan tailored to your goals and used inside '
-            'sprints and accountability check-ins.'
-        ),
-        'tiers': ('main', 'premium'),
-        'action_label': 'See how sprints work',
-        'action_url': '/sprints',
-        'destination_context': (
-            'Learn how sprints turn goals into a private personal plan and '
-            'accountability check-ins. Member plans are not publicly browseable.'
-        ),
-    },
-    {
-        'slug': 'exclusive-content',
-        'icon': 'file-text',
-        'title': 'Exclusive written content',
-        'description': (
-            'Exclusive articles, tutorials with code examples, and practical '
-            'AI tool breakdowns.'
-        ),
-        'tiers': ('basic', 'main', 'premium'),
-        'action_label': 'Browse member articles',
-        'action_url': '/blog',
-        'destination_context': (
-            'Browse the public article catalog. Individual member articles '
-            'may require Basic membership or above.'
-        ),
-    },
-    {
-        'slug': 'courses',
-        'icon': 'book-open',
-        'title': 'Mini-courses',
-        'description': 'Structured mini-courses on specialized topics.',
-        'tiers': ('premium',),
-        'action_label': 'Browse courses',
-        'action_url': '/courses',
-        'destination_context': (
-            'Browse the course catalog. Premium mini-courses require Premium '
-            'access.'
-        ),
-    },
-)
-
-
-def get_curated_activities():
-    """Return the stable, code-owned activities shown on ``/activities``.
-
-    Copies keep callers from mutating the shared marketing contract while the
-    tuple-valued tier mapping remains deterministic and easy to compare.
-    ``get_activities()`` intentionally remains the synced-data path consumed
-    by the separate ``/community`` surface.
-    """
-    return [dict(activity) for activity in CURATED_ACTIVITIES]
 
 
 ACTIVITY_ACTIONS = {
@@ -181,7 +66,7 @@ ACTIVITY_ACTIONS = {
     },
     'Closed Community Access': {
         'label': 'Compare community membership',
-        'url': '/pricing',
+        'url': '/membership',
     },
     'Collaborative Problem-Solving & Mentorship': {
         'label': 'See live community sessions',
@@ -225,13 +110,13 @@ ACTIVITY_ACTIONS = {
     },
     'Profile Teardowns': {
         'label': 'Compare Premium membership',
-        'url': '/pricing',
+        'url': '/membership',
     },
 }
 
 DEFAULT_ACTIVITY_ACTION = {
     'label': 'Compare membership options',
-    'url': '/pricing',
+    'url': '/membership',
 }
 
 
@@ -239,35 +124,53 @@ def _activity_action(title):
     return ACTIVITY_ACTIONS.get(title, DEFAULT_ACTIVITY_ACTION)
 
 
-def get_activities():
-    """Return the flat activities list for the activities page.
+def _tier_benefits(tier):
+    """Return canonical benefits, with legacy ``activities`` compatibility."""
+    if 'benefits' in tier:
+        return tier.get('benefits') or []
+    return tier.get('activities') or []
 
-    Each activity dict has 'icon', 'title', 'description', and 'tiers'
-    (list of tier slug strings). Activities owned by a lower tier are
-    inherited by all higher tiers.
+
+def get_membership_benefits():
+    """Return the flat benefit list assembled from synced ``tiers.yaml``.
+
+    The tier-level list and the expanded explanation use the same source
+    record. A blank description intentionally means "show in the plan only".
+    ``activities`` remains a read-only fallback while older content revisions
+    are still in circulation during deployment.
     """
     tiers = get_tiers()
     tier_names = [t['stripe_key'] for t in tiers]
 
-    activities = []
+    benefits = []
     seen_titles = set()
 
     for i, tier in enumerate(tiers):
-        # This tier and all higher tiers inherit this activity
+        # This tier and all higher tiers inherit this benefit.
         inheriting_tiers = tier_names[i:]
-        for activity in tier.get('activities', []):
-            title = activity['title']
+        for benefit in _tier_benefits(tier):
+            title = str(benefit.get('title', '')).strip()
+            if not title:
+                continue
             if title in seen_titles:
                 continue
             seen_titles.add(title)
             action = _activity_action(title)
-            activities.append({
-                'icon': activity['icon'],
+            benefits.append({
+                'icon': benefit.get('icon', 'circle'),
                 'title': title,
-                'description': activity['description'].strip(),
+                'description': str(benefit.get('description', '') or '').strip(),
                 'tiers': inheriting_tiers,
-                'action_label': action['label'],
-                'action_url': action['url'],
+                'minimum_tier': tier['stripe_key'],
+                'tier_name': tier['name'],
+                'required_level': tier.get('level', (i + 1) * 10),
+                'action_label': benefit.get('action_label', action['label']),
+                'action_url': benefit.get('action_url', action['url']),
             })
 
-    return activities
+    return benefits
+
+
+def get_activities():
+    """Backward-compatible alias for callers using the former name."""
+    return get_membership_benefits()

@@ -83,7 +83,7 @@ class TierModelTest(TestCase):
 
 
 class TierPricingViewTest(TestCase):
-    """Smoke + context tests for the /pricing page.
+    """Smoke + context tests for the /membership page.
 
     The visible tier cards, prices, monthly/annual toggle, CTA buttons,
     "Most Popular" badge, free-tier-links-to-newsletter behavior, and
@@ -94,16 +94,22 @@ class TierPricingViewTest(TestCase):
     """
 
     def test_pricing_page_smoke(self):
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, "payments/pricing.html")
+        self.assertTemplateUsed(response, "content/membership/page.html")
+
+    def test_legacy_pricing_url_redirects_permanently_and_keeps_query(self):
+        response = self.client.get("/pricing?checkout=cancelled")
+
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response["Location"], "/membership?checkout=cancelled")
 
     def test_pricing_page_has_four_tier_cards(self):
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         self.assertEqual(len(response.context["tiers_data"]), 4)
 
     def test_pricing_page_context_tiers_ordered_by_level(self):
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         tiers_data = response.context["tiers_data"]
         levels = [item["tier"].level for item in tiers_data]
         self.assertEqual(levels, [0, 10, 20, 30])
@@ -125,9 +131,10 @@ class TierPricingViewTest(TestCase):
         for slug, desc in sync_descriptions.items():
             Tier.objects.filter(slug=slug).update(description=desc)
 
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         content = response.content.decode()
-        self.assertIn('class="mb-6 line-clamp-3 ', content)
+        self.assertNotIn('line-clamp-3', content)
+        self.assertIn('class="mb-6 text-sm leading-6 text-muted-foreground', content)
         for desc in sync_descriptions.values():
             self.assertIn(desc, content)
 
@@ -150,7 +157,7 @@ class TierPricingViewBootstrapTest(TestCase):
             price_eur_month=None,
             price_eur_year=None,
         )
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         for tier_name in ("Free", "Basic", "Main", "Premium"):
@@ -158,12 +165,12 @@ class TierPricingViewBootstrapTest(TestCase):
 
     def test_bootstrap_tier_rows_have_no_undefined_name_string(self):
         """Regression: placeholder name must not leave 'undefined' on the page."""
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         self.assertNotIn("undefined", response.content.decode())
 
 
 class TierPricingViewAuthenticatedTest(TestCase):
-    """Issue #238: logged-in users must reach `/pricing` and see all tier
+    """Issue #238: logged-in users must reach `/membership` and see all tier
     cards (the dashboard does not contain them, so this is the canonical
     destination for header/footer Membership links)."""
 
@@ -180,11 +187,11 @@ class TierPricingViewAuthenticatedTest(TestCase):
         self.client.force_login(self.user)
 
     def test_authenticated_pricing_page_returns_200(self):
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         self.assertEqual(response.status_code, 200)
 
     def test_authenticated_pricing_page_contains_all_tier_names(self):
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         content = response.content.decode()
         for tier_name in ("Free", "Basic", "Main", "Premium"):
             self.assertIn(tier_name, content)

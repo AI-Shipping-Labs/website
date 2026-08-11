@@ -10,7 +10,7 @@ class PricingMobileResponsiveTest(TestCase):
         pass
 
     def _get_pricing_content(self):
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         self.assertEqual(response.status_code, 200)
         return response.content.decode()
 

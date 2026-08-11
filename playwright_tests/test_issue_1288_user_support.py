@@ -193,7 +193,7 @@ class TestIssue1288UserSupport:
             "https://evil.example/studio/crm/1",
             "//evil.example/studio/crm/1",
             "\\\\evil.example\\studio\\crm\\1",
-            "/pricing",
+            "/membership",
             "/studio/../../outside",
             "/studio/%2e%2e/%2e%2e/outside",
         )

@@ -106,15 +106,15 @@
   <section id="activities" class="scroll-mt-24 border-t border-border bg-card py-12 sm:py-20 lg:py-28" data-testid="home-activities-section" aria-labelledby="home-activities-heading">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="max-w-3xl">
-          <p class="text-sm font-medium uppercase tracking-widest text-accent">What members do</p>
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">Member benefits</p>
           <h2 id="home-activities-heading" class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl" style="text-wrap: balance;">
             Build momentum with people who ship
           </h2>
           <p class="mt-4 max-w-2xl text-lg leading-8 text-muted-foreground">
             AI Shipping Labs turns project ideas into a shared practice: focused work, useful feedback, and a cadence that keeps the next step visible.
           </p>
-        <a href="/activities#access-by-tier" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="home-activities-tier-link">
-          Compare activities by tier
+        <a href="/membership#activities" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="home-activities-tier-link">
+          Explore membership benefits
           <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
         </a>
       </div>
@@ -149,7 +149,7 @@
         <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
           Community sprints turn good intentions into shipping windows.
         </p>
-        <a href="/sprints" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="home-sprints-index-link">
+        <a href="/sprints" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="home-sprints-index-link">
           Explore sprints
           <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
         </a>
@@ -320,7 +320,7 @@
         {# Issues #510/#1235: cards size to their own content on mobile and desktop. #}
         {# Issue #1339 — tier / pricing role: singular spotlight surface keeps rounded-xl, #}
         {# p-5 sm:p-8, shadow-xl on the highlighted tier only, and a full-width Join button #}
-        {# with no navigation arrow. Mirrors payments/pricing.html; no visual change here. #}
+        {# with no navigation arrow. Mirrors content/membership/page.html; no visual change here. #}
         <div class="relative flex flex-col overflow-visible rounded-xl border p-5 transition-all max-lg:flex-none max-lg:snap-center sm:p-8 {% if tier.highlighted %}border-accent bg-background shadow-xl ring-2 ring-accent/20 max-lg:w-[min(86vw,22rem)] lg:scale-105{% else %}border-border bg-background max-lg:w-[min(70vw,18rem)] max-lg:p-4{% endif %}"
              data-tier-card="{{ tier.stripe_key }}"
              data-testid="home-tier-card"
@@ -347,7 +347,7 @@
             <p class="mt-2 text-sm text-muted-foreground">{{ tier.hook }}</p>
           </div>
 
-          <p class="mb-6 text-sm text-muted-foreground max-lg:mb-4 {% if not tier.highlighted %}max-lg:hidden{% endif %}">{{ tier.description }}</p>
+          <p class="mb-6 text-sm leading-6 text-muted-foreground max-lg:mb-4 lg:min-h-[4.5rem] {% if not tier.highlighted %}max-lg:hidden{% endif %}">{{ tier.description }}</p>
 
           <ul class="mb-8 flex-1 space-y-3 max-lg:mb-4 max-lg:space-y-2">
             {% for feature in tier.features %}

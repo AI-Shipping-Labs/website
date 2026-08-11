@@ -799,7 +799,7 @@ class ProjectDetailGatingTest(TestCase):
             response,
             'Upgrade to Basic to view this project',
         )
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
         self.assertNotContains(response, 'Create a free account')
         # The canonical access card replaces the old blurred skeleton.
         self.assertNotContains(response, 'filter: blur(8px)')

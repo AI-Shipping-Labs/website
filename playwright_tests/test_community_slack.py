@@ -314,7 +314,7 @@ class TestScenario3FreeMemberDiscoversCommunityOnActivities:
         page.wait_for_load_state("domcontentloaded")
 
         # Then: User is taken to the pricing page
-        assert "/pricing" in page.url
+        assert "/membership" in page.url
 # ---------------------------------------------------------------
 # Scenario 4: Anonymous visitor sees community access highlighted
 #              in the Main tier on the pricing page
@@ -329,16 +329,16 @@ class TestScenario4AnonymousVisitorSeesSlackOnPricingPage:
         self, django_server
     , page):
         """Given an anonymous visitor (not logged in).
-        Navigate to /pricing, review the tier comparison grid.
+        Navigate to /membership, review the tier comparison grid.
         The Main tier card lists 'Slack community access'. The Free
         and Basic tier cards do not mention Slack community access.
         Click the Main tier payment link to verify it leads toward
         Stripe checkout."""
         _ensure_tiers()
 
-        # Step 1: Navigate to /pricing
+        # Step 1: Navigate to /membership
         page.goto(
-            f"{django_server}/pricing",
+            f"{django_server}/membership",
             wait_until="domcontentloaded",
         )
         page.content()

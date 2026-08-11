@@ -147,12 +147,12 @@ class TestAuthReturnContext:
         # Post-#604 (Payment Links) replaced the in-app Stripe Checkout
         # flow this test used to exercise. The selectable-tier login
         # bounce (``[data-tier="main"]`` -> ``?tier=...&billing=...``) and
-        # the query params it carried no longer exist; ``/pricing`` now
+        # the query params it carried no longer exist; ``/membership`` now
         # round-trips its own path as the post-auth return target
-        # (``next_url = request.path`` in ``payments/views/pricing.py``).
+        # (``next_url = request.path`` in ``payments/views/membership.py``).
         # The return-context behavior that still exists is the generic one
-        # this module protects (#485): logging in from a ``?next=/pricing``
-        # link returns the user to /pricing. Here we assert that login
+        # this module protects (#485): logging in from a ``?next=/membership``
+        # link returns the user to /membership. Here we assert that login
         # round trip the auth-return-context module owns.
         with django_db_blocker.unblock():
             _reset_fixtures()
@@ -160,12 +160,12 @@ class TestAuthReturnContext:
 
         goto_with_retry(
             page,
-            f"{django_server}/accounts/login/?next=/pricing",
+            f"{django_server}/accounts/login/?next=/membership",
             wait_until="domcontentloaded",
         )
         _login(page)
 
-        page.wait_for_url(f"{django_server}/pricing", timeout=10000)
+        page.wait_for_url(f"{django_server}/membership", timeout=10000)
         assert "Choose your level of engagement" in page.content()
 
     def test_malicious_next_login_does_not_redirect_off_site(

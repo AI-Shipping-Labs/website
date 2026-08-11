@@ -363,7 +363,7 @@ class TestScenarioFreeMemberAccountPage:
     def test_upgrade_link_points_to_pricing(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """An Upgrade link is visible pointing to /pricing."""
+        """An Upgrade link is visible pointing to /membership."""
         ctx = _auth_context(
             browser, "free@test.com", django_db_blocker
         )
@@ -372,7 +372,7 @@ class TestScenarioFreeMemberAccountPage:
 
         btn = page.locator("#upgrade-btn")
         assert btn.is_visible()
-        assert btn.get_attribute("href") == "/pricing"
+        assert btn.get_attribute("href") == "/membership"
         ctx.close()
     @pytest.mark.core
     def test_free_membership_summary_has_no_billing_or_portal(
@@ -386,7 +386,7 @@ class TestScenarioFreeMemberAccountPage:
         benefits = page.locator("#current-tier-benefits")
         assert benefits.is_visible()
         assert "Newsletter updates" in benefits.inner_text()
-        assert page.locator("#upgrade-btn").get_attribute("href") == "/pricing"
+        assert page.locator("#upgrade-btn").get_attribute("href") == "/membership"
         assert page.locator("#manage-subscription-btn").count() == 0
         assert page.locator("#billing-period-end").count() == 0
         assert page.locator("#temporary-access-expiry").count() == 0
@@ -407,7 +407,7 @@ class TestScenarioFreeMemberAccountPage:
     def test_upgrade_link_navigates_to_pricing(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Click Upgrade link and land on /pricing."""
+        """Click Upgrade link and land on /membership."""
         ctx = _auth_context(
             browser, "free@test.com", django_db_blocker
         )
@@ -416,7 +416,7 @@ class TestScenarioFreeMemberAccountPage:
 
         page.click("#upgrade-btn")
         page.wait_for_load_state("domcontentloaded")
-        assert "/pricing" in page.url
+        assert "/membership" in page.url
         ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Basic member views subscription details
@@ -499,7 +499,7 @@ class TestScenarioBasicMemberSubscription:
         page = ctx.new_page()
         _go_to_account(page, django_server)
 
-        assert "Everything in Free" in page.locator("#current-tier-benefits").inner_text()
+        assert "Exclusive written content" in page.locator("#current-tier-benefits").inner_text()
         assert "March 15, 2026" in page.locator("#billing-period-end").inner_text()
         assert page.locator("#manage-subscription-btn").is_visible()
 
@@ -507,15 +507,16 @@ class TestScenarioBasicMemberSubscription:
         assert upsell.is_visible()
         upsell_text = upsell.inner_text()
         assert "community" in upsell_text
-        assert "live and group work" in upsell_text
-        assert "accountability" in upsell_text
-        assert "topic voting" in upsell_text
+        assert "community sprints" in upsell_text
+        assert "live events" in upsell_text
+        assert "personalized onboarding" in upsell_text
+        assert "vote on topics" in upsell_text
 
         cta = page.locator("#next-tier-upsell-btn")
-        assert cta.get_attribute("href") == "/pricing"
+        assert cta.get_attribute("href") == "/membership"
         cta.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/pricing" in page.url
+        assert "/membership" in page.url
         ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Main member initiates a downgrade
@@ -581,10 +582,9 @@ class TestScenarioMainMemberDowngrade:
         assert page.locator("#manage-subscription-btn").is_visible()
 
         upsell_text = page.locator("#next-tier-upsell").inner_text()
-        assert "mini-courses" in upsell_text
-        assert "course-topic voting" in upsell_text
+        assert "courses" in upsell_text
         assert "LinkedIn" in upsell_text
-        assert "GitHub teardowns" in upsell_text
+        assert "GitHub feedback" in upsell_text
         assert "Upgrade to Premium" in upsell_text
         assert "Compare Premium" not in upsell_text
         assert page.locator("#upgrade-modal").count() == 0
@@ -690,7 +690,7 @@ class TestScenarioAccountMembershipNoSubscription:
         _go_to_account(page, django_server)
 
         assert page.locator("#tier-name").inner_text().strip() == "Basic"
-        assert "Everything in Free" in page.locator("#current-tier-benefits").inner_text()
+        assert "Exclusive written content" in page.locator("#current-tier-benefits").inner_text()
         assert page.locator("#manage-subscription-btn").count() == 0
         assert page.locator("#paid-without-subscription-note").count() == 0
         assert page.locator("#paid-plan-pricing-btn").count() == 0

@@ -2,7 +2,7 @@
 
 Covers the user-facing flows that cross pages and matter for the story:
 
-1. A guest hits the Books gate and the upgrade CTA lands on /pricing.
+1. A guest hits the Books gate and the upgrade CTA lands on /membership.
 2. A Free member is still gated on a Main book.
 3. A Main member sees the participation body.
 4. A draft book is not publicly reachable (404).
@@ -88,9 +88,9 @@ class TestBookGate:
             assert page.locator(
                 '[data-testid="book-participation-body"]',
             ).count() == 0
-            # Follow the upgrade CTA -> /pricing.
+            # Follow the upgrade CTA -> /membership.
             page.locator('[data-testid="book-guest-gate-cta"]').first.click()
-            page.wait_for_url(f"{django_server}/pricing")
+            page.wait_for_url(f"{django_server}/membership")
         finally:
             context.close()
 

@@ -343,7 +343,7 @@ class TestScenario3FreeUserSeesUpgradePath:
     , browser):
         """Given a Basic-gated recording and a Free-tier user, the user sees
         a lock icon on the listing, a blurred placeholder on detail, and an
-        upgrade CTA linking to /pricing."""
+        upgrade CTA linking to /membership."""
         _clear_recordings()
         _create_user("free-rec@test.com", tier_slug="free")
         _create_recording(
@@ -408,14 +408,14 @@ class TestScenario3FreeUserSeesUpgradePath:
         assert paywall.count() == 1
         assert "Upgrade to Basic to watch the recording" in body
 
-        # Step 3: Click the upgrade CTA, which goes to /pricing.
+        # Step 3: Click the upgrade CTA, which goes to /membership.
         pricing_link = page.locator('[data-testid="video-upgrade-cta"]')
         assert pricing_link.count() >= 1
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 
-        # User lands on /pricing
-        assert "/pricing" in page.url
+        # User lands on /membership
+        assert "/membership" in page.url
         pricing_body = page.content()
         assert "Free" in pricing_body
         assert "Basic" in pricing_body

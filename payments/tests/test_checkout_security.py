@@ -56,7 +56,7 @@ class CheckoutBindingViewTest(TierSetupMixin, TestCase):
         super().tearDown()
 
     def test_authenticated_pricing_contains_post_forms_not_stripe_identity_urls(self):
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         self.assertContains(response, 'method="post"')
         self.assertContains(response, "/payments/checkout/basic/annual")
         self.assertNotContains(response, f"client_reference_id={self.user.pk}")
@@ -104,7 +104,7 @@ class CheckoutBindingViewTest(TierSetupMixin, TestCase):
         response = self.client.post("/payments/checkout/basic/monthly")
         self.assertRedirects(
             response,
-            "/pricing?checkout_error=temporarily_unavailable#pricing-section",
+            "/membership?checkout_error=temporarily_unavailable#pricing-section",
         )
         self.assertFalse(CheckoutAccountBinding.objects.exists())
         recovery = self.client.get(response["Location"])
@@ -120,7 +120,7 @@ class CheckoutBindingViewTest(TierSetupMixin, TestCase):
 
         self.assertRedirects(
             response,
-            "/pricing?checkout_error=invalid_interval#pricing-section",
+            "/membership?checkout_error=invalid_interval#pricing-section",
         )
         self.assertFalse(CheckoutAccountBinding.objects.exists())
         recovery = self.client.get(response["Location"])
@@ -134,7 +134,7 @@ class CheckoutBindingViewTest(TierSetupMixin, TestCase):
 
         self.assertRedirects(
             response,
-            "/pricing?checkout_error=tier_unavailable#pricing-section",
+            "/membership?checkout_error=tier_unavailable#pricing-section",
         )
         self.assertFalse(CheckoutAccountBinding.objects.exists())
         recovery = self.client.get(response["Location"])

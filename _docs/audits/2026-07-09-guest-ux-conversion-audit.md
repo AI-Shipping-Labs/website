@@ -18,7 +18,7 @@ Scope: anonymous visitor -> free signup -> paid upgrade funnel. Evidence: produc
 - Paywall partial: `templates/includes/content_gated.html` — teaser (max 200 chars), decorative blur, one CTA button "View Pricing".
 - Header (`templates/includes/header.html`): guests get a single "Sign in" button; zero signup/register links, desktop and mobile.
 - Homepage tiers section (`templates/home.html` L101-201): Basic/Main/Premium only, no Free card; "Join" buttons are raw Stripe payment links.
-- Pricing (`payments/views/pricing.py`): Free card renders an inline register form (good); paid cards are Stripe payment links; toggle defaults to Annual.
+- Pricing (`payments/views/membership.py`): Free card renders an inline register form (good); paid cards are Stripe payment links; toggle defaults to Annual.
 - Registration (`accounts/views/auth.py:306-375` + `static/js/accounts/inline-register.js:58-96`): email/password, AJAX, does NOT auto-login; shows success message and requires manual sign-in. Verification email sent but verification is not enforced for login (`website/settings.py:516-524`, `ACCOUNT_EMAIL_VERIFICATION = 'none'`).
 - OAuth (Google/GitHub/Slack) on both login and register pages; OAuth users are auto-verified and receive no emails at all.
 - Event registration for guests (`events/views/api.py:146-299`): email-only form that auto-creates a free account. Best conversion pattern on the site.
@@ -39,7 +39,7 @@ Scope: anonymous visitor -> free signup -> paid upgrade funnel. Evidence: produc
 ### P1 — free-member activation gap
 
 5. No welcome email for free signups; OAuth signups receive zero emails. No nurture sequence exists (`accounts/signals.py`, `email_app/services/email_classification.py:104-116`). Free members only get broadcast newsletters.
-6. New free-member dashboard is a stack of empty states with no getting-started checklist and no upgrade CTA. Onboarding prompt is hidden from Free members. Suggested: welcome email, 3-item dashboard checklist (start AI Hero, register for a free event, read the sprint intro), plan/sprint teaser card routing to `/pricing`.
+6. New free-member dashboard is a stack of empty states with no getting-started checklist and no upgrade CTA. Onboarding prompt is hidden from Free members. Suggested: welcome email, 3-item dashboard checklist (start AI Hero, register for a free event, read the sprint intro), plan/sprint teaser card routing to `/membership`.
 7. Homepage skips both the free path and the paid story. No Free tier card in the tiers section; sprints (the differentiator) appear nowhere on the homepage; upcoming events (best free sampling hook) are absent — only past recordings are shown. The sprint announcement article sells the community better than the homepage.
 8. Lead magnets missing and mis-flowed. `/downloads` is linked in nav but empty ("No downloadable resources yet"). When populated, free downloads say "Enter your email to download for free" but route to the full signup page (`templates/content/downloads_list.html:96-105`) instead of the event-style inline email capture.
 9. Social proof anti-sells. Event pages show "1 person is going" / "Be the first to sign up" — suppress below a threshold. Homepage testimonials are explicitly from a prior course, not the community; replace with sprint-member quotes as they accumulate.

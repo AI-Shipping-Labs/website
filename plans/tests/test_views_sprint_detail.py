@@ -293,7 +293,7 @@ class SprintDetailUnderTierTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="sprint-cta-upgrade"')
         self.assertContains(response, 'Upgrade to Premium to join')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
         self.assertNotContains(response, 'data-testid="sprint-cta-join"')
 
 

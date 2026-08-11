@@ -181,7 +181,7 @@
         <div class="rounded-lg border border-border bg-secondary/20 p-4 mb-6" id="paid-without-subscription-note" data-testid="paid-without-subscription-note">
           <p class="text-sm text-muted-foreground">{{ paid_without_subscription_note }}</p>
           {% if show_paid_plan_pricing_action %}
-          <a href="/pricing"
+          <a href="/membership"
              class="{% button_classes 'secondary' size='sm' extra='mt-3' %}"
              id="paid-plan-pricing-btn">
             <i data-lucide="credit-card" class="h-4 w-4"></i>
@@ -194,7 +194,7 @@
         <!-- Action Buttons -->
         <div class="flex flex-col sm:flex-row flex-wrap gap-3 mt-6">
           {% if show_upgrade_action %}
-            <a href="/pricing" class="{% button_classes 'primary' %}" id="upgrade-btn">
+            <a href="/membership" class="{% button_classes 'primary' %}" id="upgrade-btn">
               <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
               Upgrade
             </a>

@@ -175,7 +175,7 @@ FAQ_ITEMS = [
     },
     {
         'question': "What's included in the Premium tier?",
-        'answer': 'Premium tier accelerates your growth with structured learning paths through mini-courses and personalized career guidance. Includes everything in Main, plus access to all mini-courses on specialized topics, the ability to vote on course topics, and professional profile teardowns (resume, LinkedIn, GitHub).',
+        'answer': 'Premium tier accelerates your growth with structured courses and personalized career feedback. It includes everything in Main, plus access to courses on specialized topics, resume and LinkedIn teardown, and GitHub feedback.',
     },
     {
         'question': 'How do I get started?',
@@ -1353,7 +1353,7 @@ def _locked_feed_item(
         'date_prefix': date_prefix,
         'icon': icon,
         'url': detail_url,
-        'action_url': '/pricing',
+        'action_url': '/membership',
         'cta_label': f'Unlock with {required_tier}',
         'required_tier': required_tier,
         'locked': True,

@@ -9,12 +9,11 @@ Usage:
 import os
 import sys
 
-import yaml
 from django.core.management.base import BaseCommand, CommandError
 
-from content.models import SiteConfig
 from integrations.models import ContentSource
 from integrations.services.github import sync_content_source
+from integrations.services.github_sync.dispatchers.tiers import _sync_tiers_yaml
 
 
 class Command(BaseCommand):
@@ -68,19 +67,21 @@ class Command(BaseCommand):
                 self.stderr.write(self.style.ERROR(f'  FAILED: {e}'))
                 has_errors = True
 
-        # Sync tiers.yaml into SiteConfig if syncing from disk
+        # Keep local-disk sync semantics identical to production GitHub sync:
+        # write the full config blob and the scalar Tier fields together.
         if from_disk:
             tiers_path = os.path.join(from_disk, 'tiers.yaml')
             if os.path.isfile(tiers_path):
                 self.stdout.write('Syncing tiers.yaml...')
                 try:
-                    with open(tiers_path, encoding='utf-8') as f:
-                        tiers_data = yaml.safe_load(f) or []
-                    SiteConfig.objects.update_or_create(
-                        key='tiers',
-                        defaults={'data': tiers_data},
-                    )
-                    self.stdout.write('  tiers.yaml synced to database')
+                    result = _sync_tiers_yaml(from_disk)
+                    if result['synced']:
+                        self.stdout.write('  tiers.yaml synced to database')
+                    else:
+                        self.stderr.write(
+                            self.style.ERROR('  FAILED to sync tiers.yaml')
+                        )
+                        has_errors = True
                 except Exception as e:
                     self.stderr.write(self.style.ERROR(f'  FAILED to sync tiers.yaml: {e}'))
                     has_errors = True

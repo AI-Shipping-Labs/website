@@ -3,7 +3,6 @@ import hashlib
 from datetime import date, datetime, timedelta
 from datetime import timezone as dt_timezone
 from urllib.parse import urlparse
-from zoneinfo import ZoneInfo
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
@@ -48,9 +47,11 @@ from events.services.display_time import (
     should_display_event_location,
 )
 from events.services.freestyle_evidence import build_freestyle_evidence
-from events.services.time_windows import (
-    past_recording_events_queryset,
-    upcoming_events_queryset,
+from events.services.time_windows import past_recording_events_queryset
+from events.services.timeline import (
+    build_public_upcoming_timeline,
+    group_timeline_days,
+    viewer_timezone,
 )
 
 PUBLIC_EVENTS_PER_PAGE = 20
@@ -185,161 +186,10 @@ def _build_event_post_resources(event, *, has_access):
     }
 
 
-def _build_upcoming_rows(upcoming_events):
-    """Group upcoming series occurrences into single "series cards".
-
-    Issue #866: a visitor scanning /events should recognise recurring
-    sessions of one program at a glance instead of seeing N near-identical
-    cards. We partition the chronological ``upcoming_events`` list into:
-
-    - standalone events (no ``event_series``), and
-    - per-series buckets of their upcoming occurrences.
-
-    ``upcoming_events`` is already filtered to live upcoming events (future,
-    non-draft, non-cancelled) and ordered by ``start_datetime``, so each
-    series bucket is naturally chronological and excludes cancelled/draft
-    occurrences — they never inflate the count or the date list.
-
-    A series with 2+ upcoming occurrences becomes ONE grouped row; a series
-    with exactly 1 falls back to a normal single-event row (no benefit to a
-    one-item group). A grouped row exposes only the next occurrence plus
-    remaining/count metadata, so listing pages do not preview several dates.
-    Each row is sorted by its earliest upcoming
-    ``start_datetime`` so the overall list stays chronological.
-
-    Returns a list of dicts, each either::
-
-        {'kind': 'event', 'event': <Event>, 'sort_dt': <datetime>}
-        {'kind': 'series', 'series': <EventSeries>,
-         'next_occurrence': <Event>, 'count': N, 'remaining_count': N - 1,
-         'sort_dt': <earliest datetime>}
-    """
-    series_buckets = {}
-    series_order = []
-    standalone = []
-    for event in upcoming_events:
-        if event.event_series_id:
-            bucket = series_buckets.get(event.event_series_id)
-            if bucket is None:
-                bucket = []
-                series_buckets[event.event_series_id] = bucket
-                series_order.append(event.event_series_id)
-            bucket.append(event)
-        else:
-            standalone.append(event)
-
-    rows = []
-    for event in standalone:
-        rows.append({
-            'kind': 'event',
-            'event': event,
-            'sort_dt': event.start_datetime,
-        })
-
-    for series_id in series_order:
-        occurrences = series_buckets[series_id]
-        # A one-occurrence series stays a normal single card (which keeps the
-        # existing "Series: <name>" link), so membership is still visible.
-        if len(occurrences) < 2:
-            event = occurrences[0]
-            rows.append({
-                'kind': 'event',
-                'event': event,
-                'sort_dt': event.start_datetime,
-            })
-            continue
-        count = len(occurrences)
-        rows.append({
-            'kind': 'series',
-            'series': occurrences[0].event_series,
-            'next_occurrence': occurrences[0],
-            'count': count,
-            'remaining_count': count - 1,
-            'sort_dt': occurrences[0].start_datetime,
-        })
-
-    rows.sort(key=lambda r: r['sort_dt'])
-    return rows
-
-
-def _viewer_timezone(user):
-    """Return the viewer's ``ZoneInfo`` when they have a valid preference.
-
-    Issue #1382: the Luma-style /events timeline groups occurrences by their
-    LOCAL calendar date and shows a local time on each card. We reuse the
-    exact timezone precedence the per-card datetime partial
-    (``_event_list_time.html``) already uses: an authenticated viewer with a
-    valid ``preferred_timezone`` sees times in that zone; everyone else falls
-    back to each event's own stored timezone. This helper resolves only the
-    viewer half; the per-event fallback lives in ``_event_local_datetime``.
-    """
-    if not getattr(user, 'is_authenticated', False):
-        # Anonymous viewers fall through to each event's own stored timezone
-        # (``_event_local_datetime`` handles the ``None`` case), matching the
-        # ``event_source_short_datetime`` branch of the per-card partial.
-        return None
-    tz_name = getattr(user, 'preferred_timezone', '')
-    if is_valid_timezone(tz_name):
-        return ZoneInfo(tz_name)
-    # An authenticated viewer without a valid preference gets the UTC fallback,
-    # mirroring ``format_user_datetime``.
-    return ZoneInfo('UTC')
-
-
-def _event_local_datetime(start_datetime, event_timezone, viewer_tz):
-    """Localize ``start_datetime`` for grouping/display on the timeline."""
-    dt = start_datetime
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=dt_timezone.utc)
-    if viewer_tz is not None:
-        return dt.astimezone(viewer_tz)
-    tz_name = event_timezone if is_valid_timezone(event_timezone) else 'UTC'
-    return dt.astimezone(ZoneInfo(tz_name))
-
-
-def _format_time_label(local_dt):
-    """Return the compact 24-hour clock label used by timeline rows."""
-    return local_dt.strftime('%H:%M')
-
-
-def _group_timeline_days(rows, viewer_tz):
-    """Group already-ordered timeline rows into per-date buckets.
-
-    ``rows`` is the ordered list produced by ``_build_upcoming_rows`` (for the
-    Upcoming timeline) or a list of ``{'kind': 'past', 'event': ...}`` dicts
-    (for the Past timeline). Each row's anchor event (the ``event`` key, or the
-    ``next_occurrence`` for a grouped series row) supplies the date/time. The
-    input order is preserved — ascending for upcoming, descending for past — so
-    same-day rows are always adjacent and we can bucket in a single pass.
-
-    Mutates each row in place to add a ``display_time`` label and returns an
-    ordered list of ``{iso_date, date_label, weekday_label, rows}`` dicts.
-    """
-    days = []
-    current = None
-    for row in rows:
-        anchor = row.get('event') or row.get('next_occurrence')
-        local_dt = _event_local_datetime(
-            anchor.start_datetime, anchor.timezone, viewer_tz,
-        )
-        row['display_time'] = _format_time_label(local_dt)
-        iso_date = local_dt.date().isoformat()
-        if current is None or current['iso_date'] != iso_date:
-            current = {
-                'iso_date': iso_date,
-                'date_label': f'{local_dt.strftime("%b")} {local_dt.day}',
-                'weekday_label': local_dt.strftime('%A'),
-                'rows': [],
-            }
-            days.append(current)
-        current['rows'].append(row)
-    return days
-
-
 def events_calendar(request, year=None, month=None):
     """Monthly calendar grid view for events."""
     today = date.today()
-    viewer_tz = _viewer_timezone(request.user)
+    viewer_tz = viewer_timezone(request.user)
     events_display_timezone = str(viewer_tz) if viewer_tz is not None else ''
     year = year or today.year
     month = month or today.month
@@ -450,17 +300,9 @@ def events_list(request):
     selected_tags = _get_selected_tags(request)
     now = timezone.now()
     user = request.user
-    viewer_tz = _viewer_timezone(user)
+    viewer_tz = viewer_timezone(user)
     events_display_timezone = str(viewer_tz) if viewer_tz is not None else ''
-
-    # Registration info for authenticated viewers (drives the Registered pill).
     registered_event_ids = set()
-    if user.is_authenticated:
-        registered_event_ids = set(
-            EventRegistration.objects.filter(
-                user=user,
-            ).values_list('event_id', flat=True)
-        )
 
     # Issue #578: "Subscribe to all events" affordance. Three options resolved
     # server-side so the template stays free of URL-encoding logic.
@@ -493,17 +335,13 @@ def events_list(request):
         page_obj = paginator.get_page(request.GET.get('page'))
         is_paginated = page_obj.has_other_pages()
         past_rows = [{'kind': 'past', 'event': event} for event in page_obj]
-        past_days = _group_timeline_days(past_rows, viewer_tz)
+        past_days = group_timeline_days(past_rows, viewer_tz)
     else:
-        upcoming_events = (
-            upcoming_events_queryset(now=now)
-            .annotate(_attendee_count=Count('registrations'))
-            .select_related('event_series')
-            .order_by('start_datetime')
-        )
-        # Issue #866: collapse a series' 2+ upcoming occurrences into one row.
-        upcoming_rows = _build_upcoming_rows(upcoming_events)
-        upcoming_days = _group_timeline_days(upcoming_rows, viewer_tz)
+        upcoming_timeline = build_public_upcoming_timeline(user, now=now)
+        upcoming_rows = upcoming_timeline['upcoming_rows']
+        upcoming_days = upcoming_timeline['upcoming_days']
+        registered_event_ids = upcoming_timeline['registered_event_ids']
+        events_display_timezone = upcoming_timeline['events_display_timezone']
 
     context = {
         'filter_mode': filter_mode,
@@ -1161,7 +999,7 @@ def event_series_public(request, series_id, slug):
         'series_register_url': f'/api/events/series/{series.slug}/register',
         # Login redirect target for anonymous visitors clicking register.
         'login_next': series.get_absolute_url(),
-        'pricing_url': '/pricing',
+        'pricing_url': '/membership',
     })
 
 

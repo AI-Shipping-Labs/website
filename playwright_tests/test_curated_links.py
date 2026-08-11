@@ -249,16 +249,16 @@ class TestScenario3FreeUserSeesGatedLink:
         cta_text = cta.inner_text()
         assert "Upgrade to Basic to access this resource" in cta_text
 
-        # Membership tiers link pointing to /pricing
+        # Membership tiers link pointing to /membership
         view_plans_link = cta.locator('a:has-text("View membership tiers")')
         assert view_plans_link.count() >= 1
         href = view_plans_link.first.get_attribute("href")
-        assert "/pricing" in href
+        assert "/membership" in href
 
-        # Click "View Plans" and land on /pricing
+        # Click "View Plans" and land on /membership
         view_plans_link.first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/pricing" in page.url
+        assert "/membership" in page.url
 # ---------------------------------------------------------------
 # Scenario 4: Basic member accesses a Basic-gated link successfully
 # ---------------------------------------------------------------

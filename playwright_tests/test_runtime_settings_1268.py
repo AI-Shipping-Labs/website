@@ -53,7 +53,7 @@ def test_staff_rotates_payment_links_without_a_deploy(django_server, browser):
     assert stripe_card.locator('[data-source-badge="db"]').count() >= 1
 
     visitor = browser.new_page()
-    visitor.goto(f'{django_server}/pricing')
+    visitor.goto(f'{django_server}/membership')
     pricing_cta = visitor.locator(
         '[data-tier-card="main"] .tier-cta-link',
     )
@@ -76,7 +76,7 @@ def test_staff_rotates_payment_links_without_a_deploy(django_server, browser):
         '[data-source-badge="django_settings"]',
     ).count() == 1
     visitor.bring_to_front()
-    visitor.goto(f'{django_server}/pricing')
+    visitor.goto(f'{django_server}/membership')
     restored_cta = visitor.locator(
         '[data-tier-card="main"] .tier-cta-link',
     )

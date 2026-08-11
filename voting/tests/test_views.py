@@ -272,11 +272,11 @@ class PollGatingTest(TierSetupMixin, TestCase):
         )
 
     def test_free_user_detail_has_view_pricing_link(self):
-        """Gated detail page renders an 'Upgrade' link to /pricing."""
+        """Gated detail page renders an 'Upgrade' link to /membership."""
         response = self.client.get(f'/vote/{self.poll.id}')
         self.assertContains(
             response,
-            'href="/pricing"',
+            'href="/membership"',
         )
         self.assertContains(response, 'Upgrade')
         self.assertContains(response, 'data-testid="poll-gated"')
@@ -333,7 +333,7 @@ class CoursePollGatingTest(TierSetupMixin, TestCase):
     def test_course_poll_detail_has_view_pricing_link(self):
         """Gated course poll detail renders the 'Upgrade' link."""
         response = self.client.get(f'/vote/{self.course_poll.id}')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
         self.assertContains(response, 'Upgrade')
         self.assertContains(response, 'data-testid="poll-gated"')
         self.assertContains(response, 'Premium required')

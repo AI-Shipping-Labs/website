@@ -266,7 +266,7 @@ def test_community_dropdown_groups_membership_sprints_events(django_server, page
     ]
 
     page.get_by_test_id("nav-community-link-membership").click()
-    page.wait_for_url("**/pricing")
+    page.wait_for_url("**/membership")
     _shot(page, "04-community-membership")
 
 
@@ -286,8 +286,8 @@ def test_community_dropdown_links_membership_first(django_server, page):
         """
     )
     assert links[:6] == [
-        ["nav-community-link-membership", "/pricing"],
-        ["nav-community-link-activities", "/activities#access-by-tier"],
+        ["nav-community-link-membership", "/membership"],
+        ["nav-community-link-activities", "/activities"],
         ["nav-community-link-sprints", "/sprints"],
         ["nav-community-link-books", "/books"],
         ["nav-community-link-events", "/events"],
@@ -665,5 +665,5 @@ def test_existing_activities_page_still_loads(django_server, page):
 
     assert page.locator('[data-testid="activities-sprints-section"]').is_visible()
     assert page.get_by_role(
-        "heading", name="Membership benefits by tier"
+        "heading", name="Build with structure, support, and a group"
     ).is_visible()

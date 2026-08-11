@@ -122,9 +122,9 @@ def test_signup_surfaces_have_no_inline_register_form(
     django_server, page, django_db_blocker
 ):
     _seed(django_db_blocker)
-    # /pricing free tier is a single Join button -> register page, no
+    # /membership free tier is a single Join button -> register page, no
     # inline register form embedded on the page.
-    page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+    page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
     expect(page.locator("#register-form")).to_have_count(0)
     expect(
         page.locator("[data-testid='pricing-free-signup-cta']")

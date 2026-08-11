@@ -165,7 +165,7 @@ def test_free_member_reads_pitch_then_upgrade_links_to_pricing(
     upgrade = page.locator('[data-testid="sprint-cta-upgrade"]')
     expect(upgrade).to_contain_text("Upgrade to Main to join")
     upgrade.click()
-    page.wait_for_url(f"{django_server}/pricing")
+    page.wait_for_url(f"{django_server}/membership")
     context.close()
 
 

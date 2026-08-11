@@ -234,13 +234,13 @@ class ProductionResponsePolicyTest(TestCase):
         self.assertNoindexHtml(self.client.get('/notifications'))
         self.assertIndexableHtml(self.client.get(article.get_absolute_url()))
 
-    def test_pricing_only_excludes_recognized_result_states(self):
-        self.assertIndexableHtml(self.client.get('/pricing'))
+    def test_membership_only_excludes_recognized_result_states(self):
+        self.assertIndexableHtml(self.client.get('/membership'))
         self.assertIndexableHtml(
-            self.client.get('/pricing?checkout_error=unknown'),
+            self.client.get('/membership?checkout_error=unknown'),
         )
         self.assertIndexableHtml(
-            self.client.get('/pricing?checkout=not-cancelled'),
+            self.client.get('/membership?checkout=not-cancelled'),
         )
 
         excluded_queries = (
@@ -251,7 +251,7 @@ class ProductionResponsePolicyTest(TestCase):
         )
         for query in excluded_queries:
             with self.subTest(query=query):
-                self.assertNoindexHtml(self.client.get(f'/pricing?{query}'))
+                self.assertNoindexHtml(self.client.get(f'/membership?{query}'))
 
     def test_sitemap_keeps_public_content_and_omits_private_families(self):
         article = Article.objects.create(
@@ -277,7 +277,7 @@ class ProductionResponsePolicyTest(TestCase):
 
     @override_settings(SITE_BASE_URL='https://dev.aishippinglabs.com')
     def test_dev_policy_wins_without_duplicate_robots_meta(self):
-        response = self.client.get('/pricing')
+        response = self.client.get('/membership')
         self.assertNoindexHtml(response, canonical=False)
 
     def test_existing_draft_preview_policy_remains_restrictive(self):

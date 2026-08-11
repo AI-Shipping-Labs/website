@@ -32,12 +32,12 @@ class CommunityLandingRedirectTest(TierSetupMixin, TestCase):
         self.assertNotIn('mobile-nav-community-link-overview', header)
         self.assertNotIn('href="/community"', header)
         desktop = header[header.index('id="community-dropdown"'):]
-        # Community now leads with Activities (Membership was promoted to a
-        # top-level link in the Aug 2026 redesign).
-        self.assertLess(
-            desktop.index('nav-community-link-activities'),
-            desktop.index('nav-community-link-events'),
-        )
+        # Membership is now a top-level destination and the Community menu
+        # leads with Events; the retired overview/Activities destination must
+        # not reappear in either navigation surface.
+        self.assertIn('data-testid="nav-membership-link"', header)
+        self.assertIn('data-testid="nav-community-link-events"', desktop)
+        self.assertNotIn('nav-community-link-activities', desktop)
         sitemap = self.client.get('/sitemap.xml')
         self.assertNotContains(sitemap, '/community</loc>')
 

@@ -11,7 +11,7 @@ context flag that the footer template ANDs onto the existing
 ``not user.is_authenticated`` gate. These tests pin:
 
 - Footer newsletter is HIDDEN on /courses/<slug> (free-anon),
-  /workshops/<slug> (pages paywall, anon), and /pricing (anon).
+  /workshops/<slug> (pages paywall, anon), and /membership (anon).
 - Footer newsletter STILL renders on /blog and / (regression guards
   against over-suppression).
 - The inline registration card carries the new opt-in disclosure copy
@@ -55,7 +55,7 @@ class FooterNewsletterSuppressionTest(TierSetupMixin, TestCase):
     - ``anon_workshop`` — published workshop at /workshops/anon-ws with
       ``pages_required_level=5`` (REGISTERED) so the pages paywall
       triggers the inline register card for anonymous viewers.
-    - /pricing has no fixture requirement; it always renders the free
+    - /membership has no fixture requirement; it always renders the free
       tier card for anonymous visitors.
     """
 
@@ -117,9 +117,9 @@ class FooterNewsletterSuppressionTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, FOOTER_NEWSLETTER_HEADING)
 
     def test_pricing_anonymous_hides_footer_newsletter(self):
-        """Anonymous GET /pricing renders without the footer newsletter
+        """Anonymous GET /membership renders without the footer newsletter
         block — the free-tier card already carries the inline form."""
-        response = self.client.get('/pricing')
+        response = self.client.get('/membership')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, FOOTER_NEWSLETTER_ANCHOR)
         self.assertNotContains(response, FOOTER_NEWSLETTER_HEADING)

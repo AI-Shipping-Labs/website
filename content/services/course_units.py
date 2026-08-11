@@ -166,7 +166,7 @@ def build_gated_course_unit_context(user, course, module, unit, decision):
         copy = {
             'gated_heading': '',
             'gated_description': '',
-            'gated_cta_url': '/pricing',
+            'gated_cta_url': '/membership',
             'gated_cta_label': '',
             'required_tier_name': None,
             'current_user_state': '',

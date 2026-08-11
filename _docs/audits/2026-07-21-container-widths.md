@@ -53,7 +53,7 @@ Current and proposed refer to the outermost content container of the page body. 
 | `/` (signed in, dashboard) | `max-w-7xl` | `max-w-7xl` | KEEP | `templates/content/dashboard.html:26` | Dashboard grid, Frame tier |
 | `/about` | `max-w-3xl` | `max-w-3xl` | KEEP | `templates/content/about.html:12` | Long-form prose |
 | `/activities` | `max-w-7xl` | `max-w-7xl` | PAD | `templates/content/activities.html:16` | Frame correct; `px-6 lg:px-8` missing `px-4` base (later sections at :190/:266/:300 already standard) |
-| `/pricing` | `max-w-7xl` | `max-w-7xl` | KEEP | `templates/payments/pricing.html:43` | Marketing/listing |
+| `/membership` | `max-w-7xl` | `max-w-7xl` | KEEP | `templates/payments/pricing.html:43` | Marketing/listing |
 | `/faq` | `max-w-3xl` | `max-w-3xl` | KEEP | `templates/content/faq.html:11` | Reader tier |
 | `/request-a-call` | `max-w-3xl` | `max-w-3xl` | KEEP | `templates/content/request_a_call.html:12` | Single-column form/prose |
 | `/terms` | `max-w-3xl` | `max-w-3xl` | KEEP | `templates/legal/terms.html:11` | Long-form prose |
@@ -237,7 +237,7 @@ Re-tiered from `max-w-7xl` to `max-w-5xl` (10 pages, outer container only):
 
 `/sprints` and `/events` move together, preserving the sibling consistency that was the original 2026-07-21 complaint — both now sit at `max-w-5xl` rather than both at `max-w-7xl`.
 
-Kept at `max-w-7xl` (genuine grids / marketing / dashboard / calendar / sidebar-plus-content): `/` (anon + dashboard), `/pricing`, `/projects`, `/resources`, `/courses`, `/workshops/catalog`, `/events/calendar`, `/activities`. On `/activities` the two inner `max-w-6xl` blocks (`:45`, `:107`) were folded to `max-w-5xl`, so the last unsanctioned width on a member page is gone (this resolves the second "Open PM question" above).
+Kept at `max-w-7xl` (genuine grids / marketing / dashboard / calendar / sidebar-plus-content): `/` (anon + dashboard), `/membership`, `/projects`, `/resources`, `/courses`, `/workshops/catalog`, `/events/calendar`, `/activities`. On `/activities` the two inner `max-w-6xl` blocks (`:45`, `:107`) were folded to `max-w-5xl`, so the last unsanctioned width on a member page is gone (this resolves the second "Open PM question" above).
 
 Test contract: `AUDITED_PAGE_WIDTHS` in `content/tests/test_container_widths.py` now pins all 10 at `max-w-5xl`; `playwright_tests/test_container_widths_525.py` splits the listing band into a 7xl grid band and a 5xl row-list band (`LISTINGS_WIDE` / `LISTINGS_NARROW`) and `TestListingFrameWidthConsistency` asserts each band internally rather than across bands.
 

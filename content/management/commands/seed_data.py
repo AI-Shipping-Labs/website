@@ -118,8 +118,8 @@ POLLS = [
         ],
     },
     {
-        'title': 'Which mini-course should we create next?',
-        'description': 'Premium members: vote on our next mini-course.',
+        'title': 'Which course should we create next?',
+        'description': 'Premium members: vote on our next course.',
         'poll_type': 'course',
         'status': 'open',
         'allow_proposals': False,

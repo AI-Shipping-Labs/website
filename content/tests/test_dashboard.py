@@ -1183,7 +1183,7 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'href="/courses/aihero"')
         self.assertContains(response, 'href="/events"')
         self.assertContains(response, 'href="/sprints"')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
         self.assertContains(
             response, 'What community members are doing this month',
         )

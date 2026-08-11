@@ -27,6 +27,20 @@ class MemberBadgeRendererTest(SimpleTestCase):
         self.assertIn('data-lucide="shield"', html)
         self.assertIn('Admin', html)
 
+    def test_label_badge_supports_solid_accent_spotlight_tone(self):
+        html = render_template(
+            """
+            {% load member_badges %}
+            {% member_label_badge "Most popular" tone="accent_solid" size="sm" icon="star" %}
+            """,
+        )
+
+        self.assertIn('bg-accent', html)
+        self.assertIn('text-accent-foreground', html)
+        self.assertNotIn('bg-accent/10', html)
+        self.assertIn('data-lucide="star"', html)
+        self.assertIn('Most popular', html)
+
     def test_tier_badge_uses_public_required_tier_copy(self):
         html = render_template(
             """
@@ -155,7 +169,7 @@ class MemberBadgeTemplateUsageTest(SimpleTestCase):
             # Issue #1339 — the project card rebased onto _content_card.html; its
             # member badges now live in the dedicated badge partial.
             'templates/content/_project_card_badges.html',
-            'templates/content/activities.html',
+            'templates/content/membership/_benefit_badges.html',
             # The workshop catalog card rebased onto _content_card.html; its
             # member badges now live in the dedicated badge partial.
             'templates/content/_workshop_card_badges.html',
@@ -187,7 +201,7 @@ class MemberBadgeTemplateUsageTest(SimpleTestCase):
 
     def test_scoped_guest_templates_do_not_use_legacy_membership_prefix(self):
         template_paths = [
-            'templates/content/activities.html',
+            'templates/content/membership/page.html',
             'templates/content/sprints_index.html',
             'templates/home.html',
         ]

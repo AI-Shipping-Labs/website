@@ -208,9 +208,9 @@ class AnonymousUserTeaserTest(CourseUnitTeaserSetupMixin, TestCase):
         # Issue #481: paywall pill reads "Main or above required".
         self.assertContains(response, 'Main or above required', status_code=403)
         self.assertNotContains(response, 'Main+ required', status_code=403)
-        # Unified upgrade CTA label + /pricing target.
+        # Unified upgrade CTA label + /membership target.
         self.assertContains(response, 'Upgrade', status_code=403)
-        self.assertContains(response, 'href="/pricing"', status_code=403)
+        self.assertContains(response, 'href="/membership"', status_code=403)
         # Paid wall: no free-signup CTA — a free account grants no paid
         # access, so a free-signup CTA here would be misleading.
         self.assertNotContains(
@@ -318,7 +318,7 @@ class EmptyBodyFallbackTest(CourseUnitTeaserSetupMixin, TestCase):
     def test_still_shows_upgrade_cta(self):
         response = self.client.get(self.empty_url)
         self.assertContains(response, 'Upgrade to Main to read this lesson', status_code=403)
-        self.assertContains(response, 'href="/pricing"', status_code=403)
+        self.assertContains(response, 'href="/membership"', status_code=403)
 
 
 # ------------------------------------------------------------

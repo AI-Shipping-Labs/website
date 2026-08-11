@@ -79,7 +79,7 @@ def test_compiled_bundle_contains_dynamic_product_selectors():
 @pytest.mark.core
 @pytest.mark.local_only
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("path", ["/", "/blog", "/pricing"])
+@pytest.mark.parametrize("path", ["/", "/blog", "/membership"])
 def test_public_pages_load_local_css_without_tailwind_play_cdn(django_server, page, path):
     if path == "/":
         ensure_site_config_tiers()

@@ -289,7 +289,7 @@ def _book_secondary(request, book):
     gate): the group is not reading this book right now. The full-book summary
     route (``bookclub_book_summary``) now exists (#1368), so a finished book
     links to it; the standings CTA (#1367) is still gated on its own flag. The
-    upcoming "join to read along" CTA points to ``/pricing`` only when the
+    upcoming "join to read along" CTA points to ``/membership`` only when the
     viewer does not already meet the tier.
     """
     viewer_has_access = can_access(request.user, book)

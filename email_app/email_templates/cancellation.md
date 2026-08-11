@@ -10,7 +10,7 @@ Your **{{ tier_name }}** membership has been cancelled.
 
 If you change your mind, you can re-subscribe at any time:
 
-[Re-subscribe]({{ site_url }}/pricing/)
+[Re-subscribe]({{ site_url }}/membership)
 
 We hope to see you again!
 

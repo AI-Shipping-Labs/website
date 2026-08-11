@@ -1137,19 +1137,19 @@ class TestScenario12DiscoverSubscribeFromPricing:
         self, django_server
     , page):
         """Given an anonymous visitor comparing membership options.
-        1. Navigate to /pricing
+        1. Navigate to /membership
         2. Find the Free tier card
 
         The Free-tier CTA is a single Join button that links to the
         register page; creating a free account grants implicit newsletter
         access. This scenario verifies the Join CTA is present, points at
-        the register page, and rounds ?next= back to /pricing.
+        the register page, and rounds ?next= back to /membership.
         """
         _ensure_tiers()
 
-        # Step 1: Navigate to /pricing
+        # Step 1: Navigate to /membership
         page.goto(
-            f"{django_server}/pricing",
+            f"{django_server}/membership",
             wait_until="domcontentloaded",
         )
 
@@ -1180,5 +1180,5 @@ class TestScenario12DiscoverSubscribeFromPricing:
         )
         assert (
             signup_cta.get_attribute("href")
-            == "/accounts/register/?next=/pricing"
+            == "/accounts/register/?next=/membership"
         )

@@ -158,7 +158,7 @@ def test_signed_in_pricing_uses_server_bound_checkout_posts(
     context = _auth_context(browser, email, django_db_blocker)
     page = context.new_page()
     try:
-        page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+        page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
 
         assert "/api/checkout/create" not in page.content()
         free_card = _tier_card(page, "free")
@@ -218,7 +218,7 @@ def test_disabled_checkout_returns_to_visible_recovery_ui(
     )
     page = context.new_page()
     try:
-        page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+        page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
         _tier_card(page, "basic").locator('button[type="submit"]').click()
 
         banner = page.get_by_test_id("checkout-recovery-banner")
@@ -349,7 +349,7 @@ def test_override_member_pricing_uses_temporary_access_and_portal_actions(
     context = _auth_context(browser, email, django_db_blocker)
     page = context.new_page()
     try:
-        page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+        page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
 
         basic = _tier_card(page, "basic")
         assert "Current plan" in basic.inner_text()
@@ -393,7 +393,7 @@ def test_stale_subscription_pricing_shows_review_warning_and_portal_actions(
     context = _auth_context(browser, email, django_db_blocker)
     page = context.new_page()
     try:
-        page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+        page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
 
         free = _tier_card(page, "free")
         assert "Included" in free.inner_text()

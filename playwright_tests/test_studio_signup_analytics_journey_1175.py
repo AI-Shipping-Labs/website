@@ -66,7 +66,7 @@ def _seed_journey_signups():
     )
 
     for path, hours_ago in (
-        ("/pricing", 4),
+        ("/membership", 4),
         ("/blog/source", 3),
         ("/blog/deep-dive", 2),
     ):
@@ -116,7 +116,7 @@ class TestSignupAnalyticsJourneyContext:
             '[data-testid="signup-analytics-activity-table"]'
         )
         expect(activity_table).to_contain_text("Pricing")
-        expect(activity_table).to_contain_text("/pricing")
+        expect(activity_table).to_contain_text("/membership")
         expect(activity_table).to_contain_text("Blog")
         expect(activity_table).to_contain_text("/blog/source")
 
@@ -125,7 +125,7 @@ class TestSignupAnalyticsJourneyContext:
         )
         journey_row = recent_table.locator("tbody tr", has_text="journey@test.com")
         expect(journey_row).to_contain_text("Spring Launch (spring_launch)")
-        expect(journey_row).to_contain_text("/pricing")
+        expect(journey_row).to_contain_text("/membership")
         expect(journey_row).to_contain_text("/blog/deep-dive")
         expect(journey_row).to_contain_text("3")
         expect(journey_row).to_contain_text("Blog")

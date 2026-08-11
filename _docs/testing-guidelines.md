@@ -901,7 +901,7 @@ A test should be tagged `@pytest.mark.core` only when it covers one of the
 deploy-blocking smoke paths:
 
 - Login, registration/email verification, and password reset happy paths.
-- Stripe checkout/pricing redirect smoke, including the billing toggle.
+- Stripe checkout/membership redirect smoke, including the billing toggle.
 - Tier-based access-control smoke across anonymous/free/basic/main/premium
   and one render path per major content type: articles, recordings/workshops,
   curated links/downloads, courses, and events.

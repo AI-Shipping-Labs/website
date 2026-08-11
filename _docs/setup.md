@@ -411,7 +411,7 @@ manage.py migrate                       # creates the slug+level skeleton tier r
 manage.py sync_content [--from-disk ...] # fills in name / prices / Stripe IDs / description / features
 ```
 
-`migrate` seeds the four `payments.Tier` rows with only `slug`, `level`, and a placeholder `name` (the slug, title-cased). Every other editable tier field (`price_eur_month`, `price_eur_year`, `stripe_price_id_monthly`, `stripe_price_id_yearly`, `description`, `features`) is populated by the `tiers.yaml` content sync, which is the source of truth. Until `sync_content` runs against a yaml that carries those fields, the `/pricing` page renders empty prices and empty feature lists; tier names still work via the placeholder, but the page is not customer-ready.
+`migrate` seeds the four `payments.Tier` rows with only `slug`, `level`, and a placeholder `name` (the slug, title-cased). Every other editable tier field (`price_eur_month`, `price_eur_year`, `stripe_price_id_monthly`, `stripe_price_id_yearly`, `description`, `features`) is populated by the `tiers.yaml` content sync, which is the source of truth. Until `sync_content` runs against a yaml that carries those fields, the `/membership` page renders empty prices and empty feature lists; tier names still work via the placeholder, but the page is not customer-ready.
 
 After creating a new database, run migrations first (if the container hasn't done it yet):
 

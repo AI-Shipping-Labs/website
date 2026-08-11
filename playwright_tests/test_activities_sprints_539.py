@@ -1,86 +1,50 @@
-"""Playwright coverage for the /activities tier benefits and sprint hub.
-
-Screenshots are written to ``.tmp/screenshots/issue-1182`` for tester
-review.
-"""
+"""Browser coverage for the canonical sprint preview on Membership (#539)."""
 
 import datetime
 import os
-from pathlib import Path
 
 import pytest
+from playwright.sync_api import expect
 
-from playwright_tests.conftest import auth_context as _auth_context
-from playwright_tests.conftest import create_user as _create_user
-from playwright_tests.conftest import ensure_site_config_tiers, ensure_tiers
+from playwright_tests.conftest import auth_context, create_user, ensure_site_config_tiers, ensure_tiers
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
-# Issue #656: this module uses local-only fixtures (DB seeding,
-# session-cookie injection, etc.) and cannot run against the
-# deployed dev environment. See _docs/testing-guidelines.md.
-pytestmark = pytest.mark.local_only
-
-SCREENSHOT_DIR = Path(".tmp/screenshots/issue-1182")
+pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.local_only]
 
 
-def _shot(page, name):
-    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
-    page.screenshot(path=SCREENSHOT_DIR / f"{name}.png", full_page=False)
+def _current_start(days_ago=14):
+    return datetime.date.today() - datetime.timedelta(days=days_ago)
 
 
-def _clear_activity_data():
+def _reset_sprints():
     from django.db import connection
 
-    from content.models import CuratedLink
     from plans.models import Plan, Sprint, SprintEnrollment
 
     Plan.objects.all().delete()
     SprintEnrollment.objects.all().delete()
     Sprint.objects.all().delete()
-    CuratedLink.objects.all().delete()
     connection.close()
 
 
-def _active_sprint_start():
-    return datetime.date.today() - datetime.timedelta(days=14)
-
-
-def _expected_sprint_range(start_date, duration_weeks):
-    end_date = start_date + datetime.timedelta(weeks=duration_weeks)
-    if start_date.year == end_date.year:
-        return (
-            f"{start_date:%B} {start_date.day} – "
-            f"{end_date:%B} {end_date.day}, {end_date.year} "
-            f"({duration_weeks} weeks)"
-        )
-    return (
-        f"{start_date:%B} {start_date.day}, {start_date.year} – "
-        f"{end_date:%B} {end_date.day}, {end_date.year} "
-        f"({duration_weeks} weeks)"
-    )
-
-
 def _create_sprint(
-    name="May Shipping Sprint",
-    slug="may-shipping-sprint",
+    *,
+    name,
+    slug,
+    start_date=None,
     status="active",
     min_tier_level=20,
-    duration_weeks=4,
-    start_date=None,
 ):
     from django.db import connection
 
     from plans.models import Sprint
 
-    if start_date is None:
-        start_date = _active_sprint_start()
-
     sprint = Sprint.objects.create(
         name=name,
         slug=slug,
-        start_date=start_date,
-        duration_weeks=duration_weeks,
+        start_date=start_date or _current_start(),
+        duration_weeks=4,
         status=status,
         min_tier_level=min_tier_level,
         description="A focused cohort for shipping a useful AI product.",
@@ -91,505 +55,149 @@ def _create_sprint(
     return sprint
 
 
-def _create_curated_link():
-    from django.db import connection
-
-    from content.models import CuratedLink
-
-    CuratedLink.objects.create(
-        item_id="library-link-539",
-        title="Useful Reference",
-        description="A durable library link.",
-        url="https://example.com/reference",
-        category="articles",
-        published=True,
-    )
-    connection.close()
-
-
-def _seed_base(active=True):
+def _seed_base():
     ensure_tiers()
     ensure_site_config_tiers()
-    _clear_activity_data()
-    if active:
-        return _create_sprint()
-    return None
+    _reset_sprints()
 
 
-def _sprint_date_label(sprint):
-    start = sprint.start_date
-    end = sprint.end_date
-    week_word = "week" if sprint.duration_weeks == 1 else "weeks"
-    if start.year == end.year:
-        return (
-            f"{start.strftime('%B %-d')} – {end.strftime('%B %-d, %Y')} "
-            f"({sprint.duration_weeks} {week_word})"
+def test_membership_renders_only_the_first_current_sprint_with_canonical_card(
+    django_server, page, django_db_blocker
+):
+    with django_db_blocker.unblock():
+        _seed_base()
+        first = _create_sprint(
+            name="First Membership Sprint",
+            slug="first-membership-sprint",
+            start_date=_current_start(14),
         )
-    return (
-        f"{start.strftime('%B %-d, %Y')} – {end.strftime('%B %-d, %Y')} "
-        f"({sprint.duration_weeks} {week_word})"
+        _create_sprint(
+            name="Second Membership Sprint",
+            slug="second-membership-sprint",
+            start_date=_current_start(13),
+        )
+
+    page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
+
+    section = page.get_by_test_id("membership-sprints-section")
+    card = page.get_by_test_id("membership-sprint-card")
+    expect(section).to_contain_text(first.name)
+    expect(section).not_to_contain_text("Second Membership Sprint")
+    assert card.count() == 1
+    assert card.locator("a").count() == 1
+    detail = page.get_by_test_id("membership-sprint-detail-link")
+    assert detail.get_attribute("href") == "/sprints/first-membership-sprint"
+    assert card.get_by_test_id("sprints-sprint-context").is_visible()
+    assert card.get_by_test_id("sprints-sprint-dates").is_visible()
+    assert card.get_by_test_id("sprints-sprint-tier").get_attribute(
+        "data-required-level"
+    ) == "20"
+
+    detail.click()
+    page.wait_for_load_state("domcontentloaded")
+    assert page.url.rstrip("/").endswith("/sprints/first-membership-sprint")
+    expect(page.get_by_test_id("sprint-detail-name")).to_contain_text(first.name)
+
+
+def test_stale_active_sprint_is_hidden_from_membership(
+    django_server, page, django_db_blocker
+):
+    with django_db_blocker.unblock():
+        _seed_base()
+        _create_sprint(
+            name="Old Active Sprint",
+            slug="old-active-sprint",
+            start_date=_current_start(70),
+        )
+        _create_sprint(
+            name="Current Active Sprint",
+            slug="current-active-sprint",
+        )
+
+    page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
+
+    section = page.get_by_test_id("membership-sprints-section")
+    expect(section).to_contain_text("Current Active Sprint")
+    expect(section).not_to_contain_text("Old Active Sprint")
+
+
+def test_anonymous_and_member_do_not_see_draft_but_staff_can_preview_one(
+    django_server, browser, page, django_db_blocker
+):
+    with django_db_blocker.unblock():
+        _seed_base()
+        _create_sprint(
+            name="Draft Membership Sprint",
+            slug="draft-membership-sprint",
+            start_date=datetime.date.today() + datetime.timedelta(days=14),
+            status="draft",
+        )
+        create_user("member-539@test.com", tier_slug="main")
+        create_user("staff-539@test.com", tier_slug="premium", is_staff=True)
+
+    page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
+    expect(page.get_by_test_id("membership-sprints-section")).not_to_contain_text(
+        "Draft Membership Sprint"
     )
 
-
-def _assert_no_horizontal_overflow(page):
-    assert page.evaluate(
-        "() => document.documentElement.scrollWidth <= "
-        "document.documentElement.clientWidth"
+    member_context = auth_context(browser, "member-539@test.com")
+    member_page = member_context.new_page()
+    member_page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
+    expect(member_page.get_by_test_id("membership-sprints-section")).not_to_contain_text(
+        "Draft Membership Sprint"
     )
+    member_context.close()
 
-
-def _top(primary_locator):
-    box = primary_locator.bounding_box()
-    assert box is not None
-    return box["y"]
-
-
-def _bottom(primary_locator):
-    box = primary_locator.bounding_box()
-    assert box is not None
-    return box["y"] + box["height"]
-
-
-def _primary_nav_labels(page):
-    return page.evaluate(
-        """() => {
-          const nav = document.querySelector(
-            '[data-testid="desktop-primary-nav"]'
-          );
-          const labels = [];
-          for (const el of nav.querySelectorAll(':scope > div > button')) {
-            const text = el.textContent.trim();
-            if (text) {
-              labels.push(text);
-            }
-          }
-          return labels;
-        }"""
+    staff_context = auth_context(browser, "staff-539@test.com")
+    staff_page = staff_context.new_page()
+    staff_page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
+    expect(staff_page.get_by_test_id("membership-sprint-card")).to_contain_text(
+        "Draft Membership Sprint"
     )
+    expect(staff_page.get_by_test_id("membership-sprint-card")).to_contain_text(
+        "Draft"
+    )
+    staff_context.close()
 
 
-def _visible_activity_titles(page):
-    return page.locator(
-        '[data-testid="activity-card"]:visible [data-testid="activity-card-title"]'
-    ).all_inner_texts()
-
-
-@pytest.mark.django_db(transaction=True)
-class TestActivitiesAccessByTierLayout:
-    def test_anonymous_desktop_discovers_tier_benefits_before_sprints(
-        self, django_server, page, django_db_blocker
-    ):
-        with django_db_blocker.unblock():
-            _seed_base(active=True)
-
-        page.set_viewport_size({"width": 1280, "height": 900})
-        page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
-
-        assert _primary_nav_labels(page) == ["About", "Community", "Resources"]
-        page.get_by_role("heading", name="Membership benefits by tier").wait_for()
-        benefits = page.locator('[data-testid="activities-access-by-tier-section"]')
-        sprints = page.locator('[data-testid="activities-sprints-section"]')
-        assert benefits.get_attribute("id") == "access-by-tier"
-        assert _top(benefits) < _top(sprints)
-        assert _top(page.get_by_role("heading", name="Membership benefits by tier")) < 260
-        assert page.locator('[data-testid="activities-tier-filter"]').count() == 0
-        assert page.locator('[data-testid="activity-card"]').count() == 7
-        assert page.locator('[data-testid="activities-anchor-nav"] a').count() == 3
-        assert page.locator('[data-testid="activities-quick-comparison"]').is_visible()
-
-        page.get_by_role("heading", name="Active community sprints").wait_for()
-        intro = page.locator('[data-testid="activities-sprints-intro-row"]')
-        card = page.locator('[data-testid="activities-sprint-card"]').first
-        assert _bottom(intro) <= _top(card)
-        body = page.locator("body").inner_text()
-        assert "May Shipping Sprint" in body
-        assert "Active" in body
-        assert _expected_sprint_range(_active_sprint_start(), 4) in body
-        assert "Main or above" in body
-        assert "time-bound shipping cohort" in body
-        assert "project structure" in body
-        cta = card.locator('[data-testid="activities-sprint-cta"]')
-        assert "Log in to join" in cta.inner_text()
-        assert "/accounts/login/?next=/sprints/may-shipping-sprint" in (
-            cta.get_attribute("href")
+def test_free_member_reaches_premium_sprint_detail_and_upgrade_action(
+    django_server, browser, django_db_blocker
+):
+    with django_db_blocker.unblock():
+        _seed_base()
+        _create_sprint(
+            name="Premium Membership Sprint",
+            slug="premium-membership-sprint",
+            min_tier_level=30,
         )
-        detail_link = card.locator('[data-testid="activities-sprint-detail-link"]')
-        assert "View sprint details" in detail_link.inner_text()
-        assert detail_link.get_attribute("href") == "/sprints/may-shipping-sprint"
-        name_link = card.locator('[data-testid="activities-sprint-name-link"]')
-        assert name_link.get_attribute("href") == "/sprints/may-shipping-sprint"
-        assert _top(card.locator('[data-testid="activities-sprint-dates"]')) > _top(
-            card.locator('[data-testid="activities-sprint-name"]')
-        )
-        assert _top(cta) > _top(
-            card.locator('[data-testid="activities-sprint-guidance"]')
-        )
-        assert page.locator('[data-testid="activities-secondary-nav"]').count() == 0
-        assert _top(card) < _top(
-            page.locator('[data-testid="activities-live-events-section"]')
-        )
-        _assert_no_horizontal_overflow(page)
-        _shot(page, "01-activities-anonymous-desktop")
+        create_user("free-539@test.com", tier_slug="free")
 
-    def test_anonymous_sprint_detail_link_stays_separate_from_join_cta(
-        self, django_server, page, django_db_blocker
-    ):
-        with django_db_blocker.unblock():
-            _seed_base(active=True)
+    context = auth_context(browser, "free-539@test.com")
+    page = context.new_page()
+    page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
 
-        page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
+    card = page.get_by_test_id("membership-sprint-card")
+    assert card.get_by_test_id("sprints-sprint-tier").get_attribute(
+        "data-required-level"
+    ) == "30"
+    page.get_by_test_id("membership-sprint-detail-link").click()
+    page.wait_for_load_state("domcontentloaded")
+    assert page.url.rstrip("/").endswith("/sprints/premium-membership-sprint")
+    expect(page.get_by_test_id("sprint-cta-upgrade")).to_be_visible()
+    assert page.get_by_test_id("sprint-cta-upgrade").get_attribute("href") == "/membership"
+    context.close()
 
-        card = page.locator('[data-testid="activities-sprint-card"]').first
-        cta = card.locator('[data-testid="activities-sprint-cta"]')
-        detail = card.locator('[data-testid="activities-sprint-detail-link"]')
-        assert cta.get_attribute("href") == (
-            "/accounts/login/?next=/sprints/may-shipping-sprint"
-        )
-        assert detail.get_attribute("href") == "/sprints/may-shipping-sprint"
 
-        detail.click()
-        page.wait_for_load_state("domcontentloaded")
-        assert page.url.rstrip("/").endswith("/sprints/may-shipping-sprint")
-        expect = page.get_by_test_id("sprint-detail-name")
-        expect.wait_for()
-        assert "May Shipping Sprint" in expect.inner_text()
-        tier_badge = page.get_by_test_id("sprint-tier-badge")
-        assert tier_badge.inner_text() == "Main or above"
-        assert tier_badge.get_attribute("data-required-level") == "20"
-        assert tier_badge.locator("svg.lucide-lock").count() == 1
-        assert "Main tier required" not in page.locator("body").inner_text()
-        landing = page.get_by_test_id("sprint-landing")
-        assert landing.is_visible()
-        assert page.get_by_test_id("sprint-landing-about").is_visible()
-        assert page.get_by_test_id("sprint-landing-includes").is_visible()
-        assert page.get_by_test_id("sprint-landing-schedule").is_visible()
-        assert page.get_by_test_id("sprint-landing-outcomes").is_visible()
-        assert page.get_by_test_id("sprint-landing-audience").is_visible()
-        assert _top(landing) < _top(page.get_by_test_id("sprint-primary-action"))
-        assert page.get_by_test_id("sprint-cta-login").is_visible()
-        _shot(page, "02-activities-anonymous-sprint-detail")
+def test_sprint_empty_state_keeps_events_and_workshops_available(
+    django_server, page, django_db_blocker
+):
+    with django_db_blocker.unblock():
+        _seed_base()
 
-    def test_activity_cards_are_one_keyboard_link_with_honest_context(
-        self, django_server, page, django_db_blocker
-    ):
-        with django_db_blocker.unblock():
-            _seed_base(active=True)
+    page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
 
-        page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
-
-        expected_destinations = [
-            "/sprints", "/events", "/workshops", "/pricing", "/sprints",
-            "/blog", "/courses",
-        ]
-        cards = page.get_by_test_id("activity-card")
-        assert cards.count() == 7
-        contexts = []
-        for index, destination in enumerate(expected_destinations):
-            card = cards.nth(index)
-            links = card.locator("a")
-            assert links.count() == 1
-            link = links.first
-            assert link.get_attribute("href") == destination
-            box = link.bounding_box()
-            assert box is not None and box["height"] >= 44
-            context = card.get_by_test_id("activity-card-next-step").inner_text().strip()
-            assert context
-            contexts.append(context)
-        assert len(contexts) == len(set(contexts))
-        assert "Related surface:" not in page.locator("body").inner_text()
-        assert "Main and Premium" in contexts[3]
-        assert "not publicly browseable" in contexts[4]
-        assert "may require Basic" in contexts[5]
-        assert "require Premium" in contexts[6]
-
-        first_link = cards.first.get_by_test_id("activity-card-action")
-        first_link.focus()
-        assert first_link.evaluate("node => document.activeElement === node")
-        focus_style = first_link.evaluate(
-            "node => window.getComputedStyle(node).boxShadow"
-        )
-        assert focus_style != "none"
-        with page.expect_navigation(wait_until="domcontentloaded"):
-            page.keyboard.press("Enter")
-        assert page.url.rstrip("/").endswith("/sprints")
-
-    def test_mobile_anonymous_sees_tier_benefits_first(
-        self, django_server, browser, django_db_blocker
-    ):
-        with django_db_blocker.unblock():
-            _seed_base(active=True)
-
-        context = browser.new_context(viewport={"width": 393, "height": 851})
-        page = context.new_page()
-        page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
-
-        heading = page.get_by_role("heading", name="Membership benefits by tier")
-        benefits = page.locator('[data-testid="activities-access-by-tier-section"]')
-        sprints = page.locator('[data-testid="activities-sprints-section"]')
-        first_activity = page.locator('[data-testid="activity-card"]').first
-        assert _top(heading) < 220
-        viewport_height = page.evaluate("() => window.innerHeight")
-        assert _top(first_activity) < viewport_height
-        assert first_activity.is_visible()
-        assert _top(benefits) < _top(sprints)
-        assert page.locator('[data-testid="activities-tier-filter"]').count() == 0
-        assert page.locator('[data-testid="activity-card"]').count() == 7
-        _assert_no_horizontal_overflow(page)
-        _shot(page, "03-activities-anonymous-pixel7")
-        context.close()
-
-    def test_community_sprints_anchor_lands_on_live_section(
-        self, django_server, page, django_db_blocker
-    ):
-        with django_db_blocker.unblock():
-            _seed_base(active=True)
-
-        page.set_viewport_size({"width": 1280, "height": 900})
-        page.goto(
-            f"{django_server}/activities#community-sprints",
-            wait_until="domcontentloaded",
-        )
-
-        section = page.locator('[data-testid="activities-sprints-section"]')
-        assert section.is_visible()
-        assert page.locator("#community-sprints").count() == 1
-        assert "May Shipping Sprint" in section.inner_text()
-        _shot(page, "04-activities-anchor-desktop")
-
-    def test_stale_active_sprint_is_hidden_from_public_activities(
-        self, django_server, page, django_db_blocker
-    ):
-        with django_db_blocker.unblock():
-            _seed_base(active=False)
-            _create_sprint(
-                name="Old Active Sprint",
-                slug="old-active-sprint",
-                start_date=datetime.date.today() - datetime.timedelta(days=70),
-            )
-            _create_sprint(
-                name="Current Active Sprint",
-                slug="current-active-sprint",
-            )
-
-        page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
-
-        section_text = page.locator(
-            '[data-testid="activities-sprints-section"]'
-        ).inner_text()
-        assert "Current Active Sprint" in section_text
-        assert "Old Active Sprint" not in section_text
-
-    def test_empty_state_links_to_events_and_workshops(
-        self, django_server, page, django_db_blocker
-    ):
-        with django_db_blocker.unblock():
-            _seed_base(active=False)
-
-        page.set_viewport_size({"width": 1280, "height": 900})
-        page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
-
-        empty = page.locator('[data-testid="activities-sprints-empty"]')
-        assert empty.is_visible()
-        assert _bottom(page.locator('[data-testid="activities-sprints-intro-row"]')) <= _top(
-            empty
-        )
-        assert "Next sprint coming soon" in empty.inner_text()
-        assert empty.locator('a[href="/events"]').count() == 1
-        assert empty.locator('a[href="/workshops"]').count() == 1
-        assert page.locator('[data-testid="activities-sprint-card"]').count() == 0
-        _shot(page, "05-activities-empty-state")
-
-    def test_free_member_understands_premium_requirement(
-        self, django_server, browser, django_db_blocker
-    ):
-        with django_db_blocker.unblock():
-            _seed_base(active=False)
-            _create_sprint(
-                name="Premium Shipping Sprint",
-                slug="premium-shipping-sprint",
-                min_tier_level=30,
-            )
-            _create_user("free-539@test.com", tier_slug="free")
-
-        ctx = _auth_context(browser, "free-539@test.com")
-        page = ctx.new_page()
-        page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
-
-        card = page.locator('[data-testid="activities-sprint-card"]').first
-        assert "Premium" in card.inner_text()
-        assert "Membership:" not in card.inner_text()
-        detail = card.locator('[data-testid="activities-sprint-detail-link"]')
-        assert detail.get_attribute("href") == "/sprints/premium-shipping-sprint"
-        detail.click()
-        page.wait_for_load_state("domcontentloaded")
-        assert page.url.rstrip("/").endswith("/sprints/premium-shipping-sprint")
-        tier_badge = page.get_by_test_id("sprint-tier-badge")
-        assert tier_badge.inner_text() == "Premium"
-        assert tier_badge.get_attribute("data-required-level") == "30"
-        assert page.get_by_test_id("sprint-cta-upgrade").is_visible()
-        assert "requires the Premium tier" in page.locator("body").inner_text()
-
-        page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
-        card = page.locator('[data-testid="activities-sprint-card"]').first
-        cta = card.locator('[data-testid="activities-sprint-cta"]')
-        assert "Upgrade to Premium" in cta.inner_text()
-        assert cta.get_attribute("href") == "/pricing"
-        ctx.close()
-
-    def test_main_member_cta_reaches_sprint_detail(
-        self, django_server, browser, django_db_blocker
-    ):
-        with django_db_blocker.unblock():
-            _seed_base(active=True)
-            _create_user("main-539@test.com", tier_slug="main")
-
-        ctx = _auth_context(browser, "main-539@test.com")
-        page = ctx.new_page()
-        page.set_viewport_size({"width": 1280, "height": 900})
-        page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
-
-        page.locator('[data-testid="activities-sprint-cta"]').first.click()
-        page.wait_for_load_state("domcontentloaded")
-        assert page.url.rstrip("/").endswith("/sprints/may-shipping-sprint")
-        assert page.locator('[data-testid="sprint-detail-name"]').is_visible()
-        _shot(page, "06-activities-main-member-destination")
-        ctx.close()
-
-    def test_staff_can_preview_draft_without_public_exposure(
-        self, django_server, browser, page, django_db_blocker
-    ):
-        with django_db_blocker.unblock():
-            _seed_base(active=False)
-            _create_sprint(name="Public Sprint", slug="public-sprint")
-            _create_sprint(name="Draft Sprint", slug="draft-sprint", status="draft")
-            _create_user("staff-539@test.com", tier_slug="premium", is_staff=True)
-
-        page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
-        assert "Public Sprint" in page.locator("body").inner_text()
-        assert "Draft Sprint" not in page.locator("body").inner_text()
-
-        ctx = _auth_context(browser, "staff-539@test.com")
-        staff_page = ctx.new_page()
-        staff_page.set_viewport_size({"width": 1280, "height": 900})
-        staff_page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
-        section_text = staff_page.locator(
-            '[data-testid="activities-sprints-section"]'
-        ).inner_text()
-        assert "Draft Sprint" in section_text
-        assert "Draft" in section_text
-        draft_card = staff_page.locator(
-            '[data-testid="activities-sprint-card"]',
-            has_text="Draft Sprint",
-        )
-        draft_card.locator('[data-testid="activities-sprint-detail-link"]').click()
-        staff_page.wait_for_load_state("domcontentloaded")
-        assert staff_page.url.rstrip("/").endswith("/sprints/draft-sprint")
-        assert staff_page.get_by_test_id("sprint-detail-name").is_visible()
-        _shot(staff_page, "07-activities-staff-draft-detail")
-        ctx.close()
-
-    def test_pricing_compare_link_lands_on_access_by_tier_without_changing_ctas(
-        self, django_server, page, django_db_blocker
-    ):
-        with django_db_blocker.unblock():
-            _seed_base(active=True)
-
-        page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
-        payment_links_before = page.locator(".tier-cta-link").evaluate_all(
-            "(links) => links.map((link) => link.getAttribute('href'))"
-        )
-        page.locator('[data-testid="pricing-activities-compare-link"]').click()
-        page.wait_for_load_state("domcontentloaded")
-
-        assert page.url.endswith("/activities#access-by-tier")
-        assert page.locator("#access-by-tier").is_visible()
-        assert page.get_by_role(
-            "heading", name="Membership benefits by tier"
-        ).is_visible()
-
-        page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
-        payment_links_after = page.locator(".tier-cta-link").evaluate_all(
-            "(links) => links.map((link) => link.getAttribute('href'))"
-        )
-        assert payment_links_after == payment_links_before
-
-    def test_curated_cards_show_tier_answers_without_filters(
-        self, django_server, page, django_db_blocker
-    ):
-        with django_db_blocker.unblock():
-            _seed_base(active=True)
-
-        page.goto(
-            f"{django_server}/activities#access-by-tier",
-            wait_until="domcontentloaded",
-        )
-
-        assert page.locator('[data-testid="activities-secondary-nav"]').count() == 0
-        assert page.locator('[data-testid="activities-tier-filter"]').count() == 0
-        assert _visible_activity_titles(page) == [
-            "Community sprints",
-            "Live events",
-            "Hands-on workshops",
-            "Private Slack community",
-            "Personalized plans and accountability",
-            "Exclusive written content",
-            "Mini-courses",
-        ]
-        assert page.locator(
-            '[data-testid="activity-tier-badge"]'
-            '[data-tier="basic"][data-included="true"]'
-        ).count() == 1
-        assert page.locator(
-            '[data-testid="activity-tier-badge"]'
-            '[data-tier="main"][data-included="true"]'
-        ).count() == 6
-        assert page.locator(
-            '[data-testid="activity-tier-badge"]'
-            '[data-tier="premium"][data-included="true"]'
-        ).count() == 7
-        assert page.locator('[data-testid="activity-card-action"]:visible').count() == 7
-        assert page.locator(
-            '[data-testid="activity-card"]:visible '
-            '[data-testid="activity-card-action"][href="/courses"]'
-        ).count() == 1
-
-        page.get_by_text("Quick comparison").scroll_into_view_if_needed()
-        assert page.get_by_text("Quick comparison").is_visible()
-
-    def test_missing_tier_activity_config_keeps_curated_grid(
-        self, django_server, page, django_db_blocker
-    ):
-        with django_db_blocker.unblock():
-            _seed_base(active=False)
-            from content.models import SiteConfig
-
-            SiteConfig.objects.filter(key="tiers").delete()
-
-        page.goto(
-            f"{django_server}/activities#access-by-tier",
-            wait_until="domcontentloaded",
-        )
-
-        assert page.locator('[data-testid="activities-tier-empty"]').count() == 0
-        assert page.locator('[data-testid="activity-card"]').count() == 7
-        assert page.get_by_test_id("activities-pricing-cta").get_attribute(
-            "href"
-        ) == "/pricing"
-
-    def test_resources_stays_library_without_sprint_hub(
-        self, django_server, page, django_db_blocker
-    ):
-        with django_db_blocker.unblock():
-            _seed_base(active=True)
-            _create_curated_link()
-
-        page.set_viewport_size({"width": 1280, "height": 900})
-        page.goto(f"{django_server}/resources", wait_until="domcontentloaded")
-
-        body = page.locator("body").inner_text()
-        assert "Useful Reference" in body
-        assert "CURATED LINKS" in body
-        assert "May Shipping Sprint" not in body
-        assert page.locator('[data-testid="activities-sprint-card"]').count() == 0
-        assert page.locator('[data-testid="activities-sprints-section"]').count() == 0
-        _shot(page, "08-resources-no-sprint-hub")
+    empty = page.get_by_test_id("membership-sprints-empty")
+    expect(empty).to_contain_text("Next sprint coming soon")
+    assert empty.locator('a[href="/events"]').count() == 1
+    assert empty.locator('a[href="/workshops"]').count() == 1
+    assert page.get_by_test_id("membership-sprint-card").count() == 0

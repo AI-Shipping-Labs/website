@@ -385,7 +385,7 @@ def sprint_join(request, sprint_slug):
             request,
             f'Upgrade to {required_tier_name} to join this sprint.',
         )
-        return redirect('/pricing')
+        return redirect('/membership')
 
     _enrollment, created = SprintEnrollment.objects.get_or_create(
         sprint=sprint,

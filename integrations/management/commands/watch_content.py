@@ -15,11 +15,11 @@ import threading
 import time
 from pathlib import Path
 
-import yaml
 from django.core.management.base import BaseCommand, CommandError
 
 from integrations.models import ContentSource
 from integrations.services.github import sync_content_source
+from integrations.services.github_sync.dispatchers.tiers import _sync_tiers_yaml
 
 # File extensions that should trigger a sync
 CONTENT_EXTENSIONS = {'.md', '.yaml', '.yml'}
@@ -103,20 +103,13 @@ class DebouncedSyncer:
             self._sync_content_source(target)
 
     def _sync_tiers(self):
-        """Read tiers.yaml and clear the tier config cache."""
+        """Sync tiers.yaml through the same dispatcher production uses."""
         self.stdout.write(self.style.NOTICE('Syncing tiers.yaml...'))
         try:
-            tiers_path = Path(self.repo_dir) / 'tiers.yaml'
-            if not tiers_path.exists():
+            result = _sync_tiers_yaml(self.repo_dir)
+            if not result['synced']:
                 self.stderr.write('tiers.yaml not found, skipping.')
                 return
-            with open(tiers_path, encoding='utf-8') as f:
-                tiers_data = yaml.safe_load(f) or []
-            from content.models import SiteConfig
-            SiteConfig.objects.update_or_create(
-                key='tiers',
-                defaults={'data': tiers_data},
-            )
             self.stdout.write(self.style.SUCCESS('tiers.yaml reloaded.'))
         except Exception as e:
             self.stderr.write(f'Error syncing tiers.yaml: {e}')

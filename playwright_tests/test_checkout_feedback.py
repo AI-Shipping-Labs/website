@@ -72,7 +72,7 @@ def test_cancelled_banner_shows_and_cleans_url(
     _seed_pricing(django_db_blocker)
 
     page.goto(
-        f"{django_server}/pricing?checkout=cancelled",
+        f"{django_server}/membership?checkout=cancelled",
         wait_until="domcontentloaded",
     )
 
@@ -82,6 +82,21 @@ def test_cancelled_banner_shows_and_cleans_url(
         "Checkout was cancelled. You can try again anytime."
     )
     _expect_checkout_param_cleaned(page)
+
+    dismiss = page.get_by_role("button", name="Dismiss")
+    dismiss.focus()
+    box = dismiss.bounding_box()
+    assert box is not None
+    assert box["width"] >= 44
+    assert box["height"] >= 44
+    assert dismiss.evaluate("el => el.matches(':focus-visible')")
+    assert dismiss.evaluate(
+        "el => getComputedStyle(el).boxShadow !== 'none'"
+    )
+
+    page.keyboard.press("Enter")
+    expect(banner).to_have_count(0)
+    expect(page.locator('[data-testid="pricing-tier-card"]')).to_have_count(4)
 
 
 def test_no_banners_without_checkout_query_params(
@@ -96,7 +111,7 @@ def test_no_banners_without_checkout_query_params(
     _expect_no_banners(dashboard_page)
 
     _seed_pricing(django_db_blocker)
-    page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+    page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
     _expect_no_banners(page)
 
     context.close()

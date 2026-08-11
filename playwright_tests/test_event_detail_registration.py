@@ -279,7 +279,7 @@ class TestEventDetailCoverImage:
 @pytest.mark.django_db(transaction=True)
 class TestAnonymousPaidEventCopy:
     """Issue #671: anonymous visitors on a tier-gated event must see
-    tier-aware copy that names the required tier and points at /pricing
+    tier-aware copy that names the required tier and points at /membership
     BEFORE pushing them to create an account. The misleading "free
     account is required" copy is gone.
     """
@@ -317,14 +317,14 @@ class TestAnonymousPaidEventCopy:
         assert "free account" not in card_text.lower()
         assert "create a free account" not in card_text.lower()
 
-        # Primary CTA: "View membership options" -> /pricing. The paid
+        # Primary CTA: "View membership options" -> /membership. The paid
         # (tier-gated) card renders the single Upgrade path; a free account
         # grants no paid access, so there is no signup/sign-in companion.
         pricing_cta = card.locator(
             '[data-testid="event-anonymous-pricing-cta"]'
         )
         assert pricing_cta.count() == 1
-        assert pricing_cta.get_attribute("href") == "/pricing"
+        assert pricing_cta.get_attribute("href") == "/membership"
         assert "View membership options" in pricing_cta.inner_text()
 
     def test_clicking_view_membership_options_lands_on_pricing(
@@ -345,7 +345,7 @@ class TestAnonymousPaidEventCopy:
         page.locator(
             '[data-testid="event-anonymous-pricing-cta"]'
         ).click()
-        page.wait_for_url(f"{django_server}/pricing")
+        page.wait_for_url(f"{django_server}/membership")
         # Smoke check: the pricing page renders without an error.
         assert "Pricing" in page.title() or "pricing" in page.url
 
@@ -415,11 +415,11 @@ class TestAnonymousPaidEventCopy:
         assert page.locator(
             '[data-testid="event-anonymous-cta"]'
         ).count() == 0
-        # The registration card must not link to /pricing on a free event.
+        # The registration card must not link to /membership on a free event.
         card = page.locator(
             '[data-testid="event-registration-card"]'
         )
-        assert card.locator('a[href="/pricing"]').count() == 0
+        assert card.locator('a[href="/membership"]').count() == 0
 
     def test_anonymous_premium_event_drops_or_above(
         self, django_server, page
@@ -486,11 +486,11 @@ class TestUnderTierCopyConsistency:
         assert "free account" not in card_text.lower()
 
         # The View Pricing button is the upgrade CTA.
-        pricing_link = card.locator('a[href="/pricing"]')
+        pricing_link = card.locator('a[href="/membership"]')
         assert pricing_link.count() >= 1
-        # Click the View Pricing button and land on /pricing.
+        # Click the View Pricing button and land on /membership.
         pricing_link.first.click()
-        page.wait_for_url(f"{django_server}/pricing")
+        page.wait_for_url(f"{django_server}/membership")
         context.close()
 
     def test_basic_user_on_premium_event_drops_or_above(

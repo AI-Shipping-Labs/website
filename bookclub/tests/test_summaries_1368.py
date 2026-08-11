@@ -309,7 +309,7 @@ class BookSummaryPageTest(SummaryRenderFixture):
         self.client.force_login(self.free_user)
         response = self.client.get(self._summary_url())
         self.assertContains(response, 'book-guest-gate')
-        self.assertContains(response, '/pricing')
+        self.assertContains(response, '/membership')
         self.assertNotContains(response, 'Overall theme one.')
         self.assertNotContains(response, 'summary-overall')
 

@@ -3,36 +3,39 @@ from pathlib import Path
 from django.test import SimpleTestCase
 
 
-class ProductDocPastRecordingsNavigationTest(SimpleTestCase):
+class ProductDocNavigationTest(SimpleTestCase):
     def setUp(self):
         repo_root = Path(__file__).resolve().parents[2]
         self.doc = (repo_root / "_docs" / "product.md").read_text(encoding="utf-8")
 
-    def test_header_navigation_documents_past_recordings_under_community(self):
+    def test_header_documents_membership_as_top_level_and_no_activities_item(self):
         self.assertIn(
-            "Community dropdown: Membership (`/pricing`), "
-            "Activities (`/activities#access-by-tier`), Community Sprints (`/sprints`), "
-            "Books (`/books`), Events (`/events`), Past Recordings (`/events?filter=past`)",
+            "Primary navigation (desktop): Community, Learning, Blog, Membership, About",
             self.doc,
         )
-
-    def test_resources_navigation_excludes_recordings(self):
-        resources_line = next(
+        community_line = next(
             line for line in self.doc.splitlines()
-            if line.startswith("- Resources dropdown:")
+            if line.startswith("- Community dropdown:")
+        )
+        self.assertIn("Events (`/events`)", community_line)
+        self.assertIn("Community Sprints (`/sprints`)", community_line)
+        self.assertIn("Book Club (`/books`)", community_line)
+        self.assertIn("Activities is not a separate navigation destination", community_line)
+
+    def test_learning_navigation_documents_current_destinations(self):
+        learning_line = next(
+            line for line in self.doc.splitlines()
+            if line.startswith("- Learning dropdown:")
         )
 
         for label in [
-            "Blog",
             "Courses",
             "Workshops",
             "Learning Paths",
-            "Project Ideas",
             "Interview Prep",
-            "Curated Links",
+            "Downloads",
         ]:
-            self.assertIn(label, resources_line)
-        self.assertIn("does not contain Past Recordings or Event Recordings", resources_line)
+            self.assertIn(label, learning_line)
 
     def test_past_recordings_surface_and_terminology_are_canonical(self):
         self.assertIn(
@@ -46,19 +49,32 @@ class ProductDocPastRecordingsNavigationTest(SimpleTestCase):
         )
 
 
-class ProductDocActivitiesTierComparisonTest(SimpleTestCase):
+class ProductDocMembershipTest(SimpleTestCase):
     def setUp(self):
         repo_root = Path(__file__).resolve().parents[2]
         self.doc = (repo_root / "_docs" / "product.md").read_text(encoding="utf-8")
 
-    def test_activities_page_documents_curated_no_filter_comparison(self):
-        activities_row = next(
+    def test_membership_page_documents_merged_journey(self):
+        membership_row = next(
             line
             for line in self.doc.splitlines()
-            if line.startswith("| Activities page | `/activities#access-by-tier` |")
+            if line.startswith("| Membership page | `/membership` |")
         )
 
-        self.assertIn("Curated seven-item, no-filter membership-benefits comparison", activities_row)
-        self.assertIn("Basic/Main/Premium inclusion badges", activities_row)
-        self.assertIn("derived 1/6/7 quick comparison", activities_row)
-        self.assertNotIn("filter buttons", activities_row)
+        self.assertIn("all four plans and billing controls first", membership_row)
+        self.assertIn("extended paid-tier benefits", membership_row)
+        self.assertIn("one active sprint", membership_row)
+        self.assertIn("one upcoming event", membership_row)
+        self.assertIn("canonical shared cards", membership_row)
+
+    def test_tiers_yaml_single_source_contract_is_documented(self):
+        self.assertIn(
+            "Both the compact Membership plan bullets and the detailed benefit "
+            "rows read the same `benefits` records.",
+            self.doc,
+        )
+        self.assertIn(
+            "A benefit with an empty `description` stays in its plan card and "
+            "is intentionally omitted from the detailed explanation list.",
+            self.doc,
+        )

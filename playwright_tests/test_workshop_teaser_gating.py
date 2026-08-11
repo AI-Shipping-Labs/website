@@ -241,7 +241,7 @@ class TestFreeMemberOnBasicTutorial:
             assert 'Upgrade to Basic to access this workshop' in body
             # Single View Pricing CTA.
             cta = page.locator('[data-testid="page-upgrade-cta"]')
-            assert cta.get_attribute('href') == '/pricing'
+            assert cta.get_attribute('href') == '/membership'
             # No "Create a free account" companion for signed-in users.
             signup = page.locator('[data-testid="teaser-signup-cta"]')
             assert signup.count() == 0
@@ -320,7 +320,7 @@ class TestAnonOnPaidRecording:
         # to Pricing. A free account grants no paid access, so there is no
         # "Create a free account" companion on this paid wall.
         upgrade = page.locator('[data-testid="video-upgrade-cta"]')
-        assert upgrade.get_attribute('href') == '/pricing'
+        assert upgrade.get_attribute('href') == '/membership'
         signup = page.locator('[data-testid="teaser-signup-cta"]')
         assert signup.count() == 0
 
@@ -360,7 +360,7 @@ class TestFreeMemberOnMainRecording:
             assert 'Main or above required' in body
             assert 'Upgrade to Main to watch the recording' in body
             cta = page.locator('[data-testid="video-upgrade-cta"]')
-            assert cta.get_attribute('href') == '/pricing'
+            assert cta.get_attribute('href') == '/membership'
         finally:
             ctx.close()
 

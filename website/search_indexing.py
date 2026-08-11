@@ -77,8 +77,8 @@ _PRIVATE_API_RESULT_PATHS = frozenset({
 })
 
 # Keep in sync with the recognized recovery messages in
-# ``payments.views.pricing``. Unknown query values are ordinary public pricing
-# views and must remain indexable.
+# ``payments.services.membership_context``. Unknown query values are ordinary
+# public Membership views and must remain indexable.
 _CHECKOUT_ERROR_CODES = frozenset({
     'temporarily_unavailable',
     'invalid_interval',
@@ -155,7 +155,7 @@ def production_request_indexing_disabled(request):
     if path == '/' and getattr(user, 'is_authenticated', False):
         return True
 
-    if path == '/pricing':
+    if path == '/membership':
         if request.GET.get('checkout') == 'cancelled':
             return True
         if request.GET.get('checkout_error') in _CHECKOUT_ERROR_CODES:

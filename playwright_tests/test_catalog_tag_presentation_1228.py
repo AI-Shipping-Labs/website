@@ -273,7 +273,7 @@ def test_gated_curated_link_static_tag_reveals_existing_access_options(
     expect(card).to_have_attribute('aria-expanded', 'true')
     view_link = card.get_by_role('link', name='View membership tiers')
     expect(view_link).to_be_visible()
-    expect(view_link).to_have_attribute('href', '/pricing')
+    expect(view_link).to_have_attribute('href', '/membership')
 
 
 @pytest.mark.django_db(transaction=True)

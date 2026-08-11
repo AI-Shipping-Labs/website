@@ -335,7 +335,7 @@ class FreeUserOnPaidTierTutorialTest(TierSetupMixin, TestCase):
         self.assertContains(
             response, 'Upgrade', status_code=403,
         )
-        self.assertContains(response, 'href="/pricing"', status_code=403)
+        self.assertContains(response, 'href="/membership"', status_code=403)
         # Signed-in users do NOT get a "Create a free account" companion.
         self.assertNotContains(
             response, 'data-testid="teaser-signup-cta"', status_code=403,
@@ -428,7 +428,7 @@ class EmptyBodyTutorialFallbackTest(TierSetupMixin, TestCase):
             response, 'data-testid="page-paywall"', status_code=403,
         )
         self.assertContains(response, 'Upgrade', status_code=403)
-        self.assertContains(response, 'href="/pricing"', status_code=403)
+        self.assertContains(response, 'href="/membership"', status_code=403)
 
 
 class UnverifiedEmailTutorialTest(TierSetupMixin, TestCase):
@@ -551,7 +551,7 @@ class AnonymousPaidRecordingVideoTest(TierSetupMixin, TestCase):
         # grants no paid access.
         response = self.client.get('/workshops/reg-vid/video')
         self.assertContains(response, 'Upgrade', status_code=403)
-        self.assertContains(response, 'href="/pricing"', status_code=403)
+        self.assertContains(response, 'href="/membership"', status_code=403)
         self.assertNotContains(
             response,
             'href="/accounts/signup/?next=%2Fworkshops%2Freg-vid%2Fvideo"',
@@ -615,7 +615,7 @@ class FreeUserOnPaidRecordingTest(TierSetupMixin, TestCase):
         self.assertContains(
             response, 'Upgrade', status_code=403,
         )
-        self.assertContains(response, 'href="/pricing"', status_code=403)
+        self.assertContains(response, 'href="/membership"', status_code=403)
         self.assertContains(
             response, 'data-testid="gated-required-tier"', status_code=403,
         )

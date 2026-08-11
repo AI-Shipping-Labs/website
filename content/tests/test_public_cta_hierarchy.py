@@ -25,7 +25,7 @@ class PublicCtaHierarchyTest(TierSetupMixin, TestCase):
         self.assertIn('href="/#tiers"', body)
 
     def test_pricing_has_no_newsletter_cta_before_tier_grid(self):
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         body = response.content.decode()
 
         grid_start = body.index("<!-- Tier Grid")
@@ -47,7 +47,7 @@ class PublicCtaHierarchyTest(TierSetupMixin, TestCase):
         response = self.client.get("/resources")
         body = response.content.decode()
         gated_cta = body[body.index('class="gated-cta'):]
-        match = re.search(r'<a href="/pricing" class="([^"]*)"', gated_cta)
+        match = re.search(r'<a href="/membership" class="([^"]*)"', gated_cta)
 
         self.assertIsNotNone(match)
         classes = match.group(1)

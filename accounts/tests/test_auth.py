@@ -482,14 +482,14 @@ class HeaderLogoutLinkTest(TestCase):
         """``?next=`` should encode the full current path including the query."""
         user = User.objects.create_user(email="test@example.com")
         self.client.force_login(user)
-        response = self.client.get("/pricing?tier=main")
+        response = self.client.get("/membership?tier=main")
         self.assertEqual(response.status_code, 200)
         # The pricing path with its query string is round-tripped through
         # urlencode, so the query separator becomes ``%3F`` and ``=``
         # becomes ``%3D``.
         self.assertContains(
             response,
-            'href="/accounts/logout/?next=%2Fpricing%3Ftier%3Dmain"',
+            'href="/accounts/logout/?next=%2Fmembership%3Ftier%3Dmain"',
         )
 
 

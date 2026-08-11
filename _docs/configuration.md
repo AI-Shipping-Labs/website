@@ -129,7 +129,7 @@ Webhook events: see #113 / Stripe documentation for the exact event list. Minimu
 
 Operator payment notification (issue #645): set `PAYMENT_NOTIFICATION_EMAIL` under `Studio > Settings > Site` to receive an internal email whenever a Stripe checkout completes (new paid signup, tier upgrade, or course purchase). The setting is non-secret, plain string, and has NO hard-coded default — leave it blank to disable notifications entirely; populated with an address it sends one plain-text mail per non-duplicate webhook from `DEFAULT_FROM_EMAIL`. Failures to send are logged at WARNING and never break the webhook handler. Idempotency rides on the existing `WebhookEvent` row guard, so Stripe retries of the same event never produce duplicate emails.
 
-Test: visit `{SITE_BASE_URL}/pricing`, click a paid tier, complete checkout in Stripe test mode, confirm the user's tier updates on `{SITE_BASE_URL}/account/`.
+Test: visit `{SITE_BASE_URL}/membership`, click a paid tier, complete checkout in Stripe test mode, confirm the user's tier updates on `{SITE_BASE_URL}/account/`.
 
 ## 5. Email (Amazon SES)
 
@@ -292,6 +292,25 @@ Foot-gun: this is the GitHub APP for content sync, not the GitHub OAuth APP for 
 
 Test: in `Studio > Sync`, click "Sync now" on a content source; confirm the sync run completes and articles appear at `{SITE_BASE_URL}/blog/`.
 
+### 7.1 Membership tiers and benefits (`tiers.yaml`)
+
+Edit the root `tiers.yaml` in the `AI-Shipping-Labs/content` repository for paid-plan names, levels, prices, descriptions, and benefits. Do not add a website migration or hardcode Membership benefit copy in a Django template.
+
+Each paid tier has a `benefits` list. The benefit `title` is the compact bullet shown in that tier's plan card. The optional `description` is the extended copy shown later in the Membership benefits section. Leave `description: ""` when a benefit should appear in the plan comparison only. `icon`, `action_label`, and `action_url` control the extended row; blank action values make the row non-clickable.
+
+Higher-tier inheritance is assembled by the website rather than duplicated in YAML: Main begins with `Everything in Basic`, and Premium begins with `Everything in Main`. Do not add those strings to a tier description or its `benefits` list.
+
+On sync, the complete YAML list is written verbatim to `SiteConfig['tiers']`. The sync also copies `name`, `level`, monthly/annual prices, description, and optional Stripe price IDs to the matching `payments.Tier` row using `stripe_key == Tier.slug`. The Membership plan bullets and detailed benefit explanations both read the synced YAML benefit records; the operational tier rows continue to own access and checkout relationships.
+
+For local development, both commands use the same tier dispatcher as production:
+
+```bash
+uv run python manage.py sync_content --from-disk /path/to/ai-shipping-labs-content
+uv run python manage.py watch_content /path/to/ai-shipping-labs-content
+```
+
+Test: edit a benefit title locally, sync the content repository, and confirm the title changes in both the relevant plan card and (when its description is non-empty) the detailed section at `{SITE_BASE_URL}/membership#activities`.
+
 ## 8. S3 — content images
 
 Studio path: `Studio > Settings > S3 Content Images`.
@@ -353,9 +372,9 @@ Test: in `Studio > Events`, create an event with platform=zoom; confirm a join U
 Run this checklist after configuring everything. Each item is one click, end to end.
 
 - [ ] Sign in with Google, GitHub, and Slack — all three create a `User` row visible in `/studio/users/`.
-- [ ] Sign out, then visit a gated article at `{SITE_BASE_URL}/blog/<gated-article-slug>`; confirm a paywall renders with a working `View Pricing` link that lands on `/pricing`.
+- [ ] Sign out, then visit a gated article at `{SITE_BASE_URL}/blog/<gated-article-slug>`; confirm a paywall renders with a working `View Pricing` link that lands on `/membership`.
 - [ ] Subscribe to the newsletter on the home page; receive the welcome email at the subscribed address.
-- [ ] Upgrade to a paid tier in Stripe test mode (`/pricing`); the user's tier reflects on `/account/`.
+- [ ] Upgrade to a paid tier in Stripe test mode (`/membership`); the user's tier reflects on `/account/`.
 - [ ] As a paid member, cancel the subscription via `{SITE_BASE_URL}/account/` (or the Stripe customer portal); confirm the user's tier on `/account/` drops to Free within a few seconds (Stripe webhook `customer.subscription.deleted` reaches `/api/webhooks/payments`).
 - [ ] Trigger a content sync at `/studio/sync/`; new articles appear at `/blog/` and their images load from the CDN domain.
 - [ ] Create an event with platform=zoom in `/studio/events/`; the join URL points at zoom.us and the meeting exists in the Zoom account.

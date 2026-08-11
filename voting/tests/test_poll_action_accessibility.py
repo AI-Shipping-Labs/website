@@ -68,7 +68,7 @@ class PollActionAccessibilityTest(TierSetupMixin, TestCase):
         actions = _opening_tags(html, 'data-testid="poll-pricing-cta"')
         self.assertEqual(len(actions), 1)
         self._assert_contract(actions[0])
-        self.assertIn('href="/pricing"', actions[0])
+        self.assertIn('href="/membership"', actions[0])
 
     def test_rendered_vote_voted_and_proposal_actions_have_contract(self):
         PollVote.objects.create(

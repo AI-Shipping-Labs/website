@@ -107,7 +107,7 @@ class FooterCommunityNavigationTest(TestCase):
         community = footer[community_start:resources_start]
 
         expected = [
-            ('Activities', '/activities#access-by-tier'),
+            ('Activities', '/membership#activities'),
             ('Community Sprints', '/sprints'),
             ('Events', '/events'),
             ('Book Club', '/books'),

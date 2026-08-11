@@ -441,7 +441,7 @@ def _build_landing_context(workshop, user):
     ``_gated_reason_for_level`` so an anonymous visitor on a workshop
     using the new ``pages_required_level=LEVEL_REGISTERED`` (5) default
     sees Sign-In-shaped copy (matching the tutorial-page paywall) rather
-    than the nonsensical "Upgrade to Free" / "/pricing" combo.
+    than the nonsensical "Upgrade to Free" / "/membership" combo.
     """
     can_access_landing = workshop.user_can_access_landing(user)
     can_access_pages = workshop.user_can_access_pages(user)

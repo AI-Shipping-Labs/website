@@ -24,6 +24,7 @@ TONE_CLASSES = {
     'neutral': 'bg-secondary text-muted-foreground',
     'muted': 'bg-secondary text-muted-foreground',
     'accent': 'bg-accent/10 text-accent',
+    'accent_solid': 'bg-accent text-accent-foreground',
     'accent_strong': 'bg-accent/20 text-accent',
     'accent_outline': 'border border-accent/30 bg-accent/10 text-accent',
     'accent_outline_strong': 'border border-accent/40 bg-accent/10 text-accent',

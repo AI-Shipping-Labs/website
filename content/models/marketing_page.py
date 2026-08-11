@@ -42,7 +42,7 @@ RESERVED_PUBLIC_PATH_PREFIXES = (
     '/api',
     '/member-api',
     '/studio',
-    '/pricing',
+    '/membership',
     '/events',
     '/blog',
     '/projects',

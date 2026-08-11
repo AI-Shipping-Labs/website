@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from accounts.models import User
 from events.models import Event, EventSeries
-from events.views.pages import _event_local_datetime, _format_time_label
+from events.services.timeline import event_local_datetime, format_time_label
 
 
 def _expected_time_label(event, tz_name=None):
@@ -16,10 +16,10 @@ def _expected_time_label(event, tz_name=None):
     own stored timezone (anonymous behavior).
     """
     viewer_tz = ZoneInfo(tz_name) if tz_name else None
-    local = _event_local_datetime(
+    local = event_local_datetime(
         event.start_datetime, event.timezone, viewer_tz,
     )
-    return _format_time_label(local)
+    return format_time_label(local)
 
 
 def _future_start(*, days=12, hour=16, minute=0):

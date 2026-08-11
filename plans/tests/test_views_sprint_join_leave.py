@@ -50,7 +50,7 @@ class SprintJoinTest(TestCase):
         url = reverse('sprint_join', kwargs={'sprint_slug': self.sprint.slug})
         response = self.client.post(url)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], '/pricing')
+        self.assertEqual(response['Location'], '/membership')
         self.assertFalse(
             SprintEnrollment.objects.filter(
                 sprint=self.sprint, user=free,

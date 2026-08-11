@@ -41,7 +41,7 @@ def test_homepage_member_value_first_hierarchy(django_server, page):
 def test_pricing_focuses_on_tier_comparison(django_server, page):
     ensure_tiers()
 
-    _goto(page, django_server, "/pricing")
+    _goto(page, django_server, "/membership")
 
     tier_grid = page.locator("div.grid.sm\\:grid-cols-2.lg\\:grid-cols-4")
     expect(tier_grid).to_be_visible()

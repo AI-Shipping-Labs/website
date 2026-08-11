@@ -235,7 +235,7 @@ def test_certificate_and_about_ctas_keep_keyboard_destinations(
         pricing = page.locator('[data-testid="about-pricing-cta"]')
         _assert_keyboard_focus_and_height(page, pricing)
         page.keyboard.press('Enter')
-        page.wait_for_url(f'{django_server}/pricing')
+        page.wait_for_url(f'{django_server}/membership')
     finally:
         context.close()
 
@@ -346,7 +346,7 @@ def test_gated_poll_pricing_action_works_by_keyboard(django_server, browser):
         pricing = page.locator('[data-testid="poll-pricing-cta"]')
         _assert_keyboard_focus_and_height(page, pricing)
         page.keyboard.press('Enter')
-        page.wait_for_url(f'{django_server}/pricing')
+        page.wait_for_url(f'{django_server}/membership')
     finally:
         context.close()
 

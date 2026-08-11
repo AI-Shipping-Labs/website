@@ -16,7 +16,7 @@ Summary: dark mode and token usage are broadly healthy — no contrast or legibi
 5. Blog list: first row has no thumbnail while every other row does (`templates/content/blog_list.html`), so the list reads misaligned. Give the first card the same thumbnail slot or a consistent fallback cover.
 6. Workshop detail inline flow diagram overflows the reading column and clips at the right edge (`templates/content/workshop_detail.html`). Wrap in `overflow-x-auto` (with `-mx-4 px-4` bleed) or allow wrapping.
 7. Resources page: per-card type pill repeats the section heading ("Courses" pill inside the Courses section), and cards without descriptions stretch to the tallest neighbor leaving large empty cards (`templates/content/collection_list.html`). Drop redundant pills; let cards size to content.
-8. Same content type rendered differently on home vs its own page: project cards are compact text cards on home but large cover-image cards on `/projects`; home shows 3 tiers while `/pricing` shows 4. Align treatments or document the intent.
+8. Same content type rendered differently on home vs its own page: project cards are compact text cards on home but large cover-image cards on `/projects`; home shows 3 tiers while `/membership` shows 4. Align treatments or document the intent.
 9. Events list uses two treatments for one entity: Upcoming as large bordered cards (gated ones near-empty and tall), Past as compact rows (`templates/events/events_list.html`). Use one row/card system with state modifiers.
 10. Courses page: 2 cards left-aligned in a 3-column grid leaves the right half empty (`templates/content/courses_list.html`). Center or cap columns when item count is below column count.
 11. Event gated card does not reuse the standardized gated access card: plain `bg-secondary` box on events vs accent-bordered `_gated_access_card.html` on courses/workshops (`templates/events/_event_registration_card.html`). Reuse the partial.
@@ -26,7 +26,7 @@ Summary: dark mode and token usage are broadly healthy — no contrast or legibi
 
 ## Open product questions (need PM judgment, not design-system rules)
 
-- Home ordering and length: tiers/pricing is the third block, before testimonials and most content, and the page is roughly 9,300px on desktop / 10,900px on mobile with four content catalogs plus pricing duplicated from `/pricing`. Is price-before-proof intended? Should home trim or collapse catalogs for first-time visitors?
+- Home ordering and length: tiers/membership is the third block, before testimonials and most content, and the page is roughly 9,300px on desktop / 10,900px on mobile with four content catalogs plus pricing duplicated from `/membership`. Is price-before-proof intended? Should home trim or collapse catalogs for first-time visitors?
 - Should the Free tier keep a full inline registration form inside the pricing grid (findings 1-2), or become a single "Create free account" CTA that expands a form below the tier row? Changes conversion behavior; needs PM sign-off before the layout fix.
 - Project generated cover images are near-identical dark templates across every card, producing monotony. Intentional uniformity or should covers vary?
 

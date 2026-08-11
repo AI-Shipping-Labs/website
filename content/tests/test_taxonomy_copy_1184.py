@@ -37,7 +37,7 @@ class TaxonomyDocs1184Test(SimpleTestCase):
             'Workshops',
             'Recordings',
             'Resources',
-            'Activities',
+            'Member benefit',
         ]:
             self.assertIn(f'| {term} |', product)
         for route in [
@@ -46,7 +46,7 @@ class TaxonomyDocs1184Test(SimpleTestCase):
             '/events?filter=past',
             '/workshops',
             '/resources',
-            '/activities#access-by-tier',
+            '/membership#activities',
             '/sprints',
         ]:
             self.assertIn(route, product)
@@ -166,13 +166,16 @@ class PublicTaxonomyCopy1184Test(TierSetupMixin, TestCase):
             '/events/calendar',
             '/workshops',
             '/resources',
-            '/activities',
             '/sprints',
-            '/pricing',
+            '/membership',
         ]:
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
+
+        activities = self.client.get('/activities')
+        self.assertEqual(activities.status_code, 301)
+        self.assertEqual(activities['Location'], '/membership#activities')
 
     def test_events_and_calendar_copy_describe_live_sessions(self):
         events_response = self.client.get('/events')
@@ -209,10 +212,10 @@ class PublicTaxonomyCopy1184Test(TierSetupMixin, TestCase):
         self.assertContains(response, f'{self.workshop.get_absolute_url()}/video')
         self.assertContains(response, 'Main or above')
 
-    def test_workshops_resources_and_activities_copy_match_taxonomy(self):
+    def test_workshops_resources_and_membership_copy_match_taxonomy(self):
         workshops_response = self.client.get('/workshops')
         resources_response = self.client.get('/resources')
-        activities_response = self.client.get('/activities')
+        membership_response = self.client.get('/membership')
 
         self.assertContains(workshops_response, 'Hands-on AI workshops')
         self.assertContains(
@@ -232,10 +235,10 @@ class PublicTaxonomyCopy1184Test(TierSetupMixin, TestCase):
         )
         self.assertNotContains(resources_response, 'Workshops, Courses &amp; More')
 
-        self.assertContains(activities_response, 'Membership benefits by tier')
+        self.assertContains(membership_response, 'Member benefits')
         self.assertContains(
-            activities_response,
-            'Activities are membership benefits and participation modes',
+            membership_response,
+            'Explore how members learn, build, get feedback, and stay accountable.',
         )
-        for href in ['/pricing', '/sprints', '/events', '/workshops']:
-            self.assertContains(activities_response, f'href="{href}"')
+        for href in ['/membership', '/sprints', '/events', '/workshops']:
+            self.assertContains(membership_response, f'href="{href}"')

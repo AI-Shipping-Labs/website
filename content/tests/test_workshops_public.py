@@ -999,7 +999,7 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         """Issue #571 PM fix: anonymous on a workshop using the new
         ``pages_required_level=LEVEL_REGISTERED`` (5) default must see
         Sign-In-shaped copy on the landing pages paywall — not the
-        nonsensical "Upgrade to Free" / "/pricing" combo.
+        nonsensical "Upgrade to Free" / "/membership" combo.
         """
         ws = _make_workshop(
             slug='reg-ws', title='Registered Workshop',
@@ -1030,22 +1030,22 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
             response,
             '/accounts/signup/?next=%2Fworkshops%2Freg-ws',
         )
-        # The broken "Upgrade to Free" copy and the /pricing CTA must be
+        # The broken "Upgrade to Free" copy and the /membership CTA must be
         # gone on this surface — the visitor just needs to authenticate.
         self.assertNotContains(response, 'Upgrade to Free')
         body = response.content.decode()
         # Scope to the paywall card and assert its actions point at auth
-        # (login/signup), never /pricing.
+        # (login/signup), never /membership.
         card_start = body.index('data-testid="workshop-pages-paywall"')
         card_end = body.index('</div>', body.index(
             'data-testid="signup-actions"', card_start,
         ))
         card_slice = body[card_start:card_end + 6]
         self.assertIn('/accounts/login/?next=', card_slice)
-        self.assertNotIn('href="/pricing"', card_slice)
+        self.assertNotIn('href="/membership"', card_slice)
         self.assertNotIn(
-            'href="/pricing"', card_slice,
-            'pages paywall must not link to /pricing for anonymous '
+            'href="/membership"', card_slice,
+            'pages paywall must not link to /membership for anonymous '
             'visitors on the registered-default wall',
         )
         self.assertNotContains(response, 'Free required')
@@ -2023,7 +2023,7 @@ class WorkshopPagesPaywallInlineRegisterTest(TierSetupMixin, TestCase):
         """Issue #654 regression: the workshop pages paywall keeps the
         expanded inline register variant — the paywall card is wide
         enough to absorb the OAuth divider + provider buttons inline,
-        and only /pricing tucks them behind a toggle.
+        and only /membership tucks them behind a toggle.
         """
         from allauth.socialaccount.models import SocialApp
         from django.contrib.sites.models import Site

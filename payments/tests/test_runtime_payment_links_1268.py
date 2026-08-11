@@ -61,7 +61,7 @@ class RuntimePaymentLinksTest(TierSetupMixin, TestCase):
     def test_home_and_pricing_share_runtime_override(self):
         self._set_override(json.dumps(OVERRIDE_LINKS))
 
-        pricing = self.client.get('/pricing')
+        pricing = self.client.get('/membership')
         pricing_links = {
             item['tier'].slug: {
                 'monthly': item['payment_link_monthly'],
@@ -104,5 +104,5 @@ class RuntimePaymentLinksTest(TierSetupMixin, TestCase):
                 self.assertNotIn(invalid, ' '.join(logs.output))
 
         self._set_override('secret-invalid-json')
-        self.assertEqual(self.client.get('/pricing').status_code, 200)
+        self.assertEqual(self.client.get('/membership').status_code, 200)
         self.assertEqual(self.client.get('/').status_code, 200)

@@ -87,7 +87,7 @@ def test_certificate_and_roadmap_actions_keep_destinations_and_keyboard_focus(
     )
     TagRule.objects.create(
         tag="roadmap-1280", component_type="roadmap_signup",
-        component_config={"url": "/pricing", "cta_text": "Open roadmap"},
+        component_config={"url": "/membership", "cta_text": "Open roadmap"},
         position="after_content",
     )
     connection.close()
@@ -112,7 +112,7 @@ def test_certificate_and_roadmap_actions_keep_destinations_and_keyboard_focus(
     page.goto(f"{django_server}/blog/roadmap-actions-1280", wait_until="domcontentloaded")
     roadmap = page.get_by_test_id("tag-rule-roadmap-cta")
     _assert_focus(roadmap)
-    expect(roadmap).to_have_attribute("href", "/pricing")
+    expect(roadmap).to_have_attribute("href", "/membership")
     page.evaluate("localStorage.setItem('theme', 'light')")
     page.reload(wait_until="domcontentloaded")
     _assert_focus(page.get_by_test_id("tag-rule-roadmap-cta"))
@@ -123,7 +123,7 @@ def test_certificate_and_roadmap_actions_keep_destinations_and_keyboard_focus(
     _assert_focus(roadmap)
     page.screenshot(path=SCREENSHOT_DIR / "roadmap-dark-desktop.png")
     roadmap.press("Enter")
-    expect(page).to_have_url(f"{django_server}/pricing")
+    expect(page).to_have_url(f"{django_server}/membership")
 
     for theme in ("light", "dark"):
         page.evaluate("theme => localStorage.setItem('theme', theme)", theme)
@@ -133,7 +133,7 @@ def test_certificate_and_roadmap_actions_keep_destinations_and_keyboard_focus(
         )
         project_roadmap = page.get_by_test_id("tag-rule-roadmap-cta")
         _assert_focus(project_roadmap)
-        expect(project_roadmap).to_have_attribute("href", "/pricing")
+        expect(project_roadmap).to_have_attribute("href", "/membership")
         page.screenshot(
             path=SCREENSHOT_DIR / f"roadmap-project-{theme}-desktop.png",
         )

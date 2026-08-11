@@ -2248,7 +2248,7 @@ class EventDetailAnonymousFlowTest(TestCase):
         self.assertContains(resp, 'event-anonymous-cta')
         # The misleading "free account is required" copy is gone.
         self.assertNotContains(resp, 'free account is required')
-        # New tier-aware copy names the required tier and links to /pricing.
+        # New tier-aware copy names the required tier and links to /membership.
         self.assertContains(resp, 'This event is for Main members')
         self.assertContains(resp, 'Main or above required')
         self.assertContains(resp, 'View membership options')
@@ -2284,7 +2284,7 @@ class EventDetailAnonymousFlowTest(TestCase):
 
 class EventAnonymousPaidCopyTest(TestCase):
     """Issue #671: the anonymous CTA on a tier-gated upcoming event must
-    name the required tier and point at /pricing. The misleading "free
+    name the required tier and point at /membership. The misleading "free
     account is required" copy must be gone.
     """
 
@@ -2338,11 +2338,11 @@ class EventAnonymousPaidCopyTest(TestCase):
     def test_anonymous_paid_cta_has_pricing_link(self):
         resp = self.client.get(self.main_event.get_absolute_url())
         html = resp.content.decode()
-        # The primary CTA is "View membership options" linking to /pricing.
+        # The primary CTA is "View membership options" linking to /membership.
         self.assertIn(
             'data-testid="event-anonymous-pricing-cta"', html,
         )
-        self.assertIn('href="/pricing"', html)
+        self.assertIn('href="/membership"', html)
         self.assertIn('View membership options', html)
 
     def test_anonymous_paid_cta_has_signin_link_preserving_next(self):
@@ -2440,7 +2440,7 @@ class EventUnderTierCopyConsistencyTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Upgrade to Main to attend')
         self.assertContains(response, 'Main or above required')
         self.assertNotContains(response, 'free account')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
 
     def test_basic_user_on_premium_event_drops_or_above(self):
         self._login_at(self.basic_tier)

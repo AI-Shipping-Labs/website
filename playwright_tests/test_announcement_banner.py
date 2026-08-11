@@ -145,7 +145,7 @@ class TestScenario2AllPublicPages:
         _reset_banner()
         _set_banner(message="Cross-page banner", link_url="/about", link_label="Read more")
 
-        for path in ["/", "/blog", "/pricing", "/about"]:
+        for path in ["/", "/blog", "/membership", "/about"]:
             response = page.goto(f"{django_server}{path}", wait_until="domcontentloaded")
             # We tolerate any page that successfully loads (200 or 304).
             assert response.status < 400, f"{path} returned {response.status}"

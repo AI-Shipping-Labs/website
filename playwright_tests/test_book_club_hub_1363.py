@@ -5,7 +5,7 @@ the lighter secondary pages, layered on the #1362/#1364 foundation:
 
 1. A visitor discovers the Book Club from the Community nav.
 2. A guest opens the current book, hits the gate, and the Upgrade CTA lands on
-   /pricing with no participation body.
+   /membership with no participation body.
 3. A Main member reads the current book's roadmap (This week callout + chapter
    rows) with no gate and no broken links.
 4. A visitor browses upcoming/past and opens a finished book (secondary page,
@@ -138,7 +138,7 @@ class TestBookClubHubJourneys:
             ).count() == 0
 
             page.locator('[data-testid="book-guest-gate-cta"]').first.click()
-            page.wait_for_url(f"{django_server}/pricing")
+            page.wait_for_url(f"{django_server}/membership")
         finally:
             context.close()
 

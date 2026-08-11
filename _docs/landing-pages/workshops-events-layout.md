@@ -134,8 +134,8 @@ What must change for the split to earn its keep:
              Browse all workshops
              <i data-lucide="arrow-right" class="h-4 w-4"></i>
            </a>
--          <a href="/pricing" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border bg-background px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="view-membership-options-cta">
-+          <a href="/pricing" class="{% button_classes 'secondary' size='lg' extra='w-full sm:w-auto' %}" data-testid="view-membership-options-cta">
+-          <a href="/membership" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border bg-background px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="view-membership-options-cta">
++          <a href="/membership" class="{% button_classes 'secondary' size='lg' extra='w-full sm:w-auto' %}" data-testid="view-membership-options-cta">
              View membership options
            </a>
 ```
@@ -187,7 +187,7 @@ Rationale for moving the value trio below the cards on `/workshops`: real conten
 
 ## Open PM questions
 
-1. Which URL should nav `Resources > Workshops` target — the marketing landing or the catalog? Repeat visitors pay one extra click per visit today. If the nav stays on `/workshops`, the landing must stay lean (R3); if it moves to `/workshops/catalog`, the landing becomes a pure marketing page reached from home/pricing.
+1. Which URL should nav `Resources > Workshops` target — the marketing landing or the catalog? Repeat visitors pay one extra click per visit today. If the nav stays on `/workshops`, the landing must stay lean (R3); if it moves to `/workshops/catalog`, the landing becomes a pure marketing page reached from home/membership.
 2. Should `/events` in `all` mode paginate past events at all once R2 caps them, or is the cap plus the `?filter=past` archive enough?
 3. Viewer-aware access badges: should a signed-in member whose tier covers an item see `Included in your plan` (or no lock) instead of `Basic or above`? Requires a design-system change to `member_badges`; currently free and premium members see identical lock badges.
 4. Facet disclosure pattern (R1): is `templates/includes/_accordion.html` the right owner for filter facet boxes, or does this need a new documented pattern?

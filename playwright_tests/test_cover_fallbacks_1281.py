@@ -100,7 +100,7 @@ def test_paid_pricing_actions_share_desktop_baseline(
         _seed_pricing(oauth=True)
 
     page.set_viewport_size({"width": width, "height": 900})
-    page.goto(f"{django_server}/pricing", wait_until="networkidle")
+    page.goto(f"{django_server}/membership", wait_until="networkidle")
     _dismiss_consent(page)
 
     carousel = page.get_by_test_id("pricing-tier-carousel")
@@ -133,7 +133,7 @@ def test_pricing_sub_desktop_carousel_contract(
         _seed_pricing(oauth=True)
 
     page.set_viewport_size({"width": width, "height": height})
-    page.goto(f"{django_server}/pricing", wait_until="networkidle")
+    page.goto(f"{django_server}/membership", wait_until="networkidle")
     _dismiss_consent(page)
     carousel = page.get_by_test_id("pricing-tier-carousel")
     assert carousel.evaluate("node => getComputedStyle(node).display") == "flex"

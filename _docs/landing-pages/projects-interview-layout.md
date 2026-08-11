@@ -85,7 +85,7 @@ Visible: back link, eyebrow, H1, lead, the live Theory card, and the first `Comi
 ## 5. Conversion path
 
 - On both pages the only conversion elements are the header `Join free` button and the footer newsletter card. The page bodies contain zero CTAs. On desktop `/projects` the newsletter is ~4 screens down; on mobile ~7 screens.
-- Anonymous gated treatment on `/projects` is limited to the `Basic or above` lock badge on the one gated card (`_project_card.html:17-21`, correct `member_access_badge` usage). Nothing on the page explains what a tier is or links to `/pricing`. The interview hub cards carry no access badge at all, despite the design-system rule that every public content card shows one.
+- Anonymous gated treatment on `/projects` is limited to the `Basic or above` lock badge on the one gated card (`_project_card.html:17-21`, correct `member_access_badge` usage). Nothing on the page explains what a tier is or links to `/membership`. The interview hub cards carry no access badge at all, despite the design-system rule that every public content card shows one.
 - Neither page tells a first-time visitor what AI Shipping Labs is. The lead sentences describe the content collection, not the community; the next step after browsing is undefined. A signed-in members-only affordance also goes unused on `/projects`: the platform has a project-submission endpoint (`content/views/api.py:85`), but the page never invites members to submit.
 
 ## 6. Recommendations, ranked by impact
@@ -102,7 +102,7 @@ Completes the sanctioned hero order and puts a conversion action above the fold 
          </p>
 +        <div class="mt-6 flex flex-wrap items-center gap-3">
 +          <a href="/accounts/register/" class="{% button_classes 'primary' size='lg' %}">Join free</a>
-+          <a href="/pricing" class="{% button_classes 'secondary' size='lg' %}">View pricing</a>
++          <a href="/membership" class="{% button_classes 'secondary' size='lg' %}">View pricing</a>
 +        </div>
        </div>
 ```
@@ -228,7 +228,7 @@ Add `{% member_access_badge %}` (Free renders as the green check) and a question
 - Interview hub: show coming-soon categories at all, and if so how many? Hiding them leaves a one-card page; the compact-list treatment (R2) is the layout hedge, but visibility is a roadmap-communication call.
 - Tag filter density: all 45 tags versus a curated/top-N subset with a `More` affordance.
 - Featured projects source: `Official` badge, a curated flag in the content repo, or manual Studio selection. Content-repo-derived is most consistent with the content architecture.
-- Conversion band actions per audience: anonymous (join/pricing) versus signed-in member (`Submit your project` using the existing `submit_project` endpoint) — needs a product call on whether submission is ready to promote.
+- Conversion band actions per audience: anonymous (join/membership) versus signed-in member (`Submit your project` using the existing `submit_project` endpoint) — needs a product call on whether submission is ready to promote.
 - Hero CTA destinations and copy (owned by the copy audit).
 
 ## Design-system change candidates

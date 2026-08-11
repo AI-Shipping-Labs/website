@@ -86,7 +86,7 @@ class SlackJoinRedirectDeniedTest(TierSetupMixin, TestCase):
         response = self.client.get("/community/slack")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="slack-join-denied-upgrade"')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
         self.assertNotContains(response, INVITE_URL)
         self.assertFalse(
             UserActivity.objects.filter(
@@ -98,7 +98,7 @@ class SlackJoinRedirectDeniedTest(TierSetupMixin, TestCase):
         self._login("free@test.com", self.free_tier)
         response = self.client.get("/community/slack")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
         self.assertNotContains(response, INVITE_URL)
 
     def test_expired_override_member_denied(self):

@@ -185,7 +185,7 @@ class TestSignupFunnelAnalytics:
 
         email = f'inline-register-{uuid.uuid4().hex[:8]}@test.com'
         # Email signup now lives on the dedicated register page (the inline
-        # form on /pricing was removed). The signup_start / sign_up events
+        # form on /membership was removed). The signup_start / sign_up events
         # fire from the register form and carry its entry_path.
         page.goto(f'{django_server}/accounts/register/', wait_until='domcontentloaded')
         page.evaluate(
@@ -256,7 +256,7 @@ class TestSignupFunnelAnalytics:
         )
 
         # The OAuth-first signup buttons live on the home join-free
-        # section (the /pricing free tier is now a single Join button).
+        # section (the /membership free tier is now a single Join button).
         page.goto(f'{django_server}/', wait_until='domcontentloaded')
         page.evaluate(
             """() => {
@@ -414,7 +414,7 @@ class TestSignupFunnelAnalytics:
         page_errors = []
         page.on('pageerror', lambda err: page_errors.append(str(err)))
 
-        for path in ['/', '/pricing', '/accounts/register/']:
+        for path in ['/', '/membership', '/accounts/register/']:
             page.goto(f'{django_server}{path}', wait_until='domcontentloaded')
             html = page.content()
             assert 'googletagmanager.com' not in html

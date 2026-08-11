@@ -32,7 +32,7 @@ class PricingAccountPlanStateTest(TestCase):
     def _pricing_states(self, user=None):
         if user is not None:
             self.client.force_login(user)
-        response = self.client.get("/pricing")
+        response = self.client.get("/membership")
         self.assertEqual(response.status_code, 200)
         return {
             item["tier"].slug: item["state"]
@@ -69,7 +69,10 @@ class PricingAccountPlanStateTest(TestCase):
         user = self._user("basic-pricing@test.com", self.basic, "sub_basic")
         states, _response = self._pricing_states(user)
 
-        self.assertEqual(states["free"]["badge"], "Included")
+        self.assertEqual(states["free"]["badge"], "")
+        self.assertEqual(states["free"]["note"], "")
+        self.assertEqual(states["free"]["action_label"], "Downgrade")
+        self.assertEqual(states["free"]["action_kind"], "portal")
         self.assertEqual(states["basic"]["badge"], "Current plan")
         self.assertEqual(states["basic"]["action_kind"], "disabled")
         self.assertEqual(states["main"]["action_label"], "Manage Subscription")
@@ -85,8 +88,10 @@ class PricingAccountPlanStateTest(TestCase):
         self.assertEqual(states["main"]["action_kind"], "disabled")
         self.assertEqual(states["basic"]["action_label"], "Downgrade")
         self.assertEqual(states["basic"]["action_kind"], "portal")
+        self.assertEqual(states["basic"]["note"], "")
         self.assertEqual(states["premium"]["action_label"], "Manage Subscription")
         self.assertEqual(states["premium"]["action_kind"], "portal")
+        self.assertEqual(states["premium"]["note"], "")
 
     def test_premium_member_sees_lower_paid_tiers_as_management(self):
         user = self._user("premium-pricing@test.com", self.premium, "sub_premium")
@@ -97,6 +102,7 @@ class PricingAccountPlanStateTest(TestCase):
         for slug in ("basic", "main"):
             self.assertEqual(states[slug]["action_label"], "Downgrade")
             self.assertEqual(states[slug]["action_kind"], "portal")
+            self.assertEqual(states[slug]["note"], "")
 
     def test_pending_cancellation_shows_access_ending_without_join_prompts(self):
         user = self._user(

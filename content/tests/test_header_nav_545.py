@@ -24,7 +24,6 @@ ABOUT_LINKS = [
 ]
 
 COMMUNITY_LINKS = [
-    ('Activities', '/activities#access-by-tier'),
     ('Events', '/events'),
     ('Community Sprints', '/sprints'),
     ('Book Club', '/books'),
@@ -97,11 +96,11 @@ class HeaderTextNavigationIssue580Test(TestCase):
 
         # Blog and Membership are top-level links, not dropdown items.
         self.assertIn('data-testid="nav-blog-link"', primary)
-        self.assertIn('href="/pricing"', primary)
+        self.assertIn('href="/membership"', primary)
         membership_links = re.findall(
             r'<a[^>]*href="([^"]+)"[^>]*>\s*Membership\s*</a>', primary
         )
-        self.assertEqual(membership_links, ['/pricing'])
+        self.assertEqual(membership_links, ['/membership'])
 
         # FAQ is not a top-level link — it only appears inside the About
         # dropdown, never as a sibling of the trigger buttons.
@@ -109,9 +108,10 @@ class HeaderTextNavigationIssue580Test(TestCase):
         faq_occurrences = re.findall(r'href="/faq"', primary)
         self.assertEqual(len(faq_occurrences), 1)
 
-        # Activities is grouped inside Community, not promoted as a top-level
-        # nav link (regression check from #555).
+        # The retired Activities destination is absent; Membership is the
+        # single top-level entry point for plans and benefit explanations.
         self.assertNotIn('data-testid="nav-activities"', primary)
+        self.assertNotIn('nav-community-link-activities', primary)
 
         # About dropdown contents and order.
         about_panel = self._slice_block(primary, 'about-dropdown')
@@ -132,7 +132,6 @@ class HeaderTextNavigationIssue580Test(TestCase):
         self.assertEqual(
             community_link_ids,
             [
-                'nav-community-link-activities',
                 'nav-community-link-events',
                 'nav-community-link-sprints',
                 'nav-community-link-books',
@@ -199,7 +198,6 @@ class HeaderTextNavigationIssue580Test(TestCase):
         self.assertEqual(
             mobile_community_link_ids,
             [
-                'mobile-nav-community-link-activities',
                 'mobile-nav-community-link-events',
                 'mobile-nav-community-link-sprints',
                 'mobile-nav-community-link-books',
@@ -325,7 +323,7 @@ class HeaderTextNavigationIssue580Test(TestCase):
             '/activities',
             '/community',
             '/about',
-            '/pricing',
+            '/membership',
             '/faq',
             '/events',
             '/resources',

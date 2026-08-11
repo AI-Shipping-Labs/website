@@ -1,4 +1,4 @@
-"""Issue #482 membership/pricing card carousel layout coverage."""
+"""Issue #482 membership/membership card carousel layout coverage."""
 
 import os
 from pathlib import Path
@@ -140,7 +140,7 @@ def test_pricing_mobile_carousel_free_copy_and_desktop_grid(django_server, page)
     _ensure_pricing_tiers()
 
     page.set_viewport_size(MOBILE)
-    page.goto(f"{django_server}/pricing", wait_until="networkidle")
+    page.goto(f"{django_server}/membership", wait_until="networkidle")
     _assert_mobile_carousel(page, '[data-testid="pricing-tier-carousel"]')
     _assert_main_centered(page, '[data-testid="pricing-tier-carousel"]')
     free_card = page.locator('[data-tier-card="free"]')
@@ -153,7 +153,7 @@ def test_pricing_mobile_carousel_free_copy_and_desktop_grid(django_server, page)
     _screenshot(page, '[data-testid="pricing-tier-carousel"]', "pricing-mobile-anon")
 
     page.set_viewport_size(DESKTOP)
-    page.goto(f"{django_server}/pricing", wait_until="networkidle")
+    page.goto(f"{django_server}/membership", wait_until="networkidle")
     carousel = page.locator('[data-testid="pricing-tier-carousel"]')
     expect(carousel).to_be_visible()
     assert carousel.evaluate("el => getComputedStyle(el).display") == "grid"
@@ -176,7 +176,7 @@ def test_pricing_mobile_carousel_preserves_current_plan_state(
     page = context.new_page()
     page.set_viewport_size(MOBILE)
     try:
-        page.goto(f"{django_server}/pricing", wait_until="networkidle")
+        page.goto(f"{django_server}/membership", wait_until="networkidle")
         _assert_mobile_carousel(page, '[data-testid="pricing-tier-carousel"]')
         _assert_main_centered(page, '[data-testid="pricing-tier-carousel"]')
         expect(page.locator('[data-tier-card="main"]')).to_contain_text("Current plan")

@@ -19,7 +19,10 @@ class PublicPolishTemplateContractTest(SimpleTestCase):
         return (self.root / relative_path).read_text(encoding="utf-8")
 
     def test_pricing_stretches_only_at_desktop_and_keeps_carousel_contract(self):
-        template = self._read("templates/payments/pricing.html")
+        template = self._read("templates/content/membership/page.html")
+        tier_classes = self._read(
+            "templates/content/membership/_tier_card_classes.html"
+        )
         marker = template.index('data-testid="pricing-tier-carousel"')
         grid_start = template.rfind("<div ", 0, marker)
         grid = template[grid_start:marker]
@@ -35,7 +38,7 @@ class PublicPolishTemplateContractTest(SimpleTestCase):
             "max-lg:pt-6",
         ):
             self.assertIn(token, grid)
-        self.assertIn("flex flex-col rounded-xl", template)
+        self.assertIn("flex flex-col rounded-xl", tier_classes)
         self.assertIn('class="mb-8 flex-1', template)
         self.assertIn('<div class="mt-auto">', template)
 

@@ -36,11 +36,11 @@ class TestLoggedInUserMembershipNavigation:
         assert page.get_by_test_id("nav-membership").count() == 0
         page.get_by_test_id("nav-community-trigger").hover()
         assert page.get_by_test_id("nav-community-link-membership").is_visible()
-        page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+        page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
         page.wait_for_load_state("domcontentloaded")
 
-        assert page.url.rstrip("/").endswith("/pricing"), (
-            f"Expected to land on /pricing, got {page.url}"
+        assert page.url.rstrip("/").endswith("/membership"), (
+            f"Expected to land on /membership, got {page.url}"
         )
 
         # The four tier names must be visible.

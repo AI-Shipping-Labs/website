@@ -6,7 +6,11 @@ from django.test import SimpleTestCase
 
 HOME_TEMPLATE = Path(__file__).parents[2] / 'templates' / 'home.html'
 PRICING_TEMPLATE = (
-    Path(__file__).parents[2] / 'templates' / 'payments' / 'pricing.html'
+    Path(__file__).parents[2]
+    / 'templates'
+    / 'content'
+    / 'membership'
+    / 'page.html'
 )
 
 

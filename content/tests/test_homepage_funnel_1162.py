@@ -158,7 +158,7 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
             self.assertContains(response, title, count=1)
         self.assertContains(response, 'A personalized onboarding plan')
         self.assertNotContains(response, 'Main + Premium')
-        self.assertContains(response, 'href="/activities#access-by-tier"')
+        self.assertContains(response, 'href="/membership#activities"')
         self.assertContains(response, 'href="/#activities"')
         self.assertContains(response, 'href="/#tiers"')
         self.assertNotContains(response, 'Browse Resources')
@@ -236,7 +236,7 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
             self.assertIn('data-link-annual=', card)
         self.assertIn('Most popular', self._card(response, 'main'))
 
-        pricing = self.client.get('/pricing')
+        pricing = self.client.get('/membership')
         self.assertContains(pricing, 'data-testid="pricing-free-signup-cta"')
         self.assertNotContains(pricing, 'data-testid="inline-register-card"')
         self.assertNotContains(pricing, 'data-testid="home-join-free-section"')

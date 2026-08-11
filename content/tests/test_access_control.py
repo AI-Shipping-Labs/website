@@ -317,7 +317,7 @@ class CanAccessEmailVerifiedTest(TierSetupMixin, TestCase):
             ctx['gated_heading'], 'Upgrade to Basic to read this article',
         )
         self.assertEqual(ctx['required_tier_name'], 'Basic')
-        self.assertEqual(ctx['gated_cta_url'], '/pricing')
+        self.assertEqual(ctx['gated_cta_url'], '/membership')
         self.assertEqual(ctx['current_user_state'], 'Current access: Free member')
         self.assertEqual(ctx['signup_cta_url'], '')
         self.assertEqual(ctx['signin_cta_url'], '')
@@ -338,7 +338,7 @@ class CanAccessEmailVerifiedTest(TierSetupMixin, TestCase):
         self.assertEqual(
             ctx['gated_heading'], 'Upgrade to Basic to read this article',
         )
-        self.assertEqual(ctx['gated_cta_url'], '/pricing')
+        self.assertEqual(ctx['gated_cta_url'], '/membership')
         self.assertEqual(ctx['gated_cta_label'], 'Upgrade')
         self.assertEqual(ctx['signup_cta_url'], '')
         self.assertEqual(ctx['signup_cta_label'], '')
@@ -523,12 +523,12 @@ class BuildGatingContextTest(TierSetupMixin, TestCase):
         self.assertEqual(
             ctx['gated_heading'], 'Upgrade to Basic to read this article',
         )
-        self.assertEqual(ctx['gated_cta_url'], '/pricing')
+        self.assertEqual(ctx['gated_cta_url'], '/membership')
         self.assertEqual(ctx['gated_cta_label'], 'Upgrade')
         # Paid wall: no free-signup CTA (a free account grants no paid access).
         self.assertEqual(ctx['signup_cta_label'], '')
         self.assertEqual(ctx['required_tier_name'], 'Basic')
-        self.assertEqual(ctx['pricing_url'], '/pricing')
+        self.assertEqual(ctx['pricing_url'], '/membership')
         self.assertIn('This is the description', ctx['teaser'])
 
     def test_gated_for_free_user(self):
@@ -667,7 +667,7 @@ class BlogDetailAccessControlTest(TierSetupMixin, TestCase):
         # Upgrade CTA to Pricing. No free-signup path — a free account grants
         # no paid access.
         self.assertContains(response, 'Upgrade to Basic to read this article')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
         self.assertNotContains(response, 'View Pricing')
         self.assertNotContains(response, 'Create a free account')
         self.assertNotContains(
@@ -681,7 +681,7 @@ class BlogDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Full basic content')
         self.assertContains(response, 'Upgrade to Basic to read this article')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
 
     def test_basic_member_sees_full_basic_article(self):
         self.client.force_login(self.basic_user)
@@ -696,7 +696,7 @@ class BlogDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Full main content')
         self.assertContains(response, 'Upgrade to Main to read this article')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
 
 
 @tag('core')
@@ -762,7 +762,7 @@ class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
             'Upgrade to Basic to view this project',
         )
         # Paid wall: Upgrade CTA to Pricing, no free-signup path.
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
         self.assertNotContains(
             response,
             'href="/accounts/signup/?next=/projects/gated-project"',
@@ -851,7 +851,7 @@ class TutorialDetailAccessControlTest(TierSetupMixin, TestCase):
         # Anonymous visitor on a paid tutorial gets the upgrade heading + the
         # Upgrade CTA to Pricing. No free-signup path on a paid wall.
         self.assertContains(response, 'Upgrade to Premium to read this tutorial')
-        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'href="/membership"')
         self.assertNotContains(
             response,
             'href="/accounts/signup/?next=/tutorials/gated-tutorial"',

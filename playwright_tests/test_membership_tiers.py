@@ -184,9 +184,9 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
 
     @pytest.mark.core
     def test_pricing_page_loads_without_login(self, django_server, page):
-        """Navigate to /pricing without being logged in. Verify HTTP 200."""
+        """Navigate to /membership without being logged in. Verify HTTP 200."""
         response = page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         assert response.status == 200
     def test_free_tier_shows_zero_price_and_subscribe_button(self, django_server, page):
@@ -196,7 +196,7 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
         register form was removed).
         """
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         free_card = _get_tier_card_by_name(page, "Free")
 
@@ -218,7 +218,7 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
             "[data-testid='pricing-free-signup-cta']"
         )
         assert signup_cta.count() == 1
-        assert signup_cta.get_attribute("href") == "/accounts/register/?next=/pricing"
+        assert signup_cta.get_attribute("href") == "/accounts/register/?next=/membership"
         # Paid-tier Join button must NOT exist on the Free card.
         assert free_card.locator("a.tier-cta-link").count() == 0
     def test_free_tier_features_include_newsletter_and_open_content(
@@ -226,7 +226,7 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
     , page):
         """Verify the Free tier's feature list includes expected items."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         free_card = _get_tier_card_by_name(page, "Free")
         features_text = free_card.locator("ul").inner_text()
@@ -234,11 +234,11 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
         assert "Access to open content" in features_text
     def test_free_subscribe_button_navigates_to_register(self, django_server, page):
         """The Free tier CTA is a single Join button that links to the
-        register page with next=/pricing so users land back here after
+        register page with next=/membership so users land back here after
         creating an account. The inline register form was removed.
         """
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         free_card = _get_tier_card_by_name(page, "Free")
 
@@ -246,7 +246,7 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
             "[data-testid='pricing-free-signup-cta']"
         )
         assert signup_cta.count() == 1
-        assert signup_cta.get_attribute("href") == "/accounts/register/?next=/pricing"
+        assert signup_cta.get_attribute("href") == "/accounts/register/?next=/membership"
 @pytest.mark.django_db(transaction=True)
 class TestScenario2CompareAllFourTiers:
     """
@@ -258,7 +258,7 @@ class TestScenario2CompareAllFourTiers:
         """Verify all four tiers appear in ascending order: Free, Basic, Main,
         Premium."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         cards = _get_tier_cards(page)
         assert cards.count() == 4
@@ -275,7 +275,7 @@ class TestScenario2CompareAllFourTiers:
         """Verify each tier card has a name, a price, a description, and at
         least one feature."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         cards = _get_tier_cards(page)
         for i in range(4):
@@ -299,7 +299,7 @@ class TestScenario2CompareAllFourTiers:
         """Verify cumulative value: Basic lists its features, Main lists
         Everything in Basic, Premium lists Everything in Main."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         # Basic card
         basic_card = _get_tier_card_by_name(page, "Basic")
@@ -323,7 +323,7 @@ class TestScenario2CompareAllFourTiers:
     def test_only_main_tier_has_most_popular_badge(self, django_server, page):
         """Verify only the Main tier card displays the Most popular badge."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         # The "Most popular" text should appear exactly once on the page
         badges = page.locator("text=Most popular")
@@ -347,7 +347,7 @@ class TestScenario2CompareAllFourTiers:
         continue to use the Join button (Stripe Payment Link or portal).
         """
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         # Free -> single signup CTA, no tier-cta-link anchor.
         free_card = _get_tier_card_by_name(page, "Free")
@@ -370,7 +370,7 @@ class TestScenario3BillingToggle:
     def test_default_shows_annual_prices(self, django_server, page):
         """Verify the default state shows annual prices and pressed state."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         toggle = page.locator("#billing-toggle")
         assert toggle.get_attribute("aria-pressed") == "true"
@@ -402,7 +402,7 @@ class TestScenario3BillingToggle:
     def test_save_indicator_visible(self, django_server, page):
         """Verify the Save ~17% indicator is visible near the Annual label."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         annual_label = page.locator("#annual-label")
         label_text = annual_label.inner_text()
@@ -411,7 +411,7 @@ class TestScenario3BillingToggle:
     def test_toggle_to_monthly_shows_monthly_prices(self, django_server, page):
         """Click the toggle to switch to Monthly and verify monthly prices."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         # Click the toggle
         page.locator("#billing-toggle").click()
@@ -445,7 +445,7 @@ class TestScenario3BillingToggle:
     def test_free_tier_unaffected_by_toggle(self, django_server, page):
         """Verify the Free tier price remains 0 when toggling billing."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         free_card = _get_tier_card_by_name(page, "Free")
         price_before = free_card.locator(
@@ -470,7 +470,7 @@ class TestScenario3BillingToggle:
     def test_toggle_back_to_annual_restores_prices(self, django_server, page):
         """Toggle to monthly and back to annual, verify prices revert."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         toggle = page.locator("#billing-toggle")
 
@@ -512,7 +512,7 @@ class TestScenario4MainMonthlyStripeLink:
         """Verify the Main Join button href is a valid Stripe link matching
         the configured monthly payment link."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         page.locator("#billing-toggle").click()
         page.wait_for_load_state("domcontentloaded")
@@ -531,7 +531,7 @@ class TestScenario4MainMonthlyStripeLink:
     def test_main_join_button_uses_payment_link(self, django_server, page):
         """Verify the Join button is a direct Stripe Payment Link."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         main_card = _get_tier_card_by_name(page, "Main")
         join_button = main_card.locator("a.tier-cta-link")
@@ -550,7 +550,7 @@ class TestScenario5AnnualStripeLinksSwap:
         """Verify each paid tier's Join button has distinct values in
         data-link-monthly and data-link-annual."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         for tier_name in ["Basic", "Main", "Premium"]:
             card = _get_tier_card_by_name(page, tier_name)
@@ -572,7 +572,7 @@ class TestScenario5AnnualStripeLinksSwap:
     , page):
         """By default, each paid tier Join button href matches data-link-annual."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
 
         for tier_name in ["Basic", "Main", "Premium"]:
@@ -590,7 +590,7 @@ class TestScenario5AnnualStripeLinksSwap:
         """After toggling to monthly, each paid tier Join button href matches
         data-link-monthly."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         toggle = page.locator("#billing-toggle")
 
@@ -620,7 +620,7 @@ class TestScenario6PremiumAnnualStripeLink:
         """Verify Premium defaults to 1000/year and the correct
         Stripe link."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
 
         premium_card = _get_tier_card_by_name(page, "Premium")
@@ -642,7 +642,7 @@ class TestScenario6PremiumAnnualStripeLink:
     def test_premium_annual_link_differs_from_monthly(self, django_server, page):
         """Verify Premium annual link is different from its monthly link."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         premium_card = _get_tier_card_by_name(page, "Premium")
         cta = premium_card.locator("a.tier-cta-link")
@@ -659,7 +659,7 @@ class TestScenario7FreeSubscribeFlow:
     def test_free_tier_has_no_join_button(self, django_server, page):
         """Verify the Free tier card does NOT have a Join button."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         free_card = _get_tier_card_by_name(page, "Free")
         join_buttons = free_card.locator("a.tier-cta-link")
@@ -671,18 +671,18 @@ class TestScenario7FreeSubscribeFlow:
         exists.
         """
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         free_card = _get_tier_card_by_name(page, "Free")
         signup_cta = free_card.locator(
             "[data-testid='pricing-free-signup-cta']"
         )
         assert signup_cta.count() == 1
-        assert signup_cta.get_attribute("href") == "/accounts/register/?next=/pricing"
+        assert signup_cta.get_attribute("href") == "/accounts/register/?next=/membership"
     def test_free_tier_shows_zero_forever(self, django_server, page):
         """Verify the Free tier card shows 0 with /forever."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         free_card = _get_tier_card_by_name(page, "Free")
         price = free_card.locator("span.text-4xl").inner_text()
@@ -696,11 +696,11 @@ class TestScenario7FreeSubscribeFlow:
         self, django_server
     , page):
         """The Free tier CTA is a single Join button. Clicking it
-        navigates to the register page with next=/pricing so the visitor
-        can create an account and land back on /pricing.
+        navigates to the register page with next=/membership so the visitor
+        can create an account and land back on /membership.
         """
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         free_card = _get_tier_card_by_name(page, "Free")
         signup_cta = free_card.locator(
@@ -710,7 +710,7 @@ class TestScenario7FreeSubscribeFlow:
         assert signup_cta.is_visible()
         signup_cta.click()
         page.wait_for_url(
-            f"{django_server}/accounts/register/?next=/pricing",
+            f"{django_server}/accounts/register/?next=/membership",
             timeout=10000,
         )
 @pytest.mark.django_db(transaction=True)
@@ -723,7 +723,7 @@ class TestScenario8MainTierVisualDistinction:
     def test_main_tier_has_most_popular_badge(self, django_server, page):
         """Verify Most popular badge appears on Main and no other card."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         main_card = _get_tier_card_by_name(page, "Main")
         badge = main_card.locator("text=Most popular")
@@ -737,7 +737,7 @@ class TestScenario8MainTierVisualDistinction:
         """Verify the Main tier card has border-accent and ring-2 ring-accent/20
         CSS classes."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         main_card = _get_tier_card_by_name(page, "Main")
         classes = main_card.get_attribute("class")
@@ -754,7 +754,7 @@ class TestScenario8MainTierVisualDistinction:
         """Verify the Main Join button uses bg-accent while others use
         bg-secondary."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         # Main Join button should have bg-accent
         main_card = _get_tier_card_by_name(page, "Main")
@@ -779,7 +779,7 @@ class TestScenario9CumulativeFeatureLists:
         """Verify Free tier lists exactly Newsletter emails and Access to
         open content."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         free_card = _get_tier_card_by_name(page, "Free")
         features = free_card.locator("ul li")
@@ -794,7 +794,7 @@ class TestScenario9CumulativeFeatureLists:
     def test_basic_tier_features(self, django_server, page):
         """Verify Basic tier features include expected items."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         basic_card = _get_tier_card_by_name(page, "Basic")
         features_text = basic_card.locator("ul").inner_text()
@@ -812,7 +812,7 @@ class TestScenario9CumulativeFeatureLists:
         """Verify Main tier starts with Everything in Basic and includes
         expected features."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         main_card = _get_tier_card_by_name(page, "Main")
         features_text = main_card.locator("ul").inner_text()
@@ -834,7 +834,7 @@ class TestScenario9CumulativeFeatureLists:
         """Verify Premium tier starts with Everything in Main and includes
         expected features."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
         premium_card = _get_tier_card_by_name(page, "Premium")
         features_text = premium_card.locator("ul").inner_text()
@@ -862,7 +862,7 @@ class TestScenario10RapidToggleStressTest:
         (starting from the annual default) returns to annual. Verify that
         rapid toggling does not corrupt state."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
 
         # Use JavaScript to fire exactly 6 click events rapidly
@@ -915,7 +915,7 @@ class TestScenario10RapidToggleStressTest:
         switches to monthly. Confirms state is not corrupted by rapid
         toggling."""
         page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
+            f"{django_server}/membership", wait_until="domcontentloaded"
         )
 
         # Fire exactly 6 click events via JavaScript (back to annual)

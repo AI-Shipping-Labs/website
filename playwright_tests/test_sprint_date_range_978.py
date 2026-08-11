@@ -180,8 +180,8 @@ class TestSprintDateRange:
 
         card = page.locator('[data-testid="activities-sprint-card"]').first
         assert card.is_visible()
-        dates = card.locator('[data-testid="activities-sprint-dates"]')
-        assert dates.inner_text() == _expected_sprint_range(start_date, 6)
+        dates = card.locator('[data-testid="sprints-sprint-dates"]')
+        assert _expected_sprint_range(start_date, 6) in dates.inner_text()
         _shot(page, "03-activities-start-end")
 
     def test_cross_year_sprint_shows_year_on_both_sides(

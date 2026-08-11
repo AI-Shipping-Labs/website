@@ -348,7 +348,7 @@ class ResourcesGatingTest(TierSetupMixin, TestCase):
     def test_gated_link_shows_upgrade_cta(self):
         response = self.client.get('/resources')
         self.assertContains(response, 'Upgrade to Basic to access this resource')
-        self.assertContains(response, '/pricing')
+        self.assertContains(response, '/membership')
 
     # Lock-icon and external-link icon string-match tests removed in
     # #261: covered end-to-end by
@@ -942,7 +942,7 @@ class ResourcesGatedCtaLabelTest(TierSetupMixin, TestCase):
     """The gated-card CTA reads `View membership tiers`, never `View Plans`.
 
     `Plan` is reserved for member sprint plans in the product glossary; the
-    button links to /pricing, which sells membership tiers.
+    button links to /membership, which sells membership tiers.
     """
 
     def setUp(self):

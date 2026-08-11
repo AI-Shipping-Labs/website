@@ -1,0 +1,23 @@
+<section id="activities" class="scroll-mt-24 border-t border-border bg-background py-12 sm:py-20 lg:py-28" data-testid="membership-benefits-section">
+  <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+    <header class="mx-auto max-w-3xl text-center" data-testid="membership-benefits-intro">
+      <p class="text-sm font-medium uppercase tracking-widest text-accent">Member benefits</p>
+      <h2 class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl" style="text-wrap: balance;">
+        Build with structure, support, and a group
+      </h2>
+      <p class="mt-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
+        Explore how members learn, build, get feedback, and stay accountable.
+      </p>
+    </header>
+
+    <div class="mx-auto mt-10 max-w-3xl border-t border-border/70" data-testid="membership-benefits-list">
+      {% for benefit in membership_benefits %}
+        {% if benefit.action_url %}
+          {% include "content/_content_card.html" with card_url=benefit.action_url card_testid="membership-benefit-row" card_anchor_testid="membership-benefit-link" card_body_template="content/membership/_benefit_body.html" card_badge_template="content/membership/_benefit_badges.html" card_editorial=True card_title=benefit.title card_title_testid="membership-benefit-title" card_heading_tag="h3" card_aria_label=benefit.title %}
+        {% else %}
+          {% include "content/_content_card.html" with card_static=True card_arrow=False card_testid="membership-benefit-row" card_body_template="content/membership/_benefit_body.html" card_badge_template="content/membership/_benefit_badges.html" card_editorial=True card_title=benefit.title card_title_testid="membership-benefit-title" card_heading_tag="h3" %}
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</section>

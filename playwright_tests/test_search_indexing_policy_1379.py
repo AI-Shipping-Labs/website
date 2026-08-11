@@ -91,7 +91,7 @@ def test_anonymous_public_pages_and_article_remain_indexable(
         _prepare_production(settings)
         article = _seed_article('public-browser-boundary-1379')
 
-    for path in ('/', article.get_absolute_url(), '/pricing'):
+    for path in ('/', article.get_absolute_url(), '/membership'):
         response = page.goto(f'{django_server}{path}', wait_until='domcontentloaded')
         assert response.status == 200
         _assert_indexable(page, response)
@@ -248,13 +248,13 @@ def test_checkout_feedback_states_are_private_but_plain_pricing_is_public(
         expect(dashboard_page.locator('#checkout-success-banner')).to_be_visible()
 
         response = page.goto(
-            f'{django_server}/pricing?checkout=cancelled',
+            f'{django_server}/membership?checkout=cancelled',
             wait_until='domcontentloaded',
         )
         _assert_noindex(page, response)
         expect(page.locator('#checkout-cancelled-banner')).to_be_visible()
 
-        response = page.goto(f'{django_server}/pricing', wait_until='domcontentloaded')
+        response = page.goto(f'{django_server}/membership', wait_until='domcontentloaded')
         _assert_indexable(page, response)
     finally:
         context.close()

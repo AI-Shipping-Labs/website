@@ -102,7 +102,7 @@ def _partial_access_note(user, series, accessible_events, site_url):
     Names a single concrete upgrade target — the tier that unlocks the
     highest-gated session — so the CTA reads cleanly even when gated
     sessions span multiple tiers. Plain text only: the templates render
-    this through Django autoescaping, so the ``/pricing`` link is a bare
+    this through Django autoescaping, so the ``/membership`` link is a bare
     absolute URL.
     """
     accessible_ids = {event.id for event in accessible_events}
@@ -122,7 +122,7 @@ def _partial_access_note(user, series, accessible_events, site_url):
 
     highest_level = max(_resolve_required_level(event) for event in gated)
     tier_name = get_required_tier_name(highest_level)
-    pricing_url = f'{site_url}/pricing'
+    pricing_url = f'{site_url}/membership'
 
     return (
         f'Heads up: {count} more session{plural} in this series '

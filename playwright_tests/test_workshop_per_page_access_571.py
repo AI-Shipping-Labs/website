@@ -267,9 +267,9 @@ class TestAnonymousOnPaidWorkshopUpgradeWall:
         body = page.content()
         # Upgrade copy.
         assert 'Upgrade to Basic to access this workshop' in body
-        # CTA points to /pricing.
+        # CTA points to /membership.
         cta = page.locator('[data-testid="page-upgrade-cta"]')
-        assert cta.get_attribute('href') == '/pricing'
+        assert cta.get_attribute('href') == '/membership'
         # Paid wall: no "Create a free account" companion (a free account
         # grants no paid access).
         signup = page.locator('[data-testid="teaser-signup-cta"]')
@@ -319,7 +319,7 @@ class TestFreeMemberOnPaidWorkshopWithOpenPreview:
             body = p.content()
             assert 'Upgrade to Basic to access this workshop' in body
             cta = p.locator('[data-testid="page-upgrade-cta"]')
-            assert cta.get_attribute('href') == '/pricing'
+            assert cta.get_attribute('href') == '/membership'
         finally:
             ctx.close()
 

@@ -579,11 +579,11 @@ class PartialAccessNoteTest(TierSetupMixin, TestCase):
     Reuses the open + gated mix: a free verified member registered for the
     two open occurrences of a series that also has gated upcoming
     occurrences. The note must surface the gated count, name the unlocking
-    tier, and link to ``/pricing`` — across all three send paths — while
+    tier, and link to ``/membership`` — across all three send paths — while
     staying empty when every upcoming occurrence is accessible.
     """
 
-    PRICING_URL = 'https://aishippinglabs.com/pricing'
+    PRICING_URL = 'https://aishippinglabs.com/membership'
 
     @classmethod
     def setUpTestData(cls):

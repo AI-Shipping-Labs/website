@@ -160,8 +160,8 @@ Supporting copy (band after the categories):
 | CTA | Label | Destination |
 |-----|-------|-------------|
 | Primary | `Get new links in the newsletter` | `/subscribe` |
-| Secondary | `View membership tiers` | `/pricing` |
-| Gated card button | `View membership tiers` (replaces `View Plans`) | `/pricing` |
+| Secondary | `View membership tiers` | `/membership` |
+| Gated card button | `View membership tiers` (replaces `View Plans`) | `/membership` |
 | Gated card message | `Upgrade to {Tier} to open this link` (replaces `...to access this resource`) | `content/views/pages.py:494` |
 
 ### 2.5 Empty and gated states
@@ -238,7 +238,7 @@ Subhead:
 |-----|-------|-------------|
 | Card CTA | `Get this download` (replaces `View download`) | `/downloads/<slug>?surface=catalog` |
 | Primary (page) | none needed; the cards are the CTA | — |
-| Secondary (detail-page gate) | `View membership tiers` (replaces `View pricing`) | `/pricing` |
+| Secondary (detail-page gate) | `View membership tiers` (replaces `View pricing`) | `/membership` |
 
 ### 3.5 Empty and gated states
 
@@ -259,7 +259,7 @@ Gated state (detail page, under-tier member or anonymous on a paid download):
 
 > Heading: `This download is for members` (keep)
 > Body: `{Tier} membership unlocks this download, along with every other download at that tier.`
-> Primary CTA: `View membership tiers` -> `/pricing`
+> Primary CTA: `View membership tiers` -> `/membership`
 > Secondary CTA: `Already a member? Sign in` -> `/accounts/login/?next=...` (keep)
 
 ### 3.6 Metadata
@@ -316,7 +316,7 @@ Subhead:
 | CTA | Label | Destination |
 |-----|-------|-------------|
 | Primary | `Create a free account` | `/accounts/register/` |
-| Secondary | `View membership tiers` | `/pricing` |
+| Secondary | `View membership tiers` | `/membership` |
 
 Place under the subhead. The primary works because free courses and progress
 tracking require an account; the secondary covers Premium mini-courses.
@@ -421,10 +421,10 @@ and the tier line `Joining requires {Tier} membership.`
 |--------|-----|-------|-------------|
 | Anonymous, card primary | primary | `View sprint details` | `/sprints/<slug>` |
 | Anonymous, card secondary | secondary | `Sign in to join` (replaces `Log in to join`) | `/accounts/login/?next=<detail>` |
-| Free member below tier | primary | `Upgrade to {Tier}` (keep) | `/pricing` |
+| Free member below tier | primary | `Upgrade to {Tier}` (keep) | `/membership` |
 | Eligible member | primary | `View sprint` (keep) | `/sprints/<slug>` |
 | Enrolled member | primary | `Open my plan` / `Open cohort board` (keep) | plan / board |
-| Page-level secondary | secondary | `View membership tiers` | `/pricing` |
+| Page-level secondary | secondary | `View membership tiers` | `/membership` |
 
 Sending anonymous visitors to the detail page first (instead of straight to
 login) lets them read what the sprint is before we ask for an account.
@@ -443,7 +443,7 @@ Whole-page empty state (no visible sprints at all):
 > your email and we'll tell you when the next one opens — or see what
 > membership includes in the meantime.`
 > Primary CTA: `Get notified about the next sprint` -> `/subscribe`
-> Secondary CTA: `View membership tiers` -> `/pricing`
+> Secondary CTA: `View membership tiers` -> `/membership`
 > Tertiary link: `Browse live events` -> `/events`
 
 Section empty messages (some sections filled, others not):
@@ -544,7 +544,7 @@ CTA labels (below).
 
 | CTA | Label | Destination |
 |-----|-------|-------------|
-| Primary (quick comparison) | `View membership tiers` (replaces `Compare pricing`) | `/pricing` |
+| Primary (quick comparison) | `View membership tiers` (replaces `Compare pricing`) | `/membership` |
 | Secondary (page) | `Create a free account` | `/accounts/register/` |
 | Activity cards | keep the seven `action_label` values in `content/tier_config.py`, except `Compare community membership` -> `View membership tiers` | per card |
 
@@ -586,7 +586,7 @@ across these six pages:
 | `plans` used for pricing (`View Plans`) | `collection_list.html:109` | `membership tiers`. Doubly wrong: the glossary says tier, not plan, and `plan` already means a member's personal sprint plan (`Open my plan`, `plans` app). |
 | `Learning Paths` used for courses (`Structured Learning Paths`) | `courses_list.html:18` | `courses`. `learning_path` is a separate content type with its own nav entry; two surfaces currently claim the name. |
 | `resources` used for downloads and curated-link items (`Downloadable resources`, `access this resource`, `more resource tags`) | `downloads_list.html:9,18-19,62`; `pages.py:494`; `collection_list.html:64,98` | `downloads` on `/downloads`, `links` on `/resources`. Per the taxonomy, Resources is the nav group and `/resources` is Curated Links; calling individual items resources blurs both. |
-| Pricing CTA label varies (`View Plans`, `Compare pricing`, `View pricing`, `Compare community membership`, homepage `View membership tiers`) | `collection_list.html:109`; `activities.html:181`; `pages.py:666`; `tier_config.py:104` | `View membership tiers` everywhere a button points at `/pricing`. |
+| Pricing CTA label varies (`View Plans`, `Compare pricing`, `View pricing`, `Compare community membership`, homepage `View membership tiers`) | `collection_list.html:109`; `activities.html:181`; `pages.py:666`; `tier_config.py:104` | `View membership tiers` everywhere a button points at `/membership`. |
 
 Related consistency note: eyebrows should match the nav label the visitor
 clicked (`Community Sprints` on `/sprints`, `Activities` on `/activities`);

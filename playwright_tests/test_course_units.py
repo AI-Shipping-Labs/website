@@ -461,7 +461,7 @@ class TestScenario4FreePaywall:
     , browser):
         """Given a Free member and a Main-level course with a non-preview
         unit, navigating to the unit shows the gated message. Clicking
-        'View Pricing' leads to /pricing."""
+        'View Pricing' leads to /membership."""
         _clear_courses()
         _create_user("free-pw@test.com", tier_slug="free")
 
@@ -496,8 +496,8 @@ class TestScenario4FreePaywall:
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 
-        # Lands on /pricing
-        assert "/pricing" in page.url
+        # Lands on /membership
+        assert "/membership" in page.url
 
         context.close()
 # ---------------------------------------------------------------
@@ -564,13 +564,13 @@ class TestScenario5AnonymousSyllabus:
         assert page.locator('[data-testid="teaser-cta"]').count() == 1
         assert "Upgrade to Basic to read this lesson" in page.content()
 
-        # Issue #1335: the anonymous primary CTA now routes to /pricing,
+        # Issue #1335: the anonymous primary CTA now routes to /membership,
         # with sign-up / sign-in companions offering the account path.
         pricing_link = page.locator('[data-testid="teaser-upgrade-cta"]')
         assert pricing_link.count() == 1
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/pricing" in page.url
+        assert "/membership" in page.url
 # ---------------------------------------------------------------
 # Scenario 6: Member marks a unit completed and then undoes it
 # ---------------------------------------------------------------

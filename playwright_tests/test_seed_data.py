@@ -134,7 +134,7 @@ class TestScenario11BrowseSiteAsAdmin:
 
         # Then: Seeded polls appear with deterministic titles and types
         assert "What topic should our next deep-dive cover?" in body
-        assert "Which mini-course should we create next?" in body
+        assert "Which course should we create next?" in body
 
         body_text = page.inner_text("body").lower()
         assert "topic poll" in body_text

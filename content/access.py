@@ -326,7 +326,7 @@ def build_verify_email_context(user):
         'verify_email_address': user.email,
         'verify_resend_url': reverse('account_resend_verification'),
         'verify_resend_label': 'Resend verification email',
-        'pricing_url': '/pricing',
+        'pricing_url': '/membership',
     }
 
 
@@ -494,7 +494,7 @@ def build_gated_access_copy(
         'gated_description': upgrade_description or DEFAULT_UPGRADE_DESCRIPTION,
         'required_tier_name': tier_name,
         'current_user_state': current_user_state,
-        'gated_cta_url': '/pricing',
+        'gated_cta_url': '/membership',
         'gated_cta_label': 'Upgrade',
         'signup_cta_url': signup_cta_url,
         'signup_cta_label': signup_cta_label,
@@ -570,6 +570,6 @@ def build_gating_context(
         'gated_card_testid': gated_card_testid,
         'gated_icon': gated_icon,
         'gated_cta_testid': gated_cta_testid,
-        'pricing_url': '/pricing',
+        'pricing_url': '/membership',
         **copy,
     }

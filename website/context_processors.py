@@ -228,11 +228,6 @@ def _build_primary_nav(marketing_nav, has_published_downloads):
         ]
 
     community_items = [
-        {
-            'label': 'Activities',
-            'href': '/activities#access-by-tier',
-            'slug': 'activities',
-        },
         {'label': 'Events', 'href': '/events', 'slug': 'events'},
         {'label': 'Community Sprints', 'href': '/sprints', 'slug': 'sprints'},
         {'label': 'Book Club', 'href': '/books', 'slug': 'books'},
@@ -284,7 +279,7 @@ def _build_primary_nav(marketing_nav, has_published_downloads):
             'kind': 'link',
             'key': 'membership',
             'label': 'Membership',
-            'href': '/pricing',
+            'href': '/membership',
         },
         {
             'kind': 'dropdown',

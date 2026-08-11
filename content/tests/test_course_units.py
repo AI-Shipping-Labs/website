@@ -312,7 +312,7 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
         self.assertEqual(response.status_code, 403)
         # Issue #1335: the free-course anonymous nudge is an authentication
         # gate — Sign In primary + Create a free account companion, no
-        # upgrade/pricing route.
+        # upgrade/membership route.
         self.assertContains(
             response, 'Sign in to read this lesson', status_code=403,
         )
@@ -331,7 +331,7 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
             status_code=403,
         )
         self.assertContains(response, 'Upgrade', status_code=403)
-        self.assertContains(response, 'href="/pricing"', status_code=403)
+        self.assertContains(response, 'href="/membership"', status_code=403)
         # A free account grants no access to paid content, so the paid wall
         # no longer offers a "Create a free account" signup CTA — the only
         # forward path is Upgrade.

@@ -59,7 +59,7 @@ Supporting line above the filter controls (replaces nothing, sits with `Filter b
 |-----|-------|--------|-------|
 | Primary | the project card grid itself | `/projects/<slug>` | The content is the product here; no button should compete with the grid. |
 | Secondary (new, under subhead) | `Create a free account` | `/accounts/register/` | Supporting line: `Free members can read every open project and submit their own.` |
-| Tertiary (new, under subhead) | `View membership tiers` | `/pricing` | Text link, not a button. Label matches the canonical pricing CTA agreed in `landing-copy.md`. |
+| Tertiary (new, under subhead) | `View membership tiers` | `/membership` | Text link, not a button. Label matches the canonical pricing CTA agreed in `landing-copy.md`. |
 
 ### 1.5 Empty-state and gated-state copy
 
@@ -217,7 +217,7 @@ Preview section (strings live in `content/views/workshops.py:654-659`):
 | CTA | Label | Target | Notes |
 |-----|-------|--------|-------|
 | Primary | `Browse all workshops` | `/workshops/catalog` | Keep as is. |
-| Secondary | `View membership tiers` | `/pricing` | Relabel from `View membership options` to match the canonical pricing CTA agreed in `landing-copy.md`. |
+| Secondary | `View membership tiers` | `/membership` | Relabel from `View membership options` to match the canonical pricing CTA agreed in `landing-copy.md`. |
 | Preview section | `View all workshops` | `/workshops/catalog` | Keep as is. |
 
 ### 3.5 Empty-state and gated-state copy
@@ -422,7 +422,7 @@ The current split already has this shape; the copy just needs to stop calling th
 | 6 | `writeups` vs `tutorial pages` vs `step-by-step pages` for workshop step content | `workshops_list.html:4,18,46`, `workshops.py:655,675` | `tutorial pages` (matches routes and product.md's workshop feature table). Reserve `writeup` for the workshop landing description, and `Tutorial` alone for the separate `/tutorials` content type. |
 | 7 | `community moments` | `events_list.html:19` | Name the real things: `community calls`. `Moments` is filler. |
 
-Alignment note: `_docs/landing-pages/landing-copy.md` (the parallel audit of `/blog`, `/resources`, `/downloads`, `/courses`, `/sprints`, `/activities`) records five drifts of its own — `cohort` vs `sprint`, `plans` vs `membership tiers`, `Learning Paths` vs `courses`, `resources` vs `downloads`/`links`, and inconsistent pricing CTA labels. None conflict with the table above. This document adopts its canonical pricing CTA label, `View membership tiers`, for every button or link pointing at `/pricing` (sections 1.4 and 3.4).
+Alignment note: `_docs/landing-pages/landing-copy.md` (the parallel audit of `/blog`, `/resources`, `/downloads`, `/courses`, `/sprints`, `/activities`) records five drifts of its own — `cohort` vs `sprint`, `plans` vs `membership tiers`, `Learning Paths` vs `courses`, `resources` vs `downloads`/`links`, and inconsistent pricing CTA labels. None conflict with the table above. This document adopts its canonical pricing CTA label, `View membership tiers`, for every button or link pointing at `/membership` (sections 1.4 and 3.4).
 
 ## 8. Claims needing product confirmation
 

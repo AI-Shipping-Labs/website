@@ -66,7 +66,7 @@ def _ensure_pricing_tiers():
 def _goto_pricing(page, django_server, width=1280, height=900):
     _ensure_pricing_tiers()
     page.set_viewport_size({"width": width, "height": height})
-    page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+    page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
     page.locator("#pricing-section").scroll_into_view_if_needed()
 
 

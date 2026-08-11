@@ -744,7 +744,7 @@ class TestUtmBlankOverrideDefault874:
 
         # Leave both overrides blank.
         page.fill('#utm-add-link-form input[name="utm_content"]', "launch")
-        page.fill('#utm-add-link-form input[name="destination"]', "/pricing")
+        page.fill('#utm-add-link-form input[name="destination"]', "/membership")
         page.click('button:has-text("Add link")')
         page.wait_for_load_state("domcontentloaded")
 

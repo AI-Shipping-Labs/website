@@ -3,7 +3,6 @@ from django.test import TestCase
 from content.models import SiteConfig
 from content.tier_config import (
     get_activities,
-    get_curated_activities,
     get_tiers,
     get_tiers_with_features,
 )
@@ -185,7 +184,7 @@ class GetActivitiesTest(TestCase):
     def test_activity_dict_has_default_action_metadata(self):
         activities = get_activities()
         self.assertEqual(activities[0]['action_label'], 'Compare membership options')
-        self.assertEqual(activities[0]['action_url'], '/pricing')
+        self.assertEqual(activities[0]['action_url'], '/membership')
 
     def test_description_is_stripped(self):
         SiteConfig.objects.update_or_create(
@@ -307,59 +306,6 @@ class GetActivitiesTest(TestCase):
         self.assertEqual(unique['tiers'], ['main'])
 
 
-class GetCuratedActivitiesTest(TestCase):
-    def test_returns_exact_code_owned_activity_contract(self):
-        activities = get_curated_activities()
-
-        self.assertEqual(
-            [activity['slug'] for activity in activities],
-            [
-                'community-sprints',
-                'live-events',
-                'workshops',
-                'slack-community',
-                'personal-plans',
-                'exclusive-content',
-                'courses',
-            ],
-        )
-        self.assertEqual(
-            [activity['title'] for activity in activities],
-            [
-                'Community sprints',
-                'Live events',
-                'Hands-on workshops',
-                'Private Slack community',
-                'Personalized plans and accountability',
-                'Exclusive written content',
-                'Mini-courses',
-            ],
-        )
-        self.assertEqual(
-            [activity['tiers'] for activity in activities],
-            [
-                ('main', 'premium'),
-                ('main', 'premium'),
-                ('main', 'premium'),
-                ('main', 'premium'),
-                ('main', 'premium'),
-                ('basic', 'main', 'premium'),
-                ('premium',),
-            ],
-        )
-
-    def test_returns_fresh_dicts_without_reading_site_config(self):
-        SiteConfig.objects.create(key='tiers', data=[])
-
-        first = get_curated_activities()
-        first[0]['title'] = 'Changed by caller'
-
-        self.assertEqual(
-            get_curated_activities()[0]['title'],
-            'Community sprints',
-        )
-
-
 class ProductionYamlTest(TestCase):
     """Tests that production tiers.yaml data (loaded into DB) matches expected structure."""
 
@@ -405,44 +351,43 @@ class ProductionYamlTest(TestCase):
         self.assertEqual(tiers[2]['price_monthly'], 100)
         self.assertEqual(tiers[2]['price_annual'], 1000)
 
-    def test_activity_counts_per_tier(self):
-        """Basic owns 3, Main owns 9, Premium owns 3 activities."""
+    def test_benefit_counts_per_tier(self):
+        """Each paid tier owns only its incremental benefits."""
         tiers = get_tiers()
-        self.assertEqual(len(tiers[0]['activities']), 3)
-        self.assertEqual(len(tiers[1]['activities']), 9)
-        self.assertEqual(len(tiers[2]['activities']), 3)
+        self.assertEqual(len(tiers[0]['benefits']), 2)
+        self.assertEqual(len(tiers[1]['benefits']), 5)
+        self.assertEqual(len(tiers[2]['benefits']), 3)
 
-    def test_total_activities_is_15(self):
-        activities = get_activities()
-        self.assertEqual(len(activities), 15)
+    def test_total_benefits_is_10(self):
+        benefits = get_activities()
+        self.assertEqual(len(benefits), 10)
 
-    def test_activities_page_filter_counts(self):
-        """Basic shows 3, Main shows 12 (3+9), Premium shows 15 (3+9+3)."""
-        activities = get_activities()
-        basic_count = len([a for a in activities if 'basic' in a['tiers']])
-        main_count = len([a for a in activities if 'main' in a['tiers']])
-        premium_count = len([a for a in activities if 'premium' in a['tiers']])
-        self.assertEqual(basic_count, 3)
-        self.assertEqual(main_count, 12)
-        self.assertEqual(premium_count, 15)
+    def test_benefit_inheritance_counts(self):
+        benefits = get_activities()
+        basic_count = len([a for a in benefits if 'basic' in a['tiers']])
+        main_count = len([a for a in benefits if 'main' in a['tiers']])
+        premium_count = len([a for a in benefits if 'premium' in a['tiers']])
+        self.assertEqual(basic_count, 2)
+        self.assertEqual(main_count, 7)
+        self.assertEqual(premium_count, 10)
 
     def test_homepage_basic_feature_count(self):
-        """Basic tier should have 5 feature bullets on homepage."""
+        """Basic shows its two incremental benefits."""
         tiers = get_tiers_with_features()
         basic_features = tiers[0]['features']
-        self.assertEqual(len(basic_features), 5)
+        self.assertEqual(len(basic_features), 2)
 
     def test_homepage_main_feature_count(self):
-        """Main tier should have 10 feature bullets (1 inheritance + 9 own)."""
+        """Main shows one inheritance line plus five benefits."""
         tiers = get_tiers_with_features()
         main_features = tiers[1]['features']
-        self.assertEqual(len(main_features), 10)
+        self.assertEqual(len(main_features), 6)
 
     def test_homepage_premium_feature_count(self):
-        """Premium tier should have 6 feature bullets (1 inheritance + 5 own)."""
+        """Premium shows one inheritance line plus three benefits."""
         tiers = get_tiers_with_features()
         premium_features = tiers[2]['features']
-        self.assertEqual(len(premium_features), 6)
+        self.assertEqual(len(premium_features), 4)
 
     def test_homepage_main_starts_with_everything_in_basic(self):
         tiers = get_tiers_with_features()
@@ -453,127 +398,87 @@ class ProductionYamlTest(TestCase):
         self.assertEqual(tiers[2]['features'][0]['text'], 'Everything in Main')
 
 
-class ActivitiesViewIntegrationTest(TestCase):
-    """Test that the activities view uses the curated code-owned data."""
-
+class MembershipViewIntegrationTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         from pathlib import Path
 
         import yaml
+
         fixture_path = Path(__file__).parent / 'fixtures' / 'tiers.yaml'
-        with open(fixture_path) as f:
-            tiers_data = yaml.safe_load(f)
+        with open(fixture_path) as handle:
+            tiers_data = yaml.safe_load(handle)
         SiteConfig.objects.create(key='tiers', data=tiers_data)
 
-    def test_activities_page_shows_exactly_seven_curated_activities(self):
+    def test_legacy_activities_url_redirects_to_membership_benefits(self):
         response = self.client.get('/activities')
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.context['activities']), 7)
-        self.assertContains(response, 'data-testid="activity-card"', count=7)
 
-    def test_activities_page_basic_count(self):
-        response = self.client.get('/activities')
-        self.assertEqual(response.context['basic_count'], 1)
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response['Location'], '/membership#activities')
 
-    def test_activities_page_main_count(self):
-        response = self.client.get('/activities')
-        self.assertEqual(response.context['main_count'], 6)
-
-    def test_activities_page_premium_count(self):
-        response = self.client.get('/activities')
-        self.assertEqual(response.context['premium_count'], 7)
-
-    def test_activities_page_contains_tier_specific_activity(self):
-        response = self.client.get('/activities')
-        self.assertContains(response, 'Exclusive written content')
-        self.assertContains(response, 'Private Slack community')
-        self.assertContains(response, 'Mini-courses')
-
-    def test_access_by_tier_section_is_first_activity_surface(self):
-        response = self.client.get('/activities')
+    def test_plans_precede_explained_benefits_and_previews(self):
+        response = self.client.get('/membership')
         body = response.content.decode()
 
-        access_index = body.index('id="access-by-tier"')
-        sprint_index = body.index('id="community-sprints"')
+        self.assertLess(body.index('id="pricing-section"'), body.index('id="activities"'))
+        self.assertLess(body.index('id="activities"'), body.index('id="community-sprints"'))
+        self.assertContains(response, 'data-testid="pricing-tier-card"', count=4)
+        self.assertContains(response, 'data-testid="membership-benefit-row"', count=8)
 
-        self.assertLess(access_index, sprint_index)
-        self.assertContains(
-            response,
-            'data-testid="activities-access-by-tier-section"',
+    def test_plan_bullets_are_cumulative_without_repetition(self):
+        response = self.client.get('/membership')
+        tiers = {
+            item['tier'].slug: [feature['title'] for feature in item['pricing_features']]
+            for item in response.context['tiers_data']
+        }
+
+        self.assertEqual(
+            tiers['basic'],
+            ['Exclusive written content', 'Workshop content'],
         )
-        self.assertContains(response, 'Membership benefits by tier')
-        self.assertContains(response, 'Compare what Basic, Main, and Premium unlock')
+        self.assertEqual(tiers['main'][0], 'Everything in Basic')
+        self.assertEqual(
+            tiers['main'][1:],
+            [
+                'Community sprints',
+                'Live events',
+                'Private Slack community',
+                'Personalized onboarding plan',
+                'Topic voting',
+            ],
+        )
+        self.assertEqual(
+            tiers['premium'],
+            [
+                'Everything in Main',
+                'Courses',
+                'Resume and LinkedIn teardown',
+                'GitHub feedback',
+            ],
+        )
 
-    def test_obsolete_filter_controls_and_script_are_absent(self):
-        response = self.client.get('/activities')
+    def test_only_benefits_with_descriptions_are_explained(self):
+        config = SiteConfig.objects.get(key='tiers')
+        config.data[0]['benefits'].append({
+            'title': 'Pricing-only benefit',
+            'description': '',
+            'icon': 'circle',
+        })
+        config.save(update_fields=['data'])
 
-        self.assertNotContains(response, 'data-testid="activities-tier-filter"')
-        self.assertNotContains(response, 'filterActivities')
-
-    def test_activity_cards_render_required_fields_and_tier_inclusion(self):
-        response = self.client.get('/activities')
-        body = response.content.decode()
-
-        basic_start = body.index('Exclusive written content')
-        basic_card = body[
-            body.rfind('data-testid="activity-card"', 0, basic_start):
-            body.find('</article>', basic_start)
+        response = self.client.get('/membership')
+        explained_titles = [
+            item['title'] for item in response.context['membership_benefits']
         ]
-        main_start = body.index('Private Slack community')
-        main_card = body[
-            body.rfind('data-testid="activity-card"', 0, main_start):
-            body.find('</article>', main_start)
-        ]
-        premium_start = body.index('Mini-courses')
-        premium_card = body[
-            body.rfind('data-testid="activity-card"', 0, premium_start):
-            body.find('</article>', premium_start)
-        ]
+        basic_features = next(
+            item['pricing_features']
+            for item in response.context['tiers_data']
+            if item['tier'].slug == 'basic'
+        )
 
-        self.assertIn('data-lucide="file-text"', basic_card)
-        self.assertIn('Exclusive articles, tutorials with code examples', basic_card)
-        self.assertIn('data-tier="basic" data-included="true"', basic_card)
-        self.assertIn('data-tier="main" data-included="true"', basic_card)
-        self.assertIn('data-tier="premium" data-included="true"', basic_card)
-
-        self.assertIn('data-tier="basic" data-included="false"', main_card)
-        self.assertIn('data-tier="main" data-included="true"', main_card)
-        self.assertIn('data-tier="premium" data-included="true"', main_card)
-
-        self.assertIn('data-tier="basic" data-included="false"', premium_card)
-        self.assertIn('data-tier="main" data-included="false"', premium_card)
-        self.assertIn('data-tier="premium" data-included="true"', premium_card)
-
-    def test_quick_comparison_uses_activity_data_counts(self):
-        response = self.client.get('/activities')
-        body = response.content.decode()
-
-        quick_comparison = body[body.index('data-testid="activities-quick-comparison"'):]
-        self.assertIn('1 activity', quick_comparison)
-        self.assertIn('6 activities', quick_comparison)
-        self.assertIn('All 7 activities', quick_comparison)
-
-
-class ActivitiesViewFallbackTest(TestCase):
-    def test_missing_tier_config_does_not_change_curated_activity_grid(self):
-        response = self.client.get('/activities#access-by-tier')
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.context['activities']), 7)
-        self.assertNotContains(response, 'data-testid="activities-tier-empty"')
-        self.assertContains(response, 'href="/pricing"')
-        self.assertContains(response, 'data-testid="activity-card"', count=7)
-
-    def test_empty_tier_config_does_not_change_curated_activity_grid(self):
-        _seed_tiers([])
-
-        response = self.client.get('/activities')
-
-        self.assertEqual(len(response.context['activities']), 7)
-        self.assertNotContains(response, 'data-testid="activities-tier-empty"')
-        self.assertContains(response, 'href="/pricing"')
-        self.assertContains(response, 'id="activities-grid"')
+        self.assertNotIn('Pricing-only benefit', explained_titles)
+        self.assertIn('Pricing-only benefit', [item['title'] for item in basic_features])
+        self.assertContains(response, 'Pricing-only benefit', count=1)
 
 
 class HomepageTiersIntegrationTest(TestCase):

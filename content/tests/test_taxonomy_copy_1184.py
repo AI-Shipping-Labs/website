@@ -189,7 +189,7 @@ class PublicTaxonomyCopy1184Test(TierSetupMixin, TestCase):
         self.assertNotContains(events_response, 'Join live workshops')
 
         self.assertContains(calendar_response, 'Live community events calendar')
-        self.assertContains(calendar_response, 'plan registration and attendance')
+        self.assertContains(calendar_response, 'registration opportunities')
         self.assertContains(
             calendar_response,
             'Monthly calendar view of scheduled AI Shipping Labs live community events',
@@ -199,7 +199,7 @@ class PublicTaxonomyCopy1184Test(TierSetupMixin, TestCase):
         response = self.client.get('/events?filter=past')
 
         self.assertContains(response, 'Past event recordings')
-        self.assertContains(response, 'Catch up on live sessions you missed')
+        self.assertNotContains(response, 'Catch up on live sessions you missed')
         self.assertNotContains(response, 'legacy discovery')
         self.assertNotContains(response, 'canonical learning artifact')
         self.assertContains(response, self.standalone_recording.title)
@@ -217,11 +217,11 @@ class PublicTaxonomyCopy1184Test(TierSetupMixin, TestCase):
         self.assertContains(workshops_response, 'Hands-on AI workshops')
         self.assertContains(
             workshops_response,
-            'Workshops start as live sessions on the events calendar',
+            'In each workshop we turn an idea into a concrete guided path',
         )
         self.assertContains(
             workshops_response,
-            'the recording, tutorial pages, and materials move here',
+            'a step-by-step tutorial',
         )
         self.assertNotContains(workshops_response, 'durable hands-on learning artifact')
 

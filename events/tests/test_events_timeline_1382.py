@@ -3,19 +3,21 @@
 Covers the presentation behaviors introduced by the redesign:
 - default view is Upcoming only (Past lives behind ?filter=past),
 - events are grouped into ordered per-date buckets,
-- a series occurrence renders the "Weekly series" badge + cadence line and
-  collapses to the next occurrence (never lists every session),
-- a right-side thumbnail renders only for an authored cover image, never the
-  auto-generated banner,
+- a series renders its stable title, access, session count, and next time in
+  one row rather than listing every occurrence,
+- event rows stay text-first even when authored or generated banners exist,
 - past recordings show the "Watch recording" CTA.
 """
 
 from datetime import UTC, datetime, time, timedelta
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
 from events.models import Event, EventSeries
+
+User = get_user_model()
 
 
 def _future_utc(days, hour=9):
@@ -73,6 +75,68 @@ class TimelineDefaultUpcomingOnlyTest(TestCase):
         self.assertContains(response, 'No upcoming events yet')
 
 
+class TimelineTimezoneNoteTest(TestCase):
+    def test_anonymous_list_and_calendar_explain_source_timezones(self):
+        for url in ('/events', '/events/calendar'):
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertContains(response, 'data-testid="events-timezone-note"')
+                self.assertContains(
+                    response, "Event times are shown in each event's timezone.",
+                )
+                self.assertContains(response, 'Sign in to use your timezone')
+
+    def test_member_list_and_calendar_name_preferred_timezone_once(self):
+        member = User.objects.create_user(
+            email='timeline-timezone@example.com',
+            password='pw',
+            preferred_timezone='Europe/Berlin',
+        )
+        self.client.force_login(member)
+
+        for url in ('/events', '/events/calendar'):
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertContains(
+                    response,
+                    'Event times are shown in your timezone: Europe/Berlin.',
+                )
+                self.assertContains(response, 'Change timezone')
+
+    def test_series_uses_authored_timezone_then_member_preference(self):
+        series = EventSeries.objects.create(
+            name='Timezone Series',
+            slug='timezone-series-1382',
+            timezone='America/New_York',
+        )
+        Event.objects.create(
+            title='Timezone Session',
+            slug='timezone-session-1382',
+            start_datetime=_future_utc(3),
+            timezone='America/New_York',
+            status='upcoming',
+            origin='studio',
+            event_series=series,
+            series_position=1,
+        )
+        anonymous = self.client.get(series.get_absolute_url())
+        self.assertContains(
+            anonymous, 'Event times are shown in America/New_York.',
+        )
+
+        member = User.objects.create_user(
+            email='series-timezone@example.com',
+            password='pw',
+            preferred_timezone='Asia/Kolkata',
+        )
+        self.client.force_login(member)
+        signed_in = self.client.get(series.get_absolute_url())
+        self.assertContains(
+            signed_in,
+            'Event times are shown in your timezone: Asia/Kolkata.',
+        )
+
+
 class TimelineDateGroupingTest(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -122,8 +186,8 @@ class TimelineDateGroupingTest(TestCase):
     def test_each_card_shows_a_clock_time(self):
         response = self.client.get('/events')
         self.assertContains(response, 'data-testid="event-card-time"')
-        # 12-hour meridiem labels from the view helper.
-        self.assertContains(response, ' AM')
+        # Compact 24-hour labels from the view helper.
+        self.assertContains(response, '09:00')
 
 
 class TimelineSeriesCardTest(TestCase):
@@ -149,19 +213,18 @@ class TimelineSeriesCardTest(TestCase):
                 series_position=i + 1,
             )
 
-    def test_series_collapses_to_one_card_with_weekly_badge_and_cadence(self):
+    def test_series_collapses_to_one_card_with_badge_count_and_next_time(self):
         response = self.client.get('/events')
         self.assertContains(response, 'data-testid="event-series-card"')
-        self.assertContains(response, 'Weekly series')
-        self.assertContains(
-            response, 'Every Monday · part of Build Club',
-        )
+        self.assertContains(response, '>Series<')
         self.assertContains(response, '3 upcoming sessions')
+        self.assertContains(response, '18:00')
 
     def test_series_card_does_not_list_every_session(self):
         response = self.client.get('/events')
-        # Only the next occurrence is previewed.
-        self.assertContains(response, 'Build Club Session 0')
+        # The stable series title replaces repeated occurrence titles.
+        self.assertContains(response, 'Build Club')
+        self.assertNotContains(response, 'Build Club Session 0')
         self.assertNotContains(response, 'Build Club Session 1')
         self.assertNotContains(response, 'Build Club Session 2')
         # Exactly one series card for the three occurrences.
@@ -172,7 +235,7 @@ class TimelineSeriesCardTest(TestCase):
 
 
 class TimelineThumbnailTest(TestCase):
-    def test_authored_cover_renders_thumbnail(self):
+    def test_authored_cover_is_not_repeated_in_text_first_row(self):
         Event.objects.create(
             title='Covered Event',
             slug='covered-event-1382',
@@ -182,8 +245,8 @@ class TimelineThumbnailTest(TestCase):
             cover_image_url='https://cdn.aishippinglabs.com/events/cover.jpg',
         )
         response = self.client.get('/events')
-        self.assertContains(response, 'data-testid="event-card-thumbnail"')
-        self.assertContains(
+        self.assertNotContains(response, 'data-testid="event-card-thumbnail"')
+        self.assertNotContains(
             response, 'https://cdn.aishippinglabs.com/events/cover.jpg',
         )
 

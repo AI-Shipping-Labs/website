@@ -103,10 +103,10 @@ class PublicEventListDatetimeTest(TestCase):
 
         response = self.client.get('/events?filter=upcoming')
 
-        # start_datetime is 16:00 UTC; UTC fallback yields the 4:00 PM label.
+        # start_datetime is 16:00 UTC; the compact label stays 24-hour.
         expected = _expected_time_label(event, tz_name='UTC')
         self.assertContains(response, expected)
-        self.assertContains(response, '4:00 PM')
+        self.assertContains(response, '16:00')
 
     def test_single_occurrence_series_fallback_uses_single_event_datetime(self):
         series = EventSeries.objects.create(
@@ -169,4 +169,4 @@ class PublicEventListDatetimeTest(TestCase):
         self.assertContains(response, 'data-testid="event-series-card"')
         self.assertContains(response, _expected_time_label(first))
         self.assertContains(response, '2 upcoming sessions')
-        self.assertContains(response, 'data-testid="series-card-see-more"')
+        self.assertContains(response, 'Grouped Weekly Series')

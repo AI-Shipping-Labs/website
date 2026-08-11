@@ -294,9 +294,9 @@ class EventsListPageTest(TestCase):
         self.assertContains(response, 'data-testid="event-card-time"')
         self.assertNotContains(response, self.upcoming_event.formatted_time())
 
-    def test_event_card_shows_location(self):
+    def test_event_card_omits_default_zoom_location(self):
         response = self.client.get('/events')
-        self.assertContains(response, 'Zoom')
+        self.assertNotContains(response, 'data-testid="event-card-platform"')
 
 
 class EventsListDefaultPastPaginationTest(TestCase):
@@ -533,8 +533,9 @@ class EventsListRecordingLinkTest(TestCase):
         # Issue #1382: past recordings live on the Past toggle now.
         response = self.client.get('/events?filter=past')
         # The card itself already links to /events/<id>/<slug>. The past
-        # timeline shows a "Recording available" indicator for such events.
-        self.assertContains(response, 'Recording available')
+        # The shared card identifies the row as a recording and exposes its CTA.
+        self.assertContains(response, 'data-testid="event-card-kind"')
+        self.assertContains(response, 'data-testid="past-card-recording-cta"')
         self.assertContains(response, event.get_absolute_url())
         # Must not link out to the old standalone recording surface.
         self.assertNotContains(response, '/event-recordings/')
@@ -573,7 +574,7 @@ class EventDetailPageTest(TestCase):
     def test_detail_template(self):
         response = self.client.get(self.event.get_absolute_url())
         self.assertTemplateUsed(response, 'events/event_detail.html')
-        self.assertTemplateUsed(response, 'events/_event_hero_media.html')
+        self.assertTemplateNotUsed(response, 'events/_event_hero_media.html')
         self.assertTemplateUsed(response, 'events/_event_header.html')
         self.assertTemplateUsed(response, 'events/_event_registration_card.html')
         self.assertTemplateUsed(response, 'events/_event_description.html')
@@ -1542,11 +1543,9 @@ class EventsListRegisteredBadgeTest(TestCase):
 
 
 class EventDetailCoverImageTest(TestCase):
-    """Issue #484 + #651: event detail page renders cover image when
-    set, and renders no hero block at all when cover_image_url is
-    empty."""
+    """Event detail stays text-first regardless of social-card artwork."""
 
-    def test_event_detail_with_cover_renders_image(self):
+    def test_event_detail_with_cover_still_renders_no_hero(self):
         event = Event.objects.create(
             title='With Cover',
             slug='with-cover',
@@ -1555,8 +1554,7 @@ class EventDetailCoverImageTest(TestCase):
             cover_image_url='https://cdn.example.com/cover.jpg',
         )
         response = self.client.get(event.get_absolute_url())
-        self.assertContains(response, 'data-testid="event-cover-image"')
-        self.assertContains(response, 'https://cdn.example.com/cover.jpg')
+        self.assertNotContains(response, 'data-testid="event-cover-image"')
         self.assertNotContains(response, 'data-testid="event-cover-fallback"')
 
     def test_event_detail_without_cover_renders_no_hero(self):

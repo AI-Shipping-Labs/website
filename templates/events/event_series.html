@@ -30,7 +30,7 @@
 {% include "includes/_studio_edit_button.html" with obj=series %}
 <main class="min-h-screen pt-24">
   <section class="py-8 sm:py-16 lg:py-24">
-    <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+    <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
       <div class="mb-10">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Event series</p>
         <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl" data-testid="series-name">{{ series.name }}</h1>
@@ -48,6 +48,21 @@
           {{ series.schedule_label }}
         </p>
         {% endif %}
+        <p class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground" data-testid="series-timezone-note">
+          <span class="inline-flex items-center gap-1.5">
+            <i data-lucide="globe-2" class="h-4 w-4" aria-hidden="true"></i>
+            {% if user.is_authenticated %}
+            Event times are shown in your timezone: {{ series_display_timezone }}.
+            {% else %}
+            Event times are shown in {{ series_display_timezone }}.
+            {% endif %}
+          </span>
+          {% if user.is_authenticated %}
+          <a href="/account/#display-preferences-section" class="font-medium text-accent hover:underline">Change timezone</a>
+          {% else %}
+          <a href="/accounts/login/?next={{ series.get_absolute_url|urlencode }}" class="font-medium text-accent hover:underline">Sign in to use your timezone</a>
+          {% endif %}
+        </p>
         {% if series.description_html %}
         <div class="prose prose-invert mt-4 max-w-none">
           {{ series.description_html|safe }}
@@ -117,11 +132,7 @@
             </a>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span data-testid="series-event-date">
-                {% if user.is_authenticated %}
-                  {% user_event_datetime event.start_datetime user fmt='%a, %b %d, %Y, %H:%M' %}
-                {% else %}
-                  {{ event|event_source_full_datetime }}
-                {% endif %}
+                {% timezone series_display_timezone %}{{ event.start_datetime|date:'D, M j, Y · H:i' }}{% endtimezone %}
               </span>
               {# Issue #668: per-occurrence social-proof chip. View annotates #}
               {# _attendee_count so this renders in a single SQL pass. #}
@@ -139,6 +150,7 @@
               {% member_access_badge event.required_level testid="series-event-tier" %}
             </div>
           </div>
+          {% if event.status == 'cancelled' or event.user_reg_state != 'register' %}
           <div class="flex-shrink-0 text-sm">
             {# Issue #863/#866: staff preview surfaces cancelled occurrences #}
             {# with a clear red chip; the public list never includes them. #}
@@ -156,12 +168,9 @@
               <i data-lucide="lock" class="h-3 w-3"></i>
               Upgrade to register
             </a>
-            {% else %}
-            <a href="{{ event.get_absolute_url }}" class="inline-flex min-h-[44px] items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-foreground hover:bg-secondary/80" data-testid="series-event-state-register">
-              Register
-            </a>
             {% endif %}
           </div>
+          {% endif %}
         </li>
         {% endfor %}
       </ol>

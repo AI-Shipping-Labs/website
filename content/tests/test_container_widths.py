@@ -76,7 +76,9 @@ AUDITED_PAGE_WIDTHS = {
     # 2026-07-21 widening was originally protecting.
     "templates/content/sprints_index.html": "max-w-3xl",
     "templates/plans/sprint_detail.html": "max-w-3xl",
-    "templates/events/events_list.html": "max-w-5xl",
+    "templates/events/events_list.html": "max-w-3xl",
+    "templates/events/event_detail.html": "max-w-3xl",
+    "templates/events/event_series.html": "max-w-3xl",
     # Book Club: the collection hub has room for its grid; once a book is
     # opened, every lifecycle and reader surface shares the Reader width.
     "templates/bookclub/index.html": "max-w-5xl",

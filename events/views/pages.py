@@ -298,10 +298,8 @@ def _event_local_datetime(start_datetime, event_timezone, viewer_tz):
 
 
 def _format_time_label(local_dt):
-    """Return a 12-hour "4:00 PM" clock label (portable, no ``%-I``)."""
-    hour = local_dt.hour % 12 or 12
-    suffix = 'AM' if local_dt.hour < 12 else 'PM'
-    return f'{hour}:{local_dt.minute:02d} {suffix}'
+    """Return the compact 24-hour clock label used by timeline rows."""
+    return local_dt.strftime('%H:%M')
 
 
 def _group_timeline_days(rows, viewer_tz):
@@ -341,6 +339,8 @@ def _group_timeline_days(rows, viewer_tz):
 def events_calendar(request, year=None, month=None):
     """Monthly calendar grid view for events."""
     today = date.today()
+    viewer_tz = _viewer_timezone(request.user)
+    events_display_timezone = str(viewer_tz) if viewer_tz is not None else ''
     year = year or today.year
     month = month or today.month
 
@@ -424,6 +424,7 @@ def events_calendar(request, year=None, month=None):
         'today': today,
         'events_list': events,
         'agenda_days': agenda_days,
+        'events_display_timezone': events_display_timezone,
         'subscribe_urls': build_subscribe_urls(),
     }
     return render(request, 'events/events_calendar.html', context)
@@ -450,6 +451,7 @@ def events_list(request):
     now = timezone.now()
     user = request.user
     viewer_tz = _viewer_timezone(user)
+    events_display_timezone = str(viewer_tz) if viewer_tz is not None else ''
 
     # Registration info for authenticated viewers (drives the Registered pill).
     registered_event_ids = set()
@@ -516,6 +518,7 @@ def events_list(request):
         'selected_tags': selected_tags,
         'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
         'registered_event_ids': registered_event_ids,
+        'events_display_timezone': events_display_timezone,
         'base_path': '/events',
         'subscribe_urls': subscribe_urls,
     }
@@ -1088,6 +1091,18 @@ def event_series_public(request, series_id, slug):
 
     user = request.user
 
+    # Show the timezone once above the occurrence list instead of repeating it
+    # after every timestamp. Signed-in preferences take precedence; anonymous
+    # visitors see the series' authored timezone.
+    if user.is_authenticated and is_valid_timezone(user.preferred_timezone):
+        series_display_timezone = user.preferred_timezone
+    elif user.is_authenticated:
+        series_display_timezone = 'UTC'
+    elif is_valid_timezone(series.timezone):
+        series_display_timezone = series.timezone
+    else:
+        series_display_timezone = 'UTC'
+
     # Issue #857: per-occurrence registration state and the standing
     # series-registration flag drive the register UI on this page.
     is_series_registered = False
@@ -1137,6 +1152,7 @@ def event_series_public(request, series_id, slug):
     return render(request, 'events/event_series.html', {
         'series': series,
         'events': events,
+        'series_display_timezone': series_display_timezone,
         'is_series_registered': is_series_registered,
         'has_upcoming_to_register': has_upcoming_to_register,
         'upcoming_count': upcoming_count,

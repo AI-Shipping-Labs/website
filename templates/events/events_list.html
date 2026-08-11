@@ -22,6 +22,21 @@
         <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
           Live community events
         </h1>
+        <p class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground" data-testid="events-timezone-note">
+          <span class="inline-flex items-center gap-1.5">
+            <i data-lucide="globe-2" class="h-4 w-4" aria-hidden="true"></i>
+            {% if request.user.is_authenticated %}
+            Event times are shown in your timezone: {{ events_display_timezone }}.
+            {% else %}
+            Event times are shown in each event's timezone.
+            {% endif %}
+          </span>
+          {% if request.user.is_authenticated %}
+          <a href="/account/#display-preferences-section" class="font-medium text-accent hover:underline">Change timezone</a>
+          {% else %}
+          <a href="/accounts/login/?next={% url 'events_list' %}" class="font-medium text-accent hover:underline">Sign in to use your timezone</a>
+          {% endif %}
+        </p>
       </div>
 
       <div class="mb-8 flex flex-wrap items-center justify-between gap-3" data-testid="events-list-toolbar">
@@ -70,12 +85,6 @@
       <!-- Past event recordings timeline -->
       <div data-testid="events-past-section">
         {% if past_days %}
-        <div class="mb-8">
-          <h2 class="text-xl font-semibold tracking-tight">Past event recordings</h2>
-          <p class="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Catch up on live sessions you missed. When a recording comes from a workshop, its card takes you to the workshop page, where the recording lives alongside the tutorial and code. Standalone recordings play right here.
-          </p>
-        </div>
         {% include "events/_events_timeline.html" with days=past_days %}
 
         {% if is_paginated %}

@@ -400,9 +400,10 @@ class PublicEventSeriesViewTest(TestCase):
             event_series=self.series, series_position=3, origin='studio',
         )
         response = self.client.get(self.series.get_absolute_url())
-        self.assertContains(response, 'Monday, Jun 15, 2026 · 18:00 Europe/Berlin')
+        self.assertContains(response, 'Mon, Jun 15, 2026 · 18:00')
+        self.assertContains(response, 'Event times are shown in Europe/Berlin.')
         # The raw UTC clock time labeled Berlin must NOT appear.
-        self.assertNotContains(response, '16:00 Europe/Berlin')
+        self.assertNotContains(response, '16:00')
 
     def test_canonical_and_og_url_use_absolute_series_url(self):
         response = self.client.get(self.series.get_absolute_url())
@@ -439,9 +440,13 @@ class PublicEventSeriesViewTest(TestCase):
 
         self.assertContains(
             response,
-            'Mon, Jun 15, 2026, 12:00 America/New_York',
+            'Mon, Jun 15, 2026 · 12:00',
         )
-        self.assertNotContains(response, 'Monday, Jun 15, 2026 · 18:00 Europe/Berlin')
+        self.assertContains(
+            response,
+            'Event times are shown in your timezone: America/New_York.',
+        )
+        self.assertNotContains(response, '18:00')
 
     def test_event_detail_url_still_resolves_after_series_route(self):
         """The ``/events/series/<id>/<slug>`` route must not swallow event ids.
@@ -841,33 +846,29 @@ class UpcomingSeriesCardCadenceTest(TestCase):
         start = html.index(card_marker)
         return html[start:start + 4000]
 
-    def test_regular_series_card_shows_weekly_label_and_suffix(self):
-        # Issue #1382: the timeline series card shows a "Weekly series" pill,
-        # a stored-day cadence line, and the upcoming-session count.
+    def test_regular_series_card_shows_stable_title_and_session_count(self):
+        # The shared series row leads with the stable series identity and next
+        # time instead of repeating cadence in a second card structure.
         response = self.client.get('/events')
         card = self._card(response, 'regular-oh')
-        self.assertIn('Weekly series', card)
-        self.assertIn(
-            'Every Wednesday · part of Regular Office Hours', card,
-        )
+        self.assertIn('>Series<', card)
+        self.assertIn('Regular Office Hours', card)
         self.assertIn('3 upcoming sessions', card)
+        self.assertIn('18:00', card)
 
-    def test_irregular_series_card_shows_session_summary_not_weekly(self):
-        # The cadence line is derived from the stored cadence/day fields, so a
-        # drifted series still reads with its stored weekday plus the session
-        # count — the honest schedule-label detection lives on the series page.
+    def test_irregular_series_card_uses_the_same_session_summary(self):
         response = self.client.get('/events')
         card = self._card(response, 'irregular-ws')
-        self.assertIn(
-            'Every Wednesday · part of Irregular Workshop', card,
-        )
+        self.assertIn('>Series<', card)
+        self.assertIn('Irregular Workshop', card)
         self.assertIn('3 upcoming sessions', card)
 
-    def test_series_card_uses_stored_badge_and_cadence(self):
+    def test_series_card_uses_shared_signal_title_and_metadata_slots(self):
         response = self.client.get('/events')
         card = self._card(response, 'regular-oh')
         self.assertIn('data-testid="series-card-badge"', card)
-        self.assertIn('data-testid="series-cadence-line"', card)
+        self.assertIn('data-testid="series-card-title"', card)
+        self.assertIn('data-testid="series-card-date"', card)
         self.assertIn('data-testid="series-card-sessions"', card)
 
 

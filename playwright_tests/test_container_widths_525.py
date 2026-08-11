@@ -329,7 +329,6 @@ LISTINGS_NARROW = [
     ('/tutorials', 'max-w-5xl', None),
     ('/downloads', 'max-w-5xl', None),
     ('/workshops', 'max-w-5xl', None),
-    ('/events', 'max-w-5xl', None),
     ('/vote', 'max-w-5xl', None),
     ('/tags', 'max-w-5xl', None),
 ]
@@ -337,7 +336,6 @@ LISTINGS_NARROW = [
 DETAIL_MEDIUM = [
     ('/courses/{course_slug}', 'max-w-5xl'),
     ('/courses/{course_slug}/{module_slug}', 'max-w-5xl'),
-    ('{event_path}', 'max-w-5xl'),
     ('/vote/{poll_uuid}', 'max-w-5xl'),
 ]
 
@@ -349,6 +347,8 @@ READER_NARROW = [
     ('/interview', 'max-w-3xl'),
     ('/workshops/catalog', 'max-w-3xl'),
     ('/workshops/{workshop_slug}', 'max-w-3xl'),
+    ('/events', 'max-w-3xl'),
+    ('{event_path}', 'max-w-3xl'),
     ('/tutorials/{tutorial_slug}', 'max-w-3xl'),
     ('/projects/{project_slug}', 'max-w-3xl'),
     ('/about', 'max-w-3xl'),

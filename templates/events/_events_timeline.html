@@ -18,11 +18,11 @@ series card, or a past recording card by ``row.kind``.
       <div class="space-y-4">
         {% for row in day.rows %}
         {% if row.kind == 'series' %}
-        {% include "events/_timeline_series_card.html" with row=row %}
+        {% include "events/_timeline_listing_card.html" with card_variant="series" row=row %}
         {% elif row.kind == 'past' %}
-        {% include "events/_timeline_past_card.html" with event=row.event display_time=row.display_time %}
+        {% include "events/_timeline_listing_card.html" with card_variant="past" event=row.event display_time=row.display_time %}
         {% else %}
-        {% include "events/_timeline_event_card.html" with event=row.event display_time=row.display_time %}
+        {% include "events/_timeline_listing_card.html" with card_variant="upcoming" event=row.event display_time=row.display_time %}
         {% endif %}
         {% endfor %}
       </div>

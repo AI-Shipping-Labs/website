@@ -18,9 +18,7 @@
     {% else %}
     {% member_status_badge event.get_status_display size="sm" testid="event-status-pill" %}
     {% endif %}
-    {% if event.required_level > 0 %}
-    {% member_tier_badge event.required_level tone="accent_strong" size="sm" icon="lock" %}
-    {% endif %}
+    {% member_access_badge event.required_level size="sm" testid="event-detail-tier" %}
     {% if event.is_external %}
     {% with external_host_label="Hosted on "|add:event.external_host %}
     {% member_label_badge external_host_label tone="accent_outline_strong" size="sm" icon="external-link" testid="event-detail-external-badge" %}

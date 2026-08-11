@@ -149,26 +149,19 @@ class EventsPresentationClassTest(TestCase):
     def test_event_card_partials_and_timeline_use_compact_rhythm(self):
         # Issue #1382 — the /events list renders a date-grouped timeline. The
         # timeline partial owns the per-day card stack rhythm (space-y-4), and
-        # each card partial carries its own testid and the compact card chrome.
+        # one shared card partial carries every variant and compact card chrome.
         timeline = (ROOT / "templates/events/_events_timeline.html").read_text()
-        event_card = (
-            ROOT / "templates/events/_timeline_event_card.html"
-        ).read_text()
-        series_card = (
-            ROOT / "templates/events/_timeline_series_card.html"
-        ).read_text()
-        past_card = (
-            ROOT / "templates/events/_timeline_past_card.html"
+        listing_card = (
+            ROOT / "templates/events/_timeline_listing_card.html"
         ).read_text()
 
         # Day column stacks its cards with the compact catalog rhythm.
         self.assertIn('class="space-y-4"', timeline)
         self.assertIn('data-testid="events-timeline"', timeline)
-        self.assertIn('data-testid="upcoming-event-card"', event_card)
-        self.assertIn('data-testid="event-series-card"', series_card)
-        self.assertIn('data-testid="past-recording-card"', past_card)
-        for source in (event_card, series_card, past_card):
-            self.assertNotIn("bg-card p-6", source)
+        self.assertIn('data-testid="event-series-card"', listing_card)
+        self.assertIn('past-recording-card', listing_card)
+        self.assertIn('upcoming-event-card', listing_card)
+        self.assertNotIn("bg-card p-6", listing_card)
 
 
 class PastEventClosureStateTest(TestCase):

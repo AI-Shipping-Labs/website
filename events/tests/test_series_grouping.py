@@ -189,25 +189,21 @@ class EventsListSeriesCardRenderTest(TestCase):
         self.assertEqual(len(series_rows), 1)
         self.assertEqual(series_rows[0]['count'], 4)
 
-    def test_grouped_card_shows_badge_next_occurrence_and_see_more(self):
+    def test_grouped_card_shows_badge_series_title_count_and_next_time(self):
         response = self.client.get('/events')
         self.assertContains(response, 'data-testid="event-series-card"')
         self.assertContains(response, 'data-testid="series-card-badge"')
-        # The next occurrence title links to the series page.
+        # The stable series title links to the series page.
         self.assertContains(
             response,
             f'<a href="{self.series.get_absolute_url()}"',
         )
         self.assertNotContains(response, '/events/groups/llm-oh')
-        self.assertContains(response, 'Office Hours Session 0')
+        self.assertContains(response, 'LLM Zoomcamp office hours')
         # Session-count meta line.
         self.assertContains(response, '4 upcoming sessions')
-        # Issue #1382: the cadence line replaces the old "Series: <name>" text.
-        self.assertContains(response, 'part of LLM Zoomcamp office hours')
-        self.assertContains(response, 'data-testid="series-cadence-line"')
         self.assertContains(response, 'data-testid="series-card-date"')
-        self.assertContains(response, 'data-testid="series-card-see-more"')
-        self.assertContains(response, 'See more')
+        self.assertNotContains(response, 'data-testid="series-card-see-more"')
         self.assertNotContains(response, 'data-testid="series-card-cta"')
         self.assertNotContains(response, 'View series')
         self.assertNotContains(response, 'data-testid="series-card-dates"')
@@ -239,10 +235,10 @@ class EventsListSeriesCardRenderTest(TestCase):
         self.assertContains(response, 'data-testid="series-card-date"')
 
     def test_individual_occurrence_titles_not_repeated_as_cards(self):
-        # The grouped card replaces the 4 per-occurrence cards: only the
-        # next occurrence title appears on the listing.
+        # The grouped card replaces all per-occurrence titles with one stable
+        # series title.
         response = self.client.get('/events')
-        self.assertContains(response, 'Office Hours Session 0')
+        self.assertNotContains(response, 'Office Hours Session 0')
         self.assertNotContains(response, 'Office Hours Session 1')
         self.assertNotContains(response, 'Office Hours Session 3')
 
@@ -425,10 +421,10 @@ class CompactSeriesPageRowsTest(TestCase):
         self.assertContains(response, 'data-testid="series-event-link"')
         self.assertContains(response, 'data-testid="series-event-date"')
 
-    def test_state_chips_render_per_occurrence_for_anon(self):
+    def test_past_state_remains_while_open_rows_link_to_detail(self):
         response = self.client.get(self.series.get_absolute_url())
-        # Open future session -> Register chip; past session -> Past chip.
-        self.assertContains(response, 'data-testid="series-event-state-register"')
+        # Open future sessions use their detail link; terminal states keep a chip.
+        self.assertNotContains(response, 'data-testid="series-event-state-register"')
         self.assertContains(response, 'data-testid="series-event-state-past"')
 
     def test_cancelled_excluded_for_public(self):

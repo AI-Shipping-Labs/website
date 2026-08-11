@@ -169,11 +169,8 @@ class MemberBadgeTemplateUsageTest(SimpleTestCase):
             # its member badges now live in the dedicated badge partial.
             'templates/events/_upcoming_event_card_badges.html',
             'templates/events/events_calendar.html',
-            # Issue #1382 — the events list renders a date-grouped timeline; its
-            # member badges live in the per-card timeline partials.
-            'templates/events/_timeline_event_card.html',
-            'templates/events/_timeline_series_card.html',
-            'templates/events/_timeline_past_card.html',
+            # The shared timeline row owns badges for every event-card variant.
+            'templates/events/_timeline_listing_card.html',
             'templates/events/event_series.html',
             'templates/voting/poll_list.html',
             'templates/voting/poll_detail.html',

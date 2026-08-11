@@ -193,11 +193,10 @@ BASELINE: dict[str, dict[str, int]] = {
         "templates/integrations/admin_sync_history.html": 1,
     },
     "public_tracking_wider": {  # Initial legacy debt: #1240.
-        "templates/content/_starting_soon_card.html": 1,
         "templates/content/peer_review/review_form.html": 4,
         "templates/events/_event_post_resources.html": 1,
         "templates/events/_recording_materials.html": 1,
-        "templates/events/events_calendar.html": 8,
+        "templates/events/events_calendar.html": 7,
         "templates/integrations/admin_sync_history.html": 3,
     },
 }

@@ -15,7 +15,7 @@ Required context: ``card_variant`` ("upcoming", "series", or "past") plus
       <div class="min-w-0 flex-1">
         <div class="flex flex-wrap items-center gap-2">
           {% member_access_badge occ.required_level testid="event-tier-badge" %}
-          <p class="flex flex-wrap items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <p class="flex flex-wrap items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             <span data-testid="series-card-badge">{{ series.list_badge_label }}</span>
             <span aria-hidden="true">·</span>
             <span data-testid="series-card-sessions">{{ row.count }} upcoming session{{ row.count|pluralize }}</span>
@@ -59,7 +59,7 @@ Required context: ``card_variant`` ("upcoming", "series", or "past") plus
           {% else %}
           {% member_access_badge event.required_level testid="event-tier-badge" %}
           {% endif %}
-          <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground" data-testid="event-card-kind">
+          <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground" data-testid="event-card-kind">
             {% if card_variant == 'past' %}{% if event.kind == 'workshop' and event.workshop %}<span data-testid="past-card-workshop-badge">Workshop recording</span>{% else %}Recording{% endif %}{% elif event.event_series %}Series{% elif event.kind == 'standard' %}Event{% else %}{{ event.get_kind_display }}{% endif %}
           </p>
         </div>

@@ -1,0 +1,10 @@
+schema_version: 1
+id: homepage-density-redesign
+title: "Homepage density redesign"
+mode: building
+status: approved
+created: 2026-08-11
+seed_sha256: 9ef08843988ba1cdc1b7809a134fdf466b16ebbc17be1f4969ebfe50debe7cae
+source_roots:
+  []
+target_repo: "/home/alexey/git/ai-shipping-labs"

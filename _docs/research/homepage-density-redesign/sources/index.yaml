@@ -1,0 +1,50 @@
+schema_version: 1
+sources:
+  - id: anonymous-homepage-render
+    title: Anonymous homepage desktop and mobile audit captures
+    type: screenshot
+    locator: sources/raw/anonymous-homepage-desktop-1280.png
+    captured: 2026-08-11
+    published:
+    authority: primary
+    summary: Full-page local renders showing the public homepage at 10,592px desktop height and 13,310px mobile height.
+    page: wiki/sources/anonymous-homepage-render.md
+    raw: sources/raw/anonymous-homepage-mobile-393.png
+    relevance: 1.00
+    status: selected
+  - id: anonymous-homepage-template
+    title: Current anonymous homepage implementation
+    type: repository-source
+    locator: /home/alexey/git/ai-shipping-labs/templates/home.html
+    captured: 2026-08-11
+    published:
+    authority: primary
+    summary: The rendering template establishes the repeated section-intro, card-grid, and CTA structure observed in the captures.
+    page: wiki/sources/anonymous-homepage-template.md
+    raw:
+    relevance: 0.95
+    status: selected
+  - id: logged-in-dashboard-render
+    title: Logged-in Main-member dashboard desktop and mobile audit captures
+    type: screenshot
+    locator: sources/raw/logged-in-dashboard-desktop-1280.png
+    captured: 2026-08-11
+    published:
+    authority: primary
+    summary: Clean authenticated renders showing the current member dashboard at 1,988px desktop height and 4,069px mobile height.
+    page: wiki/sources/logged-in-dashboard-render.md
+    raw: sources/raw/logged-in-dashboard-mobile-393.png
+    relevance: 1.00
+    status: selected
+  - id: logged-in-dashboard-template
+    title: Current logged-in dashboard implementation
+    type: repository-source
+    locator: /home/alexey/git/ai-shipping-labs/templates/content/dashboard.html
+    captured: 2026-08-11
+    published:
+    authority: primary
+    summary: The authenticated dashboard template exposes learning, events, quick actions, guidance, sprint, Slack, content, and polling modules with similar visual weight.
+    page: wiki/sources/logged-in-dashboard-template.md
+    raw:
+    relevance: 0.98
+    status: selected

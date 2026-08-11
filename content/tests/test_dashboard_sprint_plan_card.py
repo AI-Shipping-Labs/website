@@ -291,7 +291,7 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
             status='active',
             min_tier_level=LEVEL_MAIN,
         )
-        other = Sprint.objects.create(
+        Sprint.objects.create(
             name='Other Sprint', slug='other-sprint',
             start_date=current_start + datetime.timedelta(weeks=8),
             duration_weeks=6,

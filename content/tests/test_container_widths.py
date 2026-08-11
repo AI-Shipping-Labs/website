@@ -66,18 +66,17 @@ FRAME_DELEGATED_TO_INCLUDE = {
 #
 # The 2026-07-21 audit moved everything to Frame on the rule "an index page must
 # never be narrower than the chrome above it".  The 2026-08-06 addendum (issue
-# #1340) superseded that with a content-shape rule: single-column row feeds and
-# sparse 2-column hubs re-tier down to Detail (max-w-5xl), aligning each list
-# with its own detail page, while genuine 3+ column grids keep the Frame.  See
+# #1340) superseded that with a content-shape rule: editorial feeds use Reader
+# (max-w-3xl), sparse hubs and ordinary grids use Detail (max-w-5xl), and
+# genuine 3+ column grids may keep the Frame. See
 # _docs/audits/2026-07-21-container-widths.md -> "2026-08-06 addendum".
 AUDITED_PAGE_WIDTHS = {
-    # 2026-08-06: single-column row lists and sparse hubs re-tiered 7xl -> 5xl
-    # so the right half of the frame no longer reads empty.  /sprints and
-    # /events move together to preserve the sibling consistency that the
-    # 2026-07-21 widening was originally protecting.
+    # Reader-width editorial feeds and detail pages; the Events month calendar
+    # is explicitly pinned to the wider 5xl Detail tier.
     "templates/content/sprints_index.html": "max-w-3xl",
     "templates/plans/sprint_detail.html": "max-w-3xl",
     "templates/events/events_list.html": "max-w-3xl",
+    "templates/events/events_calendar.html": "max-w-5xl",
     "templates/events/event_detail.html": "max-w-3xl",
     "templates/events/event_series.html": "max-w-3xl",
     # Book Club: the collection hub has room for its grid; once a book is
@@ -90,10 +89,10 @@ AUDITED_PAGE_WIDTHS = {
     "templates/bookclub/book_summary.html": "max-w-3xl",
     "templates/bookclub/reader_profile.html": "max-w-3xl",
     "templates/content/blog_list.html": "max-w-3xl",
-    # 2026-08-10: content listing pages standardise on Detail (max-w-5xl), the
-    # /events list at 1024px being the reference.  projects/courses/workshop
-    # catalog move down from 7xl so every index shares one listing width; the
-    # events month calendar and /pricing keep the Frame as deliberate exceptions.
+    # 2026-08-10: ordinary catalog grids and mixed indexes standardise on
+    # Detail (max-w-5xl). Text-first /blog and /events feeds use Reader above;
+    # the Events month calendar keeps the wider Detail tier relative to those
+    # feeds, while /membership keeps Frame.
     "templates/content/projects_list.html": "max-w-5xl",
     "templates/content/courses_list.html": "max-w-5xl",
     "templates/content/tutorials_list.html": "max-w-5xl",

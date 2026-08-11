@@ -1,11 +1,11 @@
 """Issue #525 — every public page renders at the standardized container
 width for its page-group, and never produces horizontal overflow on mobile.
 
-The audit table defines these target groups (updated by issue #1340):
-    - wide grids / marketing / dashboard / calendar -> max-w-7xl
-    - single-column row lists and sparse hubs       -> max-w-5xl
+The audit table defines these target groups (updated by issues #1340/#1395):
+    - wide grids / marketing / dashboard             -> max-w-7xl
+    - calendar / catalogs / mixed-layout indexes     -> max-w-5xl
     - mixed-layout detail pages                      -> max-w-5xl
-    - reader / long-form                             -> max-w-3xl
+    - reader / long-form / editorial row feeds       -> max-w-3xl
 
 This test parametrizes the audited URLs and asserts:
 1. The first ``mx-auto max-w-*`` wrapper inside ``<main>`` carries the
@@ -239,6 +239,63 @@ def _seed_listings():
     }
 
 
+def _seed_book_routes(email):
+    """Seed every Book Club lifecycle/reader route for issue #1397."""
+    from accounts.models import User
+    from bookclub.models import Book, Chapter, ChapterRead
+
+    Book.objects.all().delete()
+    user = User.objects.get(email=email)
+    current = Book.objects.create(
+        title='Current reader-width book',
+        slug='current-reader-width-book',
+        author='Test Author',
+        required_level=20,
+        status='current',
+        start_date=timezone.localdate(),
+        summary='Published overall summary.',
+        summary_published_at=timezone.now(),
+    )
+    chapter = Chapter.objects.create(
+        book=current,
+        number=0,
+        title='Reader-width chapter',
+        deadline=timezone.localdate() + datetime.timedelta(days=3),
+        summary='Published chapter summary.',
+        summary_published_at=timezone.now(),
+    )
+    ChapterRead.objects.create(user=user, chapter=chapter)
+    upcoming = Book.objects.create(
+        title='Upcoming reader-width book',
+        slug='upcoming-reader-width-book',
+        author='Test Author',
+        required_level=20,
+        status='upcoming',
+        start_date=timezone.localdate() + datetime.timedelta(days=30),
+    )
+    finished = Book.objects.create(
+        title='Finished reader-width book',
+        slug='finished-reader-width-book',
+        author='Test Author',
+        required_level=20,
+        status='finished',
+        start_date=timezone.localdate() - datetime.timedelta(days=30),
+        summary='Published finished-book summary.',
+        summary_published_at=timezone.now(),
+    )
+    connection.close()
+    return {
+        'hub': '/books',
+        'current': current.get_absolute_url(),
+        'upcoming': upcoming.get_absolute_url(),
+        'finished': finished.get_absolute_url(),
+        'chapter': f'/books/{current.slug}/chapters/{chapter.number}',
+        'progress': f'/books/{current.slug}/progress',
+        'summary': f'/books/{current.slug}/summary',
+        'profile': f'/books/{current.slug}/readers/{user.pk}',
+    }
+
+
 # ---------------------------------------------------------------------------
 # DOM helpers
 # ---------------------------------------------------------------------------
@@ -307,15 +364,14 @@ def _has_horizontal_overflow(page):
 #   provides via the returned dict.
 # - login email of None means anonymous; otherwise the ``page`` is
 #   replaced with an authed context.
-# Genuine multi-column grids / marketing / dashboard / calendar keep the full
-# Frame (max-w-7xl): they visibly consume the width.
+# Genuine multi-column grids / marketing / dashboard keep the full Frame
+# (max-w-7xl): they visibly consume the width.
 LISTINGS_WIDE = [
     ('/', 'max-w-7xl', None),
     ('/courses', 'max-w-7xl', None),
     ('/projects', 'max-w-7xl', None),
-    ('/events/calendar', 'max-w-7xl', None),
     ('/resources', 'max-w-7xl', None),
-    ('/pricing', 'max-w-7xl', None),
+    ('/membership', 'max-w-7xl', None),
     ('/activities', 'max-w-7xl', None),
 ]
 
@@ -329,6 +385,7 @@ LISTINGS_NARROW = [
     ('/tutorials', 'max-w-5xl', None),
     ('/downloads', 'max-w-5xl', None),
     ('/workshops', 'max-w-5xl', None),
+    ('/events/calendar', 'max-w-5xl', None),
     ('/vote', 'max-w-5xl', None),
     ('/tags', 'max-w-5xl', None),
 ]
@@ -517,6 +574,81 @@ class TestReaderPagesUseMaxW3xl:
             ctx.close()
 
 
+BOOK_ROUTE_WIDTHS = [
+    ('hub', 'max-w-5xl'),
+    ('current', 'max-w-3xl'),
+    ('upcoming', 'max-w-3xl'),
+    ('finished', 'max-w-3xl'),
+    ('chapter', 'max-w-3xl'),
+    ('progress', 'max-w-3xl'),
+    ('summary', 'max-w-3xl'),
+    ('profile', 'max-w-3xl'),
+]
+
+
+@pytest.mark.django_db(transaction=True)
+class TestBookClubHubAndOpenedBookWidths:
+    """The hub is 5xl; every opened-book lifecycle surface is 3xl."""
+
+    @pytest.mark.parametrize('route_key,expected_max_w', BOOK_ROUTE_WIDTHS)
+    def test_rendered_book_route_uses_its_canonical_width(
+        self, django_server, browser, route_key, expected_max_w,
+    ):
+        _ensure_tiers()
+        email = f'book-width-{uuid.uuid4().hex[:8]}@test.com'
+        _create_user(email, tier_slug='main')
+        paths = _seed_book_routes(email)
+        path = paths[route_key]
+
+        ctx = _auth_context(browser, email)
+        page = ctx.new_page()
+        page.set_viewport_size(DESKTOP_VIEWPORT)
+        try:
+            response = page.goto(
+                f'{django_server}{path}',
+                wait_until='domcontentloaded',
+            )
+            assert response is not None
+            assert response.status == 200
+            cls = _outer_wrapper_class_string(page)
+            assert cls is not None, f'No outer wrapper on {path}'
+            assert expected_max_w in cls, (
+                f'{path}: expected {expected_max_w}, got {cls!r}'
+            )
+            width = _outer_wrapper_client_width(page)
+            assert width <= (
+                TARGET_WIDTHS_PX[expected_max_w] + PADDING_BUDGET_PX
+            )
+        finally:
+            ctx.close()
+
+    def test_mobile_book_journey_has_no_horizontal_overflow(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        email = f'book-mobile-{uuid.uuid4().hex[:8]}@test.com'
+        _create_user(email, tier_slug='main')
+        paths = _seed_book_routes(email)
+
+        ctx = _auth_context(browser, email)
+        page = ctx.new_page()
+        page.set_viewport_size(MOBILE_VIEWPORT)
+        try:
+            for route_key, _expected_max_w in BOOK_ROUTE_WIDTHS:
+                path = paths[route_key]
+                response = page.goto(
+                    f'{django_server}{path}',
+                    wait_until='domcontentloaded',
+                )
+                assert response is not None
+                assert response.status == 200
+                assert not _has_horizontal_overflow(page), (
+                    f'{path} overflows at {MOBILE_VIEWPORT}'
+                )
+        finally:
+            ctx.close()
+
+
 # ---------------------------------------------------------------------------
 # Mobile: no horizontal overflow on any audited public page
 # ---------------------------------------------------------------------------
@@ -532,9 +664,10 @@ MOBILE_PATHS = [
     '/courses',
     '/resources',
     '/events',
+    '/events/calendar',
     '/projects',
     '/workshops',
-    '/pricing',
+    '/membership',
     '/about',
     '/terms',
     '/blog/{article_slug}',
@@ -640,9 +773,9 @@ class TestAuthenticatedDashboardAndAccount:
 class TestListingFrameWidthConsistency:
     """Navigating within a width band produces the same outer container
     width (within ±1 px) — the user does not see the page frame jump in or
-    out. Since issue #1340 there are two bands: the 7xl grids and the 5xl
-    row-list / sparse-hub pages. A page in one band is not required to match
-    a page in the other, so the two bands are asserted separately.
+    out. The three bands are 7xl grids, 5xl catalogs/mixed indexes, and 3xl
+    editorial feeds. A page in one band is not required to match a page in
+    another, so each band is asserted separately.
     """
 
     def _measure(self, django_server, page, urls):
@@ -679,7 +812,7 @@ class TestListingFrameWidthConsistency:
         finally:
             ctx.close()
 
-    def test_narrow_listings_share_frame_width(self, django_server, browser):
+    def test_detail_listings_share_frame_width(self, django_server, browser):
         _ensure_tiers()
         _ensure_site_config_tiers()
         _seed_listings()
@@ -691,13 +824,37 @@ class TestListingFrameWidthConsistency:
             widths = self._measure(
                 django_server,
                 page,
-                ['/blog', '/events', '/workshops', '/tutorials',
-                 '/downloads', '/vote', '/tags'],
+                [
+                    '/workshops', '/events/calendar', '/tutorials',
+                    '/downloads', '/vote', '/tags',
+                ],
             )
             min_w = min(w for _, w in widths)
             max_w = max(w for _, w in widths)
             assert max_w - min_w <= 1, (
-                'Narrow (5xl) listing page frame widths differ by more than '
+                'Detail (5xl) listing page frame widths differ by more than '
+                f'1px: {widths}'
+            )
+        finally:
+            ctx.close()
+
+    def test_reader_feeds_share_frame_width(self, django_server, browser):
+        _ensure_tiers()
+        _ensure_site_config_tiers()
+        _seed_listings()
+
+        ctx = browser.new_context(viewport=DESKTOP_VIEWPORT)
+        page = ctx.new_page()
+        try:
+            widths = self._measure(
+                django_server,
+                page,
+                ['/blog', '/events', '/workshops/catalog', '/interview'],
+            )
+            min_w = min(w for _, w in widths)
+            max_w = max(w for _, w in widths)
+            assert max_w - min_w <= 1, (
+                'Reader (3xl) feed frame widths differ by more than '
                 f'1px: {widths}'
             )
         finally:

@@ -145,7 +145,7 @@ Four tiers, chosen by content shape rather than per-page taste. These are the on
 
 Pick the narrowest sanctioned tier that fits the widest repeated element on the page. Text-first editorial feeds use `max-w-3xl`; mixed row feeds and sparse 2-column hubs use `max-w-5xl`. Reserve the 7xl Frame for genuine grids that fill it.
 
-Content listing/index pages are an exception to "choose by content shape": they are all `max-w-5xl` regardless of column count (including 3-column grids like `/courses`, `/projects`, and the events calendar), so every listing page is the same width and never changes width mid-page. See [Content Listing Pages](#content-listing-pages), which is authoritative for those routes.
+Listing/index pages follow their content shape: text-first editorial feeds such as `/blog` and `/events` use Reader (`max-w-3xl`); ordinary catalog grids and mixed indexes such as `/courses` and `/projects` use Detail (`max-w-5xl`). The dense Events month calendar is a distinct Detail-width (`max-w-5xl`) surface relative to the 3xl Events rows. A page keeps one outer width throughout its title, controls, populated, filtered, and empty states. See [Content Listing Pages](#content-listing-pages), which is authoritative for those routes.
 
 The outer frame always sets the tier; narrower inner columns (a `max-w-3xl` intro inside a Frame index, a `max-w-md` auth card) are normal and live inside it. A page column may be narrower than the header chrome when its content is single-column or sparse: the shared `px-4 sm:px-6 lg:px-8` gutters keep it left-aligned below the max width and centered above it, exactly like `/about`. A 7xl Frame may still cap individual inner sections, but those inner caps must use sanctioned widths (no `max-w-6xl`).
 
@@ -289,7 +289,7 @@ Exactly one `<section>`, one container, one width. No mid-page width changes, no
 
 ### Canonical width
 
-Listing grids and mixed-layout indexes use `max-w-5xl` (the `/events` list is the reference). Text-first single-column editorial feeds may use `max-w-3xl` when readable line length and calm vertical scanning matter more than side-by-side comparison; `/blog` and `/workshops/catalog` are the reference feeds. `max-w-7xl` is no longer a listing width; it remains for the member dashboard, the pricing grid, marketing pages, and the events month **calendar** view. Inner columns may be narrower; the outer container never changes mid-page.
+Listing grids and mixed-layout indexes use `max-w-5xl`; `/courses`, `/projects`, and the dense Events month **calendar** are reference surfaces. Text-first single-column editorial feeds use `max-w-3xl` when readable line length and calm vertical scanning matter more than side-by-side comparison; `/blog`, `/events`, and `/workshops/catalog` are the reference feeds. Frame remains appropriate for the member dashboard, membership grid, and marketing pages. Inner columns may be narrower; the outer container never changes mid-page.
 
 Detail/content pages are narrower: prose/reader pages (a blog article, a book chapter, the learning path) use `max-w-3xl` (Reader tier); mixed-layout detail pages keep `max-w-5xl` (Detail tier). Only the listing/index widths change under this section.
 

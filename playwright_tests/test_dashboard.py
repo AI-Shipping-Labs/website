@@ -66,6 +66,7 @@ def _anon_context(browser):
 
 def _clear_dashboard_data():
     """Delete data that affects the dashboard to ensure clean state."""
+    from bookclub.models import Book
     from content.models import (
         Article,
         Course,
@@ -101,6 +102,7 @@ def _clear_dashboard_data():
     SprintEnrollment.objects.all().delete()
     Sprint.objects.all().delete()
     Article.objects.all().delete()
+    Book.objects.all().delete()
     Event.objects.all().delete()
     EventSeries.objects.all().delete()
     connection.close()
@@ -132,6 +134,27 @@ def _assert_current_quick_actions(page):
     assert quick_actions.locator('a[href="/community"]').count() == 0
     assert quick_actions.get_by_role("link", name="Resources").count() == 0
     assert quick_actions.get_by_role("link", name="Projects").count() == 0
+
+
+CANONICAL_FOCUS_CLASSES = (
+    "focus-visible:outline-none",
+    "focus-visible:ring-2",
+    "focus-visible:ring-accent",
+    "focus-visible:ring-offset-2",
+    "focus-visible:ring-offset-background",
+)
+
+
+def _assert_dashboard_link_contract(locator, *, minimum_height=None):
+    classes = locator.get_attribute("class") or ""
+    for focus_class in CANONICAL_FOCUS_CLASSES:
+        assert focus_class in classes
+    if minimum_height is not None:
+        box = locator.bounding_box()
+        assert box is not None
+        assert box["height"] >= minimum_height
+    locator.focus()
+    assert locator.evaluate("el => el.matches(':focus-visible')")
 
 
 def _create_article(
@@ -345,6 +368,38 @@ def _create_sprint(
     )
     connection.close()
     return sprint
+
+
+def _create_book(
+    title,
+    slug,
+    *,
+    required_level=20,
+    status="current",
+    chapter_deadlines=(None, None),
+):
+    """Create a Book Club cohort with deterministic ordered chapters."""
+    from bookclub.models import Book, Chapter
+
+    book = Book.objects.create(
+        title=title,
+        slug=slug,
+        author="Test Author",
+        required_level=required_level,
+        status=status,
+        start_date=timezone.localdate(),
+    )
+    chapters = [
+        Chapter.objects.create(
+            book=book,
+            number=number,
+            title=f"Reader chapter {number}",
+            deadline=deadline,
+        )
+        for number, deadline in enumerate(chapter_deadlines)
+    ]
+    connection.close()
+    return book, chapters
 
 
 def _create_plan(user, sprint, *, shared=True):
@@ -698,7 +753,7 @@ class TestScenario3bFreeActivationDashboard:
         teaser_text = teaser.inner_text()
         assert "What community members are doing this month" in teaser_text
         page.locator('[data-testid="free-plan-teaser-cta"]').click()
-        page.wait_for_url("**/pricing*", timeout=10000)
+        page.wait_for_url("**/membership*", timeout=10000)
         pricing_body = page.content()
         assert "Basic" in pricing_body
         assert "Main" in pricing_body
@@ -783,6 +838,225 @@ class TestScenario3bFreeActivationDashboard:
         assert page.locator(
             '[data-testid="free-activation-completed-action-ai-hero"]'
         ).count() == 1
+
+    @pytest.mark.core
+    def test_dashboard_discovery_links_keep_focus_and_tap_contracts(
+        self, django_server, browser,
+    ):
+        from content.models import Workshop
+
+        _clear_dashboard_data()
+        user = _create_user("free-link-contract@test.com", tier_slug="free")
+        for number in range(4):
+            course = _create_course(
+                title=f"Started course {number}",
+                slug=f"started-course-{number}",
+            )
+            module = _create_module(course, "Start", sort_order=1)
+            first = _create_unit(module, "Completed", sort_order=1)
+            _create_unit(module, "Next", sort_order=2)
+            _enroll_user(user, course)
+            _mark_unit_completed(
+                user,
+                first,
+                completed_at=timezone.now() + datetime.timedelta(
+                    minutes=number,
+                ),
+            )
+
+        sprint = _create_sprint(
+            "Paid focus sprint",
+            "paid-focus-sprint",
+            min_tier_level=20,
+        )
+        book, _chapters = _create_book(
+            "Paid focus book",
+            "paid-focus-book",
+            required_level=20,
+        )
+        Workshop.objects.create(
+            title="Paid focus workshop",
+            slug="paid-focus-workshop",
+            date=timezone.localdate(),
+            status="published",
+            pages_required_level=20,
+        )
+        _create_event(
+            "Paid focus event",
+            "paid-focus-event",
+            required_level=20,
+            start_datetime=timezone.now() + datetime.timedelta(days=3),
+        )
+        connection.close()
+
+        context = _auth_context(browser, user.email)
+        page = context.new_page()
+        try:
+            page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+            learning_more = page.locator(
+                '[data-testid="continue-learning-more"] a[href="/courses"]'
+            )
+            assert learning_more.count() == 1
+            _assert_dashboard_link_contract(learning_more)
+
+            destinations = page.locator(
+                '[data-testid="dashboard-feed-destination"]'
+            )
+            assert destinations.count() == 7
+            for index in range(destinations.count()):
+                _assert_dashboard_link_contract(
+                    destinations.nth(index),
+                    minimum_height=44,
+                )
+
+            teaser = page.locator('[data-testid="free-plan-teaser"]')
+            unlock_links = teaser.locator("ul a")
+            expected_hrefs = {
+                sprint.get_absolute_url(),
+                book.get_absolute_url(),
+                "/workshops",
+                "/events",
+            }
+            assert set(unlock_links.evaluate_all(
+                "links => links.map(link => link.getAttribute('href'))"
+            )) == expected_hrefs
+            for href in expected_hrefs:
+                _assert_dashboard_link_contract(
+                    teaser.locator(f'ul a[href="{href}"]'),
+                    minimum_height=44,
+                )
+        finally:
+            context.close()
+
+
+# -------------------------------------------------------------------
+# Scenario 3c: Book Club progress follows the dashboard priority rules
+# -------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestScenario3cBookClubDashboard:
+    """Current-book progress, imminent deadlines, and lower-tier privacy."""
+
+    @pytest.mark.core
+    def test_reader_continues_from_the_next_unread_chapter(
+        self, django_server, browser,
+    ):
+        from bookclub.models import ChapterRead
+
+        _clear_dashboard_data()
+        user = _create_user("book-reader@test.com", tier_slug="main")
+        book, chapters = _create_book(
+            "Reader continuation book",
+            "reader-continuation-book",
+        )
+        ChapterRead.objects.create(user=user, chapter=chapters[0])
+        connection.close()
+
+        context = _auth_context(browser, user.email)
+        page = context.new_page()
+        try:
+            page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+            book_row = page.locator('[data-feed-kind="book"]')
+            assert book_row.count() == 1
+            assert book.title in book_row.inner_text()
+            assert "1/2 chapters read" in book_row.inner_text()
+            next_path = f"/books/{book.slug}/chapters/{chapters[1].number}"
+            link = book_row.locator("a")
+            assert link.get_attribute("href") == next_path
+
+            link.click()
+            page.wait_for_url(f"**{next_path}")
+            assert page.url.endswith(next_path)
+        finally:
+            context.close()
+
+    @pytest.mark.core
+    def test_imminent_unread_chapter_moves_to_your_week_without_duplication(
+        self, django_server, browser,
+    ):
+        from bookclub.models import ChapterRead
+
+        _clear_dashboard_data()
+        user = _create_user("book-deadline@test.com", tier_slug="main")
+        book, chapters = _create_book(
+            "Deadline reader book",
+            "deadline-reader-book",
+            chapter_deadlines=(
+                timezone.localdate() - datetime.timedelta(days=1),
+                timezone.localdate() + datetime.timedelta(days=3),
+            ),
+        )
+        ChapterRead.objects.create(user=user, chapter=chapters[0])
+        connection.close()
+
+        context = _auth_context(browser, user.email)
+        page = context.new_page()
+        try:
+            page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+            due_row = page.locator(
+                '[data-testid="dashboard-book-club-deadline"]'
+            )
+            assert due_row.count() == 1
+            assert due_row.locator(
+                '[data-testid="dashboard-feed-entry"]'
+            ).count() == 0
+            assert "Reader chapter 1" in due_row.inner_text()
+            assert page.locator('[data-feed-kind="book"]').count() == 0
+            next_path = f"/books/{book.slug}/chapters/{chapters[1].number}"
+            link = due_row.locator("a")
+            assert link.get_attribute("href") == next_path
+
+            link.click()
+            page.wait_for_url(f"**{next_path}")
+            assert page.url.endswith(next_path)
+        finally:
+            context.close()
+
+    @pytest.mark.core
+    def test_free_member_does_not_receive_gated_book_participation_state(
+        self, django_server, browser,
+    ):
+        from bookclub.models import ChapterRead
+
+        _clear_dashboard_data()
+        user = _create_user("book-gated@test.com", tier_slug="free")
+        _book, chapters = _create_book(
+            "Gated reader book",
+            "gated-reader-book",
+            required_level=20,
+            chapter_deadlines=(
+                timezone.localdate() - datetime.timedelta(days=1),
+                timezone.localdate() + datetime.timedelta(days=3),
+            ),
+        )
+        ChapterRead.objects.create(user=user, chapter=chapters[0])
+        connection.close()
+
+        context = _auth_context(browser, user.email)
+        page = context.new_page()
+        try:
+            page.goto(f"{django_server}/", wait_until="domcontentloaded")
+            main_text = page.locator("main").inner_text()
+
+            assert "Reader chapter 1" not in main_text
+            assert "1/2 chapters read" not in main_text
+            assert page.locator(
+                '[data-testid="dashboard-book-club-deadline"]'
+            ).count() == 0
+            assert page.locator(
+                '[data-feed-kind="book"][data-feed-locked="false"]'
+            ).count() == 0
+            teaser = page.locator('[data-testid="free-plan-teaser"]')
+            assert "Book Club:" in teaser.inner_text()
+            assert teaser.locator(
+                '[data-testid="free-plan-teaser-cta"]'
+            ).get_attribute("href") == "/membership"
+        finally:
+            context.close()
 # -------------------------------------------------------------------
 # Scenario 4: Basic member resumes an in-progress course from the
 #              dashboard
@@ -1467,7 +1741,7 @@ class TestScenario7GatedContentInRecentContent:
               require a higher tier.
         4. Click on a gated article.
         Then: The article shows a teaser with 'Upgrade to Basic to
-              read this article' and a link to /pricing."""
+              read this article' and a link to /membership."""
         _clear_dashboard_data()
         _create_user("free@test.com", tier_slug="free")
 
@@ -1569,7 +1843,7 @@ class TestScenario7GatedContentInRecentContent:
         # Then: Paywall message shown
         gated_body = page.content()
         assert "Upgrade to Basic to read this article" in gated_body
-        assert "/pricing" in gated_body
+        assert "/membership" in gated_body
 # -------------------------------------------------------------------
 # Scenario 8: Premium member sees active polls and navigates to vote
 # -------------------------------------------------------------------

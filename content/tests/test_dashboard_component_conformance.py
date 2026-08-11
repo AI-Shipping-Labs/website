@@ -2,16 +2,28 @@
 
 import datetime
 import re
+from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
+from bookclub.models import BOOK_STATUS_CURRENT, Book
 from content.access import LEVEL_MAIN, LEVEL_OPEN
-from content.models import Course, Enrollment
+from content.models import Course, Enrollment, Workshop
+from events.models import Event
 from plans.models import Sprint
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
+
+CANONICAL_FOCUS_CLASSES = {
+    'focus-visible:outline-none',
+    'focus-visible:ring-2',
+    'focus-visible:ring-accent',
+    'focus-visible:ring-offset-2',
+    'focus-visible:ring-offset-background',
+}
 
 def _active_sprint(name, slug, min_tier_level):
     return Sprint.objects.create(
@@ -131,6 +143,88 @@ class DashboardEmptyStateOwnerTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'No active sprint openings for your tier')
         self.assertContains(response, 'href="/sprints"')
         self.assertContains(response, '>Sprints <')
+
+
+class DashboardInteractiveLinkContractTest(TierSetupMixin, TestCase):
+    """Dashboard-specific links keep the canonical keyboard/tap contract."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='dashboard-links@test.com', password='pw', tier=self.free_tier,
+        )
+        self.client.login(email=self.user.email, password='pw')
+
+    def assert_focus_classes(self, class_value):
+        self.assertTrue(
+            CANONICAL_FOCUS_CLASSES.issubset(set(class_value.split())),
+            class_value,
+        )
+
+    def test_inline_learning_and_destination_links_use_canonical_focus_classes(self):
+        source = Path(
+            'templates/content/_dashboard_commitment_zones.html',
+        ).read_text(encoding='utf-8')
+
+        more = re.search(
+            r'data-testid="continue-learning-more".*?'
+            r'<a href="/courses" class="([^"]+)"',
+            source,
+        )
+        self.assertIsNotNone(more)
+        self.assert_focus_classes(more.group(1))
+        self.assertNotIn('min-h-[44px]', more.group(1))
+
+        destinations = re.findall(
+            r'<a [^>]*class="([^"]+)" '
+            r'data-testid="dashboard-feed-destination"',
+            source,
+        )
+        self.assertEqual(len(destinations), 5)
+        for classes in destinations:
+            self.assertIn('min-h-[44px]', classes)
+            self.assert_focus_classes(classes)
+
+    def test_unlock_links_are_scoped_by_href_and_keep_tap_focus_contract(self):
+        sprint = _active_sprint('Paid Sprint', 'paid-sprint', LEVEL_MAIN)
+        book = Book.objects.create(
+            title='Paid Book', slug='paid-book', author='Test Author',
+            status=BOOK_STATUS_CURRENT, required_level=LEVEL_MAIN,
+            start_date=timezone.localdate(),
+        )
+        Workshop.objects.create(
+            title='Paid Workshop', slug='paid-workshop', status='published',
+            date=timezone.localdate(), pages_required_level=LEVEL_MAIN,
+        )
+        Event.objects.create(
+            title='Paid Event', slug='paid-event', status='upcoming',
+            published=True, required_level=LEVEL_MAIN,
+            start_datetime=timezone.now() + datetime.timedelta(days=3),
+        )
+
+        response = self.client.get('/')
+        content = response.content.decode()
+        teaser_start = content.index('data-testid="free-plan-teaser"')
+        teaser_end = content.index('</ul>', teaser_start)
+        teaser = content[teaser_start:teaser_end]
+        anchors = {
+            href: classes
+            for href, classes in re.findall(
+                r'<a href="([^"]+)" class="([^"]+)"', teaser,
+            )
+        }
+
+        self.assertEqual(
+            set(anchors),
+            {
+                sprint.get_absolute_url(),
+                book.get_absolute_url(),
+                '/workshops',
+                '/events',
+            },
+        )
+        for classes in anchors.values():
+            self.assertIn('min-h-[44px]', classes)
+            self.assert_focus_classes(classes)
 
 
 class DashboardLightThemeContrastTest(TierSetupMixin, TestCase):

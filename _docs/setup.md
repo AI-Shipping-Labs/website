@@ -2,6 +2,15 @@
 
 If you are an operator bringing up a fresh environment (not a developer running locally), see [`_docs/configuration.md`](configuration.md) first — it covers the OAuth login + Studio integration setup. This file documents infrastructure, CI/CD, ECS env vars, and bastion / remote-DB access.
 
+A fresh environment that uses Zoom also needs Marketplace configuration outside
+the application: follow [configuration section 10](configuration.md#10-zoom-events)
+and the authoritative [Server-to-Server OAuth setup, six-scope matrix, and
+disposable smoke procedure](integrations/zoom.md#server-to-server-oauth-app-setup).
+After changing Zoom scopes, restart both web and worker services so every
+process-local token cache obtains a newly scoped token, or wait up to one hour.
+Never validate a fresh environment with a real event or expose a token, secret,
+recording download URL, or Zoom join/start URL as evidence.
+
 Local development additionally requires Node.js 24 and npm. Tailwind CSS
 3.4.17 is pinned in `package.json`/`package-lock.json`; `make run` and
 `make run2` perform a minified one-time build, while `make dev` starts the CSS

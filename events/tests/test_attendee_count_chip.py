@@ -4,11 +4,11 @@ Covers:
 
 - ``Event.attendee_count`` property: prefers a ``_attendee_count``
   annotation when present, otherwise falls back to ``registration_count``.
-- Event detail page: counts below 5 stay hidden; 5+ render the correct
-  upcoming/past copy.
-- Event list and series pages: the same 5+ threshold applies on public
-  cards, and the queryset stays annotated so attendee counting does not
-  generate a per-event ``COUNT(*)`` query.
+- Event detail page: every aggregate count renders with the correct
+  upcoming/past and singular/plural copy.
+- Event list and series pages expose the same aggregate, and the queryset
+  stays annotated so attendee counting does not generate a per-event
+  ``COUNT(*)`` query.
 """
 
 from datetime import time, timedelta
@@ -72,12 +72,12 @@ class EventDetailAttendeeChipCopyTest(TestCase):
             status=status,
         )
 
-    def test_upcoming_below_threshold_hides_chip(self):
+    def test_upcoming_low_count_shows_chip(self):
         event = self._make_event('upcoming-four', status='upcoming')
         _register_users(event, 4)
         response = self.client.get(event.get_absolute_url())
-        self.assertNotContains(response, 'data-testid="event-attendee-count"')
-        self.assertNotContains(response, '4 people are going')
+        self.assertContains(response, 'data-testid="event-attendee-count"')
+        self.assertContains(response, '4 people are going')
 
     def test_upcoming_with_many_uses_plural(self):
         event = self._make_event('upcoming-many', status='upcoming')
@@ -86,19 +86,24 @@ class EventDetailAttendeeChipCopyTest(TestCase):
         self.assertContains(response, '5 people are going')
         self.assertNotContains(response, 'people attended')
 
-    def test_past_with_zero_hides_chip(self):
+    def test_upcoming_with_one_uses_singular(self):
+        event = self._make_event('upcoming-one', status='upcoming')
+        _register_users(event, 1)
+        response = self.client.get(event.get_absolute_url())
+        self.assertContains(response, '1 person is going')
+        self.assertNotContains(response, '1 people are going')
+
+    def test_past_with_zero_shows_aggregate(self):
         event = self._make_event('past-zero', status='completed')
         response = self.client.get(event.get_absolute_url())
-        self.assertNotContains(
-            response, 'data-testid="event-attendee-count"',
-        )
+        self.assertContains(response, '0 people attended')
 
-    def test_past_below_threshold_hides_chip(self):
+    def test_past_low_count_shows_chip(self):
         event = self._make_event('past-four', status='completed')
         _register_users(event, 4)
         response = self.client.get(event.get_absolute_url())
-        self.assertNotContains(response, 'data-testid="event-attendee-count"')
-        self.assertNotContains(response, '4 people attended')
+        self.assertContains(response, 'data-testid="event-attendee-count"')
+        self.assertContains(response, '4 people attended')
 
     def test_past_with_many_uses_plural_attended(self):
         event = self._make_event('past-many', status='completed')
@@ -106,6 +111,13 @@ class EventDetailAttendeeChipCopyTest(TestCase):
         response = self.client.get(event.get_absolute_url())
         self.assertContains(response, '12 people attended')
         self.assertNotContains(response, '12 people are going')
+
+    def test_past_with_one_uses_singular_attended(self):
+        event = self._make_event('past-one', status='completed')
+        _register_users(event, 1)
+        response = self.client.get(event.get_absolute_url())
+        self.assertContains(response, '1 person attended')
+        self.assertNotContains(response, '1 people attended')
 
     def test_cancelled_with_attendees_uses_attended_copy(self):
         event = self._make_event('cancelled-evt', status='cancelled')
@@ -131,7 +143,7 @@ class EventListAttendeeChipTest(TestCase):
             _register_users(event, count)
         return event
 
-    def test_upcoming_events_list_hides_low_counts_and_keeps_five_plus(self):
+    def test_upcoming_events_list_shows_each_aggregate(self):
         self._make_event('upcoming-low', count=4)
         self._make_event('upcoming-high', count=5)
 
@@ -139,20 +151,20 @@ class EventListAttendeeChipTest(TestCase):
         body = response.content.decode()
 
         # Issue #1382: the timeline card shows a plain "N registered" count.
-        self.assertEqual(body.count('data-testid="event-attendee-count"'), 1)
+        self.assertEqual(body.count('data-testid="event-attendee-count"'), 2)
         self.assertIn('5 registered', body)
-        self.assertNotIn('4 registered', body)
+        self.assertIn('4 registered', body)
 
-    def test_past_recordings_list_hides_low_counts_and_keeps_five_plus(self):
+    def test_past_recordings_list_shows_each_aggregate(self):
         self._make_event('past-low', status='completed', count=4, recording=True)
         self._make_event('past-high', status='completed', count=5, recording=True)
 
         response = self.client.get('/events?filter=past')
         body = response.content.decode()
 
-        self.assertEqual(body.count('data-testid="event-attendee-count"'), 1)
+        self.assertEqual(body.count('data-testid="event-attendee-count"'), 2)
         self.assertIn('5 attended', body)
-        self.assertNotIn('4 attended', body)
+        self.assertIn('4 attended', body)
 
 
 class EventSeriesAttendeeChipTest(TestCase):
@@ -190,10 +202,11 @@ class EventSeriesAttendeeChipTest(TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
         self.assertEqual(
-            body.count('data-testid="event-attendee-count"'), 1,
+            body.count('data-testid="event-attendee-count"'), 3,
         )
+        self.assertIn('0 people are going', body)
+        self.assertIn('4 people are going', body)
         self.assertIn('5 people are going', body)
-        self.assertNotIn('4 people are going', body)
 
     def test_series_view_does_not_n_plus_one_on_attendee_counts(self):
         """Adding more events to a series must not add ``COUNT(*)`` queries.

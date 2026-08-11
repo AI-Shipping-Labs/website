@@ -11,26 +11,20 @@ Required context:
           ``registration_count`` property).
 
 Copy rules:
-  Counts 0-4   -> chip hidden
-  Upcoming 5+  -> "{n} people are going"
-  Past 5+      -> "{n} people attended"
-  Draft         -> chip hidden (draft events 404 for non-staff)
-
-The wrapping {% if %} keeps the surrounding flex/gap container clean
-when no chip is rendered (0-4, draft).
+  Upcoming -> "{n} people are going"
+  Past     -> "{n} people attended"
+  Draft    -> chip hidden (draft events 404 for non-staff)
 {% endcomment %}
 {% if event.is_upcoming or event.is_past %}
 {% with count=event.attendee_count %}
-{% if count >= 5 %}
 <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground"
       data-testid="event-attendee-count">
   <i data-lucide="users" class="h-3 w-3"></i>
   {% if event.is_upcoming %}
-    {{ count }} people are going
+    {% if count == 1 %}1 person is going{% else %}{{ count }} people are going{% endif %}
   {% else %}
-    {{ count }} people attended
+    {% if count == 1 %}1 person attended{% else %}{{ count }} people attended{% endif %}
   {% endif %}
 </span>
-{% endif %}
 {% endwith %}
 {% endif %}

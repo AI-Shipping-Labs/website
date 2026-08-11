@@ -99,14 +99,14 @@ class EventDetailRegistrationCardTest(TestCase):
 
 
 class EventDetailAttendeeChipTest(TestCase):
-    """Attendee chip follows the social-proof threshold for stale rows."""
+    """Attendee chip keeps the aggregate for stale rows."""
 
-    def test_stale_event_below_threshold_hides_attendee_chip(self):
+    def test_stale_event_low_count_shows_past_attendee_chip(self):
         event = _stale_upcoming()
         _register_users(event, 4)
         response = self.client.get(event.get_absolute_url())
-        self.assertNotContains(response, 'data-testid="event-attendee-count"')
-        self.assertNotContains(response, 'people attended')
+        self.assertContains(response, 'data-testid="event-attendee-count"')
+        self.assertContains(response, '4 people attended')
         self.assertNotContains(response, 'are going')
 
     def test_stale_event_shows_past_tense_attendee_chip(self):

@@ -77,7 +77,7 @@ Above the fold the paid page actually has a defensible top (plan card first), bu
 ### Design-system violations (numbered findings)
 
 1. Mobile overflow, Community strip (paid Pixel 7 screenshot). The three mini-cards overflow the viewport right edge and are clipped by `overflow-x-hidden` on `<main>`: arrow icons and right padding are cut, the poll title runs to the screen edge. Cause: the grid items (`<a>` at `dashboard.html:484` etc.) lack `min-w-0`, so the long poll title's nowrap min-content widens all three tracks past the container. The free page does not overflow (short labels), which confirms the content-length dependency. Breaks the mobile-behavior rule (no clipped badges/controls) and the 44px tap-target intent for the clipped arrows.
-2. Container width contradicts the contract. `dashboard.html:26` uses `mx-auto max-w-3xl`, but `_docs/design-system.md` (including its uncommitted edits, lines 141 and 292) still assigns the member dashboard to the `max-w-7xl` Frame, and `content/tests/test_container_widths.py` has no `dashboard.html` entry. Either the single-column direction is adopted (amend the doc + route table) or the template reverts. Open PM question 1.
+2. Container width contradicts the contract. `dashboard.html:26` uses `mx-auto max-w-3xl`, but `_docs/design-system.md` (including its uncommitted edits, lines 141 and 292) still assigns the member dashboard to the `max-w-7xl` Frame, and `content/tests/test_container_widths.py` has no `dashboard.html` entry. Resolved: `max-w-3xl` is adopted (see Decisions). The remaining work is to amend the doc and add the route-table/test entry, not to change the template.
 3. Section h2 scale is off-ramp. All five section headers use `text-xl font-semibold tracking-tight`; the type ramp's smallest section h2 is `text-2xl ... sm:text-3xl`. `text-xl` may be the right size for a 3xl-wide dashboard, but it is currently an undocumented seventh heading size. Open PM question 2.
 4. Decorative icons inside h2s. Every section h2 embeds an accent Lucide icon (`dashboard.html:222-223, 362-363, 475-476, 530-531, 559-560`). The listing contract explicitly bans decorative icons inside group H2s; the dashboard replicates the banned pattern five times, and the icons add a sixth accent element per viewport competing with CTAs.
 5. Hand-rolled button chrome. The starting-soon CTA (`_starting_soon_card.html:41`) hand-rolls `rounded-lg bg-accent px-5 py-3 ...` instead of `{% button_classes %}`; `px-5 py-3` is not one of the three sanctioned size paddings and `rounded-lg` differs from the button `rounded-md`.
@@ -342,18 +342,21 @@ Reasoning: inter-zone whitespace (12/16) vs intra-zone rows (4) is what makes th
 | 5 | Demote resume CTAs to secondary; remove hover affordance from static cards; card titles to `text-base font-semibold` | Medium - hierarchy legibility | Low |
 | 6 | Zone whitespace rhythm (`space-y-12/16` between, `space-y-4` within) + h2s without icons | Medium | Low |
 | 7 | `{% button_classes %}` on starting-soon CTA; eyebrow `tracking-widest`; callout `rounded-lg p-6`; grid gaps to `gap-4`/`gap-6` | Low - contract hygiene | Trivial |
-| 8 | Resolve dashboard width vs design-system Frame contract (doc amendment + width-test route entry, or revert) | Low visually, high for contract integrity | Low (decision + doc) |
+| 8 | Record the adopted `max-w-3xl` dashboard width in `_docs/design-system.md` and add the `dashboard.html` entry to `content/tests/test_container_widths.py` (decision already made - see Decisions) | Low visually, high for contract integrity | Low (doc + test) |
 
 Top three: 1, 2, 3.
 
+## Decisions
+
+1. Dashboard width - DECIDED 2026-08-11: keep `max-w-3xl` for the authenticated home dashboard. Single-column is the adopted direction; do not revert to `max-w-7xl`. Follow-up work required: amend `_docs/design-system.md` so the member dashboard is assigned to the 3xl Frame instead of 7xl, and add a `dashboard.html` entry to `content/tests/test_container_widths.py` so the contract is enforced. Finding 2 and ranked recommendation 8 are resolved by this decision and reduce to the doc/test update. If the plan card's internal two-column grid is cramped at 3xl, fix it inside the card (stack it) rather than widening the page.
+
 ## Open PM questions
 
-1. Dashboard width: the uncommitted template moved `/` (authenticated) from `max-w-7xl` to `max-w-3xl`, but `_docs/design-system.md` still assigns the member dashboard to the 7xl Frame and `content/tests/test_container_widths.py` has no dashboard entry. Adopt single-column (amend doc + route table; `max-w-3xl` vs `max-w-5xl` Detail is also open - the plan card's two-column internal grid is cramped at 3xl) or revert?
-2. Dashboard section-header scale: sanction a dashboard h2 role at `text-xl font-semibold tracking-tight` (new ramp entry) or move to the documented `text-2xl` smaller-section h2?
-3. Does the sprint plan card earn the `rounded-xl` spotlight exception (alongside tier cards and the home featured-sprint), or does it follow the `rounded-lg p-6` callout contract?
-4. Free-member gating on community links: the strip currently sends Free users to a level-20 book and Main+ polls with no lock badges. In the Unlock block, should these render with `{% member_access_badge %}` locks (demonstration) or be hidden entirely?
-5. Where does "get help" live for connected paid members? Slack deep link (`slack_profile_url` exists in context but is unused by the template) and Request a call currently have no stable home; proposal: Zone 5 row, but that is a product decision.
-6. Should "New for you" become genuinely since-last-visit (requires a last-seen timestamp) or stay latest-3?
+1. Dashboard section-header scale: sanction a dashboard h2 role at `text-xl font-semibold tracking-tight` (new ramp entry) or move to the documented `text-2xl` smaller-section h2?
+2. Does the sprint plan card earn the `rounded-xl` spotlight exception (alongside tier cards and the home featured-sprint), or does it follow the `rounded-lg p-6` callout contract?
+3. Free-member gating on community links: the strip currently sends Free users to a level-20 book and Main+ polls with no lock badges. In the Unlock block, should these render with `{% member_access_badge %}` locks (demonstration) or be hidden entirely?
+4. Where does "get help" live for connected paid members? Slack deep link (`slack_profile_url` exists in context but is unused by the template) and Request a call currently have no stable home; proposal: Zone 5 row, but that is a product decision.
+5. Should "New for you" become genuinely since-last-visit (requires a last-seen timestamp) or stay latest-3?
 
 ## Out of scope
 

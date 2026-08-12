@@ -242,9 +242,11 @@ class CancellingDropsFromAllSurfacesRegressionTest(TestCase):
         cls.series = EventSeries.objects.create(
             name='Regression Series', start_time=time(18, 0),
         )
-        cls.month_start = timezone.now().replace(
-            day=12, hour=12, minute=0, second=0, microsecond=0,
-        )
+        # Keep the target on the Upcoming surface regardless of wall-clock
+        # date/time. A fixed day-of-month becomes past after noon on that day,
+        # making this regression test fail even though the event is explicitly
+        # marked upcoming.
+        cls.month_start = timezone.now() + timedelta(days=1)
         cls.target = Event.objects.create(
             title='Regression Target Occurrence',
             slug='regression-target-occurrence',

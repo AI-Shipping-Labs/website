@@ -45,6 +45,89 @@ uv run asl events list --format raw      # compact JSON (for piping)
 uv run asl events list                   # pretty JSON (default)
 ```
 
+### Stripe tier reconciliation reports
+
+The primary paying-users-versus-Stripe check is one read-only command:
+
+```bash
+uv run asl tier-reconcile run
+```
+
+It enqueues the existing full-cohort reconciliation API and waits for the run by
+default. It polls every 2 seconds for up to 15 minutes, then prints the persisted
+summary and non-OK findings. `run`, `list`, `show`, and `wait` only report data.
+They can't change website access or call Stripe directly from the CLI.
+Their default format is `table` for operator review.
+
+Use these commands to start, resume, filter, and export reports:
+
+```bash
+# Start a long run without waiting, then resume it later
+uv run asl tier-reconcile run --no-wait
+uv run asl tier-reconcile wait <run-id>
+
+# Show one run without polling, or browse newest-first history
+uv run asl tier-reconcile show <run-id>
+uv run asl tier-reconcile list --page 1 --page-size 100
+uv run asl tier-reconcile list --all-pages
+
+# Narrow findings using server-owned filters (combined with AND)
+uv run asl tier-reconcile show <run-id> \
+  --filter actionable --tier main \
+  --classification ended_subscription_still_entitled
+
+# Fetch one bounded findings page; otherwise all next_cursor pages are followed
+uv run asl tier-reconcile show <run-id> --page 2 --page-size 100
+
+# Automation receives one JSON document even when pages are combined
+uv run asl tier-reconcile wait <run-id> --format json
+uv run asl tier-reconcile show <run-id> --format raw > report.json
+```
+
+`show`, `wait`, and completed `run` accept `--filter
+all|actionable|scheduled|warnings`, `--tier basic|main|premium|free`, and any
+server-supported `--classification` value. The CLI doesn't fix the
+classification set in the client. Findings auto-page by following each returned
+`next_cursor`. `--page N` selects one bounded page instead, and page sizes must
+be 1–500. `list` defaults to page 1 with 100 rows. It follows every cursor only
+when you pass `--all-pages`. Don't combine an explicit `--page` with
+`--all-pages`.
+
+Polling messages go to stderr, so JSON/raw stdout remains one parseable
+document. Override waiting with positive `--poll-interval SECONDS` and
+`--timeout SECONDS`. A timeout or Ctrl-C stops only local polling. The
+server-side run continues, and the printed `asl tier-reconcile wait <run-id>`
+command resumes it. The client never retries the enqueue POST after an ambiguous
+network error.
+
+The default output protects member data. Table output masks the email local part
+and omits Stripe customer/subscription IDs. JSON/raw output redacts `email`,
+`stripe_customer_id`, `current_subscription_id`, and `stripe_subscription_id`.
+It also adds `pii_redacted: true`. Use `--include-pii` only when you need full
+member emails and Stripe identifiers, and keep that output in an approved
+location.
+
+Use exit `0` for a successful report, even when it has findings. API, auth,
+network, not-found, and failed-run errors use exit `1`. Invalid CLI usage uses
+exit `2`, and a local wait timeout uses exit `3`. You can opt into exit `4`
+after the report prints with `--fail-on actionable|warning|any`; the default is
+`--fail-on never`.
+
+The older synchronous/email-targeted `tier-reconcile diagnostics` command
+remains read-only. Use the separate `tier-reconcile apply --data ...` command
+only for guarded writes. The server still requires explicit `dry_run=false`
+plus `confirm=apply_stripe_truth`, and report commands never invoke it. The
+deprecated `scripts/tier_reconcile_prod.sh` path delegates only to
+`uv run asl tier-reconcile run`.
+
+Interpret canonical Stripe values literally. `past_due` and `unpaid` remain
+dunning states and aren't relabelled canceled, non-paying, downgraded, or
+churned. Members with scheduled cancellation keep paid access through Stripe's
+period end. The report doesn't derive effective-tier/override state,
+notification state, or a grace deadline. Issue #1413 owns the future seven-day
+failed-payment grace policy. We can add new canonical server fields later
+without moving that policy into the CLI.
+
 ### Escape hatch
 
 ```bash

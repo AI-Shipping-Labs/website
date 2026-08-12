@@ -1,10 +1,10 @@
-"""Smaller surfaces: hosts, articles, tier-reconcile, diagnostics, openapi."""
+"""Smaller surfaces: hosts, articles, diagnostics, and openapi."""
 
 from __future__ import annotations
 
 import click
 
-from asl_cli.commands._shared import emit, format_option, get_client, json_option
+from asl_cli.commands._shared import emit, format_option, get_client
 
 API = "/api"
 
@@ -60,31 +60,6 @@ def article_preview_token_regenerate(content_id, fmt):
 
 
 groups.append(articles)
-
-
-# -- tier-reconcile ----------------------------------------------------------
-
-@click.group(name="tier-reconcile")
-def tier_reconcile():
-    """Tier reconciliation."""
-
-
-@tier_reconcile.command("diagnostics")
-@format_option
-def tier_reconcile_diagnostics(fmt):
-    """Tier reconciliation diagnostics."""
-    emit(get_client().get(f"{API}/payments/tier-reconcile/diagnostics"), fmt)
-
-
-@tier_reconcile.command("apply")
-@json_option("data", required=True)
-@format_option
-def tier_reconcile_apply(data, fmt):
-    """Apply tier reconciliation."""
-    emit(get_client().post(f"{API}/payments/tier-reconcile", json_body=data), fmt)
-
-
-groups.append(tier_reconcile)
 
 
 # -- standalone read commands ------------------------------------------------

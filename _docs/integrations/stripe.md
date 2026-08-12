@@ -446,9 +446,81 @@ consecutive failed runs.
 
 ### Read-only check and confirmed apply
 
+For day-to-day operator use, prefer the in-repo CLI. This is the single primary
+read-only paying-users-versus-Stripe report:
+
+```bash
+uv run asl tier-reconcile run
+```
+
+It calls `POST /api/payments/tier-reconcile/runs` exactly once and waits by
+polling the run-detail endpoint. It follows every findings `next_cursor`, then
+prints the persisted report. It doesn't query Stripe directly, reimplement the
+cohort/classifier, or change membership access.
+
+Use these commands to start and resume a long check, show persisted output, and
+list newest-first history:
+
+```bash
+uv run asl tier-reconcile run --no-wait
+uv run asl tier-reconcile wait <run-id>
+uv run asl tier-reconcile show <run-id>
+uv run asl tier-reconcile list --page 1 --page-size 100
+uv run asl tier-reconcile list --all-pages
+```
+
+`run` and `wait` poll every 2 seconds for up to 15 minutes by default. Positive
+`--poll-interval` and `--timeout` values override those defaults. A timeout
+exits 3 and Ctrl-C stops local polling only. Both print the run ID and resume
+command because the server-side job continues. The client doesn't retry an
+ambiguous enqueue failure, preventing accidental duplicate runs.
+
+`show`, `wait`, and the completed result of `run` accept the server-owned
+`--filter all|actionable|scheduled|warnings`, `--tier
+basic|main|premium|free`, and unrestricted `--classification VALUE` filters.
+They combine filters with AND and collect all pages by following the exact
+returned cursor. Use `--page N --page-size 1..500` for one bounded page, and
+don't combine an explicit page with `--all-pages`. `list` defaults to page 1
+and page size 100. `--all-pages` follows history cursors. JSON/raw returns one
+combined document with the run, evidence summary, ordered findings, and fetched
+pagination metadata.
+
+The report commands default to `--format table`. `--format json` is pretty and
+`--format raw` is compact. Poll progress uses stderr so structured stdout stays
+parseable. Table output masks email local parts and omits Stripe IDs. JSON/raw
+redacts `email`, `stripe_customer_id`, `current_subscription_id`, and
+`stripe_subscription_id`, then sets `pii_redacted: true`. `--include-pii`
+reveals canonical emails/identifiers and sets the marker false. Store and share
+that output only in an approved location. Report output never contains tokens,
+authorization headers, `.env` contents, or Stripe payloads.
+
+Reports exit 0 even with scheduled, actionable, or warning findings. Automation
+may request exit 4 after output with `--fail-on actionable|warning|any`
+(default `never`). API/auth/network/not-found and failed runs exit 1. Invalid
+options exit 2, and wait timeouts exit 3. An empty completed report says all
+checked members are in sync. Queued/running reports are labelled non-final.
+Failed reports show only the run ID and secret-free server error, not partial
+findings presented as success.
+
+The CLI compares only canonical API fields. These include the website base
+tier, exact Stripe subscription evidence, classification, action, outcome,
+message, and webhook evidence. `past_due`/`unpaid` remain exact dunning states,
+not canceled, "not paying", downgraded, or churned. The CLI doesn't fabricate
+in-sync detail rows. Those members contribute to `cohort`/`ok` counts because
+#1308 intentionally persists only non-OK findings.
+
+The CLI also doesn't infer effective tier, override state, grace expiry,
+notification delivery, or downgrade state. Issue #1413 exclusively owns the
+future seven-day failed-payment grace policy. This report will show future
+canonical fields only after the API supplies them.
+
+The old `scripts/tier_reconcile_prod.sh` entry point now delegates to the
+read-only `uv run asl tier-reconcile run` command. It contains no HTTP/token
+parsing or apply prompt.
+
 Diagnostic (read-only), no writes:
 
-```
+```text
 POST /api/payments/tier-reconcile/runs      # enqueue a full cohort run (202)
 GET  /api/payments/tier-reconcile/runs      # run history
 GET  /api/payments/tier-reconcile/runs/<id> # run detail + findings (filters)
@@ -491,6 +563,10 @@ Only deterministic drift is applied (active/trialing repair,
 scheduled-cancellation metadata, confirmed `canceled` reversion). Every
 warning/review/duplicate classification is skipped, apply is idempotent, and
 each actual change writes a secret-free audit event.
+
+This confirmed `asl tier-reconcile apply --data ...` path remains intentionally
+separate from `run`/`list`/`show`/`wait`. No reporting command prompts for,
+shortcuts to, or automatically performs an apply.
 
 Studio: `/studio/payments/subscription-reconciliation/` shows the latest run,
 summary counts, filters, and links to member and Stripe records. `Check all

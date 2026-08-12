@@ -11,6 +11,8 @@ from datetime import timedelta
 
 from django.utils import timezone
 
+from accounts.services.timezones import format_user_datetime
+
 logger = logging.getLogger(__name__)
 
 
@@ -71,12 +73,15 @@ def check_event_reminders():
 
         count = 0
         for reg in registrations:
+            event_datetime = format_user_datetime(
+                event.start_datetime, reg.user,
+            )
             result = NotificationService.create_event_reminder(
                 event=event,
                 user=reg.user,
                 interval='24h',
                 title=f'Reminder: {event.title} starts in 24 hours',
-                body=f'{event.title} is starting on {event.formatted_start()}. '
+                body=f'{event.title} is starting on {event_datetime}. '
                      f'Don\'t forget to join!',
             )
             if result:
@@ -123,13 +128,16 @@ def check_event_reminders():
 
         count = 0
         for reg in registrations:
+            event_datetime = format_user_datetime(
+                event.start_datetime, reg.user,
+            )
             result = NotificationService.create_event_reminder(
                 event=event,
                 user=reg.user,
                 interval='20m',
                 title=f'Starting soon: {event.title} starts in 20 minutes',
                 body=f'{event.title} is starting soon! '
-                     f'Get ready to join at {event.formatted_start()}.',
+                     f'Get ready to join at {event_datetime}.',
             )
             if result:
                 count += 1

@@ -106,6 +106,145 @@ class CheckEventRemindersTest(TestCase):
         self.assertIn('20 minutes', notif.title)
         self.assertEqual(notif.notification_type, 'event_reminder')
 
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_24h_bodies_are_formatted_per_recipient_across_date_boundary(
+        self, mock_slack, mock_ses,
+    ):
+        """Each bell body uses its recipient's zone, including DST/date shifts."""
+        self.user.preferred_timezone = 'Europe/Berlin'
+        self.user.save(update_fields=['preferred_timezone'])
+        self.user2.preferred_timezone = 'America/New_York'
+        self.user2.save(update_fields=['preferred_timezone'])
+
+        # Berlin is on CEST (+02) and crosses into March 30; New York is on
+        # EDT (-04) and remains on March 29 for the same event instant.
+        start = datetime(2026, 3, 29, 23, 30, 0, tzinfo=dt_tz.utc)
+        event = Event.objects.create(
+            title='Timezone Boundary Event',
+            slug='timezone-boundary-event',
+            start_datetime=start,
+            status='upcoming',
+        )
+        EventRegistration.objects.create(event=event, user=self.user)
+        EventRegistration.objects.create(event=event, user=self.user2)
+
+        with freeze_time(start - timedelta(hours=24)), patch.object(
+            Event,
+            'formatted_start',
+            side_effect=AssertionError('formatted_start must not be called'),
+        ):
+            check_event_reminders()
+
+        expected_by_user = {
+            self.user: (
+                'Timezone Boundary Event is starting on '
+                'March 30, 2026, 01:30 Europe/Berlin. '
+                "Don't forget to join!"
+            ),
+            self.user2: (
+                'Timezone Boundary Event is starting on '
+                'March 29, 2026, 19:30 America/New_York. '
+                "Don't forget to join!"
+            ),
+        }
+        for user, expected_body in expected_by_user.items():
+            with self.subTest(timezone=user.preferred_timezone):
+                notification = Notification.objects.get(user=user)
+                self.assertEqual(notification.body, expected_body)
+                self.assertEqual(
+                    notification.title,
+                    'Reminder: Timezone Boundary Event starts in 24 hours',
+                )
+                self.assertEqual(notification.notification_type, 'event_reminder')
+                self.assertEqual(notification.url, event.get_absolute_url())
+
+        self.assertEqual(mock_ses.call_count, 2)
+        rendered_by_email = {
+            call.args[0]: call.args[2] for call in mock_ses.call_args_list
+        }
+        self.assertIn(
+            'March 30, 2026, 01:30 Europe/Berlin',
+            rendered_by_email[self.user.email],
+        )
+        self.assertIn(
+            'March 29, 2026, 19:30 America/New_York',
+            rendered_by_email[self.user2.email],
+        )
+
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_20m_body_uses_recipient_timezone_without_formatted_start(
+        self, mock_slack, mock_ses,
+    ):
+        """Starting-soon bells use the same recipient-local time contract."""
+        self.user.preferred_timezone = 'Europe/Berlin'
+        self.user.save(update_fields=['preferred_timezone'])
+        start = datetime(2026, 8, 10, 15, 0, 0, tzinfo=dt_tz.utc)
+        event = Event.objects.create(
+            title='Local Soon Event',
+            slug='local-soon-event',
+            start_datetime=start,
+            status='upcoming',
+        )
+        EventRegistration.objects.create(event=event, user=self.user)
+
+        with freeze_time(start - timedelta(minutes=20)), patch.object(
+            Event,
+            'formatted_start',
+            side_effect=AssertionError('formatted_start must not be called'),
+        ):
+            check_event_reminders()
+
+        notification = Notification.objects.get(user=self.user)
+        self.assertEqual(
+            notification.body,
+            'Local Soon Event is starting soon! Get ready to join at '
+            'August 10, 2026, 17:00 Europe/Berlin.',
+        )
+        self.assertEqual(
+            notification.title,
+            'Starting soon: Local Soon Event starts in 20 minutes',
+        )
+        self.assertEqual(notification.notification_type, 'event_reminder')
+        self.assertEqual(notification.url, event.get_absolute_url())
+        self.assertIn(
+            'August 10, 2026, 17:00 Europe/Berlin',
+            mock_ses.call_args.args[2],
+        )
+
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_24h_body_uses_utc_for_missing_or_invalid_timezone(
+        self, mock_slack, mock_ses,
+    ):
+        """Empty and invalid saved preferences fall back to explicit UTC."""
+        self.user.preferred_timezone = ''
+        self.user.save(update_fields=['preferred_timezone'])
+        self.user2.preferred_timezone = 'Not/A_Timezone'
+        self.user2.save(update_fields=['preferred_timezone'])
+        start = datetime(2026, 8, 10, 15, 0, 0, tzinfo=dt_tz.utc)
+        event = Event.objects.create(
+            title='UTC Fallback Event',
+            slug='utc-fallback-event',
+            start_datetime=start,
+            status='upcoming',
+        )
+        EventRegistration.objects.create(event=event, user=self.user)
+        EventRegistration.objects.create(event=event, user=self.user2)
+
+        with freeze_time(start - timedelta(hours=24)):
+            check_event_reminders()
+
+        expected_body = (
+            'UTC Fallback Event is starting on '
+            'August 10, 2026, 15:00 UTC. '
+            "Don't forget to join!"
+        )
+        for user in (self.user, self.user2):
+            with self.subTest(timezone=user.preferred_timezone):
+                self.assertEqual(
+                    Notification.objects.get(user=user).body,
+                    expected_body,
+                )
+
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_auto_registered_host_and_attendee_get_one_20m_reminder_each(
@@ -200,6 +339,8 @@ class CheckEventRemindersTest(TestCase):
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_deduplication_no_double_reminders(self, mock_slack, mock_ses):
         """Running the job twice should not create duplicate reminders."""
+        self.user.preferred_timezone = 'Europe/Berlin'
+        self.user.save(update_fields=['preferred_timezone'])
         event = Event.objects.create(
             title='Dedup Event', slug='event-dedup',
             start_datetime=FROZEN_NOW + timedelta(hours=24),
@@ -208,9 +349,18 @@ class CheckEventRemindersTest(TestCase):
         EventRegistration.objects.create(event=event, user=self.user)
 
         check_event_reminders()
+        original_body = Notification.objects.get(user=self.user).body
+        self.user.preferred_timezone = 'America/New_York'
+        self.user.save(update_fields=['preferred_timezone'])
         check_event_reminders()
 
         self.assertEqual(Notification.objects.count(), 1)
+        self.assertEqual(
+            Notification.objects.get(user=self.user).body,
+            original_body,
+        )
+        self.assertIn('Europe/Berlin', original_body)
+        self.assertNotIn('America/New_York', original_body)
         # One per-user 24h row; the 24h_slack guard row is per-event.
         self.assertEqual(
             EventReminderLog.objects.filter(interval='24h').count(), 1,

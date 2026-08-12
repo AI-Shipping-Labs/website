@@ -1,10 +1,10 @@
 # Membership page UI/UX audit
 
-Date: 2026-08-11  
-Canonical surface: `/membership`  
-Legacy redirects: `/pricing` -> `/membership`; `/activities` -> `/membership#activities`  
-Related issue: #1402  
-Reference: `_docs/design-system.md`
+- Date: 2026-08-11
+- Canonical surface: `/membership`
+- Legacy redirects: `/pricing` -> `/membership`; `/activities` -> `/membership#activities`
+- Related issue: #1402
+- Reference: `_docs/design-system.md`
 
 ## Outcome
 

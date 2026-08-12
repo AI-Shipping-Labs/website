@@ -71,12 +71,27 @@ class TestStudioCallProfileMemberJourney:
             create_staff_user('staff-call-profile-1404@test.com')
             create_user('member-call-profile-1404@test.com', tier_slug='free')
             _complete_onboarding('member-call-profile-1404@test.com')
+            from django.db import connection
+
+            from community.models import BookedCall, CallHost
+
+            BookedCall.objects.all().delete()
+            CallHost.objects.all().delete()
+            connection.close()
 
         staff_context = auth_context(browser, 'staff-call-profile-1404@test.com')
         try:
             page = staff_context.new_page()
             page.goto(f'{django_server}/studio/call-hosts/', wait_until='domcontentloaded')
-            page.get_by_role('link', name='New call profile', exact=True).click()
+            empty_state_cta = page.get_by_test_id('studio-empty-state-fresh').get_by_role(
+                'link', name='New call profile', exact=True,
+            )
+            assert empty_state_cta.get_attribute('href') == '/studio/call-hosts/new'
+            header_cta = page.get_by_test_id('studio-header-actions').get_by_role(
+                'link', name='New call profile', exact=True,
+            )
+            assert header_cta.get_attribute('href') == '/studio/call-hosts/new'
+            header_cta.click()
             _fill_profile_form(page)
             page.get_by_label('Show on Request a call').check()
             page.get_by_test_id('sticky-save-action').click()

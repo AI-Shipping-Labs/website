@@ -55,6 +55,7 @@ def stripe_webhook(request):
     event_id = _event_field(event, "id", "") or ""
     event_type = _event_field(event, "type", "") or ""
     livemode = _event_field(event, "livemode", None)
+    event_created = _event_field(event, "created", None)
     event_data = _event_field(event, "data", {}) or {}
     event_object = (
         event_data.get("object", {})
@@ -79,5 +80,6 @@ def stripe_webhook(request):
         event_type=event_type,
         obj=obj_dict,
         livemode=livemode,
+        event_created=event_created,
     )
     return JsonResponse({"status": outcome}, status=http_status)

@@ -115,6 +115,23 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(schedule.func, 'jobs.tasks.expire_overrides.expire_tier_overrides')
         self.assertEqual(schedule.cron, '*/15 * * * *')
 
+    def test_creates_monthly_payment_grace_schedules(self):
+        call_command('setup_schedules', stdout=StringIO())
+        discovery = Schedule.objects.get(
+            name='stripe-monthly-payment-grace-discovery-daily',
+        )
+        self.assertEqual(
+            discovery.func,
+            'payments.tasks.monthly_payment_grace.run_scheduled_grace_discovery',
+        )
+        self.assertEqual(discovery.cron, '45 4 * * *')
+        sweep = Schedule.objects.get(name='stripe-monthly-payment-grace-sweep')
+        self.assertEqual(
+            sweep.func,
+            'payments.tasks.monthly_payment_grace.run_payment_grace_sweep',
+        )
+        self.assertEqual(sweep.cron, '*/15 * * * *')
+
     def test_creates_slack_membership_refresh_schedule(self):
         """Command registers slack-membership-refresh at daily cadence.
 
@@ -281,6 +298,8 @@ class SetupSchedulesCommandTest(TestCase):
             'import-slack-daily',
             'import-stripe-daily',
             'stripe-subscription-reconciliation-daily',
+            'stripe-monthly-payment-grace-discovery-daily',
+            'stripe-monthly-payment-grace-sweep',
             'remind-unverified-users',
             'purge-unverified-users',
             'ingest-plan-sprints',

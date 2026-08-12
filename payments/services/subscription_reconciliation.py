@@ -60,6 +60,9 @@ CLASSIFICATION_SCHEDULED = "scheduled_cancellation"
 CLASSIFICATION_ENDED = "ended_subscription_still_entitled"
 CLASSIFICATION_SUSPECTED_MISSED_DELETE = "suspected_missed_subscription_deleted"
 CLASSIFICATION_DUNNING = "dunning_grace"
+CLASSIFICATION_MONTHLY_GRACE_ACTIVE = "monthly_payment_grace_active"
+CLASSIFICATION_MONTHLY_GRACE_DUE = "monthly_payment_grace_due"
+CLASSIFICATION_MONTHLY_GRACE_REVIEW = "monthly_payment_grace_review"
 CLASSIFICATION_NON_ENTITLED_REVIEW = "non_entitled_status_review"
 CLASSIFICATION_MISSING_SUBSCRIPTION = "missing_stripe_subscription"
 CLASSIFICATION_MISSING_LINK = "missing_stripe_link"
@@ -130,6 +133,15 @@ class ClassificationResult:
     webhook_evidence: str = Finding.WEBHOOK_NOT_APPLICABLE
     # Duplicate ownership.
     conflicting_user_ids: list = field(default_factory=list)
+    effective_tier_slug: str = ""
+    latest_invoice_id: str = ""
+    latest_invoice_status: str = ""
+    latest_invoice_paid: bool | None = None
+    latest_invoice_created: object = None
+    collection_method: str = ""
+    interval: str = ""
+    interval_count: int | None = None
+    payment_grace: object = None
 
     @property
     def is_ok(self):
@@ -147,6 +159,7 @@ class ClassificationResult:
     def is_warning(self):
         return self.classification in {
             CLASSIFICATION_DUNNING,
+            CLASSIFICATION_MONTHLY_GRACE_REVIEW,
             CLASSIFICATION_NON_ENTITLED_REVIEW,
             CLASSIFICATION_MISSING_SUBSCRIPTION,
             CLASSIFICATION_MISSING_LINK,
@@ -218,7 +231,7 @@ def _retrieve_subscription(subscription_id):
         return stripe.Subscription.retrieve(
             subscription_id,
             api_key=_secret_key(),
-            expand=["items.data.price"],
+            expand=["items.data.price", "latest_invoice"],
         )
     except stripe.InvalidRequestError as exc:
         if getattr(exc, "code", None) == "resource_missing" or getattr(
@@ -235,7 +248,7 @@ def _list_subscriptions_for_customer(customer_id):
         customer=customer_id,
         status="all",
         limit=100,
-        expand=["data.items.data.price"],
+        expand=["data.items.data.price", "data.latest_invoice"],
     )
     subscriptions = list(response.auto_paging_iter())
     subscriptions.sort(
@@ -261,6 +274,7 @@ class _StripeState:
     period_end: object = None
     ambiguous: bool = False
     lookup_error: str = ""
+    latest_invoice: object = None
 
 
 def _resolve_stripe_state(user):
@@ -314,6 +328,7 @@ def _state_from_subscription(sub):
         subscription_id=_get(sub, "id", "") or "",
         cancel_at_period_end=bool(_get(sub, "cancel_at_period_end", False)),
         period_end=_subscription_period_end(sub),
+        latest_invoice=_get(sub, "latest_invoice", None),
     )
 
 
@@ -384,6 +399,9 @@ def classify_user(user, *, price_to_tier=None, duplicate_ids=None):
     duplicate_ids = duplicate_ids or set()
 
     result = ClassificationResult(user=user, classification=CLASSIFICATION_OK)
+    from payments.services.monthly_payment_grace import _effective_tier
+    effective = _effective_tier(user)
+    result.effective_tier_slug = effective.slug if effective else "free"
 
     # Duplicate ownership is decided BEFORE any Stripe-driven classification;
     # it is never eligible for apply.
@@ -415,6 +433,22 @@ def classify_user(user, *, price_to_tier=None, duplicate_ids=None):
         if tier is not None:
             result.stripe_tier = tier
             result.stripe_tier_slug = tier.slug
+        invoice = state.latest_invoice
+        if invoice is not None and not isinstance(invoice, str):
+            from payments.services.monthly_payment_grace import _utc_timestamp
+            result.latest_invoice_id = _get(invoice, "id", "") or ""
+            result.latest_invoice_status = _get(invoice, "status", "") or ""
+            result.latest_invoice_paid = bool(_get(invoice, "paid", False))
+            result.latest_invoice_created = _utc_timestamp(_get(invoice, "created"))
+            result.collection_method = _get(invoice, "collection_method", "") or ""
+        items = list(_get(_get(state.subscription, "items", {}) or {}, "data", []) or [])
+        if len(items) == 1:
+            recurring = _get(_get(items[0], "price", {}) or {}, "recurring", {}) or {}
+            result.interval = _get(recurring, "interval", "") or ""
+            try:
+                result.interval_count = int(_get(recurring, "interval_count", 1) or 1)
+            except (TypeError, ValueError):
+                result.interval_count = None
 
     # No Stripe subscription/history found.
     if not state.found:
@@ -448,12 +482,33 @@ def classify_user(user, *, price_to_tier=None, duplicate_ids=None):
 
     # Dunning / grace — NEVER a cancellation, NEVER a downgrade.
     if status in _DUNNING_STATUSES:
-        result.classification = CLASSIFICATION_DUNNING
-        result.action = ACTION_REVIEW
-        result.message = (
-            f"Payment is in dunning (live Stripe status {status}); access is "
-            "retained until Stripe ends the subscription."
+        from payments.models import MonthlyPaymentGrace
+        from payments.services.monthly_payment_grace import qualify_monthly_failure
+        grace = MonthlyPaymentGrace.objects.filter(
+            user=user,
+            status__in=[MonthlyPaymentGrace.STATUS_ACTIVE, MonthlyPaymentGrace.STATUS_REVIEW],
+        ).first()
+        result.payment_grace = grace
+        qualification = qualify_monthly_failure(
+            state.latest_invoice or {}, state.subscription,
+            price_to_tier=price_to_tier,
         )
+        if qualification.eligible:
+            due = bool(grace and timezone.now() >= grace.effective_expires_at)
+            result.classification = (
+                CLASSIFICATION_MONTHLY_GRACE_DUE if due
+                else CLASSIFICATION_MONTHLY_GRACE_ACTIVE
+            )
+            result.action = "payment_grace_sweep" if due else "payment_grace_observe"
+            result.message = (
+                "Eligible unpaid monthly membership invoice; payment grace "
+                "is due." if due else
+                "Eligible unpaid monthly membership invoice; payment grace is active."
+            )
+        else:
+            result.classification = CLASSIFICATION_MONTHLY_GRACE_REVIEW
+            result.action = ACTION_REVIEW
+            result.message = f"Payment grace excluded: {qualification.message}"
         return result
 
     # Non-entitled review states.
@@ -860,6 +915,18 @@ def _persist_finding(run, result, *, outcome):
         cancel_at_period_end=result.cancel_at_period_end,
         stripe_period_end=result.stripe_period_end,
         stripe_tier=result.stripe_tier_slug,
+        effective_tier=result.effective_tier_slug,
+        latest_invoice_id=result.latest_invoice_id,
+        latest_invoice_status=result.latest_invoice_status,
+        latest_invoice_paid=result.latest_invoice_paid,
+        latest_invoice_created=result.latest_invoice_created,
+        collection_method=result.collection_method,
+        interval=result.interval,
+        interval_count=result.interval_count,
+        payment_grace=result.payment_grace,
+        payment_grace_status=(result.payment_grace.status if result.payment_grace else ""),
+        payment_grace_started_at=(result.payment_grace.grace_started_at if result.payment_grace else None),
+        payment_grace_expires_at=(result.payment_grace.effective_expires_at if result.payment_grace else None),
         webhook_event_id=result.webhook_event_id,
         webhook_event_type=result.webhook_event_type,
         webhook_event_status=result.webhook_event_status,

@@ -159,12 +159,13 @@ Key member-facing distinctions the report surfaces:
   date — it is not churn and never revokes access early.
 - An ended (`canceled`) subscription that is still paid locally is actionable
   (`Revert to Free`); a surviving admin override keeps effective access.
-- A failed payment shows the exact live Stripe status (`Dunning / grace`) and
-  never offers `Revert to Free` — access is retained until Stripe ends the
-  subscription.
+- A qualifying monthly failed payment shows `Payment grace active`, `due`, or
+  `review`, the exact invoice/source/start/deadline/check state, delivery
+  outcomes, and base/effective tiers. Unsupported billing states remain
+  review-only.
 
 The report supports two independent chip rows: a view filter (All, Actionable,
-Scheduled, Warnings) and a paid-tier filter (All tiers, Basic, Main, Premium);
+Scheduled, Warnings, Payment grace) and a paid-tier filter (All tiers, Basic, Main, Premium);
 they combine as AND so an operator can, for example, see only Main-tier
 actionable rows.
 
@@ -184,3 +185,8 @@ the synchronous live check and only accepts `email` and `include=ok` (no tier or
 classification filters). See `_docs/api.md` for `curl` examples and
 `_docs/integrations/stripe.md#subscription-reconciliation-live-stripe-vs-website-access`
 for the full state contract, cadence, and the confirmed apply API.
+
+Member detail shows the latest five payment-grace rows with base and effective
+tier separately, deadline/status, safe Stripe identifiers, delivery states,
+review reason, and an audit-activity link. Both surfaces are read-only: there
+is no expire-now, extension, forgiveness, or mark-paid control.

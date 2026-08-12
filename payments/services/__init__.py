@@ -72,6 +72,7 @@ from .webhook_handlers import (  # noqa: E402
     _send_payment_notification_email,
     handle_checkout_completed,
     handle_customer_updated,
+    handle_invoice_paid,
     handle_invoice_payment_failed,
     handle_subscription_deleted,
     handle_subscription_updated,
@@ -86,6 +87,7 @@ __all__ = [
     "handle_subscription_updated",
     "handle_subscription_deleted",
     "handle_invoice_payment_failed",
+    "handle_invoice_paid",
     # Webhook signature + idempotency
     "verify_webhook_signature",
     "is_event_already_processed",

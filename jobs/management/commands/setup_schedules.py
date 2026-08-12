@@ -194,6 +194,24 @@ class Command(BaseCommand):
             'Registered: stripe-subscription-reconciliation-daily (daily at 04:30 UTC)'
         ))
 
+        schedule(
+            'payments.tasks.monthly_payment_grace.run_scheduled_grace_discovery',
+            cron='45 4 * * *',
+            name='stripe-monthly-payment-grace-discovery-daily',
+        )
+        self.stdout.write(self.style.SUCCESS(
+            'Registered: stripe-monthly-payment-grace-discovery-daily (daily at 04:45 UTC)'
+        ))
+
+        schedule(
+            'payments.tasks.monthly_payment_grace.run_payment_grace_sweep',
+            cron='*/15 * * * *',
+            name='stripe-monthly-payment-grace-sweep',
+        )
+        self.stdout.write(self.style.SUCCESS(
+            'Registered: stripe-monthly-payment-grace-sweep (every 15 minutes)'
+        ))
+
         # Issue #452: lifecycle of unverified email-signup accounts.
         # Reminder runs first (07:00 UTC) so users get a 24h heads-up
         # before the purge sweep (08:00 UTC) on the same calendar day.

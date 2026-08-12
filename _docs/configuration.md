@@ -120,12 +120,19 @@ Keys to set in Studio:
 |-----|--------|-------|
 | `STRIPE_SECRET_KEY` | secret | Stripe Dashboard > Developers > API keys. |
 | `STRIPE_WEBHOOK_SECRET` | secret | Stripe Dashboard > Webhooks > select endpoint > Signing secret. |
-| `STRIPE_CUSTOMER_PORTAL_URL` | non-secret | Customer portal URL from the Billing settings page. |
+| `STRIPE_CUSTOMER_PORTAL_URL` | non-secret | Stable `https://billing.stripe.com/p/login/<id>` portal login URL from the Billing settings page; bearer `/p/session/` URLs and URLs with credentials/query/fragment are rejected for payment-grace email. |
 | `STRIPE_DASHBOARD_ACCOUNT_ID` | non-secret | Optional. Stripe account ID (e.g. `acct_1T1mfGB7mZrgL7H5`) used to deep-link the per-user Stripe icon on `/studio/users/` to `https://dashboard.stripe.com/<acct>/customers/<cus_id>`. Find it in the Stripe URL when signed in. When blank the icon renders without a link. |
+| `STRIPE_MONTHLY_PAYMENT_GRACE_MODE` | non-secret | `observe` (default) records qualifying monthly grace and initial diagnostics without access changes; `enforce` enables the T-48 warning and verified expiry transition. Invalid values fail safe to observe. |
+| `PAYMENT_FAILURE_TEAM_EMAIL` | non-secret email | Validated single recipient for initial failed-payment diagnostics; defaults to `team@aishippinglabs.com`. Invalid/blank values are recorded for staff and never redirect mail. |
 
 Webhook endpoint to register in Stripe: `{SITE_BASE_URL}/api/webhooks/payments` (no trailing slash).
 
-Webhook events: see #113 / Stripe documentation for the exact event list. Minimum events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`.
+Webhook events: exactly six are required: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`, `invoice.paid`, and `customer.updated`.
+
+Monthly payment-grace schedules: daily missed-webhook discovery at 04:45 UTC
+after reconciliation, plus an idempotent 15-minute sweep. See the Stripe
+integration runbook for qualification, 168-hour/T-48 timing,
+observe-to-enforce rollout/rollback, overrides, and incident recovery.
 
 Operator payment notification (issue #645): set `PAYMENT_NOTIFICATION_EMAIL` under `Studio > Settings > Site` to receive an internal email whenever a Stripe checkout completes (new paid signup, tier upgrade, or course purchase). The setting is non-secret, plain string, and has NO hard-coded default — leave it blank to disable notifications entirely; populated with an address it sends one plain-text mail per non-duplicate webhook from `DEFAULT_FROM_EMAIL`. Failures to send are logged at WARNING and never break the webhook handler. Idempotency rides on the existing `WebhookEvent` row guard, so Stripe retries of the same event never produce duplicate emails.
 

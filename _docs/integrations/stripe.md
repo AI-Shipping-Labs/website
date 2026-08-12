@@ -128,14 +128,15 @@ Prereqs: You must create a webhook endpoint first.
   supported by the handler.
 - API version: leave as the Stripe default at creation time. The handler
   reads `type`, `id`, and `data` only.
-- Subscribe to exactly these 5 events:
+  - Subscribe to exactly these 6 events:
   - `checkout.session.completed`
   - `customer.subscription.updated`
   - `customer.subscription.deleted`
   - `invoice.payment_failed`
+  - `invoice.paid`
   - `customer.updated`
 
-  Other events (e.g. `invoice.paid`, `invoice.payment_succeeded`) are
+  Other events (e.g. `invoice.payment_succeeded`) are
   not handled and add log/audit noise without enabling any platform
   behavior. Don't subscribe speculatively.
 
@@ -225,10 +226,92 @@ re-activated. It is otherwise stable. Routine rotation is not necessary.
 If you do rotate it, paste the new URL into Studio — there is no
 intermediate signing step.
 
+Payment-grace email validates the configured value as the stable
+`https://billing.stripe.com/p/login/<id>` form with no credentials, query, or
+fragment. A `/p/session/` URL is a bearer session and is deliberately rejected.
+
 Test vs live: Test-mode and live-mode portals have separate URLs and
 separate configurations. Match the mode to your `STRIPE_SECRET_KEY`
 otherwise the link will load a portal that has no record of the
-customer's subscription.
+customer’s subscription.
+
+## STRIPE_MONTHLY_PAYMENT_GRACE_MODE
+
+Purpose: controls the staged monthly failed-payment policy. Allowed values are
+`observe` and `enforce`; invalid values fail safe to `observe`. The default is
+`observe`.
+
+In observe mode, an exact automatically collected, unpaid one-month membership
+invoice on a uniquely owned `past_due|unpaid` subscription starts a durable
+grace and sends only the initial member/team messages. No warning, Free email,
+or access change occurs. In enforce mode, the reminder and expiry policy runs.
+The first enforcement sweep stamps each previously observed grace once and
+gives it at least a fresh 168-hour enforcement window; toggling modes cannot
+reset that stamp.
+
+Rollout: deploy in `observe`, review the Payment grace filter in Studio and the
+read-only API cohort, then set `enforce`. Roll back by returning to `observe`;
+existing grace and delivery audit rows remain available and initial failure
+diagnostics continue. Do not delete grace rows to roll back.
+
+## PAYMENT_FAILURE_TEAM_EMAIL
+
+Purpose: single validated recipient for the initial `[Payments] Member payment
+failed` diagnostic. Default: `team@aishippinglabs.com`. Blank or invalid values
+do not redirect mail elsewhere: the team delivery is omitted and a staff-only
+configuration error is recorded while the member path continues.
+
+## Monthly payment grace state contract
+
+The policy is exactly 168 hours from the earliest authoritative Stripe failure
+timestamp: webhook event `created`, or invoice `created` when the daily 04:45
+UTC discovery task finds a missed webhook after the 04:30 reconciliation. A
+retry for the same invoice never resets the timestamp. The 15-minute sweep
+sends one warning at T-48 hours and re-fetches the exact subscription and
+invoice at expiry before changing state.
+
+Only `interval=month`, `interval_count=1`, `charge_automatically`, one mapped
+paid membership item, unpaid invoice, and `past_due|unpaid` qualify. Annual,
+multi-month, weekly/daily, one-time, manual-collection, trial-only,
+unknown/mixed/multiple price, missing/ambiguous history, and
+`incomplete|incomplete_expired|paused` remain review-only. A scheduled
+cancellation remains paid through `current_period_end`/`cancel_at` and never
+creates grace by itself.
+
+`invoice.paid` or a matching active/trialing subscription update recovers grace
+atomically and suppresses unsent warning/expiry work. Recovery matches the
+verified event's test/live mode and stores its stable event ID and `created`
+timestamp; an opposite-mode or ambiguous match changes no grace/member state
+and remains visible in webhook diagnostics. At expiry, uncertainty,
+ownership ambiguity, manual tier/subscription changes, or Stripe errors become
+`review` without access mutation. A successful expiry changes only the base
+tier to Free, retains safe Stripe recovery IDs and learning progress, writes
+the distinct `stripe:lapsed` state, and removes community access only if the
+effective tier falls below Main. Active `TierOverride` rows are never changed;
+Studio, API, audit, and email distinguish a Free base tier from continuing
+courtesy effective access.
+
+Approved subjects are: `Payment failed — please retry your AI Shipping Labs
+payment`, `Payment needed to keep your paid membership`, and `Your AI Shipping
+Labs account is now Free`; the operator subject is `[Payments] Member payment
+failed`. The initial member message deliberately contains no grace, deadline,
+access-loss, downgrade, or Free-account language. All member messages use only
+the stable validated `STRIPE_CUSTOMER_PORTAL_URL`; a missing/invalid URL is
+omitted with reply-for-help copy and a staff-visible error. Delivery claims
+expire after 15 minutes only before transport starts. Immediately before the
+irreversible SES call, a transactionally fenced `transport_started_at` marker
+prevents a reclaimed/late worker from also sending. A caught transport failure
+clears that marker and uses bounded exponential backoff. If a worker disappears
+after transport begins and the result is unknowable, automatic resend is
+suppressed and the delivery becomes a staff-visible failed/unknown outcome;
+operators investigate instead of risking duplicate mail. The durable
+grace/kind/recipient plus `EmailLog.dedupe_key` also prevents replay spam.
+
+Incident recovery: repair ownership/configuration in Stripe or Studio, keep
+the policy in observe if broad uncertainty exists, then let reconciliation and
+the sweep re-evaluate. Use Stripe as payment truth and `TierOverride` for
+explicit courtesy access; there is intentionally no force-expire, extend, or
+mark-paid endpoint.
 
 ## STRIPE_DASHBOARD_ACCOUNT_ID
 
@@ -275,7 +358,7 @@ Where it is used: Studio > Payments > `Stripe webhooks`
 (`/studio/payments/stripe-webhooks/`) and the staff-token API
 `POST /api/payments/stripe-webhooks/verify`. The verifier reads Stripe webhook
 endpoints in the same mode as `STRIPE_SECRET_KEY` and confirms exactly one
-enabled snapshot endpoint targets this URL with the five required events.
+enabled snapshot endpoint targets this URL with the six required events.
 
 Test vs live: n/a to the value itself; the mode comes from the configured key.
 The verifier reports `key_mode` (test/live) separately from the URL check.
@@ -288,9 +371,9 @@ ID is unknown is issue #1308, not this procedure.
 
 1. In the live-mode Stripe Dashboard, create or open the endpoint for
    `https://aishippinglabs.com/api/webhooks/payments`. Choose "Your account",
-   Snapshot (classic) payloads, and enable exactly the five documented events
+   Snapshot (classic) payloads, and enable exactly the six documented events
    (`checkout.session.completed`, `customer.subscription.updated`,
-   `customer.subscription.deleted`, `invoice.payment_failed`,
+   `customer.subscription.deleted`, `invoice.payment_failed`, `invoice.paid`,
    `customer.updated`). Copy that endpoint's live `whsec_...` into Studio's
    `STRIPE_WEBHOOK_SECRET`, and confirm the configured `sk_live_...` belongs to
    the same account/mode.

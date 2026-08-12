@@ -1776,8 +1776,8 @@ class InvoicePaymentFailedHandlerTest(TestCase):
     """Tests for the invoice.payment_failed webhook handler."""
 
     @patch("payments.services.send_mail")
-    def test_sends_email_on_payment_failure(self, mock_send_mail):
-        """An email is sent to the user when payment fails."""
+    def test_incomplete_invoice_cannot_send_or_start_grace(self, mock_send_mail):
+        """Email/customer fields are not payment or entitlement authority."""
         basic_tier = Tier.objects.get(slug="basic")
         user = User.objects.create_user(email="payfail@test.com")
         user.tier = basic_tier
@@ -1791,10 +1791,7 @@ class InvoicePaymentFailedHandlerTest(TestCase):
 
         handle_invoice_payment_failed(invoice_data)
 
-        mock_send_mail.assert_called_once()
-        call_kwargs = mock_send_mail.call_args
-        self.assertIn("payfail@test.com", call_kwargs[1]["recipient_list"])
-        self.assertIn("Payment failed", call_kwargs[1]["subject"])
+        mock_send_mail.assert_not_called()
 
     @patch("payments.services.send_mail")
     def test_tier_not_revoked_on_payment_failure(self, mock_send_mail):
@@ -1816,8 +1813,8 @@ class InvoicePaymentFailedHandlerTest(TestCase):
         self.assertEqual(user.tier, main_tier)
 
     @patch("payments.services.send_mail")
-    def test_lookup_by_email_when_no_customer_id(self, mock_send_mail):
-        """User is found by email when stripe_customer_id doesn't match."""
+    def test_does_not_lookup_entitlement_by_invoice_email(self, mock_send_mail):
+        """Unverified invoice email never selects a member."""
         User.objects.create_user(email="byemail@test.com")
 
         invoice_data = {
@@ -1827,7 +1824,7 @@ class InvoicePaymentFailedHandlerTest(TestCase):
 
         handle_invoice_payment_failed(invoice_data)
 
-        mock_send_mail.assert_called_once()
+        mock_send_mail.assert_not_called()
 
     @patch("payments.services.send_mail")
     def test_no_error_when_user_not_found(self, mock_send_mail):
@@ -1842,10 +1839,10 @@ class InvoicePaymentFailedHandlerTest(TestCase):
         mock_send_mail.assert_not_called()
 
     @patch("payments.services.send_mail")
-    def test_email_transport_error_is_logged_without_revoking_tier(
+    def test_incomplete_invoice_does_not_reach_email_transport(
         self, mock_send_mail,
     ):
-        """Mail transport failures are visible but do not change membership."""
+        """A non-authoritative invoice is ignored before transport."""
         mock_send_mail.side_effect = SMTPException("smtp down")
         main_tier = Tier.objects.get(slug="main")
         user = User.objects.create_user(email="smtpdown@test.com")
@@ -1857,18 +1854,17 @@ class InvoicePaymentFailedHandlerTest(TestCase):
             "customer_email": "smtpdown@test.com",
         }
 
-        with patch("payments.services.logger") as mock_logger:
-            handle_invoice_payment_failed(invoice_data)
+        handle_invoice_payment_failed(invoice_data)
 
         user.refresh_from_db()
         self.assertEqual(user.tier, main_tier)
-        mock_logger.exception.assert_called_once()
+        mock_send_mail.assert_not_called()
 
     @patch("payments.services.send_mail")
-    def test_unexpected_email_error_propagates_for_webhook_retry(
+    def test_incomplete_invoice_cannot_trigger_programmer_transport_error(
         self, mock_send_mail,
     ):
-        """Programmer errors should not be converted into processed webhooks."""
+        """Transport is never entered without authoritative billing data."""
         mock_send_mail.side_effect = RuntimeError("template bug")
         user = User.objects.create_user(
             email="emailbug@test.com",
@@ -1879,8 +1875,8 @@ class InvoicePaymentFailedHandlerTest(TestCase):
             "customer_email": user.email,
         }
 
-        with self.assertRaisesMessage(RuntimeError, "template bug"):
-            handle_invoice_payment_failed(invoice_data)
+        handle_invoice_payment_failed(invoice_data)
+        mock_send_mail.assert_not_called()
 
 
 @tag('core')
@@ -2053,10 +2049,10 @@ class WebhookIdempotencyTest(QuietSubscriptionLookupMixin, TestCase):
 
     @override_settings(STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_SECRET)
     @patch("payments.services.send_mail")
-    def test_duplicate_invoice_payment_failed_sends_only_one_email(
+    def test_duplicate_incomplete_invoice_payment_failed_sends_no_email(
         self, mock_send_mail,
     ):
-        """An invoice.payment_failed event re-delivered by Stripe must email once.
+        """A replayed non-authoritative failure never sends by email alone.
 
         Stripe retries failed webhook deliveries. The endpoint's
         idempotency short-circuit (``is_event_already_processed``) must
@@ -2092,10 +2088,7 @@ class WebhookIdempotencyTest(QuietSubscriptionLookupMixin, TestCase):
         )
         self.assertEqual(response1.status_code, 200)
         self.assertEqual(response1.json()["status"], "processed")
-        self.assertEqual(
-            mock_send_mail.call_count, 1,
-            "First invoice.payment_failed delivery must send exactly one email.",
-        )
+        self.assertEqual(mock_send_mail.call_count, 0)
 
         # Second delivery (same event id) — short-circuited as
         # already_processed, send_mail must NOT be called again.
@@ -2107,10 +2100,7 @@ class WebhookIdempotencyTest(QuietSubscriptionLookupMixin, TestCase):
         )
         self.assertEqual(response2.status_code, 200)
         self.assertEqual(response2.json()["status"], "already_processed")
-        self.assertEqual(
-            mock_send_mail.call_count, 1,
-            "Duplicate invoice.payment_failed must not send a second email.",
-        )
+        self.assertEqual(mock_send_mail.call_count, 0)
 
 
 @tag('core')

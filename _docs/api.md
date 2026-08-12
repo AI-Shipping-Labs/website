@@ -174,8 +174,35 @@ both `dry_run=false` and `confirm="apply_stripe_truth"` and explicit `emails`;
 omitting `dry_run` previews without writes. See the Stripe integration doc for
 the full apply contract.
 
-All five endpoints require a staff token: a missing or non-staff token returns
+All reconciliation endpoints require a staff token: a missing or non-staff token returns
 `401` before any Stripe call, DB query, or task enqueue (no run is created).
+
+## Monthly payment-grace API
+
+The staff-token-only read API exposes no payment mutation:
+
+```bash
+curl -sL -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/payments/payment-graces?status=active&tier=main&delivery_status=failed&page=1&page_size=100"
+
+curl -sL -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/payments/payment-graces/<grace_uuid>"
+```
+
+The collection supports `status`, `user`, `email`, base `tier`, `interval`,
+`source`, `delivery_status`, `started_from`, `started_to`, `page`, and
+`page_size`. Filters combine as AND; invalid enumerations/dates/pagination use
+the project-standard 422 with `details.field`. Rows expose stable safe Stripe
+IDs, original/current base tier, effective tier, source/status, original and
+rollout-safe deadlines, checks/review state, and delivery outcomes including
+transport-start evidence for a crash-ambiguous send. Missing,
+invalid, or non-staff tokens return 401 before payment-grace data is read.
+
+Reconciliation run findings include the same stable latest-invoice,
+interval/count, grace classification/action/timestamps, and base/effective-tier
+fields. There is intentionally no API to mark paid, force expiry, or extend
+grace; payment truth is repaired in Stripe and courtesy access uses
+`TierOverride`.
 
 ## Not exposed (Studio-only)
 

@@ -72,13 +72,19 @@ from accounts.utils.tags import (
 from community.models import CommunityAuditLog
 from community.services.slack_links import build_slack_profile_url
 from community.tasks.slack_membership import check_user_slack_membership
+from content.access import get_active_override
 from content.models import Enrollment, UserCourseProgress
 from crm.models import CRMRecord
 from email_app.models import SesEvent
 from email_app.services.email_log_history import user_history_queryset
 from events.models import EventRegistration
 from integrations.config import get_config
-from payments.models import CheckoutFulfillment, PaymentAccountMismatch, Tier
+from payments.models import (
+    CheckoutFulfillment,
+    MonthlyPaymentGrace,
+    PaymentAccountMismatch,
+    Tier,
+)
 from payments.services.backfill_tiers import backfill_user_from_stripe
 from plans.models import Plan, SprintEnrollment
 from studio.decorators import staff_required, superuser_required
@@ -987,18 +993,8 @@ def _all_known_contact_tags():
 
 
 def _active_override_for_user(user):
-    """Return the user's active non-expired override, or None."""
-    return (
-        TierOverride.objects
-        .filter(
-            user_id=user.pk,
-            is_active=True,
-            expires_at__gt=timezone.now(),
-        )
-        .select_related('override_tier')
-        .order_by('-created_at')
-        .first()
-    )
+    """Return the canonical strongest active non-expired override."""
+    return get_active_override(user)
 
 
 def _tier_source(user, has_override):
@@ -1404,6 +1400,18 @@ def user_detail(request, user_id):
             Q(paid_user=user) | Q(candidate_user=user),
         )
     )
+    payment_graces = list(
+        MonthlyPaymentGrace.objects.filter(user=user)
+        .select_related("base_tier_at_start")
+        .prefetch_related("deliveries")
+        .order_by("-grace_started_at")[:5]
+    )
+    payment_grace_audits = list(
+        CommunityAuditLog.objects.filter(
+            user=user,
+            action__startswith="monthly_payment_grace_",
+        ).order_by("-timestamp")[:10]
+    )
 
     # Inline tier-override block (issue #562). Reuses the same business
     # rules as the standalone /studio/users/tier-override/ page: only
@@ -1512,6 +1520,8 @@ def user_detail(request, user_id):
             open_payment_mismatches,
             stripe_account_id,
         ),
+        'payment_graces': payment_graces,
+        'payment_grace_audits': payment_grace_audits,
     }
     return render(request, 'studio/users/detail.html', context)
 

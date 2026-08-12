@@ -24,6 +24,7 @@ ALL_EVENTS = [
     "customer.subscription.updated",
     "customer.subscription.deleted",
     "invoice.payment_failed",
+    "invoice.paid",
     "customer.updated",
 ]
 

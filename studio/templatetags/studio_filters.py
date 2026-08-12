@@ -88,6 +88,12 @@ STATUS_BADGE_CLASSES = {
     # with the canonical palette instead of inline ``{% if %}`` blocks.
     'failed': 'bg-red-500/20 text-red-700 dark:text-red-300',
     'running': 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
+    # Monthly payment-grace and durable-delivery states (#1413).
+    'recovered': 'bg-green-500/20 text-green-700 dark:text-green-300',
+    'expired': 'bg-secondary text-muted-foreground',
+    'superseded': 'bg-secondary text-muted-foreground',
+    'review': 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300',
+    'pending': 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300',
 }
 
 TIER_PILL_CLASSES = {

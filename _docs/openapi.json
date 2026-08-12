@@ -7998,6 +7998,146 @@
         ]
       }
     },
+    "/api/payments/payment-graces": {
+      "get": {
+        "description": "Staff-token-only read-only payment-grace queue with stable filters and pagination.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "email",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tier",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "delivery_status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "started_from",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "started_to",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated graces"
+          },
+          "401": {
+            "description": "Invalid staff token"
+          },
+          "422": {
+            "description": "Invalid filter"
+          }
+        },
+        "summary": "List monthly payment graces",
+        "tags": [
+          "Payments"
+        ]
+      }
+    },
+    "/api/payments/payment-graces/{grace_id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "grace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payment grace detail"
+          },
+          "401": {
+            "description": "Invalid staff token"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "summary": "Get one monthly payment grace",
+        "tags": [
+          "Payments"
+        ]
+      }
+    },
     "/api/payments/stripe-webhooks/deliveries": {
       "get": {
         "parameters": [

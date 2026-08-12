@@ -10,7 +10,8 @@ acts on:
 - ``customer.subscription.updated`` — propagate tier changes and
   schedule community removals.
 - ``customer.subscription.deleted`` — revert the user to ``free``.
-- ``invoice.payment_failed`` — notify the user without revoking tier.
+- ``invoice.payment_failed`` — start a qualifying monthly payment grace.
+- ``invoice.paid`` — recover a matching monthly payment grace.
 
 Cross-module calls (``_community_*``, ``_record_conversion_attribution``,
 ``_get_subscription_*``, ``_tier_from_subscription``) and module-level
@@ -1090,7 +1091,7 @@ def _future_cancel_at(cancel_at):
     return when
 
 
-def handle_subscription_updated(subscription_data):
+def handle_subscription_updated(subscription_data, event_context=None):
     """Process a customer.subscription.updated event.
 
     Cancellation-state contract (issue #1314):
@@ -1122,6 +1123,14 @@ def handle_subscription_updated(subscription_data):
     price_id = ""
     if items:
         price_id = items[0].get("price", {}).get("id", "")
+    recovery_tier = (
+        _services._tier_for_price_id(price_id)
+        if len(items) == 1 and price_id
+        else None
+    )
+    recovery_is_mapped_paid = bool(
+        recovery_tier is not None and recovery_tier.level > 0
+    )
 
     resolution = resolve_subscription_user(subscription_id, customer_id)
     if resolution.stale_customer_user is not None:
@@ -1174,6 +1183,20 @@ def handle_subscription_updated(subscription_data):
             # future deletion still re-checks effective access before removing.
             if user.tier and user.tier.level >= 20 and user.billing_period_end:
                 _services._community_schedule_removal(user)
+            # A recovered payment may still leave the subscription scheduled
+            # to cancel at period end. Cancellation remains authoritative for
+            # the paid-through date, while the now-paid invoice must close the
+            # separate dunning grace immediately.
+            if status in {"active", "trialing"} and recovery_is_mapped_paid:
+                from payments.services.monthly_payment_grace import recover_grace
+
+                recover_grace(
+                    subscription_id=subscription_id,
+                    event_id=str((event_context or {}).get("event_id", "")),
+                    event_created=(event_context or {}).get("created"),
+                    livemode=(event_context or {}).get("livemode"),
+                    actor="stripe_webhook",
+                )
             return OUTCOME_PROCESSED
 
         # Not a scheduled cancellation. Clear a prior scheduled cancellation
@@ -1235,6 +1258,16 @@ def handle_subscription_updated(subscription_data):
 
             if get_user_level(user) < LEVEL_MAIN:
                 _services._community_remove(user)
+
+    if status in {"active", "trialing"} and recovery_is_mapped_paid:
+        from payments.services.monthly_payment_grace import recover_grace
+        recover_grace(
+            subscription_id=subscription_id,
+            event_id=str((event_context or {}).get("event_id", "")),
+            event_created=(event_context or {}).get("created"),
+            livemode=(event_context or {}).get("livemode"),
+            actor="stripe_webhook",
+        )
 
     return OUTCOME_PROCESSED
 
@@ -1463,77 +1496,57 @@ def _ignore_stale_subscription_event(*, user, event_type, event_subscription_id)
     )
 
 
-def handle_invoice_payment_failed(invoice_data):
+def handle_invoice_payment_failed(invoice_data, event_context=None):
     """Process an invoice.payment_failed event.
 
-    Sends an email to the user with a payment update link.
-    Does NOT revoke the tier.
-
-    Issue #969: this handler deliberately does NOT touch the ``stripe:*``
-    status tags. A failed payment is not a churn — the tier is not revoked
-    here, so ``stripe:active`` / ``stripe:churned`` / ``stripe:plan-*`` must
-    stay exactly as they are. Do not add a ``reconcile_stripe_status_tags``
-    call here; churn is signalled separately by
-    ``customer.subscription.deleted``.
+    Starts durable grace only from exact subscription/customer ownership and
+    an authoritative monthly, automatically collected, unpaid invoice. The
+    initial member/team messages are delivery rows owned by the grace service.
+    No email address from this payload is entitlement authority.
     """
-    customer_id = invoice_data.get("customer", "")
-    customer_email = invoice_data.get("customer_email", "")
-
-    user = None
-    if customer_id:
-        user = User.objects.filter(stripe_customer_id=customer_id).first()
-    if user is None and customer_email:
-        user = User.objects.filter(email=customer_email).first()
-    if user is None and customer_email:
-        # Alias fallback (issue #840a): a payment-failed for a relay email
-        # that is a known ``EmailAlias`` notifies the canonical (alias-owner)
-        # account rather than going nowhere. Primary email already won above,
-        # so this only fires when neither ``stripe_customer_id`` nor an exact
-        # primary email matched.
-        alias_user = resolve_user_by_email(customer_email)
-        if alias_user is not None:
-            user = alias_user
-            _services.logger.info(
-                "invoice.payment_failed: routed email=%s to canonical "
-                "account user=%s via EmailAlias",
-                customer_email,
-                user.email,
-            )
-
-    if user is None:
-        _services.logger.error(
-            "invoice.payment_failed: Could not find user. customer_id=%s",
-            customer_id,
-        )
-        return
-
-    portal_url = _services.get_config("STRIPE_CUSTOMER_PORTAL_URL", "")
-
-    try:
-        _services.send_mail(
-            subject="Payment failed - please update your payment method",
-            message=(
-                f"Hi,\n\n"
-                f"Your recent payment for AI Shipping Labs membership failed. "
-                f"Please update your payment method to keep your subscription active.\n\n"
-                f"Update payment method: {portal_url}\n\n"
-                f"If you have any questions, reply to this email.\n\n"
-                f"- AI Shipping Labs"
-            ),
-            from_email=None,  # Uses DEFAULT_FROM_EMAIL
-            recipient_list=[user.email],
-            fail_silently=False,
-        )
-    except (BadHeaderError, OSError, SMTPException):
-        _services.logger.exception(
-            "invoice.payment_failed: Failed to send email to user=%s",
-            user.email,
-        )
-
-    _services.logger.info(
-        "invoice.payment_failed: notified user=%s (tier NOT revoked)",
-        user.email,
+    from payments.services.monthly_payment_grace import (
+        _retrieve_subscription,
+        start_grace_from_failure,
     )
+
+    subscription_id = invoice_data.get("subscription", "") or ""
+    if isinstance(subscription_id, dict):
+        subscription_id = subscription_id.get("id", "")
+    if not subscription_id:
+        _services.logger.warning(
+            "invoice.payment_failed: missing subscription id; ignored"
+        )
+        return OUTCOME_PROCESSED
+    subscription = _retrieve_subscription(subscription_id)
+    start_grace_from_failure(
+        invoice=invoice_data,
+        subscription=subscription,
+        event_id=str((event_context or {}).get("event_id", "")),
+        event_created=(event_context or {}).get("created"),
+        livemode=(event_context or {}).get("livemode"),
+    )
+    return OUTCOME_PROCESSED
+
+
+def handle_invoice_paid(invoice_data, event_context=None):
+    """Recover grace for the exact paid invoice/subscription, if present."""
+    from payments.services.monthly_payment_grace import recover_grace
+
+    subscription_id = invoice_data.get("subscription", "") or ""
+    if isinstance(subscription_id, dict):
+        subscription_id = subscription_id.get("id", "")
+    invoice_id = invoice_data.get("id", "") or ""
+    if not subscription_id or not invoice_id:
+        return OUTCOME_PROCESSED
+    recover_grace(
+        subscription_id=subscription_id,
+        invoice_id=invoice_id,
+        event_id=str((event_context or {}).get("event_id", "")),
+        event_created=(event_context or {}).get("created"),
+        livemode=(event_context or {}).get("livemode"),
+        actor="stripe_webhook",
+    )
+    return OUTCOME_PROCESSED
 
 
 def _retire_redundant_override(user, tier):

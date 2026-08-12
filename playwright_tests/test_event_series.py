@@ -16,6 +16,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
+from accounts.templatetags.date_formatting import event_source_short_datetime
 from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
@@ -701,7 +702,6 @@ def _seed_scrambled_studio_series():
     return series, events
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario957ChronologicalOrder:
     def test_sessions_read_top_to_bottom_in_date_order(
@@ -709,6 +709,19 @@ class TestScenario957ChronologicalOrder:
     ):
         _reset_event_state()
         series = _seed_shuffled_office_hours()
+
+        from django.db import connection
+
+        from events.models import Event
+
+        expected_dates = [
+            event_source_short_datetime(event).split(" · ")[0]
+            for event in Event.objects.filter(
+                event_series=series,
+                status="upcoming",
+            ).order_by("start_datetime")
+        ]
+        connection.close()
 
         ctx = browser.new_context(viewport={"width": 1280, "height": 720})
         page = ctx.new_page()
@@ -720,18 +733,10 @@ class TestScenario957ChronologicalOrder:
         rows = page.locator('[data-testid="series-event"]')
         assert rows.count() == 4
 
-        # Read the rendered date string of each row top-to-bottom. Each row's
-        # date must be on or after the row above it (calendar order).
         date_texts = page.locator(
             '[data-testid="series-event-date"]'
         ).all_inner_texts()
-        parsed = [
-            datetime.strptime(t.split(" · ")[0].strip(), "%A, %b %d, %Y")
-            for t in date_texts
-        ]
-        assert parsed == sorted(parsed), (
-            "Sessions are not in calendar order: " + str(date_texts)
-        )
+        assert [text.split(" · ")[0].strip() for text in date_texts] == expected_dates
 
         # The first row is the earliest-dated session (position 4) and the
         # last is the latest-dated (position 1), proving the sort ignores
@@ -774,6 +779,13 @@ class TestScenario957ChronologicalOrder:
             event_series=series,
             series_position=8,
         ).save()
+        expected_dates = [
+            event_source_short_datetime(event).split(" · ")[0]
+            for event in Event.objects.filter(
+                event_series=series,
+                status="upcoming",
+            ).order_by("start_datetime")
+        ]
         connection.close()
 
         ctx = browser.new_context(viewport={"width": 1280, "height": 720})
@@ -793,11 +805,7 @@ class TestScenario957ChronologicalOrder:
         date_texts = page.locator(
             '[data-testid="series-event-date"]'
         ).all_inner_texts()
-        parsed = [
-            datetime.strptime(t.split(" · ")[0].strip(), "%A, %b %d, %Y")
-            for t in date_texts
-        ]
-        assert parsed == sorted(parsed)
+        assert [text.split(" · ")[0].strip() for text in date_texts] == expected_dates
 
         ctx.close()
 
@@ -965,7 +973,6 @@ class TestScenario9ListingShowsSeriesLink:
         ctx.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1028UpcomingListingSeriesCollapse:
     def test_listing_shows_next_occurrence_with_see_more(
@@ -1018,12 +1025,18 @@ class TestScenario1028UpcomingListingSeriesCollapse:
         )
         assert card.count() == 1
         text = card.inner_text()
-        assert "Event series" in text
-        assert "LLM Zoomcamp Office Hours Session 1" in text
+        assert card.get_by_test_id("series-card-badge").text_content().strip() == "Series"
+        assert card.get_by_test_id("series-card-sessions").text_content().strip() == (
+            "4 upcoming sessions"
+        )
+        assert card.get_by_test_id("series-card-title").inner_text() == (
+            "LLM Zoomcamp 2026 office hours"
+        )
+        assert "LLM Zoomcamp Office Hours Session 1" not in text
         assert "LLM Zoomcamp Office Hours Session 2" not in text
         assert "LLM Zoomcamp Office Hours Session 4" not in text
         assert card.locator('[data-testid="series-card-date"]').count() == 1
-        assert card.locator('[data-testid="series-card-see-more"]').count() == 1
+        assert card.locator('[data-testid="series-card-see-more"]').count() == 0
         assert card.locator('[data-testid="series-card-cta"]').count() == 0
         assert "View series" not in text
         body = page.locator("body").inner_text()
@@ -1031,7 +1044,7 @@ class TestScenario1028UpcomingListingSeriesCollapse:
         assert "LLM Zoomcamp Office Hours Session 4" not in body
         assert "Standalone Future Clinic" in body
 
-        card.locator('[data-testid="series-card-see-more"]').click()
+        card.locator('[data-testid="series-card-link"]').click()
         page.wait_for_url(
             re.compile(r".*/events/series/\d+/llm-zoomcamp-2026-office-hours$")
         )
@@ -1456,7 +1469,6 @@ class TestScenario877ScheduleLabel:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario947ListingCardCadence:
     def test_listing_card_shows_honest_cadence_matching_series_page(
@@ -1517,11 +1529,12 @@ class TestScenario947ListingCardCadence:
             '[data-series-slug="listing-drifted-series"]'
         )
         assert card.count() == 1
-        meta = card.locator('[data-testid="series-card-meta"]').inner_text()
-        # No false weekly-cadence claim; honest session summary + suffix.
-        assert "Weekly on" not in meta
-        assert "3 sessions" in meta
-        assert "3 upcoming session" in meta
+        # The timeline deliberately omits cadence prose and reports the exact
+        # number of still-upcoming occurrences instead.
+        assert "Weekly on" not in card.inner_text()
+        assert card.get_by_test_id("series-card-sessions").text_content().strip() == (
+            "3 upcoming sessions"
+        )
 
         # Click through to the series page; its header agrees with the card.
         card.locator('[data-testid="series-card-link"]').click()

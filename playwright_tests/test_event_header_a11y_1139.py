@@ -26,9 +26,6 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 pytestmark = pytest.mark.local_only
 
-SECTION_HEADINGS = {"Upcoming", "Past events", "Past event recordings"}
-
-
 def _clear():
     from django.db import connection
 
@@ -140,44 +137,25 @@ def _create_workshop():
     return workshop
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_events_listing_heading_outline_uses_h3_for_titles(django_server, page):
-    """Every <h2> on /events is a section header; event titles are <h3>."""
+    """Upcoming mode exposes one H1, one collection H2, then card H3s."""
     _seed_listing()
 
     page.goto(f"{django_server}/events", wait_until="domcontentloaded")
 
-    h2_texts = [
-        t.strip() for t in page.locator("main h2").all_inner_texts() if t.strip()
-    ]
-    assert h2_texts, "expected at least one section <h2>"
-    for text in h2_texts:
-        assert text in SECTION_HEADINGS, (
-            f"<h2> should only be a section header, found event-title-like {text!r}"
-        )
-
-    # The upcoming and past event titles render as <h3>, not <h2>.
+    assert page.locator("main h1").all_inner_texts() == ["Live community events"]
+    assert page.locator("main h2").all_inner_texts() == ["Upcoming events"]
     assert (
         page.get_by_role("heading", level=3, name="Upcoming Build Session 1139").count()
         == 1
     )
-    assert (
-        page.get_by_role("heading", level=3, name="Past Retro Recording 1139").count()
-        == 1
-    )
-    # No event title leaked into an <h2>.
-    assert (
-        page.get_by_role("heading", level=2, name="Upcoming Build Session 1139").count()
-        == 0
-    )
-    assert (
-        page.get_by_role("heading", level=2, name="Past Retro Recording 1139").count()
-        == 0
-    )
+    assert page.get_by_text("Past Retro Recording 1139").count() == 0
+    assert page.locator("main h1, main h2, main h3").evaluate_all(
+        "nodes => nodes.map(node => node.tagName)"
+    )[:3] == ["H1", "H2", "H3"]
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_past_recordings_view_single_heading_level_and_lock(django_server, page):
     """/events?filter=past keeps one section <h2>; card titles are <h3>."""
@@ -218,35 +196,62 @@ def test_past_recordings_view_single_heading_level_and_lock(django_server, page)
     assert lock_icon.count() == 1
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_toggle_tap_target_and_shape(django_server, page):
-    """List/Calendar toggle is >=44px tall, rounded-full, and navigates."""
+    """Current Events controls are keyboard reachable and at least 44px tall."""
     _seed_listing()
 
     page.goto(f"{django_server}/events", wait_until="domcontentloaded")
 
-    toggle_row = page.locator('[data-testid="events-view-toggle-row"]')
-    list_link = toggle_row.get_by_role("link", name="List", exact=True)
-    calendar_link = toggle_row.get_by_role("link", name="Calendar", exact=True)
+    toolbar = page.get_by_test_id("events-list-toolbar")
+    calendar_link = toolbar.get_by_role("link", name="Calendar", exact=True)
+    subscribe = toolbar.get_by_test_id("events-subscribe-trigger")
+    upcoming = toolbar.get_by_test_id("events-filter-upcoming")
+    past = toolbar.get_by_test_id("events-filter-past")
 
-    for link in (list_link, calendar_link):
-        box = link.bounding_box()
+    assert subscribe.inner_text().strip() == "Subscribe to all events"
+    assert subscribe.locator(".sr-only").count() == 0
+
+    for control in (calendar_link, subscribe, upcoming, past):
+        box = control.bounding_box()
         assert box is not None
-        assert box["height"] >= 44, f"toggle height {box['height']} < 44px"
-        classes = link.get_attribute("class")
-        assert "rounded-full" in classes
-        assert "min-h-[44px]" in classes
+        assert box["height"] >= 44, f"control height {box['height']} < 44px"
+        assert box["width"] >= 44, f"control width {box['width']} < 44px"
+        assert control.evaluate("el => el.tabIndex >= 0")
+        classes = control.get_attribute("class")
+        for focus_class in (
+            "focus-visible:outline-none",
+            "focus-visible:ring-2",
+            "focus-visible:ring-accent",
+            "focus-visible:ring-offset-2",
+            "focus-visible:ring-offset-background",
+        ):
+            assert focus_class in classes
 
-    # Active/inactive state colors are preserved.
-    assert "bg-accent" in list_link.get_attribute("class")
-    assert "bg-secondary" in calendar_link.get_attribute("class")
+        control.focus()
+        assert control.evaluate("el => el.matches(':focus-visible')")
 
-    calendar_link.click()
-    page.wait_for_url("**/events/calendar")
+    subscribe.click()
+    assert toolbar.get_by_test_id("events-subscribe-popover").get_attribute(
+        "open"
+    ) is not None
+    assert toolbar.get_by_test_id("events-subscribe-menu").is_visible()
+    subscribe.click()
 
-    page.get_by_role("link", name="List", exact=True).first.click()
+    assert upcoming.get_attribute("aria-selected") == "true"
+    assert upcoming.get_attribute("aria-current") == "page"
+    assert past.get_attribute("aria-selected") == "false"
+
+    past.click()
+    page.wait_for_url("**/events?filter=past")
+    assert page.get_by_test_id("events-filter-past").get_attribute(
+        "aria-selected"
+    ) == "true"
+    page.get_by_test_id("events-filter-upcoming").click()
     page.wait_for_url("**/events")
+
+    page.get_by_role("link", name="Calendar", exact=True).click()
+    page.wait_for_url("**/events/calendar")
 
 
 @pytest.mark.core

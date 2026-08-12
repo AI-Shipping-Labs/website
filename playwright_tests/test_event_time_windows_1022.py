@@ -91,7 +91,9 @@ class TestVisitorEventTimeWindows1022:
         body = page.content()
         assert 'Upcoming Workshop 1022' in body
         assert 'Completed Future Hidden 1022' not in body
-        assert 'Finished Recording 1022' in body
+        assert 'Finished Recording 1022' not in body
+        assert page.locator('[data-testid="events-upcoming-section"]').count() == 1
+        assert page.locator('[data-testid="events-past-section"]').count() == 0
 
         page.locator('[data-testid="events-filter-upcoming"]').click()
         page.wait_for_load_state('domcontentloaded')

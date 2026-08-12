@@ -84,6 +84,7 @@
       {% if filter_mode == 'past' %}
       <!-- Past event recordings timeline -->
       <div data-testid="events-past-section">
+        <h2 class="sr-only" data-testid="events-collection-heading">Past event recordings</h2>
         {% if past_days %}
         {% include "events/_events_timeline.html" with days=past_days %}
 
@@ -125,6 +126,7 @@
       {% else %}
       <!-- Upcoming events timeline -->
       <div data-testid="events-upcoming-section">
+        <h2 class="sr-only" data-testid="events-collection-heading">Upcoming events</h2>
         {% if upcoming_days %}
         {% include "events/_events_timeline.html" with days=upcoming_days %}
         {% else %}

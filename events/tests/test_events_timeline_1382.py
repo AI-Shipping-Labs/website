@@ -69,6 +69,35 @@ class TimelineDefaultUpcomingOnlyTest(TestCase):
         )
         self.assertContains(past, 'aria-current="page"')
 
+    def test_legacy_and_unknown_filters_resolve_to_upcoming(self):
+        for filter_value in ('all', 'unknown'):
+            with self.subTest(filter_value=filter_value):
+                response = self.client.get(f'/events?filter={filter_value}')
+                self.assertEqual(response.context['filter_mode'], 'upcoming')
+                self.assertContains(response, 'Future Session')
+                self.assertNotContains(response, 'Old Session')
+                self.assertNotContains(
+                    response,
+                    'data-testid="events-past-section"',
+                )
+
+    def test_each_mode_renders_one_contextual_collection_heading(self):
+        upcoming = self.client.get('/events')
+        past = self.client.get('/events?filter=past')
+
+        self.assertContains(
+            upcoming,
+            '<h2 class="sr-only" data-testid="events-collection-heading">'
+            'Upcoming events</h2>',
+            html=True,
+        )
+        self.assertContains(
+            past,
+            '<h2 class="sr-only" data-testid="events-collection-heading">'
+            'Past event recordings</h2>',
+            html=True,
+        )
+
     def test_empty_upcoming_uses_member_empty_state(self):
         Event.objects.all().delete()
         response = self.client.get('/events')

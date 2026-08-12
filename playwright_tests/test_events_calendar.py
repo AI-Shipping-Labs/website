@@ -148,10 +148,7 @@ class TestScenario1VisitorBrowsesEventsAndReadsDetails:
     def test_visitor_sees_upcoming_and_past_events_then_clicks_detail(
         self, django_server
     , page):
-        """Given an anonymous visitor. Two events exist: an upcoming event
-        and a completed event. The listing shows both in the correct
-        sections without event type badges. Clicking the upcoming event
-        shows the full detail page."""
+        """A visitor switches between Upcoming and Past, then opens a detail."""
         _clear_events()
         _ensure_tiers()
 
@@ -173,6 +170,7 @@ class TestScenario1VisitorBrowsesEventsAndReadsDetails:
             description="An introduction to large language models.",
             start_datetime=now - datetime.timedelta(days=7),
             status="completed",
+            recording_url="https://video.test/intro-to-llms",
         )
 
         # Step 1: Navigate to /events
@@ -182,27 +180,38 @@ class TestScenario1VisitorBrowsesEventsAndReadsDetails:
         )
         body = page.content()
 
-        # Then: The page shows two sections -- "Upcoming" and "Past"
-        assert "Upcoming" in body
-        assert "Past" in body
-
-        # "AI Prompt Engineering Workshop" appears in the Upcoming section
-        upcoming_section = page.locator("h2:has-text('Upcoming')").locator("..")
+        # The default view is the Upcoming collection only.
+        upcoming_section = page.locator('[data-testid="events-upcoming-section"]')
         upcoming_text = upcoming_section.inner_text()
+        assert upcoming_section.get_by_role(
+            "heading", level=2, name="Upcoming events"
+        ).count() == 1
         assert "AI Prompt Engineering Workshop" in upcoming_text
+        assert "Intro to LLMs" not in body
 
         # Event type badges were removed by #389.
         assert "Live" not in upcoming_text
         assert "Async" not in upcoming_text
 
-        # Location "Zoom" is shown; capacity copy was removed (#984)
-        assert "Zoom" in body
+        # Default Zoom is deliberately omitted from the compact timeline row;
+        # capacity copy was removed in #984.
+        assert upcoming_section.locator(
+            '[data-testid="event-card-platform"]'
+        ).count() == 0
         assert "spots remaining" not in body
 
-        # "Intro to LLMs" appears in the Past section
-        past_section = page.locator("h2:has-text('Past')").locator("..")
-        past_text = past_section.inner_text()
-        assert "Intro to LLMs" in past_text
+        # Past recordings are intentional discovery, never mixed into default.
+        page.get_by_test_id("events-filter-past").click()
+        page.wait_for_url("**/events?filter=past")
+        past_section = page.locator('[data-testid="events-past-section"]')
+        assert past_section.get_by_role(
+            "heading", level=2, name="Past event recordings"
+        ).count() == 1
+        assert "Intro to LLMs" in past_section.inner_text()
+        assert "AI Prompt Engineering Workshop" not in past_section.inner_text()
+
+        page.get_by_test_id("events-filter-upcoming").click()
+        page.wait_for_url("**/events")
 
         # Step 2: Click on "AI Prompt Engineering Workshop"
         # Issue #673: canonical URL is ``/events/<id>/<slug>``.
@@ -482,7 +491,7 @@ class TestScenario6FreeMemberGatedEventUpgradePath:
         """Given a user logged in as free@test.com (Free tier, level=0).
         An upcoming event with required_level=30 (Premium). The detail
         page is visible but shows 'Upgrade to Premium to attend' with
-        a lock icon and 'View Pricing' link. Clicking it goes to /pricing."""
+        a lock icon and 'View Pricing' link. Clicking it goes to /membership."""
         _clear_events()
         _ensure_tiers()
         _create_user("free@test.com", tier_slug="free")
@@ -519,8 +528,8 @@ class TestScenario6FreeMemberGatedEventUpgradePath:
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 
-        # Then: Lands on /pricing
-        assert "/pricing" in page.url
+        # Then: Lands on /membership
+        assert "/membership" in page.url
 # ---------------------------------------------------------------
 # Scenario 7: Registered member returns shortly before event
 #              start and sees the Zoom join link

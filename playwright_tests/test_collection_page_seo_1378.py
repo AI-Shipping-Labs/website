@@ -315,11 +315,22 @@ def test_events_past_taxonomy_facets_and_pagination_are_normalized(
     ).inner_text()
     assert _canonical(page) == f'{site_url}/events?filter=past'
 
-    pagination_cases = (
-        ('/events?page=1', f'{site_url}/events', 1),
-        ('/events?page=2', f'{site_url}/events?page=2', 2),
-        ('/events?page=bad', f'{site_url}/events', 1),
-        ('/events?page=999', f'{site_url}/events?page=2', 2),
+    upcoming_cases = (
+        '/events?page=1',
+        '/events?page=2',
+        '/events?page=bad',
+        '/events?page=999',
+    )
+    for query_url in upcoming_cases:
+        goto_with_retry(page, f'{django_server}{query_url}')
+        assert _canonical(page) == f'{site_url}/events'
+        assert _meta(page, 'meta[property="og:url"]') == f'{site_url}/events'
+        assert page.get_by_test_id('events-filter-upcoming').get_attribute(
+            'aria-selected'
+        ) == 'true'
+        assert page.get_by_test_id('events-past-pagination').count() == 0
+
+    past_pagination_cases = (
         ('/events?filter=past&page=1', f'{site_url}/events?filter=past', 1),
         (
             '/events?filter=past&page=2',
@@ -333,7 +344,7 @@ def test_events_past_taxonomy_facets_and_pagination_are_normalized(
             2,
         ),
     )
-    for query_url, expected_url, resolved_page in pagination_cases:
+    for query_url, expected_url, resolved_page in past_pagination_cases:
         goto_with_retry(page, f'{django_server}{query_url}')
         assert _canonical(page) == expected_url
         assert _meta(page, 'meta[property="og:url"]') == expected_url
@@ -342,23 +353,19 @@ def test_events_past_taxonomy_facets_and_pagination_are_normalized(
         ).inner_text()
 
     view_cases = (
-        ('', 'all', True, True),
-        ('?filter=all', 'all', True, True),
-        ('?filter=upcoming', 'upcoming', True, False),
-        ('?filter=not-a-view', 'all', True, True),
+        '',
+        '?filter=all',
+        '?filter=upcoming',
+        '?filter=not-a-view',
     )
-    for query, selected, upcoming_visible, past_visible in view_cases:
+    for query in view_cases:
         goto_with_retry(page, f'{django_server}/events{query}')
         assert _canonical(page) == f'{site_url}/events'
-        assert page.get_by_test_id(f'events-filter-{selected}').get_attribute(
+        assert page.get_by_test_id('events-filter-upcoming').get_attribute(
             'aria-selected'
         ) == 'true'
-        assert page.get_by_test_id('events-upcoming-section').count() == int(
-            upcoming_visible
-        )
-        assert page.get_by_test_id('events-past-section').count() == int(
-            past_visible
-        )
+        assert page.get_by_test_id('events-upcoming-section').count() == 1
+        assert page.get_by_test_id('events-past-section').count() == 0
 
 
 @pytest.mark.django_db(transaction=True)

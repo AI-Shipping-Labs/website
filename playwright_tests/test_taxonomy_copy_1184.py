@@ -168,7 +168,7 @@ def test_desktop_visitor_taxonomy_journey(django_server, page):
         page.get_by_role("heading", name="Live community events")
     ).to_be_visible()
     past_filter = page.locator('[data-testid="events-filter-past"]')
-    expect(past_filter).to_contain_text("Past event recordings")
+    expect(past_filter).to_have_text("Past")
     expect(page.locator("main")).not_to_contain_text("Community Events & Workshops")
 
     past_filter.click()
@@ -177,7 +177,6 @@ def test_desktop_visitor_taxonomy_journey(django_server, page):
     expect(
         page.get_by_role("heading", name="Past event recordings")
     ).to_be_visible()
-    expect(page.locator("main")).to_contain_text("Catch up on live sessions you missed")
     standalone_card = page.locator('[data-testid="past-card-event-link"]')
     workshop_card = page.locator('[data-testid="past-card-workshop-link"]')
     expect(standalone_card).to_have_attribute(
@@ -262,7 +261,6 @@ def test_mobile_taxonomy_navigation_and_past_recordings(django_server, browser):
     expect(
         page.get_by_role("heading", name="Past event recordings")
     ).to_be_visible()
-    expect(page.locator("main")).to_contain_text("Catch up on live sessions you missed")
 
     page.goto(f"{django_server}/resources", wait_until="domcontentloaded")
     expect(

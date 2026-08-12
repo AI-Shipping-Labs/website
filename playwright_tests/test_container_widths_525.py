@@ -214,7 +214,7 @@ def _seed_listings():
     Sprint.objects.create(
         name='Sample Sprint',
         slug='sample-sprint',
-        start_date=datetime.date(2026, 1, 1),
+        start_date=timezone.localdate(),
         duration_weeks=4,
         status='active',
         min_tier_level=20,

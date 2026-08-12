@@ -15,6 +15,7 @@ import os
 from datetime import datetime, timedelta
 
 import pytest
+from freezegun import freeze_time
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -181,6 +182,7 @@ class TestPartialGatedSeriesDashboardEnrollment:
     ``events/tests/test_series_invite.py`` (SES is mocked there).
     """
 
+    @freeze_time("2026-08-11T12:00:00Z")
     def test_free_member_enrolled_in_open_sessions_only(
         self, django_server, browser,
     ):
@@ -190,6 +192,16 @@ class TestPartialGatedSeriesDashboardEnrollment:
             "woh-934", "Calendar Series 934", 3,
             premium_only_positions=(3,),
         )
+        from django.db import connection
+        from django.utils import timezone
+
+        for event in series.events.order_by("series_position"):
+            event.start_datetime = timezone.now() + timedelta(
+                days=event.series_position
+            )
+            event.end_datetime = event.start_datetime + timedelta(hours=1)
+            event.save(update_fields=["start_datetime", "end_datetime"])
+        connection.close()
 
         ctx = _auth_context(browser, "member-934@test.com")
         page = ctx.new_page()
@@ -202,29 +214,29 @@ class TestPartialGatedSeriesDashboardEnrollment:
             '[data-testid="series-registered-state"]'
         ).wait_for(state="visible")
 
-        # The dashboard upcoming-events section collapses the 2 open
+        rows = page.locator('[data-testid="series-event"]')
+        assert rows.count() == 3
+        assert rows.locator(
+            '[data-testid="series-event-state-registered"]'
+        ).count() == 2
+        locked_row = rows.filter(has_text="Calendar Series 934 — Session 3")
+        assert locked_row.locator(
+            '[data-testid="series-event-state-no-access"]'
+        ).count() == 1
+
+        # The commitment-first dashboard collapses the 2 open
         # registered sessions to the next occurrence; the Premium-only
         # session is not enrolled or shown.
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
-        upcoming = page.locator(
-            "section", has=page.get_by_role(
-                "heading", name="Upcoming events",
-            ),
-        )
+        upcoming = page.locator('[data-testid="dashboard-this-week"]')
         upcoming.wait_for(state="visible")
         upcoming_text = upcoming.inner_text()
         assert "Calendar Series 934 — Session 1" in upcoming_text
         assert "Calendar Series 934 — Session 2" not in upcoming_text
         assert "Calendar Series 934 — Session 3" not in upcoming_text
-        assert "Event series" in upcoming_text
-        assert upcoming.locator(
-            '[data-testid="dashboard-event-series-see-more"]'
-        ).count() == 1
-
-        from accounts.models import User
-        from events.models import EventRegistration
-
-        user = User.objects.get(email="member-934@test.com")
-        assert EventRegistration.objects.filter(user=user).count() == 2
+        assert upcoming.get_by_test_id(
+            "dashboard-event-series-badge"
+        ).text_content().strip() == "Event series"
+        assert "1 more session" in upcoming_text
 
         ctx.close()

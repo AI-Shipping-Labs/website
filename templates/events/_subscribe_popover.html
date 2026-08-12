@@ -12,17 +12,16 @@ events.views.pages.build_subscribe_urls()).
 <details class="relative" data-testid="events-subscribe-popover">
   {% if compact %}
   {% comment %}
-  Issue #1382 — compact outline icon-button variant for the events-list utility
-  cluster, so the Subscribe affordance does not compete with the primary
-  Upcoming/Past toggle. The full label is retained (sr-only) for accessibility
-  and text-based checks. The calendar view keeps the default trigger below.
+  Compact outline icon-button variant for constrained utility clusters. The
+  full label is retained (sr-only) for accessibility and text-based checks.
+  The Events list and calendar keep the visibly labeled default trigger below.
   {% endcomment %}
-  <summary class="inline-flex min-h-[44px] cursor-pointer list-none items-center justify-center rounded-full border border-border bg-transparent px-3 text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground" data-testid="events-subscribe-trigger" title="Subscribe to all events">
+  <summary class="inline-flex min-h-[44px] min-w-[44px] cursor-pointer list-none items-center justify-center rounded-full border border-border bg-transparent px-3 text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="events-subscribe-trigger" title="Subscribe to all events">
     <i data-lucide="calendar-plus" class="h-4 w-4"></i>
     <span class="sr-only">Subscribe to all events</span>
   </summary>
   {% else %}
-  <summary class="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-secondary text-muted-foreground text-sm hover:bg-secondary/80 transition-colors cursor-pointer list-none" data-testid="events-subscribe-trigger">
+  <summary class="inline-flex min-h-[44px] min-w-[44px] cursor-pointer list-none items-center gap-1.5 rounded bg-secondary px-3 py-1 text-sm text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="events-subscribe-trigger">
     <i data-lucide="calendar-plus" class="h-4 w-4"></i>
     Subscribe to all events
   </summary>

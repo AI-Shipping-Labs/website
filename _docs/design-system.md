@@ -325,7 +325,7 @@ Rules:
 
 The toolbar sits between header and content: `<div class="mb-8 space-y-3">`. Up to three pill rows, in this fixed order; omit rows that do not apply.
 
-1. Mode row — view toggles that change how the same collection renders (`List` / `Calendar`) plus at most one compact utility control (the events Subscribe popover).
+1. Mode row — view toggles that change how the same collection renders (`List` / `Calendar`) plus at most one utility control. On `/events`, `Subscribe to all events` stays visibly labeled; the Subscribe popover's icon-only compact variant is reserved for callers that explicitly request it.
 2. Scope row — mutually exclusive collection scopes (`All` / `Upcoming` / `Past recordings`, or difficulty).
 3. Topic row — `All` plus curated topic pills.
 

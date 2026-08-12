@@ -12,9 +12,7 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 pytestmark = pytest.mark.local_only
 
-WEEKDAY_DATE_PATTERN = re.compile(
-    r"\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2}, \d{4}"
-)
+COMPACT_DATE_PATTERN = re.compile(r"[A-Z][a-z]{2} \d{1,2}")
 
 
 def _clear_events():
@@ -64,6 +62,8 @@ def _seed_default_history():
             f"history-event-1039-{index:02d}",
             start_delta=-timedelta(days=index + 1),
             end_delta=-timedelta(days=index + 1, hours=-1),
+            recording_url="https://video.test/history-1039",
+            published=True,
         )
 
 
@@ -90,7 +90,6 @@ def _seed_recording_history():
     )
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_default_events_pages_past_without_hiding_upcoming(django_server, page):
     _seed_default_history()
@@ -99,28 +98,35 @@ def test_default_events_pages_past_without_hiding_upcoming(django_server, page):
 
     assert page.locator('[data-testid="events-upcoming-section"]').is_visible()
     assert page.get_by_text("Upcoming Visible 1039").is_visible()
+    assert page.get_by_text("History Event 1039 00").count() == 0
+    assert page.locator('[data-testid="events-past-section"]').count() == 0
+    assert page.locator('[data-testid="events-past-pagination"]').count() == 0
+    assert COMPACT_DATE_PATTERN.fullmatch(
+        page.get_by_test_id("timeline-day-date").first.inner_text().strip()
+    )
+
+    page.get_by_test_id("events-filter-past").click()
+    page.wait_for_url("**/events?filter=past")
+
+    assert page.locator('[data-testid="events-upcoming-section"]').count() == 0
+    assert page.get_by_text("Upcoming Visible 1039").count() == 0
     assert page.get_by_text("History Event 1039 00").is_visible()
     assert page.get_by_text("History Event 1039 20").count() == 0
     assert page.locator('[data-testid="events-past-pagination"]').is_visible()
     assert page.get_by_text("Page 1 of 2").is_visible()
-    assert WEEKDAY_DATE_PATTERN.search(
-        page.locator('[data-testid="events-upcoming-section"]').inner_text()
-    )
-    assert WEEKDAY_DATE_PATTERN.search(
-        page.locator('[data-testid="events-past-section"]').inner_text()
+    assert COMPACT_DATE_PATTERN.fullmatch(
+        page.get_by_test_id("timeline-day-date").first.inner_text().strip()
     )
 
     page.locator('[data-testid="events-past-pagination-next"]').click()
-    page.wait_for_url("**/events?page=2")
-
-    assert page.locator('[data-testid="events-upcoming-section"]').is_visible()
-    assert page.get_by_text("Upcoming Visible 1039").is_visible()
+    page.wait_for_load_state("domcontentloaded")
+    params = parse_qs(urlparse(page.url).query)
+    assert params == {"filter": ["past"], "page": ["2"]}
     assert page.get_by_text("History Event 1039 20").is_visible()
     assert page.get_by_text("History Event 1039 00").count() == 0
     assert page.get_by_text("Page 2 of 2").is_visible()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_past_recording_pager_preserves_repeated_tags_and_clamps_pages(
     django_server, page
@@ -143,8 +149,8 @@ def test_past_recording_pager_preserves_repeated_tags_and_clamps_pages(
     assert params["page"] == ["2"]
     assert page.get_by_text("Tagged AI Recording 1039 20").is_visible()
     assert page.get_by_text("Python Only Recording 1039").count() == 0
-    assert WEEKDAY_DATE_PATTERN.search(
-        page.locator('[data-testid="events-past-section"]').inner_text()
+    assert COMPACT_DATE_PATTERN.fullmatch(
+        page.get_by_test_id("timeline-day-date").first.inner_text().strip()
     )
 
     page.goto(
@@ -153,11 +159,13 @@ def test_past_recording_pager_preserves_repeated_tags_and_clamps_pages(
     )
     assert page.get_by_text("Page 2 of 2").is_visible()
 
-    page.goto(f"{django_server}/events?page=not-a-number", wait_until="domcontentloaded")
+    page.goto(
+        f"{django_server}/events?filter=past&page=not-a-number",
+        wait_until="domcontentloaded",
+    )
     assert page.get_by_text("Page 1 of 2").is_visible()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_upcoming_filter_keeps_series_grouping_and_hides_history(django_server, page):
     from django.db import connection
@@ -192,18 +200,20 @@ def test_upcoming_filter_keeps_series_grouping_and_hides_history(django_server, 
     page.goto(f"{django_server}/events?filter=upcoming", wait_until="domcontentloaded")
 
     assert page.locator('[data-testid="events-upcoming-section"]').is_visible()
-    assert page.locator('[data-testid="event-series-card"]').is_visible()
-    assert WEEKDAY_DATE_PATTERN.search(
-        page.locator('[data-testid="series-card-date"]').inner_text()
+    series_card = page.locator('[data-testid="event-series-card"]')
+    assert series_card.is_visible()
+    assert COMPACT_DATE_PATTERN.fullmatch(
+        page.get_by_test_id("timeline-day-date").inner_text().strip()
     )
-    series_meta = page.locator('[data-testid="series-card-meta"]').inner_text()
-    assert len(WEEKDAY_DATE_PATTERN.findall(series_meta)) == 2
+    assert series_card.get_by_test_id("series-card-sessions").text_content().strip() == (
+        "2 upcoming sessions"
+    )
+    assert series_card.get_by_test_id("event-card-time").count() == 1
     assert page.locator('[data-testid="events-past-section"]').count() == 0
     assert page.locator('[data-testid="events-past-pagination"]').count() == 0
     assert page.get_by_text("Past Hidden 1039").count() == 0
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_mobile_default_events_pager_has_no_horizontal_overflow(django_server, page):
     _seed_default_history()
@@ -211,8 +221,14 @@ def test_mobile_default_events_pager_has_no_horizontal_overflow(django_server, p
 
     page.goto(f"{django_server}/events", wait_until="domcontentloaded")
 
-    assert page.locator('[data-testid="events-past-pagination"]').is_visible()
+    assert page.locator('[data-testid="events-past-pagination"]').count() == 0
     assert page.evaluate("document.documentElement.scrollWidth") <= page.evaluate(
         "document.documentElement.clientWidth"
     )
+    page.get_by_test_id("events-filter-past").click()
+    page.wait_for_url("**/events?filter=past")
+    assert page.locator('[data-testid="events-past-pagination"]').is_visible()
     assert page.get_by_text("Page 1 of 2").is_visible()
+    assert page.evaluate("document.documentElement.scrollWidth") <= page.evaluate(
+        "document.documentElement.clientWidth"
+    )

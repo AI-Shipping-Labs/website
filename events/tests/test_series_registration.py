@@ -19,7 +19,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
 
-from content.access import LEVEL_MAIN, LEVEL_OPEN
+from content.access import LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from email_app.models import EmailLog
 from events.models import (
     Event,
@@ -294,6 +294,49 @@ class SeriesRegistrationApiTest(TierSetupMixin, TestCase):
         )
         self.assertEqual(
             EventRegistration.objects.filter(user=self.user).count(), 3,
+        )
+
+    def test_partial_tier_register_persists_only_accessible_occurrences(self):
+        free_user = User.objects.create_user(
+            email='free-series@test.com',
+            password='pass',
+            email_verified=True,
+            tier=self.free_tier,
+        )
+        series = _make_series(
+            name='Mixed access series',
+            slug='mixed-access-series',
+        )
+        _make_occurrence(series, offset_days=7, position=1)
+        _make_occurrence(series, offset_days=14, position=2)
+        _make_occurrence(
+            series,
+            offset_days=21,
+            position=3,
+            required_level=LEVEL_PREMIUM,
+        )
+        self.client.force_login(free_user)
+
+        response = self.client.post(f'/api/events/series/{series.slug}/register')
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            response.json()['summary'],
+            {
+                'registered': 2,
+                'skipped_already': 0,
+                'skipped_no_access': 1,
+                'total_occurrences': 3,
+            },
+        )
+        self.assertEqual(
+            set(
+                EventRegistration.objects.filter(user=free_user).values_list(
+                    'event__series_position',
+                    flat=True,
+                )
+            ),
+            {1, 2},
         )
 
     def test_register_is_idempotent(self):

@@ -63,6 +63,8 @@ class EntrypointRegistersSchedulesTest(TestCase):
             'import-slack-daily',
             'import-stripe-daily',
             'stripe-subscription-reconciliation-daily',
+            'stripe-monthly-payment-grace-discovery-daily',
+            'stripe-monthly-payment-grace-sweep',
             'remind-unverified-users',
             'purge-unverified-users',
             'ingest-plan-sprints',

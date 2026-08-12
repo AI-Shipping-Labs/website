@@ -61,6 +61,9 @@
     </tbody>
   </table>
 </div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="redirect-list-pager" %}
+{% endif %}
 {% else %}
   {% url 'studio_redirect_create' as redirects_create_url %}
   {% studio_empty_state 'fresh' entity_label='redirect' entity_label_plural='redirects' create_url=redirects_create_url %}

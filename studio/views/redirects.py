@@ -7,14 +7,17 @@ from django.views.decorators.http import require_POST
 from integrations.middleware import clear_redirect_cache
 from integrations.models import Redirect
 from studio.decorators import staff_required
+from studio.utils import studio_pagination_context
 
 
 @staff_required
 def redirect_list(request):
     """List all redirects."""
     redirects = Redirect.objects.all()
+    pager = studio_pagination_context(request, redirects)
     return render(request, 'studio/redirects/list.html', {
-        'redirects': redirects,
+        'redirects': pager['page'].object_list,
+        **pager,
     })
 
 

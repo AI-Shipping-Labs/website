@@ -68,6 +68,9 @@
     </tbody>
   </table>
 </div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="utm-campaign-list-pager" %}
+{% endif %}
 {% else %}
   {% url 'studio_utm_campaign_create' as utm_campaigns_create_url %}
   {% studio_empty_state 'fresh' entity_label='UTM campaign' entity_label_plural='UTM campaigns' create_url=utm_campaigns_create_url cta_label='Add Campaign' %}

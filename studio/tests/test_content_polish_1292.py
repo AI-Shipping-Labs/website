@@ -1,5 +1,6 @@
 import uuid
 from datetime import date
+from html import unescape
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -78,6 +79,29 @@ class ContentPolishStudioTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["sent_when"], expected)
         self.assertContains(response, expected)
+
+    def test_payment_grace_templates_have_trigger_guidance_and_render_in_list(self):
+        grace_templates = {
+            "payment_grace_failure_member",
+            "payment_grace_failure_team",
+            "payment_grace_reminder_member",
+            "payment_grace_expired_member",
+        }
+
+        self.assertTrue(grace_templates <= set(TEMPLATE_SENT_WHEN))
+        response = self.client.get(reverse("studio_email_template_list"))
+
+        self.assertEqual(response.status_code, 200)
+        rendered = unescape(response.content.decode())
+        rows_by_name = {row["template_name"]: row for row in response.context["rows"]}
+        for template_name in grace_templates:
+            with self.subTest(template_name=template_name):
+                self.assertIn(template_name, rows_by_name)
+                self.assertEqual(
+                    rows_by_name[template_name]["sent_when"],
+                    TEMPLATE_SENT_WHEN[template_name],
+                )
+                self.assertIn(TEMPLATE_SENT_WHEN[template_name], rendered)
 
     def test_course_instructors_add_reorder_remove_and_source_ownership(self):
         add_url = reverse("studio_course_instructor_add", args=[self.course.pk])

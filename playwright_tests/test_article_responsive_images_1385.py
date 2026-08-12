@@ -90,32 +90,21 @@ def _seed_articles():
 
 
 @pytest.mark.core
-def test_blog_index_selects_one_priority_picture_and_preserves_crop(
+def test_blog_index_is_text_first_without_cover_media(
     django_server,
     page,
 ):
     _seed_articles()
-    page.set_viewport_size({"width": 1280, "height": 900})
-    response = goto_with_retry(page, f"{django_server}/blog", wait_until="networkidle")
+    response = goto_with_retry(page, f"{django_server}/blog")
     assert response.status == 200
 
-    pictures = page.locator('[data-testid="blog-card-thumbnail"] picture')
-    assert pictures.count() == 2
-    assert page.locator('img[fetchpriority="high"]').count() == 1
-    assert page.locator('img[loading="lazy"]').count() >= 1
-    first = pictures.first.locator("img")
-    box = first.bounding_box()
-    assert round(box["width"]) == 192
-    assert round(box["height"]) == 128
-    assert first.get_attribute("alt") == "Responsive open article"
-    assert "(min-width: 640px) 12rem" in (
-        pictures.first.locator("source").first.get_attribute("sizes")
-    )
-
-    page.set_viewport_size({"width": 393, "height": 851})
-    page.reload(wait_until="networkidle")
-    mobile = page.locator('[data-testid="blog-card-thumbnail"] picture img').first.bounding_box()
-    assert abs((mobile["width"] / mobile["height"]) - (16 / 9)) < 0.03
+    cards = page.get_by_test_id("blog-card")
+    assert cards.count() == 2
+    assert cards.filter(has_text="Responsive open article").count() == 1
+    assert cards.filter(has_text="Responsive gated article").count() == 1
+    assert page.get_by_test_id("blog-card-thumbnail").count() == 0
+    assert cards.locator("picture, img").count() == 0
+    assert "cover-original" not in page.content()
 
 
 @pytest.mark.core
@@ -126,8 +115,22 @@ def test_open_article_preserves_link_alt_title_and_intrinsic_size(
     _seed_articles()
     response = goto_with_retry(page, f"{django_server}/blog/responsive-open")
     assert response.status == 200
-    assert page.locator("picture").count() == 2
-    inline = page.locator(".prose picture img")
+    assert page.locator("picture").count() == 1
+    assert "cover-original" not in page.locator("main").inner_html()
+    picture = page.locator(".prose picture")
+    assert picture.count() == 1
+    sources = picture.locator("source")
+    assert sources.count() == 2
+    assert sources.nth(0).get_attribute("type") == "image/webp"
+    assert sources.nth(1).get_attribute("type") == "image/png"
+    assert sources.nth(0).get_attribute("srcset") == (
+        "/static/placeholder-logo.png?i-320-webp 320w, "
+        "/static/placeholder-logo.png?i-768-webp 768w"
+    )
+    assert sources.nth(0).get_attribute("sizes") == (
+        "(min-width: 768px) 48rem, calc(100vw - 2rem)"
+    )
+    inline = picture.locator("img")
     assert inline.get_attribute("alt") == "Inline exact alt"
     assert inline.get_attribute("title") == "Inline exact title"
     assert inline.get_attribute("width") == "1200"
@@ -149,7 +152,9 @@ def test_gated_shell_never_exposes_protected_inline_reference(
     response = goto_with_retry(page, f"{django_server}/blog/responsive-gated")
     assert response.status == 200
     markup = page.content()
-    assert "cover-original" in markup
+    social_image = page.locator('meta[property="og:image"]')
+    assert "cover-original" in social_image.get_attribute("content")
+    assert page.locator('main img[src*="cover-original"]').count() == 0
     assert "protected-inline-original" not in markup
     assert not any("protected-inline" in url for url in requested)
     assert page.locator(".prose").count() == 0
@@ -162,5 +167,11 @@ def test_draft_external_images_remain_original_fallbacks(django_server, page):
     assert response.status == 200
     assert page.get_by_test_id("draft-preview-banner").is_visible()
     assert page.locator("picture").count() == 0
-    assert page.locator('img[src="https://outside.example/manual-cover.jpg"]').count() == 1
-    assert page.locator('img[src="https://outside.example/manual-inline.jpg"]').count() == 1
+    assert page.locator('img[src="https://outside.example/manual-cover.jpg"]').count() == 0
+    inline = page.locator('img[src="https://outside.example/manual-inline.jpg"]')
+    assert inline.count() == 1
+    assert inline.get_attribute("alt") == "Manual inline"
+    assert inline.get_attribute("loading") == "lazy"
+    assert inline.get_attribute("decoding") == "async"
+    assert inline.get_attribute("width") is None
+    assert inline.get_attribute("height") is None

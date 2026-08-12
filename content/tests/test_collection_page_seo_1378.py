@@ -120,10 +120,11 @@ class CollectionPageMetadataTest(TestCase):
             'Browse all tags across articles, courses, recordings, projects, '
             'and resources.',
         ),
-        '/pricing': (
-            'Pricing | AI Shipping Labs',
-            'Choose your membership tier. Free newsletter, or paid access to '
-            'exclusive content, community, courses, and personalized feedback.',
+        '/membership': (
+            'Membership | AI Shipping Labs',
+            'Compare AI Shipping Labs membership plans and explore the '
+            'structure, community, courses, and personalized feedback included '
+            'with each tier.',
         ),
     }
 
@@ -179,14 +180,14 @@ class CollectionPageMetadataTest(TestCase):
         clear_config_cache()
 
         response = self.client.get(
-            '/pricing?checkout_error=temporarily_unavailable&utm_source=test',
+            '/membership?checkout_error=temporarily_unavailable&utm_source=test',
             HTTP_HOST='attacker.example',
         )
         head = _head(response)
 
-        self.assertEqual(head.canonicals, ['https://canonical.example/pricing'])
+        self.assertEqual(head.canonicals, ['https://canonical.example/membership'])
         self.assertEqual(
-            head.meta['og:url'], ['https://canonical.example/pricing'],
+            head.meta['og:url'], ['https://canonical.example/membership'],
         )
         self.assertContains(response, 'Checkout is temporarily unavailable')
         self.assertNotIn('attacker.example', response.content.decode())
@@ -282,12 +283,12 @@ class CollectionFacetCanonicalTest(TestCase):
         self.assertEqual(response.context['selected_tags'], ['python'])
         self.assertContains(response, 'Python Workshop')
 
-    def test_pricing_recovery_state_survives_query_canonicalization(self):
+    def test_membership_recovery_state_survives_query_canonicalization(self):
         response = self.client.get(
-            '/pricing?checkout_error=temporarily_unavailable&utm_source=test',
+            '/membership?checkout_error=temporarily_unavailable&utm_source=test',
         )
 
-        self.assert_query_free_metadata(response, '/pricing')
+        self.assert_query_free_metadata(response, '/membership')
         self.assertContains(response, 'Checkout is temporarily unavailable')
 
 

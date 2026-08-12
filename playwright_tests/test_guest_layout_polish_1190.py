@@ -135,7 +135,7 @@ def _create_event():
 
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
-def test_blog_cards_keep_thumbnail_column_and_tag_links(django_server, page):
+def test_blog_cards_are_text_first_with_one_topic_eyebrow(django_server, page):
     _reset_guest_content()
     _create_article(
         "Covered 1190 Article",
@@ -150,18 +150,18 @@ def test_blog_cards_keep_thumbnail_column_and_tag_links(django_server, page):
     )
 
     page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
-    expect(page.get_by_test_id("blog-card-thumbnail")).to_have_count(2)
-    expect(page.get_by_test_id("blog-card-thumbnail-fallback")).to_have_count(1)
-    # The per-card raw-tag chips were replaced by a non-clickable primary-topic
-    # eyebrow (Fable redesign). Both articles (agents, rag) map to the AI
-    # Engineering topic, so each card carries the eyebrow and it is not a link.
+    expect(page.get_by_test_id("blog-card-thumbnail")).to_have_count(0)
+    expect(page.get_by_test_id("blog-card-thumbnail-fallback")).to_have_count(0)
+    expect(page.get_by_test_id("blog-card").locator("picture, img")).to_have_count(0)
+    # Both articles (agents, rag) map to the AI Engineering topic, so each
+    # text-first row carries one non-clickable curated eyebrow.
     card = page.locator('article:has-text("Coverless 1190 Article")')
     eyebrow = card.get_by_test_id("blog-card-topic")
     expect(eyebrow).to_have_count(1)
     expect(eyebrow).to_be_visible()
-    expect(eyebrow).to_contain_text("AI Engineering")
+    assert eyebrow.text_content().strip() == "AI Engineering"
     assert card.locator('[data-testid="blog-card-topic"] a').count() == 0
-    _shot(page, "blog-thumbnail-fallback")
+    _shot(page, "blog-text-first-feed")
 
 
 @pytest.mark.core

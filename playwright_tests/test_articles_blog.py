@@ -170,7 +170,7 @@ class TestBlogBrowserSmoke:
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 
-        assert "/pricing" in page.url
+        assert "/membership" in page.url
 
     @pytest.mark.core
     def test_staff_opens_draft_preview_link_from_studio(
@@ -369,7 +369,7 @@ class TestBlogTopicFilterRow:
         card = page.locator('article:has-text("RAG in Production")')
         eyebrow = card.get_by_test_id("blog-card-topic")
         assert eyebrow.count() == 1
-        assert "AI Engineering" in eyebrow.inner_text()
+        assert eyebrow.text_content().strip() == "AI Engineering"
         # The eyebrow is a plain span, not a link.
         assert card.locator('[data-testid="blog-card-topic"] a').count() == 0
 

@@ -83,7 +83,11 @@ def test_legacy_recording_landing_redirects_to_past_catalog(django_server, page)
     expect(page).to_have_url(
         re.compile(r'.*/events\?filter=past&tag=agents&tag=python&page=2&utm_source=bookmark$')
     )
-    expect(page.locator('body')).to_contain_text('Past event recordings')
+    expect(page.get_by_test_id('events-filter-past')).to_have_attribute(
+        'aria-selected', 'true',
+    )
+    expect(page.get_by_test_id('events-past-section')).to_be_visible()
+    expect(page.get_by_test_id('member-empty-state')).to_be_visible()
 
 
 @pytest.mark.django_db(transaction=True)

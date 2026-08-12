@@ -322,7 +322,10 @@ class TestRelatedContentRecommendations:
         open_card = page.get_by_test_id("related-content-card").filter(
             has_text="Open Python Project"
         )
-        assert paid_card.get_by_test_id("related-content-type").inner_text() == "Article"
+        assert (
+            paid_card.get_by_test_id("related-content-type").text_content().strip()
+            == "Article"
+        )
         assert "Basic or above" in paid_card.get_by_test_id(
             "related-content-tier"
         ).inner_text()
@@ -513,7 +516,8 @@ class TestRelatedContentRecommendations:
         assert pair_cards.count() == 1
         # Reporter directive: the Workshop always wins for a genuine pair.
         assert (
-            pair_cards.get_by_test_id("related-content-type").inner_text() == "Workshop"
+            pair_cards.get_by_test_id("related-content-type").text_content().strip()
+            == "Workshop"
         )
         rail_text = rail.inner_text()
         assert "July 8, 2026" in rail_text

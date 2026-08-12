@@ -25,7 +25,7 @@ ROUTES = {
     '/workshops/catalog': 'All Workshops | AI Shipping Labs',
     '/resources': 'Curated Links | AI Shipping Labs',
     '/tags': 'Tags | AI Shipping Labs',
-    '/pricing': 'Pricing | AI Shipping Labs',
+    '/membership': 'Membership | AI Shipping Labs',
 }
 
 
@@ -150,7 +150,7 @@ def _seed_filterable_collections():
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.core
-def test_collection_filters_and_pricing_recovery_keep_ui_but_drop_queries(
+def test_collection_filters_and_membership_recovery_keep_ui_but_drop_queries(
     django_server,
     page,
     settings,
@@ -210,12 +210,12 @@ def test_collection_filters_and_pricing_recovery_keep_ui_but_drop_queries(
 
     goto_with_retry(
         page,
-        f'{django_server}/pricing?checkout_error=temporarily_unavailable'
+        f'{django_server}/membership?checkout_error=temporarily_unavailable'
         '&utm_source=browser',
     )
     assert page.get_by_test_id('checkout-recovery-banner').is_visible()
-    assert _canonical(page) == f'{site_url}/pricing'
-    assert _meta(page, 'meta[property="og:url"]') == f'{site_url}/pricing'
+    assert _canonical(page) == f'{site_url}/membership'
+    assert _meta(page, 'meta[property="og:url"]') == f'{site_url}/membership'
 
     with django_db_blocker.unblock():
         from django.db import connection
@@ -237,13 +237,13 @@ def test_collection_filters_and_pricing_recovery_keep_ui_but_drop_queries(
     )
     response = goto_with_retry(
         page,
-        f'{attacker_url}/pricing?checkout_error=temporarily_unavailable'
+        f'{attacker_url}/membership?checkout_error=temporarily_unavailable'
         '&utm_source=untrusted-host',
     )
     assert response.status == 200
     assert page.get_by_test_id('checkout-recovery-banner').is_visible()
-    assert _canonical(page) == f'{site_url}/pricing'
-    assert _meta(page, 'meta[property="og:url"]') == f'{site_url}/pricing'
+    assert _canonical(page) == f'{site_url}/membership'
+    assert _meta(page, 'meta[property="og:url"]') == f'{site_url}/membership'
     assert attacker_host not in page.content()
 
 

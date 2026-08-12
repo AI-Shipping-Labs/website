@@ -130,7 +130,7 @@ class InvoicePaymentFailedAliasResolutionTest(
 ):
     """``handle_invoice_payment_failed`` alias-routing scenario."""
 
-    def test_payment_failed_for_relay_alias_notifies_canonical_user(self):
+    def test_payment_failed_does_not_use_relay_alias_as_authority(self):
         canonical = User.objects.create_user(email="stefano@test.com")
         EmailAlias.objects.create(user=canonical, email="relay@icloud.test")
 
@@ -144,8 +144,7 @@ class InvoicePaymentFailedAliasResolutionTest(
         mail.outbox = []
         handle_invoice_payment_failed(invoice_data)
 
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(mail.outbox[0].to, ["stefano@test.com"])
+        self.assertEqual(len(mail.outbox), 0)
 
     def test_payment_failed_unknown_email_no_alias_sends_nothing(self):
         invoice_data = {

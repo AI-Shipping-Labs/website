@@ -25,6 +25,7 @@ from payments.models import StripeWebhookDeliveryAttempt, WebhookEvent
 from payments.services import (
     handle_checkout_completed,
     handle_customer_updated,
+    handle_invoice_paid,
     handle_invoice_payment_failed,
     handle_subscription_deleted,
     handle_subscription_updated,
@@ -41,6 +42,7 @@ EVENT_HANDLERS = {
     "customer.subscription.updated": handle_subscription_updated,
     "customer.subscription.deleted": handle_subscription_deleted,
     "invoice.payment_failed": handle_invoice_payment_failed,
+    "invoice.paid": handle_invoice_paid,
 }
 
 # The two callbacks that carry cancellation authority. Alerts and replay are
@@ -127,14 +129,20 @@ def finalize_attempt(attempt, *, outcome, http_status,
     return attempt
 
 
-def run_handler(event_type, obj):
+def run_handler(event_type, obj, *, event_context=None):
     """Run a handler and return an explicit outcome string.
 
     Handlers that mutate membership (subscriptions) return an outcome; other
     handlers return ``None`` on a clean run, which maps to ``processed``.
     """
     handler = EVENT_HANDLERS[event_type]
-    result = handler(obj)
+    if event_type in {
+        "invoice.payment_failed", "invoice.paid",
+        "customer.subscription.updated",
+    }:
+        result = handler(obj, event_context=event_context or {})
+    else:
+        result = handler(obj)
     if isinstance(result, str) and result:
         return result
     return Attempt.OUTCOME_PROCESSED
@@ -176,7 +184,7 @@ def _send_failure_alert(*, event_id, event_type, outcome, attempt,
         logger.exception("Failed to send cancellation failure alert for %s", event_id)
 
 
-def process_event(*, event_id, event_type, obj, livemode,
+def process_event(*, event_id, event_type, obj, livemode, event_created=None,
                   source=Attempt.SOURCE_STRIPE_DELIVERY, requested_by=None):
     """Full lifecycle for a handled, signature-verified Stripe event.
 
@@ -209,7 +217,15 @@ def process_event(*, event_id, event_type, obj, livemode,
         return Attempt.OUTCOME_ALREADY_PROCESSED, 200
 
     try:
-        outcome = run_handler(event_type, obj)
+        outcome = run_handler(
+            event_type,
+            obj,
+            event_context={
+                "event_id": event_id,
+                "created": event_created,
+                "livemode": livemode,
+            },
+        )
     except WebhookUnmatchedUserError as exc:
         finalize_attempt(
             attempt,

@@ -150,6 +150,32 @@ def _serialize_finding(f):
             f.stripe_period_end.isoformat() if f.stripe_period_end else None
         ),
         "stripe_tier": f.stripe_tier,
+        "base_tier": f.current_tier,
+        "effective_tier": f.effective_tier or f.current_tier,
+        "latest_invoice": {
+            "id": f.latest_invoice_id,
+            "status": f.latest_invoice_status,
+            "paid": f.latest_invoice_paid,
+            "created_at": (
+                f.latest_invoice_created.isoformat()
+                if f.latest_invoice_created else None
+            ),
+            "collection_method": f.collection_method,
+        },
+        "interval": f.interval,
+        "interval_count": f.interval_count,
+        "payment_grace": ({
+            "id": str(f.payment_grace_id),
+            "status": f.payment_grace_status,
+            "started_at": (
+                f.payment_grace_started_at.isoformat()
+                if f.payment_grace_started_at else None
+            ),
+            "expires_at": (
+                f.payment_grace_expires_at.isoformat()
+                if f.payment_grace_expires_at else None
+            ),
+        } if f.payment_grace_id else None),
         "classification": f.classification,
         "action": f.action,
         "outcome": f.outcome,
@@ -476,6 +502,9 @@ def _recon_classifications():
         _recon.CLASSIFICATION_ENDED,
         _recon.CLASSIFICATION_SUSPECTED_MISSED_DELETE,
         _recon.CLASSIFICATION_DUNNING,
+        _recon.CLASSIFICATION_MONTHLY_GRACE_ACTIVE,
+        _recon.CLASSIFICATION_MONTHLY_GRACE_DUE,
+        _recon.CLASSIFICATION_MONTHLY_GRACE_REVIEW,
         _recon.CLASSIFICATION_NON_ENTITLED_REVIEW,
         _recon.CLASSIFICATION_MISSING_SUBSCRIPTION,
         _recon.CLASSIFICATION_MISSING_LINK,

@@ -109,6 +109,10 @@ from api.views.onboarding import (
     onboarding_response_detail,
     onboarding_responses_collection,
 )
+from api.views.payment_graces import (
+    payment_grace_detail,
+    payment_graces_collection,
+)
 from api.views.payment_mismatches import (
     payment_mismatch_detail,
     payment_mismatches_collection,
@@ -923,6 +927,16 @@ urlpatterns = [
         interview_note_detail,
     ),
     # ---- Tier reconciliation (issue #621) -----------------------------
+    path(
+        "payments/payment-graces",
+        payment_graces_collection,
+        name="api_payment_graces_collection",
+    ),
+    path(
+        "payments/payment-graces/<uuid:grace_id>",
+        payment_grace_detail,
+        name="api_payment_grace_detail",
+    ),
     # Diagnostics is registered BEFORE the apply route so the
     # ``diagnostics`` literal does not collide with the apply path.
     path(

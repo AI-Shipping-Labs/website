@@ -43,6 +43,7 @@
   <a href="?filter=actionable&tier={{ active_tier }}" class="{{ chip_base }} {% if active_filter == 'actionable' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Actionable</a>
   <a href="?filter=scheduled&tier={{ active_tier }}" class="{{ chip_base }} {% if active_filter == 'scheduled' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Scheduled</a>
   <a href="?filter=warnings&tier={{ active_tier }}" class="{{ chip_base }} {% if active_filter == 'warnings' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Warnings</a>
+  <a href="?filter=payment_grace&tier={{ active_tier }}" class="{{ chip_base }} {% if active_filter == 'payment_grace' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="payment-grace-filter">Payment grace ({{ payment_grace_count }})</a>
 </div>
 <div class="mb-6 flex flex-wrap items-center gap-2" data-testid="reconciliation-tier-filters">
   <span class="text-xs uppercase tracking-wide text-muted-foreground mr-1">Tier</span>
@@ -53,7 +54,60 @@
 </div>
 {% endwith %}
 
-{% if rows %}
+{% if active_filter == 'payment_grace' %}
+{% if grace_rows %}
+<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="payment-grace-list">
+  <table class="w-full">
+    <thead class="border-b border-border">
+      <tr class="text-left text-xs uppercase tracking-wide text-muted-foreground">
+        <th class="px-4 py-3 font-medium">Member</th>
+        <th class="px-4 py-3 font-medium">Grace</th>
+        <th class="px-4 py-3 font-medium">Stripe</th>
+        <th class="px-4 py-3 font-medium">Membership</th>
+        <th class="px-4 py-3 font-medium">Notifications</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for row in grace_rows %}
+      {% with grace=row.grace %}
+      <tr data-testid="payment-grace-row">
+        <td class="px-4 py-3 align-top" data-label="Member">
+          <a href="{% url 'studio_user_detail' grace.user_id %}" class="text-sm text-accent hover:underline break-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ grace.user.email }}</a>
+          <p class="mt-1 text-xs text-muted-foreground">Source: {{ grace.source }}</p>
+        </td>
+        <td class="px-4 py-3 align-top" data-label="Grace">
+          {% studio_status_badge grace.status grace.get_status_display %}
+          <p class="mt-2 text-xs text-muted-foreground">Started {{ grace.grace_started_at|operator_datetime }} UTC</p>
+          <p class="text-xs text-muted-foreground">Deadline {{ grace.effective_expires_at|operator_datetime }} UTC</p>
+          {% if grace.last_checked_at %}<p class="text-xs text-muted-foreground">Checked {{ grace.last_checked_at|operator_datetime }} UTC</p>{% endif %}
+          {% if grace.last_error_message %}<p class="mt-1 text-xs text-amber-700 dark:text-amber-300">{{ grace.last_error_code }}: {{ grace.last_error_message }}</p>{% endif %}
+        </td>
+        <td class="px-4 py-3 align-top" data-label="Stripe">
+          {% if row.invoice_url %}<a href="{{ row.invoice_url }}" target="_blank" rel="noopener" class="block font-mono text-xs text-accent break-all hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ grace.stripe_invoice_id }}</a>{% else %}<p class="font-mono text-xs text-muted-foreground break-all">{{ grace.stripe_invoice_id }}</p>{% endif %}
+          {% if row.subscription_url %}<a href="{{ row.subscription_url }}" target="_blank" rel="noopener" class="block font-mono text-xs text-accent break-all hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ grace.stripe_subscription_id }}</a>{% endif %}
+          <p class="mt-1 text-xs text-muted-foreground">{{ grace.interval }} × {{ grace.interval_count }}</p>
+        </td>
+        <td class="px-4 py-3 align-top text-sm text-foreground" data-label="Membership">
+          <p>Base: {{ row.base_tier }}</p>
+          <p>Effective: {{ row.effective_tier }}</p>
+        </td>
+        <td class="px-4 py-3 align-top" data-label="Notifications">
+          {% for delivery in grace.deliveries.all %}
+          <div class="mb-1 flex flex-wrap items-center gap-1 text-xs text-foreground"><span>{{ delivery.get_kind_display }}:</span>{% studio_status_badge delivery.status delivery.get_status_display %}{% if delivery.attempt_count %}<span>({{ delivery.attempt_count }} attempt{{ delivery.attempt_count|pluralize }})</span>{% endif %}</div>
+          {% if delivery.last_error %}<p class="mb-1 text-xs text-amber-700 dark:text-amber-300">{{ delivery.last_error }}</p>{% endif %}
+          {% empty %}<p class="text-xs text-muted-foreground">No deliveries</p>{% endfor %}
+        </td>
+      </tr>
+      {% endwith %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if show_pager %}{% include "studio/includes/list_pager.html" with pager_testid_prefix="payment-grace-list-pager" %}{% endif %}
+{% else %}
+{% studio_empty_state 'filter' entity_label='payment grace' entity_label_plural='payment graces' clear_url='/studio/payments/subscription-reconciliation/' testid_suffix='payment-grace' %}
+{% endif %}
+{% elif rows %}
 <div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="reconciliation-list">
   <table class="w-full table-fixed">
     <colgroup>

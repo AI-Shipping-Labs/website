@@ -50,7 +50,11 @@ def make_sub(
     current_period_end=FUTURE_TS,
     tier_slug="main",
 ):
-    price = {"id": price_id, "metadata": {}}
+    price = {
+        "id": price_id,
+        "metadata": {},
+        "recurring": {"interval": "month", "interval_count": 1},
+    }
     if tier_slug:
         price["metadata"] = {"tier_slug": tier_slug}
     return {
@@ -59,6 +63,16 @@ def make_sub(
         "cancel_at_period_end": cancel_at_period_end,
         "current_period_end": current_period_end,
         "items": {"data": [{"price": price}]},
+        "customer": "cus_test",
+        "latest_invoice": {
+            "id": "in_latest",
+            "subscription": sub_id,
+            "customer": "cus_test",
+            "status": "open",
+            "paid": False,
+            "created": 1_723_459_600,
+            "collection_method": "charge_automatically",
+        },
     }
 
 
@@ -184,14 +198,18 @@ class ClassificationMatrixTest(ReconBase):
     def test_past_due_is_dunning_not_canceled(self):
         user = self._user("g@t.com", tier=self.main, subscription_id="sub_1")
         result = self._classify(user, sub=make_sub(status="past_due"))
-        self.assertEqual(result.classification, recon.CLASSIFICATION_DUNNING)
+        self.assertEqual(
+            result.classification, recon.CLASSIFICATION_MONTHLY_GRACE_ACTIVE,
+        )
         self.assertEqual(result.stripe_status, "past_due")
         self.assertNotEqual(result.action, recon.ACTION_REVERT_TO_FREE)
 
     def test_unpaid_is_dunning(self):
         user = self._user("h@t.com", tier=self.main, subscription_id="sub_1")
         result = self._classify(user, sub=make_sub(status="unpaid"))
-        self.assertEqual(result.classification, recon.CLASSIFICATION_DUNNING)
+        self.assertEqual(
+            result.classification, recon.CLASSIFICATION_MONTHLY_GRACE_ACTIVE,
+        )
 
     def test_incomplete_is_non_entitled_review(self):
         user = self._user("i@t.com", tier=self.main, subscription_id="sub_1")

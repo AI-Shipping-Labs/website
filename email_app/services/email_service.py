@@ -59,6 +59,13 @@ EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = {
     "download_delivery",
     "account_email_change_confirm",
     "password_reset",
+    # Payment-grace copy is contract-locked, and the team diagnostic uses a
+    # recipient override for the member's User row. Never append a member
+    # verification bearer link to either member or operator billing mail.
+    "payment_grace_failure_member",
+    "payment_grace_failure_team",
+    "payment_grace_reminder_member",
+    "payment_grace_expired_member",
 }
 
 # Token lifetime for the footer verify link. 7 days is long enough that an
@@ -128,6 +135,7 @@ class EmailService:
         cc=None,
         bcc=None,
         recipient_email=None,
+        dedupe_key=None,
     ):
         """Send a transactional email to a user.
 
@@ -151,6 +159,7 @@ class EmailService:
                 account-security flows where the email must be addressed to
                 a verified pending/former address before or after
                 ``user.email`` changes.
+            dedupe_key: Optional durable lifecycle-send idempotency key.
 
         Returns:
             EmailLog instance for the sent email.
@@ -161,6 +170,12 @@ class EmailService:
         if context is None:
             context = {}
         to_email = (recipient_email or user.email).strip()
+
+        if dedupe_key:
+            from email_app.models import EmailLog
+            existing = EmailLog.objects.filter(dedupe_key=dedupe_key).first()
+            if existing is not None:
+                return existing
 
         try:
             email_kind = classify_email_type(template_name)
@@ -234,6 +249,7 @@ class EmailService:
                 email_type=template_name,
                 subject=subject,
                 ses_message_id=ses_message_id,
+                dedupe_key=dedupe_key,
             )
         else:
             email_log = None

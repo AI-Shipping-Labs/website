@@ -157,6 +157,24 @@ class SubscriptionReconciliationFinding(models.Model):
     cancel_at_period_end = models.BooleanField(default=False)
     stripe_period_end = models.DateTimeField(null=True, blank=True)
     stripe_tier = models.CharField(max_length=64, blank=True, default="")
+    effective_tier = models.CharField(max_length=64, blank=True, default="")
+    latest_invoice_id = models.CharField(max_length=255, blank=True, default="")
+    latest_invoice_status = models.CharField(max_length=32, blank=True, default="")
+    latest_invoice_paid = models.BooleanField(null=True, blank=True)
+    latest_invoice_created = models.DateTimeField(null=True, blank=True)
+    collection_method = models.CharField(max_length=32, blank=True, default="")
+    interval = models.CharField(max_length=16, blank=True, default="")
+    interval_count = models.PositiveIntegerField(null=True, blank=True)
+    payment_grace = models.ForeignKey(
+        "payments.MonthlyPaymentGrace",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reconciliation_findings",
+    )
+    payment_grace_status = models.CharField(max_length=16, blank=True, default="")
+    payment_grace_started_at = models.DateTimeField(null=True, blank=True)
+    payment_grace_expires_at = models.DateTimeField(null=True, blank=True)
 
     # Latest correlated webhook evidence.
     webhook_event_id = models.CharField(max_length=255, blank=True, default="")

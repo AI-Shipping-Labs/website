@@ -15,8 +15,9 @@ three handlers that change subscription state — ``handle_checkout_completed``,
 ``handle_subscription_updated``, and ``handle_subscription_deleted``.
 
 ``invoice.payment_failed`` deliberately does NOT call this: a failed payment is
-not a churn and does not revoke the tier today, so the status tags stay as-is.
-Do not "fix" that — it is intentional and out of scope.
+not a churn and does not revoke the tier while grace is active, so the status
+tags stay as-is. A later paid recovery removes the distinct ``stripe:lapsed``
+marker when active truth is restored.
 
 ``stripe:imported`` is a historical "this account originated from the Stripe
 import" marker, NOT a status. It is never added or removed here.
@@ -56,6 +57,7 @@ def reconcile_stripe_status_tags(user, *, active, tier):
     if active:
         add_tag(user, "stripe:active")
         remove_tag(user, "stripe:churned")
+        remove_tag(user, "stripe:lapsed")
         if tier is not None:
             target = normalize_tag(f"{PLAN_PREFIX}{tier.slug}")
             # Drop any OTHER plan tag first so exactly one survives.

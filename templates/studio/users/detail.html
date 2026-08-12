@@ -158,6 +158,46 @@
   {% endif %}
 </section>
 
+{% if payment_graces %}
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-payment-grace-section">
+  <div class="flex items-start justify-between gap-4 mb-4">
+    <div>
+      <h2 class="text-lg font-semibold text-foreground">Payment grace</h2>
+      <p class="mt-1 text-sm text-muted-foreground">Base membership and effective access are shown separately. This surface is read-only.</p>
+    </div>
+    <a href="{% url 'studio_subscription_reconciliation' %}?filter=payment_grace" class="text-xs text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Open report</a>
+  </div>
+  <div class="space-y-4">
+    {% for grace in payment_graces %}
+    <div class="border-t border-border pt-4 first:border-t-0 first:pt-0" data-testid="user-payment-grace-row">
+      <div class="grid gap-2 text-sm sm:grid-cols-2">
+        <div><p class="text-xs text-muted-foreground">Status</p><div class="mt-1">{% studio_status_badge grace.status grace.get_status_display %}</div></div>
+        <div><p class="text-xs text-muted-foreground">Deadline</p><p class="text-foreground">{{ grace.effective_expires_at|operator_datetime }} UTC</p></div>
+        <div><p class="text-xs text-muted-foreground">Base tier</p><p class="text-foreground">{{ detail_user.tier.slug|default:'free' }}</p></div>
+        <div><p class="text-xs text-muted-foreground">Effective tier</p><p class="text-foreground">{{ tier_slug }}</p></div>
+        <div><p class="text-xs text-muted-foreground">Invoice</p><p class="font-mono text-foreground break-all">{% if stripe_account_id %}<a href="https://dashboard.stripe.com/{{ stripe_account_id }}/invoices/{{ grace.stripe_invoice_id }}" target="_blank" rel="noopener" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ grace.stripe_invoice_id }}</a>{% else %}{{ grace.stripe_invoice_id }}{% endif %}</p></div>
+        <div><p class="text-xs text-muted-foreground">Subscription</p><p class="font-mono text-foreground break-all">{% if stripe_account_id %}<a href="https://dashboard.stripe.com/{{ stripe_account_id }}/subscriptions/{{ grace.stripe_subscription_id }}" target="_blank" rel="noopener" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ grace.stripe_subscription_id }}</a>{% else %}{{ grace.stripe_subscription_id }}{% endif %}</p></div>
+        <div><p class="text-xs text-muted-foreground">Last Stripe check</p><p class="text-foreground">{% if grace.last_checked_at %}{{ grace.last_checked_at|operator_datetime }} UTC{% else %}&mdash;{% endif %}</p></div>
+      </div>
+      {% if grace.last_error_message %}<p class="mt-2 text-xs text-amber-700 dark:text-amber-300">{{ grace.last_error_code }}: {{ grace.last_error_message }}</p>{% endif %}
+      <div class="mt-2 flex flex-wrap gap-2">
+        {% for delivery in grace.deliveries.all %}<span class="inline-flex items-center gap-1 text-xs"><span>{{ delivery.get_kind_display }}:</span>{% studio_status_badge delivery.status delivery.get_status_display %}</span>{% if delivery.last_error %}<span class="text-xs text-amber-700 dark:text-amber-300">{{ delivery.last_error }}</span>{% endif %}{% endfor %}
+        <a href="#payment-grace-audit" class="text-xs text-accent hover:underline py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Audit activity</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div id="payment-grace-audit" class="mt-5 border-t border-border pt-4">
+    <p class="text-xs font-medium text-muted-foreground mb-2">Recent payment-grace audit</p>
+    {% if payment_grace_audits %}
+    <ul class="space-y-1 text-xs">
+      {% for audit in payment_grace_audits %}<li><span class="font-mono text-foreground">{{ audit.action }}</span> <span class="text-muted-foreground">{{ audit.timestamp|operator_datetime }} UTC</span></li>{% endfor %}
+    </ul>
+    {% else %}<p class="text-xs text-muted-foreground">No payment-grace audit entries.</p>{% endif %}
+  </div>
+</section>
+{% endif %}
+
 <section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-aliases-section">
   <h2 class="text-lg font-semibold text-foreground mb-4">Email aliases</h2>
   {% if aliases %}
@@ -966,7 +1006,7 @@
      (signup, enroll, lesson, register, join, payment, email click). Newest
      first, capped at {{ activity_limit }} rows. The denormalised label /
      target_url mean rows render without per-row queries. -->
-<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl"
+<section id="user-activity-section" class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl"
          data-testid="user-activity-section">
   <h2 class="text-lg font-semibold text-foreground mb-4">Activity</h2>
   {% if activities %}

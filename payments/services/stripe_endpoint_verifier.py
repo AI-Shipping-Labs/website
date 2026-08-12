@@ -3,7 +3,7 @@
 Uses the configured ``STRIPE_SECRET_KEY`` to inspect the Stripe webhook
 endpoints in the same mode as the key and prove whether the exact production
 callback URL is configured, enabled, in the right mode, non-duplicated, and
-subscribed to the five documented events. It NEVER modifies Stripe
+subscribed to the six documented events. It NEVER modifies Stripe
 configuration and NEVER persists API keys or signing secrets.
 
 Signing-secret health is reported SEPARATELY: Stripe's API cannot reveal or
@@ -32,6 +32,7 @@ REQUIRED_EVENTS = [
     "customer.subscription.updated",
     "customer.subscription.deleted",
     "invoice.payment_failed",
+    "invoice.paid",
     "customer.updated",
 ]
 CANCELLATION_EVENTS = [

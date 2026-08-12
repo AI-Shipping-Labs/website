@@ -12,6 +12,7 @@ from django.views.decorators.http import require_POST
 
 from integrations.config import get_config
 from jobs.tasks import async_task, build_task_name
+from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import (
     SubscriptionReconciliationFinding as Finding,
 )
@@ -19,10 +20,11 @@ from payments.models import (
     SubscriptionReconciliationRun as Run,
 )
 from payments.services import subscription_reconciliation as _recon
+from payments.services.monthly_payment_grace import _effective_tier
 from studio.decorators import staff_required
 from studio.utils import studio_pagination_context
 
-_FILTERS = {"actionable", "scheduled", "warnings", "all"}
+_FILTERS = {"actionable", "scheduled", "warnings", "payment_grace", "all"}
 _TIER_FILTERS = {"basic", "main", "premium"}
 
 _CLASSIFICATION_LABELS = {
@@ -34,6 +36,9 @@ _CLASSIFICATION_LABELS = {
         "Ended subscription still entitled"
     ),
     _recon.CLASSIFICATION_DUNNING: "Dunning / grace",
+    _recon.CLASSIFICATION_MONTHLY_GRACE_ACTIVE: "Payment grace active",
+    _recon.CLASSIFICATION_MONTHLY_GRACE_DUE: "Payment grace due",
+    _recon.CLASSIFICATION_MONTHLY_GRACE_REVIEW: "Payment grace review",
     _recon.CLASSIFICATION_NON_ENTITLED_REVIEW: "Needs review",
     _recon.CLASSIFICATION_MISSING_SUBSCRIPTION: "Missing Stripe subscription",
     _recon.CLASSIFICATION_MISSING_LINK: "Missing Stripe link",
@@ -97,11 +102,22 @@ def subscription_reconciliation_report(request):
             "classification", "email",
         )
 
-    pager = studio_pagination_context(request, findings_qs)
+    grace_qs = Grace.objects.none()
+    if active_filter == "payment_grace":
+        grace_qs = (
+            Grace.objects.select_related("user__tier", "base_tier_at_start")
+            .prefetch_related("deliveries")
+        )
+        if active_tier:
+            grace_qs = grace_qs.filter(user__tier__slug=active_tier)
+        grace_qs = grace_qs.order_by("-grace_started_at", "-created_at")
+        pager = studio_pagination_context(request, grace_qs)
+    else:
+        pager = studio_pagination_context(request, findings_qs)
     stripe_account_id = get_config("STRIPE_DASHBOARD_ACCOUNT_ID", "")
 
     rows = []
-    for f in pager["page"].object_list:
+    for f in ([] if active_filter == "payment_grace" else pager["page"].object_list):
         rows.append({
             "finding": f,
             "classification_label": _CLASSIFICATION_LABELS.get(
@@ -117,6 +133,25 @@ def subscription_reconciliation_report(request):
             ),
         })
 
+    grace_rows = []
+    if active_filter == "payment_grace":
+        for grace in pager["page"].object_list:
+            effective = _effective_tier(grace.user)
+            grace_rows.append({
+                "grace": grace,
+                "base_tier": grace.user.tier.slug if grace.user.tier_id else "free",
+                "effective_tier": effective.slug if effective else "free",
+                "customer_url": _stripe_url(
+                    stripe_account_id, "customers", grace.stripe_customer_id,
+                ),
+                "subscription_url": _stripe_url(
+                    stripe_account_id, "subscriptions", grace.stripe_subscription_id,
+                ),
+                "invoice_url": _stripe_url(
+                    stripe_account_id, "invoices", grace.stripe_invoice_id,
+                ),
+            })
+
     evidence_counts = _webhook_evidence_counts(
         latest_run.findings.all() if latest_run else Finding.objects.none()
     )
@@ -127,6 +162,8 @@ def subscription_reconciliation_report(request):
         {
             "latest_run": latest_run,
             "rows": rows,
+            "grace_rows": grace_rows,
+            "payment_grace_count": Grace.objects.count(),
             "active_filter": active_filter,
             "active_tier": active_tier,
             "has_findings": findings_qs.exists() if latest_run else False,

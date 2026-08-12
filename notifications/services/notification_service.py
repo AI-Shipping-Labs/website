@@ -262,13 +262,11 @@ def _send_email_channel(email_template, content_type, content):
 def _resolve_commented_content(content_id):
     """Resolve a comment ``content_id`` to its content object and title.
 
-    The comment composer is embedded on three content surfaces that carry an
-    author to notify: course unit lessons (``Unit.content_id``), workshop
-    tutorial pages (``WorkshopPage.content_id``), and Book Club member notes
-    (``bookclub.Note.comment_content_id``, issue #1365) -- a note's author is
-    notified when a fellow member comments on it. Sprint plan threads
-    (``Plan.comment_content_id``) and unknown UUIDs are intentionally
-    unresolved -- they carry no single content author to notify.
+    The shared comment composer is embedded on four legitimate surfaces:
+    course unit lessons (``Unit.content_id``), workshop tutorial pages
+    (``WorkshopPage.content_id``), Book Club member notes
+    (``bookclub.Note.comment_content_id``), and sprint plans
+    (``Plan.comment_content_id``). Unknown UUIDs remain unresolved.
 
     Returns ``(content, content_title)`` or ``(None, None)`` when the
     ``content_id`` matches none of the above.
@@ -305,26 +303,92 @@ def _resolve_commented_content(content_id):
         # The recipient's own note: "New comment on your note".
         return note, 'your note'
 
+    from plans.models import Plan
+
+    plan = (
+        Plan.objects
+        .filter(comment_content_id=content_id)
+        .select_related('member', 'sprint')
+        .first()
+    )
+    if plan is not None:
+        return plan, 'your plan'
+
     return None, None
 
 
-def _content_instructors(content):
-    """Return the notification recipients for a resolved content object.
-
-    Each element must expose ``.user`` / ``.user_id`` (matching the
-    ``Instructor`` shape the caller iterates). A Book Club ``Note`` is its own
-    single recipient — the note author — and already exposes both attributes.
-    """
+def _content_owner_users(content):
+    """Return users who own/author a supported shared-comment surface."""
     from bookclub.models import Note
     from content.models import Unit, WorkshopPage
+    from plans.models import Plan
 
     if isinstance(content, Unit):
-        return content.module.course.instructors.all()
+        return [
+            instructor.user
+            for instructor in content.module.course.instructors.select_related('user')
+            if instructor.user_id is not None
+        ]
     if isinstance(content, WorkshopPage):
-        return content.workshop.instructors.all()
+        return [
+            instructor.user
+            for instructor in content.workshop.instructors.select_related('user')
+            if instructor.user_id is not None
+        ]
     if isinstance(content, Note):
-        return [content]
+        return [content.user]
+    if isinstance(content, Plan):
+        return [content.member]
     return []
+
+
+def _direct_reply_user_can_read(content, user):
+    """Apply current domain read policy to gated direct-reply recipients."""
+    from bookclub.models import Note
+    from plans.models import Plan
+
+    if isinstance(content, Note):
+        from bookclub.comments_permissions import (  # noqa: PLC0415
+            viewer_can_read_book_note_thread,
+        )
+
+        return viewer_can_read_book_note_thread(content, user)
+    if isinstance(content, Plan):
+        from plans.comments_permissions import (  # noqa: PLC0415
+            viewer_can_read_plan_thread,
+        )
+
+        return viewer_can_read_plan_thread(content, user)
+    return True
+
+
+def _content_comment_url(content, recipient):
+    """Return the existing thread URL appropriate for ``recipient``."""
+    from bookclub.models import Note
+    from plans.models import Plan
+
+    if isinstance(content, Note):
+        return f'{content.get_absolute_url()}#qa-section-{content.pk}'
+    if isinstance(content, Plan):
+        from django.urls import reverse  # noqa: PLC0415
+
+        if recipient.pk == content.member_id:
+            route = 'my_plan_detail'
+            kwargs = {
+                'sprint_slug': content.sprint.slug,
+                'plan_id': content.pk,
+            }
+        elif recipient.is_staff:
+            route = 'studio_plan_detail'
+            kwargs = {'plan_id': content.pk}
+        else:
+            route = 'member_plan_detail'
+            kwargs = {
+                'sprint_slug': content.sprint.slug,
+                'plan_id': content.pk,
+            }
+        return reverse(route, kwargs=kwargs) + '#qa-section'
+    return content.get_absolute_url() + '#qa-section'
 
 
 class NotificationService:
@@ -472,20 +536,19 @@ class NotificationService:
 
     @staticmethod
     def notify_content_comment(comment):
-        """Notify content authors when a comment/reply is posted (issue #1341).
+        """Notify owners/authors and direct-reply authors for shared comments.
 
-        Resolves the comment's ``content_id`` to its content object (a course
-        ``Unit`` or a workshop ``WorkshopPage``), collects the distinct set of
-        linked ``Instructor.user`` accounts for that content's instructors,
-        excludes the commenter (no self-notify), and creates one
-        ``content_comment`` notification per remaining distinct recipient.
+        Recipient roles are intentionally narrow: the resolved content/note/
+        plan owner and, for a reply, the top-level parent comment author. The
+        actor is excluded and the roles are merged by user id so one comment
+        event creates at most one row per recipient. Direct-reply recipients on
+        gated Book Club and plan threads must still satisfy that domain's
+        current read predicate; existing owner delivery is unchanged.
 
-        A ``content_id`` that matches neither a ``Unit`` nor a ``WorkshopPage``
-        (e.g. a ``Plan.comment_content_id`` thread or an unknown UUID) resolves
-        to no content and notifies nobody.
-
-        The deep link targets the content page's Q&A section
-        (``content.get_absolute_url() + '#qa-section'``).
+        Unknown UUIDs and unsupported surfaces notify nobody. Course/workshop
+        URLs retain ``#qa-section``; Book Club links target the note-specific
+        section; plan links select the owner, cohort-member, or Studio route
+        for each recipient.
 
         Args:
             comment: the ``Comment`` that was just created (top-level or reply).
@@ -499,20 +562,27 @@ class NotificationService:
         if content is None:
             return {"notified": 0}
 
-        instructors = _content_instructors(content)
-        recipients = {
-            instructor.user
-            for instructor in instructors
-            if instructor.user_id is not None
+        owner_recipients = {
+            user.pk: user
+            for user in _content_owner_users(content)
         }
-        # No self-notify: an author commenting on their own content is skipped.
-        recipients.discard(comment.user)
+        recipients = dict(owner_recipients)
+
+        if comment.parent_id is not None:
+            parent_author = comment.parent.user
+            if _direct_reply_user_can_read(content, parent_author):
+                # Keep the owner role when the same user is both owner and
+                # parent author so existing owner notification titles remain
+                # unchanged.
+                recipients.setdefault(parent_author.pk, parent_author)
+
+        # No self-notify for any role.
+        recipients.pop(comment.user_id, None)
         if not recipients:
             return {"notified": 0}
 
         is_reply = comment.parent_id is not None
         verb = 'reply' if is_reply else 'comment'
-        title = f'New {verb} on {content_title}'
 
         commenter = display_name(comment.user)
         excerpt = (comment.body or '').strip()
@@ -520,17 +590,19 @@ class NotificationService:
             excerpt = excerpt[:200].rstrip() + '…'
         body = f'{commenter}: {excerpt}' if excerpt else commenter
 
-        url = content.get_absolute_url() + '#qa-section'
-
         notifications = [
             Notification(
                 user=recipient,
-                title=title,
+                title=(
+                    f'New {verb} on {content_title}'
+                    if recipient_id in owner_recipients
+                    else 'New reply to your comment'
+                ),
                 body=body,
-                url=url,
+                url=_content_comment_url(content, recipient),
                 notification_type='content_comment',
             )
-            for recipient in recipients
+            for recipient_id, recipient in recipients.items()
         ]
         Notification.objects.bulk_create(notifications)
         logger.info(

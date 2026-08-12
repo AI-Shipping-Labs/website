@@ -13,7 +13,8 @@ def create_comment(*, content_id, user, body, parent=None):
 
     Validation and permission checks stay at the HTTP boundary. This helper
     owns the side effects tied to a successful platform comment action:
-    activation and the content-author in-app notification (issue #1341).
+    activation and the shared-thread in-app notifications (issues #1341,
+    #1361, and #1365).
     """
     comment = Comment.objects.create(
         content_id=content_id,
@@ -22,16 +23,17 @@ def create_comment(*, content_id, user, body, parent=None):
         parent=parent,
     )
     mark_activated(user)
-    _notify_content_author(comment)
+    _notify_comment_recipients(comment)
     return comment
 
 
-def _notify_content_author(comment):
-    """Best-effort in-app notification to content authors (issue #1341).
+def _notify_comment_recipients(comment):
+    """Best-effort in-app notification for shared-thread recipients.
 
-    Fires for both top-level comments and replies. A failure inside the
-    notification path must never fail the comment POST, so the call is
-    wrapped and any exception is logged via ``logger.exception``.
+    Fires for both top-level comments and replies. Recipient resolution is
+    centralized in :meth:`NotificationService.notify_content_comment`; this
+    wrapper makes every resolver, URL, or notification failure non-fatal to
+    the already-created comment and logs the affected comment id.
     """
     try:
         # Imported lazily to keep the generic comments app free of a static

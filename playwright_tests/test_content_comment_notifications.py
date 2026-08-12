@@ -15,7 +15,7 @@ Covers the 8 groomed scenarios:
 6. Author who is also the commenter on co-taught content is skipped; the
    co-author is notified.
 7. Operator links an instructor to an account; future comments start notifying.
-8. Commenting on a sprint plan does not fire a content-author notification.
+8. A plan owner commenting on their own sprint plan is not self-notified.
 
 Usage:
     uv run pytest playwright_tests/test_content_comment_notifications.py -v
@@ -499,14 +499,14 @@ class TestOperatorLinksThenNotifies:
 
 
 # ----------------------------------------------------------------------
-# Scenario 8: Commenting on a sprint plan does not fire a content-author
-#             notification.
+# Scenario 8: A plan owner commenting on their own sprint plan is not
+#             self-notified.
 # ----------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestPlanThreadExcluded:
-    def test_plan_comment_creates_no_content_comment_notification(
+class TestPlanOwnerNoSelfNotify:
+    def test_owner_plan_comment_creates_no_self_notification(
         self, django_server, browser,
     ):
         from django.utils import timezone
@@ -553,6 +553,6 @@ class TestPlanThreadExcluded:
             section.locator('#qa-post-btn').click()
         assert resp_info.value.status == 201
 
-        # Comment saved, but no content_comment notification anywhere.
+        # Comment saved, but the owner is not notified about their own action.
         assert _content_comment_count() == 0
         ctx.close()

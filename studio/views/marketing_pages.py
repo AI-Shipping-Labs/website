@@ -8,7 +8,7 @@ from django.views.decorators.http import require_POST
 
 from content.models import MarketingPage
 from studio.decorators import staff_required
-from studio.utils import get_github_edit_url, is_synced
+from studio.utils import get_github_edit_url, is_synced, studio_pagination_context
 from studio.views.form_helpers import (
     parse_comma_separated_tags,
     reject_synced_content_post,
@@ -73,11 +73,13 @@ def marketing_page_list(request):
             | Q(public_path__icontains=search)
             | Q(description__icontains=search)
         )
+    pager = studio_pagination_context(request, pages)
 
     return render(request, 'studio/marketing_pages/list.html', {
-        'pages': pages,
+        'pages': pager['page'].object_list,
         'status_filter': status_filter,
         'search': search,
+        **pager,
     })
 
 

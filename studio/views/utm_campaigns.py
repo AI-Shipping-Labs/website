@@ -13,6 +13,7 @@ from django.views.decorators.http import require_POST
 from integrations.models import UtmCampaign, UtmCampaignLink
 from integrations.models.utm_campaign import UTM_MEDIUM_PRESETS, UTM_SOURCE_PRESETS
 from studio.decorators import staff_required
+from studio.utils import studio_pagination_context
 
 SLUG_RE = re.compile(r'^[a-z0-9_]+$')
 
@@ -29,9 +30,11 @@ def utm_campaign_list(request):
     """List UTM campaigns (active by default, or archived via ?archived=1)."""
     show_archived = request.GET.get('archived') == '1'
     campaigns = UtmCampaign.objects.filter(is_archived=show_archived)
+    pager = studio_pagination_context(request, campaigns)
     return render(request, 'studio/utm_campaigns/list.html', {
-        'campaigns': campaigns,
+        'campaigns': pager['page'].object_list,
         'show_archived': show_archived,
+        **pager,
     })
 
 

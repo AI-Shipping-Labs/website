@@ -76,6 +76,9 @@
     </tbody>
   </table>
 </div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="marketing-page-list-pager" %}
+{% endif %}
 {% else %}
   {% url 'studio_marketing_page_new' as new_page_url %}
   {% studio_empty_state 'fresh' entity_label='marketing page' entity_label_plural='marketing pages' create_url=new_page_url %}

@@ -32,6 +32,9 @@
     </tbody>
   </table>
 </div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="trigger-emission-list-pager" %}
+{% endif %}
 {% else %}
 <div class="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground" data-testid="emissions-empty">
   No emissions recorded yet.

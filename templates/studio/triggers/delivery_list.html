@@ -53,6 +53,9 @@
     </tbody>
   </table>
 </div>
+{% if delivery_jobs_show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="trigger-delivery-job-list-pager" page=delivery_jobs_page paginator=delivery_jobs_paginator pager_first_url=delivery_jobs_pager_first_url pager_prev_url=delivery_jobs_pager_prev_url pager_next_url=delivery_jobs_pager_next_url pager_last_url=delivery_jobs_pager_last_url page_start_index=delivery_jobs_page_start_index page_end_index=delivery_jobs_page_end_index filtered_total=delivery_jobs_filtered_total %}
+{% endif %}
 {% endif %}
 
 {% if deliveries %}
@@ -88,6 +91,9 @@
     </tbody>
   </table>
 </div>
+{% if delivery_attempts_show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="trigger-delivery-attempt-list-pager" page=delivery_attempts_page paginator=delivery_attempts_paginator pager_first_url=delivery_attempts_pager_first_url pager_prev_url=delivery_attempts_pager_prev_url pager_next_url=delivery_attempts_pager_next_url pager_last_url=delivery_attempts_pager_last_url page_start_index=delivery_attempts_page_start_index page_end_index=delivery_attempts_page_end_index filtered_total=delivery_attempts_filtered_total %}
+{% endif %}
 {% else %}
 <div class="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground" data-testid="deliveries-empty">
   No deliveries recorded yet.

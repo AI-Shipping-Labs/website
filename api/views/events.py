@@ -47,7 +47,9 @@ from events.services.calendar_lifecycle import (
     should_notify_cancellation,
 )
 from events.services.display_time import resolve_event_creation_timezone
-from events.services.host_registration import maybe_register_host_as_attendee
+from events.services.occurrence_publication import (
+    run_occurrence_publication_lifecycle,
+)
 from events.services.series_registration import (
     promote_event_registrations_to_series,
 )
@@ -1012,10 +1014,10 @@ def events_collection(request):
         _set_event_hosts(event, host_ids)
 
     zoom_error = _maybe_create_zoom_meeting(event, create_zoom)
-    # Best-effort host auto-registration. Called after the save and the
-    # create_zoom step so the host's normal registration email can carry
-    # zoom_join_url when available.
-    maybe_register_host_as_attendee(event)
+    # Run the shared occurrence lifecycle after the save transaction and
+    # create_zoom step. Series enrollment stays best-effort/idempotent, while
+    # the host's normal registration email can carry zoom_join_url when set.
+    run_occurrence_publication_lifecycle(event)
     # Banner enqueue runs LAST in the compose-time chain (zoom -> host
     # registration -> banner) so any populated state is current. Soft-fails
     # independently with a ``banner_error`` key; never rolls back the event.
@@ -1276,10 +1278,10 @@ def event_detail(request, slug):
     create_zoom_error = _maybe_create_zoom_meeting(event, create_zoom)
     if zoom_error is None:
         zoom_error = create_zoom_error
-    # Best-effort host auto-registration. A PATCH that flips a draft to a
-    # published status, or adds a platform-user host_email to a published
-    # event, creates the host registration and sends the normal confirmation.
-    maybe_register_host_as_attendee(event)
+    # Run the same shared occurrence lifecycle as Studio. This enrolls standing
+    # series registrants when the resulting event is eligible, and preserves
+    # best-effort host registration for publish/host-email updates.
+    run_occurrence_publication_lifecycle(event)
     # Banner enqueue runs after the save + zoom + host-registration steps so a
     # forced re-render reflects any populated state. Explicit-only here.
     banner_task_id, banner_error = _maybe_enqueue_banner(event, generate_banner)

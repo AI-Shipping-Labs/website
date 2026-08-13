@@ -134,7 +134,7 @@ jobs:
           # `django_db` marker is intentionally NOT auto-skipped — see
           # _docs/testing-guidelines.md "Dev-environment scheduled suite
           # policy".
-          uv run pytest -m "${PLAYWRIGHT_DEFAULT_MARKERS}" "${files[@]}" -v
+          uv run pytest -m "${PLAYWRIGHT_DEFAULT_MARKERS}" "${files[@]}" -v --durations=25
 
   notify:
     name: Scheduled Playwright (dev) Failure Issue

@@ -189,5 +189,13 @@ class ScheduledPlaywrightWorkflowNotificationTest(SimpleTestCase):
             ["shard 1/4", "shard 2/4", "shard 3/4", "shard 4/4"],
         )
         self.assertIn("PLAYWRIGHT_DEFAULT_MARKERS: not manual_visual and not slow_platform", workflow_text)
-        self.assertIn('uv run pytest -m "${PLAYWRIGHT_DEFAULT_MARKERS}" "${files[@]}" -v', workflow_text)
-        self.assertIn('uv run pytest -m "manual_visual or slow_platform" playwright_tests/ -v', workflow_text)
+        self.assertIn(
+            'uv run pytest -m "${PLAYWRIGHT_DEFAULT_MARKERS}" '
+            '"${files[@]}" -v --durations=25',
+            workflow_text,
+        )
+        self.assertIn(
+            'uv run pytest -m "manual_visual or slow_platform" '
+            'playwright_tests/ -v --durations=25',
+            workflow_text,
+        )

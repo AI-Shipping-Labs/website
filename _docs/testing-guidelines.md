@@ -771,7 +771,7 @@ Deploy Dev workflow applies the same core selection with its default marker
 exclusions across four parallel `playwright-core` matrix jobs:
 
 ```bash
-pytest -m "core and not manual_visual and not slow_platform and not visual_regression" <shard files> -v
+pytest -m "core and not manual_visual and not slow_platform and not visual_regression" <shard files> -v --durations=25
 ```
 
 The workflow sorts every `playwright_tests/test_*.py` file and assigns files
@@ -785,13 +785,39 @@ run. That scheduled default is sharded across separate GitHub Actions matrix
 jobs and uses:
 
 ```bash
-pytest -m "not manual_visual and not slow_platform" <shard files> -v
+pytest -m "not manual_visual and not slow_platform" <shard files> -v --durations=25
 ```
 
 Manual dispatch of `scheduled-playwright.yml` can also run the excluded marker
 suites by enabling the `include_excluded` input. Run
 `make test-playwright-manual-visual` locally when you specifically need the
 screenshot/manual-review suites.
+
+### CI pytest timing telemetry
+
+The Deploy Dev Playwright Core shards, the scheduled local-runner shards and
+excluded-marker leg, and the scheduled dev-environment shards pass
+`--durations=25` directly in their workflow-owned pytest commands. Pytest keeps
+the normal totals and emits a table containing at most the 25 slowest setup,
+call, or teardown nodes on both successful and failing runs. A real test
+failure therefore remains red while retaining bounded timing evidence.
+
+This flag is intentionally absent from `pyproject.toml` and the local Make
+targets. Local output stays concise unless a developer explicitly requests
+durations. When comparing CI timing, use runs for exact SHAs and compare the
+same workflow, job or shard, marker expression, browser target, and selected /
+passed / skipped / deselected counts. Keep these measures distinct:
+
+- A duration-table entry is pytest's time for one node phase.
+- Pytest's reported session duration is test-runner time for that invocation.
+- The GitHub Actions test step also includes shell-level work around pytest.
+- Total job time additionally includes checkout, dependency and browser
+  installation, CSS build, database/server setup, and post-job actions.
+- Workflow or deploy wall time includes scheduling, parallel critical paths,
+  deployment, and readiness verification.
+
+Do not attribute a total-job or workflow difference to an individual test, and
+do not compare unlike suites or different SHAs as an optimization result.
 
 ### Special Playwright and platform markers
 

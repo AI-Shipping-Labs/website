@@ -81,6 +81,7 @@ TEMPLATE_SENT_WHEN = {
     'free_welcome': 'Sent when a new Free member account is created.',
     'lead_magnet_delivery': 'Sent when a visitor requests a free lead-magnet resource.',
     'maven_cohort_removal_notification': 'Sent to staff when a member is removed from a Maven cohort.',
+    'maven_enrollment_notification': 'Sent to staff when a new Maven enrollment occurrence is admitted.',
     'maven_welcome': 'Sent when a Maven enrollee receives course access.',
     'onboarding_reminder': 'Sent when a paid member has not completed onboarding after one week.',
     'password_reset': 'Sent when someone requests a password-reset link.',

@@ -116,7 +116,7 @@ def retry_maven_enrollment_steps(limit=100):
     from integrations.services.maven import MAX_STEP_ATTEMPTS, run_occurrence_steps
 
     retryable = Q()
-    for name in ("override", "slack", "welcome", "removal"):
+    for name in ("override", "notification", "slack", "welcome", "removal"):
         retryable |= Q(
             **{
                 f"{name}_status__in": [

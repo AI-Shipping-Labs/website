@@ -91,6 +91,7 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # internal staff notification, transactional like
     # staff_signup_notification.
     "maven_welcome",
+    "maven_enrollment_notification",
     "maven_cohort_removal_notification",
     # Issue #1133: one-week reminder nudging a paid member who received
     # their onboarding-link welcome but has not completed onboarding.

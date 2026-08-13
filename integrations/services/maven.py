@@ -32,7 +32,7 @@ EVENT_REMOVED = "user_cohort.removed"
 MAX_STEP_ATTEMPTS = 3
 MAX_DATABASE_CONTENTION_RETRIES = 10
 RUNNING_STEP_LEASE = timedelta(minutes=15)
-STEP_NAMES = ("override", "slack", "welcome", "removal")
+STEP_NAMES = ("override", "notification", "slack", "welcome", "removal")
 _SQLITE_DELIVERY_LOCK = threading.Lock()
 
 
@@ -184,6 +184,8 @@ def _handle_enrolled(payload, email, course, cohort, course_key, cohort_key, ide
                     outcome=(MavenEnrollmentEvent.OUTCOME_ALREADY_MEMBER if already_member else MavenEnrollmentEvent.OUTCOME_ONBOARDED),
                     payload=_safe_payload(payload),
                     welcome_eligible=not already_member,
+                    account_created=created_user,
+                    notification_status=MavenEnrollmentEvent.STEP_PENDING,
                     slack_status=(MavenEnrollmentEvent.STEP_SKIPPED if already_member else MavenEnrollmentEvent.STEP_PENDING),
                     welcome_status=(MavenEnrollmentEvent.STEP_SKIPPED if already_member else MavenEnrollmentEvent.STEP_PENDING),
                 )
@@ -201,7 +203,7 @@ def _handle_enrolled(payload, email, course, cohort, course_key, cohort_key, ide
     status = "already_member" if not occurrence.welcome_eligible else "onboarded"
     if not created_occurrence and all(
         getattr(occurrence, f"{name}_status") in {MavenEnrollmentEvent.STEP_SUCCEEDED, MavenEnrollmentEvent.STEP_SKIPPED}
-        for name in ("override", "slack", "welcome")
+        for name in ("override", "notification", "slack", "welcome")
     ):
         status = "already_processed"
     return MavenResult(status, occurrence.outcome, actions, occurrence.user_id, created_user)
@@ -349,7 +351,7 @@ def run_occurrence_steps(occurrence, *, step=None, force=False):
     occurrence.refresh_from_db(fields=["override_status"])
     if occurrence.override_status != MavenEnrollmentEvent.STEP_SUCCEEDED:
         return actions
-    for name in ("slack", "welcome"):
+    for name in ("notification", "slack", "welcome"):
         _run_step(occurrence.pk, name, actions, force=force)
     return actions
 
@@ -396,6 +398,24 @@ def _run_step(pk, name, actions, *, force=False):
             tier = Tier.objects.get(slug=maven_override_tier_slug())
             expiry = row.created_at + timedelta(days=maven_override_duration_days())
             actions.append(_grant_or_refresh_override(row.user, tier, expiry, row.cohort, row.course, source=f"maven:{row.identity_hash}"))
+        elif name == "notification":
+            from community.services.staff_notifications import notify_maven_enrollment
+
+            tier, entitlement_expiry = _enrollment_notification_entitlement(row)
+            delivered = notify_maven_enrollment(
+                row.user,
+                occurrence_id=row.pk,
+                account_created=row.account_created,
+                course=row.course,
+                cohort=row.cohort,
+                tier=tier,
+                entitlement_expiry=entitlement_expiry,
+            )
+            if not delivered:
+                _finish_step(pk, name, MavenEnrollmentEvent.STEP_SKIPPED, "")
+                actions.append("Staff enrollment heads-up skipped: no usable destination.")
+                return
+            actions.append("Sent staff enrollment heads-up.")
         elif name == "slack":
             _invite_to_slack(row.user, actions)
         elif name == "welcome":
@@ -414,6 +434,42 @@ def _run_step(pk, name, actions, *, force=False):
         actions.append(f"{name.title()} failed; persisted for retry.")
     else:
         _finish_step(pk, name, MavenEnrollmentEvent.STEP_SUCCEEDED, "")
+
+
+def _enrollment_notification_entitlement(occurrence):
+    """Return the applied Maven tier and the member's retained access expiry."""
+    now = timezone.now()
+    grant = (
+        TierOverride.objects.filter(
+            user=occurrence.user,
+            source=f"maven:{occurrence.identity_hash}",
+        )
+        .select_related("override_tier")
+        .first()
+    )
+    if grant is None:
+        tier = Tier.objects.get(slug=maven_override_tier_slug())
+    else:
+        tier = grant.override_tier
+
+    expiry_candidates = list(
+        TierOverride.objects.filter(
+            user=occurrence.user,
+            is_active=True,
+            expires_at__gt=now,
+            override_tier__level__gte=tier.level,
+        ).values_list("expires_at", flat=True)
+    )
+    if (
+        occurrence.user.tier_id
+        and occurrence.user.tier.level >= tier.level
+        and occurrence.user.billing_period_end
+        and occurrence.user.billing_period_end > now
+    ):
+        expiry_candidates.append(occurrence.user.billing_period_end)
+    if grant is not None and grant.expires_at not in expiry_candidates:
+        expiry_candidates.append(grant.expires_at)
+    return tier, max(expiry_candidates)
 
 
 def _finish_step(pk, name, status, error):

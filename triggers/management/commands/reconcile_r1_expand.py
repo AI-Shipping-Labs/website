@@ -73,6 +73,15 @@ def reconcile_r1_expand():
     for row in MavenEnrollmentEvent.objects.filter(
         lifecycle=MavenEnrollmentEvent.LIFECYCLE_LEGACY,
         identity_hash="",
+    ).only(
+        "id",
+        "email",
+        "course",
+        "course_key",
+        "cohort",
+        "cohort_key",
+        "identity_hash",
+        "updated_at",
     ).iterator():
         row.course_key = row.course_key or row.course
         row.cohort_key = row.cohort_key or row.cohort

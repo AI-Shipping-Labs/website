@@ -81,6 +81,7 @@ class MavenEnrollmentEvent(models.Model):
         db_index=True,
     )
     welcome_eligible = models.BooleanField(default=False, db_default=False)
+    account_created = models.BooleanField(default=False, db_default=False)
     override_status = models.CharField(
         max_length=16, choices=STEP_CHOICES, default=STEP_PENDING, db_default=STEP_PENDING,
     )
@@ -102,6 +103,13 @@ class MavenEnrollmentEvent(models.Model):
     welcome_attempted_at = models.DateTimeField(null=True, blank=True)
     welcome_completed_at = models.DateTimeField(null=True, blank=True)
     welcome_error = models.CharField(max_length=255, blank=True, default="", db_default="")
+    notification_status = models.CharField(
+        max_length=16, choices=STEP_CHOICES, default=STEP_SKIPPED, db_default=STEP_SKIPPED,
+    )
+    notification_attempts = models.PositiveSmallIntegerField(default=0, db_default=0)
+    notification_attempted_at = models.DateTimeField(null=True, blank=True)
+    notification_completed_at = models.DateTimeField(null=True, blank=True)
+    notification_error = models.CharField(max_length=255, blank=True, default="", db_default="")
     removal_status = models.CharField(
         max_length=16, choices=STEP_CHOICES, default=STEP_SKIPPED, db_default=STEP_SKIPPED,
     )

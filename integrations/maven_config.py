@@ -13,7 +13,7 @@ from integrations.config import get_config, is_enabled
 logger = logging.getLogger(__name__)
 
 DEFAULT_OVERRIDE_TIER_SLUG = "main"
-DEFAULT_OVERRIDE_DURATION_DAYS = 3650
+DEFAULT_OVERRIDE_DURATION_DAYS = 1825
 
 
 def maven_enabled():

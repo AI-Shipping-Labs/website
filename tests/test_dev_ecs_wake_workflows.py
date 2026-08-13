@@ -119,7 +119,11 @@ class ScheduledPlaywrightDevWakeWorkflowTest(SimpleTestCase):
         )
         workflow_text = SCHEDULED_WORKFLOW_PATH.read_text()
         self.assertIn("uv run playwright install --with-deps chromium", workflow_text)
-        self.assertIn('uv run pytest -m "${PLAYWRIGHT_DEFAULT_MARKERS}" "${files[@]}" -v', workflow_text)
+        self.assertIn(
+            'uv run pytest -m "${PLAYWRIGHT_DEFAULT_MARKERS}" '
+            '"${files[@]}" -v --durations=25',
+            workflow_text,
+        )
         self.assertIn("Open or update failure issue", workflow_text)
 
 
@@ -188,7 +192,8 @@ class DeployDevWakeWorkflowTest(SimpleTestCase):
             if step.get("name") == "Run Playwright core shard"
         )
         self.assertIn(
-            'uv run pytest -m "core and not manual_visual and not slow_platform and not visual_regression" "${files[@]}" -v',
+            'uv run pytest -m "core and not manual_visual and not slow_platform and not visual_regression" '
+            '"${files[@]}" -v --durations=25',
             run_step["run"],
         )
         self.assertNotIn("pytest-xdist", DEPLOY_DEV_WORKFLOW_PATH.read_text())

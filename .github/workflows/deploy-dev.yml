@@ -447,7 +447,7 @@ jobs:
             exit 0
           fi
 
-          uv run pytest -m "core and not manual_visual and not slow_platform and not visual_regression" "${files[@]}" -v
+          uv run pytest -m "core and not manual_visual and not slow_platform and not visual_regression" "${files[@]}" -v --durations=25
 
   deploy:
     name: Deploy to Dev

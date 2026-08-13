@@ -1,5 +1,6 @@
 """Focused Playwright coverage for account privacy export/deletion (#1210)."""
 
+import copy
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,43 @@ from playwright_tests.conftest import (
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 pytestmark = pytest.mark.local_only
+
+FORBIDDEN_PAYMENT_CARD_FIELDS = frozenset(
+    {
+        "card_last4",
+        "card_number",
+        "last4",
+        "last_four",
+        "payment_method_card",
+    }
+)
+
+
+def _iter_mapping_keys(value, path=()):
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_path = (*path, str(key))
+            yield key_path
+            yield from _iter_mapping_keys(child, key_path)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _iter_mapping_keys(child, path)
+
+
+def _assert_export_excludes_secrets(payload, *, plaintext, key_hash):
+    rendered = json.dumps(payload)
+    assert plaintext not in rendered
+    assert key_hash not in rendered
+    assert "password" not in rendered.lower()
+
+    payment = payload["membership_payment"]
+    assert payment["card_data"] == "not_stored"
+    forbidden_paths = [
+        ".".join(("membership_payment", *path))
+        for path in _iter_mapping_keys(payment)
+        if path[-1].lower().replace("-", "_") in FORBIDDEN_PAYMENT_CARD_FIELDS
+    ]
+    assert not forbidden_paths, f"exported payment card fields: {forbidden_paths}"
 
 
 def _download_export(page, email):
@@ -74,7 +112,12 @@ def _seed_member_export_data(email):
         min_tier_level=0,
         status="active",
     )
-    Plan.objects.create(member=user, sprint=sprint, title="Privacy Plan")
+    plan = Plan.objects.create(member=user, sprint=sprint, title="Privacy Plan")
+    collision_timestamp = timezone.now().replace(microsecond=554242)
+    Plan.objects.filter(pk=plan.pk).update(
+        created_at=collision_timestamp,
+        updated_at=collision_timestamp,
+    )
 
     api_key, plaintext = MemberAPIKey.create_for_user(
         user=user,
@@ -113,12 +156,48 @@ class TestAccountPrivacyExport1210:
             keys = payload["auth_security"]["member_api_keys"]
             assert keys[0]["name"] == "portable export"
             assert keys[0]["lookup_prefix"] == api_key.lookup_prefix
-            rendered = json.dumps(payload)
-            assert plaintext not in rendered
-            assert key_hash not in rendered
-            assert "password" not in rendered.lower()
-            assert payload["membership_payment"]["card_data"] == "not_stored"
-            assert "4242" not in rendered
+            assert "4242" in payload["sprints_plans"]["plans"][0]["created_at"]
+            _assert_export_excludes_secrets(
+                payload,
+                plaintext=plaintext,
+                key_hash=key_hash,
+            )
+
+            payment_leak = copy.deepcopy(payload)
+            payment_leak["membership_payment"]["last4"] = "4242"
+            with pytest.raises(AssertionError, match="membership_payment.last4"):
+                _assert_export_excludes_secrets(
+                    payment_leak,
+                    plaintext=plaintext,
+                    key_hash=key_hash,
+                )
+
+            plaintext_leak = copy.deepcopy(payload)
+            plaintext_leak["auth_security"]["member_api_keys"][0]["key"] = plaintext
+            with pytest.raises(AssertionError):
+                _assert_export_excludes_secrets(
+                    plaintext_leak,
+                    plaintext=plaintext,
+                    key_hash=key_hash,
+                )
+
+            key_hash_leak = copy.deepcopy(payload)
+            key_hash_leak["auth_security"]["member_api_keys"][0]["key_hash"] = key_hash
+            with pytest.raises(AssertionError):
+                _assert_export_excludes_secrets(
+                    key_hash_leak,
+                    plaintext=plaintext,
+                    key_hash=key_hash,
+                )
+
+            password_leak = copy.deepcopy(payload)
+            password_leak["account_profile"]["password_hash"] = "forbidden"
+            with pytest.raises(AssertionError):
+                _assert_export_excludes_secrets(
+                    password_leak,
+                    plaintext=plaintext,
+                    key_hash=key_hash,
+                )
         finally:
             context.close()
 

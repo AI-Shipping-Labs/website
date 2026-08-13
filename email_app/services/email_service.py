@@ -68,6 +68,7 @@ EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = {
     "payment_grace_failure_team",
     "payment_grace_reminder_member",
     "payment_grace_expired_member",
+    "checkout_payment_failed",
 }
 
 # Token lifetime for the footer verify link. 7 days is long enough that an

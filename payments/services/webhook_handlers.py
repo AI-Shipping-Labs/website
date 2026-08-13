@@ -84,7 +84,32 @@ def _legacy_numeric_reference_allowed():
     return django_timezone.now() < cutoff
 
 
-def _resolve_checkout_user(session_data, fulfillment):
+def _session_created_at(value):
+    """Normalize a Stripe Session ``created`` value without guessing."""
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    try:
+        return datetime.fromtimestamp(int(value), tz=timezone.utc)
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+def _binding_was_valid_for_session(binding, session_created):
+    created_at = _session_created_at(session_created)
+    return bool(
+        created_at is not None
+        and binding.created_at <= created_at <= binding.expires_at
+    )
+
+
+def _resolve_checkout_user(
+    session_data,
+    fulfillment,
+    *,
+    allow_user_creation=True,
+    allow_reserved_binding=False,
+    session_created=None,
+):
     """Resolve the entitled user, or quarantine and return ``None``."""
     customer_email = session_data.get("customer_details", {}).get("email", "")
     client_reference_id = session_data.get("client_reference_id")
@@ -134,7 +159,24 @@ def _resolve_checkout_user(session_data, fulfillment):
                 extra_details={"binding_id": binding.pk},
             )
             return None
-        if binding.revoked_at or binding.expires_at <= django_timezone.now():
+        reserved_binding = (
+            allow_reserved_binding
+            and fulfillment.binding_id == binding.pk
+            and fulfillment.status in {
+                CheckoutFulfillment.STATUS_AWAITING_PAYMENT,
+                CheckoutFulfillment.STATUS_PAYMENT_FAILED,
+            }
+        )
+        created_during_binding = (
+            allow_reserved_binding
+            and fulfillment.binding_id is None
+            and _binding_was_valid_for_session(binding, session_created)
+        )
+        if binding.revoked_at or (
+            binding.expires_at <= django_timezone.now()
+            and not reserved_binding
+            and not created_during_binding
+        ):
             _quarantine_checkout(
                 fulfillment=fulfillment,
                 binding=binding,
@@ -202,7 +244,7 @@ def _resolve_checkout_user(session_data, fulfillment):
                 customer_email,
                 user.email,
             )
-    if user is None and customer_email:
+    if user is None and customer_email and allow_user_creation:
         # Create a new user if one doesn't exist (spec says "or creates a new user")
         # Flag the creation so the analytics post_save handler can record
         # signup_path='stripe_checkout' on the resulting UserAttribution row
@@ -333,7 +375,210 @@ def _resolve_checkout_tier(session_data, fulfillment, user, binding):
     return tier, resolved_subscription
 
 
-def handle_checkout_completed(session_data):
+def _get_checkout_fulfillment(session_data):
+    session_id = str(session_data.get("id", "") or "")
+    if not session_id:
+        raise WebhookPermanentError("checkout Session is missing its id")
+    try:
+        fulfillment, _created = CheckoutFulfillment.objects.get_or_create(
+            stripe_session_id=session_id,
+            defaults={
+                "stripe_customer_id": session_data.get("customer", "") or "",
+                "stripe_subscription_id": session_data.get("subscription", "") or "",
+                "status": CheckoutFulfillment.STATUS_PROCESSING,
+            },
+        )
+    except IntegrityError:
+        fulfillment = CheckoutFulfillment.objects.get(stripe_session_id=session_id)
+    return fulfillment
+
+
+def _checkout_session_price_id(session_data):
+    """Return the one-time Checkout Price without trusting billing email."""
+    items = session_data.get("line_items", {}).get("data", [])
+    if not items:
+        client = _services._get_stripe_client()
+        checkout_session = client.v1.checkout.sessions.retrieve(
+            session_data.get("id", ""),
+            params={"expand": ["line_items.data.price"]},
+        )
+        line_items = (
+            checkout_session.get("line_items", {})
+            if isinstance(checkout_session, dict)
+            else getattr(checkout_session, "line_items", {})
+        )
+        items = (
+            line_items.get("data", []) if isinstance(line_items, dict)
+            else getattr(line_items, "data", [])
+        )
+    if len(items) != 1:
+        return ""
+    item = items[0]
+    price = item.get("price", {}) if isinstance(item, dict) else getattr(item, "price", {})
+    if isinstance(price, dict):
+        return str(price.get("id", "") or "")
+    return str(getattr(price, "id", "") or "")
+
+
+def _resolve_course_checkout(session_data, fulfillment):
+    """Resolve and validate a legacy one-time course purchase."""
+    from content.models import Course
+
+    metadata = session_data.get("metadata", {}) or {}
+    course_id = metadata.get("course_id")
+    user_id = metadata.get("user_id")
+    reference = str(session_data.get("client_reference_id") or "")
+    customer_email = normalize_email(
+        session_data.get("customer_details", {}).get("email", "")
+    )
+
+    try:
+        course = Course.objects.get(pk=course_id)
+    except (Course.DoesNotExist, TypeError, ValueError):
+        _quarantine_checkout(
+            fulfillment=fulfillment,
+            session_data=session_data,
+            reason=PaymentAccountMismatch.REASON_TIER_MISMATCH,
+            extra_details={"purchase_kind": "course"},
+        )
+        return None
+
+    reference_user_id = reference if reference.isdigit() else None
+    if reference and reference_user_id is None:
+        _quarantine_checkout(
+            fulfillment=fulfillment,
+            session_data=session_data,
+            reason=PaymentAccountMismatch.REASON_INVALID_BINDING,
+            extra_details={"purchase_kind": "course", "course_id": course.pk},
+        )
+        return None
+    if reference_user_id and user_id and str(reference_user_id) != str(user_id):
+        _quarantine_checkout(
+            fulfillment=fulfillment,
+            session_data=session_data,
+            reason=PaymentAccountMismatch.REASON_LEGACY_REFERENCE_MISMATCH,
+            extra_details={"purchase_kind": "course", "course_id": course.pk},
+        )
+        return None
+
+    resolved_id = reference_user_id or user_id
+    user = User.objects.filter(pk=resolved_id, is_active=True).first() if resolved_id else None
+    email_user = resolve_user_by_email(customer_email) if customer_email else None
+    if user is not None and email_user is not None and user.pk != email_user.pk:
+        _quarantine_checkout(
+            fulfillment=fulfillment,
+            session_data=session_data,
+            paid_user=user,
+            candidate_user=email_user,
+            reason=PaymentAccountMismatch.REASON_LEGACY_REFERENCE_MISMATCH,
+            extra_details={"purchase_kind": "course", "course_id": course.pk},
+        )
+        return None
+    user = user or email_user
+    if user is None:
+        _quarantine_checkout(
+            fulfillment=fulfillment,
+            session_data=session_data,
+            reason=PaymentAccountMismatch.REASON_UNKNOWN_REFERENCE,
+            extra_details={"purchase_kind": "course", "course_id": course.pk},
+        )
+        return None
+
+    actual_price_id = _checkout_session_price_id(session_data)
+    if not actual_price_id:
+        _quarantine_checkout(
+            fulfillment=fulfillment,
+            session_data=session_data,
+            paid_user=user,
+            reason=PaymentAccountMismatch.REASON_MISSING_PRICE,
+            extra_details={"purchase_kind": "course", "course_id": course.pk},
+        )
+        return None
+    if not course.stripe_price_id or actual_price_id != course.stripe_price_id:
+        _quarantine_checkout(
+            fulfillment=fulfillment,
+            session_data=session_data,
+            paid_user=user,
+            reason=PaymentAccountMismatch.REASON_TIER_MISMATCH,
+            extra_details={
+                "purchase_kind": "course",
+                "course_id": course.pk,
+                "expected_price_id": course.stripe_price_id,
+                "reported_price_id": actual_price_id,
+            },
+        )
+        return None
+    return user, course
+
+
+def _awaiting_details(session_data, *, event_context, purchase_kind, local_id):
+    return {
+        "stripe_session_id": session_data.get("id", "") or "",
+        "stripe_customer_id": session_data.get("customer", "") or "",
+        "stripe_subscription_id": session_data.get("subscription", "") or "",
+        "stripe_event_id": (event_context or {}).get("event_id", "") or "",
+        "checkout_status": session_data.get("status", "") or "missing",
+        "payment_status": session_data.get("payment_status", "") or "missing",
+        "purchase_kind": purchase_kind,
+        f"{purchase_kind}_id": local_id,
+    }
+
+
+def _record_awaiting_payment(session_data, fulfillment, event_context):
+    """Validate and reserve an unpaid complete Session without entitlement."""
+    metadata = session_data.get("metadata", {}) or {}
+    course_id = metadata.get("course_id")
+    if course_id:
+        resolution = _resolve_course_checkout(session_data, fulfillment)
+        if resolution is None:
+            return
+        user, course = resolution
+        binding = None
+        tier = None
+        details = _awaiting_details(
+            session_data, event_context=event_context,
+            purchase_kind="course", local_id=course.pk,
+        )
+    else:
+        user_resolution = _resolve_checkout_user(
+            session_data, fulfillment, allow_user_creation=False,
+        )
+        if user_resolution is None:
+            return
+        user, _was_new, _by_reference, binding = user_resolution
+        tier_resolution = _resolve_checkout_tier(
+            session_data, fulfillment, user, binding,
+        )
+        if tier_resolution is None:
+            return
+        tier, _resolved_subscription = tier_resolution
+        details = _awaiting_details(
+            session_data, event_context=event_context,
+            purchase_kind="tier", local_id=tier.pk,
+        )
+
+    with transaction.atomic():
+        locked = CheckoutFulfillment.objects.select_for_update().get(pk=fulfillment.pk)
+        if locked.status not in {
+            CheckoutFulfillment.STATUS_PROCESSING,
+            CheckoutFulfillment.STATUS_AWAITING_PAYMENT,
+        }:
+            return
+        locked.binding = binding
+        locked.user = user
+        locked.tier = tier
+        locked.stripe_customer_id = session_data.get("customer", "") or ""
+        locked.stripe_subscription_id = session_data.get("subscription", "") or ""
+        locked.status = CheckoutFulfillment.STATUS_AWAITING_PAYMENT
+        locked.reason = ""
+        locked.details = details
+        locked.save(update_fields=[
+            "binding", "user", "tier", "stripe_customer_id",
+            "stripe_subscription_id", "status", "reason", "details", "updated_at",
+        ])
+
+
+def handle_checkout_completed(session_data, event_context=None):
     """Process a checkout.session.completed event.
 
     If metadata contains ``course_id``, creates a CourseAccess record
@@ -349,30 +594,27 @@ def handle_checkout_completed(session_data):
 
     # Check if this is an individual course purchase
     course_id = metadata.get("course_id")
-    if course_id:
-        _handle_course_purchase(session_data, course_id)
-        return
-
-    if not session_id:
-        raise WebhookPermanentError(
-            "checkout.session.completed: membership checkout missing session id"
-        )
-
-    try:
-        fulfillment, _created = CheckoutFulfillment.objects.get_or_create(
-            stripe_session_id=session_id,
-            defaults={
-                "stripe_customer_id": customer_id,
-                "stripe_subscription_id": subscription_id,
-                "status": CheckoutFulfillment.STATUS_PROCESSING,
-            },
-        )
-    except IntegrityError:
-        fulfillment = CheckoutFulfillment.objects.get(stripe_session_id=session_id)
+    fulfillment = _get_checkout_fulfillment(session_data)
     if fulfillment.status in {
         CheckoutFulfillment.STATUS_FULFILLED,
         CheckoutFulfillment.STATUS_QUARANTINED,
     }:
+        return
+
+    # Delayed-notification methods emit a valid complete-but-unpaid event.
+    # Validate and reserve it; expected settlement is not a mismatch.
+    if session_data.get("payment_status") == "unpaid":
+        structural_rejection = _checkout_session_rejection(
+            session_data, check_payment=False,
+        )
+        if structural_rejection is not None:
+            reason, details = structural_rejection
+            _quarantine_checkout(
+                fulfillment=fulfillment, session_data=session_data,
+                reason=reason, extra_details=details,
+            )
+            return
+        _record_awaiting_payment(session_data, fulfillment, event_context or {})
         return
 
     rejection = _checkout_session_rejection(session_data)
@@ -386,7 +628,25 @@ def handle_checkout_completed(session_data):
         )
         return
 
-    user_resolution = _resolve_checkout_user(session_data, fulfillment)
+    if course_id:
+        resolution = _resolve_course_checkout(session_data, fulfillment)
+        if resolution is None:
+            return
+        course_user, course = resolution
+        _handle_course_purchase(
+            session_data, course_id, fulfillment=fulfillment,
+            resolved_user=course_user, resolved_course=course,
+        )
+        return
+
+    user_resolution = _resolve_checkout_user(
+        session_data,
+        fulfillment,
+        allow_reserved_binding=bool((event_context or {}).get("async_success")),
+        # This must be the immutable Checkout Session creation timestamp, not
+        # the later Stripe Event creation timestamp threaded by the dispatcher.
+        session_created=session_data.get("created"),
+    )
     if user_resolution is None:
         return
     user, was_new_user, user_resolved_by_client_reference, binding = user_resolution
@@ -419,7 +679,11 @@ def handle_checkout_completed(session_data):
         fulfillment = CheckoutFulfillment.objects.select_for_update().get(
             pk=fulfillment.pk
         )
-        if fulfillment.status != CheckoutFulfillment.STATUS_PROCESSING:
+        if fulfillment.status not in {
+            CheckoutFulfillment.STATUS_PROCESSING,
+            CheckoutFulfillment.STATUS_AWAITING_PAYMENT,
+            CheckoutFulfillment.STATUS_PAYMENT_FAILED,
+        }:
             return
         if binding is not None:
             binding = CheckoutAccountBinding.objects.select_for_update().get(
@@ -668,14 +932,216 @@ def handle_checkout_completed(session_data):
             )
 
 
-def _checkout_session_rejection(session_data):
-    """Return a durable rejection reason for an unsafe membership Session."""
-    payment_status = session_data.get("payment_status")
-    if payment_status != "paid":
-        return PaymentAccountMismatch.REASON_UNPAID_CHECKOUT, {
-            "payment_status": payment_status or "missing",
-        }
+def handle_checkout_async_payment_succeeded(session_data, event_context=None):
+    """Fulfill a delayed Checkout Session through the synchronous path."""
+    context = dict(event_context or {})
+    context["async_success"] = True
+    return handle_checkout_completed(session_data, event_context=context)
 
+
+def _resolve_checkout_failure(session_data, fulfillment):
+    """Apply the purchase validators before recording an expected failure.
+
+    A payload-only billing email is deliberately not account authority. A
+    failure with no Checkout reference remains operator-visible but has no
+    recipient; any present reference or course purchase must pass the same
+    identity, binding, tier/course, and exact-Price checks as fulfillment.
+    """
+    metadata = session_data.get("metadata", {}) or {}
+    reference = str(session_data.get("client_reference_id") or "")
+
+    if metadata.get("course_id"):
+        resolution = _resolve_course_checkout(session_data, fulfillment)
+        if resolution is None:
+            return None
+        user, course = resolution
+        return user, None, None, course
+
+    if not reference:
+        if fulfillment.binding_id or fulfillment.user_id:
+            _quarantine_checkout(
+                fulfillment=fulfillment,
+                binding=fulfillment.binding,
+                session_data=session_data,
+                paid_user=fulfillment.user,
+                reason=PaymentAccountMismatch.REASON_UNKNOWN_REFERENCE,
+            )
+            return None
+        return None, None, None, None
+
+    user_resolution = _resolve_checkout_user(
+        session_data,
+        fulfillment,
+        allow_user_creation=False,
+        allow_reserved_binding=True,
+        session_created=session_data.get("created"),
+    )
+    if user_resolution is None:
+        return None
+    user, _was_new, _by_reference, binding = user_resolution
+    tier_resolution = _resolve_checkout_tier(
+        session_data,
+        fulfillment,
+        user,
+        binding,
+    )
+    if tier_resolution is None:
+        return None
+    tier, _resolved_subscription = tier_resolution
+    return user, binding, tier, None
+
+
+def _send_checkout_failure_email(*, user, session_id, course=None):
+    from email_app.services import EmailService
+    from integrations.config import site_base_url
+
+    retry_path = course.get_absolute_url() if course is not None else "/membership"
+    return EmailService().send(
+        user,
+        "checkout_payment_failed",
+        {
+            "retry_url": f"{site_base_url().rstrip('/')}{retry_path}",
+            "purchase_label": course.title if course is not None else "membership",
+        },
+        dedupe_key=f"checkout-payment-failed:{session_id}",
+    )
+
+
+def handle_checkout_async_payment_failed(session_data, event_context=None):
+    """Persist an expected delayed-payment failure and send one safe email."""
+    fulfillment = _get_checkout_fulfillment(session_data)
+    if fulfillment.status in {
+        CheckoutFulfillment.STATUS_FULFILLED,
+        CheckoutFulfillment.STATUS_QUARANTINED,
+    }:
+        return
+
+    structural_rejection = _checkout_session_rejection(
+        session_data,
+        check_payment=False,
+    )
+    if structural_rejection is not None:
+        reason, details = structural_rejection
+        _quarantine_checkout(
+            fulfillment=fulfillment,
+            session_data=session_data,
+            reason=reason,
+            extra_details=details,
+        )
+        return
+
+    resolution = _resolve_checkout_failure(session_data, fulfillment)
+    # Validators persist their canonical quarantine before returning None.
+    if resolution is None:
+        return
+    user = binding = tier = course = None
+    user, binding, tier, course = resolution
+
+    metadata = session_data.get("metadata", {}) or {}
+    kind = "course" if (course is not None or metadata.get("course_id")) else "tier"
+    local_id = (
+        course.pk if course is not None
+        else tier.pk if tier is not None
+        else metadata.get("course_id") if kind == "course"
+        else ""
+    )
+    details = _awaiting_details(
+        session_data,
+        event_context=event_context or {},
+        purchase_kind=kind,
+        local_id=local_id,
+    )
+
+    with transaction.atomic():
+        locked = CheckoutFulfillment.objects.select_for_update().get(pk=fulfillment.pk)
+        if locked.status in {
+            CheckoutFulfillment.STATUS_FULFILLED,
+            CheckoutFulfillment.STATUS_QUARANTINED,
+        }:
+            return
+        if binding is not None:
+            binding = CheckoutAccountBinding.objects.select_for_update().get(
+                pk=binding.pk,
+            )
+            if CheckoutFulfillment.objects.filter(binding=binding).exclude(
+                pk=locked.pk,
+            ).exists():
+                _quarantine_checkout(
+                    fulfillment=locked,
+                    session_data=session_data,
+                    reason=PaymentAccountMismatch.REASON_BINDING_REUSED,
+                    extra_details={"binding_id": binding.pk},
+                )
+                return
+        if user is not None:
+            user = User.objects.select_for_update().get(pk=user.pk)
+            customer_id = session_data.get("customer", "") or ""
+            subscription_id = session_data.get("subscription", "") or ""
+            if (
+                user.stripe_customer_id
+                and customer_id
+                and user.stripe_customer_id != customer_id
+            ):
+                _quarantine_checkout(
+                    fulfillment=locked,
+                    binding=binding,
+                    session_data=session_data,
+                    paid_user=user,
+                    reason=PaymentAccountMismatch.REASON_CUSTOMER_CONFLICT,
+                    extra_details={"existing_customer_id": user.stripe_customer_id},
+                )
+                return
+            if (
+                tier is not None
+                and user.subscription_id
+                and subscription_id
+                and user.subscription_id != subscription_id
+            ):
+                _quarantine_checkout(
+                    fulfillment=locked,
+                    binding=binding,
+                    session_data=session_data,
+                    paid_user=user,
+                    reason=PaymentAccountMismatch.REASON_SUBSCRIPTION_CONFLICT,
+                    extra_details={
+                        "existing_subscription_id": user.subscription_id,
+                    },
+                )
+                return
+        locked.binding = binding or locked.binding
+        locked.user = user or locked.user
+        locked.tier = tier or locked.tier
+        locked.stripe_customer_id = session_data.get("customer", "") or ""
+        locked.stripe_subscription_id = session_data.get("subscription", "") or ""
+        locked.status = CheckoutFulfillment.STATUS_PAYMENT_FAILED
+        locked.reason = "payment_failed"
+        locked.details = details
+        locked.save(update_fields=[
+            "binding", "user", "tier", "stripe_customer_id",
+            "stripe_subscription_id", "status", "reason", "details", "updated_at",
+        ])
+        resolved_user = locked.user
+
+    if resolved_user is not None:
+        # Serialize the check/send/log sequence by business key. EmailLog's
+        # unique dedupe key prevents retries after success; this row lock also
+        # prevents two first deliveries from reaching SES concurrently before
+        # either log exists. A transport exception rolls back only this small
+        # email transaction, leaving payment_failed durable and retryable.
+        with transaction.atomic():
+            locked = CheckoutFulfillment.objects.select_for_update().get(
+                pk=fulfillment.pk,
+            )
+            if locked.status != CheckoutFulfillment.STATUS_FULFILLED:
+                _send_checkout_failure_email(
+                    user=resolved_user,
+                    session_id=fulfillment.stripe_session_id,
+                    course=course,
+                )
+
+
+def _checkout_session_rejection(session_data, *, check_payment=True):
+    """Return a durable rejection reason for an unsafe membership Session."""
     checkout_status = session_data.get("status")
     if checkout_status != "complete":
         return PaymentAccountMismatch.REASON_INCOMPLETE_CHECKOUT, {
@@ -691,6 +1157,11 @@ def _checkout_session_rejection(session_data):
         return PaymentAccountMismatch.REASON_STRIPE_MODE_MISMATCH, {
             "expected_livemode": expected_livemode,
             "received_livemode": received_livemode,
+        }
+    payment_status = session_data.get("payment_status")
+    if check_payment and payment_status != "paid":
+        return PaymentAccountMismatch.REASON_UNPAID_CHECKOUT, {
+            "payment_status": payment_status or "missing",
         }
     return None
 
@@ -784,24 +1255,33 @@ def _quarantine_checkout(
     }
     if extra_details:
         details.update(extra_details)
-    fulfillment.binding = binding
-    fulfillment.user = paid_user
-    fulfillment.stripe_customer_id = details["stripe_customer_id"]
-    fulfillment.stripe_subscription_id = details["stripe_subscription_id"]
-    fulfillment.status = CheckoutFulfillment.STATUS_QUARANTINED
-    fulfillment.reason = reason
-    fulfillment.details = details
-    fulfillment.save(update_fields=[
-        "binding", "user", "stripe_customer_id", "stripe_subscription_id",
-        "status", "reason", "details", "updated_at",
-    ])
-    _record_payment_account_mismatch(
-        paid_user=paid_user,
-        candidate_user=candidate_user,
-        stripe_email=customer_email or "unknown@invalid.local",
-        reason=reason,
-        details=details,
-    )
+    with transaction.atomic():
+        locked = CheckoutFulfillment.objects.select_for_update().get(
+            pk=fulfillment.pk,
+        )
+        if locked.status in {
+            CheckoutFulfillment.STATUS_FULFILLED,
+            CheckoutFulfillment.STATUS_QUARANTINED,
+        }:
+            return
+        locked.binding = binding
+        locked.user = paid_user
+        locked.stripe_customer_id = details["stripe_customer_id"]
+        locked.stripe_subscription_id = details["stripe_subscription_id"]
+        locked.status = CheckoutFulfillment.STATUS_QUARANTINED
+        locked.reason = reason
+        locked.details = details
+        locked.save(update_fields=[
+            "binding", "user", "stripe_customer_id", "stripe_subscription_id",
+            "status", "reason", "details", "updated_at",
+        ])
+        _record_payment_account_mismatch(
+            paid_user=paid_user,
+            candidate_user=candidate_user,
+            stripe_email=customer_email or "unknown@invalid.local",
+            reason=reason,
+            details=details,
+        )
 
 
 def _record_payment_account_mismatch(
@@ -962,7 +1442,14 @@ def _send_payment_notification_email(
         )
 
 
-def _handle_course_purchase(session_data, course_id):
+def _handle_course_purchase(
+    session_data,
+    course_id,
+    *,
+    fulfillment=None,
+    resolved_user=None,
+    resolved_course=None,
+):
     """Handle a one-time course purchase from checkout.session.completed.
 
     Creates a CourseAccess record. Does NOT change the user's tier.
@@ -975,10 +1462,11 @@ def _handle_course_purchase(session_data, course_id):
     metadata = session_data.get("metadata", {})
     session_id = session_data.get("id", "")
 
-    # Look up user
-    user = None
+    # Legacy callers may omit the prevalidated objects; the public Checkout
+    # handlers always provide them after the shared paid/complete/mode gate.
+    user = resolved_user
     was_new_user = False
-    if client_reference_id:
+    if user is None and client_reference_id:
         user = User.objects.filter(pk=client_reference_id).first()
     if user is None and metadata.get("user_id"):
         user = User.objects.filter(pk=metadata["user_id"]).first()
@@ -993,8 +1481,9 @@ def _handle_course_purchase(session_data, course_id):
         return
 
     # Look up course
+    course = resolved_course
     try:
-        course = Course.objects.get(pk=course_id)
+        course = course or Course.objects.get(pk=course_id)
     except Course.DoesNotExist:
         _services.logger.error(
             "course purchase: Course %s not found. session_id=%s",
@@ -1003,30 +1492,70 @@ def _handle_course_purchase(session_data, course_id):
         )
         return
 
-    # Create CourseAccess (idempotent via get_or_create)
-    CourseAccess.objects.get_or_create(
-        user=user,
-        course=course,
-        defaults={
-            "access_type": "purchased",
-            "stripe_session_id": session_id,
-        },
-    )
+    with transaction.atomic():
+        if fulfillment is not None:
+            fulfillment = CheckoutFulfillment.objects.select_for_update().get(
+                pk=fulfillment.pk,
+            )
+            if fulfillment.status not in {
+                CheckoutFulfillment.STATUS_PROCESSING,
+                CheckoutFulfillment.STATUS_AWAITING_PAYMENT,
+                CheckoutFulfillment.STATUS_PAYMENT_FAILED,
+            }:
+                return
+        user = User.objects.select_for_update().get(pk=user.pk)
+        if (
+            user.stripe_customer_id and customer_id
+            and user.stripe_customer_id != customer_id
+        ):
+            if fulfillment is not None:
+                _quarantine_checkout(
+                    fulfillment=fulfillment,
+                    session_data=session_data,
+                    paid_user=user,
+                    reason=PaymentAccountMismatch.REASON_CUSTOMER_CONFLICT,
+                    extra_details={"purchase_kind": "course", "course_id": course.pk},
+                )
+            return
 
-    # Capture name from the Stripe receipt (issue #699). Same split /
-    # only-fill-empty behaviour as the tier-checkout path.
-    stripe_name = session_data.get("customer_details", {}).get("name", "") or ""
-    name_changed = set_name_from_external(user, full_name=stripe_name, source="stripe")
+        CourseAccess.objects.get_or_create(
+            user=user,
+            course=course,
+            defaults={
+                "access_type": "purchased",
+                "stripe_session_id": session_id,
+            },
+        )
 
-    # Update stripe_customer_id if not already set
-    update_fields = []
-    if customer_id and not user.stripe_customer_id:
-        user.stripe_customer_id = customer_id
-        update_fields.append("stripe_customer_id")
-    if name_changed:
-        update_fields.extend(["first_name", "last_name"])
-    if update_fields:
-        user.save(update_fields=update_fields)
+        stripe_name = session_data.get("customer_details", {}).get("name", "") or ""
+        name_changed = set_name_from_external(user, full_name=stripe_name, source="stripe")
+        update_fields = []
+        if customer_id and not user.stripe_customer_id:
+            user.stripe_customer_id = customer_id
+            update_fields.append("stripe_customer_id")
+        if name_changed:
+            update_fields.extend(["first_name", "last_name"])
+        if update_fields:
+            user.save(update_fields=update_fields)
+
+        if fulfillment is not None:
+            fulfillment.user = user
+            fulfillment.tier = None
+            fulfillment.stripe_customer_id = customer_id
+            fulfillment.stripe_subscription_id = ""
+            fulfillment.status = CheckoutFulfillment.STATUS_FULFILLED
+            fulfillment.reason = ""
+            fulfillment.details = {
+                "stripe_session_id": session_id,
+                "stripe_customer_id": customer_id,
+                "stripe_subscription_id": "",
+                "purchase_kind": "course",
+                "course_id": course.pk,
+            }
+            fulfillment.save(update_fields=[
+                "user", "tier", "stripe_customer_id", "stripe_subscription_id",
+                "status", "reason", "details", "updated_at",
+            ])
 
     _services.logger.info(
         "course purchase: user=%s course=%s (%s)",

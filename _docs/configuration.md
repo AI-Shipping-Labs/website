@@ -127,7 +127,7 @@ Keys to set in Studio:
 
 Webhook endpoint to register in Stripe: `{SITE_BASE_URL}/api/webhooks/payments` (no trailing slash).
 
-Webhook events: exactly six are required: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`, `invoice.paid`, and `customer.updated`.
+Webhook events: exactly eight are required: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`, `invoice.paid`, and `customer.updated`.
 
 Monthly payment-grace schedules: daily missed-webhook discovery at 04:45 UTC
 after reconciliation, plus an idempotent 15-minute sweep. See the Stripe

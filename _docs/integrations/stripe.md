@@ -74,8 +74,11 @@ won't match the live-mode signatures.
 The membership fulfillment handler also compares the Checkout Session's
 `livemode` boolean with this key prefix. A test Session delivered to a live
 deployment (or the reverse) is quarantined as `stripe_mode_mismatch`; it never
-grants access. Sessions must also report `payment_status=paid` and
-`status=complete` before identity or Price validation begins.
+grants access. Sessions must also report `status=complete` before identity or
+Price validation begins. A complete `payment_status=unpaid` Session is safely
+reserved as `awaiting_payment`; access is granted only after Stripe sends
+`checkout.session.async_payment_succeeded` with the same Session now reporting
+`payment_status=paid`.
 
 ## STRIPE_WEBHOOK_SECRET
 
@@ -128,8 +131,10 @@ Prereqs: You must create a webhook endpoint first.
   supported by the handler.
 - API version: leave as the Stripe default at creation time. The handler
   reads `type`, `id`, and `data` only.
-  - Subscribe to exactly these 6 events:
+  - Subscribe to exactly these 8 events:
   - `checkout.session.completed`
+  - `checkout.session.async_payment_succeeded`
+  - `checkout.session.async_payment_failed`
   - `customer.subscription.updated`
   - `customer.subscription.deleted`
   - `invoice.payment_failed`
@@ -358,7 +363,7 @@ Where it is used: Studio > Payments > `Stripe webhooks`
 (`/studio/payments/stripe-webhooks/`) and the staff-token API
 `POST /api/payments/stripe-webhooks/verify`. The verifier reads Stripe webhook
 endpoints in the same mode as `STRIPE_SECRET_KEY` and confirms exactly one
-enabled snapshot endpoint targets this URL with the six required events.
+enabled snapshot endpoint targets this URL with the eight required events.
 
 Test vs live: n/a to the value itself; the mode comes from the configured key.
 The verifier reports `key_mode` (test/live) separately from the URL check.
@@ -371,8 +376,9 @@ ID is unknown is issue #1308, not this procedure.
 
 1. In the live-mode Stripe Dashboard, create or open the endpoint for
    `https://aishippinglabs.com/api/webhooks/payments`. Choose "Your account",
-   Snapshot (classic) payloads, and enable exactly the six documented events
-   (`checkout.session.completed`, `customer.subscription.updated`,
+   Snapshot (classic) payloads, and enable exactly the eight documented events
+   (`checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+   `checkout.session.async_payment_failed`, `customer.subscription.updated`,
    `customer.subscription.deleted`, `invoice.payment_failed`, `invoice.paid`,
    `customer.updated`). Copy that endpoint's live `whsec_...` into Studio's
    `STRIPE_WEBHOOK_SECRET`, and confirm the configured `sk_live_...` belongs to
@@ -405,6 +411,42 @@ ID is unknown is issue #1308, not this procedure.
    secret/configuration; never disable Stripe billing. Repair member tiers only
    through confirmed replay or reconciliation — never by hand-editing a raw
    webhook or attempt row.
+
+## Delayed Checkout settlement runbook
+
+Stripe payment methods with delayed notification complete Checkout before funds
+settle. The signed `checkout.session.completed` delivery records a validated
+`awaiting_payment` fulfillment and grants no membership or course access. A
+later signed `checkout.session.async_payment_succeeded` revalidates the same
+Session, Price, account binding, customer/subscription ownership, mode, and paid
+state before using the normal exactly-once fulfillment transaction. A signed
+`checkout.session.async_payment_failed` records `payment_failed`, changes no
+access, and sends at most one transactional retry message to a safely resolved
+local account. Webhook billing email alone never authorizes that failure email.
+The configured restricted Stripe key must permit Checkout Session reads so an
+unexpanded one-time course Session can be retrieved for exact Price validation.
+
+Safe test procedure:
+
+1. Use Stripe test mode, a test member, a test Payment Link/Checkout Session,
+   and a test endpoint subscribed to all eight events. Never enable or disable a
+   live payment method as part of application testing.
+2. Deliver a signed complete/unpaid fixture and confirm the fulfillment is
+   `awaiting_payment`, with no tier/course access, conversion, welcome, or paid
+   signup notification.
+3. Deliver the signed paid async-success fixture and confirm the same Session is
+   fulfilled exactly once. Separately test async failure and confirm one retry
+   email and no access change. Mock Stripe and SES in automated tests.
+4. For an incident, filter Studio's `All handled events` history or
+   `GET /api/payments/stripe-webhooks/deliveries?event_type=...` by either async
+   event. Fix the configuration/identity cause, then use Stripe Dashboard
+   `Resend`; there is no website replay or manual-entitlement endpoint for
+   async Checkout events. Terminal event and Session-level idempotency make a
+   resend safe.
+5. A human with Stripe Dashboard access must separately record which delayed
+   methods are enabled in live mode and confirm the production endpoint has both
+   async events enabled. This application runbook is read-only with respect to
+   live Stripe configuration.
 
 ## AUTHENTICATED_CHECKOUT_BINDING_ENABLED
 

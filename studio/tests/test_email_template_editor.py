@@ -99,6 +99,7 @@ class EmailTemplateListTest(TestCase):
             'event_registration',
             'event_reminder',
             'cancellation',
+            'checkout_payment_failed',
             'payment_failed',
             'welcome_imported',
         ]:
@@ -380,6 +381,21 @@ class EmailTemplatePreviewTest(TestCase):
         self.assertIn('Hi Ada,', body)
         # And the literal Django variable should NOT appear unrendered.
         self.assertNotIn('{{ user_name }}', body)
+
+    def test_checkout_payment_failed_preview_uses_canonical_membership_retry(self):
+        response = self.client.post(
+            '/studio/email-templates/checkout_payment_failed/preview/',
+            {
+                'subject': "Your AI Shipping Labs payment didn't complete",
+                'body_markdown': '[Try again]({{ retry_url }})',
+                'footer_note': '',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertIn('href="https://aishippinglabs.com/membership"', body)
+        self.assertNotIn('/pricing', body)
 
     def test_preview_includes_footer_note_when_provided(self):
         response = self.client.post(

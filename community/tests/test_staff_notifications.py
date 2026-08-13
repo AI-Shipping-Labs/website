@@ -37,6 +37,16 @@ def handle_checkout_completed(session_data):
         ),
     }
     payload.update(session_data)
+    course_id = (payload.get("metadata") or {}).get("course_id")
+    if course_id:
+        course = Course.objects.filter(pk=course_id).first()
+        if course is not None:
+            if not course.stripe_price_id:
+                course.stripe_price_id = f"price_test_course_{course.pk}"
+                course.save(update_fields=["stripe_price_id"])
+            payload["line_items"] = {
+                "data": [{"price": {"id": course.stripe_price_id}}],
+            }
     return call_checkout_in_legacy_numeric_compat_window(
         _handle_checkout_completed,
         payload,

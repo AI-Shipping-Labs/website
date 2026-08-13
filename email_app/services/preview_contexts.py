@@ -277,6 +277,11 @@ PREVIEW_CONTEXTS = {
         'tier_name': 'Main',
         'update_payment_url': 'https://billing.stripe.com/update',
     },
+    'checkout_payment_failed': {
+        'user_name': 'Ada',
+        'purchase_label': 'Premium membership',
+        'retry_url': 'https://aishippinglabs.com/membership',
+    },
     # Issue #847: tier-specific paid-signup welcomes. The real send
     # passes ``user_first_name`` and EmailService auto-injects
     # ``site_url``; mirror both so the Studio preview resolves the

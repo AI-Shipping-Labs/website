@@ -336,6 +336,8 @@ def _endpoint(url, events, status="enabled", livemode=True, ep_id="we_1",
 
 ALL_EVENTS = [
     "checkout.session.completed",
+    "checkout.session.async_payment_succeeded",
+    "checkout.session.async_payment_failed",
     "customer.subscription.updated",
     "customer.subscription.deleted",
     "invoice.payment_failed",

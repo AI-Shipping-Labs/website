@@ -574,6 +574,21 @@
         {% if detail_user.unsubscribed %}Unsubscribed{% else %}Subscribed{% endif %}
       </dd>
     </div>
+    {% if maven_relevant %}
+    <div class="flex items-center justify-between gap-4" data-testid="user-detail-maven-emails-row">
+      <dt class="text-muted-foreground">Maven course emails</dt>
+      <dd class="flex items-center gap-3 text-foreground">
+        <span data-testid="user-detail-maven-emails-state">{% if maven_emails_enabled %}On{% else %}Off{% endif %}</span>
+        <form method="post" action="{% url 'studio_user_maven_email_preference' detail_user.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="enabled" value="{% if maven_emails_enabled %}false{% else %}true{% endif %}">
+          <button type="submit" class="{% studio_action_class 'secondary' %}" data-testid="user-detail-maven-emails-action">
+            Turn {% if maven_emails_enabled %}off{% else %}on{% endif %}
+          </button>
+        </form>
+      </dd>
+    </div>
+    {% endif %}
     {% if bounce_recorded_at %}
     <div class="flex justify-between gap-4">
       <dt class="text-muted-foreground">Recorded</dt>

@@ -14,7 +14,7 @@ Reads:
 
 Writes (audited, narrow, idempotent):
 
-- ``PATCH  /api/users/<email>``               -- ``unsubscribed`` / ``email_verified``.
+- ``PATCH  /api/users/<email>``               -- narrow account/preference fields.
 - ``POST   /api/users/<email>/tags``          -- add one tag.
 - ``DELETE /api/users/<email>/tags/<tag>``    -- remove one tag.
 
@@ -86,6 +86,7 @@ from email_app.services.email_log_history import (
     DISPOSITIONS,
     user_history_queryset,
 )
+from integrations.services.maven_preferences import set_maven_email_preference
 from questionnaires.models import Persona
 from questionnaires.onboarding import get_onboarding_response
 
@@ -230,6 +231,19 @@ def _find_user(email):
     )
 
 
+def _find_user_or_alias(email):
+    """Resolve a canonical API user through primary email or an alias."""
+    resolved = resolve_user_by_email(email)
+    if resolved is None:
+        return None
+    return (
+        User.objects
+        .select_related("tier", "pending_tier", "attribution")
+        .filter(pk=resolved.pk)
+        .first()
+    )
+
+
 def _user_not_found_response():
     return error_response(
         "User not found",
@@ -354,7 +368,12 @@ VALID_SES_EVENT_TYPES = tuple(
 
 # Allowed PATCH field set for the single-user write endpoint. Any other
 # key in the body returns a 422 ``unknown_field``.
-_PATCH_ALLOWED_FIELDS = {"unsubscribed", "email_verified", "slack_user_id"}
+_PATCH_ALLOWED_FIELDS = {
+    "unsubscribed",
+    "email_verified",
+    "slack_user_id",
+    "maven_emails",
+}
 
 
 # ---- Read endpoints --------------------------------------------------------
@@ -384,6 +403,7 @@ _USER_EXAMPLE = {
     "soft_bounce_count": 0,
     "bounce_state": "none",
     "email_verified": True,
+    "email_preferences": {"maven_emails": False},
     "tags": ["sprint:may-2026"],
     "aliases": ["47-gentle.virtual@icloud.com"],
     "slack_member": True,
@@ -540,8 +560,8 @@ def users_collection(request):
     summary="Get or update a single user",
     description=(
         "Read or update a single user's state. The PATCH surface is "
-        "deliberately narrow: only ``unsubscribed`` and "
-        "``email_verified`` are writable; tier / email rename / password "
+        "deliberately narrow: only selected account and email-preference "
+        "fields are writable; tier / email rename / password "
         "are Studio-only by design."
     ),
     methods={
@@ -565,7 +585,8 @@ def users_collection(request):
             "summary": "Update user state",
             "description": (
                 "Accepts ``unsubscribed: bool`` and/or "
-                "``email_verified: true`` only. Setting "
+                "``email_verified: true``, ``slack_user_id: string``, and/or "
+                "``maven_emails: bool``. Setting "
                 "``email_verified: false`` returns 422 "
                 "``verification_demote_forbidden``. Any other field "
                 "returns 422 ``unknown_field``. Every PATCH appends a "
@@ -584,6 +605,10 @@ def users_collection(request):
                     "slack_user_id": {
                         "type": "string",
                         "description": "Normalized U/W Slack ID; blank clears.",
+                    },
+                    "maven_emails": {
+                        "type": "boolean",
+                        "description": "Scoped Maven course-email preference.",
                     },
                 },
                 "example": {"unsubscribed": True},
@@ -614,7 +639,7 @@ def users_collection(request):
 )
 def user_detail(request, email):
     """``GET | PATCH /api/users/<email>``."""
-    user = _find_user(email)
+    user = _find_user_or_alias(email)
     if user is None:
         return _user_not_found_response()
 
@@ -651,6 +676,13 @@ def user_detail(request, email):
             "verification_demote_forbidden",
             status=422,
             details={"field": "email_verified"},
+        )
+    if "maven_emails" in data and not isinstance(data["maven_emails"], bool):
+        return error_response(
+            "maven_emails must be a boolean",
+            "validation_error",
+            status=422,
+            details={"field": "maven_emails"},
         )
     normalized_slack_id = None
     if "slack_user_id" in data:
@@ -733,6 +765,19 @@ def user_detail(request, email):
                 (
                     f"source=api_slack_id; actor_token={actor}; "
                     f"previous={previous!r}; new={normalized_slack_id!r}"
+                ),
+            )
+
+        if "maven_emails" in data:
+            enabled = data["maven_emails"]
+            previous = set_maven_email_preference(locked, enabled)
+            _audit(
+                locked,
+                "maven_email_preference",
+                (
+                    f"source=api; actor_token={actor}; "
+                    f"member_id={locked.pk}; member_email={locked.email}; "
+                    f"previous={previous}; new={enabled}"
                 ),
             )
 

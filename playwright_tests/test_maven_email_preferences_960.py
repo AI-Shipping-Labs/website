@@ -43,6 +43,27 @@ def _user(email):
     return user
 
 
+def _unrelated_user(email):
+    from accounts.models import User
+
+    ensure_tiers()
+    return User.objects.create_user(email=email, password="playwright-1392")
+
+
+def test_unrelated_member_has_no_maven_vendor_control(browser, django_server):
+    user = _unrelated_user("maven-unrelated-1392@example.com")
+    context = auth_context(browser, user.email)
+    page = context.new_page()
+
+    page.goto(f"{django_server}/account/")
+
+    expect(page.get_by_text("Newsletter", exact=True)).to_be_visible()
+    expect(page.get_by_text("Workshop announcements", exact=True)).to_be_visible()
+    expect(page.get_by_text("Maven course emails", exact=True)).to_have_count(0)
+    expect(page.get_by_test_id("maven-emails-toggle")).to_have_count(0)
+    context.close()
+
+
 def test_account_maven_toggle_persists_without_changing_access(browser, django_server):
     user = _user("maven-toggle@example.com")
     from content.access import get_user_level
@@ -51,12 +72,20 @@ def test_account_maven_toggle_persists_without_changing_access(browser, django_s
     context = auth_context(browser, user.email)
     page = context.new_page()
     page.goto(f"{django_server}/account/")
-    toggle = page.get_by_test_id("maven-emails-toggle")
+    toggle = page.get_by_role("switch", name="Toggle Maven course emails")
     expect(toggle).to_be_visible()
-    toggle.click()
-    expect(page.get_by_test_id("maven-emails-status")).to_contain_text("Access is unchanged")
+    expect(toggle).to_have_attribute("aria-checked", "true")
+    toggle.focus()
+    page.keyboard.press("Space")
+    expect(page.get_by_test_id("maven-emails-status")).to_have_text(
+        "Maven course emails turned off. Course and community access are unchanged."
+    )
+    expect(toggle).to_have_attribute("aria-checked", "false")
     page.reload()
     expect(page.locator("#maven-emails-toggle-dot")).to_have_class(re.compile("translate-x-0"))
+    expect(page.get_by_role("switch", name="Toggle Maven course emails")).to_have_attribute(
+        "aria-checked", "false"
+    )
     from accounts.models import User
     user = User.objects.get(pk=user.pk)
     assert user.email_preferences["maven_emails"] is False
@@ -78,8 +107,13 @@ def test_signed_opt_out_confirmation_and_account_reenable(browser, django_server
     account = context.new_page()
     account.goto(f"{django_server}/account/")
     expect(account.locator("#maven-emails-toggle-dot")).to_have_class(re.compile("translate-x-0"))
-    account.get_by_test_id("maven-emails-toggle").click()
-    expect(account.get_by_test_id("maven-emails-status")).to_contain_text("turned on")
+    toggle = account.get_by_role("switch", name="Toggle Maven course emails")
+    expect(toggle).to_have_attribute("aria-checked", "false")
+    toggle.click()
+    expect(account.get_by_test_id("maven-emails-status")).to_have_text(
+        "Maven course emails turned on."
+    )
+    expect(toggle).to_have_attribute("aria-checked", "true")
     account.reload()
     expect(account.locator("#maven-emails-toggle-dot")).to_have_class(re.compile("translate-x-5"))
     context.close()

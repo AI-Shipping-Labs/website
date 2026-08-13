@@ -161,6 +161,16 @@ anything), what you fixed, and whether the pipeline is now green. If the result
 was `hang`, `unresolved`, `superseded` (unrecovered), or `no_verdict`, report the
 non-verdict and the recommended recovery — never as a pass.
 
+For a terminal green handoff, also report the exact issue, accepted/merge SHA,
+successful `Deploy Dev` run ID and run head SHA, and every agent worktree path
+used during the lifecycle. Then return. Do **not** remove a worktree, close its
+lifecycle lease, prune Git metadata, or delete its branch from the live On-Call
+role. After On-Call and every other role have ended, the orchestrator verifies
+that state in its active-agent registry, closes the common-Git-dir lease, runs
+the fail-closed dry-run classifier from shared main, and applies at most one
+reviewed candidate at a time. See `_docs/PROCESS.md` ("Agent worktree
+lifecycle").
+
 ## Rules
 
 - You are the sole CI observer. Use exactly one blocking watcher invocation per
@@ -178,3 +188,6 @@ non-verdict and the recommended recovery — never as a pass.
   product code.
 - If you cannot fix the failure after 2 attempts, report to the orchestrator and
   stop.
+- Never self-clean the current worktree or mark its lifecycle lease terminal.
+  Cleanup is an orchestrator-owned post-return step and is forbidden for hang,
+  unresolved, superseded/no-verdict, failed, cancelled, or still-active runs.

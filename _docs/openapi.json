@@ -8285,6 +8285,7 @@
     },
     "/api/payments/stripe-webhooks/status": {
       "get": {
+        "description": "Returns the canonical `required_events` verifier list, currently eleven entries, with the latest persisted check and delivery aggregates. This read makes no Stripe call.",
         "responses": {
           "200": {
             "description": "Status snapshot."

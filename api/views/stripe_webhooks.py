@@ -138,6 +138,11 @@ def stripe_webhooks_verify(request):
     methods={
         "GET": {
             "summary": "Latest persisted check + aggregates (no Stripe call)",
+            "description": (
+                "Returns the canonical `required_events` verifier list, "
+                "currently eleven entries, with the latest persisted check "
+                "and delivery aggregates. This read makes no Stripe call."
+            ),
             "responses": {200: {"description": "Status snapshot."}},
         }
     },

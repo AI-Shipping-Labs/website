@@ -51,6 +51,13 @@ class BuildSpecTest(TestCase):
         self.assertIn("get", operations)
         self.assertIn("post", operations)
 
+    def test_stripe_status_documents_canonical_required_events(self):
+        operation = self.document["paths"][
+            "/api/payments/stripe-webhooks/status"
+        ]["get"]
+        self.assertIn("`required_events`", operation["description"])
+        self.assertIn("eleven", operation["description"])
+
     def test_host_profile_paths_present(self):
         self.assertIn("/api/hosts", self.document["paths"])
         self.assertIn("/api/hosts/{slug}", self.document["paths"])

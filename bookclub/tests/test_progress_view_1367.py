@@ -8,6 +8,7 @@ route #1366 is not built, so names stay plain text).
 """
 
 from datetime import date
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.db import connection
@@ -26,6 +27,13 @@ from bookclub.models import (
 )
 from bookclub.reading import build_reader_rows
 from content.access import LEVEL_MAIN, LEVEL_OPEN
+from integrations.config import clear_config_cache, get_config
+from integrations.middleware import (
+    clear_announcement_banner_cache,
+    clear_redirect_cache,
+    get_active_redirects,
+    get_announcement_banner,
+)
 from payments.models import Tier
 
 User = get_user_model()
@@ -274,6 +282,9 @@ class ProgressCountTest(ProgressBoardTestMixin, TestCase):
 
 
 class ProgressQueryBudgetTest(ProgressBoardTestMixin, TestCase):
+    RENDERED_VIEW_QUERY_BUDGET = 13
+    READER_ROWS_QUERY_BUDGET = 5
+
     def _seed_board(self, slug, reader_count):
         book = Book.objects.create(
             title=f'Book {slug}', slug=slug, author='A',
@@ -288,17 +299,79 @@ class ProgressQueryBudgetTest(ProgressBoardTestMixin, TestCase):
             _mark_read(reader, chapters, (i % 5) + 1)
         return book
 
+    def _warm_ambient_page_caches(self):
+        """Give every captured page request identical cache preconditions.
+
+        These three caches belong to global page chrome, not the Book Club
+        roster. A worker's prior test order can warm any subset of them, so a
+        cold first request otherwise pays up to three queries that the second
+        request does not (#1436).
+        """
+        clear_redirect_cache()
+        clear_config_cache()
+        clear_announcement_banner_cache()
+
+        get_active_redirects()
+        get_config('SITE_BASE_URL', '')
+        get_announcement_banner()
+
+    def _rendered_query_count(self, book):
+        self._warm_ambient_page_caches()
+        with CaptureQueriesContext(connection) as context:
+            response = self.client.get(f'/books/{book.slug}/progress')
+        self.assertEqual(response.status_code, 200)
+        return len(context)
+
+    def _reader_rows_query_count(self, book):
+        with CaptureQueriesContext(connection) as context:
+            build_reader_rows(self.viewer, book, include_self=True)
+        return len(context)
+
     def test_query_count_is_fixed_regardless_of_roster_size(self):
         small = self._seed_board('small-book', 2)
         large = self._seed_board('large-book', 20)
         self.client.force_login(self.viewer)
 
-        with CaptureQueriesContext(connection) as small_ctx:
-            self.client.get(f'/books/{small.slug}/progress')
-        with CaptureQueriesContext(connection) as large_ctx:
-            self.client.get(f'/books/{large.slug}/progress')
+        for first, second in ((small, large), (large, small)):
+            counts = (
+                self._rendered_query_count(first),
+                self._rendered_query_count(second),
+            )
+            self.assertEqual(
+                counts,
+                (
+                    self.RENDERED_VIEW_QUERY_BUDGET,
+                    self.RENDERED_VIEW_QUERY_BUDGET,
+                ),
+            )
 
-        self.assertEqual(len(small_ctx), len(large_ctx))
+    def test_reader_rows_query_budget_is_fixed_and_explicit(self):
+        small = self._seed_board('small-helper-book', 2)
+        large = self._seed_board('large-helper-book', 20)
+
+        self.assertEqual(
+            self._reader_rows_query_count(small),
+            self.READER_ROWS_QUERY_BUDGET,
+        )
+        self.assertEqual(
+            self._reader_rows_query_count(large),
+            self.READER_ROWS_QUERY_BUDGET,
+        )
+
+    def test_reader_rows_budget_detects_per_reader_query(self):
+        small = self._seed_board('small-mutation-book', 2)
+        large = self._seed_board('large-mutation-book', 20)
+
+        def query_per_reader(member):
+            User.objects.filter(pk=member.pk).exists()
+            return member.email
+
+        with mock.patch('bookclub.reading._display_name', query_per_reader):
+            small_count = self._reader_rows_query_count(small)
+            large_count = self._reader_rows_query_count(large)
+
+        self.assertGreater(small_count, self.READER_ROWS_QUERY_BUDGET)
+        self.assertGreater(large_count, small_count)
 
 
 class ProgressNoGamificationTest(ProgressBoardTestMixin, TestCase):

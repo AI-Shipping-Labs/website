@@ -641,6 +641,17 @@ INTEGRATION_GROUPS = [
             {'key': 'SITE_BASE_URL_ALIASES', 'is_secret': False, 'multiline': True, 'description': 'Additional hosts that should not trigger the host-mismatch banner. Comma- or whitespace-separated (newlines work too).', 'docs_url': '_docs/integrations/site.md#site_base_url_aliases'},
             {'key': 'EVENT_DISPLAY_TIMEZONE', 'is_secret': False, 'description': 'Default IANA timezone for public event times when the browser cannot provide one.', 'docs_url': '_docs/integrations/site.md#event_display_timezone'},
             {
+                'key': 'PRIVACY_REQUEST_EMAIL',
+                'is_secret': False,
+                'is_email': True,
+                'default': 'team@aishippinglabs.com',
+                'description': (
+                    'Validated team mailbox that receives signed-in account '
+                    'deletion requests, with the requester visibly copied.'
+                ),
+                'docs_url': '_docs/integrations/site.md#privacy_request_email',
+            },
+            {
                 'key': 'PAYMENT_NOTIFICATION_EMAIL',
                 'is_secret': False,
                 'description': (

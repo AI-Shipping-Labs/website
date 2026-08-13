@@ -141,6 +141,36 @@ on the next request.
 
 Test vs live: n/a. One value per environment.
 
+## PRIVACY_REQUEST_EMAIL
+
+Purpose: Validated team mailbox that receives account-deletion requests
+submitted by signed-in members from the Privacy & data card on `/account/`.
+The platform sends one transactional message To this address and visibly Cc's
+the member's current login email. The message identifies the member by login
+email and Support ID and links to the existing Studio member detail.
+
+Default: `team@aishippinglabs.com`.
+
+Without a valid value: Runtime validation rejects malformed overrides and the
+request page returns a truthful retryable error with a direct
+`mailto:team@aishippinglabs.com` fallback. No request is marked received and no
+account state changes. A corrected setting lets the member retry the same
+durable request without creating duplicate accepted mail.
+
+Where to find it: This is operator intent. Use the shared mailbox responsible
+for privacy requests rather than an individual address.
+
+Prereqs: Amazon SES transactional delivery must be configured and enabled.
+The sender domain must be verified; the recipient does not need separate SES
+verification once the AWS account is out of sandbox.
+
+Rotation: Safe to change at any time. New requests and failed-delivery retries
+use the current validated value; an already accepted request is not resent.
+
+Test vs live: Use a non-production team mailbox when exercising real SES in a
+non-production environment. Local and automated tests keep SES disabled or
+mock the send path.
+
 ## PAYMENT_NOTIFICATION_EMAIL
 
 Purpose: Operator email address that receives an internal

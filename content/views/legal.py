@@ -8,7 +8,7 @@ issue #368.
 from django.shortcuts import render
 
 LAST_UPDATED = 'July 15, 2026'
-PRIVACY_LAST_UPDATED = 'July 15, 2026'
+PRIVACY_LAST_UPDATED = 'August 13, 2026'
 LAST_UPDATED_DE = '27. April 2026'
 
 

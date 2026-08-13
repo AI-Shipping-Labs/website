@@ -77,7 +77,7 @@ class PrivacyAccountViewTest(TestCase):
 
         self.assertContains(response, 'data-testid="privacy-data-section"')
         self.assertContains(response, 'data-testid="privacy-export-link"')
-        self.assertContains(response, 'data-testid="privacy-delete-form"')
+        self.assertContains(response, 'data-testid="privacy-request-form"')
 
         newsletter = User.objects.create_user(
             email="newsletter-privacy@test.com",
@@ -93,14 +93,14 @@ class PrivacyAccountViewTest(TestCase):
         self.assertContains(response, 'data-testid="privacy-data-section"')
         self.assertContains(response, 'data-testid="privacy-export-link"')
 
-    def test_anonymous_export_and_delete_use_login_redirect(self):
+    def test_anonymous_export_and_deletion_request_use_login_redirect(self):
         export_response = self.client.get("/account/api/data-export")
-        delete_response = self.client.post("/account/api/delete-account")
+        request_response = self.client.post("/account/api/request-deletion")
 
         self.assertEqual(export_response.status_code, 302)
         self.assertIn("/accounts/login/", export_response.url)
-        self.assertEqual(delete_response.status_code, 302)
-        self.assertIn("/accounts/login/", delete_response.url)
+        self.assertEqual(request_response.status_code, 302)
+        self.assertIn("/accounts/login/", request_response.url)
 
 
 @tag("core")
@@ -300,92 +300,99 @@ class PrivacyExportTest(TierSetupMixin, TestCase):
 
 @tag("core")
 class PrivacyDeletionGuardTest(TierSetupMixin, TestCase):
-    def test_bad_email_and_password_are_blocked_and_audited(self):
-        user = User.objects.create_user(
-            email="guard@test.com",
-            password="TestPass123!",
-        )
-        self.client.force_login(user)
+    def test_staff_and_superuser_accounts_are_blocked_by_controlled_service(self):
+        cases = [
+            ("staff", {"is_staff": True}),
+            ("superuser", {"is_superuser": True}),
+        ]
 
-        email_response = self.client.post(
-            "/account/api/delete-account",
-            {"confirm_email": "typo@test.com", "current_password": "TestPass123!"},
-        )
-        password_response = self.client.post(
-            "/account/api/delete-account",
-            {"confirm_email": "guard@test.com", "current_password": "wrong"},
-        )
-
-        self.assertEqual(email_response.status_code, 400)
-        self.assertEqual(password_response.status_code, 400)
-        self.assertTrue(User.objects.filter(pk=user.pk).exists())
-        self.assertEqual(
-            list(
-                PrivacyRequestLog.objects.filter(
-                    request_type="delete",
-                    status=PrivacyRequestLog.STATUS_BLOCKED,
+        for label, flags in cases:
+            with self.subTest(account_type=label):
+                user = User.objects.create_user(
+                    email=f"{label}-delete@test.com",
+                    password="TestPass123!",
+                    **flags,
                 )
-                .order_by("requested_at")
-                .values_list("blocker_reason", flat=True)
-            ),
-            [
-                PrivacyRequestLog.BLOCKER_BAD_CONFIRMATION,
-                PrivacyRequestLog.BLOCKER_BAD_PASSWORD,
-            ],
-        )
+                old_user_id = user.pk
+
+                result = delete_account_for_privacy(
+                    user,
+                    {
+                        "ip": "192.0.2.20",
+                        "user_agent": "controlled-operator-guard-test",
+                    },
+                )
+
+                self.assertFalse(result.success)
+                self.assertEqual(result.status, PrivacyRequestLog.STATUS_BLOCKED)
+                self.assertEqual(
+                    result.blocker_reason,
+                    PrivacyRequestLog.BLOCKER_STAFF_ACCOUNT,
+                )
+                self.assertTrue(
+                    User.objects.filter(
+                        pk=old_user_id,
+                        email=f"{label}-delete@test.com",
+                        is_active=True,
+                        **flags,
+                    ).exists(),
+                )
+                log = PrivacyRequestLog.objects.get(pk=result.audit_log_id)
+                self.assertEqual(log.request_type, PrivacyRequestLog.REQUEST_DELETE)
+                self.assertEqual(log.status, PrivacyRequestLog.STATUS_BLOCKED)
+                self.assertEqual(log.old_user_id, old_user_id)
+                self.assertEqual(
+                    log.blocker_reason,
+                    PrivacyRequestLog.BLOCKER_STAFF_ACCOUNT,
+                )
 
     @patch("accounts.services.privacy.notify_privacy_staff")
-    def test_active_subscription_blocks_deletion_and_notifies_staff(self, notify):
+    def test_active_subscription_is_blocked_and_notifies_staff(self, notify):
         user = User.objects.create_user(
             email="paid-delete@test.com",
             password="TestPass123!",
+            tier=self.basic_tier,
+            subscription_id="sub_active",
         )
-        user.tier = self.basic_tier
-        user.subscription_id = "sub_active"
-        user.save(update_fields=["tier", "subscription_id"])
-        self.client.force_login(user)
+        old_user_id = user.pk
 
-        response = self.client.post(
-            "/account/api/delete-account",
+        result = delete_account_for_privacy(
+            user,
             {
-                "confirm_email": "paid-delete@test.com",
-                "current_password": "TestPass123!",
+                "ip": "192.0.2.21",
+                "user_agent": "controlled-operator-subscription-guard-test",
             },
         )
 
-        self.assertEqual(response.status_code, 403)
-        self.assertTrue(User.objects.filter(pk=user.pk).exists())
-        self.assertContains(response, "active subscription", status_code=403)
-        log = PrivacyRequestLog.objects.get(request_type="delete")
+        self.assertFalse(result.success)
+        self.assertEqual(result.status, PrivacyRequestLog.STATUS_BLOCKED)
+        self.assertEqual(
+            result.blocker_reason,
+            PrivacyRequestLog.BLOCKER_ACTIVE_SUBSCRIPTION,
+        )
+        self.assertTrue(
+            User.objects.filter(
+                pk=old_user_id,
+                email="paid-delete@test.com",
+                tier=self.basic_tier,
+                subscription_id="sub_active",
+                is_active=True,
+            ).exists(),
+        )
+        log = PrivacyRequestLog.objects.get(pk=result.audit_log_id)
+        self.assertEqual(log.request_type, PrivacyRequestLog.REQUEST_DELETE)
         self.assertEqual(log.status, PrivacyRequestLog.STATUS_BLOCKED)
+        self.assertEqual(log.old_user_id, old_user_id)
         self.assertEqual(
             log.blocker_reason,
             PrivacyRequestLog.BLOCKER_ACTIVE_SUBSCRIPTION,
         )
-        notify.assert_called_once()
-
-    def test_staff_account_is_blocked_from_self_service_delete(self):
-        staff = User.objects.create_user(
-            email="staff-delete@test.com",
-            password="TestPass123!",
-            is_staff=True,
+        notify.assert_called_once_with(
+            event="blocked_active_subscription",
+            email="paid-delete@test.com",
+            old_user_id=old_user_id,
+            row_count_summary={},
         )
-        self.client.force_login(staff)
-
-        page = self.client.get("/account/")
-        response = self.client.post(
-            "/account/api/delete-account",
-            {
-                "confirm_email": "staff-delete@test.com",
-                "current_password": "TestPass123!",
-            },
-        )
-
-        self.assertContains(page, 'data-testid="privacy-staff-block"')
-        self.assertEqual(response.status_code, 403)
-        self.assertTrue(User.objects.filter(pk=staff.pk).exists())
-        log = PrivacyRequestLog.objects.get(request_type="delete")
-        self.assertEqual(log.blocker_reason, PrivacyRequestLog.BLOCKER_STAFF_ACCOUNT)
 
 
 @tag("core")
@@ -471,16 +478,13 @@ class PrivacyDeletionSuccessTest(TierSetupMixin, TestCase):
 
         self.client.force_login(user)
         session_key = self.client.session.session_key
-        response = self.client.post(
-            "/account/api/delete-account",
-            {
-                "confirm_email": "delete-success@test.com",
-                "current_password": "TestPass123!",
-            },
+        old_user_id = user.pk
+        result = delete_account_for_privacy(
+            user,
+            {"ip": "127.0.0.1", "user_agent": "controlled-operator-test"},
         )
 
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "/account/deleted")
+        self.assertTrue(result.success)
         self.assertFalse(User.objects.filter(email="delete-success@test.com").exists())
         self.assertFalse(Session.objects.filter(session_key=session_key).exists())
         self.assertFalse(
@@ -520,7 +524,7 @@ class PrivacyDeletionSuccessTest(TierSetupMixin, TestCase):
 
         log = PrivacyRequestLog.objects.get(request_type="delete")
         self.assertEqual(log.status, PrivacyRequestLog.STATUS_COMPLETED)
-        self.assertEqual(log.old_user_id, user.pk)
+        self.assertEqual(log.old_user_id, old_user_id)
         self.assertIn("accounts.User", log.row_count_summary["erased"])
         self.assertIn(
             "published_submitted_projects",

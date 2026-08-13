@@ -41,6 +41,7 @@ TRANSACTIONAL_EMAIL_TYPES = {
     "password_reset",
     "account_email_change_confirm",
     "account_email_changed_notice",
+    "account_deletion_request",
     "event_registration",
     "event_rescheduled",
     "event_cancelled",

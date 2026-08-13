@@ -11,6 +11,13 @@ literal placeholder strings.
 """
 
 PREVIEW_CONTEXTS = {
+    'account_deletion_request': {
+        'login_email': 'ada@example.com',
+        'support_id': 42,
+        'request_time_utc': '2026-08-13 10:30:00 UTC',
+        'studio_member_url': 'https://aishippinglabs.com/studio/users/42/',
+        'privacy_email': 'team@aishippinglabs.com',
+    },
     'download_delivery': {
         'resource_title': 'AI Shipping field guide',
         'delivery_url': (

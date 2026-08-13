@@ -640,7 +640,7 @@
         </h2>
 
         <p class="text-sm text-muted-foreground mb-5">
-          Download a portable copy of your local platform data or delete your local account.
+          Download a portable copy of your local platform data or ask the team to delete your local account.
           External processor records follow their own retention processes.
         </p>
 
@@ -654,75 +654,45 @@
         </div>
 
         <div class="mt-6 border-t border-border pt-6">
-          <h3 class="text-base font-semibold text-red-300">Delete account</h3>
+          <h3 class="text-base font-semibold text-foreground">Request account deletion</h3>
           <p class="mt-2 text-sm text-muted-foreground">
-            This deletes your local login, preferences, progress, registrations, comments, sprint plans, CRM/onboarding data, API keys, and local linked Slack sprint-ingest copies.
+            Ask the AI Shipping Labs team to delete your local account and associated member profile. Submitting this request does not delete your account immediately or change your access, billing, or session.
+          </p>
+          <p class="mt-2 text-sm text-muted-foreground">
+            We will send a copy to your current login email, <span class="font-medium text-foreground" data-testid="privacy-request-email">{{ user.email }}</span>. The team will provide information about action taken without undue delay and no later than one month after receiving your request.
+          </p>
+          <p class="mt-2 text-sm text-muted-foreground">
+            If your account has not been deleted after one month, reply to that copied email or contact
+            <a href="mailto:team@aishippinglabs.com" class="text-foreground underline hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">team@aishippinglabs.com</a>.
           </p>
 
-          {% if privacy_delete_error %}
-          <div class="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200" data-testid="privacy-delete-error">
-            {{ privacy_delete_error }}
-            {% if privacy_blocker_reason == "active_subscription" and stripe_customer_portal_url %}
-            <a href="{{ stripe_customer_portal_url }}" class="ml-1 underline hover:text-foreground" data-testid="privacy-manage-subscription-link">Manage subscription</a>
-            {% endif %}
-          </div>
-          {% endif %}
-
-          {% if user.is_staff or user.is_superuser %}
-          <div class="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100" data-testid="privacy-staff-block">
-            Staff and admin accounts cannot be deleted from this self-service flow. Contact alexey@aishippinglabs.com for deletion.
+          {% if privacy_deletion_request.status == "requested" %}
+          <div class="mt-4 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3" data-testid="privacy-request-received" role="status">
+            <p class="text-sm font-medium text-green-800 dark:text-green-400">Deletion request received</p>
+            <p class="mt-2 text-sm text-muted-foreground">
+              We copied {{ user.email }} on {{ privacy_deletion_request.requested_at|member_full_date }}. The team will provide information about action taken without undue delay and no later than one month after receipt.
+            </p>
+            <p class="mt-2 text-sm text-muted-foreground">
+              If your account remains after one month, reply to the copied email or contact
+              <a href="mailto:team@aishippinglabs.com" class="text-foreground underline hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">team@aishippinglabs.com</a>.
+            </p>
           </div>
           {% else %}
-          {% if has_subscription %}
-          <div class="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100" data-testid="privacy-active-subscription-note">
-            Your account has an active subscription. Manage or cancel it first; export remains available.
-            {% if stripe_customer_portal_url %}
-            <a href="{{ stripe_customer_portal_url }}" class="ml-1 underline hover:text-foreground" data-testid="privacy-subscription-note-link">Manage subscription</a>
-            {% endif %}
+          {% if privacy_request_error %}
+          <div class="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300" data-testid="privacy-request-error" role="alert">
+            {{ privacy_request_error }}
+            <a href="mailto:team@aishippinglabs.com" class="ml-1 font-medium underline hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="privacy-request-mailto">Email team@aishippinglabs.com</a>
           </div>
           {% endif %}
-
-          <details class="mt-4 rounded-lg border border-red-500/30 bg-red-500/5 p-4" data-testid="privacy-delete-confirmation">
-            <summary class="cursor-pointer text-sm font-medium text-red-200">
-              Show deletion confirmation
-            </summary>
-            <form method="post" action="{% url 'account_delete' %}" class="mt-4 space-y-4" data-testid="privacy-delete-form">
-              {% csrf_token %}
-              <div>
-                <label for="privacy-confirm-email" class="block text-sm font-medium text-foreground mb-1">
-                  Type your account email exactly
-                </label>
-                <input type="email"
-                       id="privacy-confirm-email"
-                       name="confirm_email"
-                       autocomplete="off"
-                       placeholder="{{ user.email }}"
-                       required
-                       class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-red-400 focus:outline-none focus:ring-1 focus:ring-red-400"
-                       data-testid="privacy-confirm-email">
-              </div>
-              {% if privacy_requires_password %}
-              <div>
-                <label for="privacy-current-password" class="block text-sm font-medium text-foreground mb-1">
-                  Current password
-                </label>
-                <input type="password"
-                       id="privacy-current-password"
-                       name="current_password"
-                       autocomplete="current-password"
-                       required
-                       class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-red-400 focus:outline-none focus:ring-1 focus:ring-red-400"
-                       data-testid="privacy-current-password">
-              </div>
-              {% endif %}
-              <button type="submit"
-                      class="{% button_classes 'destructive' %}"
-                      data-testid="privacy-delete-submit">
-                <i data-lucide="trash-2" class="h-4 w-4"></i>
-                Delete account
-              </button>
-            </form>
-          </details>
+          <form method="post" action="{% url 'account_request_deletion' %}" class="mt-4" data-testid="privacy-request-form">
+            {% csrf_token %}
+            <button type="submit"
+                    class="{% button_classes 'destructive' %}"
+                    data-testid="privacy-request-submit">
+              <i data-lucide="send" class="h-4 w-4"></i>
+              Request account deletion
+            </button>
+          </form>
           {% endif %}
         </div>
       </div>

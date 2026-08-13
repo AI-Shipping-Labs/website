@@ -782,7 +782,7 @@ new matching test file is selected automatically without a maintained list.
 A failure blocks the deploy. The scheduled workflow runs the broader Playwright
 suite every 3 hours, skipped if no commits have landed since the last successful
 run. That scheduled default is sharded across separate GitHub Actions matrix
-jobs and uses:
+jobs with the measured assignment described below and uses:
 
 ```bash
 pytest -m "not manual_visual and not slow_platform" <shard files> -v --durations=25
@@ -818,6 +818,74 @@ passed / skipped / deselected counts. Keep these measures distinct:
 
 Do not attribute a total-job or workflow difference to an individual test, and
 do not compare unlike suites or different SHAs as an optimization result.
+
+### Measured scheduled full-suite assignment
+
+Only `.github/workflows/scheduled-playwright.yml` uses measured file weights.
+Deploy Core and the dev-environment scheduled suite retain their index
+round-robin assignment. The committed input is
+`.github/playwright-full-shard-weights.json`; the workflow never queries GitHub
+for weights and never depends on mutable external state while it runs.
+
+The first weight set uses these three completed green full-suite runs. Each run
+has the same 386-file inventory, exact default marker expression, and 2,408
+selected nodes:
+
+| Run | Exact SHA |
+|---|---|
+| [31679060660](https://github.com/AI-Shipping-Labs/website/actions/runs/31679060660) | `89faea5780eebcd2ce5108fbdce0b706514731f3` |
+| [31690316576](https://github.com/AI-Shipping-Labs/website/actions/runs/31690316576) | `0047ede3d6616b0fb35ce7c46474ddf6e099f000` |
+| [31718675813](https://github.com/AI-Shipping-Labs/website/actions/runs/31718675813) | `56f0a99a7708b8b0ab886bd1e7e34a3f66f7d104` |
+
+These pinned sources precede the `--durations=25` rollout. Their weights come
+from the immutable per-node completion timestamps already present in pytest's
+`-v` Actions logs, not from the bounded slowest-25 table. That distinction is
+intentional and auditable: a top-25 table cannot reconstruct weights for all
+386 files, while the verbose log records all 2,408 completed nodes. The
+bounded table remains the ongoing validation surface for the heaviest nodes.
+
+The extraction and aggregation rule is deterministic:
+
+1. Within each shard log, take the elapsed milliseconds between consecutive
+   completed-node timestamps.
+2. The interval before the first node also contains one-time browser/server
+   startup. Replace it with the median later-node interval for that same file,
+   or the shard median if the file has no later node.
+3. Sum all parametrized node intervals into one file total for each run. A file
+   whose nodes are all deselected has a zero total for that marker expression.
+4. Use the median of the three per-run file totals as its planning weight.
+5. Sort files by descending weight then path and place each on the currently
+   lightest shard, breaking ties by file count and shard index. Sort each final
+   shard by path before execution.
+
+To reproduce the committed extraction outside CI, with `gh` authenticated and
+the pinned commits available locally, run:
+
+```bash
+uv run python scripts/extract_playwright_shard_weights.py \
+  --manifest .github/playwright-full-shard-weights.json \
+  --output .tmp/playwright-full-shard-weights.rebuilt.json
+cmp .github/playwright-full-shard-weights.json \
+  .tmp/playwright-full-shard-weights.rebuilt.json
+```
+
+The manifest pins each run, SHA, four job IDs, selected-node count, inventory
+digest, and per-run weight digest. Contract tests recompute those digests and
+reject missing samples, so the workflow cannot silently accept incomplete or
+invented measurement input.
+
+For the measured 386-file inventory, predicted relative loads improve from
+index round-robin `[897507, 873003, 727554, 1076976]` ms to
+`[893753, 893759, 893763, 893765]` ms. The predicted maximum falls by 183,211
+ms (17.0%) before the workflow change, with file counts `98 / 96 / 96 / 96`.
+These normalized weights compare assignment quality; they are not total job or
+pytest-session wall time.
+
+New `test_*.py` files are never dropped while awaiting a refreshed weight set.
+The allocator gives each unknown file the conservative maximum known median
+weight (currently 170,116 ms), includes it once in the same deterministic
+assignment, and identifies it in the selector log so maintainers can refresh
+the manifest from later comparable green runs.
 
 ### Special Playwright and platform markers
 

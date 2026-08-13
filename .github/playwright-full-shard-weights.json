@@ -1,0 +1,1986 @@
+{
+  "aggregation": {
+    "file_weight": "Sum completed parametrized node elapsed milliseconds per file in each run, then use the median of the three run totals.",
+    "first_node_normalization": "Replace each shard's collection-to-first-result interval with the median later-node interval for that same file, or the shard median when the file has no later node. This removes one-time browser/server startup from whichever file sorts first.",
+    "node_elapsed": "Elapsed milliseconds between consecutive pytest -v completed-node timestamps in one shard log.",
+    "unknown_file": "Use the maximum known median file weight, then include the file in the same deterministic LPT assignment."
+  },
+  "file_weights_ms": {
+    "playwright_tests/test_about.py": [
+      1205,
+      1356,
+      1276
+    ],
+    "playwright_tests/test_access_control.py": [
+      62829,
+      62352,
+      62191
+    ],
+    "playwright_tests/test_accessible_actions_1224.py": [
+      13416,
+      13493,
+      14022
+    ],
+    "playwright_tests/test_accordion_typography_516.py": [
+      17484,
+      18538,
+      18326
+    ],
+    "playwright_tests/test_account_cleanup_581.py": [
+      23959,
+      25572,
+      25004
+    ],
+    "playwright_tests/test_account_effective_tier_965.py": [
+      2523,
+      2488,
+      2929
+    ],
+    "playwright_tests/test_account_email_change_1209.py": [
+      13030,
+      13097,
+      14119
+    ],
+    "playwright_tests/test_account_lifecycle_reporting_1176.py": [
+      3102,
+      3825,
+      3407
+    ],
+    "playwright_tests/test_account_page.py": [
+      169062,
+      170116,
+      175075
+    ],
+    "playwright_tests/test_account_page_polish_1206.py": [
+      8205,
+      8221,
+      8607
+    ],
+    "playwright_tests/test_account_privacy_1210.py": [
+      9578,
+      9301,
+      9943
+    ],
+    "playwright_tests/test_account_profile.py": [
+      7322,
+      8615,
+      9504
+    ],
+    "playwright_tests/test_account_slack_card_730.py": [
+      2847,
+      2763,
+      3033
+    ],
+    "playwright_tests/test_account_timezone_display.py": [
+      8742,
+      8735,
+      9362
+    ],
+    "playwright_tests/test_action_buttons_1280.py": [
+      6022,
+      5685,
+      5946
+    ],
+    "playwright_tests/test_activities_curation_1243.py": [
+      5673,
+      7262,
+      9790
+    ],
+    "playwright_tests/test_activities_sprints_539.py": [
+      4474,
+      6458,
+      4857
+    ],
+    "playwright_tests/test_aihero_course.py": [
+      11335,
+      11283,
+      11814
+    ],
+    "playwright_tests/test_analytics_consent_1164.py": [
+      9218,
+      8953,
+      9849
+    ],
+    "playwright_tests/test_announcement_banner.py": [
+      9068,
+      13572,
+      13000
+    ],
+    "playwright_tests/test_api_token_management.py": [
+      8733,
+      11164,
+      8934
+    ],
+    "playwright_tests/test_article_responsive_images_1385.py": [
+      1851,
+      1851,
+      2019
+    ],
+    "playwright_tests/test_article_source_event_1331.py": [
+      6205,
+      6000,
+      6338
+    ],
+    "playwright_tests/test_articles_blog.py": [
+      8840,
+      9391,
+      13759
+    ],
+    "playwright_tests/test_auth_funnel_visual_1223.py": [
+      0,
+      0,
+      0
+    ],
+    "playwright_tests/test_auth_return_context.py": [
+      6314,
+      6408,
+      6425
+    ],
+    "playwright_tests/test_auth_shared_components.py": [
+      12601,
+      12398,
+      12996
+    ],
+    "playwright_tests/test_banner_generator_section.py": [
+      4701,
+      4684,
+      10158
+    ],
+    "playwright_tests/test_book_club_1362.py": [
+      7789,
+      10929,
+      8858
+    ],
+    "playwright_tests/test_book_club_hub_1363.py": [
+      6451,
+      6349,
+      6828
+    ],
+    "playwright_tests/test_book_club_meetings_1369.py": [
+      3603,
+      3440,
+      3595
+    ],
+    "playwright_tests/test_book_club_notes_1365.py": [
+      6854,
+      7184,
+      9928
+    ],
+    "playwright_tests/test_book_club_progress_1367.py": [
+      13680,
+      14882,
+      19168
+    ],
+    "playwright_tests/test_book_club_reader_profile_1366.py": [
+      6460,
+      6505,
+      6686
+    ],
+    "playwright_tests/test_book_club_reading_1364.py": [
+      5159,
+      5073,
+      5209
+    ],
+    "playwright_tests/test_book_club_summaries_1368.py": [
+      8597,
+      10565,
+      12169
+    ],
+    "playwright_tests/test_book_club_summary_notifications_1374.py": [
+      28367,
+      31803,
+      29562
+    ],
+    "playwright_tests/test_browser_lifecycle_1418.py": [
+      5613,
+      5610,
+      5584
+    ],
+    "playwright_tests/test_calendly_booked_calls_884.py": [
+      3628,
+      3626,
+      3833
+    ],
+    "playwright_tests/test_call_profiles_1404.py": [
+      18502,
+      22402,
+      25603
+    ],
+    "playwright_tests/test_campaign_audience_override_966.py": [
+      3468,
+      3766,
+      3675
+    ],
+    "playwright_tests/test_campaign_audience_verification.py": [
+      2857,
+      2848,
+      2898
+    ],
+    "playwright_tests/test_campaign_tag_targeting.py": [
+      2200,
+      2233,
+      2573
+    ],
+    "playwright_tests/test_catalog_tag_presentation_1228.py": [
+      7319,
+      9058,
+      11217
+    ],
+    "playwright_tests/test_checkout_feedback.py": [
+      2581,
+      3743,
+      2706
+    ],
+    "playwright_tests/test_clickable_cards_523.py": [
+      8150,
+      8326,
+      8831
+    ],
+    "playwright_tests/test_code_copy.py": [
+      3826,
+      3780,
+      3883
+    ],
+    "playwright_tests/test_cohort_board.py": [
+      4144,
+      4320,
+      6645
+    ],
+    "playwright_tests/test_cohort_board_progress.py": [
+      11379,
+      13937,
+      12090
+    ],
+    "playwright_tests/test_collection_page_seo_1378.py": [
+      5753,
+      5656,
+      6046
+    ],
+    "playwright_tests/test_community_landing_1179.py": [
+      1919,
+      1758,
+      1919
+    ],
+    "playwright_tests/test_community_navigation_1183.py": [
+      4482,
+      5618,
+      5925
+    ],
+    "playwright_tests/test_community_slack.py": [
+      8336,
+      10496,
+      9223
+    ],
+    "playwright_tests/test_complete_finished_events.py": [
+      4636,
+      4639,
+      4968
+    ],
+    "playwright_tests/test_conftest_port_resolution.py": [
+      22,
+      16,
+      21
+    ],
+    "playwright_tests/test_contacts_import.py": [
+      1778,
+      2259,
+      2131
+    ],
+    "playwright_tests/test_contacts_import_preview_1291.py": [
+      10060,
+      13099,
+      10465
+    ],
+    "playwright_tests/test_container_widths_525.py": [
+      31957,
+      31196,
+      34214
+    ],
+    "playwright_tests/test_content_comment_notifications.py": [
+      25048,
+      25229,
+      25751
+    ],
+    "playwright_tests/test_content_polish_1292.py": [
+      22244,
+      21052,
+      20991
+    ],
+    "playwright_tests/test_content_source_first_sync.py": [
+      1853,
+      1976,
+      1993
+    ],
+    "playwright_tests/test_course_admin.py": [
+      14007,
+      13976,
+      14463
+    ],
+    "playwright_tests/test_course_catalog.py": [
+      7809,
+      7633,
+      7972
+    ],
+    "playwright_tests/test_course_cohorts.py": [
+      14098,
+      16083,
+      22527
+    ],
+    "playwright_tests/test_course_rename_dashboard.py": [
+      1139,
+      1442,
+      1157
+    ],
+    "playwright_tests/test_course_units.py": [
+      16384,
+      16303,
+      16785
+    ],
+    "playwright_tests/test_cover_fallbacks_1281.py": [
+      14849,
+      14421,
+      15314
+    ],
+    "playwright_tests/test_crm_activity_context_1054.py": [
+      3848,
+      4387,
+      4358
+    ],
+    "playwright_tests/test_crm_activity_mobile_1305.py": [
+      5368,
+      5169,
+      5891
+    ],
+    "playwright_tests/test_crm_markdown_export_1304.py": [
+      2559,
+      2577,
+      2607
+    ],
+    "playwright_tests/test_curated_links.py": [
+      5986,
+      5952,
+      6220
+    ],
+    "playwright_tests/test_curated_links_524.py": [
+      4289,
+      6255,
+      6233
+    ],
+    "playwright_tests/test_custom_banner_upload_931.py": [
+      9174,
+      9995,
+      9538
+    ],
+    "playwright_tests/test_dark_mode_contrast.py": [
+      579,
+      562,
+      596
+    ],
+    "playwright_tests/test_dashboard.py": [
+      31067,
+      30372,
+      32044
+    ],
+    "playwright_tests/test_dashboard_dismissals_1129.py": [
+      8507,
+      12017,
+      10883
+    ],
+    "playwright_tests/test_dashboard_plan_preparation_1199.py": [
+      9782,
+      11062,
+      9964
+    ],
+    "playwright_tests/test_date_rot_guard.py": [
+      3760,
+      3808,
+      3447
+    ],
+    "playwright_tests/test_dev_goto_resilience_guard.py": [
+      94,
+      97,
+      95
+    ],
+    "playwright_tests/test_dev_smoke_about.py": [
+      286,
+      307,
+      327
+    ],
+    "playwright_tests/test_dev_smoke_blog.py": [
+      331,
+      250,
+      316
+    ],
+    "playwright_tests/test_dev_smoke_courses.py": [
+      279,
+      286,
+      283
+    ],
+    "playwright_tests/test_dev_smoke_downloads.py": [
+      273,
+      260,
+      314
+    ],
+    "playwright_tests/test_dev_smoke_events.py": [
+      281,
+      299,
+      345
+    ],
+    "playwright_tests/test_dev_smoke_faq.py": [
+      281,
+      264,
+      293
+    ],
+    "playwright_tests/test_dev_smoke_homepage.py": [
+      335,
+      307,
+      345
+    ],
+    "playwright_tests/test_dev_smoke_login_form.py": [
+      259,
+      282,
+      306
+    ],
+    "playwright_tests/test_dev_smoke_pricing.py": [
+      966,
+      1300,
+      1511
+    ],
+    "playwright_tests/test_dev_smoke_projects.py": [
+      280,
+      234,
+      307
+    ],
+    "playwright_tests/test_dev_smoke_register_form.py": [
+      297,
+      276,
+      347
+    ],
+    "playwright_tests/test_dev_smoke_resources.py": [
+      280,
+      288,
+      270
+    ],
+    "playwright_tests/test_dev_smoke_robots.py": [
+      1099,
+      693,
+      692
+    ],
+    "playwright_tests/test_dev_smoke_sitemap.py": [
+      113,
+      93,
+      119
+    ],
+    "playwright_tests/test_dev_smoke_unknown_route.py": [
+      91,
+      84,
+      85
+    ],
+    "playwright_tests/test_dev_smoke_workshops.py": [
+      1431,
+      1434,
+      1436
+    ],
+    "playwright_tests/test_download_delivery_1264.py": [
+      8206,
+      20695,
+      13500
+    ],
+    "playwright_tests/test_drop_plan_status_728.py": [
+      4569,
+      6316,
+      4929
+    ],
+    "playwright_tests/test_email_log_1283.py": [
+      13121,
+      13079,
+      13348
+    ],
+    "playwright_tests/test_email_template_dash_polish.py": [
+      3757,
+      3722,
+      4195
+    ],
+    "playwright_tests/test_env_mismatch_banner.py": [
+      6885,
+      11690,
+      7914
+    ],
+    "playwright_tests/test_event_anonymous_signup.py": [
+      3025,
+      4170,
+      3123
+    ],
+    "playwright_tests/test_event_attendee_count_668.py": [
+      2327,
+      2315,
+      2369
+    ],
+    "playwright_tests/test_event_calendar_lifecycle_1073.py": [
+      3051,
+      3014,
+      3201
+    ],
+    "playwright_tests/test_event_description_markdown_988.py": [
+      4136,
+      10316,
+      6209
+    ],
+    "playwright_tests/test_event_detail_registration.py": [
+      8880,
+      13484,
+      9433
+    ],
+    "playwright_tests/test_event_detail_relationships_1390.py": [
+      1451,
+      1411,
+      1557
+    ],
+    "playwright_tests/test_event_detail_series_registration_1077.py": [
+      7579,
+      7406,
+      7787
+    ],
+    "playwright_tests/test_event_feedback_1038.py": [
+      13391,
+      15423,
+      17074
+    ],
+    "playwright_tests/test_event_header_a11y_1139.py": [
+      3256,
+      4853,
+      3421
+    ],
+    "playwright_tests/test_event_hosts_994.py": [
+      4399,
+      4407,
+      4890
+    ],
+    "playwright_tests/test_event_join_id_canonical_1082.py": [
+      4442,
+      4408,
+      4621
+    ],
+    "playwright_tests/test_event_operator_workflow_1285.py": [
+      18331,
+      21301,
+      20911
+    ],
+    "playwright_tests/test_event_recap.py": [
+      1340,
+      1437,
+      1494
+    ],
+    "playwright_tests/test_event_recordings.py": [
+      11880,
+      11616,
+      12400
+    ],
+    "playwright_tests/test_event_series.py": [
+      51319,
+      48879,
+      53845
+    ],
+    "playwright_tests/test_event_time_display.py": [
+      8569,
+      11813,
+      14707
+    ],
+    "playwright_tests/test_event_time_windows_1022.py": [
+      1539,
+      1755,
+      1645
+    ],
+    "playwright_tests/test_event_url_canonicalization_673.py": [
+      3627,
+      3629,
+      4004
+    ],
+    "playwright_tests/test_event_widget_1070.py": [
+      7450,
+      7223,
+      7500
+    ],
+    "playwright_tests/test_event_workshop_handoff.py": [
+      4380,
+      4512,
+      7293
+    ],
+    "playwright_tests/test_event_workshop_ready_1118.py": [
+      9350,
+      10433,
+      9927
+    ],
+    "playwright_tests/test_event_zoom_lifecycle_1074.py": [
+      2746,
+      2856,
+      2854
+    ],
+    "playwright_tests/test_events_calendar.py": [
+      13575,
+      13252,
+      13803
+    ],
+    "playwright_tests/test_events_calendar_feed.py": [
+      3184,
+      4205,
+      5202
+    ],
+    "playwright_tests/test_events_polish_1232.py": [
+      6987,
+      8138,
+      7602
+    ],
+    "playwright_tests/test_external_events.py": [
+      11805,
+      11718,
+      12548
+    ],
+    "playwright_tests/test_external_links.py": [
+      3103,
+      2974,
+      3348
+    ],
+    "playwright_tests/test_foldable_sidebar.py": [
+      5872,
+      9009,
+      9227
+    ],
+    "playwright_tests/test_footer_ia_1356.py": [
+      7246,
+      9078,
+      8070
+    ],
+    "playwright_tests/test_footer_newsletter_suppression.py": [
+      3994,
+      3904,
+      4288
+    ],
+    "playwright_tests/test_gated_access_cards_1225.py": [
+      12188,
+      11793,
+      12633
+    ],
+    "playwright_tests/test_gated_content_messaging.py": [
+      4911,
+      5695,
+      5366
+    ],
+    "playwright_tests/test_github_content_sync.py": [
+      37380,
+      45283,
+      38394
+    ],
+    "playwright_tests/test_google_analytics_loader_771.py": [
+      5093,
+      3318,
+      5316
+    ],
+    "playwright_tests/test_guest_funnel_1159.py": [
+      8656,
+      8310,
+      8988
+    ],
+    "playwright_tests/test_guest_layout_polish_1190.py": [
+      6397,
+      8290,
+      11209
+    ],
+    "playwright_tests/test_guest_ui_consistency_1189.py": [
+      2568,
+      3637,
+      2835
+    ],
+    "playwright_tests/test_header_account_menu.py": [
+      7070,
+      7080,
+      7623
+    ],
+    "playwright_tests/test_homepage_funnel_1162.py": [
+      6277,
+      6030,
+      6936
+    ],
+    "playwright_tests/test_homepage_ia_1241.py": [
+      2688,
+      3031,
+      4882
+    ],
+    "playwright_tests/test_homepage_tier_layout_1235.py": [
+      2264,
+      2183,
+      2439
+    ],
+    "playwright_tests/test_homepage_visual_1241.py": [
+      0,
+      0,
+      0
+    ],
+    "playwright_tests/test_host_management_861.py": [
+      7146,
+      7197,
+      7267
+    ],
+    "playwright_tests/test_include_merge_1101.py": [
+      2306,
+      3113,
+      6522
+    ],
+    "playwright_tests/test_interview_hub_empty_state_1316.py": [
+      2422,
+      2636,
+      2735
+    ],
+    "playwright_tests/test_issue_1288_user_support.py": [
+      25595,
+      25972,
+      25705
+    ],
+    "playwright_tests/test_issue_518_github_icon.py": [
+      5779,
+      5525,
+      6035
+    ],
+    "playwright_tests/test_legacy_recording_redirects_1381.py": [
+      2468,
+      3522,
+      3963
+    ],
+    "playwright_tests/test_legacy_url_guard_595.py": [
+      3705,
+      3669,
+      4244
+    ],
+    "playwright_tests/test_list_row_partial_527.py": [
+      6049,
+      5856,
+      6527
+    ],
+    "playwright_tests/test_login_flash_isolation.py": [
+      2785,
+      2789,
+      2951
+    ],
+    "playwright_tests/test_login_return_context.py": [
+      10721,
+      16281,
+      13300
+    ],
+    "playwright_tests/test_login_submit_feedback.py": [
+      9624,
+      9956,
+      10074
+    ],
+    "playwright_tests/test_logout_return_context.py": [
+      7997,
+      7773,
+      8263
+    ],
+    "playwright_tests/test_markdown_linkify_parity.py": [
+      1787,
+      1772,
+      1905
+    ],
+    "playwright_tests/test_marketing_pages.py": [
+      8839,
+      11150,
+      9794
+    ],
+    "playwright_tests/test_maven_email_preferences_960.py": [
+      3036,
+      3769,
+      3264
+    ],
+    "playwright_tests/test_member_api_docs_1113.py": [
+      3941,
+      3949,
+      3895
+    ],
+    "playwright_tests/test_member_api_keys_1111.py": [
+      12859,
+      12711,
+      13172
+    ],
+    "playwright_tests/test_member_api_usage_docs_1112.py": [
+      2437,
+      2452,
+      3624
+    ],
+    "playwright_tests/test_member_empty_states.py": [
+      6041,
+      7519,
+      6299
+    ],
+    "playwright_tests/test_member_empty_states_1227.py": [
+      6900,
+      6851,
+      7529
+    ],
+    "playwright_tests/test_member_notes.py": [
+      3454,
+      3476,
+      3607
+    ],
+    "playwright_tests/test_member_plan_carry_over_808.py": [
+      5354,
+      6710,
+      6879
+    ],
+    "playwright_tests/test_member_plan_edit.py": [
+      5141,
+      7566,
+      5509
+    ],
+    "playwright_tests/test_member_plan_notes_and_comments.py": [
+      11990,
+      11909,
+      12188
+    ],
+    "playwright_tests/test_member_plan_polish.py": [
+      6340,
+      6370,
+      6576
+    ],
+    "playwright_tests/test_member_plan_task_board_1046.py": [
+      24115,
+      28617,
+      30083
+    ],
+    "playwright_tests/test_member_surfaces_543.py": [
+      4768,
+      5040,
+      5044
+    ],
+    "playwright_tests/test_member_surfaces_polish_1234.py": [
+      5500,
+      5533,
+      5840
+    ],
+    "playwright_tests/test_membership_carousel_layout.py": [
+      5565,
+      5512,
+      5640
+    ],
+    "playwright_tests/test_membership_faq_links.py": [
+      1906,
+      2855,
+      3202
+    ],
+    "playwright_tests/test_membership_tiers.py": [
+      16374,
+      26708,
+      17858
+    ],
+    "playwright_tests/test_mermaid.py": [
+      4580,
+      4609,
+      4966
+    ],
+    "playwright_tests/test_mermaid_style.py": [
+      7370,
+      6929,
+      7566
+    ],
+    "playwright_tests/test_mermaid_theme.py": [
+      4287,
+      4824,
+      7626
+    ],
+    "playwright_tests/test_mermaid_theme_screenshots.py": [
+      0,
+      0,
+      0
+    ],
+    "playwright_tests/test_mobile_menu.py": [
+      6580,
+      6496,
+      7226
+    ],
+    "playwright_tests/test_mobile_nav_drawer_density.py": [
+      6975,
+      6703,
+      6996
+    ],
+    "playwright_tests/test_mobile_resources_accordion_matrix.py": [
+      6716,
+      8533,
+      7990
+    ],
+    "playwright_tests/test_monthly_payment_grace_1413.py": [
+      15909,
+      18187,
+      16645
+    ],
+    "playwright_tests/test_navigation_sprints_545.py": [
+      12147,
+      11919,
+      13015
+    ],
+    "playwright_tests/test_newsletter.py": [
+      16322,
+      15647,
+      16564
+    ],
+    "playwright_tests/test_newsletter_only_gating_769.py": [
+      39096,
+      49571,
+      48690
+    ],
+    "playwright_tests/test_notifications.py": [
+      4501,
+      4151,
+      4612
+    ],
+    "playwright_tests/test_onboarding_802.py": [
+      22939,
+      22883,
+      24701
+    ],
+    "playwright_tests/test_onboarding_ai_804.py": [
+      14469,
+      13330,
+      14270
+    ],
+    "playwright_tests/test_onboarding_ai_archetype_823.py": [
+      9538,
+      14980,
+      24014
+    ],
+    "playwright_tests/test_onboarding_ai_stream_806.py": [
+      19965,
+      31925,
+      20532
+    ],
+    "playwright_tests/test_onboarding_gating_982.py": [
+      8875,
+      8399,
+      9061
+    ],
+    "playwright_tests/test_onboarding_notification_studio_983.py": [
+      5434,
+      5519,
+      5583
+    ],
+    "playwright_tests/test_paid_welcome_settings_1119.py": [
+      2868,
+      921,
+      4345
+    ],
+    "playwright_tests/test_paren_count_zero_hidden.py": [
+      15238,
+      15325,
+      15516
+    ],
+    "playwright_tests/test_partner_intro_emails_1124.py": [
+      8024,
+      7996,
+      8247
+    ],
+    "playwright_tests/test_password_reset_request.py": [
+      9309,
+      9134,
+      9629
+    ],
+    "playwright_tests/test_past_recordings_1208.py": [
+      3131,
+      3166,
+      5230
+    ],
+    "playwright_tests/test_past_recordings_navigation_1185.py": [
+      1771,
+      1981,
+      1829
+    ],
+    "playwright_tests/test_plan_next_sprint_draft_891.py": [
+      6879,
+      6886,
+      7272
+    ],
+    "playwright_tests/test_plan_next_sprint_draft_profile_913.py": [
+      3395,
+      3209,
+      3443
+    ],
+    "playwright_tests/test_plan_ready_emails_1055.py": [
+      2944,
+      3530,
+      3789
+    ],
+    "playwright_tests/test_plan_request_flow_1098.py": [
+      2099,
+      2217,
+      2149
+    ],
+    "playwright_tests/test_plan_sprints_apply_890.py": [
+      7271,
+      7355,
+      7672
+    ],
+    "playwright_tests/test_plan_sprints_ingest_889.py": [
+      5877,
+      5843,
+      6000
+    ],
+    "playwright_tests/test_pricing_account_state.py": [
+      5672,
+      5816,
+      8647
+    ],
+    "playwright_tests/test_pricing_billing_toggle_541.py": [
+      9778,
+      10087,
+      10194
+    ],
+    "playwright_tests/test_pricing_layout_1188.py": [
+      4773,
+      4756,
+      4986
+    ],
+    "playwright_tests/test_project_cards_537.py": [
+      1778,
+      1751,
+      1832
+    ],
+    "playwright_tests/test_project_previews_1231.py": [
+      4718,
+      8221,
+      8545
+    ],
+    "playwright_tests/test_project_unspecified_difficulty_1317.py": [
+      8179,
+      9698,
+      8411
+    ],
+    "playwright_tests/test_prose_overflow_1230.py": [
+      4007,
+      3904,
+      4245
+    ],
+    "playwright_tests/test_public_catalog_cards_544.py": [
+      5877,
+      5717,
+      5981
+    ],
+    "playwright_tests/test_public_cta_hierarchy.py": [
+      1678,
+      3987,
+      2443
+    ],
+    "playwright_tests/test_public_event_list_times_1157.py": [
+      3999,
+      4305,
+      4156
+    ],
+    "playwright_tests/test_public_events_pagination_1039.py": [
+      2777,
+      2785,
+      3123
+    ],
+    "playwright_tests/test_public_header_dropdowns_1213.py": [
+      5562,
+      5401,
+      5630
+    ],
+    "playwright_tests/test_public_mobile_tap_targets_1214.py": [
+      7011,
+      10896,
+      8227
+    ],
+    "playwright_tests/test_reader_mobile_483.py": [
+      4784,
+      4617,
+      5035
+    ],
+    "playwright_tests/test_related_content_recommendations_1177.py": [
+      8260,
+      8226,
+      8689
+    ],
+    "playwright_tests/test_release_gate_visual_1297.py": [
+      0,
+      0,
+      0
+    ],
+    "playwright_tests/test_runtime_settings_1268.py": [
+      2148,
+      4009,
+      2568
+    ],
+    "playwright_tests/test_search_indexing_policy_1376.py": [
+      2072,
+      2309,
+      2242
+    ],
+    "playwright_tests/test_search_indexing_policy_1379.py": [
+      8121,
+      8098,
+      8613
+    ],
+    "playwright_tests/test_seed_data.py": [
+      4398,
+      4371,
+      4386
+    ],
+    "playwright_tests/test_seo_descriptions_1174.py": [
+      1229,
+      1915,
+      1242
+    ],
+    "playwright_tests/test_series_calendar_invite_869.py": [
+      7348,
+      9301,
+      7783
+    ],
+    "playwright_tests/test_series_email_previews_869.py": [
+      2905,
+      2937,
+      3156
+    ],
+    "playwright_tests/test_series_registration_857.py": [
+      8208,
+      8236,
+      8414
+    ],
+    "playwright_tests/test_signup_funnel_analytics_1164.py": [
+      8338,
+      12405,
+      9677
+    ],
+    "playwright_tests/test_slack_card_effective_tier_971.py": [
+      4620,
+      4731,
+      4899
+    ],
+    "playwright_tests/test_slack_integration.py": [
+      1024,
+      1003,
+      1070
+    ],
+    "playwright_tests/test_sprint_badge_979.py": [
+      4247,
+      4212,
+      4308
+    ],
+    "playwright_tests/test_sprint_cadence_1200.py": [
+      7151,
+      10878,
+      11260
+    ],
+    "playwright_tests/test_sprint_date_range_978.py": [
+      3278,
+      3205,
+      3432
+    ],
+    "playwright_tests/test_sprint_detail_981.py": [
+      11017,
+      11097,
+      12021
+    ],
+    "playwright_tests/test_sprint_end_recap_1201.py": [
+      4616,
+      4486,
+      4706
+    ],
+    "playwright_tests/test_sprint_ended_cta_1315.py": [
+      1557,
+      1583,
+      2248
+    ],
+    "playwright_tests/test_sprint_ended_join_1233.py": [
+      5611,
+      6325,
+      5765
+    ],
+    "playwright_tests/test_sprint_event_series_565.py": [
+      9711,
+      9739,
+      10360
+    ],
+    "playwright_tests/test_sprint_feedback_803.py": [
+      20756,
+      20683,
+      20907
+    ],
+    "playwright_tests/test_sprint_landing_1242.py": [
+      7920,
+      11087,
+      14637
+    ],
+    "playwright_tests/test_sprint_lifecycle_unification_1204.py": [
+      6405,
+      5888,
+      6506
+    ],
+    "playwright_tests/test_sprint_member_actions_585.py": [
+      11251,
+      11454,
+      11999
+    ],
+    "playwright_tests/test_sprint_operations_studio_1284.py": [
+      17045,
+      14862,
+      15116
+    ],
+    "playwright_tests/test_sprint_plan_goal_584.py": [
+      9784,
+      11656,
+      12943
+    ],
+    "playwright_tests/test_sprint_plan_pre_sprint_actions_1044.py": [
+      4882,
+      4550,
+      4997
+    ],
+    "playwright_tests/test_sprint_plan_resources_1043.py": [
+      2184,
+      2257,
+      2303
+    ],
+    "playwright_tests/test_sprint_plan_unification_583.py": [
+      13965,
+      13918,
+      14160
+    ],
+    "playwright_tests/test_sprint_progress_evidence_api.py": [
+      2481,
+      2461,
+      2436
+    ],
+    "playwright_tests/test_sprint_roster_activity_1202.py": [
+      4625,
+      5556,
+      5296
+    ],
+    "playwright_tests/test_sprints_index_grouping_1094.py": [
+      4620,
+      4718,
+      5090
+    ],
+    "playwright_tests/test_stacked_headers_1278.py": [
+      8578,
+      8529,
+      8818
+    ],
+    "playwright_tests/test_static_page_design_1229.py": [
+      5026,
+      13582,
+      15629
+    ],
+    "playwright_tests/test_status_contrast_1279.py": [
+      16526,
+      17207,
+      17030
+    ],
+    "playwright_tests/test_studio_action_cells.py": [
+      8174,
+      8106,
+      8647
+    ],
+    "playwright_tests/test_studio_assistant_872.py": [
+      11936,
+      11653,
+      12474
+    ],
+    "playwright_tests/test_studio_campaign_test_suggestions.py": [
+      8018,
+      8139,
+      16563
+    ],
+    "playwright_tests/test_studio_campaigns.py": [
+      4612,
+      4605,
+      4627
+    ],
+    "playwright_tests/test_studio_compact_modules.py": [
+      8500,
+      8449,
+      8881
+    ],
+    "playwright_tests/test_studio_content_origin.py": [
+      4429,
+      4270,
+      4655
+    ],
+    "playwright_tests/test_studio_content_sources_export_import.py": [
+      2150,
+      2088,
+      6204
+    ],
+    "playwright_tests/test_studio_conventions_1196.py": [
+      8884,
+      8688,
+      8839
+    ],
+    "playwright_tests/test_studio_course_access.py": [
+      5736,
+      5727,
+      5885
+    ],
+    "playwright_tests/test_studio_course_enrollments.py": [
+      7748,
+      7784,
+      8068
+    ],
+    "playwright_tests/test_studio_course_source_actions.py": [
+      3586,
+      4040,
+      5931
+    ],
+    "playwright_tests/test_studio_courses_list.py": [
+      1890,
+      1811,
+      1912
+    ],
+    "playwright_tests/test_studio_crm.py": [
+      33521,
+      33071,
+      34790
+    ],
+    "playwright_tests/test_studio_crm_onboarding_871.py": [
+      11892,
+      11776,
+      11995
+    ],
+    "playwright_tests/test_studio_dashboard_operations.py": [
+      4922,
+      5355,
+      11374
+    ],
+    "playwright_tests/test_studio_destructive_controls_949.py": [
+      11500,
+      11937,
+      11757
+    ],
+    "playwright_tests/test_studio_detail_headers_1275.py": [
+      62788,
+      62389,
+      65137
+    ],
+    "playwright_tests/test_studio_dirty_form_guard_1192.py": [
+      11131,
+      11173,
+      11350
+    ],
+    "playwright_tests/test_studio_edit_button.py": [
+      2317,
+      3356,
+      3599
+    ],
+    "playwright_tests/test_studio_event_banner_895.py": [
+      4662,
+      5761,
+      4655
+    ],
+    "playwright_tests/test_studio_event_banner_inplace_995.py": [
+      6397,
+      6298,
+      6481
+    ],
+    "playwright_tests/test_studio_event_banner_preview_1040.py": [
+      10260,
+      10033,
+      10820
+    ],
+    "playwright_tests/test_studio_event_create.py": [
+      8292,
+      8191,
+      8807
+    ],
+    "playwright_tests/test_studio_event_datetime.py": [
+      2526,
+      2232,
+      2540
+    ],
+    "playwright_tests/test_studio_event_duplicates.py": [
+      2651,
+      2674,
+      2793
+    ],
+    "playwright_tests/test_studio_event_no_link_warning_860.py": [
+      9678,
+      9444,
+      9821
+    ],
+    "playwright_tests/test_studio_event_registrations_mobile_1144.py": [
+      9146,
+      9035,
+      10984
+    ],
+    "playwright_tests/test_studio_event_required_level_997.py": [
+      6194,
+      6473,
+      6533
+    ],
+    "playwright_tests/test_studio_event_reschedule.py": [
+      4355,
+      5316,
+      4546
+    ],
+    "playwright_tests/test_studio_event_series_attach_1358.py": [
+      2597,
+      2523,
+      2663
+    ],
+    "playwright_tests/test_studio_event_series_banner_896.py": [
+      4055,
+      4463,
+      7486
+    ],
+    "playwright_tests/test_studio_event_series_level_958.py": [
+      3952,
+      3988,
+      4091
+    ],
+    "playwright_tests/test_studio_event_tz_browser_default_855.py": [
+      5371,
+      5308,
+      5774
+    ],
+    "playwright_tests/test_studio_event_tz_roundtrip.py": [
+      6211,
+      6043,
+      6403
+    ],
+    "playwright_tests/test_studio_events_redesign_985.py": [
+      1510,
+      1917,
+      2620
+    ],
+    "playwright_tests/test_studio_findability_1287.py": [
+      17225,
+      14465,
+      17592
+    ],
+    "playwright_tests/test_studio_global_search_1191.py": [
+      4779,
+      4631,
+      4894
+    ],
+    "playwright_tests/test_studio_instructor_linking_1345.py": [
+      2290,
+      2249,
+      2336
+    ],
+    "playwright_tests/test_studio_integration_docs_icon.py": [
+      866,
+      944,
+      1815
+    ],
+    "playwright_tests/test_studio_list_baseline_1193.py": [
+      2586,
+      3138,
+      2698
+    ],
+    "playwright_tests/test_studio_long_form_ergonomics.py": [
+      9370,
+      9206,
+      9647
+    ],
+    "playwright_tests/test_studio_member_ops_1194.py": [
+      10610,
+      10596,
+      10810
+    ],
+    "playwright_tests/test_studio_mobile_density.py": [
+      10387,
+      12313,
+      14110
+    ],
+    "playwright_tests/test_studio_mobile_lists.py": [
+      3902,
+      3846,
+      4048
+    ],
+    "playwright_tests/test_studio_operational_pagination_1328.py": [
+      5986,
+      5598,
+      6017
+    ],
+    "playwright_tests/test_studio_panel.py": [
+      18656,
+      18212,
+      18868
+    ],
+    "playwright_tests/test_studio_peer_reviews.py": [
+      3610,
+      6309,
+      5156
+    ],
+    "playwright_tests/test_studio_peer_reviews_screenshots.py": [
+      0,
+      0,
+      0
+    ],
+    "playwright_tests/test_studio_plan_editor.py": [
+      39966,
+      39225,
+      40133
+    ],
+    "playwright_tests/test_studio_plan_editor_carry_forward.py": [
+      10010,
+      9713,
+      10004
+    ],
+    "playwright_tests/test_studio_plans.py": [
+      11071,
+      14878,
+      15718
+    ],
+    "playwright_tests/test_studio_questionnaires.py": [
+      14834,
+      17844,
+      15452
+    ],
+    "playwright_tests/test_studio_raw_value_polish_1197.py": [
+      7174,
+      7078,
+      7528
+    ],
+    "playwright_tests/test_studio_recording_campaign_1076.py": [
+      10328,
+      10158,
+      10549
+    ],
+    "playwright_tests/test_studio_resource_view_journey_773.py": [
+      5810,
+      6126,
+      8061
+    ],
+    "playwright_tests/test_studio_resync_source.py": [
+      8572,
+      8041,
+      8944
+    ],
+    "playwright_tests/test_studio_series_announce_868.py": [
+      7894,
+      7800,
+      8210
+    ],
+    "playwright_tests/test_studio_series_create_zoom_859.py": [
+      5930,
+      5765,
+      6271
+    ],
+    "playwright_tests/test_studio_ses_events_severity.py": [
+      7684,
+      7820,
+      10172
+    ],
+    "playwright_tests/test_studio_settings_all_optional_badge.py": [
+      5428,
+      5001,
+      5564
+    ],
+    "playwright_tests/test_studio_settings_export_import.py": [
+      1246,
+      1259,
+      1358
+    ],
+    "playwright_tests/test_studio_settings_observability.py": [
+      2823,
+      3591,
+      3828
+    ],
+    "playwright_tests/test_studio_settings_sections.py": [
+      11654,
+      12499,
+      13570
+    ],
+    "playwright_tests/test_studio_side_effect_guards_1282.py": [
+      23949,
+      25228,
+      26381
+    ],
+    "playwright_tests/test_studio_sidebar_layout.py": [
+      14841,
+      14554,
+      15737
+    ],
+    "playwright_tests/test_studio_sidebar_mobile_density.py": [
+      5709,
+      5659,
+      6014
+    ],
+    "playwright_tests/test_studio_sidebar_reorg.py": [
+      21525,
+      25816,
+      28688
+    ],
+    "playwright_tests/test_studio_signup_analytics_campaign_link_852.py": [
+      4298,
+      4437,
+      4476
+    ],
+    "playwright_tests/test_studio_signup_analytics_journey_1175.py": [
+      1610,
+      1623,
+      1704
+    ],
+    "playwright_tests/test_studio_signup_analytics_layout_851.py": [
+      7427,
+      7384,
+      7544
+    ],
+    "playwright_tests/test_studio_signup_analytics_pagination.py": [
+      128093,
+      148425,
+      139859
+    ],
+    "playwright_tests/test_studio_sprint_add_member.py": [
+      5410,
+      5319,
+      5683
+    ],
+    "playwright_tests/test_studio_sprint_members_1050.py": [
+      4614,
+      4495,
+      4635
+    ],
+    "playwright_tests/test_studio_sprint_view_on_site_1049.py": [
+      1142,
+      1080,
+      1104
+    ],
+    "playwright_tests/test_studio_stacked_headers_1274.py": [
+      37947,
+      47916,
+      60729
+    ],
+    "playwright_tests/test_studio_tag_management.py": [
+      22067,
+      23224,
+      23115
+    ],
+    "playwright_tests/test_studio_tier_overrides_list.py": [
+      14041,
+      14202,
+      14462
+    ],
+    "playwright_tests/test_studio_user_activity_public_links_1052.py": [
+      3576,
+      3492,
+      3599
+    ],
+    "playwright_tests/test_studio_user_bounce_state.py": [
+      8220,
+      9674,
+      11051
+    ],
+    "playwright_tests/test_studio_user_crm_overview.py": [
+      8130,
+      10071,
+      8541
+    ],
+    "playwright_tests/test_studio_user_detail_layout_586.py": [
+      15973,
+      15631,
+      16546
+    ],
+    "playwright_tests/test_studio_user_detail_override_badge_link_568.py": [
+      7068,
+      7042,
+      7293
+    ],
+    "playwright_tests/test_studio_user_detail_status_clarity_924.py": [
+      9836,
+      13131,
+      14624
+    ],
+    "playwright_tests/test_studio_user_detail_stripe_link.py": [
+      2496,
+      3854,
+      2660
+    ],
+    "playwright_tests/test_studio_user_detail_tier_override.py": [
+      10319,
+      10330,
+      10830
+    ],
+    "playwright_tests/test_studio_user_imports.py": [
+      1425,
+      1417,
+      1434
+    ],
+    "playwright_tests/test_studio_user_merge.py": [
+      8451,
+      11165,
+      9974
+    ],
+    "playwright_tests/test_studio_user_slack_id.py": [
+      12073,
+      15859,
+      12550
+    ],
+    "playwright_tests/test_studio_user_tags.py": [
+      3284,
+      3292,
+      3379
+    ],
+    "playwright_tests/test_studio_users_export.py": [
+      2759,
+      2750,
+      2822
+    ],
+    "playwright_tests/test_studio_users_membership_breakdown.py": [
+      8065,
+      10224,
+      9424
+    ],
+    "playwright_tests/test_studio_users_name_layout.py": [
+      20170,
+      23268,
+      21378
+    ],
+    "playwright_tests/test_studio_users_scanability.py": [
+      2807,
+      2801,
+      2959
+    ],
+    "playwright_tests/test_studio_users_tag_contrast.py": [
+      2767,
+      2714,
+      2838
+    ],
+    "playwright_tests/test_studio_worker_task_names.py": [
+      3281,
+      4149,
+      5361
+    ],
+    "playwright_tests/test_studio_workshop_email_channel.py": [
+      7229,
+      6862,
+      7854
+    ],
+    "playwright_tests/test_studio_workshop_notify.py": [
+      6031,
+      5799,
+      6222
+    ],
+    "playwright_tests/test_studio_workshops.py": [
+      6658,
+      6633,
+      6918
+    ],
+    "playwright_tests/test_submission_people_queue_1289.py": [
+      40299,
+      41419,
+      45291
+    ],
+    "playwright_tests/test_subscriber_user_reconcile.py": [
+      7227,
+      7817,
+      7661
+    ],
+    "playwright_tests/test_subscription_reconciliation_1308.py": [
+      8824,
+      8658,
+      9395
+    ],
+    "playwright_tests/test_sync_malformed_yaml.py": [
+      2766,
+      2735,
+      2794
+    ],
+    "playwright_tests/test_sync_observability_1286.py": [
+      24169,
+      23735,
+      25791
+    ],
+    "playwright_tests/test_tailwind_build_1383.py": [
+      6655,
+      7184,
+      7278
+    ],
+    "playwright_tests/test_taxonomy_copy_1184.py": [
+      1864,
+      1856,
+      1939
+    ],
+    "playwright_tests/test_testimonial_heights_511.py": [
+      10759,
+      10682,
+      10462
+    ],
+    "playwright_tests/test_testimonials_layout.py": [
+      7536,
+      7716,
+      8509
+    ],
+    "playwright_tests/test_theme_toggle.py": [
+      3985,
+      4298,
+      4286
+    ],
+    "playwright_tests/test_tier_carousel_510.py": [
+      16797,
+      16941,
+      17131
+    ],
+    "playwright_tests/test_timezone_passive_backfill_961.py": [
+      5808,
+      5607,
+      5875
+    ],
+    "playwright_tests/test_unverified_email_gate_1025.py": [
+      9128,
+      10051,
+      17221
+    ],
+    "playwright_tests/test_utm_analytics.py": [
+      4467,
+      5589,
+      4819
+    ],
+    "playwright_tests/test_utm_campaigns.py": [
+      22323,
+      22384,
+      23133
+    ],
+    "playwright_tests/test_verify_email_footer.py": [
+      775,
+      796,
+      818
+    ],
+    "playwright_tests/test_video_player.py": [
+      10006,
+      11655,
+      14389
+    ],
+    "playwright_tests/test_voting_polls.py": [
+      9349,
+      11244,
+      10101
+    ],
+    "playwright_tests/test_worker_triage_1290.py": [
+      19055,
+      18438,
+      19801
+    ],
+    "playwright_tests/test_workshop_comments.py": [
+      12306,
+      12120,
+      12454
+    ],
+    "playwright_tests/test_workshop_completion.py": [
+      4204,
+      5866,
+      8547
+    ],
+    "playwright_tests/test_workshop_copy_file.py": [
+      3647,
+      4479,
+      4077
+    ],
+    "playwright_tests/test_workshop_gated_sidebar_teaser_1338.py": [
+      4166,
+      4326,
+      4328
+    ],
+    "playwright_tests/test_workshop_materials_position_980.py": [
+      3154,
+      3169,
+      3179
+    ],
+    "playwright_tests/test_workshop_per_page_access_571.py": [
+      6774,
+      9401,
+      11138
+    ],
+    "playwright_tests/test_workshop_reader_mobile_progress_517.py": [
+      9614,
+      11906,
+      10288
+    ],
+    "playwright_tests/test_workshop_teaser_gating.py": [
+      7721,
+      7534,
+      8033
+    ],
+    "playwright_tests/test_workshop_topics_1394.py": [
+      4480,
+      4359,
+      4635
+    ],
+    "playwright_tests/test_workshop_tutorial_sidebar.py": [
+      14924,
+      19839,
+      21702
+    ],
+    "playwright_tests/test_workshop_url_key_750.py": [
+      3292,
+      10217,
+      3712
+    ],
+    "playwright_tests/test_workshop_video_no_autoplay_899.py": [
+      6109,
+      6090,
+      6319
+    ],
+    "playwright_tests/test_workshop_video_timestamps.py": [
+      4489,
+      4448,
+      4628
+    ],
+    "playwright_tests/test_workshops.py": [
+      20673,
+      44726,
+      37100
+    ],
+    "playwright_tests/test_workshops_mobile_512.py": [
+      9496,
+      11205,
+      10141
+    ],
+    "playwright_tests/test_worktree_session_guard.py": [
+      1751,
+      1760,
+      1255
+    ]
+  },
+  "inventory_sha256": "aee7dfd363f6317ad03d066262591cdd6d008cf4ebaebeb3c356baf2ac0b5c39",
+  "schema_version": 1,
+  "source_runs": [
+    {
+      "expected_selected_nodes": 2408,
+      "file_weights_sha256": "0bc8d9cc341d76e0d0ba2358609b4a3a66bf3008eb74c5dc3d2c4add170e81f5",
+      "head_sha": "89faea5780eebcd2ce5108fbdce0b706514731f3",
+      "job_ids": [
+        94380223848,
+        94380224101,
+        94380223809,
+        94380223838
+      ],
+      "observed_selected_nodes": 2408,
+      "run_id": 31679060660,
+      "url": "https://github.com/AI-Shipping-Labs/website/actions/runs/31679060660"
+    },
+    {
+      "expected_selected_nodes": 2408,
+      "file_weights_sha256": "2eab1e31cfe77a07da8c30ac5db17cb301edd24be658d70710ee5978da3a4db5",
+      "head_sha": "0047ede3d6616b0fb35ce7c46474ddf6e099f000",
+      "job_ids": [
+        94415906999,
+        94415906951,
+        94415906945,
+        94415907003
+      ],
+      "observed_selected_nodes": 2408,
+      "run_id": 31690316576,
+      "url": "https://github.com/AI-Shipping-Labs/website/actions/runs/31690316576"
+    },
+    {
+      "expected_selected_nodes": 2408,
+      "file_weights_sha256": "99b03610f82e658c43855a4c648d0102ab0feb747e309c9b53776a74a35f933d",
+      "head_sha": "56f0a99a7708b8b0ab886bd1e7e34a3f66f7d104",
+      "job_ids": [
+        94509841937,
+        94509842047,
+        94509841969,
+        94509841860
+      ],
+      "observed_selected_nodes": 2408,
+      "run_id": 31718675813,
+      "url": "https://github.com/AI-Shipping-Labs/website/actions/runs/31718675813"
+    }
+  ]
+}

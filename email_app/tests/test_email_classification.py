@@ -4,6 +4,7 @@ from django.test import SimpleTestCase
 
 from email_app.services.email_classification import (
     EMAIL_KIND_PROMOTIONAL,
+    EMAIL_KIND_TRANSACTIONAL,
     PROMOTIONAL_EMAIL_TYPES,
     classify_email_type,
 )
@@ -22,3 +23,18 @@ class WorkshopAnnouncementClassificationTest(SimpleTestCase):
 
     def test_workshop_announcement_in_promotional_set(self):
         self.assertIn('workshop_announcement', PROMOTIONAL_EMAIL_TYPES)
+
+    def test_payment_grace_and_maven_notices_remain_transactional(self):
+        email_types = (
+            'payment_grace_failure_member',
+            'payment_grace_failure_team',
+            'payment_grace_reminder_member',
+            'payment_grace_expired_member',
+            'maven_enrollment_notification',
+        )
+        for email_type in email_types:
+            with self.subTest(email_type=email_type):
+                self.assertEqual(
+                    classify_email_type(email_type),
+                    EMAIL_KIND_TRANSACTIONAL,
+                )

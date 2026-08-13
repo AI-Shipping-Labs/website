@@ -12,6 +12,17 @@ flow through Amazon SES. Direct deep-link URLs are intentionally
 written in code blocks so they do not render as clickable links. Copy
 them into the browser.
 
+Campaign consent is enforced in two phases. Fan-out materializes only users
+who are eligible and globally subscribed at enqueue time. Each delayed batch
+then re-reads every recipient's current `unsubscribed` value immediately before
+building their unsubscribe/verification footer and calling SES. A recipient
+who opts out, permanently bounces, reaches the third-soft-bounce threshold, or
+complains after fan-out is skipped without an SES call or `EmailLog`; a soft
+bounce below that threshold remains subscribed and sendable. SES account-level
+suppression remains enforced by SES itself—campaign workers do not perform a
+live suppression-list lookup. Transactional mail and explicit operator test
+sends keep their separate delivery semantics.
+
 ## AWS_ACCESS_KEY_ID
 
 Purpose: AWS access key for the IAM user the platform uses to talk to

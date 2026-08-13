@@ -822,13 +822,12 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
             status='sending',  # Already in sending state when batch runs
         )
 
-    @patch('email_app.tasks.send_campaign.EmailService')
-    def test_batch_sends_to_specified_users(self, MockService):
+    @patch(
+        'email_app.tasks.send_campaign.EmailService._send_ses',
+        return_value='ses-msg-001',
+    )
+    def test_batch_sends_to_specified_users(self, mock_ses):
         """send_campaign_batch sends emails only to the given user_ids."""
-        mock_service = MockService.return_value
-        mock_service._send_ses.return_value = 'ses-msg-001'
-        mock_service._build_unsubscribe_url.return_value = 'http://example.com/unsub'
-
         from email_app.tasks.send_campaign import send_campaign_batch
         result = send_campaign_batch(
             self.campaign.pk,
@@ -843,13 +842,12 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         log_emails = set(logs.values_list('user__email', flat=True))
         self.assertEqual(log_emails, {'user1@test.com', 'user2@test.com'})
 
-    @patch('email_app.tasks.send_campaign.EmailService')
-    def test_batch_creates_email_logs_with_correct_fields(self, MockService):
+    @patch(
+        'email_app.tasks.send_campaign.EmailService._send_ses',
+        return_value='ses-123',
+    )
+    def test_batch_creates_email_logs_with_correct_fields(self, mock_ses):
         """Each EmailLog has campaign FK, type=campaign, and SES id set."""
-        mock_service = MockService.return_value
-        mock_service._send_ses.return_value = 'ses-123'
-        mock_service._build_unsubscribe_url.return_value = 'http://example.com/unsub'
-
         from email_app.tasks.send_campaign import send_campaign_batch
         send_campaign_batch(
             self.campaign.pk,
@@ -865,13 +863,12 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
             self.assertEqual(log.recipient_email, log.user.email)
             self.assertEqual(log.subject, self.campaign.subject)
 
-    @patch('email_app.tasks.send_campaign.EmailService')
-    def test_batch_calls_ses_per_recipient(self, MockService):
+    @patch(
+        'email_app.tasks.send_campaign.EmailService._send_ses',
+        return_value='ses-123',
+    )
+    def test_batch_calls_ses_per_recipient(self, mock_ses):
         """SES send is called once per user_id."""
-        mock_service = MockService.return_value
-        mock_service._send_ses.return_value = 'ses-123'
-        mock_service._build_unsubscribe_url.return_value = 'http://example.com/unsub'
-
         from email_app.tasks.send_campaign import send_campaign_batch
         send_campaign_batch(
             self.campaign.pk,
@@ -879,24 +876,19 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
             send_delay=0,
         )
 
-        self.assertEqual(mock_service._send_ses.call_count, 2)
-        sent_emails = {c[0][0] for c in mock_service._send_ses.call_args_list}
+        self.assertEqual(mock_ses.call_count, 2)
+        sent_emails = {c[0][0] for c in mock_ses.call_args_list}
         self.assertEqual(sent_emails, {'user1@test.com', 'user2@test.com'})
-        for call in mock_service._send_ses.call_args_list:
+        for call in mock_ses.call_args_list:
             self.assertEqual(call.kwargs['email_type'], 'campaign')
-            self.assertEqual(
-                call.kwargs['unsubscribe_url'],
-                'http://example.com/unsub',
-            )
+            self.assertIn('/api/unsubscribe?token=', call.kwargs['unsubscribe_url'])
 
-    @patch('email_app.tasks.send_campaign.EmailService')
-    def test_batch_continues_on_individual_failure(self, MockService):
+    @patch('email_app.tasks.send_campaign.EmailService._send_ses')
+    def test_batch_continues_on_individual_failure(self, mock_ses):
         """If one email fails, the rest of the batch continues."""
         from email_app.services.email_service import EmailServiceError
 
-        mock_service = MockService.return_value
-        mock_service._build_unsubscribe_url.return_value = 'http://example.com/unsub'
-        mock_service._send_ses.side_effect = [
+        mock_ses.side_effect = [
             EmailServiceError('SES error'),
             'ses-msg-002',
         ]
@@ -911,20 +903,19 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
 
         self.assertEqual(result['sent_count'], 1)
         self.assertIn(
-            f'Failed to send campaign {self.campaign.pk} to user2@test.com',
+            f'Failed to send campaign {self.campaign.pk} to user1@test.com',
             logs.output[0],
         )
         self.assertEqual(
             EmailLog.objects.filter(campaign=self.campaign).count(), 1,
         )
 
-    @patch('email_app.tasks.send_campaign.EmailService')
-    def test_batch_skips_users_with_existing_log(self, MockService):
+    @patch(
+        'email_app.tasks.send_campaign.EmailService._send_ses',
+        return_value='ses-retry',
+    )
+    def test_batch_skips_users_with_existing_log(self, mock_ses):
         """Idempotency: a retried batch skips users already logged."""
-        mock_service = MockService.return_value
-        mock_service._send_ses.return_value = 'ses-retry'
-        mock_service._build_unsubscribe_url.return_value = 'http://example.com/unsub'
-
         # Pretend user1 already received this campaign.
         EmailLog.objects.create(
             campaign=self.campaign,
@@ -945,8 +936,8 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         self.assertEqual(result['skipped_count'], 1)
 
         # SES called only for user2.
-        self.assertEqual(mock_service._send_ses.call_count, 1)
-        called_emails = {c[0][0] for c in mock_service._send_ses.call_args_list}
+        self.assertEqual(mock_ses.call_count, 1)
+        called_emails = {c[0][0] for c in mock_ses.call_args_list}
         self.assertEqual(called_emails, {'user2@test.com'})
 
         # No duplicate EmailLog for user1.
@@ -956,13 +947,12 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         self.assertEqual(user1_logs.count(), 1)
         self.assertEqual(user1_logs.first().ses_message_id, 'earlier-attempt')
 
-    @patch('email_app.tasks.send_campaign.EmailService')
-    def test_last_batch_transitions_campaign_to_sent(self, MockService):
+    @patch(
+        'email_app.tasks.send_campaign.EmailService._send_ses',
+        return_value='ses-final',
+    )
+    def test_last_batch_transitions_campaign_to_sent(self, mock_ses):
         """When the final batch finishes, campaign moves to 'sent'."""
-        mock_service = MockService.return_value
-        mock_service._send_ses.return_value = 'ses-final'
-        mock_service._build_unsubscribe_url.return_value = 'http://example.com/unsub'
-
         # Two batches: first one leaves user2 pending; second completes.
         from email_app.tasks.send_campaign import send_campaign_batch
         send_campaign_batch(
@@ -987,6 +977,281 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         with self.assertRaises(ValueError) as ctx:
             send_campaign_batch(99999, user_ids=[1], send_delay=0)
         self.assertIn('not found', str(ctx.exception))
+
+    @patch('email_app.tasks.send_campaign.EmailService._send_ses')
+    @patch('email_app.tasks.send_campaign.EmailService._build_unsubscribe_url')
+    @patch('email_app.tasks.send_campaign.EmailService._build_verify_email_url')
+    def test_batch_optout_before_turn_skips_without_tokens_log_or_transport(
+        self,
+        build_verify_url,
+        build_unsubscribe_url,
+        mock_ses,
+    ):
+        User.objects.filter(pk=self.user1.pk).update(unsubscribed=True)
+
+        from email_app.tasks.send_campaign import send_campaign_batch
+
+        with self.assertLogs(
+            'email_app.services.email_service',
+            level='INFO',
+        ) as captured:
+            result = send_campaign_batch(
+                self.campaign.pk,
+                user_ids=[self.user1.pk],
+                send_delay=0,
+            )
+
+        self.assertEqual(result['sent_count'], 0)
+        self.assertEqual(result['skipped_count'], 0)
+        self.assertEqual(result['unsubscribed_at_send_count'], 1)
+        mock_ses.assert_not_called()
+        build_unsubscribe_url.assert_not_called()
+        build_verify_url.assert_not_called()
+        self.assertFalse(
+            EmailLog.objects.filter(
+                campaign=self.campaign,
+                user=self.user1,
+            ).exists(),
+        )
+        diagnostic = '\n'.join(captured.output)
+        self.assertIn(f'campaign_id={self.campaign.pk}', diagnostic)
+        self.assertIn(f'user_id={self.user1.pk}', diagnostic)
+        self.assertIn('reason=unsubscribed_at_send', diagnostic)
+        self.assertNotIn(self.user1.email, diagnostic)
+        self.assertNotIn('token=', diagnostic)
+
+    @patch('email_app.tasks.send_campaign.EmailService._send_ses')
+    def test_all_opted_out_batch_finishes_without_logs(self, mock_ses):
+        User.objects.filter(pk__in=[self.user1.pk, self.user2.pk]).update(
+            unsubscribed=True,
+        )
+
+        from email_app.tasks.send_campaign import send_campaign_batch
+
+        result = send_campaign_batch(
+            self.campaign.pk,
+            user_ids=[self.user1.pk, self.user2.pk],
+            send_delay=0,
+        )
+
+        self.assertEqual(result['sent_count'], 0)
+        self.assertEqual(result['skipped_count'], 0)
+        self.assertEqual(result['unsubscribed_at_send_count'], 2)
+        mock_ses.assert_not_called()
+        self.assertFalse(
+            EmailLog.objects.filter(campaign=self.campaign).exists(),
+        )
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.status, 'sent')
+        self.assertEqual(self.campaign.sent_count, 0)
+        self.assertIsNotNone(self.campaign.sent_at)
+
+    @patch('email_app.tasks.send_campaign.EmailService._send_ses')
+    def test_optout_during_running_batch_wins_and_batch_completes(
+        self,
+        mock_ses,
+    ):
+        def send_first_then_opt_out_second(*args, **kwargs):
+            User.objects.filter(pk=self.user2.pk).update(unsubscribed=True)
+            return 'first-message'
+
+        mock_ses.side_effect = send_first_then_opt_out_second
+
+        from email_app.tasks.send_campaign import send_campaign_batch
+
+        result = send_campaign_batch(
+            self.campaign.pk,
+            user_ids=[self.user1.pk, self.user2.pk],
+            send_delay=0,
+        )
+
+        self.assertEqual(result['sent_count'], 1)
+        self.assertEqual(result['unsubscribed_at_send_count'], 1)
+        mock_ses.assert_called_once()
+        self.assertEqual(mock_ses.call_args.args[0], self.user1.email)
+        self.assertTrue(
+            EmailLog.objects.filter(
+                campaign=self.campaign,
+                user=self.user1,
+            ).exists(),
+        )
+        self.assertFalse(
+            EmailLog.objects.filter(
+                campaign=self.campaign,
+                user=self.user2,
+            ).exists(),
+        )
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.sent_count, 1)
+        self.assertEqual(self.campaign.status, 'sent')
+
+    @patch('email_app.tasks.send_campaign.EmailService._send_ses')
+    def test_retry_distinguishes_already_sent_and_consent_skips(self, mock_ses):
+        EmailLog.objects.create(
+            campaign=self.campaign,
+            user=self.user1,
+            recipient_email=self.user1.email,
+            email_type='campaign',
+            ses_message_id='existing',
+        )
+        User.objects.filter(pk=self.user2.pk).update(unsubscribed=True)
+
+        from email_app.tasks.send_campaign import send_campaign_batch
+
+        for _ in range(2):
+            result = send_campaign_batch(
+                self.campaign.pk,
+                user_ids=[self.user1.pk, self.user2.pk],
+                send_delay=0,
+            )
+            self.assertEqual(result['sent_count'], 0)
+            self.assertEqual(result['skipped_count'], 1)
+            self.assertEqual(result['unsubscribed_at_send_count'], 1)
+
+        mock_ses.assert_not_called()
+        self.assertEqual(
+            EmailLog.objects.filter(campaign=self.campaign).count(),
+            1,
+        )
+
+    @patch(
+        'email_app.tasks.send_campaign.EmailService._send_ses',
+        return_value='resubscribed-message',
+    )
+    def test_resubscription_before_recipient_turn_sends(self, mock_ses):
+        User.objects.filter(pk=self.user3.pk).update(unsubscribed=False)
+
+        from email_app.tasks.send_campaign import send_campaign_batch
+
+        result = send_campaign_batch(
+            self.campaign.pk,
+            user_ids=[self.user3.pk],
+            send_delay=0,
+        )
+
+        self.assertEqual(result['sent_count'], 1)
+        self.assertEqual(result['unsubscribed_at_send_count'], 0)
+        mock_ses.assert_called_once()
+        self.assertTrue(
+            EmailLog.objects.filter(
+                campaign=self.campaign,
+                user=self.user3,
+            ).exists(),
+        )
+
+    @patch(
+        'email_app.tasks.send_campaign.EmailService._send_ses',
+        return_value='soft-bounce-message',
+    )
+    def test_bounce_and_complaint_policy_flows_through_unsubscribe(
+        self,
+        mock_ses,
+    ):
+        from accounts.utils.bounce import mark_permanent_bounce, record_soft_bounce
+        from api.views.ses_events import _mark_complaint
+
+        permanent = User.objects.create_user(
+            email='permanent@test.com',
+            tier=self.free_tier,
+            email_verified=True,
+        )
+        threshold = User.objects.create_user(
+            email='threshold@test.com',
+            tier=self.free_tier,
+            email_verified=True,
+            soft_bounce_count=2,
+        )
+        complaint = User.objects.create_user(
+            email='complaint@test.com',
+            tier=self.free_tier,
+            email_verified=True,
+        )
+        below_threshold = User.objects.create_user(
+            email='soft@test.com',
+            tier=self.free_tier,
+            email_verified=True,
+        )
+        mark_permanent_bounce(permanent)
+        record_soft_bounce(threshold)
+        _mark_complaint(complaint)
+        record_soft_bounce(below_threshold)
+
+        from email_app.tasks.send_campaign import send_campaign_batch
+
+        result = send_campaign_batch(
+            self.campaign.pk,
+            user_ids=[
+                permanent.pk,
+                threshold.pk,
+                complaint.pk,
+                below_threshold.pk,
+            ],
+            send_delay=0,
+        )
+
+        self.assertEqual(result['sent_count'], 1)
+        self.assertEqual(result['unsubscribed_at_send_count'], 3)
+        mock_ses.assert_called_once()
+        self.assertEqual(mock_ses.call_args.args[0], below_threshold.email)
+        self.assertEqual(below_threshold.bounce_state, User.BounceState.SOFT)
+        self.assertFalse(below_threshold.unsubscribed)
+
+    @patch(
+        'email_app.tasks.send_campaign.EmailService._send_ses',
+        return_value='actual-send',
+    )
+    def test_status_count_keeps_actual_log_after_recipient_opts_out(
+        self,
+        mock_ses,
+    ):
+        from email_app.tasks.send_campaign import send_campaign_batch
+
+        send_campaign_batch(
+            self.campaign.pk,
+            user_ids=[self.user1.pk],
+            send_delay=0,
+        )
+        User.objects.filter(pk__in=[self.user1.pk, self.user2.pk]).update(
+            unsubscribed=True,
+        )
+        result = send_campaign_batch(
+            self.campaign.pk,
+            user_ids=[self.user2.pk],
+            send_delay=0,
+        )
+
+        self.assertEqual(result['unsubscribed_at_send_count'], 1)
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.sent_count, 1)
+        self.assertEqual(
+            self.campaign.sent_count,
+            EmailLog.objects.filter(campaign=self.campaign).count(),
+        )
+        self.assertEqual(self.campaign.status, 'sent')
+
+    def test_stale_batch_instances_converge_from_email_logs(self):
+        from email_app.tasks.send_campaign import _refresh_campaign_status
+
+        worker_one = EmailCampaign.objects.get(pk=self.campaign.pk)
+        worker_two = EmailCampaign.objects.get(pk=self.campaign.pk)
+        EmailLog.objects.create(
+            campaign=self.campaign,
+            user=self.user1,
+            email_type='campaign',
+            ses_message_id='one',
+        )
+        _refresh_campaign_status(worker_one)
+        EmailLog.objects.create(
+            campaign=self.campaign,
+            user=self.user2,
+            email_type='campaign',
+            ses_message_id='two',
+        )
+        _refresh_campaign_status(worker_two)
+
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.sent_count, 2)
+        self.assertEqual(self.campaign.status, 'sent')
 
 
 @tag('core')
@@ -1035,14 +1300,13 @@ class EmailLogUniquenessTest(TierSetupMixin, TestCase):
 class SendCampaignEndToEndTest(TierSetupMixin, TestCase):
     """End-to-end: fan-out + batch execution with chunking."""
 
-    @patch('email_app.tasks.send_campaign.EmailService')
-    def test_full_pipeline_chunks_and_completes(self, MockService):
+    @patch(
+        'email_app.tasks.send_campaign.EmailService._send_ses',
+        return_value='ses-id',
+    )
+    def test_full_pipeline_chunks_and_completes(self, mock_ses):
         """7 recipients with batch_size=3 produce 3 chunks; running each
         chunk results in all 7 receiving the campaign and status=sent."""
-        mock_service = MockService.return_value
-        mock_service._send_ses.return_value = 'ses-id'
-        mock_service._build_unsubscribe_url.return_value = 'http://example.com/u'
-
         users = [
             User.objects.create_user(
                 email=f'eu{i}@test.com', tier=self.free_tier,
@@ -1164,6 +1428,8 @@ class CampaignAdminTest(TierSetupMixin, TestCase):
         mock_service = MockService.return_value
         mock_service._send_ses.return_value = 'test-ses-id'
         mock_service._build_unsubscribe_url.return_value = 'http://example.com/unsub'
+        self.admin_user.unsubscribed = True
+        self.admin_user.save(update_fields=['unsubscribed'])
 
         url = reverse(
             'admin:email_app_emailcampaign_send_test',
@@ -1475,9 +1741,12 @@ class CampaignEligibilityCriteriaTest(TierSetupMixin, TestCase):
     Moved from playwright_tests/test_email_campaigns.py Scenario 8.
     """
 
-    @patch('email_app.tasks.send_campaign.EmailService')
+    @patch(
+        'email_app.tasks.send_campaign.EmailService._send_ses',
+        return_value='ses-msg-id',
+    )
     def test_campaign_send_respects_tier_verification_and_subscription(
-        self, MockService
+        self, mock_ses,
     ):
         """Main+ campaign sends only to verified, subscribed Main/Premium users.
 
@@ -1485,10 +1754,6 @@ class CampaignEligibilityCriteriaTest(TierSetupMixin, TestCase):
         1 unverified Main, 3 Free users.
         Then: sent_count is 3 (2 Main + 1 Premium).
         """
-        mock_service = MockService.return_value
-        mock_service._send_ses.return_value = 'ses-msg-id'
-        mock_service._build_unsubscribe_url.return_value = 'http://example.com/unsub'
-
         # 2 verified Main members (eligible)
         User.objects.create_user(
             email='main-eligible-1@test.com', tier=self.main_tier,

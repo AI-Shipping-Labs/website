@@ -767,12 +767,17 @@ make test-playwright-manual-visual
 ```
 
 `make test-playwright-core` runs `pytest -m core playwright_tests/ -v`. The
-Deploy Dev workflow runs the same command in a parallel `playwright-core`
-job with the default marker exclusion:
+Deploy Dev workflow applies the same core selection with its default marker
+exclusions across four parallel `playwright-core` matrix jobs:
 
 ```bash
-pytest -m "core and not manual_visual and not slow_platform" playwright_tests/ -v
+pytest -m "core and not manual_visual and not slow_platform and not visual_regression" <shard files> -v
 ```
+
+The workflow sorts every `playwright_tests/test_*.py` file and assigns files
+round-robin by index. The four file sets are deterministic and disjoint, and a
+new matching test file is selected automatically without a maintained list.
+`Deploy to Dev` remains blocked until every core shard succeeds.
 
 A failure blocks the deploy. The scheduled workflow runs the broader Playwright
 suite every 3 hours, skipped if no commits have landed since the last successful

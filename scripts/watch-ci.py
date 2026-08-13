@@ -65,8 +65,8 @@ ACCEPTABLE_CONCLUSIONS = frozenset({"success", "skipped"})
 
 DEFAULT_WORKFLOW = "Deploy Dev"
 
-# The seven exact required job names of `.github/workflows/deploy-dev.yml` for a
-# post-push `Deploy Dev` run on `main`. All seven must resolve to success (or an
+# The ten exact required job names of `.github/workflows/deploy-dev.yml` for a
+# post-push `Deploy Dev` run on `main`. All ten must resolve to success (or an
 # appropriate skip) before the watcher reports `green`. A missing required job
 # is never green. Scheduled Playwright and manual production deployment are
 # separate operational workflows and are intentionally NOT in this set.
@@ -76,7 +76,10 @@ DEPLOY_DEV_REQUIRED_CHECKS: tuple[str, ...] = (
     "Unit & Integration Tests (shard 2/4)",
     "Unit & Integration Tests (shard 3/4)",
     "Unit & Integration Tests (shard 4/4)",
-    "Playwright Core E2E",
+    "Playwright Core E2E (shard 1/4)",
+    "Playwright Core E2E (shard 2/4)",
+    "Playwright Core E2E (shard 3/4)",
+    "Playwright Core E2E (shard 4/4)",
     "Deploy to Dev",
 )
 

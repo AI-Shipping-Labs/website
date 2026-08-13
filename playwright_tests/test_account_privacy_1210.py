@@ -179,7 +179,7 @@ class TestAccountPrivacyDeletionRequest1398:
             expect(received).to_contain_text(email)
             expect(received).to_contain_text("no later than one month")
             expect(received.get_by_role("link", name="team@aishippinglabs.com")).to_be_visible()
-            expect(page.get_by_text(email, exact=True).first).to_be_visible()
+            expect(received.locator("p", has_text=email)).to_be_visible()
 
             page.reload(wait_until="domcontentloaded")
             expect(page.get_by_test_id("privacy-request-received")).to_be_visible()
@@ -213,8 +213,9 @@ class TestAccountPrivacyDeletionRequest1398:
                 page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
                 expect(page.get_by_test_id("privacy-request-submit")).to_be_visible()
                 page.get_by_test_id("privacy-request-submit").click()
-                expect(page.get_by_test_id("privacy-request-received")).to_be_visible()
-                expect(page.get_by_text(email, exact=True).first).to_be_visible()
+                received = page.get_by_test_id("privacy-request-received")
+                expect(received).to_be_visible()
+                expect(received.locator("p", has_text=email)).to_be_visible()
             finally:
                 context.close()
 
@@ -281,7 +282,7 @@ class TestAccountPrivacyDeletionRequest1398:
 
             page.reload(wait_until="domcontentloaded")
             expect(page.get_by_test_id("privacy-request-submit")).to_be_visible()
-            expect(page.get_by_text(email, exact=True).first).to_be_visible()
+            expect(page.get_by_test_id("privacy-request-email")).to_have_text(email)
         finally:
             context.close()
 

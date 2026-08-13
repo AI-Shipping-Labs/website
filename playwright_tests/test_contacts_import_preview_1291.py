@@ -233,22 +233,35 @@ class TestContactImportOutcomePreview:
             f'Name,Contact email\nAda,ada-{suffix}@example.com\n',
         )
         select = page.get_by_test_id('import-email-column')
-        pending_routes = []
+        preview_interceptions = []
+
+        def inspect_and_continue_preview(route):
+            preview_interceptions.append({
+                'method': route.request.method,
+                'loading_visible': page.get_by_test_id(
+                    'import-preview-loading'
+                ).is_visible(),
+                'submit_disabled': page.get_by_test_id(
+                    'import-confirm-submit'
+                ).is_disabled(),
+            })
+            route.continue_()
+
         page.route(
             '**/studio/users/import/preview',
-            lambda route: pending_routes.append(route),
+            inspect_and_continue_preview,
         )
         select.focus()
-        with page.expect_request(lambda request: request.url.endswith('/preview')):
+        with page.expect_response(lambda response: response.url.endswith('/preview')):
             select.evaluate(
                 "element => { element.value = 'Contact email'; "
                 "element.dispatchEvent(new Event('change', {bubbles: true})); }"
             )
-        assert len(pending_routes) == 1
-        assert page.get_by_test_id('import-preview-loading').is_visible()
-        assert page.get_by_test_id('import-confirm-submit').is_disabled()
-        with page.expect_response(lambda response: response.url.endswith('/preview')):
-            pending_routes[0].continue_()
+        assert preview_interceptions == [{
+            'method': 'POST',
+            'loading_visible': True,
+            'submit_disabled': True,
+        }]
         assert select.evaluate('element => document.activeElement === element')
         assert page.get_by_test_id('import-confirm-submit').is_enabled()
         assert page.get_by_test_id('import-outcome-card').get_attribute('aria-live') == 'polite'

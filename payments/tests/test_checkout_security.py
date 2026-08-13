@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlparse
 import stripe
 from allauth.socialaccount.models import SocialAccount
 from django.core.management import call_command
-from django.db import OperationalError, close_old_connections
+from django.db import OperationalError, close_old_connections, transaction
 from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
@@ -26,6 +26,7 @@ from payments.models import (
     Tier,
 )
 from payments.services import (
+    handle_checkout_async_payment_succeeded,
     handle_checkout_completed,
     handle_subscription_deleted,
     handle_subscription_updated,
@@ -604,6 +605,7 @@ class CheckoutConcurrencySecurityTest(TransactionTestCase):
             "payment_status": "paid",
             "status": "complete",
             "livemode": False,
+            "created": int(timezone.now().timestamp()),
         }
 
     def _deliver_concurrently(self, payloads):
@@ -644,6 +646,18 @@ class CheckoutConcurrencySecurityTest(TransactionTestCase):
                 futures = [pool.submit(deliver, payload) for payload in payloads]
                 for future in futures:
                     future.result(timeout=20)
+
+    def _deliver_once(self, payload, *, async_success=False):
+        handler = (
+            handle_checkout_async_payment_succeeded
+            if async_success
+            else handle_checkout_completed
+        )
+        with patch(
+            "payments.services.webhook_handlers._bound_checkout_price_id",
+            return_value="price_basic_m",
+        ):
+            return handler(payload)
 
     def test_concurrent_same_session_grants_once(self):
         user = User.objects.create_user(email="concurrent@test.com")
@@ -688,6 +702,163 @@ class CheckoutConcurrencySecurityTest(TransactionTestCase):
                 status=CheckoutFulfillment.STATUS_FULFILLED,
             ).count(),
             1,
+        )
+
+    def test_post_commit_failure_cannot_strand_or_duplicate_paid_welcome(self):
+        user = User.objects.create_user(email="concurrent@test.com")
+        _binding, reference = self._issue(user)
+        payload = self._session(
+            reference,
+            "cs_post_commit_failure",
+            "sub_post_commit_failure",
+        )
+
+        def fail_after_commit(_user, _tier):
+            self.assertFalse(transaction.get_connection().in_atomic_block)
+            self.assertEqual(
+                CheckoutFulfillment.objects.get(
+                    stripe_session_id="cs_post_commit_failure",
+                ).status,
+                CheckoutFulfillment.STATUS_FULFILLED,
+            )
+            raise OperationalError("injected post-commit failure")
+
+        with patch(
+            "community.services.staff_notifications.notify_paid_signup",
+        ) as mock_notify, patch(
+            "payments.services.webhook_handlers._retire_redundant_override",
+            side_effect=fail_after_commit,
+        ):
+            with self.assertRaisesMessage(
+                OperationalError,
+                "injected post-commit failure",
+            ):
+                self._deliver_once(payload)
+
+            # Stripe's later delivery reaches the terminal guard, so neither
+            # entitlement nor the paid-signup handoff is repeated.
+            self._deliver_once(payload)
+
+        mock_notify.assert_called_once()
+        user.refresh_from_db()
+        self.assertEqual(user.tier, self.basic_tier)
+        self.assertEqual(
+            CheckoutFulfillment.objects.filter(
+                stripe_session_id="cs_post_commit_failure",
+                status=CheckoutFulfillment.STATUS_FULFILLED,
+            ).count(),
+            1,
+        )
+
+    def test_rolled_back_fulfillment_notifies_only_on_successful_retry(self):
+        user = User.objects.create_user(email="concurrent@test.com")
+        _binding, reference = self._issue(user)
+        payload = self._session(
+            reference,
+            "cs_rollback_then_retry",
+            "sub_rollback_then_retry",
+        )
+        original_save = CheckoutFulfillment.save
+
+        def fail_terminal_save(instance, *args, **kwargs):
+            if instance.status == CheckoutFulfillment.STATUS_FULFILLED:
+                raise OperationalError("injected pre-commit failure")
+            return original_save(instance, *args, **kwargs)
+
+        with patch(
+            "community.services.staff_notifications.notify_paid_signup",
+        ) as mock_notify:
+            with patch.object(
+                CheckoutFulfillment,
+                "save",
+                new=fail_terminal_save,
+            ), self.assertRaisesMessage(
+                OperationalError,
+                "injected pre-commit failure",
+            ):
+                self._deliver_once(payload)
+
+            mock_notify.assert_not_called()
+            user.refresh_from_db()
+            self.assertEqual(user.tier.slug, "free")
+            self.assertFalse(user.account_activated)
+            self.assertFalse(user.email_verified)
+            self.assertEqual(
+                CheckoutFulfillment.objects.get(
+                    stripe_session_id="cs_rollback_then_retry",
+                ).status,
+                CheckoutFulfillment.STATUS_PROCESSING,
+            )
+
+            self._deliver_once(payload)
+
+        mock_notify.assert_called_once()
+        user.refresh_from_db()
+        self.assertEqual(user.tier, self.basic_tier)
+        self.assertTrue(user.account_activated)
+        self.assertTrue(user.email_verified)
+
+    def test_async_success_and_duplicate_share_exactly_once_handoff(self):
+        user = User.objects.create_user(email="concurrent@test.com")
+        _binding, reference = self._issue(user)
+        pending = self._session(
+            reference,
+            "cs_async_welcome_once",
+            "sub_async_welcome_once",
+        )
+        pending["payment_status"] = "unpaid"
+        self._deliver_once(pending)
+
+        paid = dict(pending, payment_status="paid")
+        with patch(
+            "community.services.staff_notifications.notify_paid_signup",
+        ) as mock_notify:
+            self._deliver_once(paid, async_success=True)
+            self._deliver_once(paid, async_success=True)
+
+        mock_notify.assert_called_once()
+        self.assertEqual(
+            mock_notify.call_args.kwargs["session_id"],
+            "cs_async_welcome_once",
+        )
+        self.assertEqual(
+            CheckoutFulfillment.objects.get(
+                stripe_session_id="cs_async_welcome_once",
+            ).status,
+            CheckoutFulfillment.STATUS_FULFILLED,
+        )
+
+    def test_paid_welcome_failure_is_logged_without_reversing_fulfillment(self):
+        user = User.objects.create_user(email="concurrent@test.com")
+        _binding, reference = self._issue(user)
+        payload = self._session(
+            reference,
+            "cs_welcome_provider_failure",
+            "sub_welcome_provider_failure",
+        )
+
+        with patch(
+            "community.services.staff_notifications.notify_paid_signup",
+            side_effect=RuntimeError("provider setup failed"),
+        ) as mock_notify, self.assertLogs(
+            "payments.services",
+            level="ERROR",
+        ) as logs:
+            self._deliver_once(payload)
+            self._deliver_once(payload)
+
+        mock_notify.assert_called_once()
+        self.assertTrue(any(
+            "notify_paid_signup raised unexpectedly" in message
+            for message in logs.output
+        ))
+        user.refresh_from_db()
+        self.assertEqual(user.tier, self.basic_tier)
+        self.assertEqual(
+            CheckoutFulfillment.objects.get(
+                stripe_session_id="cs_welcome_provider_failure",
+            ).status,
+            CheckoutFulfillment.STATUS_FULFILLED,
         )
 
     def test_concurrent_sessions_for_same_binding_grant_once(self):

@@ -658,6 +658,30 @@ def handle_checkout_completed(session_data, event_context=None):
         return
     tier, resolved_subscription = tier_resolution
 
+    # Resolve the interval before the fulfillment transaction so the paid
+    # signup handoff can run at the commit boundary without another fallible
+    # lookup in between. Bound checkouts already proved the exact Price above,
+    # so their signed binding is authoritative. Payment-Link fallback already
+    # loaded the subscription; legacy metadata checkouts retain the existing
+    # best-effort subscription lookup.
+    billing_period = ""
+    if binding is not None:
+        billing_period = (
+            "monthly"
+            if binding.billing_period == CheckoutAccountBinding.PERIOD_MONTHLY
+            else "yearly"
+        )
+    elif subscription_id:
+        sub_price_id = (
+            _subscription_price_id(resolved_subscription)
+            if resolved_subscription is not None
+            else _services._get_subscription_price_id(subscription_id)
+        )
+        if sub_price_id and sub_price_id == tier.stripe_price_id_yearly:
+            billing_period = "yearly"
+        elif sub_price_id and sub_price_id == tier.stripe_price_id_monthly:
+            billing_period = "monthly"
+
     # Remember the previous tier so we can tell upgrade-vs-new-paid-user
     # apart when building the operator notification email below.
     previous_tier = user.tier
@@ -762,6 +786,14 @@ def handle_checkout_completed(session_data, event_context=None):
         if set_name_from_external(user, full_name=stripe_name, source="stripe"):
             update_fields.extend(["first_name", "last_name"])
         user.save(update_fields=update_fields)
+
+        # Issue #1439: these flags must be committed with the entitlement so
+        # the welcome handoff can run immediately after the winning transaction
+        # while preserving issue #839's verified-before-welcome contract.
+        from accounts.utils.activation import mark_activated, mark_email_verified
+        mark_activated(user)
+        mark_email_verified(user)
+
         fulfillment.binding = binding
         fulfillment.user = user
         fulfillment.tier = tier
@@ -773,6 +805,50 @@ def handle_checkout_completed(session_data, event_context=None):
             "binding", "user", "tier", "stripe_customer_id",
             "stripe_subscription_id", "status", "reason", "updated_at",
         ])
+
+    # Issue #1439: the unique winning fulfillment invokes the paid-signup
+    # handoff at the transaction boundary, before any later reconciliation or
+    # CRM database work can fail and strand a terminal fulfillment. A duplicate
+    # Session returns from the locked terminal guard above and never reaches
+    # this block. Provider/setup failures remain best-effort and contained.
+    from content.access import LEVEL_BASIC
+
+    if tier is not None and tier.level >= LEVEL_BASIC:
+        try:
+            from community.services.staff_notifications import (
+                notify_paid_signup,
+            )
+
+            # Issue #952: thread the REAL charged amount + currency and
+            # Stripe ids already loaded by the handler. No new Stripe lookup
+            # occurs at this post-commit boundary.
+            notify_paid_signup(
+                user=user,
+                tier=tier,
+                previous_tier=previous_tier,
+                was_new_user=was_new_user,
+                stripe_customer_id=customer_id,
+                session_id=session_id,
+                billing_period=billing_period,
+                amount_total_minor=session_data.get("amount_total"),
+                currency=session_data.get("currency", "") or "",
+                payment_intent_id=session_data.get("payment_intent", "") or "",
+                subscription_id=subscription_id,
+                # Issue #976: snapshot taken before tag reconciliation can
+                # clear ``stripe:churned``.
+                is_returning=is_returning,
+            )
+        except Exception:
+            # Defensive: notify_paid_signup isolates each provider send, but
+            # setup-time failures must not turn paid entitlement into a Stripe
+            # retry.
+            _services.logger.exception(
+                "notify_paid_signup raised unexpectedly for user=%s "
+                "session=%s",
+                user.email,
+                session_id,
+            )
+
     _services.logger.info(
         "checkout.session.completed: user=%s tier=%s", user.email, tier.slug,
     )
@@ -790,40 +866,6 @@ def handle_checkout_completed(session_data, event_context=None):
     # current ``stripe:plan-<tier.slug>`` (this is the path that missed Kir's
     # re-activation — there is no customer.subscription.created handler).
     reconcile_stripe_status_tags(user, active=True, tier=tier)
-
-    # Issue #768: a successful tier checkout (including upgrades on an
-    # existing row that did NOT take the new-user branch above) is the
-    # canonical paid activation signal — flip ``account_activated``
-    # if it was not already True. ``mark_activated`` is idempotent so
-    # the new-user branch that already set the flag is a no-op here.
-    from accounts.utils.activation import mark_activated, mark_email_verified
-    mark_activated(user)
-
-    # Issue #839: a successful paid tier checkout proves the entitled
-    # account's email is real — Stripe sends receipts to it. Flip
-    # ``email_verified`` on this exact ``user`` row so payers skip the
-    # verify-email footer and reminders. ``mark_email_verified`` is
-    # idempotent (no-op when already verified) and uses its own focused
-    # single-field ``save(update_fields=["email_verified"])``, so it does
-    # not collide with the multi-field save above. This MUST run before
-    # ``notify_paid_signup`` below: the ``cofounder_welcome`` email reads
-    # ``user.email_verified`` live at send time, and flipping it first is
-    # what suppresses the verify footer in the same request.
-    #
-    # Verification is flipped ONLY on the entitled row the webhook
-    # resolved — it never looks up a different account from the Stripe
-    # billing email (the relay / cross-account case is issue #840, out
-    # of scope here).
-    mark_email_verified(user)
-
-    # Determine billing period from the Stripe subscription's price ID.
-    billing_period = ""
-    if subscription_id:
-        sub_price_id = _services._get_subscription_price_id(subscription_id)
-        if sub_price_id and sub_price_id == tier.stripe_price_id_yearly:
-            billing_period = "yearly"
-        elif sub_price_id and sub_price_id == tier.stripe_price_id_monthly:
-            billing_period = "monthly"
 
     # Snapshot UTM attribution for this conversion. Wrapped so an
     # attribution failure NEVER breaks the tier/customer/subscription
@@ -882,54 +924,6 @@ def handle_checkout_completed(session_data, event_context=None):
         course=None,
         stripe_customer_id=customer_id,
     )
-
-    # Issue #703: paid-signup automation. Gated on Basic+ (level 10).
-    # Course purchases are explicitly out of scope — they take the
-    # ``_send_payment_notification_email(course=...)`` path above and
-    # never reach here. Failures inside the helper are swallowed and
-    # logged; they MUST NOT propagate out and trigger a Stripe retry.
-    from content.access import LEVEL_BASIC
-
-    if tier is not None and tier.level >= LEVEL_BASIC:
-        try:
-            from community.services.staff_notifications import (
-                notify_paid_signup,
-            )
-
-            # Issue #952: thread the REAL charged amount + currency and
-            # the Stripe ids the handler already loaded so the staff
-            # email renders the actual charge, the plan interval, and
-            # account-scoped dashboard deep-links. NO new Stripe round-trip
-            # is added here — every value below comes from ``session_data``
-            # or the local ``subscription_id`` already in scope.
-            notify_paid_signup(
-                user=user,
-                tier=tier,
-                previous_tier=previous_tier,
-                was_new_user=was_new_user,
-                stripe_customer_id=customer_id,
-                session_id=session_id,
-                billing_period=billing_period,
-                amount_total_minor=session_data.get("amount_total"),
-                currency=session_data.get("currency", "") or "",
-                payment_intent_id=session_data.get("payment_intent", "") or "",
-                subscription_id=subscription_id,
-                # Issue #976: snapshot taken above, before the #969 reconcile
-                # could clear ``stripe:churned`` — a re-subscribing churned
-                # member gets the "welcome back" email, not the new welcome.
-                is_returning=is_returning,
-            )
-        except Exception:
-            # Defensive: notify_paid_signup wraps each send internally,
-            # but a setup-time error (import failure, get_config dying)
-            # could still throw. The user has paid — we must not let
-            # Stripe retry the webhook.
-            _services.logger.exception(
-                "notify_paid_signup raised unexpectedly for user=%s "
-                "session=%s",
-                user.email,
-                session_id,
-            )
 
 
 def handle_checkout_async_payment_succeeded(session_data, event_context=None):

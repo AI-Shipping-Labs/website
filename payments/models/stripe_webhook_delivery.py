@@ -42,6 +42,7 @@ class StripeWebhookDeliveryAttempt(models.Model):
     OUTCOME_AMBIGUOUS_USER = "ambiguous_user"
     OUTCOME_FAILED_TRANSIENT = "failed_transient"
     OUTCOME_FAILED_PERMANENT = "failed_permanent"
+    OUTCOME_REVIEW_REQUIRED = "review_required"
     OUTCOME_CHOICES = [
         (OUTCOME_RECEIVED, "Received"),
         (OUTCOME_PROCESSED, "Processed"),
@@ -51,6 +52,7 @@ class StripeWebhookDeliveryAttempt(models.Model):
         (OUTCOME_AMBIGUOUS_USER, "Ambiguous user (terminal)"),
         (OUTCOME_FAILED_TRANSIENT, "Failed (transient)"),
         (OUTCOME_FAILED_PERMANENT, "Failed (permanent)"),
+        (OUTCOME_REVIEW_REQUIRED, "Review required"),
     ]
 
     # Outcomes that mutate nobody / are safe-but-not-successful. Used by the
@@ -63,6 +65,7 @@ class StripeWebhookDeliveryAttempt(models.Model):
         OUTCOME_AMBIGUOUS_USER,
         OUTCOME_FAILED_TRANSIENT,
         OUTCOME_FAILED_PERMANENT,
+        OUTCOME_REVIEW_REQUIRED,
     })
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -86,6 +89,15 @@ class StripeWebhookDeliveryAttempt(models.Model):
         max_length=255, blank=True, default="", db_index=True,
     )
     stripe_subscription_id = models.CharField(
+        max_length=255, blank=True, default="", db_index=True,
+    )
+    stripe_charge_id = models.CharField(
+        max_length=255, blank=True, default="", db_index=True,
+    )
+    stripe_invoice_id = models.CharField(
+        max_length=255, blank=True, default="", db_index=True,
+    )
+    stripe_dispute_id = models.CharField(
         max_length=255, blank=True, default="", db_index=True,
     )
     livemode = models.BooleanField(null=True, blank=True)

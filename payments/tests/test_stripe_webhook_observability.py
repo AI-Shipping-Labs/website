@@ -343,6 +343,9 @@ ALL_EVENTS = [
     "invoice.payment_failed",
     "invoice.paid",
     "customer.updated",
+    "charge.refunded",
+    "charge.dispute.created",
+    "charge.dispute.closed",
 ]
 EXPECTED_URL = "https://aishippinglabs.com/api/webhooks/payments"
 
@@ -405,10 +408,10 @@ class EndpointVerifierTest(TestCase):
         self.assertEqual(check.error_code, "duplicate_endpoints")
 
     def test_extra_events_warn(self):
-        check = self._run([_endpoint(EXPECTED_URL, ALL_EVENTS + ["charge.refunded"])])
+        check = self._run([_endpoint(EXPECTED_URL, ALL_EVENTS + ["charge.succeeded"])])
         self.assertEqual(check.status, "warning")
         self.assertEqual(check.error_code, "unexpected_events")
-        self.assertIn("charge.refunded", check.unexpected_events)
+        self.assertIn("charge.succeeded", check.unexpected_events)
 
     def test_permission_error_is_not_endpoint_missing(self):
         import stripe as stripe_mod

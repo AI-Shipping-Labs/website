@@ -162,7 +162,7 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 |---------|-----|-------------|--------|-------|
 | Membership page | `/membership` | Canonical conversion page: all four plans and billing controls first, followed by extended paid-tier benefits, one active sprint, one upcoming event, and recent workshops using their canonical shared cards | Everyone | Shipped |
 | Legacy pricing and activities routes | `/pricing`, `/activities` | Permanent redirects to `/membership` and `/membership#activities`, respectively | Everyone | Shipped |
-| Stripe webhook | `/api/webhooks/payments` | Receives eight required Stripe events for immediate/delayed Checkout, subscription changes/deletion, monthly payment failure/recovery, and customer email sync | System | Shipped |
+| Stripe webhook | `/api/webhooks/payments` | Receives eleven required Stripe events for immediate/delayed Checkout, subscription changes/deletion, monthly payment failure/recovery, customer email sync, and review-only refund/dispute evidence. Refunds and disputes alert operators but never change access; cancellation in Stripe remains the authoritative way to end membership. | System | Shipped |
 | Monthly payment grace | Studio reconciliation/member detail; `/api/payments/payment-graces` | Qualifying unpaid monthly renewals keep base access for 168 hours, warn at T-48, and change only base membership to Free after exact Stripe revalidation; active courtesy overrides/effective access survive | System / staff read-only | Shipped |
 
 ### Voting

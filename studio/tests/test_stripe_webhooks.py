@@ -23,6 +23,9 @@ ALL_EVENTS = [
     "invoice.payment_failed",
     "invoice.paid",
     "customer.updated",
+    "charge.refunded",
+    "charge.dispute.created",
+    "charge.dispute.closed",
 ]
 
 
@@ -118,6 +121,26 @@ class StripeWebhooksStudioTest(TestCase):
         response = self.client.get(self.url, {"scope": "all"})
         self.assertContains(response, "evt_async_failed")
         self.assertContains(response, "checkout.session.async_payment_failed")
+
+    def test_review_delivery_shows_neutral_outcome_and_safe_ids(self):
+        StripeWebhookDeliveryAttempt.objects.create(
+            stripe_event_id="evt_review",
+            event_type="charge.dispute.closed",
+            stripe_charge_id="ch_review",
+            stripe_invoice_id="in_review",
+            stripe_dispute_id="dp_review",
+            outcome="review_required",
+            http_status=200,
+        )
+        self.client.force_login(self.staff)
+        response = self.client.get(self.url)
+        self.assertContains(response, "Review required")
+        self.assertContains(response, "Charge: ch_review")
+        self.assertContains(response, "Invoice: in_review")
+        self.assertContains(response, "Dispute: dp_review")
+        self.assertContains(response, "charge.refunded")
+        self.assertContains(response, "charge.dispute.created")
+        self.assertContains(response, "charge.dispute.closed")
 
     def test_inspect_event_is_read_only_preview(self):
         user = User.objects.create_user(email="target@test.com")

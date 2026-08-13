@@ -986,6 +986,30 @@ When `PLAYWRIGHT_BASE_URL` points at a non-local host such as
 `https://dev.aishippinglabs.com`, the suite does not start the local server or
 use the local SQLite test DB, so it does not claim the same-worktree guard.
 
+### Per-node browser ownership
+
+The Chromium process remains session-scoped for speed, but every browser
+context and page is function-scoped to one pytest node. A browser-using node
+must start with `0 contexts / 0 pages` inherited from earlier nodes and shared
+teardown returns the session browser to `0 contexts / 0 pages` after the node's
+ordinary fixture finalizers run. This boundary also runs when the test body
+fails, errors, or skips.
+
+Tests may use the ordinary `page` fixture, call `browser.new_context()`
+directly, or use `auth_context()`. Explicit early `context.close()` calls are
+still useful when a flow can release resources sooner, but suite isolation
+does not depend on every caller reaching a success-tail close. Shared teardown
+enumerates and closes every remaining context; one close error does not prevent
+the others from being attempted, and the resulting teardown error reports the
+node id, before/after context and page counts, and every close failure.
+
+Module- and session-scoped browser contexts or pages are unsupported. They
+would carry cookies, JavaScript timers, network pollers, and page state across
+node boundaries. Keep only the browser process session-scoped; create contexts
+inside function-scoped fixtures or test nodes. Static guard tests that do not
+request `browser` directly or transitively do not launch Chromium for this
+lifecycle boundary.
+
 ## Running Playwright in isolation / parallel across worktrees
 
 The Playwright server fixture in `playwright_tests/conftest.py` used to bind a

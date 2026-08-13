@@ -70,6 +70,8 @@ from .tier_resolution import (  # noqa: E402
 from .webhook_handlers import (  # noqa: E402
     _handle_course_purchase,
     _send_payment_notification_email,
+    handle_checkout_async_payment_failed,
+    handle_checkout_async_payment_succeeded,
     handle_checkout_completed,
     handle_customer_updated,
     handle_invoice_paid,
@@ -83,6 +85,8 @@ __all__ = [
     "WebhookPermanentError",
     # Webhook handlers (public)
     "handle_checkout_completed",
+    "handle_checkout_async_payment_succeeded",
+    "handle_checkout_async_payment_failed",
     "handle_customer_updated",
     "handle_subscription_updated",
     "handle_subscription_deleted",

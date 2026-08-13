@@ -3,7 +3,7 @@
 Uses the configured ``STRIPE_SECRET_KEY`` to inspect the Stripe webhook
 endpoints in the same mode as the key and prove whether the exact production
 callback URL is configured, enabled, in the right mode, non-duplicated, and
-subscribed to the six documented events. It NEVER modifies Stripe
+subscribed to the eight documented events. It NEVER modifies Stripe
 configuration and NEVER persists API keys or signing secrets.
 
 Signing-secret health is reported SEPARATELY: Stripe's API cannot reveal or
@@ -29,6 +29,8 @@ DEFAULT_EXPECTED_URL = "https://aishippinglabs.com/api/webhooks/payments"
 # cancellation event (or any other) is a failure; extra events are a warning.
 REQUIRED_EVENTS = [
     "checkout.session.completed",
+    "checkout.session.async_payment_succeeded",
+    "checkout.session.async_payment_failed",
     "customer.subscription.updated",
     "customer.subscription.deleted",
     "invoice.payment_failed",

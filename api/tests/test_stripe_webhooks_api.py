@@ -21,6 +21,8 @@ REPLAY_URL = "/api/payments/stripe-webhooks/replay"
 EXPECTED_URL = "https://aishippinglabs.com/api/webhooks/payments"
 ALL_EVENTS = [
     "checkout.session.completed",
+    "checkout.session.async_payment_succeeded",
+    "checkout.session.async_payment_failed",
     "customer.subscription.updated",
     "customer.subscription.deleted",
     "invoice.payment_failed",
@@ -209,6 +211,33 @@ class StripeWebhookApiTest(TestCase):
             DELIVERIES_URL, {"outcome": "bogus"}, **self._auth(),
         )
         self.assertEqual(resp.status_code, 422)
+
+    def test_deliveries_filters_async_checkout_events(self):
+        StripeWebhookDeliveryAttempt.objects.create(
+            stripe_event_id="evt_async_success",
+            event_type="checkout.session.async_payment_succeeded",
+            stripe_object_id="cs_async",
+            outcome="processed",
+            http_status=200,
+        )
+        StripeWebhookDeliveryAttempt.objects.create(
+            stripe_event_id="evt_other",
+            event_type="checkout.session.completed",
+            stripe_object_id="cs_other",
+            outcome="processed",
+            http_status=200,
+        )
+        response = self.client.get(
+            DELIVERIES_URL,
+            {"event_type": "checkout.session.async_payment_succeeded"},
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["count"], 1)
+        self.assertEqual(
+            response.json()["deliveries"][0]["stripe_event_id"],
+            "evt_async_success",
+        )
 
     # ---- replay -------------------------------------------------------
     def test_replay_dry_run_previews_without_mutation(self):

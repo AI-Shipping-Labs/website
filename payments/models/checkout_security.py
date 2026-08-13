@@ -86,10 +86,14 @@ class CheckoutFulfillment(models.Model):
     """Exactly-once business outcome for a Stripe Checkout Session."""
 
     STATUS_PROCESSING = "processing"
+    STATUS_AWAITING_PAYMENT = "awaiting_payment"
+    STATUS_PAYMENT_FAILED = "payment_failed"
     STATUS_FULFILLED = "fulfilled"
     STATUS_QUARANTINED = "quarantined"
     STATUS_CHOICES = [
         (STATUS_PROCESSING, "Processing"),
+        (STATUS_AWAITING_PAYMENT, "Awaiting payment"),
+        (STATUS_PAYMENT_FAILED, "Payment failed"),
         (STATUS_FULFILLED, "Fulfilled"),
         (STATUS_QUARANTINED, "Quarantined"),
     ]

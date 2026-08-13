@@ -39,6 +39,13 @@ def handle_checkout_completed(session_data):
         ),
     }
     payload.update(session_data)
+    course_id = (payload.get("metadata") or {}).get("course_id")
+    if course_id:
+        course = Course.objects.filter(pk=course_id).first()
+        if course is not None:
+            payload["line_items"] = {
+                "data": [{"price": {"id": course.stripe_price_id}}],
+            }
     return call_checkout_in_legacy_numeric_compat_window(
         _handle_checkout_completed,
         payload,
@@ -325,6 +332,7 @@ class WebhookCoursePurchaseTest(TierSetupMixin, TestCase):
             title='Webhook Course', slug='webhook-course',
             status='published', required_level=20,
             individual_price_eur=Decimal('49.00'),
+            stripe_price_id='price_webhook_course',
         )
 
     def test_creates_course_access(self):

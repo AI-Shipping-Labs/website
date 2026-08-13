@@ -16,6 +16,8 @@ from payments.models import (
 EXPECTED_URL = "https://aishippinglabs.com/api/webhooks/payments"
 ALL_EVENTS = [
     "checkout.session.completed",
+    "checkout.session.async_payment_succeeded",
+    "checkout.session.async_payment_failed",
     "customer.subscription.updated",
     "customer.subscription.deleted",
     "invoice.payment_failed",
@@ -103,6 +105,19 @@ class StripeWebhooksStudioTest(TestCase):
         resp = self.client.get(self.url, {"scope": "cancellation"})
         self.assertContains(resp, "evt_c")
         self.assertNotContains(resp, "evt_o")
+
+    def test_all_handled_events_shows_async_checkout_attempts(self):
+        StripeWebhookDeliveryAttempt.objects.create(
+            stripe_event_id="evt_async_failed",
+            event_type="checkout.session.async_payment_failed",
+            stripe_object_id="cs_async_failed",
+            outcome="processed",
+            http_status=200,
+        )
+        self.client.force_login(self.staff)
+        response = self.client.get(self.url, {"scope": "all"})
+        self.assertContains(response, "evt_async_failed")
+        self.assertContains(response, "checkout.session.async_payment_failed")
 
     def test_inspect_event_is_read_only_preview(self):
         user = User.objects.create_user(email="target@test.com")

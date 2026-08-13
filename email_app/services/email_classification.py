@@ -23,6 +23,7 @@ TRANSACTIONAL_EMAIL_TYPES = {
     "welcome",
     "free_welcome",
     "payment_failed",
+    "checkout_payment_failed",
     "payment_grace_failure_member",
     "payment_grace_failure_team",
     "payment_grace_reminder_member",

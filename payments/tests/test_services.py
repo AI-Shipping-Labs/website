@@ -407,6 +407,7 @@ class PaymentNotificationEmailTest(TestCase):
             "subscription": "",
             "client_reference_id": None,
             "metadata": {"course_id": str(course.pk)},
+            "line_items": {"data": [{"price": {"id": course.stripe_price_id}}]},
         }
 
     # ------------------------------------------------------------------
@@ -568,6 +569,7 @@ class PaymentNotificationEmailTest(TestCase):
             slug="resilient-llm-apps",
             status="published",
             individual_price_eur=Decimal("99.00"),
+            stripe_price_id="price_notify_course",
         )
 
         handle_checkout_completed(self._course_session_data(course, user.email))
@@ -624,6 +626,7 @@ class PaymentNotificationEmailTest(TestCase):
             slug="mlops-bootcamp-645",
             status="published",
             individual_price_eur=Decimal("199.00"),
+            stripe_price_id="price_notify_course_subject",
         )
         handle_checkout_completed(self._course_session_data(
             course, buyer.email, session_id="cs_subject_course",

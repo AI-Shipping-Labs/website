@@ -205,7 +205,7 @@ class CheckoutSecurityHandlerTest(TierSetupMixin, TestCase):
             "livemode": livemode,
         }
 
-    def test_unpaid_incomplete_and_wrong_mode_sessions_are_quarantined(self):
+    def test_unpaid_waits_while_incomplete_and_wrong_mode_are_quarantined(self):
         user = User.objects.create_user(email="bound@test.com")
         cases = [
             (
@@ -230,8 +230,13 @@ class CheckoutSecurityHandlerTest(TierSetupMixin, TestCase):
                 self.session(reference, session_id=session_id, **overrides)
             )
             row = CheckoutFulfillment.objects.get(stripe_session_id=session_id)
-            self.assertEqual(row.status, CheckoutFulfillment.STATUS_QUARANTINED)
-            self.assertEqual(row.reason, reason)
+            expected_status = (
+                CheckoutFulfillment.STATUS_AWAITING_PAYMENT
+                if session_id == "cs_unpaid"
+                else CheckoutFulfillment.STATUS_QUARANTINED
+            )
+            self.assertEqual(row.status, expected_status)
+            self.assertEqual(row.reason, "" if session_id == "cs_unpaid" else reason)
         user.refresh_from_db()
         self.assertEqual(user.tier, self.free_tier)
 

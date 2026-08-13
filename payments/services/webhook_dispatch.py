@@ -23,6 +23,8 @@ from payments.exceptions import (
 )
 from payments.models import StripeWebhookDeliveryAttempt, WebhookEvent
 from payments.services import (
+    handle_checkout_async_payment_failed,
+    handle_checkout_async_payment_succeeded,
     handle_checkout_completed,
     handle_customer_updated,
     handle_invoice_paid,
@@ -38,6 +40,8 @@ logger = logging.getLogger(__name__)
 # Event types we know how to handle. Only handled types get a delivery attempt.
 EVENT_HANDLERS = {
     "checkout.session.completed": handle_checkout_completed,
+    "checkout.session.async_payment_succeeded": handle_checkout_async_payment_succeeded,
+    "checkout.session.async_payment_failed": handle_checkout_async_payment_failed,
     "customer.updated": handle_customer_updated,
     "customer.subscription.updated": handle_subscription_updated,
     "customer.subscription.deleted": handle_subscription_deleted,
@@ -82,7 +86,7 @@ def safe_object_ids(event_type, obj):
             "customer_id": object_id,
             "subscription_id": "",
         }
-    # checkout.session.completed / invoice.payment_failed
+    # Checkout Session / invoice payment events
     return {
         "object_id": object_id,
         "customer_id": _id_of(obj.get("customer")),
@@ -137,6 +141,8 @@ def run_handler(event_type, obj, *, event_context=None):
     """
     handler = EVENT_HANDLERS[event_type]
     if event_type in {
+        "checkout.session.async_payment_succeeded",
+        "checkout.session.async_payment_failed",
         "invoice.payment_failed", "invoice.paid",
         "customer.subscription.updated",
     }:

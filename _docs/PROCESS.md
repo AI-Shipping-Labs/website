@@ -109,6 +109,7 @@ Orchestrator picks groomed issue
 - Before launching any SWE agent in an isolated worktree, ensure `main` has no uncommitted changes. If there are, commit them (or stash with the user's approval) first. Worktrees are created from `HEAD`, so uncommitted main changes are invisible to the agent; when the agent's branch merges back, it will overwrite or conflict with that work. Run `git status` and resolve before invoking the agent.
 - Dirty-main unblock protocol: when uncommitted changes block new worktrees, inspect `git diff` and classify the change before stopping. If the user has explicitly said to commit and continue, run focused verification for the dirty files, commit only those files with a specific message, push `main`, launch on-call monitoring, then resume issue selection. If the change is ambiguous and the user has not authorized commit/stash, ask once for `commit`, `stash`, or `leave`, and continue only safe GitHub-only grooming/triage while waiting. Do not repeatedly report the same dirty-main blocker after the user has answered it.
 - Launch software engineer with the issue number. When running multiple SWE agents in parallel, use `isolation: "worktree"` to give each agent its own copy of the repo — otherwise concurrent agents overwrite each other's file changes
+- Immediately after creating any role worktree, and before dispatching its first role, create its active lifecycle lease with `scripts/cleanup-agent-worktrees.py` as documented in "Agent worktree lifecycle" below. The common-Git-dir lease remains active across SWE, Tester, PM-acceptance, and On-Call handoff gaps; an idle role is not evidence that its worktree is disposable.
 - When software engineer reports done, launch tester
 - If tester fails: relay feedback to software engineer, re-launch to fix, then re-launch tester
 - If tester passes: launch product manager for acceptance review
@@ -116,6 +117,7 @@ Orchestrator picks groomed issue
 - If PM accepts: tell software engineer to commit on the worktree branch (no push, no PR)
 - After SWE commits, the orchestrator merges the worktree branch into local `main` and pushes `main` to origin (see "Merging — local only, no PRs" below)
 - After pushing, dispatch the oncall-engineer agent asynchronously and continue with other work or end the turn. The orchestrator is never the CI observer: it must not invoke `scripts/watch-ci.py`, run `gh run watch`, `sleep`, repeatedly call `gh run list`/`gh run view`, or remain idle across agent turns solely to await CI. Only on-call observes the `Deploy Dev` run. On-call invokes the blocking watcher once (see below) and interprets its single verdict; the orchestrator may receive on-call's final report but never shadow-polls, runs a second watcher, or waits on CI itself.
+- After On-Call returns a terminal green verdict, perform the attributable cleanup handoff from the clean shared main checkout as documented in "Agent worktree lifecycle" below. On-Call never removes its own worktree.
 - When a role agent reports a failure, assign the fix to the right role agent. For code/test failures, send the concrete tester or on-call findings back to a software-engineer agent; for deployment/CI infrastructure failures, let the on-call agent fix when it can.
 - After committing, pick the next two issues (never stop until all issues are done)
 
@@ -137,6 +139,100 @@ Steps after the SWE has committed on `worktree-agent-XXXX`:
 5. After push, run oncall-engineer.
 
 Why no PRs: the team's review pipeline is the agent flow (PM groom → SWE → tester → PM acceptance) — opening a PR adds nothing on top of that and produces noisy `Merge pull request #NNN from <branch>` commit subjects on `main`. Local `--no-ff` merges keep the history clean and let the orchestrator control the merge subject.
+
+### Agent worktree lifecycle
+
+Agent worktree cleanup is an explicit orchestrator step, not a startup sweep or
+an On-Call responsibility. The fail-closed helper stores lifecycle leases below
+the repository's common Git directory, so the evidence survives role handoffs
+and removal of an eligible worktree.
+
+#### Create the lease before dispatch
+
+From the clean shared main checkout, create a lease immediately after every
+`git worktree add` and before dispatching a role into that path:
+
+```bash
+uv run python scripts/cleanup-agent-worktrees.py \
+  --repo . --actor "orchestrator:<session-id>" \
+  lease-create --path .claude/worktrees/<name> --issue <issue> --role <first-role>
+```
+
+The active lease is authoritative across idle handoff gaps. Do not close it
+while a SWE, Tester, PM-acceptance, or On-Call agent is running, waiting, or may
+resume on the path. Every separately created role worktree gets its own lease.
+
+#### Terminal handoff and dry run
+
+On-Call reports the exact issue, merge SHA, successful `Deploy Dev` run ID/run
+head, verdict, and all worktree paths it used, then returns without cleaning.
+The orchestrator must use its active-agent registry to verify that every role
+which can access a candidate has ended. The repository helper cannot query that
+host registry; `--roles-ended` is an attributable assertion that this external
+check was completed, not an inactivity detector.
+
+Only after that check, close each matching lease from shared main. Closing
+independently validates the successful GitHub run and Git ancestry:
+
+```bash
+uv run python scripts/cleanup-agent-worktrees.py \
+  --repo . --actor "orchestrator:<session-id>" \
+  lease-close --path .claude/worktrees/<name> --issue <issue> \
+  --merge-sha <merge-sha> --run-id <deploy-dev-run-id> \
+  --run-head-sha <run-head-sha> --roles-ended
+
+uv run python scripts/cleanup-agent-worktrees.py \
+  --repo . --actor "orchestrator:<session-id>" --json \
+  classify --path .claude/worktrees/<name>
+```
+
+The default/no-subcommand invocation is also a read-only classification of all
+registered worktrees plus existing unregistered directories under
+`.claude/worktrees/`. Missing or malformed leases, dirty or untracked changes,
+unmerged HEADs, active processes, incomplete `/proc` visibility, paths outside
+the boundary, and shared main all remain protected.
+
+Legacy paths without a lease require `lease-adopt` with the same terminal
+evidence and `--roles-ended`, after the orchestrator checks its registry. Never
+adopt a malformed lease or infer role completion from an absent OS process.
+
+#### Remove one unchanged eligible candidate
+
+Review/post the dry-run record. Apply only the exact candidate and digest from
+that record:
+
+```bash
+uv run python scripts/cleanup-agent-worktrees.py \
+  --repo . --actor "orchestrator:<session-id>" --json \
+  remove --apply --path .claude/worktrees/<name> --issue <issue> \
+  --plan-digest <reviewed-plan-digest>
+```
+
+Apply recomputes every fact and refuses drift. It uses non-force
+`git worktree remove`; an attached branch is removed afterward only through
+merged-safe `git branch -d`. It never uses recursive deletion or force. Run one
+candidate at a time and report both removed and retained paths/reason codes.
+
+Already-absent stale Git registrations are a separate mode:
+
+```bash
+uv run python scripts/cleanup-agent-worktrees.py \
+  --repo . --actor "orchestrator:<session-id>" --json prune-metadata
+```
+
+Metadata apply additionally requires the exact aggregate digest and refuses the
+whole prune if any stale registration is locked, active, unmerged, ambiguous,
+or lacks validated terminal evidence. It never deletes a directory. An
+existing unregistered directory or broken `.git` backlink is retained for
+manual recovery. Local branches are retained by default; include
+`--delete-merged-branches` in both the reviewed dry run and apply invocation to
+request explicit post-prune `git branch -d` cleanup. The option is part of the
+plan digest and never force-deletes an unmerged branch.
+
+Do not run cleanup at role/process startup, role launch, merge, push, watcher
+start, cancellation, timeout, hang, superseded/no-verdict result, or while any
+role or process may still use the path. Current incident/recovery paths are not
+retroactively removable merely because this helper exists.
 
 ### Mandatory Steps (never skip)
 

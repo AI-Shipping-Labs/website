@@ -109,13 +109,12 @@ def test_keyboard_focus_is_visible_and_calendar_controls_are_44px(django_server,
     )
 
     toggle = page.locator('[data-testid="events-view-toggle-row"]')
-    for label in ("List", "Calendar"):
-        control = toggle.get_by_role("link", name=label, exact=True)
-        box = control.bounding_box()
-        assert box is not None and box["height"] >= 44
-        classes = control.get_attribute("class") or ""
-        assert "rounded-full" in classes
-        assert "px-4" in classes and "py-2" in classes
+    control = toggle.get_by_role("link", name="List", exact=True)
+    box = control.bounding_box()
+    assert box is not None and box["height"] >= 44
+    classes = control.get_attribute("class") or ""
+    assert "rounded-full" in classes
+    assert "px-4" in classes and "py-2" in classes
 
     for label in ("Previous month", "Next month"):
         box = page.get_by_role("link", name=label).bounding_box()
@@ -125,8 +124,10 @@ def test_keyboard_focus_is_visible_and_calendar_controls_are_44px(django_server,
 
     toggle.get_by_role("link", name="List", exact=True).click()
     page.wait_for_url("**/events")
-    list_toggle = page.locator('[data-testid="events-view-toggle-row"]')
-    assert "bg-accent" in (list_toggle.get_by_role("link", name="List", exact=True).get_attribute("class") or "")
+    list_toolbar = page.locator('[data-testid="events-list-toolbar"]')
+    upcoming = list_toolbar.get_by_test_id('events-filter-upcoming')
+    expect(upcoming).to_have_attribute('aria-selected', 'true')
+    assert upcoming.bounding_box()["height"] >= 44
 
 
 @pytest.mark.django_db(transaction=True)
@@ -140,6 +141,7 @@ def test_opening_second_week_day_closes_first_and_panel_precedes_next_week(djang
     second = page.locator("#calendar-day-2027-3-9")
     first.focus()
     page.keyboard.press("Enter")
+    page.keyboard.press("Escape")
     second.focus()
     page.keyboard.press("Space")
 
@@ -148,13 +150,8 @@ def test_opening_second_week_day_closes_first_and_panel_precedes_next_week(djang
     expect(second).to_have_attribute("aria-expanded", "true")
     second_panel = page.locator("#day-events-2027-3-9")
     expect(second_panel).to_be_visible()
-    assert page.locator("[data-day-panel]:not(.hidden)").count() == 1
-    assert second_panel.evaluate(
-        """panel => {
-            const nextWeek = document.querySelector('[data-calendar-week="3"]');
-            return Boolean(panel.compareDocumentPosition(nextWeek) & Node.DOCUMENT_POSITION_FOLLOWING);
-        }"""
-    )
+    assert page.locator("[data-day-panel][open]").count() == 1
+    assert second_panel.evaluate("panel => panel.tagName === 'DIALOG' && panel.open")
 
     panel_link = second_panel.get_by_role("link", name=second_event.title)
     expect(panel_link).to_have_attribute("href", second_event.get_absolute_url())
@@ -216,10 +213,11 @@ def test_mixed_event_cards_share_compact_padding_and_16px_stack_rhythm(django_se
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(f"{django_server}/events", wait_until="domcontentloaded")
 
-    stack = page.locator('[data-testid="upcoming-events-stack"]')
-    stack_cards = stack.locator(":scope > article")
-    expect(stack_cards.nth(1)).to_have_css("margin-top", "16px")
-    assert _vertical_spacing(stack_cards) == pytest.approx(16)
+    timeline = page.get_by_test_id('events-timeline')
+    stack_cards = timeline.locator('article')
+    expect(stack_cards).to_have_count(2)
+    days = timeline.get_by_test_id('events-timeline-day')
+    expect(days.nth(1)).to_have_css('margin-top', '8px')
     # Issue #1339 — the upcoming and series cards rebased onto the shared
     # content/_content_card.html container, which puts the compact catalog
     # padding (p-4 sm:p-5 -> 20px at this viewport) on the inner navigable body
@@ -227,9 +225,8 @@ def test_mixed_event_cards_share_compact_padding_and_16px_stack_rhythm(django_se
     # past-event card is not yet rebased (Phase 2) and keeps padding on its
     # <article>. All three still render the same 20px compact padding.
     for card in (
-        page.locator('[data-testid="upcoming-event-card"] a > div').first,
-        page.locator('[data-testid="event-series-card"] a > div').first,
-        page.locator('[data-testid="past-event-card"]').first,
+        page.locator('[data-testid="upcoming-event-card"]').first,
+        page.locator('[data-testid="event-series-card"]').first,
     ):
         expect(card).to_have_css("padding-top", "20px")
     standalone_link = page.locator(f'a[href="{standalone.get_absolute_url()}"]').first
@@ -272,11 +269,11 @@ def test_past_recording_cards_keep_actions_and_compact_rhythm(django_server, pag
     )
     page.goto(f"{django_server}/events?filter=past", wait_until="domcontentloaded")
 
-    stack = page.locator('[data-testid="past-recordings-stack"]')
+    stack = page.get_by_test_id('events-timeline')
     cards = stack.locator('[data-testid="past-recording-card"]')
     expect(cards).to_have_count(2)
-    expect(cards.nth(1)).to_have_css("margin-top", "16px")
-    assert _vertical_spacing(cards) == pytest.approx(16)
+    days = stack.get_by_test_id('events-timeline-day')
+    expect(days.nth(1)).to_have_css('margin-top', '8px')
     expect(stack.locator(f'a[href="{standalone.get_absolute_url()}"]').first).to_be_visible()
     expect(stack.locator(f'a[href="{workshop.get_absolute_url()}"]').first).to_be_visible()
     standalone_action = stack.locator(

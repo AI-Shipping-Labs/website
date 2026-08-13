@@ -350,7 +350,7 @@ def content_category_for_path(path):
     normalized = _display_path(path).lower()
     if normalized == '/':
         return 'Home'
-    if normalized.startswith('/pricing'):
+    if normalized.startswith(('/pricing', '/membership')):
         return 'Pricing'
     if normalized.startswith('/blog'):
         return 'Blog'

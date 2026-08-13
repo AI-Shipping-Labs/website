@@ -334,12 +334,12 @@ def test_mobile_account_section_and_text_nav_coexist_without_overflow(
 
     page.locator("#mobile-menu-btn").click()
     page.locator("#mobile-community-toggle").click()
-    page.locator("#mobile-resources-toggle").click()
+    page.locator("#mobile-learning-toggle").click()
 
     menu = page.locator("#mobile-menu")
     assert menu.is_visible()
     assert page.locator("#mobile-community-list").is_visible()
-    assert page.locator("#mobile-resources-list").is_visible()
+    assert page.locator("#mobile-learning-list").is_visible()
     assert page.locator('[data-testid="mobile-account-section"]').is_visible()
     for label in ["Notifications", "Account", "Log out"]:
         assert menu.get_by_role("link", name=label).is_visible()

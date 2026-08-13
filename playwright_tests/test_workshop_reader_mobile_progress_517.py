@@ -652,7 +652,8 @@ class TestDesktopLayoutUnchanged:
             floating = page.locator(
                 '[data-testid="content-sidebar-floating-toggle"]',
             )
-            assert floating.is_visible()
+            # The restore control deliberately transitions in after collapse.
+            floating.wait_for(state="visible")
 
             _shot(page, "08-desktop-unchanged")
         finally:

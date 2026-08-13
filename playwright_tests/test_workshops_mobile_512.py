@@ -114,7 +114,7 @@ def test_pixel7_archive_is_overflow_free_and_home_omits_recordings(
     expect(page.get_by_test_id("past-recording-card")).to_have_count(4)
     assert _doc_overflow(page) <= 1
     _section_screenshot(
-        page, '[data-testid="past-recordings-stack"]', "393x851-default",
+        page, '[data-testid="events-timeline"]', "393x851-default",
     )
 
 
@@ -159,7 +159,7 @@ def test_mobile_archive_uses_reachable_vertical_cards(django_server, page):
 
     page.set_viewport_size(PIXEL_7)
     _open_archive(page, django_server)
-    stack = page.get_by_test_id("past-recordings-stack")
+    stack = page.get_by_test_id("events-timeline")
     expect(stack).to_be_visible()
     assert stack.evaluate("el => el.scrollWidth - el.clientWidth") <= 1
     cards = stack.get_by_test_id("past-recording-card")
@@ -201,7 +201,7 @@ def test_tablet_archive_keeps_all_recordings_reachable(django_server, page):
 
     page.set_viewport_size(TABLET_1024)
     _open_archive(page, django_server)
-    stack = page.get_by_test_id("past-recordings-stack")
+    stack = page.get_by_test_id("events-timeline")
     expect(stack.get_by_test_id("past-recording-card")).to_have_count(3)
     assert stack.evaluate("el => el.scrollWidth - el.clientWidth") <= 1
     assert _doc_overflow(page) <= 1
@@ -249,5 +249,5 @@ def test_empty_archive_state_no_overflow_on_pixel7(django_server, page):
     expect(
         page.get_by_text("No past event recordings yet", exact=True)
     ).to_be_visible()
-    expect(page.get_by_test_id("past-recordings-stack")).to_have_count(0)
+    expect(page.get_by_test_id("events-timeline")).to_have_count(0)
     assert _doc_overflow(page) <= 1

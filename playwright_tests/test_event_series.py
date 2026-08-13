@@ -950,21 +950,19 @@ class TestScenario9ListingShowsSeriesLink:
             f"{django_server}/events?filter=upcoming",
             wait_until="domcontentloaded",
         )
-        # The series-linked event shows the series link, the standalone does not.
+        # A one-occurrence series stays an occurrence card, but the card
+        # points to the series and names that relationship in its cadence.
         assert page.locator('[data-testid="event-series-card"]').count() == 0
         assert page.locator('[data-testid="series-card-see-more"]').count() == 0
         assert "Standalone Event" in page.locator("body").inner_text()
-        series_link = page.locator('[data-testid="event-card-series-link"]')
-        assert series_link.count() == 1
-        assert "Listed Public Series" in series_link.first.inner_text()
-        # Issue #857: the series label is now plain text — the card's own
-        # anchor routes the whole occurrence to the series page, so there is
-        # no nested <a>. Click the card link and assert it targets the series.
-        card_link = page.locator(
-            '[data-testid="upcoming-event-card"] '
-            '[data-testid="event-card-link"]'
-        ).filter(has_text="Grouped Event")
+        grouped_card = page.get_by_test_id('upcoming-event-card').filter(
+            has_text='Grouped Event',
+        )
+        assert grouped_card.count() == 1
+        assert 'part of Listed Public Series' in grouped_card.inner_text()
+        card_link = grouped_card.get_by_test_id('event-card-link')
         assert card_link.count() == 1
+        assert card_link.get_attribute('href') == series.get_absolute_url()
         card_link.first.click()
         page.wait_for_url(
             re.compile(r".*/events/series/\d+/listed-public-series$")

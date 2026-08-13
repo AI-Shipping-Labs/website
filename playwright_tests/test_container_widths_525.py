@@ -2,7 +2,7 @@
 width for its page-group, and never produces horizontal overflow on mobile.
 
 The audit table defines these target groups (updated by issues #1340/#1395):
-    - wide grids / marketing / dashboard             -> max-w-7xl
+    - wide marketing pages                            -> max-w-7xl
     - calendar / catalogs / mixed-layout indexes     -> max-w-5xl
     - mixed-layout detail pages                      -> max-w-5xl
     - reader / long-form / editorial row feeds       -> max-w-3xl
@@ -368,8 +368,6 @@ def _has_horizontal_overflow(page):
 # (max-w-7xl): they visibly consume the width.
 LISTINGS_WIDE = [
     ('/', 'max-w-7xl', None),
-    ('/courses', 'max-w-7xl', None),
-    ('/projects', 'max-w-7xl', None),
     ('/resources', 'max-w-7xl', None),
     ('/membership', 'max-w-7xl', None),
     ('/activities', 'max-w-7xl', None),
@@ -382,6 +380,8 @@ LISTINGS_WIDE = [
 # addendum". /workshops here is the 5xl landing-page hero; its standalone
 # archive and the other text-first editorial feeds use Reader width below.
 LISTINGS_NARROW = [
+    ('/courses', 'max-w-5xl', None),
+    ('/projects', 'max-w-5xl', None),
     ('/tutorials', 'max-w-5xl', None),
     ('/downloads', 'max-w-5xl', None),
     ('/workshops', 'max-w-5xl', None),
@@ -391,12 +391,12 @@ LISTINGS_NARROW = [
 ]
 
 DETAIL_MEDIUM = [
-    ('/courses/{course_slug}', 'max-w-5xl'),
     ('/courses/{course_slug}/{module_slug}', 'max-w-5xl'),
     ('/vote/{poll_uuid}', 'max-w-5xl'),
 ]
 
 READER_NARROW = [
+    ('/courses/{course_slug}', 'max-w-3xl'),
     ('/sprints', 'max-w-3xl'),
     ('/sprints/{sprint_slug}', 'max-w-3xl'),
     ('/blog', 'max-w-3xl'),
@@ -710,12 +710,12 @@ class TestMobileNoHorizontalOverflow:
 
 @pytest.mark.django_db(transaction=True)
 class TestAuthenticatedDashboardAndAccount:
-    """The authenticated homepage (dashboard) is ``max-w-7xl`` and the
+    """The authenticated homepage (dashboard) is ``max-w-3xl`` and the
     account page is ``max-w-5xl`` — verifies the two sibling shells
     share the standard widths.
     """
 
-    def test_dashboard_uses_wide_frame(self, django_server, browser):
+    def test_dashboard_uses_reader_frame(self, django_server, browser):
         _ensure_tiers()
         _ensure_site_config_tiers()
         _seed_listings()
@@ -732,8 +732,8 @@ class TestAuthenticatedDashboardAndAccount:
             page.goto(f'{django_server}/', wait_until='domcontentloaded')
             cls = _outer_wrapper_class_string(page)
             assert cls is not None
-            assert 'max-w-7xl' in cls, (
-                f'authenticated / dashboard: expected max-w-7xl, got: {cls!r}'
+            assert 'max-w-3xl' in cls, (
+                f'authenticated / dashboard: expected max-w-3xl, got: {cls!r}'
             )
         finally:
             ctx.close()
@@ -801,7 +801,7 @@ class TestListingFrameWidthConsistency:
             widths = self._measure(
                 django_server,
                 page,
-                ['/', '/courses', '/resources', '/projects'],
+                ['/', '/resources', '/membership', '/activities'],
             )
             min_w = min(w for _, w in widths)
             max_w = max(w for _, w in widths)
@@ -825,7 +825,8 @@ class TestListingFrameWidthConsistency:
                 django_server,
                 page,
                 [
-                    '/workshops', '/events/calendar', '/tutorials',
+                    '/courses', '/projects', '/workshops',
+                    '/events/calendar', '/tutorials',
                     '/downloads', '/vote', '/tags',
                 ],
             )

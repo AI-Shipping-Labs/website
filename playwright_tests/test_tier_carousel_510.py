@@ -554,21 +554,28 @@ def test_desktop_layout_unchanged(django_server, page):
         f"Expected lg:scale-105 transform on Main, got: {main_transform}"
     )
 
-    # Full feature list on Basic — at least 5 features (no condensed mobile
-    # treatment on desktop).
+    # Every configured Basic feature remains visible on desktop. The current
+    # homepage configuration intentionally has two concise benefits; this
+    # guards against applying the mobile-only condensation to either one.
     basic_features = page.evaluate(
         """() => {
             const card = document.querySelector('[data-tier-card="basic"]');
-            if (!card) return 0;
-            return Array.from(card.querySelectorAll('ul li')).filter(li => {
-                return getComputedStyle(li).display !== 'none';
-            }).length;
+            if (!card) return {all: [], visible: []};
+            const items = Array.from(card.querySelectorAll('ul li'));
+            return {
+                all: items.map(li => li.innerText.trim()),
+                visible: items.filter(
+                    li => getComputedStyle(li).display !== 'none'
+                ).map(li => li.innerText.trim()),
+            };
         }"""
     )
-    assert basic_features >= 4, (
-        f"Basic card must show full feature list on desktop, got "
-        f"{basic_features} visible items"
-    )
+    expected_basic_features = [
+        "Exclusive written content",
+        "Workshop content",
+    ]
+    assert basic_features["all"] == expected_basic_features
+    assert basic_features["visible"] == expected_basic_features
 
     _screenshot(page, "home_tiers_desktop_unchanged")
 

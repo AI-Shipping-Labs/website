@@ -1,7 +1,7 @@
 """Playwright E2E tests for the mobile (hamburger) navigation menu (Issue #272).
 
 Covers:
-- Community and Resources accordions are collapsed by default.
+- Community, Learning, and About accordions are collapsed by default.
 - Tapping each section expands the list and rotates the chevron 180 degrees.
 - Even when text navigation is expanded, items below it (Sign in / Account /
   Studio / Logout) remain reachable because the menu container itself
@@ -74,9 +74,9 @@ class TestMobileMenuHitTarget:
         assert btn.get_attribute("aria-label") == "Close menu"
 
         public_test_ids = [
-            "mobile-nav-about-trigger",
             "mobile-nav-community-trigger",
-            "mobile-nav-resources-trigger",
+            "mobile-nav-learning-trigger",
+            "mobile-nav-about-trigger",
         ]
         for test_id in public_test_ids:
             assert page.locator(
@@ -102,23 +102,24 @@ class TestMobileMenuHitTarget:
 
         assert not page.locator("#mobile-menu-btn").is_visible()
         desktop_nav = page.locator('[data-testid="desktop-primary-nav"]')
-        # About / Community / Resources are dropdown trigger buttons; the
-        # rest are direct links.
+        # Community / Learning / About are dropdown trigger buttons; Blog and
+        # Membership are direct links.
         for trigger_test_id in [
-            "nav-about-trigger",
             "nav-community-trigger",
-            "nav-resources-trigger",
+            "nav-learning-trigger",
+            "nav-about-trigger",
         ]:
             assert desktop_nav.locator(
                 f'[data-testid="{trigger_test_id}"]'
             ).is_visible()
-        for link_test_id in ["nav-membership", "nav-sprints", "nav-events"]:
+        for link_test_id in ["nav-blog-link", "nav-membership-link"]:
             assert desktop_nav.locator(
                 f'[data-testid="{link_test_id}"]'
-            ).count() == 0
+            ).is_visible()
         assert page.locator("#community-dropdown-btn").is_visible()
-        assert page.locator("#resources-dropdown-btn").is_visible()
-        assert page.locator("#learn-dropdown-btn").count() == 0
+        assert page.locator("#learning-dropdown-btn").is_visible()
+        assert page.locator("#about-dropdown-btn").is_visible()
+        assert page.locator("#resources-dropdown-btn").count() == 0
 
         context.close()
 
@@ -139,7 +140,7 @@ class TestMobileMenuTextNavAccordion:
 
         _open_mobile_menu(page)
 
-        for section in ["about", "community", "resources"]:
+        for section in ["community", "learning", "about"]:
             section_list = page.locator(f"#mobile-{section}-list")
             assert section_list.count() == 1
             assert "hidden" in (section_list.get_attribute("class") or "")
@@ -166,20 +167,15 @@ class TestMobileMenuTextNavAccordion:
                 "FAQ",
             ],
             "community": [
-                "Membership",
-                "Activities",
-                "Community Sprints",
                 "Events",
-                "Past Recordings",
+                "Community Sprints",
+                "Book Club",
             ],
-            "resources": [
-                "Blog",
+            "learning": [
                 "Courses",
                 "Workshops",
                 "Learning Paths",
-                "Project Ideas",
                 "Interview Prep",
-                "Curated Links",
             ],
         }
         for section, labels in expected.items():
@@ -193,7 +189,7 @@ class TestMobileMenuTextNavAccordion:
             assert "rotate-180" in (chevron.get_attribute("class") or "")
 
         community_links = page.locator("#mobile-community-list a")
-        assert community_links.first.inner_text().strip() == "Membership"
+        assert community_links.first.inner_text().strip() == "Events"
         assert page.locator(
             '#mobile-community-list a[href="/community"]'
         ).count() == 0
@@ -212,9 +208,9 @@ class TestMobileMenuTextNavAccordion:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
         _open_mobile_menu(page)
-        page.locator("#mobile-about-toggle").click()
         page.locator("#mobile-community-toggle").click()
-        page.locator("#mobile-resources-toggle").click()
+        page.locator("#mobile-learning-toggle").click()
+        page.locator("#mobile-about-toggle").click()
 
         # Container must declare a bounded height + scroll behavior.
         overflow_y, max_height = page.evaluate(
@@ -279,9 +275,9 @@ class TestMobileMenuAuthenticatedItemsReachable:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
         _open_mobile_menu(page)
-        page.locator("#mobile-about-toggle").click()
         page.locator("#mobile-community-toggle").click()
-        page.locator("#mobile-resources-toggle").click()
+        page.locator("#mobile-learning-toggle").click()
+        page.locator("#mobile-about-toggle").click()
 
         # Studio and Log out are below the text nav for staff users.
         studio_link = page.locator('#mobile-menu a:has-text("Studio")')

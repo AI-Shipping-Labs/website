@@ -13,14 +13,14 @@ This file covers two complementary checks:
 Test 1: ``test_mobile_text_navigation_present_on_each_url`` --
   Iterates a matrix of 9 representative public-page URLs at iPhone-sized
   viewport (390x844). For each URL it taps the hamburger, taps the
-  Community and Resources toggles, and asserts representative links inside
+  Community and Learning toggles, and asserts representative links inside
   both accordion lists become visible. The assertion includes the
   URL in its failure message so a future regression points at the page,
   not just "menu broken".
 
 Test 2: ``test_desktop_header_renders_on_peer_review_pages`` -- At
   1024x768 (desktop), the four peer-review URLs must render the desktop
-  nav (Community and Resources dropdowns) and must NOT show
+  nav (Community and Learning dropdowns) and must NOT show
   the mobile hamburger. This covers the desktop side of the same template
   fix.
 
@@ -246,8 +246,8 @@ class TestMobileTextNavigationAcrossPages:
 
                     _open_mobile_menu(page)
 
-                    # Step 2: Community and Resources toggles are reachable.
-                    for section in ["community", "resources"]:
+                    # Step 2: Community and Learning toggles are reachable.
+                    for section in ["community", "learning"]:
                         toggle = page.locator(f"#mobile-{section}-toggle")
                         if toggle.count() != 1 or not toggle.is_visible():
                             failures.append(
@@ -259,13 +259,13 @@ class TestMobileTextNavigationAcrossPages:
 
                     # Step 3: representative links inside both expanded
                     # accordions are visible.
-                    blog_link = page.locator(
-                        '#mobile-resources-list a[href="/blog"]'
+                    courses_link = page.locator(
+                        '#mobile-learning-list a[href="/courses"]'
                     )
-                    if blog_link.count() != 1 or not blog_link.is_visible():
+                    if courses_link.count() != 1 or not courses_link.is_visible():
                         failures.append(
                             f"[{label}] {path}: text navigation did "
-                            "not expand to show the /blog link"
+                            "not expand to show the /courses link"
                         )
                         continue
                     sprints_link = page.locator(
@@ -296,7 +296,7 @@ class TestMobileTextNavigationAcrossPages:
 
 class TestDesktopHeaderOnPeerReviewPages:
     """At desktop width the same four peer-review URLs must render the
-    desktop nav (Community and Resources dropdown triggers) and must NOT show
+    desktop nav (Community and Learning dropdown triggers) and must NOT show
     the mobile hamburger."""
 
     def test_desktop_header_renders_on_peer_review_pages(
@@ -332,14 +332,14 @@ class TestDesktopHeaderOnPeerReviewPages:
                         wait_until="domcontentloaded",
                     )
 
-                    resources_dd = page.locator("#resources-dropdown-btn")
+                    learning_dd = page.locator("#learning-dropdown-btn")
                     if (
-                        resources_dd.count() != 1
-                        or not resources_dd.is_visible()
+                        learning_dd.count() != 1
+                        or not learning_dd.is_visible()
                     ):
                         failures.append(
-                            f"{path}: desktop Resources dropdown button "
-                            "(#resources-dropdown-btn) not visible"
+                            f"{path}: desktop Learning dropdown button "
+                            "(#learning-dropdown-btn) not visible"
                         )
 
                     community_dd = page.locator("#community-dropdown-btn")
@@ -437,13 +437,13 @@ class TestHomepageMobileMenuStillWorks:
             page.goto(f"{django_server}/", wait_until="domcontentloaded")
             _open_mobile_menu(page)
             _expand_mobile_section(page, "community")
-            _expand_mobile_section(page, "resources")
+            _expand_mobile_section(page, "learning")
 
-            blog = page.locator(
-                '#mobile-resources-list a[href="/blog"]'
+            courses = page.locator(
+                '#mobile-learning-list a[href="/courses"]'
             )
-            assert blog.count() == 1
-            assert blog.is_visible()
+            assert courses.count() == 1
+            assert courses.is_visible()
             sprints = page.locator(
                 '#mobile-community-list a[href="/sprints"]'
             )

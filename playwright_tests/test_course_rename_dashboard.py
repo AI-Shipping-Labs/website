@@ -135,7 +135,9 @@ class TestCourseRenameDashboardLink:
 
         # Step 4: click Continue and confirm the page resolves at the
         # new URL (200, not 404).
-        continue_link = learning.locator('a:has-text("Continue")').first
+        continue_link = learning.get_by_role(
+            'link', name='Python Fundamentals', exact=True,
+        )
         continue_link.click()
         page.wait_for_load_state('domcontentloaded')
         assert '/courses/python/' in page.url, (

@@ -103,15 +103,17 @@ def _assert_no_horizontal_overflow(page):
 
 
 def _desktop_top_level_test_ids(page):
-    """Return the top-level data-testids in left-to-right document order."""
+    """Return the current top-level data-testids in document order."""
     return page.evaluate(
         """
         () => {
             const nav = document.querySelector('[data-testid="desktop-primary-nav"]');
             const ids = [
-                'nav-about-trigger',
                 'nav-community-trigger',
-                'nav-resources-trigger',
+                'nav-learning-trigger',
+                'nav-blog-link',
+                'nav-membership-link',
+                'nav-about-trigger',
             ];
             const found = [...nav.querySelectorAll('[data-testid]')]
                 .map(el => el.getAttribute('data-testid'))
@@ -128,15 +130,17 @@ def _desktop_top_level_test_ids(page):
 # ---------------------------------------------------------------------------
 
 
-def test_anonymous_top_nav_has_three_groups_in_order(django_server, page):
+def test_anonymous_top_nav_has_current_items_in_order(django_server, page):
     """Scenario: Anonymous visitor scans the top nav and finds the grouped IA."""
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
     assert _desktop_top_level_test_ids(page) == [
-        "nav-about-trigger",
         "nav-community-trigger",
-        "nav-resources-trigger",
+        "nav-learning-trigger",
+        "nav-blog-link",
+        "nav-membership-link",
+        "nav-about-trigger",
     ]
 
     nav = page.locator('[data-testid="desktop-primary-nav"]')
@@ -185,13 +189,13 @@ def test_about_dropdown_contains_about_team_faq(django_server, page):
     _shot(page, "02-about-team-anchor")
 
 
-def test_resources_dropdown_lists_blog_first(django_server, page):
-    """Scenario: Visitor opens Resources and sees Blog first."""
+def test_learning_dropdown_lists_current_learning_destinations(django_server, page):
+    """Scenario: Visitor opens Learning and sees its canonical destinations."""
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
-    page.get_by_test_id("nav-resources-trigger").hover()
-    menu = page.get_by_test_id("nav-resources-menu")
+    page.get_by_test_id("nav-learning-trigger").hover()
+    menu = page.get_by_test_id("nav-learning-menu")
     menu.wait_for(state="visible")
 
     link_ids = menu.evaluate(
@@ -201,29 +205,26 @@ def test_resources_dropdown_lists_blog_first(django_server, page):
         """
     )
     assert link_ids == [
-        "nav-resources-link-blog",
-        "nav-resources-link-courses",
-        "nav-resources-link-workshops",
-        "nav-resources-link-learning-paths",
-        "nav-resources-link-projects",
-        "nav-resources-link-interview",
-        "nav-resources-link-curated-links",
+        "nav-learning-link-courses",
+        "nav-learning-link-workshops",
+        "nav-learning-link-learning-paths",
+        "nav-learning-link-interview",
     ]
 
     # Verify the Learning Paths label is plural even though the route is singular.
-    learning_link = page.get_by_test_id("nav-resources-link-learning-paths")
+    learning_link = page.get_by_test_id("nav-learning-link-learning-paths")
     assert learning_link.inner_text().strip() == "Learning Paths"
     assert learning_link.get_attribute("href") == "/learning-path/ai-engineer"
     assert menu.get_by_text("Past Recordings", exact=True).count() == 0
     assert menu.get_by_text("Event Recordings", exact=True).count() == 0
     assert menu.locator('a[href="/events?filter=past"]').count() == 0
 
-    page.get_by_test_id("nav-resources-link-blog").click()
-    page.wait_for_url("**/blog")
-    _shot(page, "03-resources-blog-first")
+    page.get_by_test_id("nav-learning-link-courses").click()
+    page.wait_for_url("**/courses")
+    _shot(page, "03-learning-destinations")
 
 
-def test_resources_dropdown_adds_downloads_only_when_published(
+def test_learning_dropdown_adds_downloads_only_when_published(
     django_server, page, django_db_blocker
 ):
     with django_db_blocker.unblock():
@@ -232,17 +233,17 @@ def test_resources_dropdown_adds_downloads_only_when_published(
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
-    page.get_by_test_id("nav-resources-trigger").hover()
-    menu = page.get_by_test_id("nav-resources-menu")
+    page.get_by_test_id("nav-learning-trigger").hover()
+    menu = page.get_by_test_id("nav-learning-menu")
     menu.wait_for(state="visible")
 
-    downloads_link = page.get_by_test_id("nav-resources-link-downloads")
+    downloads_link = page.get_by_test_id("nav-learning-link-downloads")
     assert downloads_link.count() == 1
     assert downloads_link.get_attribute("href") == "/downloads"
 
 
-def test_community_dropdown_groups_membership_sprints_events(django_server, page):
-    """Scenario: Visitor opens Community and finds Membership grouped with surfaces."""
+def test_community_dropdown_groups_current_surfaces(django_server, page):
+    """Scenario: Visitor opens Community and finds current surfaces."""
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
@@ -257,21 +258,18 @@ def test_community_dropdown_groups_membership_sprints_events(django_server, page
         """
     )
     assert link_ids == [
-        "nav-community-link-membership",
-        "nav-community-link-activities",
+        "nav-community-link-events",
         "nav-community-link-sprints",
         "nav-community-link-books",
-        "nav-community-link-events",
-        "nav-community-link-past-recordings",
     ]
 
-    page.get_by_test_id("nav-community-link-membership").click()
-    page.wait_for_url("**/membership")
-    _shot(page, "04-community-membership")
+    page.get_by_test_id("nav-community-link-events").click()
+    page.wait_for_url("**/events")
+    _shot(page, "04-community-events")
 
 
-def test_community_dropdown_links_membership_first(django_server, page):
-    """Scenario: Visitor opens Community and starts at Membership."""
+def test_community_dropdown_links_events_first(django_server, page):
+    """Scenario: Visitor opens Community and starts at Events."""
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
@@ -285,13 +283,10 @@ def test_community_dropdown_links_membership_first(django_server, page):
             .map(a => [a.getAttribute('data-testid'), a.getAttribute('href')])
         """
     )
-    assert links[:6] == [
-        ["nav-community-link-membership", "/membership"],
-        ["nav-community-link-activities", "/activities"],
+    assert links[:3] == [
+        ["nav-community-link-events", "/events"],
         ["nav-community-link-sprints", "/sprints"],
         ["nav-community-link-books", "/books"],
-        ["nav-community-link-events", "/events"],
-        ["nav-community-link-past-recordings", "/events?filter=past"],
     ]
 
 
@@ -314,14 +309,12 @@ def test_community_links_reach_membership_sprints_and_events(django_server, page
     page.get_by_test_id("nav-community-menu").wait_for(state="visible")
     events = page.get_by_test_id("nav-community-link-events")
     assert events.get_attribute("href") == "/events"
-    past_recordings = page.get_by_test_id("nav-community-link-past-recordings")
-    assert past_recordings.get_attribute("href") == "/events?filter=past"
     events.click()
     page.wait_for_url("**/events")
     _shot(page, "05-sprints-events-community")
 
 
-def test_desktop_community_past_recordings_link_opens_selected_filter(
+def test_desktop_events_page_exposes_past_filter(
     django_server, page
 ):
     """Scenario: Visitor finds past recordings from desktop community navigation."""
@@ -332,17 +325,8 @@ def test_desktop_community_past_recordings_link_opens_selected_filter(
     menu = page.get_by_test_id("nav-community-menu")
     menu.wait_for(state="visible")
 
-    link_ids = menu.evaluate(
-        """
-        el => [...el.querySelectorAll('a[data-testid]')]
-            .map(a => a.getAttribute('data-testid'))
-        """
-    )
-    assert link_ids.index("nav-community-link-events") + 1 == link_ids.index(
-        "nav-community-link-past-recordings"
-    )
-
-    page.get_by_test_id("nav-community-link-past-recordings").click()
+    page.get_by_test_id("nav-community-link-events").click()
+    page.get_by_test_id("events-filter-past").click()
     page.wait_for_url(re.compile(r".*/events\?filter=past$"))
     assert page.get_by_test_id("events-filter-past").get_attribute(
         "aria-selected"
@@ -392,15 +376,15 @@ def test_mobile_about_accordion_exposes_team_and_faq(django_server, browser):
     context.close()
 
 
-def test_mobile_resources_accordion_lists_blog_first(django_server, browser):
-    """Scenario: Mobile visitor expands Resources and sees Blog first."""
+def test_mobile_learning_accordion_lists_current_destinations(django_server, browser):
+    """Scenario: Mobile visitor expands Learning."""
     context = browser.new_context(viewport={"width": 390, "height": 844})
     page = context.new_page()
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
     _open_mobile_menu(page)
-    page.get_by_test_id("mobile-nav-resources-trigger").click()
-    resources_menu = page.get_by_test_id("mobile-nav-resources-menu")
+    page.get_by_test_id("mobile-nav-learning-trigger").click()
+    resources_menu = page.get_by_test_id("mobile-nav-learning-menu")
     resources_menu.wait_for(state="visible")
 
     link_ids = resources_menu.evaluate(
@@ -410,25 +394,22 @@ def test_mobile_resources_accordion_lists_blog_first(django_server, browser):
         """
     )
     assert link_ids == [
-        "mobile-nav-resources-link-blog",
-        "mobile-nav-resources-link-courses",
-        "mobile-nav-resources-link-workshops",
-        "mobile-nav-resources-link-learning-paths",
-        "mobile-nav-resources-link-projects",
-        "mobile-nav-resources-link-interview",
-        "mobile-nav-resources-link-curated-links",
+        "mobile-nav-learning-link-courses",
+        "mobile-nav-learning-link-workshops",
+        "mobile-nav-learning-link-learning-paths",
+        "mobile-nav-learning-link-interview",
     ]
-    learning_link = page.get_by_test_id("mobile-nav-resources-link-learning-paths")
+    learning_link = page.get_by_test_id("mobile-nav-learning-link-learning-paths")
     assert learning_link.inner_text().strip() == "Learning Paths"
 
-    page.get_by_test_id("mobile-nav-resources-link-blog").click()
-    page.wait_for_url("**/blog")
-    _shot(page, "07-mobile-resources-blog")
+    page.get_by_test_id("mobile-nav-learning-link-courses").click()
+    page.wait_for_url("**/courses")
+    _shot(page, "07-mobile-learning")
     context.close()
 
 
-def test_mobile_community_accordion_reaches_past_recordings(django_server, browser):
-    """Scenario: Mobile visitor reaches the same past-recordings list."""
+def test_mobile_community_accordion_reaches_events_past_filter(django_server, browser):
+    """Scenario: Mobile visitor reaches Events and its past filter."""
     context = browser.new_context(viewport={"width": 390, "height": 844})
     page = context.new_page()
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
@@ -445,15 +426,13 @@ def test_mobile_community_accordion_reaches_past_recordings(django_server, brows
         """
     )
     assert link_ids == [
-        "mobile-nav-community-link-membership",
-        "mobile-nav-community-link-activities",
+        "mobile-nav-community-link-events",
         "mobile-nav-community-link-sprints",
         "mobile-nav-community-link-books",
-        "mobile-nav-community-link-events",
-        "mobile-nav-community-link-past-recordings",
     ]
 
-    page.get_by_test_id("mobile-nav-community-link-past-recordings").click()
+    page.get_by_test_id("mobile-nav-community-link-events").click()
+    page.get_by_test_id("events-filter-past").click()
     page.wait_for_url(re.compile(r".*/events\?filter=past$"))
     assert page.get_by_test_id("events-filter-past").get_attribute(
         "aria-selected"
@@ -463,8 +442,8 @@ def test_mobile_community_accordion_reaches_past_recordings(django_server, brows
     context.close()
 
 
-def test_mobile_top_level_groups_appear_between_about_and_resources(django_server, browser):
-    """Scenario: Mobile visitor sees Community as the only community surface group."""
+def test_mobile_top_level_items_follow_current_order(django_server, browser):
+    """Scenario: Mobile visitor sees the current public IA order."""
     context = browser.new_context(viewport={"width": 390, "height": 844})
     page = context.new_page()
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
@@ -477,9 +456,11 @@ def test_mobile_top_level_groups_appear_between_about_and_resources(django_serve
         () => {
             const menu = document.getElementById('mobile-menu');
             const wanted = new Set([
-                'mobile-nav-about-trigger',
                 'mobile-nav-community-trigger',
-                'mobile-nav-resources-trigger',
+                'mobile-nav-learning-trigger',
+                'mobile-nav-blog-link',
+                'mobile-nav-membership-link',
+                'mobile-nav-about-trigger',
             ]);
             return [...menu.querySelectorAll('[data-testid]')]
                 .map(el => el.getAttribute('data-testid'))
@@ -488,9 +469,11 @@ def test_mobile_top_level_groups_appear_between_about_and_resources(django_serve
         """
     )
     assert test_ids == [
-        "mobile-nav-about-trigger",
         "mobile-nav-community-trigger",
-        "mobile-nav-resources-trigger",
+        "mobile-nav-learning-trigger",
+        "mobile-nav-blog-link",
+        "mobile-nav-membership-link",
+        "mobile-nav-about-trigger",
     ]
     for duplicate_id in [
         "mobile-nav-membership",
@@ -509,9 +492,9 @@ def test_mobile_320px_has_no_horizontal_overflow(django_server, browser):
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
     _open_mobile_menu(page)
-    page.get_by_test_id("mobile-nav-about-trigger").click()
     page.get_by_test_id("mobile-nav-community-trigger").click()
-    page.get_by_test_id("mobile-nav-resources-trigger").click()
+    page.get_by_test_id("mobile-nav-learning-trigger").click()
+    page.get_by_test_id("mobile-nav-about-trigger").click()
 
     scroll_width = page.evaluate("() => document.documentElement.scrollWidth")
     assert scroll_width <= 320 + 1, (
@@ -522,11 +505,10 @@ def test_mobile_320px_has_no_horizontal_overflow(django_server, browser):
     # the menu container (no horizontal overflow forcing them off-canvas).
     for test_id in [
         "mobile-nav-about-link-team",
-        "mobile-nav-community-link-membership",
-        "mobile-nav-community-link-activities",
+        "mobile-nav-community-link-events",
         "mobile-nav-community-link-sprints",
-        "mobile-nav-community-link-past-recordings",
-        "mobile-nav-resources-link-curated-links",
+        "mobile-nav-learning-link-courses",
+        "mobile-nav-learning-link-interview",
     ]:
         link = page.get_by_test_id(test_id)
         link.scroll_into_view_if_needed()
@@ -555,9 +537,11 @@ def test_authenticated_member_sees_same_public_nav_plus_account(
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
     assert _desktop_top_level_test_ids(page) == [
-        "nav-about-trigger",
         "nav-community-trigger",
-        "nav-resources-trigger",
+        "nav-learning-trigger",
+        "nav-blog-link",
+        "nav-membership-link",
+        "nav-about-trigger",
     ]
     assert page.locator("#notification-bell-btn").is_visible()
     assert page.locator("#account-menu-trigger").is_visible()
@@ -572,15 +556,13 @@ def test_authenticated_member_sees_same_public_nav_plus_account(
         ".map(a => a.getAttribute('data-testid'))"
     )
     assert link_ids == [
-        "nav-community-link-membership",
-        "nav-community-link-activities",
+        "nav-community-link-events",
         "nav-community-link-sprints",
         "nav-community-link-books",
-        "nav-community-link-events",
-        "nav-community-link-past-recordings",
     ]
 
-    page.get_by_test_id("nav-community-link-past-recordings").click()
+    page.get_by_test_id("nav-community-link-events").click()
+    page.get_by_test_id("events-filter-past").click()
     page.wait_for_url(re.compile(r".*/events\?filter=past$"))
     assert page.get_by_test_id("events-filter-past").get_attribute(
         "aria-selected"
@@ -660,10 +642,11 @@ def test_sprints_page_empty_state(django_server, page, django_db_blocker):
     assert page.locator('[data-testid="sprints-sprint-card"]').count() == 0
 
 
-def test_existing_activities_page_still_loads(django_server, page):
+def test_existing_activities_url_redirects_to_membership_benefits(django_server, page):
     page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
 
-    assert page.locator('[data-testid="activities-sprints-section"]').is_visible()
+    page.wait_for_url(f"{django_server}/membership#activities")
+    assert page.locator('[data-testid="membership-benefits-section"]').is_visible()
     assert page.get_by_role(
         "heading", name="Build with structure, support, and a group"
     ).is_visible()

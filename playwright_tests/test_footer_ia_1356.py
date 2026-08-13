@@ -116,14 +116,15 @@ class TestFooterInformationArchitecture:
         )
         for name in [
             'Activities', 'Community Sprints', 'Events',
-            'Past Recordings', 'Books', 'Join Slack',
+            'Book Club', 'Join Slack',
         ]:
             assert community.get_by_role(
                 'link', name=name, exact=True,
             ).count() == 1
         # Catch-all links are NOT in the Community column.
         for name in [
-            'Membership Tiers', 'FAQ', 'Team', 'Manage Subscription',
+            'Past Recordings', 'Membership Tiers', 'FAQ', 'Team',
+            'Manage Subscription',
         ]:
             assert community.get_by_role(
                 'link', name=name, exact=True,

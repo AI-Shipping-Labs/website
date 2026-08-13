@@ -568,10 +568,10 @@ class TestScenario5NavigateFromDetailToFilteredListing:
         page.wait_for_load_state("domcontentloaded")
         assert "/workshops/building-chatbots" in page.url
 
-        # Step 4: Navigate back to /events — both recordings are still
+        # Step 4: Navigate back to the Past filter — both recordings are still
         # discoverable under the past-events section.
         page.goto(
-            f"{django_server}/events",
+            f"{django_server}/events?filter=past",
             wait_until="domcontentloaded",
         )
         body = page.content()

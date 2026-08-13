@@ -3,7 +3,7 @@
 A member should be able to read, at a glance, when a sprint runs from start
 to finish -- not just when it starts. These flows verify the
 ``Start - End (N weeks)`` wording renders consistently on the sprint detail
-page, the ``/sprints`` list, and the ``/activities`` cards, and that the
+page, the ``/sprints`` list, and the Membership sprint preview, and that the
 cross-year form shows the year on both sides.
 
 Screenshots are written to ``.tmp/screenshots/issue-978`` for tester
@@ -158,17 +158,19 @@ class TestSprintDateRange:
 
         ranges = page.locator('[data-testid="sprints-sprint-dates"]')
         assert ranges.count() == 2
+        # The visually hidden "Sprint window" prefix gives screen-reader
+        # context, so compare the visible range as a substring.
         texts = {ranges.nth(i).inner_text() for i in range(ranges.count())}
-        assert _expected_sprint_range(june_start, 6) in texts
-        assert _expected_sprint_range(august_start, 8) in texts
+        assert any(_expected_sprint_range(june_start, 6) in text for text in texts)
+        assert any(_expected_sprint_range(august_start, 8) in text for text in texts)
         _shot(page, "02-sprints-list-windows")
         ctx.close()
 
     def test_visitor_activities_shows_start_and_end(
         self, django_server, page, django_db_blocker
     ):
-        """An anonymous visitor on /activities sees the start--end (duration)
-        range, consistent with the /sprints and detail wording."""
+        """The legacy /activities entry reaches Membership and preserves the
+        start--end (duration) range in its active-sprint preview."""
         with django_db_blocker.unblock():
             ensure_tiers()
             ensure_site_config_tiers()
@@ -178,7 +180,8 @@ class TestSprintDateRange:
 
         page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
 
-        card = page.locator('[data-testid="activities-sprint-card"]').first
+        assert page.url.endswith("/membership#activities")
+        card = page.locator('[data-testid="membership-sprint-card"]').first
         assert card.is_visible()
         dates = card.locator('[data-testid="sprints-sprint-dates"]')
         assert _expected_sprint_range(start_date, 6) in dates.inner_text()

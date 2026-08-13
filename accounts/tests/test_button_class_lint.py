@@ -33,7 +33,7 @@ import re
 from pathlib import Path
 
 from django.conf import settings
-from django.test import TestCase
+from django.test import TestCase, tag
 
 # Scoped templates: these six have all been fully migrated to
 # {% button_classes ... %}. Adding a seventh template here is fine; the
@@ -60,8 +60,165 @@ FORBIDDEN_ACTION_PALETTE_TOKENS = (
 )
 
 
+IGNORED_SOURCE_REGIONS = re.compile(
+    r'{#.*?#}'
+    r'|{%\s*comment\s*%}.*?{%\s*endcomment\s*%}'
+    r'|<!--.*?-->'
+    r'|<script\b.*?</script\s*>'
+    r'|<style\b.*?</style\s*>',
+    re.DOTALL | re.IGNORECASE,
+)
+MARKUP_TAG_RE = re.compile(
+    r'<[a-z][a-z0-9:-]*\b(?P<attrs>[^>]*)>',
+    re.DOTALL | re.IGNORECASE,
+)
+CLASS_ATTR_RE = re.compile(
+    r'\bclass\s*=\s*(?P<quote>["\'])(?P<classes>.*?)(?P=quote)',
+    re.DOTALL | re.IGNORECASE,
+)
+MAX_PALETTE_DIAGNOSTICS = 25
+
+# The #1434 implementation baseline contains no forbidden action-palette
+# occurrences in Studio. The explicit rule/path map is intentionally empty:
+# every new occurrence therefore has a positive budget of zero. The separate
+# ceiling prevents the map from ever growing beyond this baseline.
+KNOWN_STUDIO_ACTION_PALETTE_EXCEPTIONS: dict[tuple[str, str], int] = {}
+STUDIO_ACTION_PALETTE_EXCEPTION_CEILING: dict[tuple[str, str], int] = {}
+
+
+def _mask_ignored_regions(source: str) -> str:
+    return IGNORED_SOURCE_REGIONS.sub(
+        lambda match: re.sub(r'[^\n]', ' ', match.group(0)),
+        source,
+    )
+
+
+def _action_palette_occurrences(html: str) -> list[tuple[str, int]]:
+    """Find exact forbidden class tokens on action-shaped markup."""
+
+    masked = _mask_ignored_regions(html)
+    occurrences = []
+    for tag_match in MARKUP_TAG_RE.finditer(masked):
+        class_match = CLASS_ATTR_RE.search(tag_match.group('attrs'))
+        if class_match is None:
+            continue
+        classes = class_match.group('classes')
+        class_offset = tag_match.start('attrs') + class_match.start('classes')
+        for token in FORBIDDEN_ACTION_PALETTE_TOKENS:
+            token_re = re.compile(rf'(?<!\S){re.escape(token)}(?!\S)')
+            for token_match in token_re.finditer(classes):
+                offset = class_offset + token_match.start()
+                occurrences.append((token, masked.count('\n', 0, offset) + 1))
+    return occurrences
+
+
 def _scan_forbidden_action_palette(html: str) -> list[str]:
-    return [token for token in FORBIDDEN_ACTION_PALETTE_TOKENS if token in html]
+    """Compatibility helper returning each matched token in source order."""
+
+    return [token for token, _line in _action_palette_occurrences(html)]
+
+
+def _palette_diagnostic(
+    rule: str,
+    path: str,
+    line: int,
+    allowed: int,
+    actual: int,
+    remediation: str,
+) -> str:
+    return (
+        f'rule={rule} path={path} line={line} allowed={allowed} '
+        f'actual={actual} remediation={remediation}'
+    )
+
+
+def _scan_action_palette_sources(
+    sources: dict[str, str],
+    exceptions: dict[tuple[str, str], int] | None = None,
+    ceiling: dict[tuple[str, str], int] | None = None,
+) -> list[str]:
+    """Scan all template sources with Studio-only rule/path debt budgets."""
+
+    exceptions = (
+        KNOWN_STUDIO_ACTION_PALETTE_EXCEPTIONS
+        if exceptions is None
+        else exceptions
+    )
+    ceiling = (
+        STUDIO_ACTION_PALETTE_EXCEPTION_CEILING if ceiling is None else ceiling
+    )
+    diagnostics = []
+
+    for (rule, path), allowed_count in sorted(exceptions.items()):
+        ceiling_count = ceiling.get((rule, path))
+        if ceiling_count is None:
+            diagnostics.append(
+                _palette_diagnostic(
+                    'studio-action-palette-exception-path-ceiling',
+                    path,
+                    1,
+                    0,
+                    1,
+                    'use-studio-action-owner-instead-of-adding-an-exception',
+                ),
+            )
+        elif allowed_count > ceiling_count:
+            diagnostics.append(
+                _palette_diagnostic(
+                    'studio-action-palette-exception-count-ceiling',
+                    path,
+                    1,
+                    ceiling_count,
+                    allowed_count,
+                    f'remove-{rule}-and-use-studio-action-owner',
+                ),
+            )
+
+    actual_counts = {}
+    first_lines = {}
+    for path, source in sorted(sources.items()):
+        for rule, line in _action_palette_occurrences(source):
+            key = (rule, path)
+            actual_counts[key] = actual_counts.get(key, 0) + 1
+            first_lines.setdefault(key, line)
+
+    keys = set(actual_counts) | set(exceptions)
+    for rule, path in sorted(keys):
+        actual = actual_counts.get((rule, path), 0)
+        allowed = exceptions.get((rule, path), 0) if path.startswith('studio/') else 0
+        if actual == allowed:
+            continue
+        is_studio = path.startswith('studio/')
+        owner = (
+            'studio_header_actions|studio_overflow_menu|studio_list_action|'
+            'studio_action_class'
+            if is_studio
+            else 'button_classes'
+        )
+        diagnostics.append(
+            _palette_diagnostic(
+                f'forbidden-action-palette:{rule}',
+                path,
+                first_lines.get((rule, path), 1),
+                allowed,
+                actual,
+                f'use-indexed-owner-{owner}',
+            ),
+        )
+
+    ordered = sorted(set(diagnostics))
+    if len(ordered) <= MAX_PALETTE_DIAGNOSTICS:
+        return ordered
+    return ordered[:MAX_PALETTE_DIAGNOSTICS] + [
+        _palette_diagnostic(
+            'studio-action-palette-diagnostic-limit',
+            'studio',
+            1,
+            MAX_PALETTE_DIAGNOSTICS,
+            len(ordered),
+            'fix-listed-violations-and-rerun',
+        ),
+    ]
 
 # Tokens we forbid inside a button-shaped class attribute. ``py-1`` without
 # ``py-1.5`` is matched with a word-boundary negative lookahead.
@@ -137,6 +294,7 @@ def _scan_template(path: Path) -> list[str]:
     return violations
 
 
+@tag('core')
 class ButtonPaddingLintTest(TestCase):
     """Fail if any scoped template hand-rolls a non-canonical button."""
 
@@ -195,15 +353,13 @@ class ButtonPaddingLintTest(TestCase):
             ),
         )
 
-    def test_non_studio_templates_have_no_forbidden_action_palette(self):
+    def test_all_templates_have_no_unbudgeted_forbidden_action_palette(self):
         templates = Path(settings.BASE_DIR) / 'templates'
-        offenders = []
+        sources = {}
         for path in templates.rglob('*.html'):
-            if 'studio' in path.relative_to(templates).parts:
-                continue
-            for token in _scan_forbidden_action_palette(path.read_text()):
-                offenders.append(f'{path.relative_to(templates)}: {token}')
-        self.assertEqual(offenders, [])
+            relative = path.relative_to(templates).as_posix()
+            sources[relative] = path.read_text(encoding='utf-8')
+        self.assertEqual(_scan_action_palette_sources(sources), [])
 
     def test_action_palette_lint_rejects_synthetic_violation(self):
         bad = '<a class="rounded bg-green-600 hover:bg-green-700">Go</a>'
@@ -211,6 +367,71 @@ class ButtonPaddingLintTest(TestCase):
             _scan_forbidden_action_palette(bad),
             ['bg-green-600', 'hover:bg-green-700'],
         )
+
+    def test_new_studio_palette_violation_defaults_to_zero(self):
+        diagnostics = _scan_action_palette_sources({
+            'studio/synthetic.html': (
+                '<button\n class="rounded bg-green-600">Go</button>'
+            ),
+        })
+        self.assertEqual(
+            diagnostics,
+            [
+                'rule=forbidden-action-palette:bg-green-600 '
+                'path=studio/synthetic.html line=2 allowed=0 actual=1 '
+                'remediation=use-indexed-owner-studio_header_actions|'
+                'studio_overflow_menu|studio_list_action|studio_action_class',
+            ],
+        )
+
+    def test_studio_palette_exception_cannot_raise_empty_baseline(self):
+        diagnostics = _scan_action_palette_sources(
+            {'studio/synthetic.html': '<button class="bg-green-600">Go</button>'},
+            exceptions={('bg-green-600', 'studio/synthetic.html'): 1},
+            ceiling={},
+        )
+        self.assertTrue(
+            any(
+                'rule=studio-action-palette-exception-path-ceiling' in row
+                for row in diagnostics
+            ),
+        )
+        for row in diagnostics:
+            self.assertRegex(
+                row,
+                r'rule=\S+ path=\S+ line=\d+ allowed=\d+ actual=\d+ remediation=',
+            )
+
+    def test_action_matcher_boundaries_and_studio_owners(self):
+        owner_source = """
+            {% studio_header_actions title='Owned' %}
+              {% studio_overflow_menu %}{% endstudio_overflow_menu %}
+              {% studio_list_action detail_url 'View' 'secondary' %}
+              <button class="{%
+                  studio_action_class
+                  'primary'
+              %}">Save</button>
+            {% endstudio_header_actions %}
+        """
+        boundary_sources = {
+            'studio/owners.html': owner_source,
+            'studio/lookalikes.html': """
+                {# <button class="bg-green-600">Comment</button> #}
+                {% comment %}<a class="bg-green-600">Comment</a>{% endcomment %}
+                <!-- <a class="bg-green-600">Comment</a> -->
+                <script>const klass = 'bg-green-600';</script>
+                <style>.bg-green-600ish { color: green; }</style>
+                <a class="bg-green-600ish">Substring</a>
+            """,
+            # The palette guard is Studio-wide, so genuine partial violations
+            # are deliberately scanned even though header discovery ignores them.
+            'studio/_partial.html': '<a class="bg-green-600">Partial action</a>',
+            'studio/non_page.html': '<div class="text-green-600">Status</div>',
+        }
+        diagnostics = _scan_action_palette_sources(boundary_sources)
+        self.assertEqual(len(diagnostics), 1)
+        self.assertIn('path=studio/_partial.html', diagnostics[0])
+        self.assertNotIn('button_classes', owner_source)
 
     def test_lint_allows_form_inputs_with_px4_py25(self):
         """Form inputs intentionally keep their own padding chrome."""

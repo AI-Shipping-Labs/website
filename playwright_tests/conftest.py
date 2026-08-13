@@ -178,6 +178,21 @@ def pytest_sessionfinish(session, exitstatus):
     _release_playwright_worktree_guard(session.config)
 
 
+def pytest_terminal_summary(terminalreporter):
+    """Record the shared browser's final resource state when it was used."""
+    final_resources = getattr(
+        terminalreporter.config,
+        "_playwright_final_browser_resources",
+        None,
+    )
+    if final_resources is None:
+        return
+    contexts, pages = final_resources
+    terminalreporter.write_line(
+        f"Playwright session browser final state: {contexts} contexts / {pages} pages"
+    )
+
+
 def pytest_collection_modifyitems(config, items):
     """Skip local-only / creates_data tests when running against a deployed env.
 
@@ -325,7 +340,7 @@ def django_server(request):
 
 
 @pytest.fixture(scope="session")
-def browser():
+def browser(request):
     """Launch a single Chromium instance for the entire test session.
 
     This avoids the ~1-2s overhead of launching a new browser per test.
@@ -334,7 +349,118 @@ def browser():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         yield browser
+        final_contexts, final_pages = _browser_resource_counts(browser)
+        request.config._playwright_final_browser_resources = (
+            final_contexts,
+            final_pages,
+        )
         browser.close()
+
+
+def _browser_resource_snapshot(browser):
+    """Return active contexts plus exact context/page counts."""
+    contexts = list(browser.contexts)
+    return contexts, len(contexts), sum(len(context.pages) for context in contexts)
+
+
+def _browser_resource_counts(browser):
+    """Return exact active context/page counts for the shared browser."""
+    _contexts, context_count, page_count = _browser_resource_snapshot(browser)
+    return context_count, page_count
+
+
+def _close_browser_contexts(browser):
+    """Close every context discovered on the shared browser.
+
+    Contexts are closed in the stable order returned by Playwright. A failed
+    close never prevents the remaining contexts from being attempted.
+    """
+    contexts, context_count, page_count = _browser_resource_snapshot(browser)
+    close_errors = []
+    for index, context in enumerate(contexts, start=1):
+        try:
+            context.close()
+        except Exception as exc:  # noqa: BLE001 - aggregate every teardown failure
+            close_errors.append(
+                f"context {index}: {type(exc).__name__}: {exc}"
+            )
+
+    _remaining, remaining_contexts, remaining_pages = _browser_resource_snapshot(
+        browser
+    )
+    return {
+        "before_contexts": context_count,
+        "before_pages": page_count,
+        "after_contexts": remaining_contexts,
+        "after_pages": remaining_pages,
+        "close_errors": close_errors,
+    }
+
+
+def _browser_lifecycle_error(nodeid, phase, cleanup):
+    """Build one actionable error containing all browser cleanup evidence."""
+    close_errors = cleanup["close_errors"]
+    lines = [
+        "Playwright per-node browser lifecycle violation.",
+        f"Node: {nodeid}",
+        f"Phase: {phase}",
+        (
+            "Before cleanup: "
+            f"{cleanup['before_contexts']} contexts / "
+            f"{cleanup['before_pages']} pages"
+        ),
+        (
+            "After cleanup: "
+            f"{cleanup['after_contexts']} contexts / "
+            f"{cleanup['after_pages']} pages"
+        ),
+        f"Context close errors ({len(close_errors)}):",
+    ]
+    lines.extend(f"- {error}" for error in close_errors)
+    if not close_errors:
+        lines.append("- none")
+    return "\n".join(lines)
+
+
+@pytest.fixture(autouse=True)
+def _browser_node_lifecycle(request):
+    """Own all shared-browser resources for exactly one test node.
+
+    The fixture stays dormant unless ``browser`` is already in the node's
+    declared fixture closure, so static guards do not launch Chromium. As an
+    autouse fixture it initializes before ordinary function fixtures and
+    therefore finalizes after them: the normal ``page`` teardown runs first,
+    then this boundary closes any contexts created directly by the test.
+    """
+    if "browser" not in request.fixturenames:
+        yield
+        return
+
+    browser = request.getfixturevalue("browser")
+    inherited_contexts, inherited_pages = _browser_resource_counts(browser)
+    if (inherited_contexts, inherited_pages) != (0, 0):
+        cleanup = _close_browser_contexts(browser)
+        raise AssertionError(
+            _browser_lifecycle_error(
+                request.node.nodeid,
+                "precondition: inherited resources from an earlier node",
+                cleanup,
+            )
+        )
+
+    yield
+
+    cleanup = _close_browser_contexts(browser)
+    if cleanup["close_errors"] or (
+        cleanup["after_contexts"], cleanup["after_pages"]
+    ) != (0, 0):
+        raise AssertionError(
+            _browser_lifecycle_error(
+                request.node.nodeid,
+                "teardown",
+                cleanup,
+            )
+        )
 
 
 @pytest.fixture

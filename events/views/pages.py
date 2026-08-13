@@ -16,6 +16,12 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from accounts.services.timezones import format_user_datetime, is_valid_timezone
+from bookclub.models import (
+    BOOK_STATUS_CURRENT,
+    BOOK_STATUS_FINISHED,
+    BOOK_STATUS_UPCOMING,
+    Book,
+)
 from content.access import (
     build_gating_context,
     can_access,
@@ -53,6 +59,7 @@ from events.services.timeline import (
     group_timeline_days,
     viewer_timezone,
 )
+from plans.models import Sprint
 
 PUBLIC_EVENTS_PER_PAGE = 20
 EVENTS_PAGE_TITLE = 'Events | AI Shipping Labs'
@@ -66,6 +73,13 @@ PAST_EVENTS_PAGE_DESCRIPTION = (
     'sessions, and practical AI engineering recordings.'
 )
 _validate_resource_url = URLValidator(schemes=['http', 'https'])
+
+PUBLIC_BOOK_RELATIONSHIP_STATUSES = (
+    BOOK_STATUS_CURRENT,
+    BOOK_STATUS_UPCOMING,
+    BOOK_STATUS_FINISHED,
+)
+PUBLIC_SPRINT_RELATIONSHIP_STATUSES = ('active', 'completed')
 
 
 def _get_selected_tags(request):
@@ -150,6 +164,46 @@ def _event_has_linked_workshop(event):
         return event.workshop is not None
     except ObjectDoesNotExist:
         return False
+
+
+def _build_event_relationships(event):
+    """Return public parent/program links for an Event detail page.
+
+    The related rows are loaded onto ``event.event_series`` by the detail
+    queryset below. Keeping this builder presentation-only means registration
+    and tier state cannot affect discovery, and iterating over several Books or
+    Sprints never issues one query per row.
+    """
+    series = event.event_series
+    if series is None:
+        return []
+
+    relationships = []
+    public_occurrences = getattr(
+        series, 'public_relationship_occurrences', [],
+    )
+    if series.is_active and public_occurrences:
+        relationships.append({
+            'kind': 'event_series',
+            'text': f'Event series · {series.name}',
+            'url': series.get_absolute_url(),
+        })
+
+    for book in getattr(series, 'public_relationship_books', []):
+        relationships.append({
+            'kind': 'book',
+            'text': f'Book Club · {book.title}',
+            'url': book.get_absolute_url(),
+        })
+
+    for sprint in getattr(series, 'public_relationship_sprints', []):
+        relationships.append({
+            'kind': 'sprint',
+            'text': f'Community Sprint · {sprint.name}',
+            'url': sprint.get_absolute_url(),
+        })
+
+    return relationships
 
 
 def _build_event_post_resources(event, *, has_access):
@@ -520,12 +574,37 @@ def event_detail(request, event_id, slug):
     two URLs into one.
     """
     event = get_object_or_404(
-        Event.objects.select_related('workshop').prefetch_related(
+        Event.objects.select_related('workshop', 'event_series').prefetch_related(
             Prefetch(
                 'event_host_links',
                 queryset=EventHost.objects.select_related('host').order_by(
                     'position',
                 ),
+            ),
+            Prefetch(
+                'event_series__events',
+                queryset=Event.objects.filter(
+                    status__in=PUBLIC_EVENT_STATUSES,
+                ).only('pk', 'event_series_id'),
+                to_attr='public_relationship_occurrences',
+            ),
+            Prefetch(
+                'event_series__books',
+                queryset=Book.objects.filter(
+                    status__in=PUBLIC_BOOK_RELATIONSHIP_STATUSES,
+                ).only('pk', 'event_series_id', 'slug', 'title').order_by(
+                    'title', 'pk',
+                ),
+                to_attr='public_relationship_books',
+            ),
+            Prefetch(
+                'event_series__sprints',
+                queryset=Sprint.objects.filter(
+                    status__in=PUBLIC_SPRINT_RELATIONSHIP_STATUSES,
+                ).only('pk', 'event_series_id', 'slug', 'name').order_by(
+                    'name', 'pk',
+                ),
+                to_attr='public_relationship_sprints',
             ),
         ),
         pk=event_id,
@@ -700,6 +779,9 @@ def event_detail(request, event_id, slug):
 
     context = {
         'event': event,
+        # Issue #1390: public navigation derived only from the existing parent
+        # series and its filtered reverse Book/Sprint relationships.
+        'event_relationships': _build_event_relationships(event),
         'event_time_display': build_event_time_display(event, user),
         'has_access': has_access,
         'is_registered': is_registered,

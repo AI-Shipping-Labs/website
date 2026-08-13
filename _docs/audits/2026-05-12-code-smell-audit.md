@@ -185,7 +185,7 @@ Recommended remediation:
 3. Split large test modules by behavior area.
 4. Add a small number of integration tests that avoid mocking internal service calls for payments and content sync.
 
-See `_docs/audits/2026-05-12-test-suite-audit.md` for the dedicated test-quality and runtime-optimization plan, including candidates to remove from default CI.
+See `_docs/audits/2026-08-13-test-suite-audit.md` for the dedicated test-quality and runtime-optimization plan, including candidates to remove from default CI. It supersedes the 2026-05-12 test-suite audit, whose recommendations were implemented and which was removed as stale.
 
 ## Tooling Gaps
 

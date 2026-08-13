@@ -16,7 +16,6 @@ Examples of filenames that belong here (taken from the files already in this fol
 
 - `2026-04-20-audit.md`
 - `2026-05-12-code-smell-audit.md`
-- `2026-05-12-test-suite-audit.md`
 - `2026-07-09-account-page-audit.md`
 - `2026-06-26-datamailer-port-analysis.md`
 - `2026-07-09-guest-ui-design-audit.md`

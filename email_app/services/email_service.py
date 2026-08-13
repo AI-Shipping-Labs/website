@@ -58,6 +58,7 @@ EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = {
     "email_verification_subscribe",
     "download_delivery",
     "account_email_change_confirm",
+    "account_deletion_request",
     "password_reset",
     # Payment-grace copy is contract-locked, and the team diagnostic uses a
     # recipient override for the member's User row. Never append a member

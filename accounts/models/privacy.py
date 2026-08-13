@@ -6,16 +6,24 @@ class PrivacyRequestLog(models.Model):
 
     REQUEST_EXPORT = "export"
     REQUEST_DELETE = "delete"
+    REQUEST_DELETION_REQUEST = "deletion_request"
     REQUEST_TYPE_CHOICES = [
         (REQUEST_EXPORT, "Export"),
         (REQUEST_DELETE, "Delete"),
+        (REQUEST_DELETION_REQUEST, "Deletion request"),
     ]
 
     STATUS_COMPLETED = "completed"
     STATUS_BLOCKED = "blocked"
+    STATUS_PENDING_DELIVERY = "pending_delivery"
+    STATUS_REQUESTED = "requested"
+    STATUS_DELIVERY_FAILED = "delivery_failed"
     STATUS_CHOICES = [
         (STATUS_COMPLETED, "Completed"),
         (STATUS_BLOCKED, "Blocked"),
+        (STATUS_PENDING_DELIVERY, "Pending delivery"),
+        (STATUS_REQUESTED, "Requested"),
+        (STATUS_DELIVERY_FAILED, "Delivery failed"),
     ]
 
     BLOCKER_ACTIVE_SUBSCRIPTION = "active_subscription"
@@ -39,6 +47,17 @@ class PrivacyRequestLog(models.Model):
         indexes = [
             models.Index(fields=["request_type", "status", "-requested_at"]),
             models.Index(fields=["blocker_reason"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["old_user_id"],
+                condition=(
+                    models.Q(request_type="deletion_request")
+                    & models.Q(status__in=["pending_delivery", "requested"])
+                    & models.Q(old_user_id__isnull=False)
+                ),
+                name="unique_active_deletion_request",
+            ),
         ]
 
     def __str__(self):

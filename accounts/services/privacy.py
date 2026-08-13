@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from datetime import timezone as datetime_timezone
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -15,11 +16,18 @@ from django.contrib.sessions.models import Session
 from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
 
 from accounts.models import PrivacyRequestLog
-from integrations.config import get_config, is_enabled, site_base_url
+from email_app.services.email_service import EmailService, EmailServiceError
+from integrations.config import (
+    get_config,
+    is_enabled,
+    site_base_url,
+    validate_email_config_value,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +66,8 @@ TOKEN_VALUE_PREFIXES = (
     "xoxp-",
 )
 JWT_RE = re.compile(r"^[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}$")
+PRIVACY_REQUEST_EMAIL_KEY = "PRIVACY_REQUEST_EMAIL"
+DEFAULT_PRIVACY_REQUEST_EMAIL = "team@aishippinglabs.com"
 
 
 @dataclass(frozen=True)
@@ -67,6 +77,16 @@ class PrivacyDeletionResult:
     audit_log_id: int | None = None
     blocker_reason: str = ""
     row_count_summary: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class PrivacyDeletionRequestResult:
+    success: bool
+    status: str
+    audit_log_id: int
+    requested_at: Any
+    email_log_id: int | None = None
+    duplicate: bool = False
 
 
 def request_context_from_request(request):
@@ -118,6 +138,134 @@ def log_blocked_privacy_delete(user, reason, request_context=None):
         row_count_summary={},
         request_context=request_context,
     )
+
+
+def get_account_deletion_request(user):
+    """Return the durable deletion-request lifecycle for ``user``, if any."""
+    return (
+        PrivacyRequestLog.objects.filter(
+            request_type=PrivacyRequestLog.REQUEST_DELETION_REQUEST,
+            old_user_id=user.pk,
+        )
+        .order_by("-requested_at", "-pk")
+        .first()
+    )
+
+
+def request_account_deletion(user, request_context=None):
+    """Email one durable, idempotent deletion request for ``user``.
+
+    The member row is locked across lifecycle resolution and delivery so two
+    workers cannot both become senders. The partial unique constraint on
+    ``PrivacyRequestLog`` is the database-level backstop for active requests.
+    Failed delivery reuses the same audit row and dedupe key on retry.
+    """
+    user_model = user.__class__
+    with transaction.atomic():
+        locked_user = user_model.objects.select_for_update().get(pk=user.pk)
+        request_log = get_account_deletion_request(locked_user)
+
+        if request_log and request_log.status == PrivacyRequestLog.STATUS_REQUESTED:
+            return PrivacyDeletionRequestResult(
+                success=True,
+                status=request_log.status,
+                audit_log_id=request_log.pk,
+                requested_at=request_log.requested_at,
+                email_log_id=request_log.row_count_summary.get("email_log_id"),
+                duplicate=True,
+            )
+
+        if request_log is None:
+            request_log = _create_privacy_log(
+                user=locked_user,
+                request_type=PrivacyRequestLog.REQUEST_DELETION_REQUEST,
+                status=PrivacyRequestLog.STATUS_PENDING_DELIVERY,
+                row_count_summary={},
+                request_context=request_context,
+            )
+        else:
+            request_log.status = PrivacyRequestLog.STATUS_PENDING_DELIVERY
+            # A failed attempt was not received by the team. Start the
+            # one-month response clock from this retry, which becomes the
+            # visible receipt date only if delivery succeeds below.
+            request_log.requested_at = timezone.now()
+            request_log.row_count_summary = {}
+            request_log.blocker_reason = ""
+            request_log.save(
+                update_fields=[
+                    "status",
+                    "requested_at",
+                    "row_count_summary",
+                    "blocker_reason",
+                ],
+            )
+
+        team_email = validate_email_config_value(
+            PRIVACY_REQUEST_EMAIL_KEY,
+            get_config(
+                PRIVACY_REQUEST_EMAIL_KEY,
+                DEFAULT_PRIVACY_REQUEST_EMAIL,
+            ),
+        )
+        if not team_email:
+            request_log.status = PrivacyRequestLog.STATUS_DELIVERY_FAILED
+            request_log.save(update_fields=["status"])
+            return PrivacyDeletionRequestResult(
+                success=False,
+                status=request_log.status,
+                audit_log_id=request_log.pk,
+                requested_at=request_log.requested_at,
+            )
+
+        studio_member_url = (
+            f"{site_base_url().rstrip('/')}"
+            f"{reverse('studio_user_detail', kwargs={'user_id': locked_user.pk})}"
+        )
+        dedupe_key = f"account-deletion-request:{request_log.pk}"
+        context = {
+            "login_email": locked_user.email,
+            "support_id": locked_user.pk,
+            "request_time_utc": request_log.requested_at.astimezone(
+                datetime_timezone.utc,
+            ).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "studio_member_url": studio_member_url,
+            "privacy_email": DEFAULT_PRIVACY_REQUEST_EMAIL,
+        }
+
+        try:
+            with transaction.atomic():
+                email_log = EmailService().send(
+                    locked_user,
+                    "account_deletion_request",
+                    context,
+                    cc=[locked_user.email],
+                    recipient_email=team_email,
+                    dedupe_key=dedupe_key,
+                )
+        except EmailServiceError:
+            logger.warning(
+                "Account deletion request delivery failed for user_id=%s",
+                locked_user.pk,
+            )
+            request_log.status = PrivacyRequestLog.STATUS_DELIVERY_FAILED
+            request_log.save(update_fields=["status"])
+            return PrivacyDeletionRequestResult(
+                success=False,
+                status=request_log.status,
+                audit_log_id=request_log.pk,
+                requested_at=request_log.requested_at,
+            )
+
+        request_log.status = PrivacyRequestLog.STATUS_REQUESTED
+        request_log.row_count_summary = {"email_log_id": email_log.pk}
+        request_log.save(update_fields=["status", "row_count_summary"])
+        return PrivacyDeletionRequestResult(
+            success=True,
+            status=request_log.status,
+            audit_log_id=request_log.pk,
+            requested_at=request_log.requested_at,
+            email_log_id=email_log.pk,
+        )
 
 
 def delete_account_for_privacy(user, request_context=None):

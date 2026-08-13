@@ -1,17 +1,16 @@
 from django.urls import include, path
 
 from accounts.views.account import (
-    account_deleted_view,
     account_profile_post_view,
     account_view,
     change_email_confirm_view,
     data_export_view,
-    delete_account_view,
     dismiss_dashboard_card,
     email_preferences_view,
     member_api_key_create_view,
     member_api_key_delete_view,
     member_api_key_revoke_view,
+    request_deletion_view,
     resend_verification_view,
     theme_preference_view,
     timezone_preference_view,
@@ -108,10 +107,13 @@ onboarding_urlpatterns = [
 # Account page and API endpoints (mounted at /account/ in project urls.py)
 account_urlpatterns = [
     path('', account_view, name='account'),
-    path('deleted', account_deleted_view, name='account_deleted'),
     path('profile', account_profile_post_view, name='account_profile'),
     path('api/data-export', data_export_view, name='account_data_export'),
-    path('api/delete-account', delete_account_view, name='account_delete'),
+    path(
+        'api/request-deletion',
+        request_deletion_view,
+        name='account_request_deletion',
+    ),
     path(
         'change-email/confirm',
         change_email_confirm_view,

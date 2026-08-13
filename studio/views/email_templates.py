@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 TEMPLATE_DISPLAY_ORDER = [
     'welcome',
     'free_welcome',
+    'account_deletion_request',
     'email_verification_signup',
     'email_verification_subscribe',
     'password_reset',
@@ -57,6 +58,7 @@ TEMPLATE_DISPLAY_ORDER = [
 # drift apart. The completeness test intentionally fails when registration is
 # extended without documenting the real send trigger.
 TEMPLATE_SENT_WHEN = {
+    'account_deletion_request': 'Sent when a signed-in member asks the team to delete their local account.',
     'account_email_change_confirm': 'Sent when a member requests an account email-address change.',
     'account_email_changed_notice': 'Sent to the previous address after an account email change succeeds.',
     'basic_welcome': 'Sent when a member first receives Basic membership access.',

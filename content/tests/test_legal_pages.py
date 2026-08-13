@@ -105,11 +105,14 @@ class PrivacyContentTests(TestCase):
         for processor in ('Stripe', 'Slack', 'Amazon SES'):
             self.assertIn(processor, self.body)
 
-    def test_mentions_self_service_export_delete_and_slack_ingest(self):
-        self.assertIn('July 15, 2026', self.body)
+    def test_mentions_export_deletion_request_timeline_and_slack_ingest(self):
+        self.assertIn('August 13, 2026', self.body)
         self.assertIn('Privacy &amp; data section', self.body)
         self.assertIn('download a portable copy', self.body)
-        self.assertIn('local account deletion', self.body)
+        self.assertIn('does not delete the account immediately', self.body)
+        self.assertIn('no later than one month', self.body)
+        self.assertIn('does not promise unconditional erasure', self.body)
+        self.assertIn('team@aishippinglabs.com', self.body)
         self.assertIn('imports limited sprint/community Slack', self.body)
         self.assertIn('Billing records are kept', self.body)
 
@@ -119,7 +122,7 @@ class PrivacyContentTests(TestCase):
 
     def test_contains_last_updated_stamp(self):
         self.assertIn('Last updated', self.body)
-        self.assertIn('July 15, 2026', self.body)
+        self.assertIn('August 13, 2026', self.body)
 
 
 class ImpressumContentTests(TestCase):

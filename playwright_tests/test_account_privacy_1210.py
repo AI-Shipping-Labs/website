@@ -21,13 +21,6 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 pytestmark = pytest.mark.local_only
 
 
-def _login_attempt(page, django_server, email, password=DEFAULT_PASSWORD):
-    page.goto(f"{django_server}/accounts/login/", wait_until="domcontentloaded")
-    page.locator("#login-email").fill(email)
-    page.locator("#login-password").fill(password)
-    page.locator("#login-submit").click()
-
-
 def _download_export(page, email):
     with page.expect_download() as download_info:
         page.get_by_test_id("privacy-export-link").click()
@@ -89,31 +82,6 @@ def _seed_member_export_data(email):
         scopes=["plans:read"],
     )
     return user, api_key, plaintext
-
-
-def _user_exists(email):
-    from django.db import connection
-
-    from accounts.models import User
-
-    exists = User.objects.filter(email=email).exists()
-    connection.close()
-    return exists
-
-
-def _privacy_log_reasons(email=None):
-    from django.db import connection
-
-    from accounts.models import PrivacyRequestLog, User
-
-    qs = PrivacyRequestLog.objects.filter(request_type=PrivacyRequestLog.REQUEST_DELETE)
-    if email:
-        user = User.objects.filter(email=email).first()
-        if user:
-            qs = qs.filter(old_user_id=user.pk)
-    reasons = list(qs.order_by("requested_at").values_list("blocker_reason", flat=True))
-    connection.close()
-    return reasons
 
 
 @pytest.mark.django_db(transaction=True)
@@ -183,74 +151,11 @@ class TestAccountPrivacyExport1210:
 
 
 @pytest.mark.django_db(transaction=True)
-class TestAccountPrivacyDeletion1210:
-    def test_paid_member_is_blocked_before_subscription_cleanup(
+class TestAccountPrivacyDeletionRequest1398:
+    def test_free_member_requests_deletion_and_remains_signed_in(
         self, django_server, django_db_blocker, browser
     ):
-        email = "privacy-paid-1210@test.com"
-        with django_db_blocker.unblock():
-            user = create_user(email, tier_slug="basic")
-            user.subscription_id = "sub_active_1210"
-            user.save(update_fields=["subscription_id"])
-
-        context = auth_context(browser, email)
-        try:
-            page = context.new_page()
-            page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
-
-            expect(page.get_by_test_id("privacy-active-subscription-note")).to_be_visible()
-            page.get_by_test_id("privacy-delete-confirmation").click()
-            page.get_by_test_id("privacy-confirm-email").fill(email)
-            page.get_by_test_id("privacy-current-password").fill(DEFAULT_PASSWORD)
-            page.get_by_test_id("privacy-delete-submit").click()
-
-            expect(page.get_by_test_id("privacy-delete-error")).to_contain_text(
-                "active subscription"
-            )
-        finally:
-            context.close()
-
-        with django_db_blocker.unblock():
-            assert _user_exists(email)
-            assert "active_subscription" in _privacy_log_reasons(email)
-
-    def test_free_member_deletes_account_and_old_password_no_longer_signs_in(
-        self, django_server, django_db_blocker, browser
-    ):
-        email = "privacy-free-delete-1210@test.com"
-        with django_db_blocker.unblock():
-            _seed_member_export_data(email)
-
-        context = auth_context(browser, email)
-        try:
-            page = context.new_page()
-            page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
-            page.get_by_test_id("privacy-delete-confirmation").click()
-            page.get_by_test_id("privacy-confirm-email").fill(email)
-            page.get_by_test_id("privacy-current-password").fill(DEFAULT_PASSWORD)
-            page.get_by_test_id("privacy-delete-submit").click()
-            page.wait_for_url(f"{django_server}/account/deleted")
-            expect(
-                page.get_by_test_id("account-deleted-confirmation")
-            ).to_contain_text("Your local AI Shipping Labs account has been deleted")
-        finally:
-            context.close()
-
-        with django_db_blocker.unblock():
-            assert not _user_exists(email)
-
-        page = browser.new_page()
-        try:
-            _login_attempt(page, django_server, email)
-            expect(page.locator("#login-error")).to_be_visible()
-            expect(page.locator("#login-error")).to_contain_text("Invalid")
-        finally:
-            page.close()
-
-    def test_typo_or_wrong_password_keeps_account_and_audits_attempts(
-        self, django_server, django_db_blocker, browser
-    ):
-        email = "privacy-guard-1210@test.com"
+        email = "privacy-request-free-1398@test.com"
         with django_db_blocker.unblock():
             create_user(email, tier_slug="free")
 
@@ -259,63 +164,136 @@ class TestAccountPrivacyDeletion1210:
             page = context.new_page()
             page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
 
-            page.get_by_test_id("privacy-delete-confirmation").click()
-            page.get_by_test_id("privacy-confirm-email").fill("typo-" + email)
-            page.get_by_test_id("privacy-current-password").fill(DEFAULT_PASSWORD)
-            page.get_by_test_id("privacy-delete-submit").click()
-            expect(page.get_by_test_id("privacy-delete-error")).to_contain_text(
-                "could not confirm"
-            )
+            request_section = page.get_by_test_id("privacy-data-section")
+            expect(request_section).to_contain_text("Request account deletion")
+            expect(request_section).to_contain_text("does not delete your account immediately")
+            expect(request_section).to_contain_text(email)
+            request_button = page.get_by_role("button", name="Request account deletion")
+            expect(request_button).to_be_enabled()
+            request_button.focus()
+            page.keyboard.press("Enter")
 
-            page.get_by_test_id("privacy-delete-confirmation").click()
-            page.get_by_test_id("privacy-confirm-email").fill(email)
-            page.get_by_test_id("privacy-current-password").fill("wrong-password")
-            page.get_by_test_id("privacy-delete-submit").click()
-            expect(page.get_by_test_id("privacy-delete-error")).to_contain_text(
-                "could not confirm"
-            )
+            page.wait_for_url(f"{django_server}/account/#privacy-data-section")
+            received = page.get_by_role("status")
+            expect(received).to_contain_text("Deletion request received")
+            expect(received).to_contain_text(email)
+            expect(received).to_contain_text("no later than one month")
+            expect(received.get_by_role("link", name="team@aishippinglabs.com")).to_be_visible()
+            expect(page.get_by_text(email, exact=True).first).to_be_visible()
+
+            page.reload(wait_until="domcontentloaded")
+            expect(page.get_by_test_id("privacy-request-received")).to_be_visible()
+            expect(page.get_by_test_id("privacy-request-submit")).to_have_count(0)
         finally:
             context.close()
 
-        with django_db_blocker.unblock():
-            assert _user_exists(email)
-            reasons = _privacy_log_reasons(email)
-            assert "bad_confirmation" in reasons
-            assert "bad_password" in reasons
+    def test_newsletter_paid_and_staff_accounts_get_the_same_request_action(
+        self, django_server, django_db_blocker, browser
+    ):
+        from accounts.models.user import SIGNUP_SOURCE_NEWSLETTER
 
-    def test_staff_export_available_but_self_delete_blocked(self, django_server, browser):
-        email = "privacy-staff-1210@test.com"
-        create_staff_user(email)
+        with django_db_blocker.unblock():
+            newsletter = create_user("privacy-newsletter-request-1398@test.com", tier_slug="free")
+            newsletter.signup_source = SIGNUP_SOURCE_NEWSLETTER
+            newsletter.account_activated = False
+            newsletter.save(update_fields=["signup_source", "account_activated"])
+            paid = create_user("privacy-paid-request-1398@test.com", tier_slug="basic")
+            paid.subscription_id = "sub_request_1398"
+            paid.save(update_fields=["subscription_id"])
+            create_staff_user("privacy-staff-request-1398@test.com")
+
+        for email in (
+            newsletter.email,
+            paid.email,
+            "privacy-staff-request-1398@test.com",
+        ):
+            context = auth_context(browser, email)
+            try:
+                page = context.new_page()
+                page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
+                expect(page.get_by_test_id("privacy-request-submit")).to_be_visible()
+                page.get_by_test_id("privacy-request-submit").click()
+                expect(page.get_by_test_id("privacy-request-received")).to_be_visible()
+                expect(page.get_by_text(email, exact=True).first).to_be_visible()
+            finally:
+                context.close()
+
+    def test_delivery_failure_is_truthful_and_retryable(
+        self, django_server, django_db_blocker, browser
+    ):
+        from integrations.config import clear_config_cache
+        from integrations.models import IntegrationSetting
+
+        email = "privacy-delivery-retry-1398@test.com"
+        with django_db_blocker.unblock():
+            create_user(email, tier_slug="free")
+            IntegrationSetting.objects.create(
+                key="PRIVACY_REQUEST_EMAIL",
+                value="invalid-recipient",
+            )
+            clear_config_cache()
 
         context = auth_context(browser, email)
         try:
             page = context.new_page()
             page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
+            page.get_by_test_id("privacy-request-submit").click()
 
-            expect(page.get_by_test_id("privacy-export-link")).to_be_visible()
-            expect(page.get_by_test_id("privacy-staff-block")).to_contain_text(
-                "cannot be deleted"
+            expect(page).to_have_url(f"{django_server}/account/api/request-deletion")
+            error = page.get_by_test_id("privacy-request-error")
+            expect(error).to_contain_text("could not deliver")
+            expect(error.get_by_role("link", name="Email team@aishippinglabs.com")).to_have_attribute(
+                "href", "mailto:team@aishippinglabs.com"
             )
+            expect(page.get_by_test_id("privacy-request-received")).to_have_count(0)
+            expect(page.get_by_test_id("privacy-request-submit")).to_be_visible()
 
-            response = page.request.post(
-                f"{django_server}/account/api/delete-account",
-                form={
-                    "confirm_email": email,
-                    "current_password": DEFAULT_PASSWORD,
-                },
-            )
-            assert response.status == 403
+            with django_db_blocker.unblock():
+                IntegrationSetting.objects.filter(key="PRIVACY_REQUEST_EMAIL").update(
+                    value="team@aishippinglabs.com"
+                )
+                clear_config_cache()
+            page.get_by_test_id("privacy-request-submit").click()
+            expect(page.get_by_test_id("privacy-request-received")).to_be_visible()
         finally:
             context.close()
 
-        assert _user_exists(email)
+    def test_old_self_service_deletion_urls_are_gone(self, django_server, browser):
+        email = "privacy-retired-routes-1398@test.com"
+        create_user(email, tier_slug="free")
+        context = auth_context(browser, email)
+        try:
+            page = context.new_page()
+            page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
+            csrf_token = next(
+                cookie["value"]
+                for cookie in context.cookies()
+                if cookie["name"] == "csrftoken"
+            )
+            post_response = page.request.post(
+                f"{django_server}/account/api/delete-account",
+                form={"confirm_email": email, "current_password": DEFAULT_PASSWORD},
+                headers={"X-CSRFToken": csrf_token},
+            )
+            get_response = page.request.get(f"{django_server}/account/deleted")
+            assert post_response.status == 404
+            assert get_response.status == 404
+
+            page.reload(wait_until="domcontentloaded")
+            expect(page.get_by_test_id("privacy-request-submit")).to_be_visible()
+            expect(page.get_by_text(email, exact=True).first).to_be_visible()
+        finally:
+            context.close()
 
 
-def test_privacy_policy_mentions_self_service_and_retention(django_server, page):
+def test_privacy_policy_mentions_request_timeline_and_retention(django_server, page):
     page.goto(f"{django_server}/privacy/", wait_until="domcontentloaded")
 
     body = page.locator("body")
     expect(body).to_contain_text("Privacy & data section")
-    expect(body).to_contain_text("local account deletion")
+    expect(body).to_contain_text("does not delete the account immediately")
+    expect(body).to_contain_text("no later than one month")
+    expect(body).to_contain_text("does not promise unconditional erasure")
+    expect(body).to_contain_text("team@aishippinglabs.com")
     expect(body).to_contain_text("local linked copies are included")
     expect(body).to_contain_text("Billing records are kept")

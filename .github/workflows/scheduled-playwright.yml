@@ -129,13 +129,14 @@ jobs:
         id: shard
         shell: bash
         run: |
-          mapfile -t files < <(
-            find playwright_tests -maxdepth 1 -type f -name 'test_*.py' | sort |
-              awk -v shard="${{ matrix.shard_index }}" -v total="${{ matrix.shard_total }}" \
-                '((NR - 1) % total) == shard'
-          )
+          python scripts/playwright_shard_plan.py \
+            --weights .github/playwright-full-shard-weights.json \
+            --inventory playwright_tests \
+            --shards "${{ matrix.shard_total }}" \
+            --shard-index "${{ matrix.shard_index }}" \
+            --output .playwright-shard-files
 
-          printf '%s\n' "${files[@]}" > .playwright-shard-files
+          mapfile -t files < .playwright-shard-files
           echo "count=${#files[@]}" >> "$GITHUB_OUTPUT"
           printf 'Selected %s files for %s:\n' "${#files[@]}" "${{ matrix.shard_name }}"
           printf '  %s\n' "${files[@]}"

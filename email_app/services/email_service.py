@@ -13,6 +13,7 @@ body that supports Django template variables.
 
 import logging
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -81,6 +82,20 @@ VERIFY_FOOTER_TOKEN_EXPIRY_HOURS = 24 * 7
 # Reply-To header entirely.
 WELCOME_REPLY_TO_KEY = "SES_WELCOME_REPLY_TO_EMAIL"
 DEFAULT_WELCOME_REPLY_TO_EMAIL = "welcome@aishippinglabs.com"
+
+UNSUBSCRIBED_AT_SEND = "unsubscribed_at_send"
+
+
+@dataclass(frozen=True)
+class RenderedEmailSendResult:
+    """Outcome from the guarded already-rendered email boundary."""
+
+    ses_message_id: str | None = None
+    skip_reason: str | None = None
+
+    @property
+    def sent(self):
+        return self.skip_reason is None
 
 
 def _normalize_cc(cc):
@@ -178,19 +193,13 @@ class EmailService:
             if existing is not None:
                 return existing
 
-        try:
-            email_kind = classify_email_type(template_name)
-        except EmailClassificationError as exc:
-            raise EmailServiceError(str(exc)) from exc
-
-        # Promotional sends respect the global newsletter unsubscribe flag.
-        # Transactional sends must remain deliverable for account/service
-        # continuity even when the user opted out of marketing.
-        if email_kind == EMAIL_KIND_PROMOTIONAL and getattr(user, "unsubscribed", False):
+        email_kind, skip_reason = self._delivery_decision(user, template_name)
+        if skip_reason is not None:
             logger.info(
-                'Skipping email "%s" to unsubscribed user %s',
+                "Skipping email email_type=%s user_id=%s reason=%s",
                 template_name,
-                user.email,
+                getattr(user, "pk", None),
+                skip_reason,
             )
             return None
 
@@ -263,6 +272,89 @@ class EmailService:
         )
 
         return email_log
+
+    def send_rendered(
+        self,
+        user,
+        subject,
+        body_html,
+        *,
+        email_type,
+        campaign_id=None,
+        footer_note=None,
+        cc=None,
+        bcc=None,
+    ):
+        """Guard and send an already-rendered email body.
+
+        This is the public delivery boundary for callers whose content does
+        not come from a named email template, notably ``EmailCampaign``. A
+        persisted recipient is refreshed immediately before the consent
+        decision and before any unsubscribe/verification token is minted.
+
+        The caller remains responsible for its domain-specific ``EmailLog``
+        row because already-rendered sends may need associations such as a
+        campaign or event. A promotional opt-out returns a distinct no-send
+        result and never reaches the private SES transport.
+        """
+        if getattr(user, "pk", None):
+            user.refresh_from_db()
+
+        email_kind, skip_reason = self._delivery_decision(user, email_type)
+        if skip_reason is not None:
+            logger.info(
+                "Skipping rendered email email_type=%s campaign_id=%s "
+                "user_id=%s reason=%s",
+                email_type,
+                campaign_id,
+                getattr(user, "pk", None),
+                skip_reason,
+            )
+            return RenderedEmailSendResult(skip_reason=skip_reason)
+
+        unsubscribe_url = None
+        if email_kind == EMAIL_KIND_PROMOTIONAL:
+            unsubscribe_url = self._build_unsubscribe_url(user)
+
+        verify_email_url = None
+        if self._should_include_verify_footer(user, email_type):
+            verify_email_url = self._build_verify_email_url(user)
+
+        full_html = self.render_html_email(
+            subject,
+            body_html,
+            unsubscribe_url=unsubscribe_url,
+            footer_note=footer_note,
+            verify_email_url=verify_email_url,
+        )
+        ses_message_id = self._send_ses(
+            user.email,
+            subject,
+            full_html,
+            email_type=email_type,
+            unsubscribe_url=unsubscribe_url,
+            cc=cc,
+            bcc=bcc,
+        )
+        return RenderedEmailSendResult(ses_message_id=ses_message_id)
+
+    @staticmethod
+    def _delivery_decision(user, email_type):
+        """Return the canonical kind and any consent-based skip reason."""
+        try:
+            email_kind = classify_email_type(email_type)
+        except EmailClassificationError as exc:
+            raise EmailServiceError(str(exc)) from exc
+
+        # Promotional sends respect the global newsletter unsubscribe flag.
+        # Transactional sends must remain deliverable for account/service
+        # continuity even when the user opted out of marketing.
+        if (
+            email_kind == EMAIL_KIND_PROMOTIONAL
+            and getattr(user, "unsubscribed", False)
+        ):
+            return email_kind, UNSUBSCRIBED_AT_SEND
+        return email_kind, None
 
     def _render_template(self, template_name, user, context):
         """Load a template, render with context, convert to HTML."""

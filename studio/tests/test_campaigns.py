@@ -279,11 +279,11 @@ class StudioCampaignDetailTest(TestCase):
         self.assertEqual(self.campaign.sent_count, 0)
 
     @patch.object(EmailService, "_send_ses", return_value="test-ses-clean")
-    def test_test_send_uses_clean_footer_for_real_render(self, mock_ses):
+    def test_test_send_to_unsubscribed_user_uses_clean_footer(self, mock_ses):
         recipient = User.objects.create_user(
             email="recipient@example.com",
             email_verified=True,
-            unsubscribed=False,
+            unsubscribed=True,
         )
 
         response = self.client.post(

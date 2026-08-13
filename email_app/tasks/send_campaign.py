@@ -25,12 +25,15 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.template.loader import render_to_string
 from django.utils import timezone
 
 from content.utils.markdown import render_email_markdown
 from email_app.models import EmailCampaign, EmailLog
-from email_app.services.email_service import EmailService, EmailServiceError
+from email_app.services.email_service import (
+    UNSUBSCRIBED_AT_SEND,
+    EmailService,
+    EmailServiceError,
+)
 from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
@@ -228,7 +231,9 @@ def send_campaign_batch(campaign_id, user_ids, send_delay=None):
             ``DEFAULT_SEND_DELAY`` (0.05s). Set to 0 in tests for speed.
 
     Returns:
-        dict with campaign_id, batch_size, sent_count, skipped_count.
+        dict with campaign_id, batch_size, sent_count, skipped_count, and
+        unsubscribed_at_send_count. ``skipped_count`` retains its historical
+        meaning of already-sent idempotency skips.
 
     Raises:
         ValueError: If campaign not found.
@@ -255,48 +260,37 @@ def send_campaign_batch(campaign_id, user_ids, send_delay=None):
     pending_ids = [uid for uid in user_ids if uid not in already_sent_ids]
     skipped = len(already_sent_ids)
 
-    users = list(User.objects.filter(pk__in=pending_ids))
-
     logger.info(
         "Campaign %s batch starting: %d to send, %d skipped (already sent)",
-        campaign_id, len(users), skipped,
+        campaign_id, len(pending_ids), skipped,
     )
 
     service = EmailService()
     sent_count = 0
+    unsubscribed_at_send_count = 0
     # Pre-render markdown body once per batch — it does not change
     # across recipients within a campaign.
     body_html = render_email_markdown(campaign.body)
 
-    for user in users:
+    for user_id in pending_ids:
+        # Fetch one recipient at a time. Loading the full batch here would
+        # create a stale consent window for recipients later in the loop.
+        user = User.objects.filter(pk=user_id).first()
+        if user is None:
+            continue
+
         try:
-            unsubscribe_url = service._build_unsubscribe_url(user)
-
-            # Issue #450: per-recipient verify-email footer CTA. The
-            # ``users`` list is freshly fetched from the DB above
-            # (``User.objects.filter(pk__in=pending_ids)``) so the
-            # ``email_verified`` flag reflects the SEND-time value, not
-            # whatever it was when the campaign was enqueued. This
-            # mirrors how ``unsubscribed`` is handled — the latest DB
-            # state wins, even if the user verified after enqueue.
-            verify_email_url = None
-            if service._should_include_verify_footer(user, 'campaign'):
-                verify_email_url = service._build_verify_email_url(user)
-
-            full_html = render_to_string('email_app/base_email.html', {
-                'subject': campaign.subject,
-                'body_html': body_html,
-                'unsubscribe_url': unsubscribe_url,
-                'verify_email_url': verify_email_url,
-            })
-
-            ses_message_id = service._send_ses(
-                user.email,
+            result = service.send_rendered(
+                user,
                 campaign.subject,
-                full_html,
+                body_html,
                 email_type='campaign',
-                unsubscribe_url=unsubscribe_url,
+                campaign_id=campaign_id,
             )
+            if result.skip_reason is not None:
+                if result.skip_reason == UNSUBSCRIBED_AT_SEND:
+                    unsubscribed_at_send_count += 1
+                continue
 
             try:
                 with transaction.atomic():
@@ -306,7 +300,7 @@ def send_campaign_batch(campaign_id, user_ids, send_delay=None):
                         recipient_email=user.email,
                         email_type='campaign',
                         subject=campaign.subject,
-                        ses_message_id=ses_message_id,
+                        ses_message_id=result.ses_message_id,
                     )
             except IntegrityError:
                 # A concurrent task already created the log for this
@@ -337,8 +331,9 @@ def send_campaign_batch(campaign_id, user_ids, send_delay=None):
     _refresh_campaign_status(campaign)
 
     logger.info(
-        "Campaign %s batch complete: %d sent, %d skipped",
-        campaign_id, sent_count, skipped,
+        "Campaign %s batch complete: %d sent, %d already sent, "
+        "%d unsubscribed at send",
+        campaign_id, sent_count, skipped, unsubscribed_at_send_count,
     )
 
     return {
@@ -346,6 +341,7 @@ def send_campaign_batch(campaign_id, user_ids, send_delay=None):
         'batch_size': len(user_ids),
         'sent_count': sent_count,
         'skipped_count': skipped,
+        'unsubscribed_at_send_count': unsubscribed_at_send_count,
     }
 
 
@@ -355,37 +351,39 @@ def _refresh_campaign_status(campaign):
     no eligible recipient is still pending).
 
     Called after each chunk finishes; the last chunk to finish is the
-    one that flips the status. Safe to call concurrently — the
-    eligible-but-unlogged check is monotonic.
+    one that flips the status. The campaign row lock serializes parallel
+    refreshes so a stale worker cannot overwrite a newer aggregate count.
     """
-    eligible_ids = set(
-        campaign.get_eligible_recipients().values_list('pk', flat=True)
-    )
-    logged_ids = set(
-        EmailLog.objects.filter(
-            campaign=campaign, user_id__in=eligible_ids,
-        ).values_list('user_id', flat=True)
-    )
-
-    sent_total = len(logged_ids)
-    pending = eligible_ids - logged_ids
-
-    update_fields = []
-    # Refresh from DB to avoid stomping on a parallel update.
-    campaign.refresh_from_db(fields=['status', 'sent_count'])
-
-    if campaign.sent_count != sent_total:
-        campaign.sent_count = sent_total
-        update_fields.append('sent_count')
-
-    if not pending and campaign.status == 'sending':
-        campaign.status = 'sent'
-        campaign.sent_at = timezone.now()
-        update_fields.extend(['status', 'sent_at'])
-        logger.info(
-            "Campaign %s complete: %d/%d eligible recipients sent",
-            campaign.pk, sent_total, len(eligible_ids),
+    with transaction.atomic():
+        locked_campaign = EmailCampaign.objects.select_for_update().get(
+            pk=campaign.pk,
         )
+        eligible_ids = set(
+            locked_campaign.get_eligible_recipients().values_list(
+                'pk', flat=True,
+            )
+        )
+        campaign_logs = EmailLog.objects.filter(campaign=locked_campaign)
+        logged_ids = set(campaign_logs.values_list('user_id', flat=True))
 
-    if update_fields:
-        campaign.save(update_fields=update_fields)
+        sent_total = campaign_logs.count()
+        pending = eligible_ids - logged_ids
+        update_fields = []
+
+        if locked_campaign.sent_count != sent_total:
+            locked_campaign.sent_count = sent_total
+            update_fields.append('sent_count')
+
+        if not pending and locked_campaign.status == 'sending':
+            locked_campaign.status = 'sent'
+            locked_campaign.sent_at = timezone.now()
+            update_fields.extend(['status', 'sent_at'])
+            logger.info(
+                "Campaign %s complete: %d/%d eligible recipients sent",
+                locked_campaign.pk,
+                sent_total,
+                len(eligible_ids),
+            )
+
+        if update_fields:
+            locked_campaign.save(update_fields=update_fields)

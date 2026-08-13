@@ -674,6 +674,85 @@ class EmailServiceSESIntegrationTest(TestCase):
         self.assertIsNone(log)
         mock_client.send_email.assert_not_called()
 
+    @patch.object(EmailService, '_send_ses', return_value='rendered-id')
+    @patch.object(EmailService, '_build_unsubscribe_url')
+    @patch.object(EmailService, '_build_verify_email_url')
+    def test_send_rendered_rechecks_persisted_optout_before_tokens_or_transport(
+        self,
+        build_verify_url,
+        build_unsubscribe_url,
+        mock_ses,
+    ):
+        """A DB opt-out wins even when the caller holds a subscribed user."""
+        User.objects.filter(pk=self.user.pk).update(unsubscribed=True)
+
+        with self.assertLogs(
+            'email_app.services.email_service',
+            level='INFO',
+        ) as captured:
+            result = self.service.send_rendered(
+                self.user,
+                'Campaign subject',
+                '<p>Already rendered</p>',
+                email_type='campaign',
+                campaign_id=42,
+            )
+
+        self.assertFalse(result.sent)
+        self.assertEqual(result.skip_reason, 'unsubscribed_at_send')
+        build_unsubscribe_url.assert_not_called()
+        build_verify_url.assert_not_called()
+        mock_ses.assert_not_called()
+        diagnostic = '\n'.join(captured.output)
+        self.assertIn('campaign_id=42', diagnostic)
+        self.assertIn(f'user_id={self.user.pk}', diagnostic)
+        self.assertIn('reason=unsubscribed_at_send', diagnostic)
+        self.assertNotIn(self.user.email, diagnostic)
+        self.assertNotIn('Already rendered', diagnostic)
+        self.assertNotIn('token=', diagnostic)
+
+    @patch.object(EmailService, '_send_ses', return_value='rendered-id')
+    def test_send_rendered_uses_latest_resubscribed_state(self, mock_ses):
+        """A stale opted-out instance does not suppress a persisted opt-in."""
+        self.user.unsubscribed = True
+        self.user.save(update_fields=['unsubscribed'])
+        User.objects.filter(pk=self.user.pk).update(unsubscribed=False)
+
+        result = self.service.send_rendered(
+            self.user,
+            'Campaign subject',
+            '<p>Already rendered</p>',
+            email_type='campaign',
+            campaign_id=42,
+        )
+
+        self.assertTrue(result.sent)
+        self.assertEqual(result.ses_message_id, 'rendered-id')
+        mock_ses.assert_called_once()
+        self.assertIn(
+            '/api/unsubscribe?token=',
+            mock_ses.call_args.kwargs['unsubscribe_url'],
+        )
+
+    @patch.object(EmailService, '_send_ses', return_value='transactional-id')
+    def test_send_rendered_keeps_transactional_delivery_for_opted_out_user(
+        self,
+        mock_ses,
+    ):
+        self.user.unsubscribed = True
+        self.user.save(update_fields=['unsubscribed'])
+
+        result = self.service.send_rendered(
+            self.user,
+            'Payment grace notice',
+            '<p>Account service message</p>',
+            email_type='payment_grace_failure_member',
+        )
+
+        self.assertTrue(result.sent)
+        mock_ses.assert_called_once()
+        self.assertIsNone(mock_ses.call_args.kwargs['unsubscribe_url'])
+
     @patch('email_app.services.email_service.boto3')
     def test_welcome_send_has_no_unsubscribe_header(self, mock_boto3):
         """A welcome send is still transactional: no List-Unsubscribe header

@@ -4,7 +4,7 @@
 {% block studio_title %}Stripe webhooks{% endblock %}
 
 {% block studio_content %}
-{% studio_header_actions title="Stripe cancellation webhooks" subtitle="Prove whether Stripe cancellation callbacks are configured, received, processed, retried, or rejected." %}
+{% studio_header_actions title="Stripe payment webhooks" subtitle="Inspect cancellation, refund, and dispute callbacks without changing member access." %}
   <a href="{% url 'studio_payment_mismatch_list' %}" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
     <i data-lucide="alert-triangle" class="h-4 w-4"></i>
     <span>Payment mismatches</span>
@@ -102,7 +102,7 @@
 {# ---- Read-only event inspector ------------------------------------------- #}
 <section class="bg-card border border-border rounded-lg p-5 mb-6" data-testid="stripe-webhook-inspect-card">
   <h2 class="text-lg font-semibold text-foreground">Inspect event</h2>
-  <p class="text-sm text-muted-foreground mt-1">Read-only preview of a Stripe event id. Studio does not execute replays; use the API for a confirmed replay.</p>
+  <p class="text-sm text-muted-foreground mt-1">Read-only preview of a cancellation event id. Studio does not execute replays; confirmed replay remains cancellation-only through the API, while refund and dispute events are review evidence.</p>
   <form method="get" class="mt-3 flex flex-wrap gap-2">
     <input type="text" name="inspect_event_id" value="{{ inspect_event_id }}" placeholder="evt_..." class="flex-1 min-w-[220px] bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="inspect-event-input">
     <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity" data-testid="inspect-event-submit">Inspect</button>
@@ -209,6 +209,21 @@
             <a href="{{ row.subscription_url }}" target="_blank" rel="noopener" class="block font-mono text-accent break-all hover:underline">Subscription: {{ attempt.stripe_subscription_id }}</a>
             {% elif attempt.stripe_subscription_id %}
             <p class="font-mono text-muted-foreground break-all">Subscription: {{ attempt.stripe_subscription_id }}</p>
+            {% endif %}
+            {% if row.charge_url %}
+            <a href="{{ row.charge_url }}" target="_blank" rel="noopener" class="block font-mono text-accent break-all hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Charge: {{ attempt.stripe_charge_id }}</a>
+            {% elif attempt.stripe_charge_id %}
+            <p class="font-mono text-muted-foreground break-all">Charge: {{ attempt.stripe_charge_id }}</p>
+            {% endif %}
+            {% if row.invoice_url %}
+            <a href="{{ row.invoice_url }}" target="_blank" rel="noopener" class="block font-mono text-accent break-all hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Invoice: {{ attempt.stripe_invoice_id }}</a>
+            {% elif attempt.stripe_invoice_id %}
+            <p class="font-mono text-muted-foreground break-all">Invoice: {{ attempt.stripe_invoice_id }}</p>
+            {% endif %}
+            {% if row.dispute_url %}
+            <a href="{{ row.dispute_url }}" target="_blank" rel="noopener" class="block font-mono text-accent break-all hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Dispute: {{ attempt.stripe_dispute_id }}</a>
+            {% elif attempt.stripe_dispute_id %}
+            <p class="font-mono text-muted-foreground break-all">Dispute: {{ attempt.stripe_dispute_id }}</p>
             {% endif %}
           </td>
           <td class="px-4 py-3 align-top text-xs text-muted-foreground" data-label="Source">{{ attempt.get_source_display }}</td>

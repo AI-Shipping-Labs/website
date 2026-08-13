@@ -47,6 +47,15 @@ def _attempt_rows(attempts, account_id):
             "subscription_url": _stripe_dashboard_url(
                 account_id, "subscriptions", attempt.stripe_subscription_id,
             ),
+            "charge_url": _stripe_dashboard_url(
+                account_id, "payments", attempt.stripe_charge_id,
+            ),
+            "invoice_url": _stripe_dashboard_url(
+                account_id, "invoices", attempt.stripe_invoice_id,
+            ),
+            "dispute_url": _stripe_dashboard_url(
+                account_id, "disputes", attempt.stripe_dispute_id,
+            ),
             "event_url": _stripe_dashboard_url(
                 account_id, "events", attempt.stripe_event_id,
             ),

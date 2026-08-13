@@ -131,7 +131,7 @@ Prereqs: You must create a webhook endpoint first.
   supported by the handler.
 - API version: leave as the Stripe default at creation time. The handler
   reads `type`, `id`, and `data` only.
-  - Subscribe to exactly these 8 events:
+  - Subscribe to exactly these 11 events:
   - `checkout.session.completed`
   - `checkout.session.async_payment_succeeded`
   - `checkout.session.async_payment_failed`
@@ -140,6 +140,9 @@ Prereqs: You must create a webhook endpoint first.
   - `invoice.payment_failed`
   - `invoice.paid`
   - `customer.updated`
+  - `charge.refunded`
+  - `charge.dispute.created`
+  - `charge.dispute.closed`
 
   Other events (e.g. `invoice.payment_succeeded`) are
   not handled and add log/audit noise without enabling any platform
@@ -363,7 +366,7 @@ Where it is used: Studio > Payments > `Stripe webhooks`
 (`/studio/payments/stripe-webhooks/`) and the staff-token API
 `POST /api/payments/stripe-webhooks/verify`. The verifier reads Stripe webhook
 endpoints in the same mode as `STRIPE_SECRET_KEY` and confirms exactly one
-enabled snapshot endpoint targets this URL with the eight required events.
+enabled snapshot endpoint targets this URL with the eleven required events.
 
 Test vs live: n/a to the value itself; the mode comes from the configured key.
 The verifier reports `key_mode` (test/live) separately from the URL check.
@@ -376,11 +379,12 @@ ID is unknown is issue #1308, not this procedure.
 
 1. In the live-mode Stripe Dashboard, create or open the endpoint for
    `https://aishippinglabs.com/api/webhooks/payments`. Choose "Your account",
-   Snapshot (classic) payloads, and enable exactly the eight documented events
+   Snapshot (classic) payloads, and enable exactly the eleven documented events
    (`checkout.session.completed`, `checkout.session.async_payment_succeeded`,
    `checkout.session.async_payment_failed`, `customer.subscription.updated`,
    `customer.subscription.deleted`, `invoice.payment_failed`, `invoice.paid`,
-   `customer.updated`). Copy that endpoint's live `whsec_...` into Studio's
+   `customer.updated`, `charge.refunded`, `charge.dispute.created`,
+   `charge.dispute.closed`). Copy that endpoint's live `whsec_...` into Studio's
    `STRIPE_WEBHOOK_SECRET`, and confirm the configured `sk_live_...` belongs to
    the same account/mode.
 2. Open Studio > Payments > `Stripe webhooks` and click
@@ -429,7 +433,7 @@ unexpanded one-time course Session can be retrieved for exact Price validation.
 Safe test procedure:
 
 1. Use Stripe test mode, a test member, a test Payment Link/Checkout Session,
-   and a test endpoint subscribed to all eight events. Never enable or disable a
+   and a test endpoint subscribed to all eleven events. Never enable or disable a
    live payment method as part of application testing.
 2. Deliver a signed complete/unpaid fixture and confirm the fulfillment is
    `awaiting_payment`, with no tier/course access, conversion, welcome, or paid
@@ -447,6 +451,33 @@ Safe test procedure:
    methods are enabled in live mode and confirm the production endpoint has both
    async events enabled. This application runbook is read-only with respect to
    live Stripe configuration.
+### Refund and dispute review runbook
+
+`charge.refunded`, `charge.dispute.created`, and `charge.dispute.closed` are
+review signals, not entitlement authorities. A signature-valid callback is
+classified as a full/partial refund, opened dispute, or closed won/lost
+dispute; it terminates as `review_required`, records only bounded safe Stripe
+event/customer/subscription/charge/invoice/dispute identifiers, and sends one
+`mail_admins` alert for that event ID. Exact redelivery records
+`already_processed` and sends no duplicate alert. No raw payload, signature,
+secret, receipt URL, payment-method/card data, or member email is stored on the
+delivery-attempt row.
+
+Partial refunds may be adjustments, refunds do not cancel active
+subscriptions, and disputes are provisional until closed. Therefore these
+callbacks never change base/effective tier, `TierOverride`, pending tier,
+billing dates, tags, community access, `CourseAccess`, progress, or monthly
+payment grace. No automatic member email is sent. After reviewing the Stripe
+charge/dispute and member context, cancel the membership subscription in
+Stripe if access should end; the verified `customer.subscription.deleted`
+callback remains the sole automated subscription-end transition.
+
+Inspect evidence at `/studio/payments/stripe-webhooks/` or through the
+staff-token status/deliveries API. The confirmed replay API remains
+cancellation-only: resend a refund/dispute from Stripe after correcting a
+transient lookup/configuration problem. A transport, authentication, or
+configuration failure returns HTTP 500, records `failed_transient`, writes no
+terminal `WebhookEvent`, and remains retryable.
 
 ## AUTHENTICATED_CHECKOUT_BINDING_ENABLED
 

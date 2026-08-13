@@ -28,6 +28,9 @@ ALL_EVENTS = [
     "invoice.payment_failed",
     "invoice.paid",
     "customer.updated",
+    "charge.refunded",
+    "charge.dispute.created",
+    "charge.dispute.closed",
 ]
 
 
@@ -178,12 +181,22 @@ class StripeWebhookApiTest(TestCase):
             stripe_event_id="evt_2", event_type="customer.subscription.deleted",
             outcome="unmatched_user", http_status=500,
         )
+        StripeWebhookDeliveryAttempt.objects.create(
+            stripe_event_id="evt_refund", event_type="charge.refunded",
+            outcome="review_required", http_status=200,
+        )
+        StripeWebhookDeliveryAttempt.objects.create(
+            stripe_event_id="evt_dispute", event_type="charge.dispute.created",
+            outcome="review_required", http_status=200,
+        )
         resp = self.client.get(STATUS_URL, **self._auth())
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data["expected_url"], EXPECTED_URL)
         self.assertEqual(data["cancellation_attempt_counts"]["processed"], 1)
         self.assertEqual(data["cancellation_attempt_counts"]["unmatched_user"], 1)
+        self.assertEqual(data["refund_review_attempt_count"], 1)
+        self.assertEqual(data["dispute_review_attempt_count"], 1)
 
     # ---- deliveries ---------------------------------------------------
     def test_deliveries_filter_and_paginate(self):
@@ -238,6 +251,34 @@ class StripeWebhookApiTest(TestCase):
             response.json()["deliveries"][0]["stripe_event_id"],
             "evt_async_success",
         )
+
+    def test_review_deliveries_serialize_and_filter_safe_ids(self):
+        StripeWebhookDeliveryAttempt.objects.create(
+            stripe_event_id="evt_review",
+            event_type="charge.dispute.closed",
+            stripe_charge_id="ch_filter",
+            stripe_invoice_id="in_filter",
+            stripe_dispute_id="dp_filter",
+            outcome="review_required",
+            http_status=200,
+        )
+        for query in (
+            {"outcome": "review_required"},
+            {"charge_id": "ch_filter"},
+            {"invoice_id": "in_filter"},
+            {"dispute_id": "dp_filter"},
+        ):
+            with self.subTest(query=query):
+                response = self.client.get(
+                    DELIVERIES_URL, query, **self._auth(),
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["count"], 1)
+                row = response.json()["deliveries"][0]
+                self.assertEqual(row["stripe_charge_id"], "ch_filter")
+                self.assertEqual(row["stripe_invoice_id"], "in_filter")
+                self.assertEqual(row["stripe_dispute_id"], "dp_filter")
+                self.assertNotIn("payload", row)
 
     # ---- replay -------------------------------------------------------
     def test_replay_dry_run_previews_without_mutation(self):
@@ -331,6 +372,27 @@ class StripeWebhookApiTest(TestCase):
             )
         self.assertEqual(resp.status_code, 422)
         self.assertEqual(resp.json()["code"], "unsupported_event_type")
+
+        refund = _stripe_event(
+            "evt_refund", "charge.refunded", {"id": "ch_refund"},
+        )
+        p1, p2 = self._mock_replay(refund)
+        with p1, p2:
+            refund_resp = self.client.post(
+                REPLAY_URL,
+                data={
+                    "event_id": "evt_refund",
+                    "dry_run": False,
+                    "confirm": "replay_cancellation_event",
+                },
+                content_type="application/json",
+                **self._auth(),
+            )
+        self.assertEqual(refund_resp.status_code, 422)
+        self.assertEqual(refund_resp.json()["code"], "unsupported_event_type")
+        self.assertFalse(StripeWebhookDeliveryAttempt.objects.filter(
+            stripe_event_id="evt_refund",
+        ).exists())
 
     def test_replay_mode_mismatch_rejected(self):
         test_mode_event = _stripe_event(

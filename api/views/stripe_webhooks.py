@@ -21,6 +21,10 @@ from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from payments.models import StripeWebhookDeliveryAttempt, StripeWebhookEndpointCheck
+from payments.services.refund_dispute_review import (
+    DISPUTE_EVENT_TYPES,
+    REFUND_EVENT_TYPES,
+)
 from payments.services.stripe_endpoint_verifier import (
     REQUIRED_EVENTS,
     get_expected_webhook_url,
@@ -68,6 +72,9 @@ def _serialize_attempt(attempt):
         "stripe_object_id": attempt.stripe_object_id,
         "stripe_customer_id": attempt.stripe_customer_id,
         "stripe_subscription_id": attempt.stripe_subscription_id,
+        "stripe_charge_id": attempt.stripe_charge_id,
+        "stripe_invoice_id": attempt.stripe_invoice_id,
+        "stripe_dispute_id": attempt.stripe_dispute_id,
         "livemode": attempt.livemode,
         "attempt_number": attempt.attempt_number,
         "outcome": attempt.outcome,
@@ -127,7 +134,7 @@ def stripe_webhooks_verify(request):
 @require_methods("GET")
 @openapi_spec(
     tag="Payments",
-    summary="Stripe webhook status and cancellation attempt aggregates",
+    summary="Stripe webhook status and review-attempt aggregates",
     methods={
         "GET": {
             "summary": "Latest persisted check + aggregates (no Stripe call)",
@@ -146,12 +153,21 @@ def stripe_webhooks_status(request):
             .annotate(n=Count("id"))
         )
     }
+    review_attempts = StripeWebhookDeliveryAttempt.objects.filter(
+        outcome=StripeWebhookDeliveryAttempt.OUTCOME_REVIEW_REQUIRED,
+    )
     return JsonResponse({
         "latest_check": _serialize_check(latest),
         "expected_url": get_expected_webhook_url(),
         "required_events": REQUIRED_EVENTS,
         "signing_secret": _signing_secret_payload(),
         "cancellation_attempt_counts": counts,
+        "refund_review_attempt_count": review_attempts.filter(
+            event_type__in=REFUND_EVENT_TYPES,
+        ).count(),
+        "dispute_review_attempt_count": review_attempts.filter(
+            event_type__in=DISPUTE_EVENT_TYPES,
+        ).count(),
     })
 
 
@@ -169,6 +185,9 @@ def stripe_webhooks_status(request):
                 "stripe_event_id": {"type": "string", "required": False},
                 "customer_id": {"type": "string", "required": False},
                 "subscription_id": {"type": "string", "required": False},
+                "charge_id": {"type": "string", "required": False},
+                "invoice_id": {"type": "string", "required": False},
+                "dispute_id": {"type": "string", "required": False},
                 "cancellation": {"type": "boolean", "required": False},
                 "page": {"type": "integer", "required": False},
                 "page_size": {"type": "integer", "required": False},
@@ -208,6 +227,18 @@ def stripe_webhooks_deliveries(request):
     subscription_id = (request.GET.get("subscription_id") or "").strip()
     if subscription_id:
         qs = qs.filter(stripe_subscription_id=subscription_id)
+
+    charge_id = (request.GET.get("charge_id") or "").strip()
+    if charge_id:
+        qs = qs.filter(stripe_charge_id=charge_id)
+
+    invoice_id = (request.GET.get("invoice_id") or "").strip()
+    if invoice_id:
+        qs = qs.filter(stripe_invoice_id=invoice_id)
+
+    dispute_id = (request.GET.get("dispute_id") or "").strip()
+    if dispute_id:
+        qs = qs.filter(stripe_dispute_id=dispute_id)
 
     try:
         page = max(1, int(request.GET.get("page", "1")))

@@ -15,6 +15,7 @@ class StripeWebhookDeliveryAttemptAdmin(admin.ModelAdmin):
     list_filter = ["outcome", "event_type", "source"]
     search_fields = [
         "stripe_event_id", "stripe_customer_id", "stripe_subscription_id",
+        "stripe_charge_id", "stripe_invoice_id", "stripe_dispute_id",
     ]
     readonly_fields = [f.name for f in StripeWebhookDeliveryAttempt._meta.fields]
     ordering = ["-received_at"]

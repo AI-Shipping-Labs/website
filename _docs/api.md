@@ -179,11 +179,14 @@ All reconciliation endpoints require a staff token: a missing or non-staff token
 
 ## Stripe webhook diagnostics API
 
-The existing staff-token-only diagnostics surface covers all nine required
-snapshot webhook events. `POST /api/payments/stripe-webhooks/verify` performs a
-read-only endpoint check. `GET /api/payments/stripe-webhooks/status` returns the
-latest check, preserves `cancellation_attempt_counts`, and adds separate
-`refund_review_attempt_count` and `dispute_review_attempt_count` totals.
+The existing staff-token-only diagnostics surface covers all eleven required
+snapshot webhook events: the original six, two delayed-Checkout events, and
+three refund/dispute review events. `POST /api/payments/stripe-webhooks/verify`
+performs a read-only endpoint check. The status endpoint
+(`GET /api/payments/stripe-webhooks/status`) returns the latest check and
+canonical `required_events` list, preserves `cancellation_attempt_counts`, and
+adds separate `refund_review_attempt_count` and `dispute_review_attempt_count`
+totals.
 
 `GET /api/payments/stripe-webhooks/deliveries` lists secret-free delivery
 evidence. In addition to existing event/customer/subscription fields, each row

@@ -368,7 +368,7 @@ class DelayedCourseCheckoutTest(TierSetupMixin, TestCase):
 @tag("core")
 class DelayedCheckoutDispatchContractTest(TestCase):
     def test_dispatcher_and_verifier_include_exact_eleven_events(self):
-        expected = {
+        expected = [
             "checkout.session.completed",
             "checkout.session.async_payment_succeeded",
             "checkout.session.async_payment_failed",
@@ -380,9 +380,10 @@ class DelayedCheckoutDispatchContractTest(TestCase):
             "charge.refunded",
             "charge.dispute.created",
             "charge.dispute.closed",
-        }
-        self.assertEqual(set(REQUIRED_EVENTS), expected)
-        self.assertEqual(set(EVENT_HANDLERS), expected)
+        ]
+        self.assertEqual(REQUIRED_EVENTS, expected)
+        self.assertEqual(len(REQUIRED_EVENTS), len(set(REQUIRED_EVENTS)))
+        self.assertEqual(set(EVENT_HANDLERS), set(expected))
 
     def test_async_attempt_and_terminal_event_are_recorded(self):
         with patch(

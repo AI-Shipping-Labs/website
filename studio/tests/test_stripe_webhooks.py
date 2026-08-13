@@ -12,21 +12,10 @@ from payments.models import (
     StripeWebhookEndpointCheck,
     Tier,
 )
+from payments.services.stripe_endpoint_verifier import REQUIRED_EVENTS
 
 EXPECTED_URL = "https://aishippinglabs.com/api/webhooks/payments"
-ALL_EVENTS = [
-    "checkout.session.completed",
-    "checkout.session.async_payment_succeeded",
-    "checkout.session.async_payment_failed",
-    "customer.subscription.updated",
-    "customer.subscription.deleted",
-    "invoice.payment_failed",
-    "invoice.paid",
-    "customer.updated",
-    "charge.refunded",
-    "charge.dispute.created",
-    "charge.dispute.closed",
-]
+ALL_EVENTS = list(REQUIRED_EVENTS)
 
 
 @tag("core")
@@ -58,6 +47,9 @@ class StripeWebhooksStudioTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Verify Stripe configuration")
         self.assertContains(resp, EXPECTED_URL)
+        self.assertEqual(resp.context["required_events"], REQUIRED_EVENTS)
+        for event_type in REQUIRED_EVENTS:
+            self.assertContains(resp, event_type)
         # Quiet-but-healthy neutral empty state, not a failure.
         self.assertContains(resp, "No delivery has arrived yet")
         self.assertContains(resp, "not proof of failure")

@@ -12,6 +12,7 @@ from payments.models import (
     Tier,
     WebhookEvent,
 )
+from payments.services.stripe_endpoint_verifier import REQUIRED_EVENTS
 
 VERIFY_URL = "/api/payments/stripe-webhooks/verify"
 STATUS_URL = "/api/payments/stripe-webhooks/status"
@@ -19,19 +20,7 @@ DELIVERIES_URL = "/api/payments/stripe-webhooks/deliveries"
 REPLAY_URL = "/api/payments/stripe-webhooks/replay"
 
 EXPECTED_URL = "https://aishippinglabs.com/api/webhooks/payments"
-ALL_EVENTS = [
-    "checkout.session.completed",
-    "checkout.session.async_payment_succeeded",
-    "checkout.session.async_payment_failed",
-    "customer.subscription.updated",
-    "customer.subscription.deleted",
-    "invoice.payment_failed",
-    "invoice.paid",
-    "customer.updated",
-    "charge.refunded",
-    "charge.dispute.created",
-    "charge.dispute.closed",
-]
+ALL_EVENTS = list(REQUIRED_EVENTS)
 
 
 def _endpoint(url=EXPECTED_URL, events=None, status="enabled", livemode=True):
@@ -193,6 +182,7 @@ class StripeWebhookApiTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data["expected_url"], EXPECTED_URL)
+        self.assertEqual(data["required_events"], REQUIRED_EVENTS)
         self.assertEqual(data["cancellation_attempt_counts"]["processed"], 1)
         self.assertEqual(data["cancellation_attempt_counts"]["unmatched_user"], 1)
         self.assertEqual(data["refund_review_attempt_count"], 1)

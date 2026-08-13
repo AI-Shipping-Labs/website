@@ -25,6 +25,7 @@ from payments.models import (
 )
 from payments.services import handle_subscription_updated
 from payments.services.stripe_endpoint_verifier import (
+    REQUIRED_EVENTS,
     signing_secret_evidence,
     verify_stripe_endpoint,
 )
@@ -334,19 +335,7 @@ def _endpoint(url, events, status="enabled", livemode=True, ep_id="we_1",
     }
 
 
-ALL_EVENTS = [
-    "checkout.session.completed",
-    "checkout.session.async_payment_succeeded",
-    "checkout.session.async_payment_failed",
-    "customer.subscription.updated",
-    "customer.subscription.deleted",
-    "invoice.payment_failed",
-    "invoice.paid",
-    "customer.updated",
-    "charge.refunded",
-    "charge.dispute.created",
-    "charge.dispute.closed",
-]
+ALL_EVENTS = list(REQUIRED_EVENTS)
 EXPECTED_URL = "https://aishippinglabs.com/api/webhooks/payments"
 
 

@@ -3,6 +3,7 @@
 import os
 
 import pytest
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import auth_context, create_staff_user, create_user
 
@@ -54,6 +55,19 @@ def _capture_matrix(page, tmp_path, label):
                 path=str(tmp_path / f'issue-1291-{label}-{viewport}-{theme}.png'),
                 full_page=True,
             )
+
+
+def _expect_preview_applied(page, summary, *, can_apply):
+    expect(page.get_by_test_id('import-outcome-summary')).to_have_text(summary)
+    submit = page.get_by_test_id('import-confirm-submit')
+    block_reason = page.get_by_test_id('import-block-reason')
+    if can_apply:
+        expect(submit).to_be_enabled()
+        expect(block_reason).to_be_hidden()
+    else:
+        expect(submit).to_be_disabled()
+        expect(block_reason).to_be_visible()
+    expect(page.get_by_test_id('import-preview-loading')).to_be_hidden()
 
 
 @pytest.mark.django_db(transaction=True)
@@ -144,6 +158,12 @@ class TestContactImportOutcomePreview:
 
         with page.expect_response(lambda response: response.url.endswith('/preview')):
             page.get_by_test_id('import-email-column').select_option('Contact email')
+        _expect_preview_applied(
+            page,
+            '2 new users will be created, 0 existing users will be updated, '
+            '0 rows will be skipped (0 invalid emails, 0 duplicates).',
+            can_apply=True,
+        )
         assert page.get_by_test_id('import-confirm-submit').is_enabled()
         assert page.get_by_test_id('import-outcome-summary').inner_text().startswith(
             '2 new users will be created'
@@ -153,8 +173,18 @@ class TestContactImportOutcomePreview:
 
         with page.expect_response(lambda response: response.url.endswith('/preview')):
             page.get_by_test_id('import-email-column').select_option('Name')
+        _expect_preview_applied(
+            page,
+            '0 new users will be created, 0 existing users will be updated, '
+            '2 rows will be skipped (2 invalid emails, 0 duplicates).',
+            can_apply=False,
+        )
         assert page.get_by_test_id('import-confirm-submit').is_disabled()
         assert page.get_by_test_id('import-block-reason').is_visible()
+        assert page.get_by_test_id('import-outcome-summary').inner_text() == (
+            '0 new users will be created, 0 existing users will be updated, '
+            '2 rows will be skipped (2 invalid emails, 0 duplicates).'
+        )
         assert tag.input_value() == 'keep-this-tag'
         assert tier.locator('option:checked').inner_text() == 'Main'
         context.close()
@@ -262,6 +292,12 @@ class TestContactImportOutcomePreview:
             'loading_visible': True,
             'submit_disabled': True,
         }]
+        _expect_preview_applied(
+            page,
+            '1 new user will be created, 0 existing users will be updated, '
+            '0 rows will be skipped (0 invalid emails, 0 duplicates).',
+            can_apply=True,
+        )
         assert select.evaluate('element => document.activeElement === element')
         assert page.get_by_test_id('import-confirm-submit').is_enabled()
         assert page.get_by_test_id('import-outcome-card').get_attribute('aria-live') == 'polite'

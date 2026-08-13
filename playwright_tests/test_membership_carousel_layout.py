@@ -144,7 +144,8 @@ def test_pricing_mobile_carousel_free_copy_and_desktop_grid(django_server, page)
     _assert_mobile_carousel(page, '[data-testid="pricing-tier-carousel"]')
     _assert_main_centered(page, '[data-testid="pricing-tier-carousel"]')
     free_card = page.locator('[data-tier-card="free"]')
-    expect(free_card).to_contain_text("Newsletter and open resources")
+    expect(free_card).to_contain_text("Newsletter emails")
+    expect(free_card).to_contain_text("Access to open content")
     # The Free tier CTA is a single Join button that links to the register
     # page (the inline register form was removed).
     expect(

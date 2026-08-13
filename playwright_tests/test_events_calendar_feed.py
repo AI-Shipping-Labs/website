@@ -139,16 +139,18 @@ class TestVisitorDiscoversSubscribeOption:
         )
         assert response.status == 200
 
-        # Trigger lives in the same row as List / Calendar.
+        # Trigger lives in the current list toolbar beside Calendar and the
+        # Upcoming/Past filters.
         toggle_row = page.locator(
-            '[data-testid="events-view-toggle-row"]',
+            '[data-testid="events-list-toolbar"]',
         )
         assert toggle_row.count() == 1
         assert toggle_row.locator(
             '[data-testid="events-subscribe-trigger"]',
         ).count() == 1
-        assert "List" in toggle_row.inner_text()
         assert "Calendar" in toggle_row.inner_text()
+        assert "Upcoming" in toggle_row.inner_text()
+        assert "Past" in toggle_row.inner_text()
         assert "Subscribe to all events" in toggle_row.inner_text()
 
         # Open the popover.

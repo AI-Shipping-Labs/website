@@ -122,17 +122,15 @@ class TestDarkModeAccentContrast:
     def test_accent_buttons_have_visible_label_in_dark_mode(
         self, django_server, page
     ):
-        """The active List / Calendar toggles and the today-cell day
-        number must use ``text-accent-foreground`` (near-black in dark
-        mode), not ``text-white``. Asserts a per-channel RGB delta of
-        at least 80 between background-color and color for each."""
+        """Current selected filters and the accent-filled today marker keep
+        visibly contrasting foreground colors in dark mode."""
         _ensure_tiers()
         _clear_events()
         _create_today_event()
 
         _force_dark_mode(page)
 
-        # ---- /events : the active "List" toggle ----
+        # ---- /events : the selected Upcoming filter ----
         page.goto(
             f"{django_server}/events",
             wait_until="domcontentloaded",
@@ -143,19 +141,17 @@ class TestDarkModeAccentContrast:
             "() => document.documentElement.classList.contains('dark')"
         ) is True, "expected /events to render in dark mode"
 
-        list_toggle = page.locator(
-            "a.bg-accent",
-            has_text="List",
-        )
-        bg, fg = _computed_bg_and_fg(page, list_toggle)
+        selected_filter = page.get_by_test_id('events-filter-upcoming')
+        assert selected_filter.get_attribute('aria-selected') == 'true'
+        bg, fg = _computed_bg_and_fg(page, selected_filter)
         delta = _max_channel_delta(_parse_rgb(bg), _parse_rgb(fg))
         assert delta >= CHANNEL_DELTA_THRESHOLD, (
-            f"active 'List' toggle on /events has illegible label in "
+            f"selected Upcoming filter on /events has illegible label in "
             f"dark mode: bg={bg}, color={fg}, max channel delta={delta} "
-            f"< {CHANNEL_DELTA_THRESHOLD}. Use bg-accent text-accent-foreground."
+            f"< {CHANNEL_DELTA_THRESHOLD}."
         )
 
-        # ---- /events/calendar/<year>/<month> : active "Calendar" toggle ----
+        # ---- /events/calendar/<year>/<month> : today marker ----
         today = datetime.date.today()
         page.goto(
             f"{django_server}/events/calendar/{today.year}/{today.month}",
@@ -166,20 +162,7 @@ class TestDarkModeAccentContrast:
             "() => document.documentElement.classList.contains('dark')"
         ) is True, "expected /events/calendar to render in dark mode"
 
-        calendar_toggle = page.locator(
-            "a.bg-accent",
-            has_text="Calendar",
-        )
-        bg, fg = _computed_bg_and_fg(page, calendar_toggle)
-        delta = _max_channel_delta(_parse_rgb(bg), _parse_rgb(fg))
-        assert delta >= CHANNEL_DELTA_THRESHOLD, (
-            f"active 'Calendar' toggle on /events/calendar has "
-            f"illegible label in dark mode: bg={bg}, color={fg}, "
-            f"max channel delta={delta} < {CHANNEL_DELTA_THRESHOLD}. "
-            f"Use bg-accent text-accent-foreground."
-        )
-
-        # ---- today-cell day number (only present if today is in this month) ----
+        # today-cell day number (only present if today is in this month)
         today_day_span = page.locator(
             "span.bg-accent.font-bold"
         )

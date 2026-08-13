@@ -121,18 +121,10 @@ class TestJustEndedEventMovesToPast:
 
         _run_cron()
 
-        page.goto(
-            f"{django_server}/events",
-            wait_until="domcontentloaded",
-        )
-
-        past_section = page.locator('[data-testid="events-past-section"]')
-        assert past_section.count() == 1
-        assert "Today Just Ended" in past_section.inner_text()
-
-        # The event must NOT appear in the upcoming section. Scope the
-        # locator to the upcoming-section testid so we don't get false
-        # positives from sibling text (filter tabs, headings, etc.).
+        # The public Past filter is a recordings archive, so an ended event
+        # without a recording simply leaves Upcoming and remains reachable
+        # at its canonical detail URL.
+        page.goto(f"{django_server}/events", wait_until="domcontentloaded")
         upcoming_section = page.locator(
             '[data-testid="events-upcoming-section"]'
         )
@@ -178,7 +170,9 @@ class TestFutureEventStaysUpcoming:
         body_text = page.locator("main").inner_text()
         assert "Next Week" in body_text
 
-        # The event must not appear in the past section.
+        page.goto(
+            f"{django_server}/events?filter=past", wait_until="domcontentloaded",
+        )
         past_section = page.locator('[data-testid="events-past-section"]')
         assert "Next Week" not in past_section.inner_text()
 
@@ -201,20 +195,13 @@ class TestImplicitEndTreatedAsEnded:
 
         _run_cron()
 
-        page.goto(
-            f"{django_server}/events",
-            wait_until="domcontentloaded",
-        )
-
-        past_section = page.locator('[data-testid="events-past-section"]')
-        assert "Flash QA" in past_section.inner_text()
-
-        # Scope the NOT-in-upcoming guard to the upcoming-section testid.
+        page.goto(f"{django_server}/events", wait_until="domcontentloaded")
         upcoming_section = page.locator(
             '[data-testid="events-upcoming-section"]'
         )
         assert upcoming_section.count() == 1
         assert "Flash QA" not in upcoming_section.inner_text()
+        assert _refresh_status("flash-qa") == "completed"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -247,9 +234,11 @@ class TestLiveEventStaysUpcoming:
         assert upcoming_section.count() == 1
         assert "Live Now" in upcoming_section.inner_text()
 
+        page.goto(
+            f"{django_server}/events?filter=past", wait_until="domcontentloaded",
+        )
         past_section = page.locator('[data-testid="events-past-section"]')
-        if past_section.count() > 0:
-            assert "Live Now" not in past_section.inner_text()
+        assert "Live Now" not in past_section.inner_text()
 
 
 @pytest.mark.django_db(transaction=True)
@@ -453,10 +442,6 @@ class TestPublicEventsUpcomingCountDrops:
         assert "Public Later" in before_text
         assert "Public Ended" not in before_text
 
-        past_section = page.locator('[data-testid="events-past-section"]')
-        assert past_section.count() == 1
-        assert "Public Ended" in past_section.inner_text()
-
         # Run the cron task — the DB-side side-effect: it flips the
         # ended event from ``status='upcoming'`` to ``status='completed'``.
         # The cron is still wired up for Zoom cancellation/archival
@@ -481,9 +466,12 @@ class TestPublicEventsUpcomingCountDrops:
         assert "Public Later" in after_text
         assert "Public Ended" not in after_text
 
-        past_section = page.locator('[data-testid="events-past-section"]')
-        assert past_section.count() == 1
-        assert "Public Ended" in past_section.inner_text()
+        # Past is a recordings archive; this event has no recording and is
+        # intentionally absent there even though its DB lifecycle completed.
+        page.goto(f"{django_server}/events?filter=past", wait_until="domcontentloaded")
+        assert "Public Ended" not in page.get_by_test_id(
+            'events-past-section'
+        ).inner_text()
 
 
 # Suppress unused-import warnings for import-only modules above.

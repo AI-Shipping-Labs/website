@@ -106,10 +106,16 @@ def test_header_opens_past_recordings_and_workshop_handoff(
 
     expect(page.get_by_test_id("home-past-recordings-section")).to_have_count(0)
     expect(page.locator(f'a[href="{standalone.get_absolute_url()}"]')).to_have_count(0)
+    # Past recordings are a filter on the Events destination, rather than a
+    # separate header item. Keep the full discovery path covered.
     page.get_by_test_id("nav-community-trigger").hover()
-    archive_link = page.get_by_test_id("nav-community-link-past-recordings")
+    events_link = page.get_by_test_id("nav-community-link-events")
+    expect(events_link).to_be_visible()
+    expect(events_link).to_have_attribute("href", "/events")
+    events_link.click()
+    expect(page).to_have_url(re.compile(r".*/events$"))
+    archive_link = page.get_by_test_id("events-filter-past")
     expect(archive_link).to_be_visible()
-    expect(archive_link).to_have_attribute("href", "/events?filter=past")
     archive_link.click()
     expect(page).to_have_url(re.compile(r".*/events\?filter=past$"))
     expect(page.get_by_test_id("events-filter-past")).to_have_attribute(

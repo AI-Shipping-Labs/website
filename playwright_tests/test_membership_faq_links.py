@@ -21,9 +21,9 @@ pytestmark = pytest.mark.local_only
 
 @pytest.mark.django_db(transaction=True)
 class TestLoggedInUserMembershipNavigation:
-    """The removed header Membership link does not affect pricing access."""
+    """The top-level Membership link reaches the pricing surface."""
 
-    def test_header_no_longer_has_membership_link_and_pricing_still_loads(
+    def test_header_membership_link_loads_current_membership_page(
         self, django_server, browser, django_db_blocker
     ):
         with django_db_blocker.unblock():
@@ -33,10 +33,10 @@ class TestLoggedInUserMembershipNavigation:
         page = ctx.new_page()
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
-        assert page.get_by_test_id("nav-membership").count() == 0
-        page.get_by_test_id("nav-community-trigger").hover()
-        assert page.get_by_test_id("nav-community-link-membership").is_visible()
-        page.goto(f"{django_server}/membership", wait_until="domcontentloaded")
+        membership = page.get_by_test_id("nav-membership-link")
+        assert membership.is_visible()
+        assert membership.get_attribute('href') == '/membership'
+        membership.click()
         page.wait_for_load_state("domcontentloaded")
 
         assert page.url.rstrip("/").endswith("/membership"), (

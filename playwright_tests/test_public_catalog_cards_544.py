@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 import pytest
+from playwright.sync_api import expect
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -121,6 +122,27 @@ def _capture(page, name):
     page.screenshot(path=SCREENSHOT_DIR / f"{name}.png", full_page=True)
 
 
+def _assert_card_signal(page, signal):
+    signal_element = page.get_by_test_id(signal["testid"])
+    expect(signal_element).to_have_count(1)
+
+    if signal["kind"] == "topic":
+        expect(signal_element).to_have_text(signal["text"])
+        return
+
+    visible_tags = signal_element.locator(
+        ":scope > a, :scope > span:not([aria-label])"
+    )
+    expect(visible_tags).to_have_count(3)
+    assert visible_tags.all_inner_texts() == ["agents", "rag", "python"]
+
+    overflow = signal_element.locator(
+        f':scope > [aria-label="2 more {signal["owner"]} tags"]'
+    )
+    expect(overflow).to_have_count(1)
+    expect(overflow).to_have_text("+2")
+
+
 def _open_page(browser, base_url, path, viewport, theme):
     context = browser.new_context(viewport=viewport)
     _set_theme(context, theme)
@@ -166,21 +188,43 @@ def test_public_catalog_cards_have_consistent_density_screenshots(
     _seed_catalog_content()
 
     routes = [
-        ("courses", "/courses", "Production AI Agents Course"),
-        ("workshops", "/workshops", "Agent Evaluation Workshop"),
-        ("blog", "/blog", "Designing Agent Feedback Loops"),
-        ("downloads", "/downloads", "Agent Evaluation Checklist"),
-        ("resources", "/resources", "Agent Evaluation Resource"),
-        ("events-past", "/events?filter=past", "Agent Evaluation Recording"),
-        ("blog-filtered-agents", "/blog?tag=agents", "Designing Agent Feedback Loops"),
+        (
+            "courses", "/courses", "Production AI Agents Course",
+            {"kind": "tags", "testid": "course-card-tags", "owner": "course"},
+        ),
+        (
+            "workshops", "/workshops", "Agent Evaluation Workshop",
+            {"kind": "topic", "testid": "workshop-card-topic", "text": "RAG & Search"},
+        ),
+        (
+            "blog", "/blog", "Designing Agent Feedback Loops",
+            {"kind": "topic", "testid": "blog-card-topic", "text": "AI Engineering"},
+        ),
+        (
+            "downloads", "/downloads", "Agent Evaluation Checklist",
+            {"kind": "tags", "testid": "download-card-tags", "owner": "download"},
+        ),
+        (
+            "resources", "/resources", "Agent Evaluation Resource",
+            {"kind": "tags", "testid": "curated-link-card-tags", "owner": "resource"},
+        ),
+        (
+            "events-past", "/events?filter=past", "Agent Evaluation Recording",
+            {"kind": "tags", "testid": "event-card-tags", "owner": "event"},
+        ),
+        (
+            "blog-filtered-agents", "/blog?tag=agents",
+            "Designing Agent Feedback Loops",
+            {"kind": "topic", "testid": "blog-card-topic", "text": "AI Engineering"},
+        ),
     ]
 
-    for label, path, text in routes:
+    for label, path, text, signal in routes:
         for theme in ("light", "dark"):
             context, page = _open_page(browser, django_server, path, DESKTOP, theme)
             try:
                 page.get_by_text(text).first.wait_for()
-                assert page.get_by_text("+2").count() >= 1
+                _assert_card_signal(page, signal)
                 assert _doc_overflow(page) <= 1
                 _capture(page, f"{label}-desktop-{theme}-1280x900")
             finally:
@@ -189,7 +233,7 @@ def test_public_catalog_cards_have_consistent_density_screenshots(
             context, page = _open_page(browser, django_server, path, MOBILE, theme)
             try:
                 page.get_by_text(text).first.wait_for()
-                assert page.get_by_text("+2").count() >= 1
+                _assert_card_signal(page, signal)
                 assert _doc_overflow(page) <= 1
                 _capture(page, f"{label}-mobile-{theme}-393x851")
             finally:

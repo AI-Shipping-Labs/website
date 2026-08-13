@@ -252,9 +252,9 @@ def test_marketing_pages_appear_in_desktop_and_mobile_nav(django_server, browser
     try:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
         page.locator("#mobile-menu-btn").click()
-        page.locator('[data-testid="mobile-nav-resources-trigger"]').click()
+        page.locator('[data-testid="mobile-nav-learning-trigger"]').click()
         resources_link = page.locator(
-            '[data-testid="mobile-nav-resources-menu"] a',
+            '[data-testid="mobile-nav-learning-menu"] a',
             has_text="Builder Resources",
         )
         expect(resources_link).to_be_visible()
@@ -308,7 +308,7 @@ def test_draft_preview_is_private_and_noindexed(django_server, browser):
         assert response.status == 404
 
         public_page.goto(f"{django_server}/", wait_until="domcontentloaded")
-        public_page.locator('[data-testid="nav-resources-trigger"]').hover()
+        public_page.locator('[data-testid="nav-learning-trigger"]').hover()
         expect(public_page.get_by_text("Draft Campaign Page")).to_have_count(0)
     finally:
         public.close()

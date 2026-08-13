@@ -150,7 +150,7 @@ class TestBlogCardTagChipClick:
             slug='ml-blog',
             title='ML Blog Post',
             description='ML stuff.',
-            tags=['mlops'],
+            tags=['python'],
         )
         _create_article(
             slug='other-blog',
@@ -161,18 +161,25 @@ class TestBlogCardTagChipClick:
 
         page.goto(f'{django_server}/blog', wait_until='domcontentloaded')
 
-        # Click the "mlops" tag chip on the first card.
-        page.locator('a:has-text("mlops")').first.click()
+        # Topic badges on cards are informational. The listing-level topic
+        # control owns filtering, so use that canonical navigation surface.
+        card = page.locator('[data-testid="blog-card"]', has_text='ML Blog Post')
+        assert 'PRODUCTION & INFRA' in card.inner_text()
+        assert card.get_by_role(
+            'link', name='Production & Infra', exact=True,
+        ).count() == 0
+        page.locator('a[href="/blog?topic=production-infra"]').click()
         page.wait_for_load_state('domcontentloaded')
 
         # The user lands on the tag-filtered listing, NOT the article detail.
         assert '/blog/ml-blog' not in page.url
         assert '/blog' in page.url
-        assert 'tag=mlops' in page.url or page.url.rstrip('/').endswith('/mlops')
+        assert 'topic=production-infra' in page.url
 
         # The filtered listing shows the matching article and hides the other.
         body = page.content()
         assert 'ML Blog Post' in body
+        assert 'Other Topic' not in page.locator('main').inner_text()
 
 
 # ---------------------------------------------------------------

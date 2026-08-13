@@ -236,9 +236,8 @@ class TestPostRegistrationConfirmation:
 
 @pytest.mark.django_db(transaction=True)
 class TestEventDetailCoverImage:
-    """Issue #484 + #651: cover image renders when set; when missing,
-    no hero block (neither image nor fallback) is rendered on the
-    detail page."""
+    """Cover images remain social metadata while the streamlined detail
+    page intentionally renders no hero media block."""
 
     def test_cover_image_renders_when_set(self, django_server, page):
         _clear_events()
@@ -252,8 +251,11 @@ class TestEventDetailCoverImage:
             wait_until="domcontentloaded",
         )
         assert page.locator(
-            '[data-testid="event-cover-image"]'
+            'meta[property="og:image"][content="https://cdn.example.com/cover.jpg"]'
         ).count() == 1
+        assert page.locator(
+            '[data-testid="event-cover-image"]'
+        ).count() == 0
         assert page.locator(
             '[data-testid="event-cover-fallback"]'
         ).count() == 0
@@ -347,7 +349,7 @@ class TestAnonymousPaidEventCopy:
         ).click()
         page.wait_for_url(f"{django_server}/membership")
         # Smoke check: the pricing page renders without an error.
-        assert "Pricing" in page.title() or "pricing" in page.url
+        assert "Membership" in page.title()
 
     def test_paid_freestyle_event_shows_past_freestyle_evidence(
         self, django_server, page

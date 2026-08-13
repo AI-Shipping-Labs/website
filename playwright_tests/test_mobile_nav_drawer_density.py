@@ -14,7 +14,7 @@ mobile drawer rendered from ``templates/includes/header.html``:
    accessibility checklist.
 4. The drawer wrapper scrolls but the underlying ``<body>`` does too,
    so page chrome bleeds through behind the drawer when the menu is
-   long (staff variant + both accordions open ~ 1700 px on a 1830 px
+   long (staff variant + all accordions open ~ 1700 px on a 1830 px
    viewport).
 5. The mobile Notifications row reflows when the badge appears or
    disappears because the badge is placed inline mid-text with
@@ -153,12 +153,12 @@ class TestThemeRowSymmetricAcrossAuthStates:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 2: Resources sub-links sit under a left rule and use compact rows.
+# Scenario 2: Learning sub-links sit under a left rule and use compact rows.
 # ---------------------------------------------------------------------------
 
 
-class TestResourcesAccordionGroupingAndTapTargets:
-    def test_resources_sublinks_carry_left_rule_and_compact_height(
+class TestLearningAccordionGroupingAndTapTargets:
+    def test_learning_sublinks_carry_left_rule_and_compact_height(
         self, django_server, browser
     ):
         _create_user(email=MEMBER_EMAIL, tier_slug="free")
@@ -168,24 +168,24 @@ class TestResourcesAccordionGroupingAndTapTargets:
         try:
             page.goto(f"{django_server}/", wait_until="domcontentloaded")
             _open_drawer(page)
-            _expand(page, "resources")
+            _expand(page, "learning")
 
             # Every sub-link in the expanded list meets the mobile tap target
             # floor from the shared public chrome accessibility fix (#1214).
             link_heights = page.evaluate(
                 """
                 () => {
-                    const list = document.getElementById('mobile-resources-list');
+                    const list = document.getElementById('mobile-learning-list');
                     return Array.from(list.querySelectorAll('a')).map(a => {
                         return a.getBoundingClientRect().height;
                     });
                 }
                 """
             )
-            assert link_heights, "Resources accordion must render sub-links"
+            assert link_heights, "Learning accordion must render sub-links"
             for height in link_heights:
                 assert height >= 44, (
-                    f"Resources sub-link is {height}px tall, "
+                    f"Learning sub-link is {height}px tall, "
                     "expected at least a 44px mobile tap target"
                 )
 
@@ -193,19 +193,19 @@ class TestResourcesAccordionGroupingAndTapTargets:
             border_left_width = page.evaluate(
                 """
                 () => {
-                    const list = document.getElementById('mobile-resources-list');
+                    const list = document.getElementById('mobile-learning-list');
                     return getComputedStyle(list).borderLeftWidth;
                 }
                 """
             )
             assert border_left_width not in ("0px", "", None), (
-                f"Resources sub-list must have a left border to group "
+                f"Learning sub-list must have a left border to group "
                 f"children to the parent, got border-left-width="
                 f"{border_left_width!r}"
             )
 
             # The toggle now reports aria-expanded="true".
-            toggle = page.locator("#mobile-resources-toggle")
+            toggle = page.locator("#mobile-learning-toggle")
             assert toggle.get_attribute("aria-expanded") == "true"
         finally:
             context.close()
@@ -227,7 +227,7 @@ class TestAccordionAriaExpandedSync:
             _open_drawer(page)
 
             community_toggle = page.locator("#mobile-community-toggle")
-            resources_toggle = page.locator("#mobile-resources-toggle")
+            learning_toggle = page.locator("#mobile-learning-toggle")
 
             # Initial state: both accordions collapsed.
             assert community_toggle.get_attribute("aria-expanded") == "false"
@@ -235,10 +235,10 @@ class TestAccordionAriaExpandedSync:
                 community_toggle.get_attribute("aria-controls")
                 == "mobile-community-list"
             )
-            assert resources_toggle.get_attribute("aria-expanded") == "false"
+            assert learning_toggle.get_attribute("aria-expanded") == "false"
             assert (
-                resources_toggle.get_attribute("aria-controls")
-                == "mobile-resources-list"
+                learning_toggle.get_attribute("aria-controls")
+                == "mobile-learning-list"
             )
 
             # Tap Community: aria-expanded flips to true.
@@ -329,7 +329,8 @@ class TestStaffLogoutReachableWithoutPageBleedThrough:
             page.goto(f"{django_server}/", wait_until="domcontentloaded")
             _open_drawer(page)
             _expand(page, "community")
-            _expand(page, "resources")
+            _expand(page, "learning")
+            _expand(page, "about")
 
             logout = page.locator(
                 '#mobile-menu a[href="/accounts/logout/"]'
@@ -465,7 +466,7 @@ class TestNotificationBadgeNoLayoutShift:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 7: Member drawer with both accordions open is < 1100 px tall.
+# Scenario 7: Member drawer with all accordions open is < 1100 px tall.
 # ---------------------------------------------------------------------------
 
 
@@ -481,13 +482,14 @@ class TestDrawerFitsViewportWithBothAccordionsOpen:
             page.goto(f"{django_server}/", wait_until="domcontentloaded")
             _open_drawer(page)
             _expand(page, "community")
-            _expand(page, "resources")
+            _expand(page, "learning")
+            _expand(page, "about")
 
             scroll_height = page.evaluate(
                 "() => document.getElementById('mobile-menu').scrollHeight"
             )
             assert scroll_height < 1100, (
-                f"Member drawer with both accordions open must be "
+                f"Member drawer with all accordions open must be "
                 f"< 1100px tall, got {scroll_height}px"
             )
 
@@ -525,9 +527,9 @@ class TestDesktopLayoutUntouched:
             primary = page.locator('[data-testid="desktop-primary-nav"]')
             assert primary.is_visible()
             for testid in [
-                "nav-about-trigger",
                 "nav-community-trigger",
-                "nav-resources-trigger",
+                "nav-learning-trigger",
+                "nav-about-trigger",
             ]:
                 assert primary.locator(f'[data-testid="{testid}"]').is_visible()
 
@@ -537,7 +539,7 @@ class TestDesktopLayoutUntouched:
             ).is_visible()
             primary.locator('[data-testid="nav-community-trigger"]').hover()
             assert primary.locator(
-                '[data-testid="nav-community-link-membership"]'
+                '[data-testid="nav-community-link-events"]'
             ).is_visible()
 
             # Mobile drawer is hidden.

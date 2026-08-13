@@ -806,9 +806,11 @@ class TestSharedReaderWorkshopBehavior:
             assert page.evaluate(
                 "localStorage.getItem('content-sidebar-collapsed')"
             ) == '1'
-            assert page.locator(
+            # The shared restore control deliberately transitions in after
+            # collapse; wait for that accessible control before navigating.
+            page.locator(
                 '[data-testid="content-sidebar-floating-toggle"]',
-            ).is_visible()
+            ).wait_for(state='visible')
 
             page.goto(f'{django_server}{course_unit_url}', wait_until='domcontentloaded')
             assert page.evaluate(

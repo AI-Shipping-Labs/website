@@ -13550,6 +13550,9 @@
                       "date_joined": "2026-04-15T12:00:00+00:00",
                       "display_name": "Alice Doe",
                       "email": "alice@example.com",
+                      "email_preferences": {
+                        "maven_emails": false
+                      },
                       "email_verified": true,
                       "first_name": "Alice",
                       "last_login": "2026-05-19T08:30:00+00:00",
@@ -13924,6 +13927,9 @@
                   "date_joined": "2026-04-15T12:00:00+00:00",
                   "display_name": "Alice Doe",
                   "email": "alice@example.com",
+                  "email_preferences": {
+                    "maven_emails": false
+                  },
                   "email_verified": true,
                   "first_name": "Alice",
                   "last_login": "2026-05-19T08:30:00+00:00",
@@ -13973,7 +13979,7 @@
         ]
       },
       "patch": {
-        "description": "Accepts ``unsubscribed: bool`` and/or ``email_verified: true`` only. Setting ``email_verified: false`` returns 422 ``verification_demote_forbidden``. Any other field returns 422 ``unknown_field``. Every PATCH appends a ``CommunityAuditLog`` row (even no-ops).",
+        "description": "Accepts ``unsubscribed: bool`` and/or ``email_verified: true``, ``slack_user_id: string``, and/or ``maven_emails: bool``. Setting ``email_verified: false`` returns 422 ``verification_demote_forbidden``. Any other field returns 422 ``unknown_field``. Every PATCH appends a ``CommunityAuditLog`` row (even no-ops).",
         "parameters": [
           {
             "in": "path",
@@ -13994,6 +14000,10 @@
                 "properties": {
                   "email_verified": {
                     "description": "Only ``true`` is accepted; demote-via-API is forbidden.",
+                    "type": "boolean"
+                  },
+                  "maven_emails": {
+                    "description": "Scoped Maven course-email preference.",
                     "type": "boolean"
                   },
                   "slack_user_id": {
@@ -14028,6 +14038,9 @@
                   "date_joined": "2026-04-15T12:00:00+00:00",
                   "display_name": "Alice Doe",
                   "email": "alice@example.com",
+                  "email_preferences": {
+                    "maven_emails": false
+                  },
                   "email_verified": true,
                   "first_name": "Alice",
                   "last_login": "2026-05-19T08:30:00+00:00",
@@ -14417,6 +14430,9 @@
                   "date_joined": "2026-04-15T12:00:00+00:00",
                   "display_name": "Alice Doe",
                   "email": "alice@example.com",
+                  "email_preferences": {
+                    "maven_emails": false
+                  },
                   "email_verified": true,
                   "first_name": "Alice",
                   "last_login": "2026-05-19T08:30:00+00:00",
@@ -14921,6 +14937,9 @@
                   "date_joined": "2026-04-15T12:00:00+00:00",
                   "display_name": "Alice Doe",
                   "email": "alice@example.com",
+                  "email_preferences": {
+                    "maven_emails": false
+                  },
                   "email_verified": true,
                   "first_name": "Alice",
                   "last_login": "2026-05-19T08:30:00+00:00",

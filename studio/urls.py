@@ -324,6 +324,7 @@ from studio.views.users import (
     user_detail,
     user_export_csv,
     user_list,
+    user_maven_email_preference,
     user_slack_id_set,
     user_slack_membership_check,
     user_sync_from_stripe,
@@ -927,6 +928,11 @@ urlpatterns = [
         'users/<int:user_id>/deliverability/<str:action>',
         user_deliverability_action,
         name='studio_user_deliverability_action',
+    ),
+    path(
+        'users/<int:user_id>/maven-email-preference',
+        user_maven_email_preference,
+        name='studio_user_maven_email_preference',
     ),
     path(
         'users/<int:user_id>/aliases/add',

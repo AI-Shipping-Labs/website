@@ -95,6 +95,10 @@ from community.services.slack_links import build_slack_profile_url
 from content.access import LEVEL_MAIN, get_active_override, get_user_level
 from content.tier_config import get_tiers_with_features
 from integrations.config import get_config
+from integrations.services.maven_preferences import (
+    is_maven_relevant,
+    maven_email_preference,
+)
 from payments.models import Tier
 from payments.tier_state import build_tier_state
 
@@ -375,7 +379,8 @@ def _render_account_page(
         "sprint_cadence_emails_enabled": user.email_preferences.get(
             "sprint_cadence_emails", True
         ),
-        "maven_emails_enabled": user.email_preferences.get("maven_emails", True),
+        "show_maven_email_preference": is_maven_relevant(user),
+        "maven_emails_enabled": maven_email_preference(user),
         # Issue #1374: per-type opt-out for Book Club summary emails. Default
         # ON (opted in) when the key is absent — new accounts and any account
         # that has never touched the toggle.

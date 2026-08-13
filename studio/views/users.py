@@ -79,6 +79,11 @@ from email_app.models import SesEvent
 from email_app.services.email_log_history import user_history_queryset
 from events.models import EventRegistration
 from integrations.config import get_config
+from integrations.services.maven_preferences import (
+    is_maven_relevant,
+    maven_email_preference,
+    set_maven_email_preference,
+)
 from payments.models import (
     CheckoutFulfillment,
     MonthlyPaymentGrace,
@@ -1463,6 +1468,7 @@ def user_detail(request, user_id):
     bounce_state = user.bounce_state or User.BounceState.NONE
     bounce_state_label = user.get_bounce_state_display()
     account_lifecycle = derive_account_lifecycle(user)
+    maven_relevant = is_maven_relevant(user)
 
     context = {
         'detail_user': user,
@@ -1480,6 +1486,8 @@ def user_detail(request, user_id):
         'account_lifecycle_label': lifecycle_label(account_lifecycle),
         'bounce_recorded_at': user.bounce_recorded_at,
         'last_bounce_diagnostic': user.last_bounce_diagnostic or '',
+        'maven_relevant': maven_relevant,
+        'maven_emails_enabled': maven_email_preference(user),
         'recent_ses_events': deliverability_rows["ses_events"],
         'email_history': email_history,
         'email_history_url': (
@@ -1762,6 +1770,37 @@ def user_deliverability_action(request, user_id, action):
         )
 
     messages.success(request, message)
+    return redirect("studio_user_detail", user_id=user.pk)
+
+
+@staff_required
+@require_POST
+def user_maven_email_preference(request, user_id):
+    """Update a Maven-relevant member's scoped course-email preference."""
+    raw_enabled = request.POST.get("enabled")
+    if raw_enabled not in {"true", "false"}:
+        messages.error(request, "Choose an explicit Maven email preference state.")
+        return redirect("studio_user_detail", user_id=user_id)
+    enabled = raw_enabled == "true"
+
+    with transaction.atomic():
+        user = get_object_or_404(User.objects.select_for_update(), pk=user_id)
+        if not is_maven_relevant(user):
+            messages.error(request, "Maven email controls are not available for this member.")
+            return redirect("studio_user_detail", user_id=user.pk)
+        previous = set_maven_email_preference(user, enabled)
+        CommunityAuditLog.objects.create(
+            user=user,
+            action="maven_email_preference",
+            details=(
+                f"source=studio; actor={request.user.email}; "
+                f"member_id={user.pk}; member_email={user.email}; "
+                f"previous={previous}; new={enabled}"
+            ),
+        )
+
+    state = "on" if enabled else "off"
+    messages.success(request, f"Maven course emails turned {state}.")
     return redirect("studio_user_detail", user_id=user.pk)
 
 

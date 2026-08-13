@@ -29,8 +29,14 @@ from __future__ import annotations
 import hashlib
 import os
 
+import django
 import tblib.pickling_support
-from django.test.runner import DiscoverRunner, partition_suite_by_case
+from django.test import override_settings
+from django.test.runner import (
+    DiscoverRunner,
+    ParallelTestSuite,
+    partition_suite_by_case,
+)
 from django.test.utils import iter_test_cases
 
 tblib.pickling_support.install()
@@ -44,7 +50,25 @@ tblib.pickling_support.install()
 # Dedicated security tests override the config/clock explicitly to verify the
 # real cutoff and kill-switch contracts.
 TEST_LEGACY_NUMERIC_REFERENCE_CUTOFF = "2099-01-01T00:00:00Z"
+TEST_PASSWORD_HASHERS = ("django.contrib.auth.hashers.MD5PasswordHasher",)
 _ENV_UNSET = object()
+
+
+class FastPasswordHasherParallelTestSuite(ParallelTestSuite):
+    """Ensure spawned workers receive the runner's test-only hasher override.
+
+    Linux's default ``fork`` workers inherit the override enabled by
+    ``PicklableTracebackRunner.setup_test_environment``. Django's ``spawn``
+    and ``forkserver`` paths start from freshly imported settings instead, so
+    ``ParallelTestSuite`` calls this hook before worker setup in those modes.
+    The worker process owns the override for its remaining lifetime.
+    """
+
+    def process_setup(*_args):
+        # Django passes the unbound ``__func__`` to spawned workers, so this
+        # hook must also be callable without the suite instance.
+        django.setup()
+        override_settings(PASSWORD_HASHERS=TEST_PASSWORD_HASHERS).enable()
 
 
 # --- Deterministic test sharding (issue #888) -----------------------------
@@ -138,6 +162,8 @@ class PicklableTracebackRunner(DiscoverRunner):
     shard is parallelised exactly as an unsharded run would be.
     """
 
+    parallel_test_suite = FastPasswordHasherParallelTestSuite
+
     def __init__(self, *args, **kwargs):
         tblib.pickling_support.install()
         super().__init__(*args, **kwargs)
@@ -146,15 +172,37 @@ class PicklableTracebackRunner(DiscoverRunner):
         key = "LEGACY_NUMERIC_CHECKOUT_REFERENCE_CUTOFF"
         self._legacy_checkout_cutoff_previous = os.environ.get(key, _ENV_UNSET)
         os.environ[key] = TEST_LEGACY_NUMERIC_REFERENCE_CUTOFF
+        self._password_hashers_override = override_settings(
+            PASSWORD_HASHERS=TEST_PASSWORD_HASHERS
+        )
+        try:
+            self._password_hashers_override.enable()
+        except BaseException:
+            # ``override_settings.enable()`` restores settings itself when a
+            # setting-changed receiver fails, so do not disable it twice.
+            self._password_hashers_override = None
+            self._restore_legacy_checkout_cutoff_env()
+            raise
         try:
             super().setup_test_environment(**kwargs)
-        except Exception:
-            self._restore_legacy_checkout_cutoff_env()
+        except BaseException:
+            self._restore_test_environment_overrides()
             raise
 
     def teardown_test_environment(self, **kwargs):
         try:
             super().teardown_test_environment(**kwargs)
+        finally:
+            self._restore_test_environment_overrides()
+
+    def _restore_test_environment_overrides(self):
+        try:
+            password_hashers_override = getattr(
+                self, "_password_hashers_override", None
+            )
+            if password_hashers_override is not None:
+                self._password_hashers_override = None
+                password_hashers_override.disable()
         finally:
             self._restore_legacy_checkout_cutoff_env()
 

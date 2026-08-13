@@ -3,12 +3,15 @@
 import io
 from contextlib import redirect_stderr, redirect_stdout
 
-from django.contrib.auth.hashers import check_password
+from django.contrib.auth.hashers import check_password, identify_hasher
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 
 
+@override_settings(
+    PASSWORD_HASHERS=["django.contrib.auth.hashers.PBKDF2PasswordHasher"]
+)
 class OperatorTokenHashMigrationTest(TransactionTestCase):
     """Existing plaintext token rows are hashed without changing clients."""
 
@@ -50,6 +53,10 @@ class OperatorTokenHashMigrationTest(TransactionTestCase):
             self.assertNotEqual(migrated.pk, plaintext_key)
             self.assertEqual(migrated.lookup_prefix, plaintext_key[:24])
             self.assertNotEqual(migrated.key_hash, plaintext_key)
+            self.assertEqual(
+                identify_hasher(migrated.key_hash).algorithm,
+                "pbkdf2_sha256",
+            )
             self.assertTrue(check_password(plaintext_key, migrated.key_hash))
             self.assertNotIn(plaintext_key, stdout.getvalue())
             self.assertNotIn(plaintext_key, stderr.getvalue())

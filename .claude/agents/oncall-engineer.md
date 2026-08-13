@@ -46,9 +46,20 @@ The final stdout line is a JSON object with at least `result`, `exit_code`,
 `run_id`, `required`, `failing_jobs`, `signature`, `likely_infra`, `reason`,
 `polls`, and `elapsed_s`.
 
+For `Deploy Dev`, `required` contains these ten exact job names:
+
+- `Deploy Gates (migrations / OpenAPI / system check / static)`
+- `Unit & Integration Tests (shard 1/4)` through `Unit & Integration Tests (shard 4/4)`
+- `Playwright Core E2E (shard 1/4)` through `Playwright Core E2E (shard 4/4)`
+- `Deploy to Dev`
+
+PostgreSQL Verification remains a deploy dependency. It is outside the
+watcher's established required-name set, but any PostgreSQL failure that gates
+the required deploy job still produces a failed verdict.
+
 | Exit | result | Meaning | Action |
 |------|--------|---------|--------|
-| 0 | `green` | All seven required `Deploy Dev` jobs succeeded (or appropriately skipped) | Report success and stop. Do NOT call anything else green. |
+| 0 | `green` | All ten required `Deploy Dev` jobs succeeded (or appropriately skipped): Deploy Gates, four Django shards, four Playwright Core shards, and Deploy to Dev | Report success and stop. Do NOT call anything else green. |
 | 1 | `failed` | A genuine required-job/run failure | Go to step 3 (fix). Use `failing_jobs` and `signature`. |
 | 2 | `hang` | No job-state progress deadline or max wall-clock deadline reached | Report the non-verdict and recommended recovery (re-run the watcher, or investigate a stuck runner). Do NOT call it green. |
 | 3 | `unresolved` | Inputs/run resolution failed, or `gh` failures exceeded the retry budget | Report unresolved and recommended recovery (check `gh auth`, confirm the run exists, retry). Do NOT call it green or failed. |

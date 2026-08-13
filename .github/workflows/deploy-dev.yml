@@ -371,12 +371,30 @@ jobs:
         run: uv run python manage.py test accounts.tests.test_email_auth.ResendVerificationConcurrencyTest --verbosity 2
 
   playwright-core:
-    name: Playwright Core E2E
+    name: Playwright Core E2E (${{ matrix.shard_name }})
     runs-on: ubuntu-latest
-    # The core partition is the deploy-critical Playwright smoke set. The
-    # scheduled workflow owns the full long-tail suite. Keep this above the
-    # current ~20m CI runtime so deploys are not cancelled mid-pass.
+    # The core partition is the deploy-critical Playwright smoke set. Shard
+    # the sorted file inventory with the same proven round-robin selector as
+    # scheduled-playwright.yml. Every test_*.py file belongs to exactly one
+    # matrix entry, while the marker expression keeps the selected test
+    # semantics identical to the former single job.
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard_name: shard 1/4
+            shard_index: 0
+            shard_total: 4
+          - shard_name: shard 2/4
+            shard_index: 1
+            shard_total: 4
+          - shard_name: shard 3/4
+            shard_index: 2
+            shard_total: 4
+          - shard_name: shard 4/4
+            shard_index: 3
+            shard_total: 4
 
     steps:
       - name: Checkout code
@@ -405,16 +423,39 @@ jobs:
       - name: Install Playwright browsers
         run: uv run playwright install --with-deps chromium
 
-      - name: Run Playwright core tests
-        run: uv run pytest -m "core and not manual_visual and not slow_platform and not visual_regression" playwright_tests/ -v
+      - name: Select Playwright core shard files
+        id: shard
+        shell: bash
+        run: |
+          mapfile -t files < <(
+            find playwright_tests -maxdepth 1 -type f -name 'test_*.py' | sort |
+              awk -v shard="${{ matrix.shard_index }}" -v total="${{ matrix.shard_total }}" \
+                '((NR - 1) % total) == shard'
+          )
+
+          printf '%s\n' "${files[@]}" > .playwright-core-shard-files
+          echo "count=${#files[@]}" >> "$GITHUB_OUTPUT"
+          printf 'Selected %s files for %s:\n' "${#files[@]}" "${{ matrix.shard_name }}"
+          printf '  %s\n' "${files[@]}"
+
+      - name: Run Playwright core shard
+        shell: bash
+        run: |
+          mapfile -t files < .playwright-core-shard-files
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No Playwright files selected for ${{ matrix.shard_name }}."
+            exit 0
+          fi
+
+          uv run pytest -m "core and not manual_visual and not slow_platform and not visual_regression" "${files[@]}" -v
 
   deploy:
     name: Deploy to Dev
     runs-on: ubuntu-latest
-    # #888: deploy gates on every test shard plus the one-time `checks` job and
-    # the Playwright core set. A `needs` array entry only succeeds when ALL of a
-    # matrix job's shards succeed, so listing `test` here means deploy runs only
-    # when all 4 shards are green.
+    # #888/#1425: deploy gates on every Django and Playwright test shard plus
+    # the one-time `checks` and PostgreSQL jobs. A `needs` array entry only
+    # succeeds when ALL of a matrix job's shards succeed, so listing `test` and
+    # `playwright-core` here means deploy runs only when all 8 shards are green.
     needs: [checks, test, playwright-core, postgres-verification]
     if: github.ref == 'refs/heads/main'
 

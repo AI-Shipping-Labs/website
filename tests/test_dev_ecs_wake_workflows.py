@@ -125,6 +125,86 @@ class ScheduledPlaywrightDevWakeWorkflowTest(SimpleTestCase):
 
 @tag("core")
 class DeployDevWakeWorkflowTest(SimpleTestCase):
+    def test_playwright_core_matrix_is_disjoint_complete_and_fail_fast_false(self):
+        workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)
+        playwright_job = workflow["jobs"]["playwright-core"]
+        matrix = playwright_job["strategy"]["matrix"]["include"]
+
+        self.assertFalse(playwright_job["strategy"]["fail-fast"])
+        self.assertEqual(
+            matrix,
+            [
+                {"shard_name": "shard 1/4", "shard_index": 0, "shard_total": 4},
+                {"shard_name": "shard 2/4", "shard_index": 1, "shard_total": 4},
+                {"shard_name": "shard 3/4", "shard_index": 2, "shard_total": 4},
+                {"shard_name": "shard 4/4", "shard_index": 3, "shard_total": 4},
+            ],
+        )
+        self.assertEqual(
+            playwright_job["name"],
+            "Playwright Core E2E (${{ matrix.shard_name }})",
+        )
+
+        files = sorted(REPO_ROOT.glob("playwright_tests/test_*.py"))
+        assigned = [
+            path
+            for item in matrix
+            for position, path in enumerate(files)
+            if position % item["shard_total"] == item["shard_index"]
+        ]
+        self.assertEqual(len(assigned), len(files))
+        self.assertEqual(len(set(assigned)), len(files))
+        self.assertEqual(set(assigned), set(files))
+
+        selector = next(
+            step["run"]
+            for step in playwright_job["steps"]
+            if step.get("name") == "Select Playwright core shard files"
+        )
+        self.assertIn(
+            "find playwright_tests -maxdepth 1 -type f -name 'test_*.py' | sort",
+            selector,
+        )
+        self.assertIn("'((NR - 1) % total) == shard'", selector)
+        self.assertNotIn("test_account", selector)
+
+    def test_playwright_core_shards_preserve_marker_browser_and_timeout_contracts(self):
+        workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)
+        playwright_job = workflow["jobs"]["playwright-core"]
+
+        self.assertEqual(playwright_job["timeout-minutes"], 30)
+        browser_step = next(
+            step
+            for step in playwright_job["steps"]
+            if step.get("name") == "Install Playwright browsers"
+        )
+        self.assertEqual(
+            browser_step["run"],
+            "uv run playwright install --with-deps chromium",
+        )
+        run_step = next(
+            step
+            for step in playwright_job["steps"]
+            if step.get("name") == "Run Playwright core shard"
+        )
+        self.assertIn(
+            'uv run pytest -m "core and not manual_visual and not slow_platform and not visual_regression" "${files[@]}" -v',
+            run_step["run"],
+        )
+        self.assertNotIn("pytest-xdist", DEPLOY_DEV_WORKFLOW_PATH.read_text())
+
+    def test_deploy_waits_for_every_playwright_core_matrix_job(self):
+        workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)
+        deploy_job = workflow["jobs"]["deploy"]
+
+        self.assertEqual(
+            deploy_job["needs"],
+            ["checks", "test", "playwright-core", "postgres-verification"],
+        )
+        self.assertFalse(
+            workflow["jobs"]["playwright-core"].get("continue-on-error", False)
+        )
+
     def test_deploy_requires_non_skipping_postgresql_verification_gate(self):
         workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)
         postgres_job = workflow["jobs"]["postgres-verification"]

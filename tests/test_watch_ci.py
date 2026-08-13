@@ -52,7 +52,7 @@ def run_payload(
     }
 
 
-def all_seven_success():
+def all_required_success():
     return [job(name) for name in REQUIRED]
 
 
@@ -116,8 +116,16 @@ def make_watcher(runner, **kwargs):
 
 @tag("core")
 class WatcherExitCodeTest(SimpleTestCase):
-    def test_green_after_all_seven_required_jobs_succeed(self):
-        gh = FakeGh(views=[run_payload(status="completed", conclusion="success", jobs=all_seven_success())])
+    def test_green_after_all_ten_required_jobs_succeed(self):
+        gh = FakeGh(
+            views=[
+                run_payload(
+                    status="completed",
+                    conclusion="success",
+                    jobs=all_required_success(),
+                )
+            ]
+        )
         verdict = make_watcher(gh).watch(run_id="100")
 
         self.assertEqual(verdict.result, watch_ci.GREEN)
@@ -128,20 +136,15 @@ class WatcherExitCodeTest(SimpleTestCase):
         # final JSON already carries every decision field.
         self.assertNotIn(["run", "view", "100", "--log-failed"], gh.calls)
 
-    def test_failed_shard_names_job_and_captures_evidence_not_green(self):
-        jobs = [
-            job(REQUIRED[0]),
-            job(REQUIRED[1]),
-            job(REQUIRED[2]),
-            job(REQUIRED[3], conclusion="failure"),  # shard 3/4 fails
-            job(REQUIRED[4], status="completed", conclusion="cancelled"),  # shard 4/4 cancelled
-            job(REQUIRED[5], status="completed", conclusion="cancelled"),  # Playwright cancelled
-            job(REQUIRED[6], status="completed", conclusion="skipped"),  # deploy skipped
-        ]
+    def test_failed_playwright_shard_names_job_and_captures_evidence_not_green(self):
+        jobs = all_required_success()
+        jobs[7] = job(REQUIRED[7], conclusion="failure")  # Playwright shard 3/4 fails
+        jobs[8] = job(REQUIRED[8], status="completed", conclusion="cancelled")
+        jobs[9] = job(REQUIRED[9], status="completed", conclusion="skipped")
         log = dedent(
             """
-            Unit & Integration Tests (shard 3/4)\tRun tests\t2026-07-25T10:05:00Z E   AssertionError: 3 != 4
-            Unit & Integration Tests (shard 3/4)\tRun tests\t2026-07-25T10:05:00Z FAILED accounts/tests/test_x.py::test_y
+            Playwright Core E2E (shard 3/4)\tRun Playwright core shard\t2026-07-25T10:05:00Z E   AssertionError: expected page title
+            Playwright Core E2E (shard 3/4)\tRun Playwright core shard\t2026-07-25T10:05:00Z FAILED playwright_tests/test_x.py::test_y
             """
         )
         gh = FakeGh(
@@ -152,22 +155,41 @@ class WatcherExitCodeTest(SimpleTestCase):
 
         self.assertEqual(verdict.result, watch_ci.FAILED)
         self.assertEqual(verdict.exit_code, 1)
-        self.assertEqual(verdict.failing_jobs, ["Unit & Integration Tests (shard 3/4)"])
+        self.assertEqual(verdict.failing_jobs, ["Playwright Core E2E (shard 3/4)"])
         self.assertIsNotNone(verdict.signature)
-        self.assertIn("AssertionError: 3 != 4", verdict.signature)
+        self.assertIn("AssertionError: expected page title", verdict.signature)
         self.assertFalse(verdict.likely_infra)
 
-    def test_missing_matrix_job_is_never_green_and_names_missing_job(self):
-        # Deploy Gates, three shards, Playwright, and deploy pass; shard 4/4 absent.
-        present = [REQUIRED[0], REQUIRED[1], REQUIRED[2], REQUIRED[4], REQUIRED[5], REQUIRED[6]]
-        jobs = [job(name) for name in present]
+    def test_missing_playwright_matrix_job_is_never_green_and_names_missing_job(self):
+        missing_name = "Playwright Core E2E (shard 3/4)"
+        jobs = [job(name) for name in REQUIRED if name != missing_name]
         gh = FakeGh(views=[run_payload(status="completed", conclusion="success", jobs=jobs)])
         verdict = make_watcher(gh).watch(run_id="100")
 
         self.assertNotEqual(verdict.result, watch_ci.GREEN)
         self.assertEqual(verdict.result, watch_ci.NO_VERDICT)
         self.assertEqual(verdict.exit_code, 5)
-        self.assertIn("shard 3/4", verdict.reason)
+        self.assertIn(missing_name, verdict.reason)
+
+    def test_cancelled_playwright_matrix_job_is_never_green(self):
+        jobs = all_required_success()
+        cancelled_name = "Playwright Core E2E (shard 3/4)"
+        jobs[7] = job(cancelled_name, status="completed", conclusion="cancelled")
+        gh = FakeGh(
+            views=[run_payload(status="completed", conclusion="cancelled", jobs=jobs)],
+            run_list=[
+                {
+                    "databaseId": "100",
+                    "createdAt": "2026-07-25T10:00:00Z",
+                    "status": "completed",
+                }
+            ],
+        )
+        verdict = make_watcher(gh).watch(run_id="100")
+
+        self.assertEqual(verdict.result, watch_ci.NO_VERDICT)
+        self.assertEqual(verdict.exit_code, 5)
+        self.assertNotEqual(verdict.result, watch_ci.GREEN)
 
     def test_no_progress_deadline_returns_hang(self):
         stalled = run_payload(
@@ -272,7 +294,7 @@ class WatcherExitCodeTest(SimpleTestCase):
             conclusion="",
             jobs=[job(name, status="queued", conclusion="") for name in REQUIRED],
         )
-        done = run_payload(status="completed", conclusion="success", jobs=all_seven_success())
+        done = run_payload(status="completed", conclusion="success", jobs=all_required_success())
         gh = FakeGh(views=[running, reset, done])
         watcher = make_watcher(gh, interval=15.0, no_progress_timeout=1000.0)
         verdict = watcher.watch(run_id="100")
@@ -282,15 +304,11 @@ class WatcherExitCodeTest(SimpleTestCase):
         self.assertGreaterEqual(verdict.polls, 3)
 
     def test_genuine_required_failure_wins_over_later_cancellation(self):
-        jobs = [
-            job(REQUIRED[0]),
-            job(REQUIRED[1], conclusion="failure"),  # shard 1/4 genuinely failed
-            job(REQUIRED[2], status="completed", conclusion="cancelled"),
-            job(REQUIRED[3], status="completed", conclusion="cancelled"),
-            job(REQUIRED[4], status="completed", conclusion="cancelled"),
-            job(REQUIRED[5], status="completed", conclusion="cancelled"),
-            job(REQUIRED[6], status="completed", conclusion="skipped"),
-        ]
+        jobs = all_required_success()
+        jobs[1] = job(REQUIRED[1], conclusion="failure")
+        for index in range(2, 9):
+            jobs[index] = job(REQUIRED[index], status="completed", conclusion="cancelled")
+        jobs[9] = job(REQUIRED[9], status="completed", conclusion="skipped")
         # Run itself was cancelled, but the failed required job must win.
         gh = FakeGh(
             views=[run_payload(status="completed", conclusion="cancelled", jobs=jobs)],
@@ -307,7 +325,7 @@ class WatcherExitCodeTest(SimpleTestCase):
 class SkippedGatingTest(SimpleTestCase):
     def test_skipped_required_job_is_green_when_nothing_failed(self):
         jobs = [job(name) for name in REQUIRED[:-1]]
-        jobs.append(job(REQUIRED[6], status="completed", conclusion="skipped"))  # deploy skipped
+        jobs.append(job(REQUIRED[-1], status="completed", conclusion="skipped"))
         gh = FakeGh(views=[run_payload(status="completed", conclusion="success", jobs=jobs)])
         verdict = make_watcher(gh).watch(run_id="100")
 
@@ -317,7 +335,7 @@ class SkippedGatingTest(SimpleTestCase):
         jobs = [job(name) for name in REQUIRED[:-1]]
         # Non-required PostgreSQL job fails and gates the required deploy to skip.
         jobs.append(job("PostgreSQL 16 Verification", status="completed", conclusion="failure"))
-        jobs.append(job(REQUIRED[6], status="completed", conclusion="skipped"))
+        jobs.append(job(REQUIRED[-1], status="completed", conclusion="skipped"))
         gh = FakeGh(
             views=[run_payload(status="completed", conclusion="failure", jobs=jobs)],
             log_failed="",
@@ -367,14 +385,14 @@ class SignatureSafetyTest(SimpleTestCase):
 class CompactOutputTest(SimpleTestCase):
     def _green_verdict_and_run(self):
         run = watch_ci.parse_run_payload(
-            run_payload(status="completed", conclusion="success", jobs=all_seven_success())
+            run_payload(status="completed", conclusion="success", jobs=all_required_success())
         )
         verdict = watch_ci.classify(run, list(REQUIRED))
         verdict.polls = 6
         verdict.elapsed_s = 512.0
         return verdict, run
 
-    def test_summary_plus_json_stays_under_25_lines_with_all_seven(self):
+    def test_summary_plus_json_stays_under_25_lines_with_all_ten(self):
         verdict, run = self._green_verdict_and_run()
         summary = watch_ci.render_summary(verdict, run)
         total_lines = len(summary) + 1  # + final JSON line
@@ -408,7 +426,7 @@ class CompactOutputTest(SimpleTestCase):
 
 @tag("core")
 class RequiredCheckDefaultsTest(SimpleTestCase):
-    def test_deploy_dev_defaults_to_the_seven_exact_website_job_names(self):
+    def test_deploy_dev_defaults_to_the_ten_exact_website_job_names(self):
         self.assertEqual(
             list(REQUIRED),
             [
@@ -417,7 +435,10 @@ class RequiredCheckDefaultsTest(SimpleTestCase):
                 "Unit & Integration Tests (shard 2/4)",
                 "Unit & Integration Tests (shard 3/4)",
                 "Unit & Integration Tests (shard 4/4)",
-                "Playwright Core E2E",
+                "Playwright Core E2E (shard 1/4)",
+                "Playwright Core E2E (shard 2/4)",
+                "Playwright Core E2E (shard 3/4)",
+                "Playwright Core E2E (shard 4/4)",
                 "Deploy to Dev",
             ],
         )

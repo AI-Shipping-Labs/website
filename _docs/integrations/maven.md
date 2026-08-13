@@ -34,8 +34,9 @@ Tier slug granted as the override (string, default `main`). Validated against
 
 ### MAVEN_OVERRIDE_DURATION_DAYS
 
-Override lifetime in days (default `3650`, ~10 years, matching the manual
-contact-import practice). An existing longer override is never shortened.
+Override lifetime in days (default `1825`, five years). An explicit valid
+Studio or environment value remains authoritative. An existing longer Maven
+or unrelated entitlement is never shortened.
 
 ## Webhook setup
 
@@ -87,10 +88,15 @@ against the Stripe-side `payment.success` for paid enrollments.
   `welcome@`; carries a transparent notice + a scoped Maven-email opt-out link
   + reply-to-remove line). The opt-out does not affect access or other email
   preferences, and Account can re-enable it.
+- After the entitlement succeeds, sends one independent internal staff
+  enrollment heads-up to the configured staff mailbox and/or optional Slack
+  channel. One successful destination completes the step; total delivery
+  failure remains retryable, while no usable destination is terminally
+  skipped. The notice links to the canonical Studio member and occurrence.
 - Already-a-member enrollees (active access + already in Slack) get nothing
-  visible — no welcome email, no staff note, no re-invite — but the override is
-  still silently refreshed/extended if it lapsed or would expire before the
-  cohort.
+  member-visible — no welcome email and no re-invite — but staff still receives
+  the one internal enrollment heads-up for the new occurrence. The override is
+  silently refreshed/extended if it lapsed or would expire before the cohort.
 
 `user_cohort.removed`:
 
@@ -108,10 +114,11 @@ collide. One active `MavenEnrollmentEvent` occurrence is admitted under a
 database constraint. Removal closes it without revocation; a later enrollment
 creates a genuine new occurrence.
 
-The entitlement, Slack invite, welcome, and removal notification each persist
-their own status, attempted/completed timestamps, bounded attempt count (three
-automatic attempts), and a safe error class. A five-minute scheduled recovery
-job retries pending, failed, or stale-running work within that bound. A
+The entitlement, enrollment staff heads-up, Slack invite, welcome, and removal
+notification each persist their own status, attempted/completed timestamps,
+bounded attempt count (three automatic attempts), and a safe error class. A
+five-minute scheduled recovery job retries pending, failed, or stale-running
+work within that bound. A
 duplicate delivery retries only failed work; successful or actively running
 work is never repeated. Operators can inspect the canonical member and safely
 retry individual steps at `/studio/maven-events/`; retries are

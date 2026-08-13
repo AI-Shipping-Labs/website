@@ -154,7 +154,7 @@ class MavenEnrolledTest(TestCase):
 
         override = TierOverride.objects.get(user=user, is_active=True)
         self.assertEqual(override.override_tier, self.main)
-        self.assertGreater(override.expires_at, timezone.now() + timedelta(days=3000))
+        self.assertGreater(override.expires_at, timezone.now() + timedelta(days=1700))
 
         email_service.return_value.send.assert_called_once()
         sent_args = email_service.return_value.send.call_args
@@ -204,7 +204,7 @@ class MavenEnrolledTest(TestCase):
         active = TierOverride.objects.filter(user=user, is_active=True)
         self.assertEqual(active.count(), 1)
         self.assertGreater(
-            active.first().expires_at, timezone.now() + timedelta(days=3000)
+            active.first().expires_at, timezone.now() + timedelta(days=1700)
         )
 
     @patch("integrations.services.maven.EmailService")
@@ -277,7 +277,7 @@ class MavenEnrolledTest(TestCase):
         active = TierOverride.objects.filter(user=user, is_active=True)
         self.assertEqual(active.count(), 1)
         self.assertGreater(
-            active.first().expires_at, timezone.now() + timedelta(days=3000)
+            active.first().expires_at, timezone.now() + timedelta(days=1700)
         )
 
     @patch("integrations.services.maven.EmailService")
@@ -302,7 +302,7 @@ class MavenEnrolledTest(TestCase):
         active = TierOverride.objects.filter(user=user, is_active=True)
         self.assertEqual(active.count(), 1)
         self.assertGreater(
-            active.first().expires_at, timezone.now() + timedelta(days=3000)
+            active.first().expires_at, timezone.now() + timedelta(days=1700)
         )
 
     @patch("integrations.services.maven.EmailService")
@@ -468,6 +468,13 @@ class MavenEmailClassificationTest(TestCase):
 
         self.assertEqual(
             classify_email_type("maven_cohort_removal_notification"), "transactional"
+        )
+
+    def test_enrollment_notification_classified_transactional(self):
+        from email_app.services.email_classification import classify_email_type
+
+        self.assertEqual(
+            classify_email_type("maven_enrollment_notification"), "transactional"
         )
 
 

@@ -449,7 +449,7 @@ class MavenConcurrentDeliveryTest(TransactionTestCase):
     def test_simultaneous_identical_deliveries_run_side_effects_once(self):
         barrier = threading.Barrier(2)
         side_effect_lock = threading.Lock()
-        calls = {"slack": 0, "welcome": 0}
+        calls = {"notification": 0, "slack": 0, "welcome": 0}
         payload = json.dumps(
             {
                 "event": "user_cohort.enrolled",
@@ -481,7 +481,10 @@ class MavenConcurrentDeliveryTest(TransactionTestCase):
             close_old_connections()
             return result
 
-        with patch("integrations.services.maven._invite_to_slack", side_effect=count("slack")), patch(
+        with patch(
+            "community.services.staff_notifications.notify_maven_enrollment",
+            side_effect=lambda *args, **kwargs: count("notification")() or True,
+        ), patch("integrations.services.maven._invite_to_slack", side_effect=count("slack")), patch(
             "integrations.services.maven._send_welcome",
             side_effect=count("welcome"),
         ):
@@ -500,4 +503,4 @@ class MavenConcurrentDeliveryTest(TransactionTestCase):
         self.assertEqual(User.objects.filter(email="concurrent@example.com").count(), 1)
         self.assertEqual(MavenEnrollmentEvent.objects.filter(lifecycle="active").count(), 1)
         self.assertEqual(TierOverride.objects.filter(source__startswith="maven:").count(), 1)
-        self.assertEqual(calls, {"slack": 1, "welcome": 1})
+        self.assertEqual(calls, {"notification": 1, "slack": 1, "welcome": 1})

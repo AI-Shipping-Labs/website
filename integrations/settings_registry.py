@@ -1160,11 +1160,11 @@ INTEGRATION_GROUPS = [
                 'key': 'MAVEN_OVERRIDE_DURATION_DAYS',
                 'is_secret': False,
                 'optional': True,
-                'default': '3650',
+                'default': '1825',
                 'description': (
                     'Lifetime in days of the override granted to Maven enrollees '
-                    '(default 3650, ~10 years, matching the manual contact-import '
-                    'practice). An existing longer override is never shortened.'
+                    '(default 1825, five years). An existing longer entitlement '
+                    'is never shortened.'
                 ),
                 'docs_url': '_docs/integrations/maven.md#maven_override_duration_days',
             },

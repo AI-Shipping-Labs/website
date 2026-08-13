@@ -229,6 +229,156 @@ def notify_maven_cohort_removal(user, cohort, course="", *, email=None):
             )
 
 
+class MavenEnrollmentNotificationDeliveryError(Exception):
+    """Every usable internal enrollment-notification destination failed."""
+
+
+def notify_maven_enrollment(
+    user,
+    *,
+    occurrence_id,
+    account_created,
+    course,
+    cohort,
+    tier,
+    entitlement_expiry,
+):
+    """Deliver one internal heads-up for a new Maven enrollment occurrence.
+
+    Email and Slack are independent destinations. One success completes the
+    logical notification. When neither path is usable the caller terminally
+    skips the persisted step; when all usable paths fail, an exception keeps
+    the step observable and retryable.
+    """
+    staff_email = validate_email_config_value(
+        "STAFF_SIGNUP_NOTIFY_EMAIL",
+        get_config("STAFF_SIGNUP_NOTIFY_EMAIL", ""),
+    )
+    slack_channel_id = (get_config("STAFF_SIGNUP_NOTIFY_CHANNEL_ID", "") or "").strip()
+    slack_available = bool(
+        slack_channel_id
+        and is_enabled("SLACK_ENABLED")
+        and get_config("SLACK_BOT_TOKEN")
+    )
+    if not staff_email and not slack_available:
+        logger.info(
+            "Skipping Maven enrollment notification for occurrence=%s: "
+            "no usable staff destination",
+            occurrence_id,
+        )
+        return False
+
+    ctx = _build_maven_enrollment_context(
+        user,
+        occurrence_id=occurrence_id,
+        account_created=account_created,
+        course=course,
+        cohort=cohort,
+        tier=tier,
+        entitlement_expiry=entitlement_expiry,
+    )
+    delivered = False
+    if staff_email:
+        try:
+            _send_staff_maven_enrollment_notification(staff_email, ctx)
+        except Exception:
+            logger.exception(
+                "Maven enrollment staff email failed for occurrence=%s",
+                occurrence_id,
+            )
+        else:
+            delivered = True
+
+    if slack_available:
+        try:
+            slack_delivered = _post_slack_maven_enrollment_notification(
+                slack_channel_id,
+                ctx,
+            )
+        except Exception:
+            logger.exception(
+                "Maven enrollment Slack notification failed for occurrence=%s",
+                occurrence_id,
+            )
+        else:
+            delivered = delivered or slack_delivered
+
+    if not delivered:
+        raise MavenEnrollmentNotificationDeliveryError
+    return True
+
+
+def _build_maven_enrollment_context(
+    user,
+    *,
+    occurrence_id,
+    account_created,
+    course,
+    cohort,
+    tier,
+    entitlement_expiry,
+):
+    base_url = site_base_url().rstrip("/")
+    return {
+        "enrolled_user_name": _or_dash(
+            f"{user.first_name} {user.last_name}".strip() or user.email
+        ),
+        "enrolled_user_email": user.email,
+        "enrolled_user_id": str(user.pk),
+        "account_state": "newly created" if account_created else "already existed",
+        "course": _or_dash(course),
+        "cohort": _or_dash(cohort),
+        "tier_name": tier.name,
+        "tier_slug": tier.slug,
+        "entitlement_expiry": entitlement_expiry.isoformat(),
+        "studio_user_url": f"{base_url}/studio/users/{user.pk}/",
+        "studio_occurrence_url": f"{base_url}/studio/maven-events/{occurrence_id}/",
+    }
+
+
+def _send_staff_maven_enrollment_notification(staff_email, ctx):
+    from email_app.services import EmailService
+
+    staff_recipient = SimpleNamespace(
+        email=staff_email,
+        first_name="",
+        email_verified=True,
+        unsubscribed=False,
+        pk=0,
+    )
+    EmailService().send(staff_recipient, "maven_enrollment_notification", ctx)
+
+
+def _post_slack_maven_enrollment_notification(channel_id, ctx):
+    response = requests.post(
+        _SLACK_POST_MESSAGE_URL,
+        json={"channel": channel_id, "text": _build_maven_enrollment_slack_text(ctx)},
+        headers={
+            "Authorization": f"Bearer {get_config('SLACK_BOT_TOKEN')}",
+            "Content-Type": "application/json; charset=utf-8",
+        },
+        timeout=10,
+    )
+    try:
+        data = response.json()
+    except ValueError:
+        return False
+    return bool(isinstance(data, dict) and data.get("ok"))
+
+
+def _build_maven_enrollment_slack_text(ctx):
+    return (
+        f"*New Maven enrollment:* {ctx['enrolled_user_name']} "
+        f"({ctx['enrolled_user_email']}) — {ctx['account_state']}.\n"
+        f"*User ID:* {ctx['enrolled_user_id']} | "
+        f"*Member:* <{ctx['studio_user_url']}|open in Studio> | "
+        f"*Occurrence:* <{ctx['studio_occurrence_url']}|open ledger>\n"
+        f"*Course / cohort:* {ctx['course']} / {ctx['cohort']} | "
+        f"*Tier:* {ctx['tier_name']} (`{ctx['tier_slug']}`) | "
+        f"*Entitlement expiry:* {ctx['entitlement_expiry']}"
+    )
+
+
 def _build_removal_context(user, cohort, course, email):
     """Materialise the shared context for the removal staff notification."""
     if user is not None:

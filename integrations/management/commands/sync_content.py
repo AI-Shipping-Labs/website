@@ -7,7 +7,6 @@ Usage:
 """
 
 import os
-import sys
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -61,10 +60,16 @@ class Command(BaseCommand):
                 self.stdout.write(f'  {created} created, {updated} updated')
                 for error in (result.errors or []):
                     error_msg = error.get('error', str(error)) if isinstance(error, dict) else str(error)
-                    self.stderr.write(self.style.ERROR(f'  ERROR: {error_msg}'))
+                    self.stderr.write(
+                        self.style.ERROR(
+                            f'  ERROR [{source.repo_name}]: {error_msg}'
+                        )
+                    )
                     has_errors = True
             except Exception as e:
-                self.stderr.write(self.style.ERROR(f'  FAILED: {e}'))
+                self.stderr.write(
+                    self.style.ERROR(f'  FAILED [{source.repo_name}]: {e}')
+                )
                 has_errors = True
 
         # Keep local-disk sync semantics identical to production GitHub sync:
@@ -94,4 +99,4 @@ class Command(BaseCommand):
         )
 
         if has_errors:
-            sys.exit(1)
+            raise CommandError('Content sync completed with errors.')

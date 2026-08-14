@@ -75,6 +75,8 @@ AUDITED_PAGE_WIDTHS = {
     # is explicitly pinned to the wider 5xl Detail tier.
     "templates/content/sprints_index.html": "max-w-3xl",
     "templates/plans/sprint_detail.html": "max-w-3xl",
+    "templates/plans/my_plan_detail.html": "max-w-3xl",
+    "templates/plans/member_plan_detail.html": "max-w-3xl",
     "templates/events/events_list.html": "max-w-3xl",
     "templates/events/events_calendar.html": "max-w-5xl",
     "templates/events/event_detail.html": "max-w-3xl",

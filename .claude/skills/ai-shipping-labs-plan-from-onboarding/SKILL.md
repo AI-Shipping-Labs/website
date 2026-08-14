@@ -67,6 +67,13 @@ Plan from the member's stated goal, not from generic curriculum. Keep the member
 - Accountability: cadence, demos, and check-ins.
 - Next Steps: immediate actions.
 
+Write the member-facing plan directly to the member:
+
+- Use second person (`you`, `your`) throughout. Do not describe the member as `she`, `he`, `the member`, or by name in shareable sections.
+- Include only concrete steps the member needs to take. Do not include staff or coach tasks, owner labels such as `[Nicole]` or `[Alexey]`, unchecked-checkbox syntax such as `[ ]`, editing controls, or other planning boilerplate.
+- Put staff coordination and private follow-up in `Internal Action Items`; keep `Timeline`, `Resources`, `Deliverables`, `Accountability`, and `Next Steps` usable by the member without internal context.
+- When a course is the main course for the sprint, explain what it teaches and why it is in the plan. For example: `AI Hero — the main course for this sprint, covering the coding tools and how to build with them. Run it in parallel to help you decide how much AI engineering you want to pursue.`
+
 Put private interpretation into internal sections, not member-facing plan text:
 
 - Persona

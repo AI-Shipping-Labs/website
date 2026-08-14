@@ -30,6 +30,8 @@ ZOOM_TEST_SECRET = 'test-zoom-webhook-secret'
 ZOOM_TEST_CLIENT_ID = 'test-client-id'
 ZOOM_TEST_CLIENT_SECRET = 'test-client-secret'
 ZOOM_TEST_ACCOUNT_ID = 'test-account-id'
+ZOOM_TEST_NOW = 1_700_000_000
+ZOOM_TEST_TOLERANCE_SECONDS = 300
 
 
 class _ZoomSecretIsolationMixin:
@@ -50,9 +52,10 @@ class _ZoomSecretIsolationMixin:
         from integrations.config import clear_config_cache
         from integrations.models import IntegrationSetting
 
-        IntegrationSetting.objects.filter(
-            key='ZOOM_WEBHOOK_SECRET_TOKEN'
-        ).delete()
+        IntegrationSetting.objects.filter(key__in=(
+            'ZOOM_WEBHOOK_SECRET_TOKEN',
+            'ZOOM_WEBHOOK_TOLERANCE_SECONDS',
+        )).delete()
         clear_config_cache()
         self.addCleanup(clear_config_cache)
 
@@ -848,6 +851,16 @@ class ApplyZoomMeetingSettingsCommandTest(TestCase):
 class ZoomValidateWebhookSignatureTest(_ZoomSecretIsolationMixin, TestCase):
     """Test Zoom webhook signature validation."""
 
+    @staticmethod
+    def _request(body, timestamp, signature=None):
+        request = MagicMock()
+        request.headers = {
+            'x-zm-request-timestamp': timestamp,
+            'x-zm-signature': signature or make_zoom_signature(body, timestamp),
+        }
+        request.body = body.encode('utf-8')
+        return request
+
     @override_settings(ZOOM_WEBHOOK_SECRET_TOKEN=ZOOM_TEST_SECRET)
     def test_valid_signature(self):
         from integrations.services.zoom import validate_webhook_signature
@@ -921,6 +934,188 @@ class ZoomValidateWebhookSignatureTest(_ZoomSecretIsolationMixin, TestCase):
         request.body = b'{"event":"tampered"}'
 
         self.assertFalse(validate_webhook_signature(request))
+
+    @override_settings(ZOOM_WEBHOOK_SECRET_TOKEN=ZOOM_TEST_SECRET)
+    def test_freshness_boundary_is_inclusive(self):
+        from integrations.services.zoom import validate_webhook_signature
+
+        body = '{"event":"test"}'
+        for offset in (-ZOOM_TEST_TOLERANCE_SECONDS,
+                       ZOOM_TEST_TOLERANCE_SECONDS):
+            with self.subTest(offset=offset):
+                timestamp = str(ZOOM_TEST_NOW + offset)
+                request = self._request(body, timestamp)
+                self.assertTrue(
+                    validate_webhook_signature(request, now=ZOOM_TEST_NOW),
+                )
+
+    @override_settings(ZOOM_WEBHOOK_SECRET_TOKEN=ZOOM_TEST_SECRET)
+    def test_correct_signature_immediately_outside_boundary_is_rejected(self):
+        from integrations.services.zoom import validate_webhook_signature
+
+        body = '{"event":"test"}'
+        for offset in (-(ZOOM_TEST_TOLERANCE_SECONDS + 1),
+                       ZOOM_TEST_TOLERANCE_SECONDS + 1):
+            with self.subTest(offset=offset):
+                timestamp = str(ZOOM_TEST_NOW + offset)
+                request = self._request(body, timestamp)
+                self.assertFalse(
+                    validate_webhook_signature(request, now=ZOOM_TEST_NOW),
+                )
+
+    @override_settings(ZOOM_WEBHOOK_SECRET_TOKEN=ZOOM_TEST_SECRET)
+    def test_malformed_or_negative_timestamp_is_rejected(self):
+        from integrations.services.zoom import validate_webhook_signature
+
+        body = '{"event":"test"}'
+        for timestamp in (
+            'not-a-number',
+            '1.5',
+            '-1',
+            f'+{ZOOM_TEST_NOW}',
+            f' {ZOOM_TEST_NOW}',
+            f'0{ZOOM_TEST_NOW}',
+            '1_700_000_000',
+            '١٧٠٠٠٠٠٠٠٠',
+        ):
+            with self.subTest(timestamp=timestamp):
+                request = self._request(body, timestamp)
+                self.assertFalse(
+                    validate_webhook_signature(request, now=ZOOM_TEST_NOW),
+                )
+
+    @override_settings(ZOOM_WEBHOOK_SECRET_TOKEN=ZOOM_TEST_SECRET)
+    def test_oversized_canonical_timestamps_fail_closed(self):
+        from integrations.services.zoom import validate_webhook_signature
+
+        body = '{"event":"test"}'
+        for digit_count in (4096, 4300, 4301, 5000):
+            with self.subTest(digit_count=digit_count):
+                timestamp = '9' * digit_count
+                self.assertFalse(
+                    validate_webhook_signature(
+                        self._request(body, timestamp),
+                        now=ZOOM_TEST_NOW,
+                    ),
+                )
+
+        boundary = str(ZOOM_TEST_NOW + ZOOM_TEST_TOLERANCE_SECONDS)
+        self.assertTrue(
+            validate_webhook_signature(
+                self._request(body, boundary),
+                now=ZOOM_TEST_NOW,
+            ),
+        )
+
+    @override_settings(ZOOM_WEBHOOK_SECRET_TOKEN=ZOOM_TEST_SECRET)
+    def test_large_supported_unix_seconds_keep_exact_boundary_semantics(self):
+        from integrations.services.zoom import (
+            MAX_ZOOM_WEBHOOK_TIMESTAMP_SECONDS,
+            validate_webhook_signature,
+        )
+
+        body = '{"event":"test"}'
+        large_now = 10**18
+        for offset in (-ZOOM_TEST_TOLERANCE_SECONDS, 0,
+                       ZOOM_TEST_TOLERANCE_SECONDS):
+            with self.subTest(offset=offset):
+                timestamp = str(large_now + offset)
+                self.assertTrue(
+                    validate_webhook_signature(
+                        self._request(body, timestamp),
+                        now=large_now,
+                    ),
+                )
+
+        for offset in (-(ZOOM_TEST_TOLERANCE_SECONDS + 1),
+                       ZOOM_TEST_TOLERANCE_SECONDS + 1):
+            with self.subTest(offset=offset):
+                timestamp = str(large_now + offset)
+                self.assertFalse(
+                    validate_webhook_signature(
+                        self._request(body, timestamp),
+                        now=large_now,
+                    ),
+                )
+
+        maximum = str(MAX_ZOOM_WEBHOOK_TIMESTAMP_SECONDS)
+        self.assertTrue(validate_webhook_signature(
+            self._request(body, maximum),
+            now=MAX_ZOOM_WEBHOOK_TIMESTAMP_SECONDS,
+        ))
+        self.assertFalse(validate_webhook_signature(
+            self._request(body, str(MAX_ZOOM_WEBHOOK_TIMESTAMP_SECONDS + 1)),
+            now=MAX_ZOOM_WEBHOOK_TIMESTAMP_SECONDS,
+        ))
+
+        self.assertTrue(validate_webhook_signature(
+            self._request(body, '0'),
+            now=ZOOM_TEST_TOLERANCE_SECONDS,
+        ))
+        self.assertFalse(validate_webhook_signature(
+            self._request(body, '0'),
+            now=ZOOM_TEST_TOLERANCE_SECONDS + 1,
+        ))
+
+    @override_settings(ZOOM_WEBHOOK_SECRET_TOKEN=ZOOM_TEST_SECRET)
+    def test_tolerance_uses_integration_setting_override(self):
+        from integrations.config import clear_config_cache
+        from integrations.services.zoom import validate_webhook_signature
+
+        IntegrationSetting.objects.create(
+            key='ZOOM_WEBHOOK_TOLERANCE_SECONDS',
+            value='60',
+            group='zoom',
+        )
+        clear_config_cache()
+        body = '{"event":"test"}'
+
+        boundary = str(ZOOM_TEST_NOW - 60)
+        outside = str(ZOOM_TEST_NOW - 61)
+        self.assertTrue(validate_webhook_signature(
+            self._request(body, boundary), now=ZOOM_TEST_NOW,
+        ))
+        self.assertFalse(validate_webhook_signature(
+            self._request(body, outside), now=ZOOM_TEST_NOW,
+        ))
+
+    def test_tolerance_default_and_invalid_overrides_are_safe(self):
+        from integrations.config import clear_config_cache
+        from integrations.services.zoom import zoom_webhook_tolerance_seconds
+
+        self.assertEqual(
+            zoom_webhook_tolerance_seconds(),
+            ZOOM_TEST_TOLERANCE_SECONDS,
+        )
+        for value in ('0', '-10', 'not-a-number', '9' * 5000):
+            with self.subTest(value=value):
+                IntegrationSetting.objects.update_or_create(
+                    key='ZOOM_WEBHOOK_TOLERANCE_SECONDS',
+                    defaults={'value': value, 'group': 'zoom'},
+                )
+                clear_config_cache()
+                self.assertEqual(
+                    zoom_webhook_tolerance_seconds(),
+                    ZOOM_TEST_TOLERANCE_SECONDS,
+                )
+
+    @override_settings(ZOOM_WEBHOOK_SECRET_TOKEN=ZOOM_TEST_SECRET)
+    def test_fresh_signature_uses_constant_time_comparison(self):
+        from integrations.services.zoom import validate_webhook_signature
+
+        body = '{"event":"test"}'
+        timestamp = str(ZOOM_TEST_NOW)
+        request = self._request(body, timestamp)
+
+        with patch(
+            'integrations.services.zoom.hmac.compare_digest',
+            wraps=hmac.compare_digest,
+        ) as compare_digest:
+            self.assertTrue(
+                validate_webhook_signature(request, now=ZOOM_TEST_NOW),
+            )
+
+        compare_digest.assert_called_once()
 
 
 # --- Zoom Webhook Endpoint Tests ---
@@ -1003,9 +1198,11 @@ class ZoomWebhookUrlValidationTest(_ZoomSecretIsolationMixin, TestCase):
         super().setUp()
         self.client = Client()
 
-    def _post_challenge(self, payload, secret=ZOOM_TEST_SECRET):
+    def _post_challenge(
+        self, payload, secret=ZOOM_TEST_SECRET, *, timestamp=None,
+    ):
         body = json.dumps(payload)
-        timestamp = str(int(time.time()))
+        timestamp = timestamp or str(int(time.time()))
         signature = make_zoom_signature(body, timestamp, secret=secret)
         return self.client.post(
             '/api/webhooks/zoom',
@@ -1022,7 +1219,14 @@ class ZoomWebhookUrlValidationTest(_ZoomSecretIsolationMixin, TestCase):
                 'plainToken': 'test-plain-token-abc',
             },
         }
-        response = self._post_challenge(payload)
+        with patch(
+            'integrations.services.zoom.time.time',
+            return_value=ZOOM_TEST_NOW,
+        ):
+            response = self._post_challenge(
+                payload,
+                timestamp=str(ZOOM_TEST_NOW + ZOOM_TEST_TOLERANCE_SECONDS),
+            )
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data['plainToken'], 'test-plain-token-abc')
@@ -1132,9 +1336,11 @@ class ZoomRecordingCompletedTest(_ZoomSecretIsolationMixin, TestCase):
         )
         self.initial_published = self.event.published
 
-    def _post_webhook(self, payload_dict, secret=ZOOM_TEST_SECRET):
+    def _post_webhook(
+        self, payload_dict, secret=ZOOM_TEST_SECRET, *, timestamp=None,
+    ):
         body = json.dumps(payload_dict)
-        timestamp = str(int(time.time()))
+        timestamp = timestamp or str(int(time.time()))
         signature = make_zoom_signature(body, timestamp, secret=secret)
         return self.client.post(
             '/api/webhooks/zoom',
@@ -1151,7 +1357,14 @@ class ZoomRecordingCompletedTest(_ZoomSecretIsolationMixin, TestCase):
             '12345678901', include_transcript=True,
         )
 
-        response = self._post_webhook(payload)
+        with patch(
+            'integrations.services.zoom.time.time',
+            return_value=ZOOM_TEST_NOW,
+        ):
+            response = self._post_webhook(
+                payload,
+                timestamp=str(ZOOM_TEST_NOW - ZOOM_TEST_TOLERANCE_SECONDS),
+            )
 
         self.assertEqual(response.status_code, 200)
         self.event.refresh_from_db()
@@ -1439,6 +1652,86 @@ class ZoomRecordingCompletedTest(_ZoomSecretIsolationMixin, TestCase):
             ).exists()
         )
         mock_q_async.assert_not_called()
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_out_of_window_recording_creates_no_side_effects(self, mock_q_async):
+        payload = make_recording_completed_payload('12345678901')
+
+        for offset in (-(ZOOM_TEST_TOLERANCE_SECONDS + 1),
+                       ZOOM_TEST_TOLERANCE_SECONDS + 1):
+            with self.subTest(offset=offset), patch(
+                'integrations.services.zoom.time.time',
+                return_value=ZOOM_TEST_NOW,
+            ):
+                response = self._post_webhook(
+                    payload,
+                    timestamp=str(ZOOM_TEST_NOW + offset),
+                )
+
+                self.assertEqual(response.status_code, 400)
+                self.event.refresh_from_db()
+                self.assertEqual(self.event.recording_url, '')
+                self.assertEqual(self.event.transcript_url, '')
+                self.assertEqual(self.event.recording_s3_url, '')
+                self.assertIsNone(self.event.recording_upload_enqueued_at)
+                self.assertEqual(self.event.published, self.initial_published)
+                self.assertFalse(
+                    WebhookLog.objects.filter(service='zoom').exists(),
+                )
+                mock_q_async.assert_not_called()
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_oversized_timestamp_rejects_before_all_side_effects(
+        self, mock_q_async,
+    ):
+        payload = make_recording_completed_payload('12345678901')
+
+        with patch(
+            'integrations.services.zoom.time.time',
+            return_value=ZOOM_TEST_NOW,
+        ):
+            for digit_count in (4096, 4300, 4301, 5000):
+                with self.subTest(digit_count=digit_count):
+                    response = self._post_webhook(
+                        payload,
+                        timestamp='9' * digit_count,
+                    )
+
+                    self.assertEqual(response.status_code, 400)
+                    self.assertEqual(
+                        response.json()['error'],
+                        'Invalid webhook signature',
+                    )
+                    self.event.refresh_from_db()
+                    self.assertEqual(self.event.recording_url, '')
+                    self.assertEqual(self.event.transcript_url, '')
+                    self.assertEqual(self.event.recording_s3_url, '')
+                    self.assertIsNone(self.event.recording_upload_enqueued_at)
+                    self.assertEqual(self.event.published, self.initial_published)
+                    self.assertFalse(
+                        WebhookLog.objects.filter(service='zoom').exists(),
+                    )
+                    mock_q_async.assert_not_called()
+
+            boundary_response = self._post_webhook(
+                payload,
+                timestamp=str(
+                    ZOOM_TEST_NOW + ZOOM_TEST_TOLERANCE_SECONDS,
+                ),
+            )
+
+        self.assertEqual(boundary_response.status_code, 200)
+        self.event.refresh_from_db()
+        self.assertEqual(
+            self.event.recording_url,
+            'https://zoom.us/rec/play/abc123',
+        )
+        self.assertIsNotNone(self.event.recording_upload_enqueued_at)
+        self.assertEqual(
+            WebhookLog.objects.filter(service='zoom').count(),
+            1,
+        )
+        mock_q_async.assert_called_once()
 
     def test_sets_recording_fields_on_event(self):
         """recording.completed webhook sets recording fields on the matched Event.
@@ -2237,6 +2530,24 @@ class ZoomSettingsTest(TestCase):
         self.assertTrue(entry.get('description'))
         self.assertTrue(entry.get('docs_url'))
         self.assertEqual(entry.get('default'), 'cloud')
+
+    def test_webhook_tolerance_key_registered_in_zoom_group(self):
+        from integrations.settings_registry import get_group_by_name
+
+        zoom_group = get_group_by_name('zoom')
+        entry = next(
+            key_def for key_def in zoom_group['keys']
+            if key_def['key'] == 'ZOOM_WEBHOOK_TOLERANCE_SECONDS'
+        )
+        self.assertFalse(entry['is_secret'])
+        self.assertTrue(entry['optional'])
+        self.assertEqual(entry['default'], '300')
+        self.assertEqual(entry['value_type'], 'integer')
+        self.assertTrue(entry['description'])
+        self.assertEqual(
+            entry['docs_url'],
+            '_docs/integrations/zoom.md#zoom_webhook_tolerance_seconds',
+        )
 
 
 # --- Recording Model Event FK Test ---

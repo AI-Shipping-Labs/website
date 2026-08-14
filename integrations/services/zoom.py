@@ -30,6 +30,11 @@ _token_cache = {
 ZOOM_OAUTH_TOKEN_URL = 'https://zoom.us/oauth/token'
 ZOOM_API_BASE_URL = 'https://api.zoom.us/v2/'
 ZOOM_PROVIDER_MESSAGE_MAX_LENGTH = 300
+DEFAULT_ZOOM_WEBHOOK_TOLERANCE_SECONDS = 300
+MAX_ZOOM_WEBHOOK_TIMESTAMP_SECONDS = (1 << 63) - 1
+MAX_ZOOM_WEBHOOK_TIMESTAMP_DIGITS = len(
+    str(MAX_ZOOM_WEBHOOK_TIMESTAMP_SECONDS),
+)
 
 _URL_RE = re.compile(r'https?://\S+', re.IGNORECASE)
 _BEARER_RE = re.compile(r'\bBearer\s+\S+', re.IGNORECASE)
@@ -422,7 +427,30 @@ def delete_meeting(event):
     )
 
 
-def validate_webhook_signature(request):
+def zoom_webhook_tolerance_seconds():
+    """Return the positive webhook timestamp tolerance configured by operators.
+
+    IntegrationSetting values are stored as text and may also come from
+    Django settings or the environment. An invalid or non-positive override
+    must never disable freshness validation, so those values fall back to the
+    safe five-minute default.
+    """
+    raw = get_config(
+        'ZOOM_WEBHOOK_TOLERANCE_SECONDS',
+        DEFAULT_ZOOM_WEBHOOK_TOLERANCE_SECONDS,
+    )
+    try:
+        if isinstance(raw, bool):
+            raise ValueError
+        tolerance = int(str(raw).strip(), 10)
+    except (TypeError, ValueError):
+        return DEFAULT_ZOOM_WEBHOOK_TOLERANCE_SECONDS
+    if tolerance <= 0:
+        return DEFAULT_ZOOM_WEBHOOK_TOLERANCE_SECONDS
+    return tolerance
+
+
+def validate_webhook_signature(request, *, now=None):
     """Validate an incoming Zoom webhook request signature.
 
     Zoom webhooks include these headers:
@@ -434,6 +462,7 @@ def validate_webhook_signature(request):
 
     Args:
         request: Django HttpRequest object.
+        now: Optional Unix timestamp used for deterministic boundary tests.
 
     Returns:
         bool: True if the signature is valid, False otherwise.
@@ -447,6 +476,25 @@ def validate_webhook_signature(request):
     signature = request.headers.get('x-zm-signature', '')
 
     if not timestamp or not signature:
+        return False
+
+    if (
+        not isinstance(timestamp, str)
+        or not timestamp.isascii()
+        or not timestamp.isdigit()
+        or (len(timestamp) > 1 and timestamp.startswith('0'))
+        or len(timestamp) > MAX_ZOOM_WEBHOOK_TIMESTAMP_DIGITS
+    ):
+        return False
+    try:
+        request_timestamp = int(timestamp, 10)
+    except ValueError:
+        return False
+    if request_timestamp > MAX_ZOOM_WEBHOOK_TIMESTAMP_SECONDS:
+        return False
+
+    current_timestamp = int(time.time() if now is None else now)
+    if abs(current_timestamp - request_timestamp) > zoom_webhook_tolerance_seconds():
         return False
 
     # Construct the message: v0:{timestamp}:{body}

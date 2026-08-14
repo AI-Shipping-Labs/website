@@ -8,7 +8,7 @@ For SES bounce/complaint notifications delivered via SNS.
 
 import base64
 import logging
-from urllib.parse import urlparse
+import re
 
 from django.conf import settings
 
@@ -25,6 +25,29 @@ VALID_SNS_HOSTS = {
     'sns.ap-southeast-1.amazonaws.com',
     'sns.ap-northeast-1.amazonaws.com',
 }
+
+_SNS_CERT_URL_RE = re.compile(
+    rf'https://(?:{"|".join(re.escape(host) for host in sorted(VALID_SNS_HOSTS))})'
+    r'/SimpleNotificationService-[A-Za-z0-9_-]{10,}\.pem',
+)
+
+_NOTIFICATION_SIGNING_FIELDS = (
+    'Message',
+    'MessageId',
+    'Timestamp',
+    'TopicArn',
+    'Type',
+)
+
+_CONFIRMATION_SIGNING_FIELDS = (
+    'Message',
+    'MessageId',
+    'SubscribeURL',
+    'Timestamp',
+    'Token',
+    'TopicArn',
+    'Type',
+)
 
 _UNSET = object()
 
@@ -76,6 +99,10 @@ def validate_sns_notification(payload):
     if not _ses_validation_enabled():
         return True
 
+    if not isinstance(payload, dict):
+        logger.warning('Invalid SNS payload type: %s', type(payload).__name__)
+        return False
+
     # Check that the SigningCertURL is from an AWS domain
     cert_url = payload.get('SigningCertURL', '')
     if not _is_valid_cert_url(cert_url):
@@ -89,7 +116,12 @@ def validate_sns_notification(payload):
 
 
 def _is_valid_cert_url(cert_url):
-    """Check that a certificate URL is from a valid AWS SNS domain.
+    """Check that a certificate URL exactly matches the supported SNS grammar.
+
+    Validate the complete raw string instead of accepting a URL parser's
+    normalized representation. Parsers may discard ASCII control characters,
+    leading whitespace, or empty query/fragment delimiters; none of those forms
+    is a certificate URL emitted by SNS, and they must fail before any request.
 
     Args:
         cert_url: URL string to validate.
@@ -97,20 +129,10 @@ def _is_valid_cert_url(cert_url):
     Returns:
         bool: True if the URL is from a valid AWS domain.
     """
-    if not cert_url:
+    if not isinstance(cert_url, str) or not cert_url:
         return False
 
-    parsed = urlparse(cert_url)
-
-    # Must be HTTPS
-    if parsed.scheme != 'https':
-        return False
-
-    # Must be from an AWS SNS domain
-    if parsed.hostname not in VALID_SNS_HOSTS:
-        return False
-
-    return True
+    return _SNS_CERT_URL_RE.fullmatch(cert_url) is not None
 
 
 def _verify_signature(payload, cert_url):
@@ -129,11 +151,47 @@ def _verify_signature(payload, cert_url):
     try:
         import requests
         from cryptography.hazmat.primitives import hashes
-        from cryptography.hazmat.primitives.asymmetric import padding
+        from cryptography.hazmat.primitives.asymmetric import padding, rsa
         from cryptography.x509 import load_pem_x509_certificate
 
+        if not _is_valid_cert_url(cert_url):
+            return False
+
+        # Validate all local signature material before making a network
+        # request. Missing/unsupported fields cannot be repaired by a
+        # certificate download and must fail closed.
+        message_string = _build_signing_string(payload)
+        if message_string is None:
+            return False
+
+        signature_version = payload.get('SignatureVersion')
+        if signature_version == '1':
+            signature_hash = hashes.SHA1()
+        elif signature_version == '2':
+            signature_hash = hashes.SHA256()
+        else:
+            logger.warning(
+                'Unsupported SNS SignatureVersion: %s',
+                signature_version,
+            )
+            return False
+
+        encoded_signature = payload.get('Signature')
+        if not isinstance(encoded_signature, str) or not encoded_signature:
+            logger.warning('Missing or invalid SNS Signature')
+            return False
+
+        signature = base64.b64decode(encoded_signature, validate=True)
+        if not signature:
+            logger.warning('Empty SNS Signature')
+            return False
+
         # Download the certificate
-        response = requests.get(cert_url, timeout=10)
+        response = requests.get(
+            cert_url,
+            timeout=10,
+            allow_redirects=False,
+        )
         if response.status_code != 200:
             logger.warning(
                 'Failed to download SNS certificate from %s: %s',
@@ -144,21 +202,16 @@ def _verify_signature(payload, cert_url):
         # Load the certificate
         cert = load_pem_x509_certificate(response.content)
         public_key = cert.public_key()
-
-        # Build the message string to verify
-        message_string = _build_signing_string(payload)
-        if message_string is None:
+        if not isinstance(public_key, rsa.RSAPublicKey):
+            logger.warning('SNS signing certificate does not contain an RSA key')
             return False
-
-        # Decode the signature
-        signature = base64.b64decode(payload.get('Signature', ''))
 
         # Verify
         public_key.verify(
             signature,
             message_string.encode('utf-8'),
             padding.PKCS1v15(),
-            hashes.SHA1(),
+            signature_hash,
         )
         return True
 
@@ -188,19 +241,19 @@ def _build_signing_string(payload):
         fields = ['Message', 'MessageId']
         if 'Subject' in payload:
             fields.append('Subject')
-        fields.extend(['Timestamp', 'TopicArn', 'Type'])
+        fields.extend(_NOTIFICATION_SIGNING_FIELDS[2:])
     elif message_type in ('SubscriptionConfirmation', 'UnsubscribeConfirmation'):
-        fields = [
-            'Message', 'MessageId', 'SubscribeURL',
-            'Timestamp', 'Token', 'TopicArn', 'Type',
-        ]
+        fields = _CONFIRMATION_SIGNING_FIELDS
     else:
         logger.warning('Unknown SNS message type: %s', message_type)
         return None
 
     parts = []
     for field in fields:
+        if field not in payload or not isinstance(payload[field], str):
+            logger.warning('Missing or invalid SNS signing field: %s', field)
+            return None
         parts.append(field)
-        parts.append(payload.get(field, ''))
+        parts.append(payload[field])
 
     return '\n'.join(parts) + '\n'

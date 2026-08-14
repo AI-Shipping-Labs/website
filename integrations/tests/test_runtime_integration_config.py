@@ -82,13 +82,19 @@ class SESRuntimeConfigTest(RuntimeConfigTestCase):
     def test_ses_validation_defaults_to_enabled_outside_debug(self, mock_verify):
         mock_verify.return_value = False
         payload = {
-            "SigningCertURL": "https://sns.us-east-1.amazonaws.com/cert.pem",
+            "SigningCertURL": (
+                "https://sns.us-east-1.amazonaws.com/"
+                "SimpleNotificationService-0123456789abcdef.pem"
+            ),
         }
 
         self.assertFalse(ses_service.validate_sns_notification(payload))
         mock_verify.assert_called_once_with(
             payload,
-            "https://sns.us-east-1.amazonaws.com/cert.pem",
+            (
+                "https://sns.us-east-1.amazonaws.com/"
+                "SimpleNotificationService-0123456789abcdef.pem"
+            ),
         )
 
     @override_settings(DEBUG=True)

@@ -359,9 +359,31 @@ environment to its own set via the per-environment override.
 Purpose: When true, the SES events webhook (`api/views/ses_events.py`)
 verifies SNS message signatures against AWS's public certificate
 before processing. Implemented by
-`integrations/services/ses.py:_settings_override_value`. Recommended
-in production; off by default to ease local development where the SNS
-signing chain is awkward to mock.
+`integrations/services/ses.py:validate_sns_notification`. Recommended
+in production; off by default to preserve intentional local replay
+workflows.
+
+Validation is fail closed when enabled:
+
+- `SigningCertURL` must use HTTPS, an explicitly supported regional SNS
+  hostname, and AWS's
+  `SimpleNotificationService-<certificate-id>.pem` path. Userinfo,
+  custom ports, redirects, query strings, fragments, lookalike hosts,
+  unsupported regions, whitespace/control characters, parser-normalized
+  variants, and even empty query/fragment/path-parameter delimiters are
+  rejected from the raw URL before a request is made.
+- Certificate downloads use a bounded timeout and do not follow
+  redirects. Non-200 responses, network errors, invalid PEM, and
+  non-RSA public keys are rejected.
+- Required SNS fields must be strings and use the canonical field
+  order for their message type. Signature version `1` uses RSA/SHA-1;
+  version `2` uses RSA/SHA-256. Unknown versions, invalid base64, and
+  signature mismatches are rejected.
+
+The validation-disabled setting is an explicit bypass: it returns
+before payload-shape, certificate URL, network, or cryptographic checks.
+Keep that bypass limited to local/test replay and configure validation
+on in production.
 
 Without it (false): The webhook still accepts SNS deliveries but does
 not verify their authenticity. In environments where the webhook URL

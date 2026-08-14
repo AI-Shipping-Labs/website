@@ -163,8 +163,11 @@ class SyncContentCommandTest(TestCase):
         self.assertNotIn(WEBHOOK_SECRET, stderr)
         self.assertNotIn(WEBHOOK_SECRET, str(error))
 
+    @patch('django.core.management.base.connections.close_all')
     @patch(f'{COMMAND_MODULE}.sync_content_source')
-    def test_django_cli_maps_command_error_to_exit_code_one(self, sync_source):
+    def test_django_cli_maps_command_error_to_exit_code_one(
+        self, sync_source, close_all,
+    ):
         source = self._source('AI-Shipping-Labs/content')
         sync_source.return_value = _result(errors=['invalid article metadata'])
         stdout = StringIO()
@@ -185,6 +188,7 @@ class SyncContentCommandTest(TestCase):
             'CommandError: Content sync completed with errors.',
             stderr.getvalue(),
         )
+        close_all.assert_called_once_with()
 
     @patch(f'{COMMAND_MODULE}.sync_content_source')
     def test_repeated_runs_keep_stable_once_per_source_dispatch(self, sync_source):

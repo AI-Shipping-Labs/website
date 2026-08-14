@@ -1163,6 +1163,7 @@ class TestScenario5MainMemberSeesUpcomingEvents:
     to event detail."""
 
     @pytest.mark.core
+    @freeze_time("2026-08-14T10:00:00Z")
     def test_upcoming_events_shown_ordered_by_date(
         self, django_server
     , browser):
@@ -1181,18 +1182,24 @@ class TestScenario5MainMemberSeesUpcomingEvents:
             "main@test.com", tier_slug="main"
         )
 
-        # Create 2 events: event1 is sooner, event2 is later
+        # Keep both events after Friday and inside the same week.
+        now = timezone.now()
+        event1_start = now + datetime.timedelta(days=1)
+        event2_start = now + datetime.timedelta(days=2)
+        assert now < event1_start < event2_start
+        assert event2_start.weekday() == 6
+
         event1 = _create_event(
             title="AI Workshop: Prompt Engineering",
             slug="ai-workshop-prompt-engineering",
             description="Learn prompt engineering techniques.",
-            start_datetime=timezone.now() + datetime.timedelta(days=3),
+            start_datetime=event1_start,
         )
         event2 = _create_event(
             title="RAG Pipeline Deep Dive",
             slug="rag-pipeline-deep-dive",
             description="Deep dive into RAG pipelines.",
-            start_datetime=timezone.now() + datetime.timedelta(days=10),
+            start_datetime=event2_start,
         )
 
         # Register user for both

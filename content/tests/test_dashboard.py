@@ -836,7 +836,12 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Dashboard Series Session 2')
         self.assertContains(response, 'Standalone After Series 3')
 
-    def test_single_registered_series_occurrence_has_marker_without_see_more(self):
+    def _assert_single_registered_series_occurrence(self):
+        now = timezone.now()
+        event_start = now + timedelta(days=6 - now.weekday())
+        self.assertGreater(event_start, now)
+        self.assertEqual(event_start.weekday(), 6)
+
         series = EventSeries.objects.create(
             name='One Session Series', slug='one-session-series',
             start_time=time(18, 0),
@@ -844,7 +849,7 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         event = Event.objects.create(
             slug='one-session-series-event',
             title='One Session Series Event',
-            start_datetime=timezone.now() + timedelta(days=3),
+            start_datetime=event_start,
             status='upcoming',
             event_series=series,
             series_position=1,
@@ -859,6 +864,14 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
             response,
             '1 more session',
         )
+
+    @freeze_time('2026-08-13T10:00:00Z')
+    def test_single_registered_series_occurrence_has_marker_without_see_more(self):
+        self._assert_single_registered_series_occurrence()
+
+    @freeze_time('2026-08-14T10:00:00Z')
+    def test_single_registered_series_occurrence_stays_in_week_on_friday(self):
+        self._assert_single_registered_series_occurrence()
 
 
 # ============================================================

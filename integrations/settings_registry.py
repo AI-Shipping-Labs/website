@@ -156,6 +156,18 @@ INTEGRATION_GROUPS = [
             {'key': 'ZOOM_ACCOUNT_ID', 'is_secret': True, 'description': 'Zoom account UUID the OAuth app belongs to. Found in the Zoom Marketplace app settings.', 'docs_url': '_docs/integrations/zoom.md#zoom_account_id'},
             {'key': 'ZOOM_WEBHOOK_SECRET_TOKEN', 'is_secret': True, 'description': 'Verifies Zoom webhook callbacks (event start, recording ready). Set in the Zoom app event subscription.', 'docs_url': '_docs/integrations/zoom.md#zoom_webhook_secret_token'},
             {
+                'key': 'ZOOM_WEBHOOK_TOLERANCE_SECONDS',
+                'is_secret': False,
+                'optional': True,
+                'default': '300',
+                'description': (
+                    'Maximum accepted Zoom webhook age or future clock skew '
+                    'in seconds. Defaults to 300 seconds; invalid or '
+                    'non-positive overrides fall back to that safe default.'
+                ),
+                'docs_url': '_docs/integrations/zoom.md#zoom_webhook_tolerance_seconds',
+            },
+            {
                 'key': 'ZOOM_WAITING_ROOM',
                 'is_secret': False,
                 'is_boolean': True,
@@ -1223,6 +1235,7 @@ SETTING_VALUE_TYPES = {
     'RECORDING_PRESIGNED_URL_TTL_SECONDS': 'integer',
     'DOWNLOAD_PRESIGNED_URL_TTL_SECONDS': 'integer',
     'DOWNLOAD_DELIVERY_TOKEN_TTL_HOURS': 'integer',
+    'ZOOM_WEBHOOK_TOLERANCE_SECONDS': 'integer',
     'CALENDLY_WEBHOOK_TOLERANCE_SECONDS': 'integer',
     'CALENDLY_WEBHOOK_RETENTION_DAYS': 'integer',
     'PLAN_SPRINTS_FIRST_RUN_LOOKBACK_DAYS': 'integer',

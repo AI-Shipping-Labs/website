@@ -300,6 +300,31 @@ each event subscription has one secret. Use a separate event
 subscription (or a separate S2S app on a development workspace) for
 non-prod traffic.
 
+## ZOOM_WEBHOOK_TOLERANCE_SECONDS
+
+Purpose: Maximum accepted age or future clock skew for a signed Zoom webhook,
+in Unix seconds. The default is `300` (five minutes). Signature verification
+accepts timestamps exactly at either boundary and rejects timestamps one
+second beyond it, even when the HMAC is otherwise correct. This limits replay
+of a captured delivery while allowing ordinary provider and server clock skew.
+
+Type: positive integer seconds. Default: `300`. Invalid, zero, or negative
+overrides fall back to `300`; they never disable freshness validation. Webhook
+timestamps must be canonical ASCII decimal Unix seconds in the non-negative
+signed 64-bit range; malformed, padded, or oversized headers are rejected
+before integer conversion. The setting is non-secret and can be changed in
+**Studio → Settings → Zoom** without a deploy.
+
+Where it applies: every request to `/api/webhooks/zoom`, including
+`endpoint.url_validation` and `recording.completed`. A request outside the
+window is rejected before JSON parsing, `WebhookLog` creation, event mutation,
+or recording-upload task enqueueing. The HMAC still covers the exact timestamp
+header and raw request body and is compared with a timing-safe comparison.
+
+Operational guidance: keep web-server clocks synchronized. Increase the
+window only to accommodate a measured clock-skew problem; a larger value also
+increases how long a captured signed delivery remains replayable.
+
 ## ZOOM_WAITING_ROOM
 
 Purpose: Boolean. Off by default. When true, every meeting created or

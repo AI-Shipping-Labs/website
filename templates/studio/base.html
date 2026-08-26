@@ -181,11 +181,14 @@ double-rendering. See issue #347.
       collapsed section before any JS has run, and means the auto-expand
       behavior works even with JS disabled. See issue #570.
 
-      The per-section path-matching mirrors the per-link active rules
-      below — keep them in sync.
+      Since #1435 the single source of truth is the resolved route name:
+      ``studio.sidebar`` maps every Studio route to its owning section and
+      its one logical sidebar destination. Templates must not re-derive
+      active state from ``request.path`` substrings — add the new route to
+      ``studio/sidebar.py`` instead.
       {% endcomment %}
       <div class="relative -mx-6 min-h-0 flex-1 md:mx-0 md:min-h-0 md:flex-none">
-      {% studio_sidebar_state request.path as state %}
+      {% studio_sidebar_state request as state %}
       <nav id="studio-sidebar-nav" data-studio-active-section="{{ state.active_section }}" class="h-full space-y-0.5 overflow-y-auto px-6 pb-10 md:h-auto md:space-y-0.5 md:overflow-visible md:px-0 md:pb-0">
 
         <!-- Top utility row: back to website + theme toggle -->
@@ -209,7 +212,8 @@ double-rendering. See issue #347.
         <!-- Dashboard link (own item, below utility row) -->
         <div>
           <a href="{% url 'studio_dashboard' %}"
-             class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if request.path == '/studio/' or request.path == '/studio' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+             class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'dashboard' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+             {% if state.active_destination == 'dashboard' %}aria-current="page"{% endif %}>
             <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
             <span>Dashboard</span>
           </a>
@@ -234,10 +238,10 @@ double-rendering. See issue #347.
         </div>
 
         {% comment %}
-        Per-section expansion booleans, keyed off ``request.path``. See
-        ``studio.templatetags.studio_filters.studio_sidebar_state`` for
-        the rules. Keep this in lock-step with the per-link active
-        highlight rules below.
+        Per-section expansion booleans and the single active destination,
+        both derived from the resolved route name by ``studio.sidebar``
+        (via ``studio_sidebar_state``). Exactly one destination carries
+        the active class string and ``aria-current="page"``.
         {% endcomment %}
         <!-- Events Section (expanded by default on dashboard) -->
         <div>
@@ -255,23 +259,26 @@ double-rendering. See issue #347.
           <ul id="studio-section-events" class="space-y-1 mt-1{% if not state.events_expanded %} hidden{% endif %}">
             <li>
               <a href="{% url 'studio_event_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/events/' in request.path or request.path == '/studio/events' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'events' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'events' %}aria-current="page"{% endif %}>
                 <i data-lucide="calendar" class="w-4 h-4"></i>
                 <span>Events</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_event_series_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'event-series' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
-                 data-testid="sidebar-event-series-link">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'event_series' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 data-testid="sidebar-event-series-link"
+                 {% if state.active_destination == 'event_series' %}aria-current="page"{% endif %}>
                 <i data-lucide="layers" class="w-4 h-4"></i>
                 <span>Event series</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_host_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/studio/hosts' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
-                 data-testid="sidebar-hosts-link">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'event_hosts' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 data-testid="sidebar-hosts-link"
+                 {% if state.active_destination == 'event_hosts' %}aria-current="page"{% endif %}>
                 <i data-lucide="user-round-check" class="w-4 h-4"></i>
                 <span>Event hosts</span>
               </a>
@@ -295,49 +302,56 @@ double-rendering. See issue #347.
           <ul id="studio-section-content" class="space-y-1 mt-1{% if not state.content_active %} hidden{% endif %}">
             <li>
               <a href="{% url 'studio_article_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'articles' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'articles' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'articles' %}aria-current="page"{% endif %}>
                 <i data-lucide="file-text" class="w-4 h-4"></i>
                 <span>Articles</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_marketing_page_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'marketing-pages' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'marketing_pages' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'marketing_pages' %}aria-current="page"{% endif %}>
                 <i data-lucide="panel-top" class="w-4 h-4"></i>
                 <span>Marketing pages</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_course_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'courses' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'courses' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'courses' %}aria-current="page"{% endif %}>
                 <i data-lucide="book-open" class="w-4 h-4"></i>
                 <span>Courses</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_project_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'projects' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'projects' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'projects' %}aria-current="page"{% endif %}>
                 <i data-lucide="folder-kanban" class="w-4 h-4"></i>
                 <span>Projects</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_workshop_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/workshops' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'workshops' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'workshops' %}aria-current="page"{% endif %}>
                 <i data-lucide="presentation" class="w-4 h-4"></i>
                 <span>Workshops</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_recording_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'recordings' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'recordings' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'recordings' %}aria-current="page"{% endif %}>
                 <i data-lucide="video" class="w-4 h-4"></i>
                 <span>Recordings</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_download_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'downloads' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'downloads' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'downloads' %}aria-current="page"{% endif %}>
                 <i data-lucide="download" class="w-4 h-4"></i>
                 <span>Downloads</span>
               </a>
@@ -361,63 +375,72 @@ double-rendering. See issue #347.
           <ul id="studio-section-people" class="space-y-1 mt-1{% if not state.people_active %} hidden{% endif %}">
             <li>
               <a href="{% url 'studio_user_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if request.path == '/studio/users/' or request.path == '/studio/users/export' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'users' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'users' %}aria-current="page"{% endif %}>
                 <i data-lucide="users" class="w-4 h-4"></i>
                 <span>Users</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_call_host_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/studio/call-hosts' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'call_hosts' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'call_hosts' %}aria-current="page"{% endif %}>
                 <i data-lucide="phone" class="w-4 h-4"></i>
                 <span>Call profiles</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_import_batch_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/studio/imports/' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'imports' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'imports' %}aria-current="page"{% endif %}>
                 <i data-lucide="upload-cloud" class="w-4 h-4"></i>
                 <span>Imports</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_instructor_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/studio/instructors' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'instructors' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'instructors' %}aria-current="page"{% endif %}>
                 <i data-lucide="graduation-cap" class="w-4 h-4"></i>
                 <span>Instructors</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_tier_overrides_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'tier_override' in request.path or 'tier_overrides' in request.path or 'tier-override' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'tier_overrides' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'tier_overrides' %}aria-current="page"{% endif %}>
                 <i data-lucide="shield" class="w-4 h-4"></i>
                 <span>Tier overrides</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_tag_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if request.path == '/studio/tags/' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'tags' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'tags' %}aria-current="page"{% endif %}>
                 <i data-lucide="tags" class="w-4 h-4"></i>
                 <span>Tags</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_user_merge' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/users/merge' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'user_merge' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'user_merge' %}aria-current="page"{% endif %}>
                 <i data-lucide="git-merge" class="w-4 h-4"></i>
                 <span>Merge accounts</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_payment_mismatch_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/users/payment-mismatches' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'payment_mismatches' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'payment_mismatches' %}aria-current="page"{% endif %}>
                 <i data-lucide="triangle-alert" class="w-4 h-4"></i>
                 <span>Payment mismatches</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_subscription_reconciliation' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/payments/subscription-reconciliation' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'subscription_reconciliation' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'subscription_reconciliation' %}aria-current="page"{% endif %}>
                 <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                 <span>Subscription reconciliation</span>
               </a>
@@ -425,7 +448,8 @@ double-rendering. See issue #347.
             {% if request.user.is_superuser %}
             <li>
               <a href="{% url 'studio_user_create' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/users/new' in request.path or '/users/created' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'user_create' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'user_create' %}aria-current="page"{% endif %}>
                 <i data-lucide="user-plus" class="w-4 h-4"></i>
                 <span>New user</span>
               </a>
@@ -433,7 +457,8 @@ double-rendering. See issue #347.
             {% endif %}
             <li>
               <a href="{% url 'studio_crm_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/crm' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'crm' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'crm' %}aria-current="page"{% endif %}>
                 <i data-lucide="contact" class="w-4 h-4"></i>
                 <span>CRM</span>
               </a>
@@ -441,7 +466,8 @@ double-rendering. See issue #347.
             <li>
               <a href="{% url 'studio_assistant' %}"
                  data-testid="studio-nav-assistant"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/assistant' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'assistant' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'assistant' %}aria-current="page"{% endif %}>
                 <i data-lucide="sparkles" class="w-4 h-4"></i>
                 <span>AI Assistant</span>
               </a>
@@ -465,21 +491,24 @@ double-rendering. See issue #347.
           <ul id="studio-section-planning" class="space-y-1 mt-1{% if not state.planning_active %} hidden{% endif %}">
             <li>
               <a href="{% url 'studio_sprint_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/sprints' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'sprints' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'sprints' %}aria-current="page"{% endif %}>
                 <i data-lucide="calendar-days" class="w-4 h-4"></i>
                 <span>Sprints</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_plan_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/plans' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'plans' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'plans' %}aria-current="page"{% endif %}>
                 <i data-lucide="clipboard-list" class="w-4 h-4"></i>
                 <span>Plans</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_book_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/books' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'books' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'books' %}aria-current="page"{% endif %}>
                 <i data-lucide="book-open" class="w-4 h-4"></i>
                 <span>Book club</span>
               </a>
@@ -503,14 +532,16 @@ double-rendering. See issue #347.
           <ul id="studio-section-onboarding" class="space-y-1 mt-1{% if not state.onboarding_active %} hidden{% endif %}">
             <li>
               <a href="{% url 'studio_questionnaire_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/questionnaires' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'questionnaires' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'questionnaires' %}aria-current="page"{% endif %}>
                 <i data-lucide="list-checks" class="w-4 h-4"></i>
                 <span>Questionnaires</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_persona_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/personas' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'personas' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'personas' %}aria-current="page"{% endif %}>
                 <i data-lucide="users-round" class="w-4 h-4"></i>
                 <span>Personas</span>
               </a>
@@ -534,28 +565,32 @@ double-rendering. See issue #347.
           <ul id="studio-section-communication" class="space-y-1 mt-1{% if not state.communication_active %} hidden{% endif %}">
             <li>
               <a href="{% url 'studio_notification_log' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'notifications' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'notifications' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'notifications' %}aria-current="page"{% endif %}>
                 <i data-lucide="bell" class="w-4 h-4"></i>
                 <span>Notifications</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_campaign_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/campaigns' in request.path and 'utm-campaigns' not in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'campaigns' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'campaigns' %}aria-current="page"{% endif %}>
                 <i data-lucide="mail" class="w-4 h-4"></i>
                 <span>Email campaigns</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_email_template_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/email-templates' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'email_templates' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'email_templates' %}aria-current="page"{% endif %}>
                 <i data-lucide="mail" class="w-4 h-4"></i>
                 <span>Email templates</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_announcement_banner' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/announcement' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'announcement' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'announcement' %}aria-current="page"{% endif %}>
                 <i data-lucide="megaphone" class="w-4 h-4"></i>
                 <span>Site banner</span>
               </a>
@@ -579,21 +614,24 @@ double-rendering. See issue #347.
           <ul id="studio-section-tracking" class="space-y-1 mt-1{% if not state.tracking_active %} hidden{% endif %}">
             <li>
               <a href="{% url 'studio_utm_campaign_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'utm-campaigns' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'utm_campaigns' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'utm_campaigns' %}aria-current="page"{% endif %}>
                 <i data-lucide="link" class="w-4 h-4"></i>
                 <span>UTM links</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_utm_dashboard' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'utm-analytics' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'utm_analytics' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'utm_analytics' %}aria-current="page"{% endif %}>
                 <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
                 <span>UTM analytics</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_signup_analytics' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'signup-analytics' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'signup_analytics' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'signup_analytics' %}aria-current="page"{% endif %}>
                 <i data-lucide="user-plus" class="w-4 h-4"></i>
                 <span>Signup analytics</span>
               </a>
@@ -617,42 +655,47 @@ double-rendering. See issue #347.
           <ul id="studio-section-operations" class="space-y-1 mt-1{% if not state.operations_active %} hidden{% endif %}">
             <li>
               <a href="{% url 'studio_sync_dashboard' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/sync' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'sync' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'sync' %}aria-current="page"{% endif %}>
                 <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                 <span>Content sync</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_worker' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/worker' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'worker' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'worker' %}aria-current="page"{% endif %}>
                 <i data-lucide="cpu" class="w-4 h-4"></i>
                 <span>Worker</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_ses_event_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/ses-events' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'ses_events' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'ses_events' %}aria-current="page"{% endif %}>
                 <i data-lucide="mail-warning" class="w-4 h-4"></i>
                 <span>SES events</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_email_log_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/email-log' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                 {% if '/email-log' in request.path %}aria-current="page"{% endif %}>
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'email_log' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                 {% if state.active_destination == 'email_log' %}aria-current="page"{% endif %}>
                 <i data-lucide="send" class="w-4 h-4"></i>
                 <span>Email log</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_maven_event_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/maven-events' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'maven_events' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'maven_events' %}aria-current="page"{% endif %}>
                 <i data-lucide="graduation-cap" class="w-4 h-4"></i><span>Maven events</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_redirect_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'redirects' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'redirects' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'redirects' %}aria-current="page"{% endif %}>
                 <i data-lucide="arrow-right-left" class="w-4 h-4"></i>
                 <span>Redirects</span>
               </a>
@@ -673,7 +716,8 @@ double-rendering. See issue #347.
                 <li>
                   <a href="{% url 'studio_trigger_subscription_list' %}"
                      data-testid="sidebar-triggers-subscriptions-link"
-                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/triggers/subscriptions' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'trigger_subscriptions' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                     {% if state.active_destination == 'trigger_subscriptions' %}aria-current="page"{% endif %}>
                     <i data-lucide="webhook" class="w-4 h-4"></i>
                     <span>Trigger subscriptions</span>
                   </a>
@@ -681,7 +725,8 @@ double-rendering. See issue #347.
                 <li>
                   <a href="{% url 'studio_trigger_widget_list' %}"
                      data-testid="sidebar-triggers-widgets-link"
-                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/triggers/widgets' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'trigger_widgets' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                     {% if state.active_destination == 'trigger_widgets' %}aria-current="page"{% endif %}>
                     <i data-lucide="badge-check" class="w-4 h-4"></i>
                     <span>Event widgets</span>
                   </a>
@@ -689,7 +734,8 @@ double-rendering. See issue #347.
                 <li>
                   <a href="{% url 'studio_trigger_emission_list' %}"
                      data-testid="sidebar-triggers-emissions-link"
-                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/triggers/emissions' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'trigger_emissions' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                     {% if state.active_destination == 'trigger_emissions' %}aria-current="page"{% endif %}>
                     <i data-lucide="activity" class="w-4 h-4"></i>
                     <span>Event emissions</span>
                   </a>
@@ -697,7 +743,8 @@ double-rendering. See issue #347.
                 <li>
                   <a href="{% url 'studio_trigger_delivery_list' %}"
                      data-testid="sidebar-triggers-deliveries-link"
-                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/triggers/deliveries' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'trigger_deliveries' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                     {% if state.active_destination == 'trigger_deliveries' %}aria-current="page"{% endif %}>
                     <i data-lucide="send" class="w-4 h-4"></i>
                     <span>Webhook deliveries</span>
                   </a>
@@ -706,7 +753,8 @@ double-rendering. See issue #347.
             </li>
             <li>
               <a href="{% url 'studio_settings' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/settings' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'settings' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'settings' %}aria-current="page"{% endif %}>
                 <i data-lucide="settings" class="w-4 h-4"></i>
                 <span>Settings</span>
               </a>
@@ -715,7 +763,8 @@ double-rendering. See issue #347.
             <li>
               <a href="{% url 'studio_api_token_list' %}"
                  data-testid="api-tokens-nav-link"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/api-tokens' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'api_tokens' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 {% if state.active_destination == 'api_tokens' %}aria-current="page"{% endif %}>
                 <i data-lucide="key" class="w-4 h-4"></i>
                 <span>API tokens</span>
               </a>

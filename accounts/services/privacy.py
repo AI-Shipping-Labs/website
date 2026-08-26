@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import uuid
 from dataclasses import dataclass
 from datetime import timezone as datetime_timezone
 from typing import Any
@@ -31,7 +32,7 @@ from integrations.config import (
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = "2026-07-15.1"
+SCHEMA_VERSION = "2026-08-26.1"
 REDACTED = "[privacy-redacted]"
 SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 SENSITIVE_METADATA_KEY_PARTS = (
@@ -767,6 +768,9 @@ def _events_community(user):
         "calendly_webhook_deliveries": _calendly_webhook_export(user),
         "slack_threads": _slack_threads_export(user),
         "slack_authored_messages": _slack_authored_messages_export(user),
+        # Book Club is a Community surface, so the member's reading lives as a
+        # namespaced key here rather than as a ninth top-level section.
+        "book_club": _book_club_export(user),
     }
 
 
@@ -1074,8 +1078,20 @@ def _single_values(model, filters, fields):
 
 
 def _plain(value):
+    """Convert one exported field value to a JSON-native value.
+
+    Deliberately narrow: the export builder owns the plain-value contract, so
+    ``data_export_view`` can call ``json.dumps`` without a ``default=``
+    fallback. A blanket ``default=str`` would quietly stringify any future
+    non-JSON object (a model instance, say) instead of failing loudly.
+    """
     if hasattr(value, "isoformat"):
         return value.isoformat()
+    if isinstance(value, uuid.UUID):
+        # Every UUID-valued exported field (comment content ids, poll ids,
+        # delivery grant / certificate ids) would otherwise raise
+        # ``TypeError: Object of type UUID is not JSON serializable``.
+        return str(value)
     return value
 
 
@@ -1289,6 +1305,104 @@ def _slack_authored_messages_export(user):
             "is_root",
         ],
     )
+
+
+def _book_club_export(user):
+    """Export this member's own Book Club reading, notes, and visibility.
+
+    Strictly first-person: only the member's own ``ChapterRead`` marks,
+    ``Note`` bodies, and ``ReaderProfile`` preference — never another
+    reader's note, read, or profile.
+    """
+    return {
+        "reader_profile": _book_club_reader_profile(user),
+        "chapter_reads": _book_club_chapter_reads(user),
+        "notes": _book_club_notes(user),
+    }
+
+
+def _book_club_reader_profile(user):
+    """Return the member's notes-visibility setting, always as a dict.
+
+    With no stored row the exported ``visibility`` is read from the model
+    field's own default rather than hardcoded, so flipping that default keeps
+    the export truthful with no edit here.
+    """
+    model = _model("bookclub", "ReaderProfile")
+    if model is None:
+        return {
+            "visibility": None,
+            "has_explicit_setting": False,
+            "created_at": None,
+            "updated_at": None,
+        }
+    profile = model.objects.filter(user=user).first()
+    if profile is None:
+        return {
+            "visibility": model._meta.get_field("visibility").get_default(),
+            "has_explicit_setting": False,
+            "created_at": None,
+            "updated_at": None,
+        }
+    return {
+        "visibility": profile.visibility,
+        "has_explicit_setting": True,
+        "created_at": _plain(profile.created_at),
+        "updated_at": _plain(profile.updated_at),
+    }
+
+
+def _book_club_chapter_reads(user):
+    model = _model("bookclub", "ChapterRead")
+    if model is None:
+        return []
+    rows = model.objects.filter(user=user).select_related("chapter__book").order_by("read_at", "pk")
+    return [
+        {
+            "id": row.pk,
+            **_book_club_chapter_context(row.chapter),
+            "read_at": _plain(row.read_at),
+        }
+        for row in rows
+    ]
+
+
+def _book_club_notes(user):
+    model = _model("bookclub", "Note")
+    if model is None:
+        return []
+    rows = model.objects.filter(user=user).select_related("chapter__book").order_by("created_at", "pk")
+    return [
+        {
+            "id": row.pk,
+            **_book_club_chapter_context(row.chapter),
+            # The member's own markdown source. ``body_html`` is a derived
+            # column and is deliberately never exported.
+            "body": row.body,
+            # The join key back to the already-exported
+            # ``communications_activity.comments`` rows on this note's thread.
+            "comment_content_id": _plain(row.comment_content_id),
+            "created_at": _plain(row.created_at),
+            "updated_at": _plain(row.updated_at),
+        }
+        for row in rows
+    ]
+
+
+def _book_club_chapter_context(chapter):
+    """Denormalise readable book/chapter context onto a read or note row.
+
+    A bare ``chapter_id`` is not an intelligible portable artifact; the
+    precedent is ``_questionnaire_responses_export``, which denormalises
+    ``answer.question.prompt``.
+    """
+    return {
+        "chapter_id": chapter.pk,
+        "book_slug": chapter.book.slug,
+        "book_title": chapter.book.title,
+        "chapter_number": chapter.number,
+        "chapter_title": chapter.title,
+    }
 
 
 def _empty_summary():

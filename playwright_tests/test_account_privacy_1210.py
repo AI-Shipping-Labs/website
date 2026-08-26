@@ -229,6 +229,208 @@ class TestAccountPrivacyExport1210:
             context.close()
 
 
+def _seed_book_club_reading(
+    email,
+    *,
+    book_slug,
+    note_body,
+    visibility="public",
+    tier_slug="main",
+):
+    """Seed one reader with two chapter reads, one note, and a visibility row."""
+    from django.db import connection
+
+    from bookclub.models import Book, Chapter, ChapterRead, Note, ReaderProfile
+
+    user = create_user(email, tier_slug=tier_slug)
+    book, _ = Book.objects.get_or_create(
+        slug=book_slug,
+        defaults={
+            "title": "Inference Engineering",
+            "author": "Philip Kiely",
+            "status": "current",
+        },
+    )
+    batching, _ = Chapter.objects.get_or_create(
+        book=book, number=1, defaults={"title": "Batching"},
+    )
+    caching, _ = Chapter.objects.get_or_create(
+        book=book, number=2, defaults={"title": "Caching"},
+    )
+    ChapterRead.objects.create(chapter=batching, user=user)
+    ChapterRead.objects.create(chapter=caching, user=user)
+    note = Note.objects.create(chapter=batching, user=user, body=note_body)
+    ReaderProfile.objects.create(user=user, visibility=visibility)
+    connection.close()
+    return user, book, batching, note
+
+
+@pytest.mark.django_db(transaction=True)
+class TestAccountPrivacyBookClubExport1466:
+    def test_book_club_member_finds_their_reading_in_the_download(
+        self, django_server, django_db_blocker, browser
+    ):
+        email = "privacy-bookclub-1466@test.com"
+        note_body = "continuous batching is the win"
+        with django_db_blocker.unblock():
+            _seed_book_club_reading(
+                email,
+                book_slug="privacy-bookclub-1466",
+                note_body=note_body,
+                visibility="public",
+            )
+
+        context = auth_context(browser, email)
+        try:
+            page = context.new_page()
+            page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
+
+            privacy_section = page.get_by_test_id("privacy-data-section")
+            privacy_section.scroll_into_view_if_needed()
+            expect(privacy_section).to_be_visible()
+            payload = _download_export(page, email)
+
+            book_club = payload["events_community"]["book_club"]
+            reads = book_club["chapter_reads"]
+            assert [row["chapter_title"] for row in reads] == ["Batching", "Caching"]
+            assert {row["book_title"] for row in reads} == {"Inference Engineering"}
+            assert [row["chapter_number"] for row in reads] == [1, 2]
+
+            notes = book_club["notes"]
+            assert [row["body"] for row in notes] == [note_body]
+            assert notes[0]["chapter_title"] == "Batching"
+            assert "body_html" not in notes[0]
+
+            assert book_club["reader_profile"]["visibility"] == "public"
+            assert book_club["reader_profile"]["has_explicit_setting"] is True
+        finally:
+            context.close()
+
+    def test_member_who_commented_and_voted_can_export_at_all(
+        self, django_server, django_db_blocker, browser
+    ):
+        email = "privacy-uuid-1466@test.com"
+        with django_db_blocker.unblock():
+            from comments.models import Comment
+            from voting.models import Poll, PollOption, PollVote
+
+            user, _, _, note = _seed_book_club_reading(
+                email,
+                book_slug="privacy-uuid-1466",
+                note_body="my note, with a thread under it",
+            )
+            Comment.objects.create(
+                user=user,
+                content_id=note.comment_content_id,
+                body="replying on my own note thread",
+            )
+            poll = Poll.objects.create(title="Next topic", allow_proposals=True)
+            option = PollOption.objects.create(
+                poll=poll, title="Inference engineering", proposed_by=user,
+            )
+            PollVote.objects.create(poll=poll, option=option, user=user)
+            poll_id = str(poll.pk)
+            option_id = str(option.pk)
+            note_content_id = str(note.comment_content_id)
+
+        context = auth_context(browser, email)
+        try:
+            page = context.new_page()
+            page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
+
+            payload = _download_export(page, email)
+
+            comments = payload["communications_activity"]["comments"]
+            assert [row["body"] for row in comments] == [
+                "replying on my own note thread"
+            ]
+            assert comments[0]["content_id"] == note_content_id
+            assert isinstance(comments[0]["content_id"], str)
+
+            votes = payload["communications_activity"]["poll_votes"]
+            assert votes[0]["poll_id"] == poll_id
+            assert votes[0]["option_id"] == option_id
+            assert isinstance(votes[0]["poll_id"], str)
+
+            proposals = payload["communications_activity"]["poll_proposals"]
+            assert proposals[0]["id"] == option_id
+            assert isinstance(proposals[0]["id"], str)
+
+            note_row = payload["events_community"]["book_club"]["notes"][0]
+            assert note_row["comment_content_id"] == note_content_id
+        finally:
+            context.close()
+
+    def test_export_does_not_expose_another_members_private_notes(
+        self, django_server, django_db_blocker, browser
+    ):
+        email = "privacy-mine-1466@test.com"
+        other_email = "privacy-theirs-1466@test.com"
+        other_note_body = "their private reading note"
+        with django_db_blocker.unblock():
+            from bookclub.models import ChapterRead, Note, ReaderProfile
+
+            _, _, batching, _ = _seed_book_club_reading(
+                email,
+                book_slug="privacy-shared-1466",
+                note_body="my own reading note",
+            )
+            other = create_user(other_email, tier_slug="main")
+            ChapterRead.objects.create(chapter=batching, user=other)
+            Note.objects.create(chapter=batching, user=other, body=other_note_body)
+            ReaderProfile.objects.create(user=other, visibility="private")
+
+        context = auth_context(browser, email)
+        try:
+            page = context.new_page()
+            page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
+
+            with page.expect_download() as download_info:
+                page.get_by_test_id("privacy-export-link").click()
+            raw = Path(download_info.value.path()).read_text()
+            payload = json.loads(raw)
+
+            assert payload["manifest"]["primary_email"] == email
+            assert other_note_body not in raw
+            assert other_email not in raw
+            book_club = payload["events_community"]["book_club"]
+            assert [row["body"] for row in book_club["notes"]] == [
+                "my own reading note"
+            ]
+            assert len(book_club["chapter_reads"]) == 2
+        finally:
+            context.close()
+
+    def test_member_with_no_book_club_history_gets_a_clean_export(
+        self, django_server, django_db_blocker, browser
+    ):
+        email = "privacy-nobookclub-1466@test.com"
+        with django_db_blocker.unblock():
+            create_user(email, tier_slug="free")
+
+        context = auth_context(browser, email)
+        try:
+            page = context.new_page()
+            page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
+
+            payload = _download_export(page, email)
+
+            book_club = payload["events_community"]["book_club"]
+            assert book_club["chapter_reads"] == []
+            assert book_club["notes"] == []
+            assert book_club["reader_profile"]["has_explicit_setting"] is False
+            assert book_club["reader_profile"]["visibility"] == _reader_visibility_default()
+            assert book_club["reader_profile"]["created_at"] is None
+        finally:
+            context.close()
+
+
+def _reader_visibility_default():
+    from bookclub.models import ReaderProfile
+
+    return ReaderProfile._meta.get_field("visibility").get_default()
+
+
 @pytest.mark.django_db(transaction=True)
 class TestAccountPrivacyDeletionRequest1398:
     def test_free_member_requests_deletion_and_remains_signed_in(

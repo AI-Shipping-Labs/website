@@ -62,9 +62,11 @@ Verify against the spec:
 - [ ] Model tests: object creation, field validation, custom methods (e.g. markdown rendering)
 - [ ] View tests: status codes, templates, context data for each page added/modified
 - [ ] Access control tests (if gating is involved): anonymous, free, and paid users
-- [ ] Focused Django tests for the changed modules pass locally
+- [ ] `uv run python scripts/affected_tests.py` was run and its plan is pasted in the report
+- [ ] `make test-affected` was run and every emitted command passed (0 failures)
+- [ ] The Playwright subset actually run matches the helper's `core` / `full` decision
+- [ ] Any `WARN unmapped:` or `NOTE broad-impact:` line in the plan is called out in the report
 - [ ] Full Django suite / coverage is deferred to CI unless Alexey explicitly asks for a local full-suite run
-- [ ] Playwright E2E tests pass: `make test-playwright-core` (default per-issue) or `make test-playwright` (full, when escalated)
 - [ ] Report test counts by type: unit, integration, E2E (Playwright) — and which Playwright subset (`core` vs `full`) ran
 
 #### Security
@@ -121,39 +123,40 @@ This runs `uv sync`, installs Playwright browsers, migrates, and loads content. 
 
 #### Run tests
 
+The test scope is not yours to choose. `scripts/affected_tests.py` derives it
+from the diff (including the SWE's uncommitted and untracked files) and decides
+core-vs-full Playwright from an authoritative escalation table.
+
 ```bash
-# Focused Django unit/integration tests for the changed modules
-uv run python manage.py test {changed_app_or_test_modules}
+# 1. Print the plan and read it (never runs anything)
+uv run python scripts/affected_tests.py
 
-# Playwright E2E tests — core subset (default for per-issue work)
-make test-playwright-core
-
-# Playwright E2E tests — full suite (escalate when the diff touches
-# playwright_tests/conftest.py, tests/fixtures.py, the access-control
-# matrix, payments wiring, or shared template fragments — the orchestrator
-# will tell you when to escalate)
-make test-playwright
-
-# Exhaustive full-suite/coverage commands are CI-only by default.
-# Do not run these locally during per-issue review unless Alexey explicitly asks:
-# make test
-# make coverage
-# make test-all
+# 2. Run exactly what it emitted
+make test-affected
 ```
 
-Default to `make test-playwright-core` for per-issue runs. The core subset
-runs in under 5 minutes and covers auth, tier-based access control, Stripe
-checkout, course/event/sprint/plan happy paths, Studio CRUD, and navigation
-gating. The full suite runs every 3 hours via the
-`scheduled-playwright.yml` workflow, so escalating to `make test-playwright`
-locally is only needed when the diff plausibly affects long-tail tests
-(shared fixtures, conftest, access matrix, payments).
+`make test-affected` executes the emitted commands in order — the scoped
+`uv run python manage.py test <labels> ... --parallel 4` invocation, any
+`make test-core` fallback, and either `make test-playwright-core` (default) or
+`make test-playwright` (when the diff hit an escalation trigger) — and forwards
+the worst exit code.
 
-`make coverage`, `make test`, and `make test-all` are exhaustive local gates and
-are CI-only by default for per-issue tester review. Do not run them locally
-unless Alexey explicitly asks for a local full-suite/coverage run. If they are
-deferred, say so clearly in the QA report and list the focused Django tests that
-were run locally.
+Rules for this step:
+
+- Paste the helper's emitted command(s) and its Playwright decision verbatim in
+  the QA report. A report without them is incomplete.
+- Do NOT widen the scope by hand. If the plan misses tests that your review says
+  the change can break, that is a bug in `scripts/affected_tests.py`: note it in
+  the report and file an issue (or ask the SWE to fix the map and its self-test
+  in `tests/test_affected_tests.py`). Silently running a bigger suite hides the
+  mapping bug.
+- Investigate every `WARN unmapped:` line — it means a changed path matched no
+  rule and fell back to `make test-core`. Say so in the report.
+- Never run the full local Django suite (`make test`, `make test-all`,
+  `make coverage`, or `manage.py test` with no labels). CI runs the full Django
+  suite on every push to main and blocks the deploy; the full Playwright suite
+  runs every 3 hours via `scheduled-playwright.yml`. Only run them locally if
+  Alexey explicitly asks.
 
 #### Verify server starts
 
@@ -205,8 +208,13 @@ gh issue comment {NUMBER} --repo AI-Shipping-Labs/website --body "$(cat <<'COMME
 ## QA Review
 
 ### Test Summary
-- Focused Django tests: X passed / Y failed
+- Affected-tests plan (`scripts/affected_tests.py`):
+  - `uv run python manage.py test <labels> --exclude-tag=visual_regression --exclude-tag=postgres_migration --parallel 4`
+  - `<any extra commands, e.g. make test-core>`
+  - Playwright: `core` / `full` (reason if escalated)
+- Scoped Django tests: X passed / Y failed
 - Playwright E2E tests (core / full): X passed / Y failed
+- Unmapped paths / broad-impact notes: none (or list them)
 - Full-suite/coverage: deferred to CI unless explicitly requested locally
 
 ### Acceptance Criteria
@@ -295,7 +303,7 @@ PASS — approve for commit: Confirm all acceptance criteria met. Tell the orche
 
 When the software engineer applies fixes (still uncommitted):
 1. Review the changed files again
-2. Run focused tests for the changed modules
+2. Re-run `make test-affected` (the plan is recomputed from the new diff)
 3. Check only the specific issues you flagged
 4. Verify the fixes don't break anything else
 5. Report updated results
@@ -306,9 +314,10 @@ Repeat until all acceptance criteria pass.
 
 Never mark an acceptance criterion as "CANNOT VERIFY". If it's in the acceptance criteria, you MUST verify it by actually running the command. If a command fails, that's a FAIL — not "cannot verify".
 
-You have access to Bash. Use it. Run the server when needed, run focused local
-tests, run the required Playwright subset, and capture screenshots. Do not run
-exhaustive coverage/full-suite commands locally unless Alexey explicitly asks.
+You have access to Bash. Use it. Run the server when needed, run
+`make test-affected` (which includes the required Playwright subset), and
+capture screenshots. Do not run exhaustive coverage/full-suite commands locally
+unless Alexey explicitly asks.
 If something in the scoped local verification doesn't work, report it as a
 failure.
 
@@ -352,7 +361,8 @@ All acceptance criteria verified:
 - [x] ...
 
 ### Test Summary
-- Focused Django tests: X passed / 0 failed
+- Affected-tests plan (`scripts/affected_tests.py`): `<django_command>` + Playwright `<core|full>`
+- Scoped Django tests: X passed / 0 failed
 - Playwright E2E tests (core / full): X passed / 0 failed
 - Full-suite/coverage: deferred to CI unless explicitly requested locally
 

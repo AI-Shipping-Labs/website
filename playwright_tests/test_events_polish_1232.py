@@ -337,9 +337,17 @@ def test_past_detail_closure_is_truthful_for_plain_gated_recap_and_workshop_stat
     expect(member_page.get_by_text(closure, exact=True)).to_have_count(0)
     assert "https://protected.example.com/hidden.mp4" not in member_page.content()
 
+    # Issue #1458: the recap body moved to its own /recap page, so the detail
+    # page carries the CTA instead of the recap markup. The #1232 contract is
+    # unchanged: a recap still suppresses the "no recording" closure.
     page.goto(f"{django_server}{recap.get_absolute_url()}", wait_until="domcontentloaded")
-    expect(page.get_by_text("Recap 1232", exact=True)).to_be_visible()
+    expect(page.get_by_test_id("event-recap-cta")).to_be_visible()
+    expect(page.get_by_text("Recap 1232", exact=True)).to_have_count(0)
     expect(page.get_by_text(closure, exact=True)).to_have_count(0)
+
+    page.get_by_test_id("event-recap-cta-link").click()
+    page.wait_for_load_state("domcontentloaded")
+    expect(page.get_by_text("Recap 1232", exact=True)).to_be_visible()
 
     page.goto(
         f"{django_server}{workshop_event.get_absolute_url()}",

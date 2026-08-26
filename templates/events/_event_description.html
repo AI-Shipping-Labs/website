@@ -1,9 +1,12 @@
-{# Issue #713: time-derived gate; render recap as soon as effective end passes. #}
-{% if event.has_recap and event.is_past %}
-<div class="event-recap space-y-12">
-  {{ event.recap_html|safe }}
-</div>
-{% elif event.description_html %}
+{% comment %}
+Issue #1458: the recap body no longer renders inline here. It lives at
+/events/<id>/<slug>/recap (templates/events/event_recap.html) and the detail
+page links to it through events/_event_recap_cta.html. Rendering the same body
+at two URLs splits SEO and lets the event page grow without bound, so the
+event's own description always renders here — including on past events that
+have a recap.
+{% endcomment %}
+{% if event.description_html %}
 <div class="prose">
   {{ event.description_html|safe }}
 </div>

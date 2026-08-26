@@ -107,6 +107,9 @@ WRITABLE_FIELDS = {
     "materials",
     # Issue #1358: attach/detach an existing event to a series (pk/slug/null).
     "event_series",
+    # Issue #1458: Studio/API-authored recap notes (Markdown). Empty string
+    # clears them; a synced content-repo recap, when present, resurfaces.
+    "recap_notes",
 }
 
 VALID_KINDS = {value for value, _label in EVENT_KIND_CHOICES}
@@ -172,6 +175,17 @@ _EVENT_SERIES_REQUEST_SCHEMA = {
     ),
 }
 
+_RECAP_NOTES_REQUEST_SCHEMA = {
+    "type": "string",
+    "description": (
+        "Studio/API-authored recap notes for this event (Markdown). Rendered "
+        "on the event's own recap page at /events/<id>/<slug>/recap once the "
+        "event has ended. Empty string clears the notes; a synced "
+        "content-repo recap, when present, then resurfaces. Never written or "
+        "overwritten by content sync."
+    ),
+}
+
 _EVENT_EXAMPLE = {
     "id": 42,
     "slug": "office-hours-2026-05-05",
@@ -224,6 +238,10 @@ _EVENT_EXAMPLE = {
         }
     ],
     "banner_url": "https://cdn.aishippinglabs.com/banners/event/office-hours.jpg",
+    "recap_notes": "## What we covered\n\nBatching and KV cache.",
+    "has_recap": True,
+    "recap_published": True,
+    "recap_url": "/events/42/office-hours-2026-05-05/recap",
     "origin": "studio",
     "source_repo": "",
     "source_path": "",
@@ -296,6 +314,13 @@ def serialize_event(event):
         "materials": event.materials or [],
         "hosts": [_serialize_host(host) for host in event.ordered_hosts],
         "banner_url": effective_banner_url(event),
+        # Issue #1458: Studio/API-authored recap notes plus the derived
+        # publication state. ``has_recap`` is true for a synced content-repo
+        # recap too, even though ``recap_notes`` is empty in that case.
+        "recap_notes": event.recap_notes or "",
+        "has_recap": event.has_recap,
+        "recap_published": event.recap_is_published,
+        "recap_url": event.get_recap_url(),
         "origin": event.origin,
         "source_repo": event.source_repo or "",
         "source_path": event.source_path or "",
@@ -446,7 +471,7 @@ def _collect_event_values(data, *, existing=None, require_description=True):
     elif existing is None and require_description:
         errors["description"] = "Description is required."
 
-    for field in ("timezone", "zoom_join_url", "location"):
+    for field in ("timezone", "zoom_join_url", "location", "recap_notes"):
         if field in data:
             values[field] = coerce_optional_text(data[field])
     if "timezone" in values and not is_valid_timezone(values["timezone"]):
@@ -826,6 +851,7 @@ def _maybe_enqueue_banner(event, generate_banner):
                             "clears the field."
                         ),
                     },
+                    "recap_notes": _RECAP_NOTES_REQUEST_SCHEMA,
                     "materials": {
                         "type": "array",
                         "items": {
@@ -1088,6 +1114,7 @@ def events_collection(request):
                             "clears the field."
                         ),
                     },
+                    "recap_notes": _RECAP_NOTES_REQUEST_SCHEMA,
                     "materials": {
                         "type": "array",
                         "items": {

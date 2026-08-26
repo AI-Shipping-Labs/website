@@ -24,6 +24,8 @@ from events.views.pages import (
     event_detail_no_slug_redirect,
     event_feedback_submit,
     event_join_redirect,
+    event_recap,
+    event_recap_legacy,
     event_series_no_slug_redirect,
     event_series_public,
     events_calendar,
@@ -147,6 +149,23 @@ urlpatterns = [
         'events/<int:event_id>/<slug:slug>/feedback',
         event_feedback_submit,
         name='event_feedback_submit',
+    ),
+    # Issue #1458: event recap page. Registered BEFORE the canonical
+    # ``events/<int:event_id>/<slug:slug>`` route below so the literal
+    # ``recap`` segment is not swallowed by the slug converter — same
+    # pattern as ``join`` / ``feedback`` / ``recording.mp4``.
+    path(
+        'events/<int:event_id>/<slug:slug>/recap',
+        event_recap,
+        name='event_recap',
+    ),
+    # Issue #1458: legacy slug-only recap URL. #393 retired this route
+    # entirely; it now 301s instead of 404ing so stale links from old
+    # emails and external posts still land somewhere useful.
+    path(
+        'events/<slug:slug>/recap',
+        event_recap_legacy,
+        name='event_recap_legacy',
     ),
     # Issue #1134: access-controlled recording serving endpoint. The URL
     # MUST end in ``.mp4`` so ``detect_video_source`` classifies the

@@ -4561,6 +4561,7 @@
                       "end_datetime": "2026-05-05T18:00:00+02:00",
                       "event_series": null,
                       "external_host": "",
+                      "has_recap": true,
                       "host_email": "host@example.com",
                       "hosts": [
                         {
@@ -4589,6 +4590,9 @@
                       "origin": "studio",
                       "platform": "zoom",
                       "published": true,
+                      "recap_notes": "## What we covered\n\nBatching and KV cache.",
+                      "recap_published": true,
+                      "recap_url": "/events/42/office-hours-2026-05-05/recap",
                       "recording_url": "https://www.youtube.com/watch?v=16EUIZQTiAo",
                       "required_level": 0,
                       "slug": "office-hours-2026-05-05",
@@ -4728,6 +4732,10 @@
                   "published": {
                     "type": "boolean"
                   },
+                  "recap_notes": {
+                    "description": "Studio/API-authored recap notes for this event (Markdown). Rendered on the event's own recap page at /events/<id>/<slug>/recap once the event has ended. Empty string clears the notes; a synced content-repo recap, when present, then resurfaces. Never written or overwritten by content sync.",
+                    "type": "string"
+                  },
                   "recording_url": {
                     "description": "Optional primary recording URL. Empty string clears the field.",
                     "format": "uri",
@@ -4818,6 +4826,7 @@
                   "end_datetime": "2026-05-05T18:00:00+02:00",
                   "event_series": null,
                   "external_host": "",
+                  "has_recap": true,
                   "host_email": "host@example.com",
                   "hosts": [
                     {
@@ -4846,6 +4855,9 @@
                   "origin": "studio",
                   "platform": "zoom",
                   "published": true,
+                  "recap_notes": "## What we covered\n\nBatching and KV cache.",
+                  "recap_published": true,
+                  "recap_url": "/events/42/office-hours-2026-05-05/recap",
                   "recording_url": "https://www.youtube.com/watch?v=16EUIZQTiAo",
                   "required_level": 0,
                   "slug": "office-hours-2026-05-05",
@@ -4941,6 +4953,7 @@
                   "end_datetime": "2026-05-05T18:00:00+02:00",
                   "event_series": null,
                   "external_host": "",
+                  "has_recap": true,
                   "host_email": "host@example.com",
                   "hosts": [
                     {
@@ -4969,6 +4982,9 @@
                   "origin": "studio",
                   "platform": "zoom",
                   "published": true,
+                  "recap_notes": "## What we covered\n\nBatching and KV cache.",
+                  "recap_published": true,
+                  "recap_url": "/events/42/office-hours-2026-05-05/recap",
                   "recording_url": "https://www.youtube.com/watch?v=16EUIZQTiAo",
                   "required_level": 0,
                   "slug": "office-hours-2026-05-05",
@@ -5115,6 +5131,10 @@
                   "published": {
                     "type": "boolean"
                   },
+                  "recap_notes": {
+                    "description": "Studio/API-authored recap notes for this event (Markdown). Rendered on the event's own recap page at /events/<id>/<slug>/recap once the event has ended. Empty string clears the notes; a synced content-repo recap, when present, then resurfaces. Never written or overwritten by content sync.",
+                    "type": "string"
+                  },
                   "recording_url": {
                     "description": "Optional primary recording URL. Empty string clears the field.",
                     "format": "uri",
@@ -5179,6 +5199,7 @@
                   "end_datetime": "2026-05-05T18:00:00+02:00",
                   "event_series": null,
                   "external_host": "",
+                  "has_recap": true,
                   "host_email": "host@example.com",
                   "hosts": [
                     {
@@ -5207,6 +5228,9 @@
                   "origin": "studio",
                   "platform": "zoom",
                   "published": true,
+                  "recap_notes": "## What we covered\n\nBatching and KV cache.",
+                  "recap_published": true,
+                  "recap_url": "/events/42/office-hours-2026-05-05/recap",
                   "recording_url": "https://www.youtube.com/watch?v=16EUIZQTiAo",
                   "required_level": 0,
                   "slug": "office-hours-2026-05-05",

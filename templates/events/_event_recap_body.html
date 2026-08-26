@@ -1,0 +1,24 @@
+{% comment %}
+Issue #1458 — single owner for recap HTML emission.
+
+Two shapes, matching what templates/events/_event_description.html used to do
+inline:
+
+- Studio/API-authored notes (`recap_notes_html`) are markdown rendered by the
+  same `render_description_html` pipeline as descriptions, so they wrap in the
+  standard `.prose` container.
+- A synced content-repo recap (`recap_html`) is full section markup with its
+  own headings/embeds, so it keeps the `event-recap space-y-12` wrapper.
+
+Precedence lives in `Event.recap_body_html`; this partial only renders.
+Never emit recap HTML anywhere else — include this partial instead.
+{% endcomment %}
+{% if event.recap_notes_html %}
+<div class="prose" data-testid="event-recap-notes-body">
+  {{ event.recap_notes_html|safe }}
+</div>
+{% elif event.recap_html %}
+<div class="event-recap space-y-12" data-testid="event-recap-synced-body">
+  {{ event.recap_html|safe }}
+</div>
+{% endif %}

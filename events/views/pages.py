@@ -937,6 +937,84 @@ def event_feedback_submit(request, event_id, slug):
     return redirect(f'{event.get_absolute_url()}?feedback=thanks')
 
 
+def event_recap(request, event_id, slug):
+    """Public recap page for a single event.
+
+    Issue #1458. The recap body used to render inline on the event detail
+    page (#393); it now lives at its own ``/events/<id>/<slug>/recap`` URL
+    so a recap never has to become an article and Studio-origin events
+    (book club, sprint calls) can have notes at all.
+
+    Gates mirror ``event_detail``, in this order:
+
+    1. Cosmetic slug mismatch -> 301 to the canonical recap URL.
+    2. Draft (and the #881 retired-duplicate signature) -> 404 for
+       non-staff.
+    3. No recap body at all -> 404.
+    4. Recap body present but the event has not happened yet: staff get a
+       preview with a "not visible to members yet" notice; everyone else
+       is 302'd to the event detail page — the event exists and its page
+       is the useful destination, so no dead end and no early leak.
+
+    Access: public, no tier gate — parity with the previously ungated
+    inline recap. Recording playback keeps its own gate on the
+    event/workshop surfaces; this page never links a raw stream URL.
+    """
+    event = get_object_or_404(
+        Event.objects.select_related('workshop', 'event_series'),
+        pk=event_id,
+    )
+
+    if slug != event.slug:
+        canonical = event.get_recap_url()
+        if canonical:
+            return redirect(canonical, permanent=True)
+        # No recap body: fall through to the no-recap handling below on
+        # the canonical id so we never mint an empty redirect target.
+        raise Http404
+
+    if event.status == 'draft' and not request.user.is_staff:
+        raise Http404
+
+    if (
+        event.status == 'cancelled'
+        and not event.published
+        and not request.user.is_staff
+    ):
+        raise Http404
+
+    if not event.has_recap:
+        raise Http404
+
+    is_unpublished_preview = False
+    if not event.is_past:
+        if not request.user.is_staff:
+            return redirect(event.get_absolute_url())
+        is_unpublished_preview = True
+
+    return render(request, 'events/event_recap.html', {
+        'event': event,
+        'event_time_display': build_event_time_display(event, request.user),
+        # Staff-only "not visible to members yet" notice for the
+        # pre-publication preview.
+        'is_unpublished_preview': is_unpublished_preview,
+    })
+
+
+def event_recap_legacy(request, slug):
+    """Permanent redirect for the slug-only ``/events/<slug>/recap`` URL.
+
+    Issue #1458, mirroring the ``event_join_legacy`` precedent: stale
+    recap links in old emails and external posts must land somewhere
+    useful instead of 404ing. Redirects to the canonical recap URL when
+    the event has a recap, otherwise to the event detail page. Only an
+    unknown slug still 404s.
+    """
+    event = get_object_or_404(Event, slug=slug)
+    target = event.get_recap_url() or event.get_absolute_url()
+    return redirect(target, permanent=True)
+
+
 def event_detail_no_slug_redirect(request, event_id):
     """Permanent redirect from ``/events/<id>`` to the canonical id+slug URL.
 

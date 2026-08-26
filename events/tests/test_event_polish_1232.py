@@ -196,7 +196,13 @@ class PastEventClosureStateTest(TestCase):
         event = _event(slug="past-with-recap", recap_html="<h2>Session recap</h2>")
 
         response = self.client.get(event.get_absolute_url())
-        self.assertContains(response, "Session recap")
+        # Issue #1458: the recap body moved to its own /recap page, so the
+        # detail page surfaces the CTA rather than the recap markup. The
+        # #1232 contract is unchanged: a recap still suppresses the
+        # "no recording" closure.
+        self.assertContains(response, 'data-testid="event-recap-cta"')
+        self.assertContains(response, event.get_recap_url())
+        self.assertNotContains(response, "Session recap")
         self.assertNotContains(response, NO_RECORDING_COPY)
 
     def test_linked_workshop_suppresses_closure_and_keeps_handoff(self):

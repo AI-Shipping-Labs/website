@@ -1,0 +1,28 @@
+{% comment %}
+Issue #1458 — callout/action card pointing at the event's own recap page.
+
+Renders only when `event.recap_is_published` (has a recap body AND the event
+has happened). There is deliberately no "recap coming soon" placeholder: an
+event without a published recap shows nothing here.
+
+Card chrome comes from `content/_info_card_classes.html` (the documented
+`rounded-lg border border-border p-6` string, identical for the callout role)
+plus the band-contrast surface token; the CTA is an explicit `button_classes`
+button, per the card role contract in _docs/design-system.md.
+{% endcomment %}
+{% load accounts_extras %}
+{% if event.recap_is_published %}
+<section class="{% include 'content/_info_card_classes.html' %} mb-12 bg-card"
+         aria-labelledby="event-recap-cta-title"
+         data-testid="event-recap-cta">
+  <h2 id="event-recap-cta-title" class="text-lg font-semibold text-foreground">Recap</h2>
+  <p class="mt-1 text-sm text-muted-foreground">Notes from this session are written up in the recap.</p>
+  <div class="mt-4">
+    <a href="{{ event.get_recap_url }}"
+       class="{% button_classes 'primary' %}"
+       data-testid="event-recap-cta-link">
+      Read the recap
+    </a>
+  </div>
+</section>
+{% endif %}

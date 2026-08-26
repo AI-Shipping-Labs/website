@@ -196,8 +196,10 @@ class TestIncludeMergeRegressions:
         _clear_content()
         event = _create_event_recap()
 
+        # Issue #1458: rendered content-repo recaps live at the event's own
+        # /recap page now, not inline on the event detail page.
         page.goto(
-            f"{django_server}{event.get_absolute_url()}",
+            f"{django_server}{event.get_recap_url()}",
             wait_until="domcontentloaded",
         )
         body = page.content()

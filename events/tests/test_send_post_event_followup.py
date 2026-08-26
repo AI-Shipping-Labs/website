@@ -186,6 +186,24 @@ class SendPostEventFollowupOneTest(TestCase):
         # CTA absent by default (issue #679 not shipped).
         self.assertNotIn('Leave feedback', sent_html)
 
+    @patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-4b')
+    def test_published_recap_replaces_the_notes_placeholder(self, mock_send):
+        # Issue #1458: the placeholder used to be unconditional, so every
+        # follow-up promised notes that never arrived.
+        Event.objects.filter(pk=self.event.pk).update(
+            recap_notes='## What we covered\n\nBatching.',
+            recap_notes_html='<h2>What we covered</h2><p>Batching.</p>',
+        )
+        send_post_event_followup_one(self.event.pk, self.user.pk)
+
+        sent_html = mock_send.call_args.args[2]
+        self.event.refresh_from_db()
+        self.assertIn(self.event.get_recap_url(), sent_html)
+        self.assertIn('Read the recap', sent_html)
+        self.assertNotIn(
+            'Workshop notes are still being put together', sent_html,
+        )
+
     @patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-5')
     def test_blank_summary_uses_generic_fallback(self, mock_send):
         Event.objects.filter(pk=self.event.pk).update(post_event_summary='')

@@ -195,8 +195,16 @@ def send_post_event_followup_one(event_id, user_id):
         'event_summary': event_summary,
         'recording_url': recording_url,
         'event_url': event_url,
-        'notes_placeholder': True,
     }
+
+    # Issue #1458: link the real recap when one is published. Only fall back
+    # to the "notes are still being put together" line when there is nothing
+    # to link — before this the placeholder was unconditional, so every
+    # follow-up promised notes that never arrived.
+    if event.recap_is_published:
+        context['recap_url'] = f'{site_url}{event.get_recap_url()}'
+    else:
+        context['notes_placeholder'] = True
 
     feedback_url = _build_feedback_url(event)
     if feedback_url:

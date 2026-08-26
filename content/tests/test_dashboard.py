@@ -610,6 +610,10 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         self.assertNotIn('data-testid="dashboard-commitment-list"', content)
         self.assertNotIn('No upcoming events', content)
 
+    # Pinned mid-week (issue #1462): ``_get_this_week_events`` truncates the
+    # weekly zone at Sunday 23:59:59, so a relative ``now + 3 hours`` fixture
+    # falls into next week when the suite runs late on a Sunday UTC.
+    @freeze_time('2026-08-12T10:00:00Z')
     def test_shows_registered_upcoming_events(self):
         future = timezone.now() + timedelta(hours=3)
         event = Event.objects.create(
@@ -621,6 +625,8 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         self.assertContains(response, 'AI Workshop')
 
+    # Pinned mid-week for the same reason as the test above (issue #1462).
+    @freeze_time('2026-08-12T10:00:00Z')
     def test_shows_event_date(self):
         future = timezone.now() + timedelta(hours=3)
         event = Event.objects.create(
@@ -872,6 +878,110 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
     @freeze_time('2026-08-14T10:00:00Z')
     def test_single_registered_series_occurrence_stays_in_week_on_friday(self):
         self._assert_single_registered_series_occurrence()
+
+
+# ============================================================
+# Weekly zone boundary contract (issue #1462)
+# ============================================================
+
+
+class WeeklyZoneBoundaryTest(TierSetupMixin, TestCase):
+    """Pin the "Your week" boundary on every weekday.
+
+    ``_get_this_week_events`` (``content/views/home.py``) truncates
+    ``dashboard_upcoming_events`` at that week's Sunday 23:59:59 in the
+    member's timezone, and
+    ``templates/content/_dashboard_commitment_zones.html`` renders the
+    "View all events" link only when that list is non-empty. Relative
+    fixtures such as ``now + 2 days`` therefore change meaning with the
+    wall-clock weekday, which is how issue #1462's Playwright failure
+    only reproduced on Saturdays and Sundays. These tests walk all seven
+    weekdays under a frozen clock so the boundary is asserted from both
+    sides, deterministically and without a browser.
+    """
+
+    # Monday 2026-08-10 through Sunday 2026-08-16, one ISO week.
+    FROZEN_WEEKDAYS = [
+        ('Monday', '2026-08-10T10:00:00Z'),
+        ('Tuesday', '2026-08-11T10:00:00Z'),
+        ('Wednesday', '2026-08-12T10:00:00Z'),
+        ('Thursday', '2026-08-13T10:00:00Z'),
+        ('Friday', '2026-08-14T10:00:00Z'),
+        ('Saturday', '2026-08-15T10:00:00Z'),
+        ('Sunday', '2026-08-16T10:00:00Z'),
+    ]
+    # Last moment inside that week's rendered window.
+    IN_WEEK_START = datetime(2026, 8, 16, 23, 0, tzinfo=UTC)
+    # First moment after that week's Sunday 23:59:59.999999.
+    NEXT_WEEK_START = datetime(2026, 8, 17, 0, 30, tzinfo=UTC)
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='weekboundary@example.com', password='testpass',
+        )
+        self.client.login(
+            email='weekboundary@example.com', password='testpass',
+        )
+
+    def _register_event(self, start_datetime):
+        Event.objects.all().delete()
+        event = Event.objects.create(
+            slug='week-boundary-event',
+            title='Week Boundary Event',
+            start_datetime=start_datetime,
+            status='upcoming',
+        )
+        EventRegistration.objects.create(user=self.user, event=event)
+        return event
+
+    def test_in_week_event_renders_view_all_events_on_every_weekday(self):
+        for weekday, frozen_at in self.FROZEN_WEEKDAYS:
+            with self.subTest(weekday=weekday), freeze_time(frozen_at):
+                self.assertLess(timezone.now(), self.IN_WEEK_START)
+                event = self._register_event(self.IN_WEEK_START)
+
+                response = self.client.get('/')
+                content = response.content.decode()
+
+                self.assertEqual(
+                    [row.pk for row in response.context[
+                        'dashboard_upcoming_events'
+                    ]],
+                    [event.pk],
+                )
+                link = re.search(
+                    r'<a href="(?P<href>[^"]+)"[^>]*>\s*View all events',
+                    content,
+                )
+                self.assertIsNotNone(
+                    link, 'The "View all events" link should be rendered.',
+                )
+                self.assertEqual(link.group('href'), '/events')
+
+    def test_next_week_event_hides_view_all_events_on_every_weekday(self):
+        for weekday, frozen_at in self.FROZEN_WEEKDAYS:
+            with self.subTest(weekday=weekday), freeze_time(frozen_at):
+                self.assertLess(timezone.now(), self.NEXT_WEEK_START)
+                self._register_event(self.NEXT_WEEK_START)
+
+                response = self.client.get('/')
+                content = response.content.decode()
+
+                self.assertEqual(
+                    response.context['dashboard_upcoming_events'], [],
+                )
+                self.assertNotIn('View all events', content)
+                # The member is not stranded: the home feed still offers
+                # an /events destination.
+                self.assertIsNotNone(
+                    re.search(
+                        r'<a href="/events"[^>]*'
+                        r'data-testid="dashboard-feed-destination"[^>]*>\s*'
+                        r'Events',
+                        content,
+                    ),
+                    'The feed destinations should still link to /events.',
+                )
 
 
 # ============================================================

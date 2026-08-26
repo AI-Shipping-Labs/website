@@ -15,8 +15,17 @@ from pathlib import Path
 MAX_CONTEXT_LINES = 24
 MAX_CONTEXT_CHARS = 4000
 
+LOG_UNAVAILABLE_NOTE = "Failed logs were not available when this notification ran."
+JOBS_UNAVAILABLE_NOTE = "Failure details were not available when this notification ran."
+
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s+")
+# ``gh run view --log-failed`` prefixes every line with ``job\tstep\t`` before
+# the timestamp. Job-scoped logs (``gh api .../jobs/{id}/logs``) start straight
+# at the timestamp, so the prefix is only stripped when it is really there —
+# otherwise tab characters inside pytest output would eat the line content.
+JOB_PREFIX_RE = re.compile(r"^[^\t]+\t[^\t]+\t(?=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})")
+JOB_ID_FROM_URL_RE = re.compile(r"/job/(\d+)")
 SENSITIVE_RE = re.compile(
     r"(?i)("
     r"authorization|credential|passwd|password|private[-_ ]?key|secret|token|"
@@ -29,6 +38,7 @@ SENSITIVE_RE = re.compile(
 class FailedJob:
     name: str
     url: str = ""
+    job_id: str = ""
 
 
 @dataclass
@@ -82,52 +92,65 @@ def load_failed_jobs(
             continue
         name = str(job.get("name") or "Unnamed failed job")
         url = str(job.get("url") or "")
-        jobs.append(FailedJob(name=name, url=url))
+        jobs.append(FailedJob(name=name, url=url, job_id=_job_id(job)))
 
     if not jobs:
-        return [], "Failure details were not available when this notification ran."
+        return [], JOBS_UNAVAILABLE_NOTE
 
     return jobs, ""
 
 
-def load_failed_log(
-    run_id: str,
+def _job_id(job: dict) -> str:
+    raw_id = job.get("databaseId") or job.get("id") or ""
+    if raw_id:
+        return str(raw_id)
+    match = JOB_ID_FROM_URL_RE.search(str(job.get("url") or ""))
+    return match.group(1) if match else ""
+
+
+def load_job_log(
+    job: FailedJob,
     *,
     repo: str | None = None,
     command_runner: Callable[[Sequence[str]], str] | None = None,
 ) -> tuple[str, str]:
+    """Fetch one failed job's log.
+
+    The run-scoped archive (``gh run view <run_id> --log-failed``) is only
+    served once the whole run has finished, and the ``notify`` job is part of
+    that run \u2014 so it can never succeed there (issue #1462). Job-scoped logs are
+    served as soon as the individual job completes, which is exactly what we
+    need while the parent run is still in progress.
+    """
+    if not job.job_id or not repo:
+        return "", LOG_UNAVAILABLE_NOTE
     runner = command_runner or run_gh
     try:
-        return runner([*_gh_run_args(run_id, repo), "--log-failed"]), ""
+        return runner(["api", f"repos/{repo}/actions/jobs/{job.job_id}/logs"]), ""
     except (GhCommandError, OSError):
-        return "", "Failed logs were not available when this notification ran."
+        return "", LOG_UNAVAILABLE_NOTE
 
 
-def clean_log_line(raw_line: str) -> tuple[str | None, str]:
-    parts = raw_line.rstrip("\n").split("\t", 2)
-    job_name = parts[0] if len(parts) == 3 else None
-    content = parts[2] if len(parts) == 3 else raw_line.rstrip("\n")
-    content = content.lstrip("\ufeff")
+def clean_log_line(raw_line: str) -> str:
+    """Strip the optional ``job\\tstep\\t`` prefix, ANSI codes and timestamp."""
+    line = raw_line.rstrip("\n")
+    if JOB_PREFIX_RE.match(line):
+        line = line.split("\t", 2)[2]
+    content = line.lstrip("\ufeff")
     content = ANSI_RE.sub("", content)
     content = content.lstrip("\ufeff")
     content = TIMESTAMP_RE.sub("", content)
-    return job_name, content.rstrip()
+    return content.rstrip()
 
 
-def split_failed_log_by_job(log_text: str) -> tuple[dict[str, list[str]], list[str]]:
-    grouped: dict[str, list[str]] = {}
-    ungrouped: list[str] = []
-
+def extract_log_lines(log_text: str) -> list[str]:
+    """Return non-empty cleaned content lines from a job or run log."""
+    lines: list[str] = []
     for raw_line in log_text.splitlines():
-        job_name, content = clean_log_line(raw_line)
-        if not content.strip():
-            continue
-        if job_name:
-            grouped.setdefault(job_name, []).append(content)
-        else:
-            ungrouped.append(content)
-
-    return grouped, ungrouped
+        content = clean_log_line(raw_line)
+        if content.strip():
+            lines.append(content)
+    return lines
 
 
 def extract_pytest_node_ids(lines: Sequence[str]) -> list[str]:
@@ -201,12 +224,23 @@ def extract_bounded_context(lines: Sequence[str]) -> list[str]:
     if not lines:
         return []
 
+    # Job-scoped logs (issue #1462) carry the whole job, including setup steps
+    # whose shell echoes start with ">" and would otherwise be mistaken for
+    # pytest failure detail. When pytest reached its FAILURES banner, only look
+    # for detail from there on; infra failures without a banner are unaffected.
+    failures_banner = [
+        index for index, line in enumerate(lines) if " FAILURES " in line
+    ]
+    detail_start = failures_banner[-1] if failures_banner else 0
     failure_detail_centers = [
         index
         for index, line in enumerate(lines)
-        if line.lstrip().startswith((">", "E   ", "E       "))
-        or "AssertionError" in line
-        or "Error:" in line
+        if index >= detail_start
+        and (
+            line.lstrip().startswith((">", "E   ", "E       "))
+            or "AssertionError" in line
+            or "Error:" in line
+        )
     ][:4]
     summary_centers = [
         index
@@ -255,15 +289,12 @@ def collect_failed_job_diagnostics(
     if not jobs:
         return [], jobs_note
 
-    log_text, log_note = load_failed_log(run_id, repo=repo, command_runner=command_runner)
-    grouped, ungrouped = split_failed_log_by_job(log_text)
-
     diagnostics: list[JobDiagnostic] = []
     for job in jobs:
-        lines = grouped.get(job.name, [])
-        if not lines and len(jobs) == 1:
-            lines = ungrouped
-        diagnostics.append(build_job_diagnostic(job, lines, note=log_note))
+        log_text, log_note = load_job_log(job, repo=repo, command_runner=command_runner)
+        diagnostics.append(
+            build_job_diagnostic(job, extract_log_lines(log_text), note=log_note)
+        )
 
     return diagnostics, ""
 
@@ -288,7 +319,7 @@ def format_failure_body(
     ]
 
     if not diagnostics:
-        note = fallback_note or "Failure details were not available when this notification ran."
+        note = fallback_note or JOBS_UNAVAILABLE_NOTE
         lines.append(f"- {note}")
         return "\n".join(lines).rstrip() + "\n"
 

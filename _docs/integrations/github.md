@@ -3,7 +3,9 @@
 This page documents every setting registered in
 `integrations/settings_registry.py` under the `github` group. Each
 section follows the same template — Purpose, Without it, Where to find
-it, Prereqs, Rotation, Test vs live.
+it, Prereqs, Rotation, Test vs live. The first section covers the
+inbound webhook endpoint's retry and idempotency semantics, which are
+code behavior rather than a setting.
 
 The platform reads content from the private `AI-Shipping-Labs/content`
 repository via a GitHub App. The App authenticates as itself (with
@@ -13,6 +15,64 @@ sync (`integrations/services/github_sync/client.py`).
 
 Direct deep-link URLs are intentionally written in code blocks so they
 do not render as clickable links. Copy them into the browser.
+
+## Webhook delivery idempotency
+
+Endpoint: `POST /api/webhooks/github`. GitHub redelivers a payload when
+the endpoint times out or errors, and an operator can replay one from
+"Recent Deliveries" in the App's Advanced tab. The handler treats every
+delivery as a claim so a replay never triggers a second content sync.
+
+Order of checks (each step must pass before the next runs):
+
+| Step | Behavior on failure |
+| --- | --- |
+| Parse the JSON body | 400, nothing recorded |
+| Resolve `repository.full_name` to a `ContentSource` | 404, nothing recorded |
+| Require a configured `webhook_secret` | 400, nothing recorded |
+| Verify `X-Hub-Signature-256` | 400, nothing recorded |
+| Claim the delivery in `WebhookLog.deduplication_key` | 200 `{"status": "duplicate"}` |
+| Filter to `push` on `main`/`master`, then enqueue the sync | 200 `{"status": "error"}`, claim released |
+
+The claim is the unique `WebhookLog.deduplication_key` column, namespaced
+by provider so a GitHub delivery id can never collide with another
+service's fingerprint:
+
+- `github:delivery:<X-GitHub-Delivery>` for a normal delivery. GitHub
+  sends a UUID, which is stored verbatim so an operator can paste a
+  delivery GUID from GitHub's "Recent Deliveries" panel straight into
+  the `WebhookLog` admin search.
+- `github:delivery:sha256:<digest>` when the header is unusually long or
+  contains characters outside `[A-Za-z0-9_-]`, so the key always fits
+  the column and can never be truncated into a collision.
+- `github:body:<digest>` when `X-GitHub-Delivery` is missing or blank.
+  The digest covers the verified `X-Hub-Signature-256` header plus the
+  raw body — never the payload alone. Only a holder of the webhook
+  secret can produce that signature, so an unauthenticated caller cannot
+  steer the key, and two byte-identical signed deliveries collapse into
+  one claim rather than fanning out into duplicate syncs.
+
+Claim semantics:
+
+- The first delivery wins the claim and follows the existing flow:
+  `last_webhook_at` is stamped, an `async_task` is enqueued with a
+  `queued` `SyncLog` (or, if a sync already holds the lock,
+  `sync_requested` is set instead).
+- A repeat of a claimed delivery returns 200 `{"status": "duplicate"}`
+  and performs no side effect at all — no queue entry, no `SyncLog`, no
+  `ContentSource` update, and no second `WebhookLog` row.
+- Concurrent duplicates converge: the unique constraint rejects the
+  losing insert and that request reports the duplicate instead of
+  raising an integrity error.
+- Distinct delivery ids are unaffected and each enqueue independently.
+- A delivery whose processing raised releases its claim (the key is set
+  back to `NULL`, which the unique constraint exempts) and records
+  `attempts` plus `error_message`. A GitHub redelivery of the same id is
+  then processed normally instead of being swallowed as a duplicate.
+
+There is no Studio or public UI for this; the durable record is the
+`WebhookLog` row (Django admin, searchable by `deduplication_key`)
+alongside the usual `SyncLog` history at `/studio/sync/`.
 
 ## GITHUB_APP_ID
 

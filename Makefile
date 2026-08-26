@@ -1,4 +1,4 @@
-.PHONY: css-build css-watch check-tailwind collectstatic run run2 worker dev migrate qcache sync seed test test-core test-judge coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory check-openapi-drift boot-profile clean
+.PHONY: css-build css-watch check-tailwind collectstatic run run2 worker dev migrate qcache sync seed test test-core test-affected test-judge coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory check-openapi-drift boot-profile clean
 
 # Default SITE_BASE_URL for local dev so generated links (unsubscribe,
 # calendar invites, password resets, share URLs) point at the running
@@ -71,8 +71,23 @@ test:
 # Run only the core subset of Django tests (auth, access control, payments,
 # sync happy paths, critical model invariants). Targeted at <45s wall time.
 # See _docs/testing-guidelines.md ("Core test subset") for the tagging policy.
+# ``--parallel 4`` (not bare ``--parallel``, which spawns one worker per core)
+# because ``make test-affected`` emits this target on its fail-closed and
+# hub-module paths -- the bounded-parallelism guarantee has to hold there too.
 test-core:
-	uv run python manage.py test --tag=core --exclude-tag=visual_regression --exclude-tag=postgres_migration --parallel
+	uv run python manage.py test --tag=core --exclude-tag=visual_regression --exclude-tag=postgres_migration --parallel 4
+
+# Run only the tests the current diff can plausibly break. scripts/affected_tests.py
+# maps `git diff --name-only` against origin/main (unioned with staged, unstaged,
+# and untracked work) onto Django test labels plus a core-vs-full Playwright
+# decision, then runs the emitted commands and forwards the worst exit code.
+# This is the per-issue local gate for agents: do NOT run the full Django suite
+# locally -- CI runs it on every push to main and blocks the deploy.
+# Print the plan without running anything:
+#   uv run python scripts/affected_tests.py [--json]
+# See _docs/testing-guidelines.md ("Affected-tests selection").
+test-affected:
+	uv run python scripts/affected_tests.py --run
 
 # Run the live LLM-judge scenario tests (tests/live_judge/). These hit the
 # REAL configured provider (LLM_API_KEY must be set) and assert plain-English

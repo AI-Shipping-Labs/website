@@ -691,20 +691,184 @@ regressions.
 
 ---
 
-## Core test subset (`make test-core`)
+## Affected-tests selection (`make test-affected`)
 
-The full Django suite has thousands of tests and takes 1-3 minutes. For the
-inner loop (TDD, quick sanity checks before pushing) we maintain a tagged
-subset that runs in well under a minute.
+Per-issue local verification runs the tests the diff can plausibly break --
+never the whole Django suite. `scripts/affected_tests.py` derives that scope
+deterministically so neither the software engineer nor the tester has to guess
+(or quietly escalate to `manage.py test`).
 
 ```bash
-make test-core          # ~800 tests in ~30s, parallel
-make test               # full suite, parallel
+uv run python scripts/affected_tests.py            # print the plan, run nothing
+uv run python scripts/affected_tests.py --json     # machine-readable plan
+make test-affected                                 # run exactly the emitted commands
 ```
 
-`make test-core` runs `python manage.py test --tag=core --parallel`. CI
-continues to run the full suite -- the tag is a local-development convenience,
-not a substitute for `make test` before merging.
+The helper is stdlib-only and never imports Django, so it runs in well under a
+second. It diffs against `git merge-base origin/main HEAD` and unions in
+unstaged, staged, and untracked files, because SWE work is still uncommitted
+when the tester reviews it. Exit code 0 means a plan was produced (with
+`--run`, the worst exit code of the executed commands); exit code 2 means git
+failed.
+
+### Why not just run everything locally
+
+The full Django suite is ~14,800 tests. CI already runs it on every push to
+main (`.github/workflows/deploy-dev.yml`) and blocks the deploy on failure, and
+the full Playwright suite runs every 3 hours
+(`.github/workflows/scheduled-playwright.yml`). Repeating either locally adds
+no coverage; with several agents on one box it just produces contention. This
+is also why the emitted Django command uses `--parallel 4` rather than a bare
+`--parallel`: bare spawns one worker per core, which is what melted a 12-core
+box running concurrent agents. CI uses the same bounded value.
+
+### The rule chain
+
+Rules are applied in order; the first match wins for each changed file, except
+rule 2 (escalation), which sets a flag and lets the file fall through.
+
+| # | Changed path | Target |
+|---|---|---|
+| 1 | `_docs/**`, `docs/**`, `specs/**`, and top-level markdown (`README.md`) -- minus anything claimed by rule 3 | nothing -- a docs-only diff short-circuits to `NO TESTS REQUIRED`. Markdown anywhere else is treated as code, because a lot of it is asserted by real tests: `email_app/email_templates/*.md` are the shipped email bodies (rule 8 -> `email_app`), and `.claude/**` has content guards in `tests/` (rule 3). |
+| 2 | escalation triggers (table below) | sets Playwright to `full`, then falls through to the remaining rules |
+| 3 | `.github/**`, `scripts/**`, `Makefile`, `Dockerfile`, `docker-compose.yml`, `entrypoint.sh`, `Procfile.dev`, `deploy/**`, `package*.json`, `.claude/**`, `manage.py` | `tests` |
+| 3 | guarded doc artifacts -- see the table below | the app whose tests read them; also exempts the path from rule 1 |
+| 4 | `website/**` | `tests` + `website` + `make test-core` + full Playwright (every-request blast radius) |
+| 5 | `pyproject.toml`, `uv.lock` | `make test-core` plus a note -- soft trigger, rely on CI for the full suite |
+| 6 | curated hub modules (table below) | the mapped labels |
+| 7 | test files | the exact dotted test module (`studio/tests/test_events.py` -> `studio.tests.test_events`), not the whole app. `playwright_tests/test_X.py` also runs that file directly; `asl_cli/**` runs `uv run pytest asl_cli/tests` |
+| 8 | app source under one of the 20 project apps | that app, plus a one-hop reverse-import expansion (below) |
+| 9 | `templates/<app>/**` | that app (+ core Playwright). `templates/includes/**`, `templates/_partials/**`, `templates/base.html` -> `content` + `make test-core` + full Playwright. Any other template dir -> `make test-core` |
+| 10 | `static/**` | core Playwright only. `tailwind.config.js` escalates to full Playwright (purge config can strip classes on any page) |
+| 11 | `<app>/migrations/**` | that app only. Migrations touching 2+ apps in one diff also add `make test-core` |
+| 12 | anything unmatched | fails closed to `make test-core`, printed as `WARN unmapped: <path>` -- never silently dropped |
+
+The Django targets compose into a single invocation:
+
+```
+uv run python manage.py test <sorted labels> --exclude-tag=visual_regression --exclude-tag=postgres_migration --parallel 4
+```
+
+Playwright is always part of the plan for a non-docs diff: `make
+test-playwright-core` by default, `make test-playwright` when any escalation
+trigger fired. When the plan escalates to the full suite, the per-file
+`uv run pytest playwright_tests/test_X.py -v` commands from rule 7 are dropped
+(with a `NOTE playwright-full-supersedes:` line) -- the full run already covers
+them, and keeping them would boot another server and browser per changed file.
+
+### Guarded doc artifacts
+
+Rule 1 would happily drop every `.md` under `_docs/`, `docs/` and `specs/` --
+but a number of those files are *read and asserted* by real Django tests, so
+dropping them would skip the only guard they have. Those files are listed in
+`CONTRACT_PATHS` (rule 3) and map to the app that reads them:
+
+| Artifact | Target | Read by |
+|---|---|---|
+| `CLAUDE.md`, `AGENTS.md`, `_docs/PROCESS.md`, `_docs/testing-guidelines.md` | `tests` | `tests/test_affected_tests.py` rot guards |
+| `_docs/design-system.md` | `accounts` + `content` | `content/tests/test_design_system_lint.py`, `accounts/tests/test_template_date_vocabulary.py` |
+| `_docs/product.md`, `_docs/content.md`, `specs/06-content-resources.md`, `specs/07-events.md`, `specs/README.md` | `content` | `content/tests/test_taxonomy_copy_1184.py`, `content/tests/test_workshops_public.py` |
+| `_docs/openapi.json` | `api` | `api/tests/test_openapi.py` |
+| `_docs/member-openapi.json` | `member_api` | `member_api/tests/test_openapi.py` |
+| `_docs/integrations/**` | `integrations` | `integrations/tests/*` |
+| `docs/**`, `skills/**` | `member_api` | `member_api/tests/test_usage_docs_1112.py` (the Playwright test over the same artifact is `local_only`, so the core subset does not cover it) |
+
+A doc that a test merely *mentions* -- a `docs_url` string in
+`integrations/settings_registry.py`, say -- is deliberately not listed:
+renaming the file cannot break that assertion, so it stays a no-test path.
+
+`tests/test_affected_tests.py` keeps this honest mechanically: it scans every
+Django test module (tracked and untracked) for artifacts it actually reads and
+fails if one is not covered here. Add a test that reads a new doc and the
+guard tells you to update the table.
+
+### Escalation table (authoritative)
+
+This table is the source of truth for local Playwright escalation and
+supersedes the prose list that used to live in `_docs/PROCESS.md`. It is
+encoded as `ESCALATION_TRIGGERS` in `scripts/affected_tests.py` and pinned by
+`tests/test_affected_tests.py`.
+
+| Trigger | Reason |
+|---|---|
+| `playwright_tests/conftest.py` | shared fixtures |
+| `tests/fixtures.py` | shared fixtures |
+| `content/access.py`, `content/tier_config.py`, `accounts/gating.py`, `playwright_tests/test_access_control.py` | access-control matrix |
+| `payments/tier_state.py`, `payments/stripe_links.py`, `payments/services/**`, `payments/views/**` (webhook handlers live under `payments/services/`) | payments wiring |
+| `templates/includes/**`, `templates/_partials/**`, `templates/base.html` | shared template fragments |
+| `website/**` (settings, urls, middleware, context processors), `accounts/context_processors.py` | every-request/every-page surface |
+| `tailwind.config.js` | content-purge config, can strip classes on any page |
+| `integrations/middleware.py` | every request |
+| `pyproject.toml`, `uv.lock` | soft trigger -- note only, does not force full local Playwright |
+
+Note that `payments/tests/**` deliberately does not escalate: editing a
+payments test is not the same as editing payments wiring.
+
+### Curated hub-module map
+
+A small, reviewable dict for known cross-cutting files, whose blast radius is
+wider than "the app that owns them". `tests/test_affected_tests.py` asserts
+every key still exists on disk, so the map cannot rot silently.
+
+| File | Django targets |
+|---|---|
+| `integrations/config.py`, `integrations/settings_registry.py` | `integrations` + `tests` + `make test-core` |
+| `content/access.py`, `content/tier_config.py`, `accounts/gating.py` | `content` + `accounts` + `make test-core` (+ full Playwright, via the escalation table) |
+| `tests/fixtures.py` | `make test-core` (+ full Playwright) |
+| `payments/tier_state.py`, `payments/stripe_links.py`, `payments/services/**`, `payments/views/**` | `payments` + `accounts` + `api` (+ full Playwright) |
+| `accounts/models/**`, `accounts/auth.py`, `accounts/adapters.py`, `accounts/signals.py` | `accounts` + `make test-core` |
+
+### One-hop reverse-import expansion and the 6-app cap
+
+Rule 8 does not stop at the owning app. A single `git grep -E` over every
+`*.py` under the 20 app directories plus `tests/` and `playwright_tests/`
+finds one-hop references to each changed module:
+
+- real imports -- `import a.b.c`, `from a.b.c import X`, `from a.b import c`;
+- quoted dotted paths -- this is what binds
+  `mock.patch('integrations.services.zoom.create_meeting')` to the module it
+  patches, which a pure import graph would miss;
+- the parent package too, when the package `__init__.py` re-exports the changed
+  module (`from .article import *`), since consumers import through it.
+
+Referencing apps join the Django target list. Hits inside `tests/` add that
+exact test module. Hits inside `playwright_tests/` are reported as a
+`NOTE playwright-refs:` line only -- the core Playwright subset already covers
+them and one changed model should not force a full browser run.
+
+Cap: if the expansion exceeds 6 app labels, the expansion is replaced by
+`make test-core` (the owning app is kept) and a `NOTE broad-impact:` line is
+printed. Without the cap, a hub module such as `content/models/article.py`
+would name a dozen apps and silently reconstruct a full-suite-equivalent run.
+
+### Working with the plan
+
+- Read the plan before trusting it. `WARN unmapped:` means a path matched no
+  rule; `NOTE broad-impact:` means the cap fired.
+- Do not widen the scope by hand. If the plan misses tests that the change can
+  break, that is a bug in the mapping: fix `scripts/affected_tests.py` and its
+  self-test, or file an issue. Substituting a bigger run hides the bug.
+- Keep `tests/test_affected_tests.py` in step with any map change. It is tagged
+  `core`, so `make test-core` catches drift.
+
+---
+
+## Core test subset (`make test-core`)
+
+The full Django suite is ~14,800 tests. For the inner loop (TDD, quick sanity
+checks) we maintain a tagged subset that runs in well under a minute, and the
+affected-tests plan above uses it as its fail-closed fallback.
+
+```bash
+make test-core          # tagged subset, ~30s, parallel
+make test               # full suite -- CI-only by default
+```
+
+`make test-core` runs `python manage.py test --tag=core --parallel`. CI runs
+the full suite on every push to main and blocks the deploy on failure, so
+`make test` is not part of the local per-issue loop -- use `make test-affected`
+(see "Affected-tests selection" above) and leave the exhaustive run to CI
+unless Alexey explicitly asks for it locally.
 
 ### What belongs in `core`
 

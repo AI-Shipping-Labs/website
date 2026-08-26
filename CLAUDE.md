@@ -50,7 +50,7 @@ Always use `uv` instead of `pip`:
 uv add djangorestframework
 uv run python manage.py makemigrations
 uv run python manage.py migrate
-uv run python manage.py test --parallel
+uv run python manage.py test {app} --parallel 4
 ```
 
 ### Configurable Settings Go Through the IntegrationSetting Framework
@@ -125,10 +125,18 @@ This does NOT create content — content only comes from GitHub sync.
 
 ### Run tests
 
+Local test scope comes from the diff, not from habit. `scripts/affected_tests.py` maps the changed files (including uncommitted and untracked work) to Django test labels plus a core-vs-full Playwright decision:
+
 ```bash
-uv run python manage.py test --parallel     # Django tests (~1 min)
-uv run python -m pytest playwright_tests/   # E2E tests (requires running server)
+uv run python scripts/affected_tests.py     # print the plan, run nothing
+make test-affected                          # run exactly what the plan emitted
 ```
+
+Inner loop while editing: `uv run python manage.py test {touched_app} --parallel 4`, plus `make test-core` for cross-cutting changes.
+
+Do NOT run the full Django suite locally (`make test`, `make test-all`, `make coverage`, or `manage.py test` with no labels). It is ~14,800 tests and starves everything else on the box, for no coverage gain: CI runs the full Django suite on every push to main and blocks the deploy on failure, and the full Playwright suite runs every 3 hours. Run it locally only if Alexey explicitly asks.
+
+See [`_docs/testing-guidelines.md`](_docs/testing-guidelines.md) ("Affected-tests selection") for the rule chain, the authoritative escalation table, and what to do when the plan looks wrong (fix the map — never widen the run by hand).
 
 ## Content Architecture
 

@@ -79,8 +79,11 @@ Every issue must include tests.
   - View tests: use `self.client.get()/post()`, check status codes, check template used, check context data
   - Access control tests: verify anonymous/free/paid users see correct content or get correct gating
 - Run tests in two phases to keep the inner loop fast:
-  - Inner loop (during edit-test-edit iteration): `uv run make test-core` (tagged subset, ~45s) plus `uv run python manage.py test {touched_app} --parallel` (focused, ~10-30s). This is what you should be running every time you change code.
-  - Final check (once before reporting done): `uv run python manage.py test --parallel` (full suite, ~3 min). Always run this once at the end to catch cross-module regressions before handoff.
+  - Inner loop (during edit-test-edit iteration): `uv run python manage.py test {touched_app} --parallel 4` (focused, ~10-30s), plus `uv run make test-core` (tagged subset, ~45s) when the change is cross-cutting. This is what you should be running every time you change code.
+  - Final check (once before reporting done): `uv run make test-affected`. This runs `scripts/affected_tests.py`, which maps your actual diff (including uncommitted and untracked files) to the Django labels and the Playwright subset it can plausibly break, then executes exactly those commands.
+- Do NOT run the full Django suite locally (`manage.py test` with no labels, `make test`, `make test-all`, or `make coverage`). It is ~14,800 tests, it starves every other agent on the box, and it buys nothing: CI runs the full Django suite on every push to main and blocks the deploy on failure, and the full Playwright suite runs every 3 hours via `.github/workflows/scheduled-playwright.yml`. Only run it locally if Alexey explicitly asks.
+- Do not widen the plan by hand. If `scripts/affected_tests.py` selects the wrong targets for your change, that is a bug in the mapping — fix the map (and its self-test in `tests/test_affected_tests.py`) or file an issue; do not silently substitute a bigger run.
+- Inspect the plan before you trust it: `uv run python scripts/affected_tests.py` prints the plan without running anything, and flags `WARN unmapped:` paths and `NOTE broad-impact:` substitutions.
 - Run lint and fix any issues before declaring done: `uv run ruff check --fix .`. Re-run `uv run ruff check .` to confirm zero remaining errors. CI will fail on lint, so this MUST be clean before commit.
 
 Example:
@@ -127,7 +130,7 @@ gh issue comment {NUMBER} --repo AI-Shipping-Labs/website --body "$(cat <<'COMME
 
 ### Tests
 - Unit tests: X passing
-- Coverage: X%
+- Affected-tests plan: `<django_command from scripts/affected_tests.py>` + Playwright `<core|full>`
 
 ### What Works
 - ...
@@ -145,6 +148,12 @@ COMMENT
 
 After implementation and tests pass locally, report what you did to the orchestrator.
 
+The report MUST include this line so the tester and orchestrator can see the scope you actually verified:
+
+```
+Affected-tests plan: <django_command from scripts/affected_tests.py> + Playwright <core|full>
+```
+
 Do NOT commit or push. Wait for tester review first.
 
 ### 9. Handle Tester Feedback
@@ -152,7 +161,7 @@ Do NOT commit or push. Wait for tester review first.
 When you receive feedback from the tester:
 1. Read the feedback carefully
 2. Fix each issue
-3. Run tests again — inner loop (`uv run make test-core` + `uv run python manage.py test {touched_app} --parallel`), then full suite once before reporting back (`uv run python manage.py test --parallel`)
+3. Run tests again — inner loop (`uv run python manage.py test {touched_app} --parallel 4`), then `uv run make test-affected` once before reporting back. Never the full local Django suite.
 4. Report the fixes back
 
 Repeat until the tester confirms all acceptance criteria pass.

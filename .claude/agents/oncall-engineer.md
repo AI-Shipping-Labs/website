@@ -120,10 +120,16 @@ When the watcher returns `failed` (exit 1):
 3. Fix the code locally and verify:
 
    ```bash
-   uv run python manage.py test {touched_app} --parallel
+   uv run python manage.py test {touched_app} --parallel 4
    ```
 
-   If a Playwright test failed: `uv run pytest playwright_tests/ -v`.
+   If a Playwright test failed, re-run only the failing file:
+   `uv run pytest playwright_tests/test_{failing_file}.py -v`. Before pushing,
+   confirm the scope with `make test-affected`, which derives the Django labels
+   and the core-or-full Playwright subset from your diff. Do not run the full
+   local Django suite or the unfiltered Playwright suite — CI runs the full
+   Django suite on every push to main, and the full Playwright suite runs every
+   3 hours.
 
 4. Push the fix (use `Refs #N`, not `Closes #N`, to avoid premature closure):
 

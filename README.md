@@ -90,28 +90,41 @@ uv run python manage.py createsuperuser
 
 ## Tests
 
+Local runs come from the diff, not from habit:
+
 ```bash
+# Print the plan (Django labels + core-vs-full Playwright), run nothing
+uv run python scripts/affected_tests.py
+
+# Run exactly what the plan emitted
+make test-affected
+
 # Fast core subset for the inner dev loop (~30s, parallel)
 make test-core
 
-# Full Django unit/integration suite (parallel)
-make test
+# Core Playwright subset
+make test-playwright-core
+```
 
-# Tests with coverage report
-make coverage
+Exhaustive runs are CI gates, not part of the local loop:
 
-# Playwright E2E tests
-make playwright
-
-# All tests (Django + Playwright)
-make test-all
+```bash
+make test            # CI gate: full Django unit/integration suite
+make playwright      # CI gate: full Playwright E2E suite
+make test-all        # CI gate: both
+make coverage        # CI gate: full suite + coverage report
 ```
 
 `make test-core` runs only test classes decorated with `@tag('core')` -- the
-auth, access-control, payments, sync, and critical model paths. CI runs the
-full suite, so always run `make test` before pushing. See
-[_docs/testing-guidelines.md](_docs/testing-guidelines.md) for the policy on
-what belongs in core.
+auth, access-control, payments, sync, and critical model paths -- and is the
+fail-closed fallback the affected-tests plan uses.
+
+Do not run the full Django suite locally (`make test`, `make test-all`, `make coverage`).
+It is ~14,800 tests. CI runs it on every push to `main` and blocks the deploy on
+failure, and the full Playwright suite runs every 3 hours, so a local repeat only
+costs you wall time. See
+[_docs/testing-guidelines.md](_docs/testing-guidelines.md) ("Affected-tests
+selection") for the rule chain and the policy on what belongs in core.
 
 Pytest and Playwright use pytest-managed test databases. They must not create
 fixture content in the normal local `db.sqlite3`; the Playwright server fixture

@@ -75,6 +75,32 @@ class SeedBookClubTest(TestCase):
             1,
         )
 
+    def test_sets_week_number_and_never_writes_week_n_into_week_label(self):
+        # #1461: the seed used to write week_label='Week 1'..'Week 8' and never
+        # set week_number, which contradicted the field's documented meaning
+        # (week_label is a THEME) and hid the roadmap's week grouping locally.
+        call_command('seed_book_club')
+        chapters = Chapter.objects.filter(
+            book__slug='inference-engineering',
+        ).order_by('number')
+        self.assertEqual(
+            [c.week_number for c in chapters], [1, 2, 3, 4, 5, 6, 7, 8],
+        )
+        for chapter in chapters:
+            self.assertNotIn('Week', chapter.week_label)
+
+    def test_rerun_heals_a_chapter_that_drifted(self):
+        call_command('seed_book_club')
+        Chapter.objects.filter(
+            book__slug='inference-engineering', number=0,
+        ).update(week_number=None, week_label='Week 1')
+        call_command('seed_book_club')
+        chapter = Chapter.objects.get(
+            book__slug='inference-engineering', number=0,
+        )
+        self.assertEqual(chapter.week_number, 1)
+        self.assertEqual(chapter.week_label, '')
+
     def test_does_not_duplicate_chapters_on_rerun(self):
         call_command('seed_book_club')
         call_command('seed_book_club')

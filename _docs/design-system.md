@@ -82,7 +82,7 @@ Inter uses weights 300 through 700. Headings always use `font-semibold`, never `
 
 Use `tracking-tight` on `text-2xl` and larger headings. Many hero and section headings also use `style="text-wrap: balance;"` for calmer two-line wrapping.
 
-Markdown content is styled by `.prose` in `templates/base.html`. Workshop/tutorial contexts can add `.prose-tight` when list rhythm needs to match compact rows.
+Markdown content is styled by `.prose` in `templates/base.html`. Workshop/tutorial contexts can add `.prose-tight` when list rhythm needs to match compact rows. Member-authored markdown embedded in a card — Book Club note bodies — adds `.prose-note`, which caps note headings below the host card's own `text-lg` title and lets the wrapper's font size win for paragraphs, so a member's `##` never outranks the page. Both are modifiers on `.prose`, never replacements for it, and neither changes `.prose pre` horizontal scrolling.
 
 ### Casing
 

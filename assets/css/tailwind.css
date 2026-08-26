@@ -93,6 +93,22 @@ body {
    paywall assertions in the test suite. Consumer templates opt in
    by adding `prose-tight` as a second class on the prose wrapper. */
 .prose-tight li { margin: 0.25rem 0; line-height: 1.5; }
+/* Issue #1461: member-authored note bodies (the Book Club chapter feed and
+   the reader-profile feed) are hosted inside cards whose own title is
+   `text-lg` (1.125rem). Bare `.prose` renders a member's `##` at 1.5rem —
+   larger than the section heading above it and rivalling the page H1 — and
+   `.prose p`'s hard 1rem defeats the wrapper's `text-sm`. This modifier caps
+   note headings below the host card's title and lets the wrapper's own font
+   size win for paragraphs. Deliberately leaves `.prose pre` alone so fenced
+   code keeps its horizontal scroll on narrow viewports. Sibling of
+   `.prose-tight` above: consumer templates opt in by adding `prose-note` as a
+   second class on the prose wrapper. */
+.prose-note h1 { font-size: 1.0625rem; margin-top: 1.25rem; margin-bottom: 0.5rem; }
+.prose-note h2 { font-size: 1rem; margin-top: 1.25rem; margin-bottom: 0.5rem; }
+.prose-note h3 { font-size: 0.9375rem; margin-top: 1rem; margin-bottom: 0.5rem; }
+.prose-note h4, .prose-note h5, .prose-note h6 { font-size: 0.875rem; margin-top: 1rem; margin-bottom: 0.5rem; }
+.prose-note p { font-size: inherit; margin-top: 0.75rem; }
+.prose-note ul, .prose-note ol, .prose-note li { font-size: inherit; }
 .prose code { border-radius: 0.25rem; background: hsl(var(--secondary)); padding: 0.125rem 0.375rem; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace; color: hsl(var(--foreground)); border: 1px solid hsl(var(--border)); font-variant-ligatures: none; }
 .prose pre { margin-top: 1rem; border-radius: 0.5rem; border: 1px solid hsl(var(--border)); background: hsl(var(--card)); padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; overflow-x: auto; font-variant-ligatures: none; }
 .prose pre code { background: transparent; padding: 0; border: none; color: hsl(var(--card-foreground)); }

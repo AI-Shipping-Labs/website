@@ -1,0 +1,30 @@
+{% load date_formatting %}
+{% comment %}
+Book Club meeting row (issue #1461).
+
+A thin call site for the canonical row owner `templates/includes/_list_row.html`
+so the week block, the pre-week standalone rows, and the post-week standalone
+rows all render one identical row anatomy instead of three copies.
+
+The row title leads with the differentiating token and never repeats the series
+name: `Meeting · Mon, Aug 17, 19:00` inside a week block (position already says
+which week), `Kickoff · Mon, Aug 10, 17:00` for a standalone occurrence. The
+view sets `meeting.display_label`.
+
+When the session is past and has a published recap, a quiet body link to the
+event's own page is offered under the row (the same
+`event.has_recap and event.is_past` gate `templates/events/_event_description.html`
+uses). When the gate is false nothing extra renders — no "recap coming"
+placeholder.
+
+Context:
+  meeting   an events.Event with `display_label` set by bookclub.views.
+  user      the viewer, for timezone-aware datetime rendering.
+{% endcomment %}
+{% user_event_datetime meeting.start_datetime user fmt='%a, %b %d, %H:%M' as meeting_when %}
+{% include "includes/_list_row.html" with href=meeting.get_absolute_url title=meeting.display_label|add:" · "|add:meeting_when marker_kind="custom" marker_html='<i data-lucide="calendar" class="h-4 w-4 text-muted-foreground"></i>' testid="book-meeting-row" %}
+{% if meeting.has_recap and meeting.is_past %}
+<p class="pb-1 pl-10 pr-3 text-xs text-muted-foreground">
+  <a href="{{ meeting.get_absolute_url }}" class="text-accent underline underline-offset-4 hover:text-accent/80" data-testid="book-meeting-recap">Read the notes from this session</a>
+</p>
+{% endif %}

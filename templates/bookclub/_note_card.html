@@ -46,8 +46,10 @@ dead or leaking link.
 
   {% comment %} Body: rendered markdown, sanitised on save. Fenced code blocks
   render as code; a ```mermaid fence renders as a diagram via mermaid-render.js
-  (the hosting page includes _partials/mermaid_script.html). {% endcomment %}
-  <div class="prose mt-3 max-w-none text-sm text-foreground/90" data-testid="note-body">{{ note.body_html|safe }}</div>
+  (the hosting page includes _partials/mermaid_script.html). `prose-note` caps
+  member-authored headings below this card's own title and lets the wrapper's
+  text-sm win for paragraphs (#1461). {% endcomment %}
+  <div class="prose prose-note mt-3 max-w-none text-sm text-foreground/90" data-testid="note-body">{{ note.body_html|safe }}</div>
 
   {% comment %} Comments: the shared comments-app thread, keyed by this note.
   Tighter section_class/heading_class keep the embedded thread proportional

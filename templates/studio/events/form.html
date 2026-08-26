@@ -294,6 +294,40 @@
     {% endif %}
 
     {% comment %}
+      Issue #1458: Studio-authored recap notes. Published on the event's own
+      recap page once the event has ended. Deliberately NOT disabled for
+      synced rows — same precedent as post_event_summary below (#680), so
+      staff can write notes without round-tripping through the content repo.
+      Only renders on the edit form (a brand-new event has no recap yet).
+    {% endcomment %}
+    {% if event %}
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="event-recap-notes">Recap / event notes (Markdown)</label>
+      {% if event.recap_file %}
+      {% comment %}
+        Reuses the event-duplicate-context notice class string from the top of
+        this file; only the bottom margin differs (field-scoped, not page-scoped).
+      {% endcomment %}
+      <p class="mb-2 break-words rounded-lg border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground"
+         data-testid="event-recap-source-conflict">
+        This event also has a synced recap from the content repo ({{ event.recap_file }}). Notes you write here take precedence on the public recap page.
+      </p>
+      {% endif %}
+      <textarea name="recap_notes"
+                id="event-recap-notes"
+                rows="12"
+                data-testid="event-recap-notes"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ event.recap_notes|default:'' }}</textarea>
+      <p class="text-xs text-muted-foreground mt-1">
+        Published on the event's recap page once the event has ended. Leave blank for no recap.
+        {% if event.has_recap %}
+        <a href="{{ event.get_recap_url }}" class="text-accent hover:underline" data-testid="event-recap-view-link">{% if event.recap_is_published %}View recap{% else %}Preview recap (not public yet){% endif %}</a>
+        {% endif %}
+      </p>
+    </div>
+    {% endif %}
+
+    {% comment %}
       Issue #680: post-event recap body for the follow-up email. Markdown
       input; blank is permitted (the task substitutes a generic fallback
       string). Only renders on the edit form (no event = no recap yet).

@@ -10,6 +10,8 @@ Watch the recording: [{{ event_title }}]({{ event_url }})
 
 Direct video link: {{ recording_url }}
 
+{% if recap_url %}Read the recap: [{{ event_title }} recap]({{ recap_url }}){% endif %}
+
 {% if notes_placeholder %}Workshop notes are still being put together — we'll send them separately when ready.{% endif %}
 
 {% if feedback_url %}If you have a minute, we'd love your feedback on the session: [Leave feedback]({{ feedback_url }}).{% endif %}

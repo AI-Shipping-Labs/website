@@ -45,6 +45,12 @@
         workshops remains on the Workshop landing/video surface (issue #426).
       {% endcomment %}
       {% include "events/_event_description.html" %}
+      {% comment %}
+        Issue #1458: the recap body lives at its own /recap URL now. This card
+        is the only recap surface on the detail page and renders only when
+        ``event.recap_is_published``.
+      {% endcomment %}
+      {% include "events/_event_recap_cta.html" %}
       {% include "events/_event_hosts.html" %}
       {% include "events/_event_post_resources.html" %}
       {% if show_no_recording_closure %}

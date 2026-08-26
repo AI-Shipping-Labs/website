@@ -393,6 +393,23 @@ class Event(
         help_text='Data from recap frontmatter / event recap_data for include rendering.',
     )
 
+    # Issue #1458: Studio/API-authored recap notes. Deliberately a SECOND
+    # field pair beside the sync-owned ``recap_markdown`` / ``recap_html``
+    # so "content sync never clobbers Studio notes" stays a trivially
+    # checkable invariant rather than a precedence rule buried in the sync
+    # pipeline. ``recap_body_html`` resolves which of the two wins.
+    recap_notes = models.TextField(
+        blank=True, default='',
+        help_text=(
+            'Studio/API-authored recap notes for this event (Markdown). '
+            'Never written by content sync.'
+        ),
+    )
+    recap_notes_html = models.TextField(
+        blank=True, default='', editable=False,
+        help_text='Rendered HTML for recap_notes.',
+    )
+
     # Issue #680: host-authored recap body for the post-event follow-up
     # email. Markdown. Optional — when blank the follow-up template uses a
     # generic fallback string so a host who forgets to fill this in still
@@ -527,6 +544,24 @@ class Event(
             kwargs={'event_id': self.id, 'slug': self.slug},
         )
 
+    def get_recap_url(self):
+        """Return the canonical ``/events/<id>/<slug>/recap`` URL.
+
+        Issue #1458: id-canonical like ``get_absolute_url`` /
+        ``get_join_url``. Returns ``''`` for unsaved rows and for events
+        with no recap body so callers can branch on truthiness.
+
+        Deliberately NOT gated on ``is_past`` — Studio offers staff a
+        preview link before the recap is public. Use
+        ``recap_is_published`` for the public gate.
+        """
+        if self.id is None or not self.has_recap:
+            return ''
+        return reverse(
+            'event_recap',
+            kwargs={'event_id': self.id, 'slug': self.slug},
+        )
+
     def get_studio_edit_url(self):
         return f'/studio/events/{self.pk}/edit'
 
@@ -577,6 +612,11 @@ class Event(
         self.tags = normalize_tags(self.tags)
 
         self.description_html = render_description_html(self.description)
+
+        # Issue #1458: recap notes go through the same markdown pipeline as
+        # descriptions (#988) so inline-bullet normalization and mermaid
+        # support behave identically on the recap page.
+        self.recap_notes_html = render_description_html(self.recap_notes)
 
         # Issue #673: cap slug length so a 200-char title cannot produce
         # a giant ``/events/<id>/<200-char-slug>`` URL. Truncates on the
@@ -673,9 +713,31 @@ class Event(
         return bool(self.video_url)
 
     @property
+    def recap_body_html(self):
+        """Return the recap HTML that should be published for this event.
+
+        Issue #1458: Studio/API-authored ``recap_notes_html`` wins over a
+        synced content-repo ``recap_html``. The operator's most recent
+        deliberate act is what ships; silently ignoring hand-written notes
+        is the worse failure. The synced pair is never deleted, so clearing
+        the notes restores the synced recap.
+        """
+        return self.recap_notes_html or self.recap_html
+
+    @property
     def has_recap(self):
-        """Return True if this event has any recap data."""
-        return bool(self.recap_html)
+        """Return True if this event has any recap body to publish."""
+        return bool(self.recap_body_html)
+
+    @property
+    def recap_is_published(self):
+        """Return True when the recap is visible to members.
+
+        Issue #1458 keeps the #713 time-derived gate: a recap only goes
+        public once the event has actually happened. This is the single
+        public gate — every public template and email branches on it.
+        """
+        return self.has_recap and self.is_past
 
     @property
     def is_external(self):

@@ -1036,6 +1036,12 @@ def event_edit(request, event_id):
                 request.POST.get('external_host', ''),
             )
 
+            # Issue #1458: Studio-authored recap notes for the event's own
+            # recap page. Editable on synced rows for the same reason as
+            # post_event_summary below; content sync never writes this
+            # field, so a later re-sync cannot clobber it.
+            event.recap_notes = request.POST.get('recap_notes', '')
+
             # Issue #680: post_event_summary is a host-authored recap body
             # for the follow-up email. Editable even on synced rows so
             # staff can write the recap without round-tripping through
@@ -1147,6 +1153,11 @@ def event_edit(request, event_id):
             if platform == 'custom':
                 event.zoom_join_url = request.POST.get('custom_url', '').strip()
                 event.zoom_meeting_id = ''
+
+            # Issue #1458: Studio-authored recap notes for the event's own
+            # recap page. Markdown; blank means no recap (a synced
+            # ``recap_file`` recap, when present, resurfaces).
+            event.recap_notes = request.POST.get('recap_notes', '')
 
             # Issue #680: post_event_summary is a host-authored recap body
             # for the follow-up email. Markdown; blank is permitted (the

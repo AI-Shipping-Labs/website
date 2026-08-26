@@ -167,7 +167,12 @@ PREVIEW_CONTEXTS = {
             'ai-shipping-workshop.mp4'
         ),
         'event_url': 'https://aishippinglabs.com/events/42/ai-shipping-workshop',
-        'notes_placeholder': True,
+        # Issue #1458: preview the recap-link variant. The real send sets
+        # either ``recap_url`` (published recap) or ``notes_placeholder``,
+        # never both.
+        'recap_url': (
+            'https://aishippinglabs.com/events/42/ai-shipping-workshop/recap'
+        ),
         'feedback_url': (
             'https://aishippinglabs.com/events/ai-shipping-workshop/feedback'
         ),

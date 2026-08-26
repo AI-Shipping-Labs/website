@@ -1,4 +1,8 @@
-"""Book-detail "When we meet" rows + derived meets label (issue #1369)."""
+"""Book-detail meeting rows + derived meets label (issue #1369).
+
+#1461 merged the rows into the week blocks and linked the derived label to
+the series page; the assertions here track that shape.
+"""
 
 from datetime import timedelta
 
@@ -76,37 +80,44 @@ class BookMeetingsTest(TestCase):
     def test_member_sees_meeting_rows(self):
         self.client.force_login(self.main_user)
         response = self.client.get('/books/inference-engineering')
-        self.assertContains(response, 'book-when-we-meet')
         self.assertContains(response, 'book-meeting-row', count=1)
         self.assertContains(response, 'Book club kickoff')
         self.assertContains(response, self.kickoff.get_absolute_url())
         # Draft occurrence must not surface.
         self.assertNotContains(response, 'Draft session')
 
+    def test_when_we_meet_section_is_gone(self):
+        # #1461 merged meetings into the week blocks; the separate section and
+        # its heading no longer render.
+        self.client.force_login(self.main_user)
+        response = self.client.get('/books/inference-engineering')
+        self.assertNotContains(response, 'book-when-we-meet')
+        self.assertNotContains(response, 'When we meet')
+
     def test_template_comments_do_not_leak(self):
         self.client.force_login(self.main_user)
         response = self.client.get('/books/inference-engineering')
         self.assertNotContains(response, '{#')
         self.assertNotContains(response, '{% comment %}')
-        self.assertNotContains(response, 'quiet calendar rows')
+        self.assertNotContains(response, 'never repeats the series name')
 
-    def test_no_series_hides_section(self):
+    def test_no_series_hides_meeting_rows(self):
         self.client.force_login(self.main_user)
         response = self.client.get('/books/no-series-book')
         self.assertContains(response, 'book-participation-body')
-        self.assertNotContains(response, 'book-when-we-meet')
+        self.assertNotContains(response, 'book-meeting-row')
 
-    def test_zero_public_occurrences_hides_section(self):
+    def test_zero_public_occurrences_hides_meeting_rows(self):
         self.client.force_login(self.main_user)
         response = self.client.get('/books/empty-series-book')
         self.assertContains(response, 'book-participation-body')
-        self.assertNotContains(response, 'book-when-we-meet')
+        self.assertNotContains(response, 'book-meeting-row')
 
     def test_guest_gated_with_no_meeting_rows(self):
         response = self.client.get('/books/inference-engineering')
         self.assertContains(response, 'book-guest-gate')
-        self.assertNotContains(response, 'book-when-we-meet')
         self.assertNotContains(response, 'book-meeting-row')
+        self.assertNotContains(response, 'Book club kickoff')
 
     def test_meets_label_prefers_series_schedule_label(self):
         # A cadence-less collection with a single session must read honestly —
@@ -121,3 +132,21 @@ class BookMeetingsTest(TestCase):
         self.client.force_login(self.main_user)
         response = self.client.get('/books/no-series-book')
         self.assertContains(response, 'Every other Tuesday')
+
+    def test_meets_label_links_to_the_series(self):
+        # #1461: schedule_label counts only public occurrences, so it
+        # under-reports while draft weeks exist — the series page is the full
+        # schedule and the label now links to it.
+        self.client.force_login(self.main_user)
+        response = self.client.get('/books/inference-engineering')
+        self.assertContains(
+            response,
+            f'<a href="{self.series.get_absolute_url()}" '
+            'class="text-accent underline underline-offset-4 '
+            'hover:text-accent/80" data-testid="book-meets-link">',
+        )
+
+    def test_meeting_cadence_fallback_stays_plain_text(self):
+        self.client.force_login(self.main_user)
+        response = self.client.get('/books/no-series-book')
+        self.assertNotContains(response, 'book-meets-link')

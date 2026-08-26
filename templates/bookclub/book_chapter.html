@@ -15,8 +15,9 @@
     <div class="absolute inset-0 hero-gradient"></div>
     <div class="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
 
-      {# Back link to the book #}
-      <a href="{% url 'bookclub_book_detail' slug=book.slug %}" class="inline-flex items-center gap-1 text-sm text-accent hover:underline">
+      {% comment %} Back link to the book — the same muted 44px focus-ring
+      pattern book_detail.html uses for the identical role (#1461). {% endcomment %}
+      <a href="{% url 'bookclub_book_detail' slug=book.slug %}" class="inline-flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="chapter-back-link">
         <i data-lucide="arrow-left" class="h-4 w-4"></i> {{ book.title }}
       </a>
 
@@ -37,9 +38,11 @@
         <h1 class="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Ch. {{ chapter.number }} — {{ chapter.title }}</h1>
         <div class="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
           {% if chapter.deadline %}<span class="inline-flex items-center gap-1" data-testid="chapter-deadline"><i data-lucide="calendar-clock" class="h-3.5 w-3.5"></i>Meets {{ chapter.deadline|member_short_date }}</span>{% endif %}
+          {% comment %} The notes count lives in the "Notes" section header
+          only (#1461) — printing it here too put the same number twice in one
+          viewport. {% endcomment %}
           {% if is_member %}
           <span class="inline-flex items-center gap-1"><i data-lucide="users" class="h-3.5 w-3.5"></i>{{ read_count }} read</span>
-          <span class="inline-flex items-center gap-1"><i data-lucide="message-square" class="h-3.5 w-3.5"></i>{{ notes_count }} note{{ notes_count|pluralize }}</span>
           {% endif %}
         </div>
       </header>
@@ -74,13 +77,23 @@
 
         {# Your note — a single per-member note, written vs empty/editing #}
         <div class="mt-6">
+          {% comment %} The own-note card is the single canonical self surface
+          (#1461): the group feed below excludes the viewer's own note, so this
+          card also hosts that note's comment thread and the member-API hint —
+          neither is loose page chrome any more. {% endcomment %}
           {% if own_note and not editing %}
           <div class="{% include 'content/_info_card_classes.html' %} bg-card" data-testid="own-note-written">
             <div class="flex items-start justify-between gap-3">
               <p class="text-lg font-semibold text-foreground">Your note</p>
               <a href="?edit=1" class="{% button_classes 'secondary' size='sm' extra='shrink-0' %}" data-testid="own-note-edit">Edit note</a>
             </div>
-            <div class="prose mt-3 max-w-none text-sm text-foreground/90" data-testid="own-note-body-rendered">{{ own_note.body_html|safe }}</div>
+            <div class="prose prose-note mt-3 max-w-none text-sm text-foreground/90" data-testid="own-note-body-rendered">{{ own_note.body_html|safe }}</div>
+            {% include "comments/_qa_section.html" with content_id=own_note.comment_content_id instance_id=own_note.pk user_authenticated=user.is_authenticated section_heading="Comments" composer_placeholder="Add a comment about this note…" composer_button_label="Post comment" composer_signin_prompt="to join this discussion" section_class="mt-6 mb-0" heading_class="text-base" %}
+            <p class="mt-6 text-xs text-muted-foreground" data-testid="own-note-api-hint">
+              You can also read and update this note through the
+              <a href="/member-api/docs" class="text-accent hover:underline">member API</a> — create an API token in your
+              <a href="/account/#api-keys" class="text-accent hover:underline">account settings</a>.
+            </p>
           </div>
           {% else %}
           <div class="rounded-lg border border-accent/30 bg-accent/5 p-6" data-testid="own-note-composer">
@@ -93,16 +106,13 @@
               <p class="mt-2 text-xs text-muted-foreground">Markdown supported. Fence a code block with <code class="rounded bg-muted px-1 py-0.5 font-mono">```</code>; use <code class="rounded bg-muted px-1 py-0.5 font-mono">```mermaid</code> to render a diagram.</p>
               <button type="submit" class="{% button_classes 'primary' extra='mt-4' %}" data-testid="own-note-post">Post note</button>
             </form>
+            <p class="mt-6 text-xs text-muted-foreground" data-testid="own-note-api-hint">
+              You can also read and update this note through the
+              <a href="/member-api/docs" class="text-accent hover:underline">member API</a> — create an API token in your
+              <a href="/account/#api-keys" class="text-accent hover:underline">account settings</a>.
+            </p>
           </div>
           {% endif %}
-          {% comment %} You can read and update your own note programmatically
-          via the member API. Shown in both the written and composer states.
-          {% endcomment %}
-          <p class="mt-3 text-xs text-muted-foreground" data-testid="own-note-api-hint">
-            You can also read and update this note through the
-            <a href="/member-api/docs" class="text-accent hover:underline">member API</a> — create an API token in your
-            <a href="/account/#api-keys" class="text-accent hover:underline">account settings</a>.
-          </p>
         </div>
 
         {% comment %} Chapter summary (#1368). Published (timestamp set +
@@ -155,7 +165,12 @@
 
       {% comment %} Prev / next chapter navigation (members and guests). Same
       element pattern as the workshop / course reader bottom nav: bordered prev
-      on the left, accent-filled next pushed right. {% endcomment %}
+      on the left, filled next pushed right. #1461 fixes the two ends: on the
+      first chapter the left slot holds a back-to-book link instead of being
+      empty (a lone right-floating button under a full-width divider), and for
+      a viewer without access the forward action is demoted to `secondary` so
+      it does not compete with the gated card's sign-up primary. {% endcomment %}
+      {% if is_member %}{% button_classes 'primary' extra='min-w-0 sm:ml-auto' as chapter_nav_forward_class %}{% else %}{% button_classes 'secondary' extra='min-w-0 sm:ml-auto' as chapter_nav_forward_class %}{% endif %}
       <nav class="mt-10 flex flex-col gap-4 sm:flex-row sm:items-center border-t border-border pt-8">
         {% if prev_chapter %}
         <a href="{% url 'bookclub_chapter_detail' slug=book.slug number=prev_chapter.number %}"
@@ -164,11 +179,18 @@
           <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
           <span class="truncate">Ch. {{ prev_chapter.number }} — {{ prev_chapter.title }}</span>
         </a>
+        {% else %}
+        <a href="{% url 'bookclub_book_detail' slug=book.slug %}"
+           class="{% button_classes 'secondary' extra='min-w-0' %}"
+           data-testid="chapter-back-to-book">
+          <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
+          <span class="truncate">Back to {{ book.title }}</span>
+        </a>
         {% endif %}
 
         {% if next_chapter %}
         <a href="{% url 'bookclub_chapter_detail' slug=book.slug number=next_chapter.number %}"
-           class="{% button_classes 'primary' extra='min-w-0 sm:ml-auto' %}"
+           class="{{ chapter_nav_forward_class }}"
            data-testid="chapter-next">
           <span class="truncate">Next: Ch. {{ next_chapter.number }} — {{ next_chapter.title }}</span>
           <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0"></i>
@@ -178,7 +200,7 @@
         so the deferred handoff copy is now a real link to /books/<slug>/summary
         (no more dead link). {% endcomment %}
         <a href="{% url 'bookclub_book_summary' slug=book.slug %}"
-           class="{% button_classes 'primary' extra='min-w-0 sm:ml-auto' %}"
+           class="{{ chapter_nav_forward_class }}"
            data-testid="chapter-end-of-book">
           <span class="truncate">Read the full book summary</span>
           <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0"></i>

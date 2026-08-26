@@ -132,14 +132,27 @@ class BookRoadmapWeekGroupingTest(TestCase):
         self.assertContains(response, '>Week 1<')
         self.assertContains(response, '>Week 2<')
 
-    def test_week_label_overrides_the_default_heading(self):
+    def test_week_label_composes_with_the_week_number(self):
+        # #1461: a themed week keeps its number — the theme used to replace it.
         Chapter.objects.filter(book=self.book, number=0).update(
             week_label='Foundations',
         )
         self.client.force_login(self.member)
         response = self.client.get('/books/weekly-book')
-        self.assertContains(response, '>Foundations<')
+        self.assertContains(response, '>Week 1 · Foundations<')
+        self.assertNotContains(response, '>Foundations<')
         self.assertContains(response, '>Week 2<')
+
+    def test_this_week_callout_shows_the_theme_alone(self):
+        # The callout is already prefixed "This week", so it renders the theme
+        # without repeating the composed "Week N · theme" heading (#1461).
+        Chapter.objects.filter(book=self.book, number=0).update(
+            week_label='Foundations',
+        )
+        self.client.force_login(self.member)
+        response = self.client.get('/books/weekly-book')
+        self.assertContains(response, 'This week &middot; Foundations')
+        self.assertNotContains(response, 'This week &middot; Week 1')
 
     def test_this_week_lists_the_whole_week_set(self):
         self.client.force_login(self.member)

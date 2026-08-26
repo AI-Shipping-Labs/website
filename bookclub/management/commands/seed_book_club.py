@@ -1,7 +1,7 @@
 """Idempotent seed for the first Book Club book (issue #1362).
 
 Seeds "Inference Engineering" (Main tier, current) with its 8-chapter
-roadmap and illustrative deadlines/week labels, mirroring the prototype
+roadmap and illustrative deadlines/week numbers, mirroring the prototype
 sample data. Safe to re-run: the book is upserted by slug and chapters are
 upserted by ``(book, number)``.
 
@@ -44,16 +44,24 @@ BOOK_DEFAULTS = {
 }
 
 # Chapter roadmap: the real table of contents (Ch 0–7). Deadlines and week
-# labels are illustrative — the actual cadence is set on the kickoff call.
+# grouping are illustrative — the actual cadence is set on the kickoff call.
+#
+# ``week_number`` is the grouping key the roadmap reads; ``week_label`` is a
+# free-text THEME for that week and is left blank here. Issue #1461: the seed
+# used to write ``week_label='Week 1'..'Week 8'`` and never set
+# ``week_number``, which both contradicted the field's documented meaning and
+# hid the roadmap's week grouping locally. A ``Week N`` string never belongs in
+# ``week_label`` — the view composes the number itself.
+# (number, title, deadline, week_number, week_label)
 CHAPTERS = [
-    (0, 'Inference', date(2026, 8, 17), 'Week 1'),
-    (1, 'Prerequisites', date(2026, 8, 24), 'Week 2'),
-    (2, 'Architecture', date(2026, 8, 31), 'Week 3'),
-    (3, 'Hardware', date(2026, 9, 7), 'Week 4'),
-    (4, 'Software', date(2026, 9, 14), 'Week 5'),
-    (5, 'Techniques', date(2026, 9, 21), 'Week 6'),
-    (6, 'Modalities', date(2026, 9, 28), 'Week 7'),
-    (7, 'Production', date(2026, 10, 5), 'Week 8'),
+    (0, 'Inference', date(2026, 8, 17), 1, ''),
+    (1, 'Prerequisites', date(2026, 8, 24), 2, ''),
+    (2, 'Architecture', date(2026, 8, 31), 3, ''),
+    (3, 'Hardware', date(2026, 9, 7), 4, ''),
+    (4, 'Software', date(2026, 9, 14), 5, ''),
+    (5, 'Techniques', date(2026, 9, 21), 6, ''),
+    (6, 'Modalities', date(2026, 9, 28), 7, ''),
+    (7, 'Production', date(2026, 10, 5), 8, ''),
 ]
 
 
@@ -82,13 +90,14 @@ class Command(BaseCommand):
             book.save()
 
         updated = 0
-        for number, title, deadline, week_label in CHAPTERS:
+        for number, title, deadline, week_number, week_label in CHAPTERS:
             _chapter, ch_created = Chapter.objects.update_or_create(
                 book=book,
                 number=number,
                 defaults={
                     'title': title,
                     'deadline': deadline,
+                    'week_number': week_number,
                     'week_label': week_label,
                 },
             )

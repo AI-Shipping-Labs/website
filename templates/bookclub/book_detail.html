@@ -46,7 +46,7 @@
             meeting_cadence; fall back to meeting_cadence when no series is
             linked. {% endcomment %}
             {% if book.event_series.schedule_label %}
-            <div><dt class="inline font-medium text-foreground">Meets:</dt> <dd class="inline" data-testid="book-meets">{{ book.event_series.schedule_label }}</dd></div>
+            <div><dt class="inline font-medium text-foreground">Meets:</dt> <dd class="inline" data-testid="book-meets"><a href="{{ book.event_series.get_absolute_url }}" class="text-accent underline underline-offset-4 hover:text-accent/80" data-testid="book-meets-link">{{ book.event_series.schedule_label }}</a></dd></div>
             {% elif book.meeting_cadence %}
             <div><dt class="inline font-medium text-foreground">Meets:</dt> <dd class="inline" data-testid="book-meets">{{ book.meeting_cadence }}</dd></div>
             {% endif %}
@@ -71,12 +71,12 @@
         read-together set; otherwise fall back to the single-chapter form. The
         open-chapter action is each chapter's own link (#1365). {% endcomment %}
         <div class="mb-8 rounded-lg border border-accent/40 bg-accent/5 p-6" data-testid="book-this-week">
-          <p class="text-sm font-medium uppercase tracking-widest text-accent">This week{% if current_week.label %} &middot; {{ current_week.label }}{% endif %}</p>
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">This week{% if current_week.theme %} &middot; {{ current_week.theme }}{% endif %}</p>
           <ul class="mt-2 space-y-1">
             {% for ch in current_week.chapters %}
             <li class="flex items-center justify-between gap-3">
               <a href="{% url 'bookclub_chapter_detail' book.slug ch.number %}" class="text-base font-semibold text-foreground hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="book-this-week-chapter">Ch. {{ ch.number }} — {{ ch.title }}</a>
-              {% if ch.viewer_read %}<span class="text-xs text-muted-foreground">Read</span>{% endif %}
+              {% if ch.viewer_read %}{% member_status_badge "Read" status="active" icon="check" testid="book-this-week-read-badge" %}{% endif %}
             </li>
             {% endfor %}
           </ul>
@@ -103,19 +103,35 @@
           </div>
         </div>
         {% if viewer_total %}
-        {# Calm read-progress bar — no streak / gamification chrome. #}
-        <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted" role="progressbar"
+        {% comment %} Calm read-progress bar — no streak / gamification chrome.
+        `mt-3` keeps clearance from the header links above, which wrap onto
+        their own line at 393px; without it the accent bar reads as the wrapped
+        link's underline (#1461). {% endcomment %}
+        <div class="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted" role="progressbar"
              aria-valuenow="{{ viewer_pct }}" aria-valuemin="0" aria-valuemax="100"
              aria-label="Reading progress" data-testid="book-reading-progress-bar">
           <div class="h-full rounded-full bg-accent transition-all" style="width: {{ viewer_pct }}%"></div>
         </div>
         {% endif %}
-        {% if chapter_weeks %}
-        {% comment %} Roadmap grouped by week. Chapters sharing a week_number
-        render under one "Week N" heading (the read-together set); chapters
-        without a week_number fall into an unheaded group so a book that never
-        sets weeks looks exactly as before. {% endcomment %}
+        {% comment %} Week-by-week roadmap (#1461). One block per week carries
+        that week's chapters and, last in the block, the meeting(s) those
+        chapters link to via Chapter.event — so "what does week N ask of me"
+        is answered in one place instead of split across a roadmap and a
+        separate "When we meet" list 300px lower. Chapters without a
+        week_number fall into an unheaded group so a book that never sets weeks
+        looks exactly as before. Occurrences no chapter links to (the kickoff,
+        an extra session) render as standalone rows before / after the week
+        blocks. {% endcomment %}
         <div class="mt-4 space-y-4">
+          {% if meetings_before %}
+          <div class="space-y-0.5" data-testid="book-meetings-before">
+            {% for m in meetings_before %}
+            {% include "bookclub/_meeting_row.html" with meeting=m %}
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          {% if chapter_weeks %}
           {% for week in chapter_weeks %}
           <div{% if week.week_number %} data-testid="book-week-group" data-week-number="{{ week.week_number }}"{% endif %}>
             {% comment %} Subtle week divider: one muted line, no bold heading.
@@ -128,9 +144,13 @@
             {% endif %}
             <ol class="space-y-0.5">
               {% for ch in week.chapters %}
-              <li id="chapter-{{ ch.number }}" class="flex min-h-[44px] flex-wrap items-center justify-between gap-2.5 rounded-md px-3 py-2 text-sm">
+              <li id="chapter-{{ ch.number }}" class="flex min-h-[44px] flex-wrap items-center gap-2.5 rounded-md px-3 py-2 text-sm">
                 <a href="{% url 'bookclub_chapter_detail' book.slug ch.number %}" class="group inline-flex items-center gap-1 text-foreground hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="book-chapter-link">Ch. {{ ch.number }} — {{ ch.title }}<i data-lucide="chevron-right" class="h-4 w-4 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-accent"></i></a>
-                <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                {% comment %} `ml-auto` (not `justify-between` on the row) so a
+                read row — badge plus "Mark unread" — stays right-aligned when
+                it wraps, instead of zig-zagging against its unread
+                siblings. {% endcomment %}
+                <div class="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
                   {% if ch.week_label and not ch.week_number %}<span>{{ ch.week_label }}</span>{% endif %}
                   {% if ch.deadline and not ch.week_number %}<span data-testid="book-chapter-deadline">{{ ch.deadline|member_short_date }}</span>{% endif %}
                   <form method="post" action="{% url 'bookclub_chapter_read' book.slug ch.number %}" class="flex items-center">
@@ -148,29 +168,27 @@
               </li>
               {% endfor %}
             </ol>
+            {% if week.events %}
+            <div class="mt-1 space-y-0.5" data-testid="book-week-meetings">
+              {% for m in week.events %}
+              {% include "bookclub/_meeting_row.html" with meeting=m %}
+              {% endfor %}
+            </div>
+            {% endif %}
           </div>
           {% endfor %}
-        </div>
-        {% else %}
-        <p class="mt-3 text-sm text-muted-foreground">The chapter roadmap is being prepared.</p>
-        {% endif %}
+          {% else %}
+          <p class="text-sm text-muted-foreground">The chapter roadmap is being prepared.</p>
+          {% endif %}
 
-        {% comment %} "When we meet" (#1369) — quiet calendar rows to the
-        linked series' public occurrences, one per meeting, ordered by start.
-        Member-only (this whole section sits in the is_member branch), so
-        meetings never leak below the tier gate. Hidden entirely when the book
-        has no series or the series has zero public occurrences. {% endcomment %}
-        {% if meetings %}
-        <div class="mt-10" data-testid="book-when-we-meet">
-          <h2 class="text-lg font-semibold tracking-tight">When we meet</h2>
-          <div class="mt-3 space-y-0.5">
-            {% for m in meetings %}
-            {% user_event_datetime m.start_datetime user fmt='%b %d, %H:%M' as m_when %}
-            {% include "includes/_list_row.html" with href=m.get_absolute_url title=m_when|add:" · "|add:m.title marker_kind="custom" marker_html='<i data-lucide="calendar" class="h-4 w-4 text-muted-foreground"></i>' testid="book-meeting-row" %}
+          {% if meetings_after %}
+          <div class="space-y-0.5" data-testid="book-meetings-after">
+            {% for m in meetings_after %}
+            {% include "bookclub/_meeting_row.html" with meeting=m %}
             {% endfor %}
           </div>
+          {% endif %}
         </div>
-        {% endif %}
       </section>
       {% else %}
       {# Guests / below-tier members: exactly one gated access card. #}

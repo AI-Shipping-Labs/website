@@ -115,19 +115,31 @@ def _derive_current_chapter(chapters):
     return chapters[-1]
 
 
-def _group_chapters_by_week(chapters):
+def _group_chapters_by_week(chapters, meetings_by_id=None):
     """Group ordered chapters into weeks for the roadmap.
 
-    Returns a list of ``{'week_number', 'label', 'deadline', 'chapters'}`` in
+    Returns a list of
+    ``{'week_number', 'label', 'theme', 'deadline', 'chapters', 'events'}`` in
     reading order. Chapters are bucketed by ``week_number`` (preserving
     first-appearance order); chapters with ``week_number is None`` collect into
     a single group that renders without a heading — so a book that never sets a
     week number looks exactly as it did before this feature.
 
-    ``label`` is the operator's ``week_label`` theme when any chapter in the
-    week set one, else ``"Week N"``. ``deadline`` is the week's latest chapter
-    deadline (the read-by date for the whole week).
+    ``label`` composes the week number with the operator's ``week_label``
+    theme (#1461): ``"Week N"`` with no theme, ``"Week N · <theme>"`` with one.
+    The precedence used to *replace* the number with the theme, which silently
+    dropped the week number the member navigates by. ``theme`` keeps the raw
+    label separately available so the "This week" callout can render the theme
+    alone instead of repeating ``Week N`` twice.
+
+    ``deadline`` is the week's latest chapter deadline (the read-by date for
+    the whole week). ``events`` holds the distinct meetings linked from the
+    week's chapters via ``Chapter.event``, ordered by ``start_datetime``.
+    ``meetings_by_id`` is the caller's ``{pk: Event}`` map of *public*
+    occurrences, so a draft/hidden occurrence linked to a chapter is dropped
+    here and can never reach the roadmap.
     """
+    meetings_by_id = meetings_by_id or {}
     groups = {}
     order = []
     for chapter in chapters:
@@ -140,19 +152,85 @@ def _group_chapters_by_week(chapters):
     weeks = []
     for key in order:
         members = groups[key]
+        theme = next((c.week_label for c in members if c.week_label), '')
         if key is None:
             label = ''
+        elif theme:
+            label = f'Week {key} · {theme}'
         else:
-            theme = next((c.week_label for c in members if c.week_label), '')
-            label = theme or f'Week {key}'
+            label = f'Week {key}'
         deadlines = [c.deadline for c in members if c.deadline]
+        seen_events = set()
+        events = []
+        for chapter in members:
+            event = meetings_by_id.get(chapter.event_id)
+            if event is None or event.pk in seen_events:
+                continue
+            seen_events.add(event.pk)
+            events.append(event)
+        events.sort(key=lambda event: event.start_datetime)
         weeks.append({
             'week_number': key,
             'label': label,
+            'theme': theme,
             'deadline': max(deadlines) if deadlines else None,
             'chapters': members,
+            'events': events,
         })
     return weeks
+
+
+# Separators an operator may leave between a series title and the session's
+# own name — em dash, en dash, hyphen, colon, middot (#1461).
+_SERIES_PREFIX_SEPARATORS = '—–-:·'
+
+
+def _meeting_display_label(event, series_name):
+    """The differentiating leading token for a standalone meeting row (#1461).
+
+    A meeting row reads ``<label> · <when>``. For an occurrence that is not
+    linked to a week, the label is the event's own title with the linked
+    series title stripped when it is a leading prefix (case-insensitive,
+    allowing a separator and surrounding whitespace) — so
+    ``"Inference Engineering book club kickoff"`` in the
+    ``"Inference Engineering Book Club"`` series reads ``"Kickoff"`` instead of
+    repeating the series name on every row. Falls back to the full title when
+    stripping would leave nothing.
+    """
+    title = (getattr(event, 'title', '') or '').strip()
+    prefix = (series_name or '').strip()
+    if not title or not prefix:
+        return title
+    if title.lower().startswith(prefix.lower()):
+        remainder = title[len(prefix):].strip()
+        remainder = remainder.lstrip(_SERIES_PREFIX_SEPARATORS).strip()
+        if remainder:
+            return remainder[0].upper() + remainder[1:]
+    return title
+
+
+def _split_unlinked_meetings(meetings, chapter_weeks):
+    """Place occurrences that no chapter links to, around the week blocks.
+
+    Returns ``(before, after)``: occurrences starting before the earliest
+    week-linked meeting render above the first week block; every remaining
+    unlinked occurrence renders below the last one. With no
+    week-linked meeting at all, every occurrence falls into ``after``. The
+    invariant this guarantees is that each occurrence in ``meetings`` renders
+    exactly once — no drops, no duplicates (#1461).
+    """
+    linked = [event for week in chapter_weeks for event in week['events']]
+    linked_ids = {event.pk for event in linked}
+    earliest = min((e.start_datetime for e in linked), default=None)
+    before, after = [], []
+    for meeting in meetings:
+        if meeting.pk in linked_ids:
+            continue
+        if earliest is not None and meeting.start_datetime < earliest:
+            before.append(meeting)
+        else:
+            after.append(meeting)
+    return before, after
 
 
 def _derive_current_week(chapter_weeks, current_chapter):
@@ -232,7 +310,7 @@ def book_detail(request, slug):
         return _book_secondary(request, book)
 
     is_member = can_access(request.user, book)
-    chapters = list(book.chapters.all())
+    chapters = list(book.chapters.select_related('event').all())
 
     context = {
         'book': book,
@@ -246,7 +324,29 @@ def book_detail(request, slug):
         for chapter in chapters:
             chapter.viewer_read = chapter.number in read_numbers
         current_chapter = _derive_current_chapter(chapters)
-        chapter_weeks = _group_chapters_by_week(chapters)
+        # Meeting rows (#1369, restructured in #1461): the linked series'
+        # public occurrences, ordered by start. Members only — computed inside
+        # the is_member branch so meetings never reach the gated context and
+        # cannot leak below the tier gate. Each occurrence is joined to the
+        # week whose chapters link it (``Chapter.event``) and rendered inside
+        # that week's block; occurrences no chapter links to (the kickoff, an
+        # extra session) render as standalone rows around the week blocks.
+        meetings = _series_meetings(book)
+        meetings_by_id = {meeting.pk: meeting for meeting in meetings}
+        chapter_weeks = _group_chapters_by_week(chapters, meetings_by_id)
+        series_name = book.event_series.name if book.event_series_id else ''
+        for week in chapter_weeks:
+            for event in week['events']:
+                # The week block already says which week this is, so the row
+                # label must not repeat it (or the series name).
+                event.display_label = 'Meeting'
+        meetings_before, meetings_after = _split_unlinked_meetings(
+            meetings, chapter_weeks,
+        )
+        for meeting in meetings_before + meetings_after:
+            meeting.display_label = _meeting_display_label(
+                meeting, series_name,
+            )
         context.update({
             'viewer_total': progress['total'],
             'viewer_done': progress['done'],
@@ -254,12 +354,8 @@ def book_detail(request, slug):
             'current_chapter': current_chapter,
             'chapter_weeks': chapter_weeks,
             'current_week': _derive_current_week(chapter_weeks, current_chapter),
-            # "When we meet" rows (#1369): the linked series' public
-            # occurrences, ordered by start. Members only — computed inside the
-            # is_member branch so meetings never reach the gated context and
-            # cannot leak below the tier gate. Empty/absent series -> [] -> the
-            # template hides the section entirely.
-            'meetings': _series_meetings(book),
+            'meetings_before': meetings_before,
+            'meetings_after': meetings_after,
         })
     else:
         context.update(_gate_context(request, book))
@@ -560,28 +656,36 @@ def chapter_detail(request, slug, number):
 
     # Group notes feed: members' notes for this chapter, newest first. #1366
     # flips the private-profile exclusion on: a note whose author is a private,
-    # non-self reader is not shown to other members. The viewer's OWN note is
-    # always visible to them regardless of their own visibility. One
-    # ``public_reader_ids`` query partitions the authors (no N+1).
+    # non-self reader is not shown to other members. One ``public_reader_ids``
+    # query partitions the authors (no N+1).
+    #
+    # #1461: the viewer's own note is excluded from the feed. The own-note card
+    # is the single canonical self surface; keeping the note in the feed too
+    # rendered it twice, ~1000px apart. ``notes_count`` still counts every note
+    # visible to the viewer (feed + their own), because it is a chapter-level
+    # count, not a feed length.
     all_notes = list(
         Note.objects.filter(chapter=chapter)
         .select_related('user')
         .order_by('-created_at')
     )
     public_author_ids = public_reader_ids({n.user_id for n in all_notes})
-    group_notes = [
+    visible_notes = [
         note for note in all_notes
         if note.user_id == request.user.id or note.user_id in public_author_ids
     ]
+    group_notes = [
+        note for note in visible_notes if note.user_id != request.user.id
+    ]
     for note in group_notes:
-        note.is_own = note.user_id == request.user.id
+        note.is_own = False
 
     context.update({
         'viewer_read': chapter.number in read_numbers,
         'own_note': own_note,
         'editing': request.GET.get('edit') == '1',
         'group_notes': group_notes,
-        'notes_count': len(group_notes),
+        'notes_count': len(visible_notes),
         'read_count': chapter.reads.count(),
     })
     return render(request, 'bookclub/book_chapter.html', context)

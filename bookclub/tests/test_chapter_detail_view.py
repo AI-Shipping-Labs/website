@@ -219,8 +219,10 @@ class ChapterNoteWriteTest(ChapterDetailFixture):
 
 
 class ChapterGroupFeedTest(ChapterDetailFixture):
-    def test_feed_shows_public_and_own_notes_with_you_chip(self):
+    def test_feed_shows_public_notes_and_excludes_the_viewers_own(self):
         # #1366: another member's note appears only if their profile is public.
+        # #1461: the viewer's own note is NOT repeated in the feed — the
+        # own-note card above is the single canonical self surface.
         ReaderProfile.objects.create(
             user=self.other_main, visibility=READER_VISIBILITY_PUBLIC,
         )
@@ -229,9 +231,11 @@ class ChapterGroupFeedTest(ChapterDetailFixture):
         self.client.force_login(self.main_user)
         response = self.client.get(self._url(0))
         self.assertContains(response, 'Theirs')
-        self.assertContains(response, 'Mine')
-        # The viewer's own note carries the "You" chip; exactly one on the page.
-        self.assertContains(response, 'note-you-chip', count=1)
+        # "Mine" renders exactly once — in the own-note card, not the feed.
+        self.assertContains(response, 'Mine', count=1)
+        self.assertContains(response, 'data-testid="own-note-body-rendered"', count=1)
+        self.assertContains(response, 'data-testid="note-body"', count=1)
+        self.assertNotContains(response, 'note-you-chip')
         # The public author's name links to their reader profile (#1366).
         self.assertContains(response, 'note-author-link')
         # No leaked Django comment markers from the rendered note cards.

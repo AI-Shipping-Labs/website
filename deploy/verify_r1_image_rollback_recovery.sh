@@ -14,9 +14,11 @@ CANDIDATE_IMAGE=$1
 R1_IMAGE=$2
 POSTGRES_CONTAINER="aisl-r1-recovery-${GITHUB_RUN_ID:-local}-$$"
 DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:55432/aisl_r1_recovery"
+PULL_LOG=$(mktemp)
 
 cleanup() {
     docker rm -f "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || true
+    rm -f "${PULL_LOG}"
 }
 trap cleanup EXIT
 
@@ -32,8 +34,24 @@ if [ "${candidate_phase}" != "r1" ]; then
     exit 0
 fi
 
+# The second self-retirement path: the exact R1 artifact has a finite registry
+# lifetime. Once the registry no longer holds it, an image-level rollback to R1
+# can never be performed again, so this rehearsal has nothing left to prove and
+# main deploys must not stay coupled to retaining it. Absence is the ONLY
+# tolerated pull failure. Authentication, network, and daemon errors still fail
+# the gate closed, because those leave the R1 rollback claim unproven rather
+# than moot.
 if ! docker image inspect "${R1_IMAGE}" >/dev/null 2>&1; then
-    docker pull "${R1_IMAGE}"
+    if ! docker pull "${R1_IMAGE}" >"${PULL_LOG}" 2>&1; then
+        cat "${PULL_LOG}" >&2
+        if grep -qiE 'manifest unknown|manifest for .* not found' "${PULL_LOG}"; then
+            echo "Exact R1 image rehearsal retired: ${R1_IMAGE} is no longer in the registry."
+            exit 0
+        fi
+        echo "Exact R1 image pull failed for a reason other than registry absence." >&2
+        exit 1
+    fi
+    cat "${PULL_LOG}"
 fi
 docker run --detach --rm \
     --name "${POSTGRES_CONTAINER}" \

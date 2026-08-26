@@ -16,13 +16,18 @@ from accounts.models import (
 )
 from accounts.services.privacy import (
     REDACTED,
+    SCHEMA_VERSION,
+    _book_club_export,
     build_user_data_export,
     delete_account_for_privacy,
 )
 from analytics.models import UserActivity
+from bookclub.models import Book, Chapter, ChapterRead, Note, ReaderProfile
 from comments.models import Comment
 from community.models import UnmatchedBookedCall
 from content.models import Course, Enrollment, Project, UserContentCompletion
+from content.models.download import Download, DownloadDeliveryGrant
+from content.models.peer_review import CourseCertificate
 from crm.models import CRMRecord, SlackMessage, SlackThread
 from email_app.models import EmailLog
 from events.models import Event, EventRegistration
@@ -35,6 +40,7 @@ from payments.models import (
 )
 from plans.models import Plan, Sprint
 from tests.fixtures import TierSetupMixin
+from voting.models import Poll, PollOption, PollVote
 
 
 def _course(slug="privacy-course"):
@@ -296,6 +302,296 @@ class PrivacyExportTest(TierSetupMixin, TestCase):
         self.assertNotIn("raw-github-token", body)
         self.assertNotIn("raw-provider-token", body)
         self.assertNotIn("raw-query-token", body)
+
+
+@tag("core")
+class PrivacyExportUuidSerialisationTest(TestCase):
+    """Every UUID-valued export field must reach the member as a string."""
+
+    def test_engaged_member_export_serialises_every_uuid_field_as_a_string(self):
+        user = User.objects.create_user(email="uuid-export@test.com")
+        course = _course("uuid-course")
+        plan_content_id = Comment.objects.create(
+            user=user,
+            content_id="11111111-1111-4111-8111-111111111111",
+            body="A comment on a thread",
+        ).content_id
+        poll = Poll.objects.create(title="Next topic", allow_proposals=True)
+        proposed = PollOption.objects.create(
+            poll=poll,
+            title="Inference engineering",
+            proposed_by=user,
+        )
+        vote = PollVote.objects.create(poll=poll, option=proposed, user=user)
+        download = Download.objects.create(
+            title="Cheatsheet",
+            slug="uuid-cheatsheet",
+            file_url="https://example.com/cheatsheet.pdf",
+        )
+        grant = DownloadDeliveryGrant.objects.create(
+            user=user,
+            download=download,
+            token_hash="uuid-export-token-hash",
+            expires_at=timezone.now() + timedelta(days=1),
+        )
+        certificate = CourseCertificate.objects.create(user=user, course=course)
+
+        self.client.force_login(user)
+        response = self.client.get("/account/api/data-export")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/json")
+        payload = json.loads(response.content)
+
+        comment_row = payload["communications_activity"]["comments"][0]
+        vote_row = payload["communications_activity"]["poll_votes"][0]
+        proposal_row = payload["communications_activity"]["poll_proposals"][0]
+        grant_row = payload["learning_content"]["download_delivery_grants"][0]
+        certificate_row = payload["learning_content"]["course_certificates"][0]
+
+        self.assertEqual(comment_row["content_id"], str(plan_content_id))
+        self.assertEqual(vote_row["poll_id"], str(poll.pk))
+        self.assertEqual(vote_row["option_id"], str(proposed.pk))
+        self.assertEqual(vote_row["id"], vote.pk)
+        self.assertEqual(proposal_row["id"], str(proposed.pk))
+        self.assertEqual(proposal_row["poll_id"], str(poll.pk))
+        self.assertEqual(grant_row["id"], str(grant.pk))
+        self.assertEqual(certificate_row["id"], str(certificate.pk))
+        for value in (
+            comment_row["content_id"],
+            vote_row["poll_id"],
+            vote_row["option_id"],
+            proposal_row["id"],
+            proposal_row["poll_id"],
+            grant_row["id"],
+            certificate_row["id"],
+        ):
+            self.assertIsInstance(value, str)
+
+    @patch("accounts.views.account.build_user_data_export")
+    def test_export_view_still_fails_loudly_on_a_non_plain_value(self, build_export):
+        """No ``default=`` fallback: an unconverted object must not be stringified."""
+        user = User.objects.create_user(email="loud-export@test.com")
+        build_export.return_value = {"manifest": {}, "account_profile": user}
+
+        self.client.force_login(user)
+
+        with self.assertRaises(TypeError):
+            self.client.get("/account/api/data-export")
+
+
+@tag("core")
+class PrivacyBookClubExportTest(TestCase):
+    """``events_community.book_club`` carries the member's own reading only."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.book = Book.objects.create(
+            title="Inference Engineering",
+            slug="inference-engineering",
+            author="Philip Kiely",
+            status="current",
+        )
+        cls.chapter_one = Chapter.objects.create(
+            book=cls.book, number=1, title="Batching",
+        )
+        cls.chapter_two = Chapter.objects.create(
+            book=cls.book, number=2, title="Caching",
+        )
+
+    def test_reader_export_carries_reads_notes_and_stored_visibility(self):
+        user = User.objects.create_user(email="bookclub-export@test.com")
+        ChapterRead.objects.create(chapter=self.chapter_one, user=user)
+        ChapterRead.objects.create(chapter=self.chapter_two, user=user)
+        note = Note.objects.create(
+            chapter=self.chapter_one,
+            user=user,
+            body="continuous batching is the win",
+        )
+        profile = ReaderProfile.objects.create(user=user, visibility="private")
+
+        book_club = build_user_data_export(user)["events_community"]["book_club"]
+
+        reads = book_club["chapter_reads"]
+        self.assertEqual(len(reads), 2)
+        self.assertEqual(
+            [row["chapter_number"] for row in reads],
+            [1, 2],
+        )
+        self.assertEqual(
+            [row["chapter_title"] for row in reads],
+            ["Batching", "Caching"],
+        )
+        self.assertEqual(reads[0]["book_slug"], "inference-engineering")
+        self.assertEqual(reads[0]["book_title"], "Inference Engineering")
+        self.assertEqual(reads[0]["chapter_id"], self.chapter_one.pk)
+        self.assertEqual(
+            reads[0]["read_at"],
+            ChapterRead.objects.get(chapter=self.chapter_one, user=user).read_at.isoformat(),
+        )
+
+        self.assertEqual(len(book_club["notes"]), 1)
+        note_row = book_club["notes"][0]
+        self.assertEqual(note_row["body"], "continuous batching is the win")
+        self.assertEqual(note_row["comment_content_id"], str(note.comment_content_id))
+        self.assertIsInstance(note_row["comment_content_id"], str)
+        self.assertEqual(note_row["chapter_title"], "Batching")
+        self.assertEqual(note_row["book_slug"], "inference-engineering")
+        self.assertEqual(note_row["created_at"], note.created_at.isoformat())
+        self.assertEqual(note_row["updated_at"], note.updated_at.isoformat())
+        self.assertNotIn("body_html", note_row)
+
+        self.assertEqual(
+            book_club["reader_profile"],
+            {
+                "visibility": "private",
+                "has_explicit_setting": True,
+                "created_at": profile.created_at.isoformat(),
+                "updated_at": profile.updated_at.isoformat(),
+            },
+        )
+
+    def test_reader_without_a_profile_row_reports_the_live_model_default(self):
+        user = User.objects.create_user(email="bookclub-default@test.com")
+        ChapterRead.objects.create(chapter=self.chapter_one, user=user)
+
+        profile_export = build_user_data_export(user)["events_community"]["book_club"]["reader_profile"]
+
+        field_default = ReaderProfile._meta.get_field("visibility").get_default()
+        self.assertEqual(profile_export["visibility"], field_default)
+        self.assertFalse(profile_export["has_explicit_setting"])
+        self.assertIsNone(profile_export["created_at"])
+        self.assertIsNone(profile_export["updated_at"])
+
+    def test_flipping_the_model_default_flips_the_export_without_touching_privacy(self):
+        user = User.objects.create_user(email="bookclub-flip@test.com")
+        visibility_field = ReaderProfile._meta.get_field("visibility")
+        original_default = visibility_field.default
+        flipped = "public" if original_default == "private" else "private"
+        visibility_field.default = flipped
+        try:
+            profile_export = build_user_data_export(user)["events_community"]["book_club"]["reader_profile"]
+        finally:
+            visibility_field.default = original_default
+
+        self.assertEqual(profile_export["visibility"], flipped)
+        self.assertNotEqual(profile_export["visibility"], original_default)
+
+    def test_export_never_leaks_another_readers_notes_reads_or_profile(self):
+        mine = User.objects.create_user(email="bookclub-mine@test.com")
+        theirs = User.objects.create_user(email="bookclub-theirs@test.com")
+        ChapterRead.objects.create(chapter=self.chapter_one, user=mine)
+        ChapterRead.objects.create(chapter=self.chapter_one, user=theirs)
+        Note.objects.create(chapter=self.chapter_one, user=mine, body="my own note")
+        other_note = Note.objects.create(
+            chapter=self.chapter_one, user=theirs, body="their private note",
+        )
+        ReaderProfile.objects.create(user=theirs, visibility="public")
+
+        payload = build_user_data_export(mine)
+        book_club = payload["events_community"]["book_club"]
+
+        self.assertEqual([row["body"] for row in book_club["notes"]], ["my own note"])
+        self.assertEqual(len(book_club["chapter_reads"]), 1)
+        self.assertFalse(book_club["reader_profile"]["has_explicit_setting"])
+        rendered = json.dumps(payload)
+        self.assertNotIn("their private note", rendered)
+        self.assertNotIn(str(other_note.comment_content_id), rendered)
+        self.assertNotIn("bookclub-theirs@test.com", rendered)
+
+    def test_member_without_book_club_activity_gets_populated_empty_structures(self):
+        user = User.objects.create_user(
+            email="bookclub-none@test.com",
+            signup_source=SIGNUP_SOURCE_NEWSLETTER,
+            account_activated=False,
+            email_verified=True,
+        )
+
+        payload = build_user_data_export(user)
+        book_club = payload["events_community"]["book_club"]
+
+        self.assertEqual(book_club["chapter_reads"], [])
+        self.assertEqual(book_club["notes"], [])
+        self.assertEqual(
+            book_club["reader_profile"]["visibility"],
+            ReaderProfile._meta.get_field("visibility").get_default(),
+        )
+        self.assertFalse(book_club["reader_profile"]["has_explicit_setting"])
+        json.dumps(payload)
+
+    def test_book_club_export_query_count_does_not_grow_with_reading_volume(self):
+        light = User.objects.create_user(email="bookclub-light@test.com")
+        ChapterRead.objects.create(chapter=self.chapter_one, user=light)
+        Note.objects.create(chapter=self.chapter_one, user=light, body="one note")
+        ReaderProfile.objects.create(user=light, visibility="public")
+
+        heavy = User.objects.create_user(email="bookclub-heavy@test.com")
+        ReaderProfile.objects.create(user=heavy, visibility="public")
+        chapters = []
+        for book_index in range(3):
+            book = Book.objects.create(
+                title=f"Book {book_index}",
+                slug=f"heavy-book-{book_index}",
+                author="Author",
+                status="finished",
+            )
+            for chapter_number in range(7):
+                chapters.append(
+                    Chapter.objects.create(
+                        book=book,
+                        number=chapter_number,
+                        title=f"Chapter {chapter_number}",
+                    )
+                )
+        for chapter in chapters[:20]:
+            ChapterRead.objects.create(chapter=chapter, user=heavy)
+        for chapter in chapters[:10]:
+            Note.objects.create(chapter=chapter, user=heavy, body="heavy note")
+
+        with self.assertNumQueries(3):
+            light_export = _book_club_export(light)
+        with self.assertNumQueries(3):
+            heavy_export = _book_club_export(heavy)
+
+        self.assertEqual(len(light_export["chapter_reads"]), 1)
+        self.assertEqual(len(heavy_export["chapter_reads"]), 20)
+        self.assertEqual(len(heavy_export["notes"]), 10)
+        self.assertEqual(
+            {row["book_slug"] for row in heavy_export["chapter_reads"]},
+            {"heavy-book-0", "heavy-book-1", "heavy-book-2"},
+        )
+
+    def test_export_keeps_eight_top_level_sections_and_the_audit_count(self):
+        user = User.objects.create_user(email="bookclub-sections@test.com")
+        ChapterRead.objects.create(chapter=self.chapter_one, user=user)
+
+        self.client.force_login(user)
+        response = self.client.get("/account/api/data-export")
+
+        payload = json.loads(response.content)
+        self.assertEqual(payload["manifest"]["schema_version"], SCHEMA_VERSION)
+        self.assertEqual(len(set(payload) - {"manifest"}), 8)
+        self.assertIn("book_club", payload["events_community"])
+        log = PrivacyRequestLog.objects.get(request_type="export")
+        self.assertEqual(log.row_count_summary, {"exported_sections": 8})
+
+    @patch("accounts.services.privacy.notify_privacy_staff")
+    def test_deleting_the_account_still_erases_book_club_rows(self, _notify):
+        user = User.objects.create_user(email="bookclub-delete@test.com")
+        ChapterRead.objects.create(chapter=self.chapter_one, user=user)
+        Note.objects.create(chapter=self.chapter_one, user=user, body="erase me")
+        ReaderProfile.objects.create(user=user, visibility="public")
+
+        result = delete_account_for_privacy(user, {"ip": "127.0.0.1"})
+
+        self.assertTrue(result.success)
+        self.assertFalse(ChapterRead.objects.exists())
+        self.assertFalse(Note.objects.exists())
+        self.assertFalse(ReaderProfile.objects.exists())
+        erased = result.row_count_summary["erased"]
+        self.assertEqual(erased["bookclub.ChapterRead"], 1)
+        self.assertEqual(erased["bookclub.Note"], 1)
+        self.assertEqual(erased["bookclub.ReaderProfile"], 1)
 
 
 @tag("core")

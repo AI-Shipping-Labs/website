@@ -381,3 +381,122 @@ def test_host_labels_routes_field_contract_and_visual_states(django_server, brow
     )
     _capture_theme_pair(page, "settings-validation-error-desktop")
     context.close()
+
+
+# ---------------------------------------------------------------------------
+# Route-derived active state (#1435)
+#
+# The sidebar's expanded group and its single current destination come from
+# the resolved Django route name (``studio/sidebar.py``). These scenarios
+# extend the #1287 preference contract to deep routes: the owning group must
+# already be open in the *server* HTML, a stored ``false`` must survive, and
+# exactly one link may claim ``aria-current="page"`` -- none at all when the
+# route has no sidebar destination of its own.
+# ---------------------------------------------------------------------------
+
+
+def _seed_member_1435():
+    from accounts.models import User
+
+    user, _ = User.objects.get_or_create(
+        email="findability-member-1435@test.com",
+        defaults={"email_verified": True},
+    )
+    user_id = user.pk
+    connection.close()
+    return user_id
+
+
+def _server_html(page, url):
+    """Return the pre-JavaScript server response body for ``url``."""
+    response = page.request.get(url)
+    assert response.status == 200
+    return response.text()
+
+
+def _section_expanded_server_side(html, slug):
+    return f'id="studio-section-{slug}" class="space-y-1 mt-1"' in html
+
+
+def _current_links(page):
+    return page.locator('#studio-sidebar-nav a[aria-current="page"]')
+
+
+def test_user_deep_link_opens_people_server_side_and_keeps_preference(
+    django_server, browser
+):
+    user_id = _seed_member_1435()
+    context, page = _staff_page(browser, "findability-deep-1435@test.com")
+    page.add_init_script(
+        "localStorage.setItem('studio-nav-open', JSON.stringify({people:false}))"
+    )
+    url = f"{django_server}/studio/users/{user_id}/"
+
+    html = _server_html(page, url)
+    assert _section_expanded_server_side(html, "people")
+    assert not _section_expanded_server_side(html, "events")
+
+    page.goto(url, wait_until="domcontentloaded")
+    assert _toggle(page, "people").get_attribute("aria-expanded") == "true"
+    current = _current_links(page)
+    assert current.count() == 1
+    assert current.first.get_attribute("href") == "/studio/users/"
+    assert (
+        page.evaluate("JSON.parse(localStorage.getItem('studio-nav-open')).people")
+        is False
+    )
+    context.close()
+
+
+def test_questionnaire_response_queue_marks_questionnaires_current(
+    django_server, browser
+):
+    context, page = _staff_page(browser, "findability-queue-1435@test.com")
+    url = f"{django_server}/studio/questionnaire-responses/"
+
+    assert _section_expanded_server_side(_server_html(page, url), "onboarding")
+
+    page.goto(url, wait_until="domcontentloaded")
+    assert _toggle(page, "onboarding").get_attribute("aria-expanded") == "true"
+    current = _current_links(page)
+    assert current.count() == 1
+    assert current.first.get_attribute("href") == "/studio/questionnaires/"
+    context.close()
+
+
+def test_assistant_and_maven_routes_open_their_accepted_groups(
+    django_server, browser
+):
+    context, page = _staff_page(browser, "findability-ops-1435@test.com")
+
+    page.goto(f"{django_server}/studio/assistant/", wait_until="domcontentloaded")
+    assert _toggle(page, "people").get_attribute("aria-expanded") == "true"
+    current = _current_links(page)
+    assert current.count() == 1
+    assert current.first.get_attribute("href") == "/studio/assistant/"
+
+    page.goto(f"{django_server}/studio/maven-events/", wait_until="domcontentloaded")
+    assert _toggle(page, "operations").get_attribute("aria-expanded") == "true"
+    current = _current_links(page)
+    assert current.count() == 1
+    assert current.first.get_attribute("href") == "/studio/maven-events/"
+    context.close()
+
+
+def test_stripe_webhook_diagnostics_open_people_without_a_false_current_link(
+    django_server, browser
+):
+    context, page = _staff_page(browser, "findability-webhooks-1435@test.com")
+    url = f"{django_server}/studio/payments/stripe-webhooks/"
+
+    assert _section_expanded_server_side(_server_html(page, url), "people")
+
+    page.goto(url, wait_until="domcontentloaded")
+    assert _toggle(page, "people").get_attribute("aria-expanded") == "true"
+    assert _current_links(page).count() == 0
+    mismatches = page.locator(
+        '#studio-sidebar-nav a[href="/studio/users/payment-mismatches/"]'
+    )
+    assert mismatches.count() == 1
+    assert mismatches.first.get_attribute("aria-current") is None
+    context.close()

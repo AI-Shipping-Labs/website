@@ -22,6 +22,7 @@ from content.access import (
 from email_app import ses_explain
 from integrations.config import site_base_url
 from integrations.models.utm_campaign import UTM_MEDIUM_PRESETS, UTM_SOURCE_PRESETS
+from studio.sidebar import sidebar_state
 from studio.utils import get_github_edit_url, is_synced
 from studio.worker_health import get_worker_status
 
@@ -614,121 +615,26 @@ def sync_status_pill(status, error_count=0, size='sm'):
 
 
 @register.simple_tag
-def studio_sidebar_state(path):
-    """Compute which collapsible sidebar section contains the active page.
+def studio_sidebar_state(target):
+    """Compute the active section and active destination for the sidebar.
 
     Issue #570 reorganised the Studio sidebar into collapsible sections.
     To avoid a flash of collapsed-then-expanded on first paint, the section
     containing the active page must render expanded server-side — that means
     the template needs to know which section is active before any JS runs.
 
+    Issue #1435 moved the authority from URL substring checks (duplicated
+    here and in ``templates/studio/base.html``) to the resolved Django route
+    name. All rules live in :mod:`studio.sidebar`; this tag is the template
+    entry point. ``target`` is normally ``request``; a raw path string still
+    works and is resolved through the URLconf.
+
     Django's ``{% with %}`` tag does not accept boolean expressions with
-    mixed precedence (``a or b in c`` errors at parse time), so we
-    compute the booleans here and return them as a dict the template can
-    look up with ``{{ state.people_active }}`` etc. Keep these rules in
-    lock-step with the per-link ``{% if ... in request.path %}`` checks
-    inside ``templates/studio/base.html``.
+    mixed precedence, so the booleans are computed here and returned as a
+    dict the template looks up with ``{{ state.people_active }}``,
+    ``{{ state.active_destination }}`` etc.
     """
-    p = path or ''
-
-    content_active = (
-        'articles' in p
-        or 'marketing-pages' in p
-        or 'courses' in p
-        or 'projects' in p
-        or '/workshops' in p
-        or 'recordings' in p
-        or 'downloads' in p
-    )
-    people_active = (
-        p == '/studio/users/'
-        or p == '/studio/users/export'
-        or '/studio/users/payment-mismatches' in p
-        or p == '/studio/tags/'
-        or '/studio/imports/' in p
-        or 'tier-override' in p
-        or 'tier_override' in p
-        or 'tier_overrides' in p
-        or '/users/new' in p
-        or '/users/created' in p
-        or '/crm' in p
-        or '/studio/call-hosts' in p
-        or '/studio/instructors' in p
-    )
-    planning_active = (
-        '/sprints' in p or '/plans' in p
-    )
-    onboarding_active = (
-        '/questionnaires' in p or '/personas' in p
-    )
-    events_active = (
-        '/events/' in p
-        or p == '/studio/events'
-        or 'event-series' in p
-        or '/studio/hosts' in p
-    )
-    communication_active = (
-        'notifications' in p
-        or ('/campaigns' in p and 'utm-campaigns' not in p)
-        or '/email-templates' in p
-        or '/announcement' in p
-    )
-    tracking_active = (
-        'utm-campaigns' in p
-        or 'utm-analytics' in p
-        or 'signup-analytics' in p
-    )
-    operations_active = (
-        '/sync' in p
-        or '/worker' in p
-        or '/ses-events' in p
-        or '/email-log' in p
-        or 'redirects' in p
-        or '/settings' in p
-        or '/api-tokens' in p
-        or '/triggers/' in p
-    )
-    triggers_active = '/triggers/' in p
-
-    # Events is the dashboard default (#576) — when no other section is
-    # active, Events renders expanded so the admin lands on its primary
-    # surface. Once any other section is active, Events collapses back.
-    any_other_section_active = (
-        content_active
-        or people_active
-        or planning_active
-        or onboarding_active
-        or communication_active
-        or tracking_active
-        or operations_active
-    )
-    events_expanded = events_active or not any_other_section_active
-    active_section = next((
-        slug for slug, active in (
-            ('events', events_active),
-            ('content', content_active),
-            ('people', people_active),
-            ('planning', planning_active),
-            ('onboarding', onboarding_active),
-            ('communication', communication_active),
-            ('tracking', tracking_active),
-            ('operations', operations_active),
-        ) if active
-    ), '')
-
-    return {
-        'content_active': content_active,
-        'people_active': people_active,
-        'planning_active': planning_active,
-        'onboarding_active': onboarding_active,
-        'events_active': events_active,
-        'events_expanded': events_expanded,
-        'communication_active': communication_active,
-        'tracking_active': tracking_active,
-        'operations_active': operations_active,
-        'triggers_active': triggers_active,
-        'active_section': active_section,
-    }
+    return sidebar_state(target)
 
 
 # --- SES event explanation tags (issue #849) --------------------------------

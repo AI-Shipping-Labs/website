@@ -305,8 +305,11 @@ jobs:
           fi
 
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          gh issue close "${issue_number}" \
-            --comment "Scheduled Playwright recovered on \`${GITHUB_REF_NAME}\`: ${run_url}"
+          # Name the recovering commit (issue #1462): a green run on a later
+          # commit is not evidence that the commit which failed is fixed.
+          comment=$(printf 'Scheduled Playwright recovered on `%s`: %s\nCommit: %s\n' \
+            "${GITHUB_REF_NAME}" "${run_url}" "${GITHUB_SHA}")
+          gh issue close "${issue_number}" --comment "${comment}"
 
   notify-django-visual-regression:
     name: Django visual_regression Failure Issue

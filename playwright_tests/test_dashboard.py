@@ -1243,6 +1243,14 @@ class TestScenario5MainMemberSeesUpcomingEvents:
 @pytest.mark.django_db(transaction=True)
 class TestIssue1211StartingSoonEvent:
     @pytest.mark.core
+    # Pinned to Friday 2026-08-14 (issue #1462). ``_clear_dashboard_data()``
+    # removes the plan and book-club sources, so ``dashboard-this-week`` is
+    # rendered only when ``dashboard_upcoming_events`` is non-empty — and
+    # ``_get_this_week_events`` (content/views/home.py) truncates that list at
+    # Sunday 23:59:59. Unpinned, the ``+7 minutes`` event below falls into next
+    # week between Sunday 23:53 and 23:59:59 UTC, the section never renders,
+    # and ``upcoming.bounding_box()`` returns None. Keep the pin.
+    @freeze_time("2026-08-14T10:00:00Z")
     def test_starting_soon_event_is_first_dashboard_action(
         self, django_server, browser,
     ):
@@ -1277,6 +1285,13 @@ class TestIssue1211StartingSoonEvent:
 @pytest.mark.django_db(transaction=True)
 class TestScenario1028DashboardSeriesCollapse:
     @pytest.mark.core
+    # Pinned to Monday 2026-08-10 (issue #1462) so all four seeded events stay
+    # inside the week that ``_get_this_week_events`` (content/views/home.py)
+    # renders, which ends at Sunday 23:59:59. Without the pin the later
+    # sessions can drop out of the weekly zone through week filtering, and the
+    # "Session 2"/"Session 3" absence assertions below would pass for the wrong
+    # reason instead of proving series collapse.
+    @freeze_time("2026-08-10T10:00:00Z")
     def test_registered_series_collapses_to_next_occurrence(
         self, django_server, browser
     ):
@@ -1285,6 +1300,9 @@ class TestScenario1028DashboardSeriesCollapse:
         _clear_dashboard_data()
         user = _create_user("series-main@test.com", tier_slug="main")
         now = timezone.now()
+        # Monday, so the +1..+4 day events below all land Tue-Fri, inside
+        # the rendered week.
+        assert now.weekday() == 0
         series = EventSeries.objects.create(
             name="LLM Zoomcamp 2026 office hours",
             slug="llm-zoomcamp-2026-office-hours",
@@ -1674,15 +1692,32 @@ class TestIssue1211MobileDashboard:
         assert page.locator('[data-testid="slack-account-card-dismiss"]').count() == 0
 
     @pytest.mark.core
+    # Pinned to Friday 2026-08-14 (issue #1462). The "View all events" link
+    # renders only when ``dashboard_upcoming_events`` is non-empty, and
+    # ``_get_this_week_events`` (content/views/home.py) truncates that list at
+    # the current week's Sunday 23:59:59. The old ``now + 2 days`` fixture ran
+    # on an unpinned clock and therefore landed in next week on Saturdays and
+    # Sundays: the link never rendered and this test failed on weekends only.
+    # Keep the pin together with the week-anchored fixture below.
+    @freeze_time("2026-08-14T10:00:00Z")
     def test_mobile_dashboard_links_have_no_overflow_and_navigate(
         self, django_server, browser,
     ):
         _clear_dashboard_data()
         user = _create_user("mobile-dashboard@test.com", tier_slug="main")
+        now = timezone.now()
+        # Anchor the event to this week's Sunday evening, the last slot still
+        # inside the rendered window, so the fixture holds on any weekday the
+        # clock is pinned to (the old ``now + 2 days`` did not).
+        event_start = (now + datetime.timedelta(days=6 - now.weekday())).replace(
+            hour=20, minute=0, second=0, microsecond=0,
+        )
+        assert event_start > now
+        assert event_start.weekday() == 6
         event = _create_event(
             title="Mobile Link Clinic",
             slug="mobile-link-clinic",
-            start_datetime=timezone.now() + datetime.timedelta(days=2),
+            start_datetime=event_start,
         )
         _register_user_for_event(user, event)
         _create_article(

@@ -5,7 +5,8 @@ Endpoint: POST /api/webhooks/github
 When GitHub sends a push event to main:
 1. Validates the X-Hub-Signature-256 header
 2. Identifies the repo from the payload
-3. Enqueues a background sync job for the repo
+3. Claims the delivery (X-GitHub-Delivery) so retries are idempotent
+4. Enqueues a background sync job for the repo
 """
 
 import json
@@ -19,6 +20,7 @@ from django.views.decorators.http import require_POST
 from integrations.models import SyncLog, WebhookLog
 from integrations.services.github import (
     SYNC_LOCK_TIMEOUT_MINUTES,
+    delivery_deduplication_key,
     find_content_source,
     sync_content_source,
     validate_webhook_signature,
@@ -85,14 +87,30 @@ def github_webhook(request):
             status=400,
         )
 
-    # Log the webhook
+    # Claim the delivery before any state change, queue write, or sync.
+    # ``deduplication_key`` is unique, so the create either wins the claim
+    # or loses it to an identical delivery that is already being handled --
+    # ``get_or_create`` turns the concurrent IntegrityError into a plain
+    # "already exists" read, so two simultaneous retries converge instead
+    # of double-syncing.
     event_type = request.headers.get('X-GitHub-Event', 'unknown')
-    webhook_log = WebhookLog.objects.create(
-        service='github',
-        event_type=event_type,
-        payload=payload,
-        processed=False,
+    deduplication_key = delivery_deduplication_key(request)
+    webhook_log, claimed = WebhookLog.objects.get_or_create(
+        deduplication_key=deduplication_key,
+        defaults={
+            'service': 'github',
+            'event_type': event_type,
+            'payload': payload,
+            'processed': False,
+        },
     )
+    if not claimed:
+        logger.info(
+            'Duplicate GitHub webhook delivery for %s ignored (%s)',
+            repo_full_name,
+            deduplication_key,
+        )
+        return JsonResponse({'status': 'duplicate'})
 
     # Only process push events to the main/master branch
     ref = payload.get('ref', '')
@@ -151,11 +169,34 @@ def github_webhook(request):
                     sync_content_source(source, force=True)
 
             webhook_log.processed = True
-            webhook_log.save()
+            webhook_log.processed_at = timezone.now()
+            webhook_log.save(
+                update_fields=['processed', 'processed_at'],
+            )
         except Exception as e:
             logger.exception(
                 'Error processing GitHub webhook for %s', repo_full_name,
             )
+            # The claim only guards successful processing. A failed
+            # delivery releases its key (NULL is exempt from the unique
+            # constraint) so a GitHub redelivery of the same id can be
+            # retried instead of being silently swallowed as a duplicate.
+            webhook_log.deduplication_key = None
+            webhook_log.attempts = webhook_log.attempts + 1
+            webhook_log.error_message = str(e)
+            try:
+                webhook_log.save(
+                    update_fields=[
+                        'deduplication_key', 'attempts', 'error_message',
+                    ],
+                )
+            except Exception:
+                # A broken connection must not turn a handled webhook
+                # failure into a 500 GitHub cannot interpret.
+                logger.exception(
+                    'Could not release GitHub delivery claim for %s',
+                    repo_full_name,
+                )
             return JsonResponse(
                 {'status': 'error', 'message': str(e)},
                 status=200,

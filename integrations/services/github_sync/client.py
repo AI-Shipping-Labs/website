@@ -126,6 +126,63 @@ def validate_webhook_signature(request, secret):
     return hmac.compare_digest(expected_sig, signature_header)
 
 
+# Provider namespace for ``WebhookLog.deduplication_key`` so GitHub
+# delivery ids can never collide with another service's fingerprint
+# (the column is globally unique across every webhook source).
+GITHUB_DELIVERY_KEY_PREFIX = 'github:delivery:'
+GITHUB_BODY_KEY_PREFIX = 'github:body:'
+
+# GitHub delivery ids are UUIDs (36 chars). We keep the raw value in the
+# key when it is short and printable so operators can search a delivery
+# GUID straight from the GitHub "Recent Deliveries" panel; anything else
+# is hashed so the key always fits ``deduplication_key`` (128 chars) and
+# can never be truncated into a collision with a different delivery.
+_MAX_RAW_DELIVERY_ID_LENGTH = 80
+
+
+def _is_plain_delivery_id(delivery_id):
+    """True when the delivery id is short, ASCII, and free of separators."""
+    if len(delivery_id) > _MAX_RAW_DELIVERY_ID_LENGTH:
+        return False
+    if not delivery_id.isascii():
+        return False
+    return all(char.isalnum() or char in '-_' for char in delivery_id)
+
+
+def delivery_deduplication_key(request):
+    """Build the replay key for an already-authenticated GitHub delivery.
+
+    Call this only after the repository is known and the
+    ``X-Hub-Signature-256`` HMAC has been verified: the key is a claim on
+    processing, so an unauthenticated caller must never be able to reserve
+    (or steal) one.
+
+    GitHub stamps every delivery -- including its own retries and manual
+    redeliveries -- with ``X-GitHub-Delivery``, so that header is the
+    fingerprint whenever it is present.
+
+    Missing/blank header policy: fall back to a digest of the verified
+    signature header plus the raw body. That is deliberately not payload
+    identity on its own -- the signature is ``HMAC(webhook_secret, body)``,
+    so only a holder of the shared secret can produce it, and a caller
+    without the secret cannot steer the key. The fallback fails safe: two
+    byte-identical signed deliveries collapse into one claim (at worst we
+    skip a redundant sync) rather than fanning out into duplicate syncs.
+    """
+    delivery_id = (request.headers.get('X-GitHub-Delivery') or '').strip()
+    if delivery_id:
+        if _is_plain_delivery_id(delivery_id):
+            return f'{GITHUB_DELIVERY_KEY_PREFIX}{delivery_id}'
+        digest = hashlib.sha256(delivery_id.encode('utf-8')).hexdigest()
+        return f'{GITHUB_DELIVERY_KEY_PREFIX}sha256:{digest}'
+
+    signature_header = request.headers.get('X-Hub-Signature-256', '')
+    digest = hashlib.sha256(
+        signature_header.encode('utf-8') + b'\0' + request.body,
+    ).hexdigest()
+    return f'{GITHUB_BODY_KEY_PREFIX}{digest}'
+
+
 def find_content_source(repo_full_name):
     """Find a ContentSource by repo name.
 

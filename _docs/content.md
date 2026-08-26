@@ -6,6 +6,8 @@ How content is structured, synced, and gated. Companion to `setup.md` (which cov
 
 Content lives in GitHub repos. Each repo is registered as a `ContentSource` row. A push to a registered repo triggers a webhook at `/api/webhooks/github` which enqueues a background sync job. The sync clones (or pulls) the repo, walks the cloned repo tree, parses YAML/markdown frontmatter, uploads images to S3 (rewriting relative paths to the CDN), and upserts rows into the relevant content models. Each file is dispatched by filename, frontmatter, and location — there is no per-type sub-path configuration.
 
+Webhook deliveries are idempotent: the handler claims each `X-GitHub-Delivery` id in `WebhookLog.deduplication_key` after signature verification, so a GitHub retry or manual redelivery returns `{"status": "duplicate"}` without enqueueing a second sync. See `_docs/integrations/github.md` ("Webhook delivery idempotency") for the full contract.
+
 Manual sync: `uv run python manage.py sync_content` (all sources) or `uv run python manage.py sync_content --from-disk <path>` (local clone, useful for previewing changes before they land in GitHub).
 
 Sync code: `integrations/services/github_sync/orchestration.py` (contains `_sync_repo`) plus the per-type dispatchers in `integrations/services/github_sync/dispatchers/*.py`. `integrations/services/github.py` is now a compatibility facade that re-exports from `github_sync/`. The per-type dispatch functions follow the pattern `_dispatch_<type>(source, repo_dir, file_list, commit_sha, stats, ...)` — e.g. `_dispatch_articles`, `_dispatch_courses`, `_dispatch_events`.

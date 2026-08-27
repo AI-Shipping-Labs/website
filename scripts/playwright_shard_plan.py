@@ -66,9 +66,7 @@ def round_robin_loads(
     return tuple(loads)
 
 
-def build_shard_plan(
-    inventory: list[str], measured: dict[str, int], shard_count: int
-) -> ShardPlan:
+def build_shard_plan(inventory: list[str], measured: dict[str, int], shard_count: int) -> ShardPlan:
     if shard_count < 1:
         raise ValueError("shard_count must be positive")
     normalized_inventory = sorted(inventory)
@@ -76,6 +74,9 @@ def build_shard_plan(
         raise ValueError("Playwright inventory contains duplicate paths")
     if not measured:
         raise ValueError("measured weights cannot be empty")
+    missing_measured = sorted(set(measured) - set(normalized_inventory))
+    if missing_measured:
+        raise ValueError("measured Playwright paths missing from current inventory: " + ", ".join(missing_measured))
 
     unknown_weight_ms = max(measured.values())
     unknown_files = tuple(path for path in normalized_inventory if path not in measured)
@@ -137,13 +138,11 @@ def main() -> int:
     print(f"Index round-robin loads (ms): {list(baseline)}")
     if plan.unknown_files:
         print(
-            "Unknown files use conservative max measured weight "
-            f"{plan.unknown_weight_ms}ms: {list(plan.unknown_files)}"
+            "Unknown Playwright files are included with conservative fallback "
+            f"weight {plan.unknown_weight_ms}ms; the committed manifest remains "
+            f"unchanged: {list(plan.unknown_files)}"
         )
-    print(
-        f"Selected {len(plan.files[args.shard_index])} files for "
-        f"shard {args.shard_index + 1}/{args.shards}."
-    )
+    print(f"Selected {len(plan.files[args.shard_index])} files for shard {args.shard_index + 1}/{args.shards}.")
     return 0
 
 

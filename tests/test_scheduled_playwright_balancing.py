@@ -1,12 +1,22 @@
 import copy
 import hashlib
 import json
+import subprocess
+import sys
+import tempfile
+from collections import Counter
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
 from django.test import SimpleTestCase, tag
 
-from scripts.extract_playwright_shard_weights import parse_job_log
+from scripts.extract_playwright_shard_weights import (
+    canonical_inventory_digest,
+    parse_job_log,
+    rebuild_manifest,
+    validate_run,
+)
 from scripts.playwright_shard_plan import (
     build_shard_plan,
     canonical_weights_digest,
@@ -39,6 +49,10 @@ EXPECTED_SOURCES = {
     },
 }
 EXPECTED_INVENTORY_DIGEST = "aee7dfd363f6317ad03d066262591cdd6d008cf4ebaebeb3c356baf2ac0b5c39"
+SYNTHETIC_FILES = (
+    "playwright_tests/test_measured_a.py",
+    "playwright_tests/test_measured_b.py",
+)
 
 
 def _manifest():
@@ -51,6 +65,66 @@ def _current_inventory():
 
 def _workflow():
     return yaml.safe_load(WORKFLOW_PATH.read_text())
+
+
+def _assert_exact_partition(test_case, plan, inventory):
+    assigned = [filename for shard in plan.files for filename in shard]
+    test_case.assertCountEqual(assigned, inventory)
+    test_case.assertEqual(len(assigned), len(set(assigned)))
+
+
+def _synthetic_job_log():
+    return "\n".join(
+        [
+            "job\tstep\t2026-08-13T10:00:00.000Z collecting ... collected 2 items",
+            "job\tstep\t2026-08-13T10:00:01.000Z playwright_tests/test_measured_a.py::test_a PASSED [ 50%]",
+            "job\tstep\t2026-08-13T10:00:02.000Z playwright_tests/test_measured_b.py::test_b PASSED [100%]",
+        ]
+    )
+
+
+def _synthetic_manifest():
+    per_run_weights = {filename: 4_000 for filename in SYNTHETIC_FILES}
+    weights_digest = canonical_weights_digest(per_run_weights)
+    sources = []
+    for run_id in (101, 102, 103):
+        sources.append(
+            {
+                "expected_selected_nodes": 8,
+                "file_weights_sha256": weights_digest,
+                "head_sha": f"synthetic-sha-{run_id}",
+                "job_ids": [run_id * 10 + index for index in range(4)],
+                "observed_selected_nodes": 8,
+                "run_id": run_id,
+                "url": f"https://example.invalid/actions/runs/{run_id}",
+            }
+        )
+    return {
+        "aggregation": {"fixture": "deterministic synthetic evidence"},
+        "file_weights_ms": {filename: [4_000, 4_000, 4_000] for filename in SYNTHETIC_FILES},
+        "inventory_sha256": canonical_inventory_digest(list(SYNTHETIC_FILES)),
+        "schema_version": 1,
+        "source_runs": sources,
+    }
+
+
+def _rebuild_synthetic_manifest(seed):
+    def fake_fetch_job_log(item):
+        run_id, job_id = item
+        return run_id, job_id, _synthetic_job_log()
+
+    with (
+        patch("scripts.extract_playwright_shard_weights.validate_run"),
+        patch(
+            "scripts.extract_playwright_shard_weights.inventory_at_sha",
+            return_value=list(SYNTHETIC_FILES),
+        ),
+        patch(
+            "scripts.extract_playwright_shard_weights.fetch_job_log",
+            side_effect=fake_fetch_job_log,
+        ),
+    ):
+        return rebuild_manifest(seed)
 
 
 @tag("core")
@@ -72,25 +146,49 @@ class ScheduledPlaywrightMeasuredBalanceTest(SimpleTestCase):
             self.assertEqual(source["observed_selected_nodes"], 2408)
             self.assertEqual(source["file_weights_sha256"], expected["weights_digest"])
             per_run_weights = {
-                filename: samples[source_index]
-                for filename, samples in manifest["file_weights_ms"].items()
+                filename: samples[source_index] for filename, samples in manifest["file_weights_ms"].items()
             }
-            self.assertEqual(
-                canonical_weights_digest(per_run_weights), expected["weights_digest"]
-            )
+            self.assertEqual(canonical_weights_digest(per_run_weights), expected["weights_digest"])
 
     def test_weight_manifest_has_complete_reproducible_samples(self):
         manifest = _manifest()
         measured = measured_weights_from_manifest(manifest)
         self.assertEqual(set(measured), set(manifest["file_weights_ms"]))
-        self.assertTrue(set(measured).issubset(_current_inventory()))
         self.assertTrue(all(len(samples) == 3 for samples in manifest["file_weights_ms"].values()))
 
+    def test_manifest_schema_and_samples_fail_closed(self):
+        manifest = _manifest()
+        first_filename = next(iter(manifest["file_weights_ms"]))
+        cases = []
+
+        unsupported_schema = copy.deepcopy(manifest)
+        unsupported_schema["schema_version"] = 2
+        cases.append((unsupported_schema, "unsupported Playwright shard-weight schema"))
+
+        too_few_sources = copy.deepcopy(manifest)
+        too_few_sources["source_runs"] = too_few_sources["source_runs"][:2]
+        for samples in too_few_sources["file_weights_ms"].values():
+            del samples[2:]
+        cases.append((too_few_sources, "at least three source runs are required"))
+
         missing_sample = copy.deepcopy(manifest)
-        first_filename = next(iter(missing_sample["file_weights_ms"]))
         missing_sample["file_weights_ms"][first_filename].pop()
-        with self.assertRaisesRegex(ValueError, "one weight per source run"):
-            measured_weights_from_manifest(missing_sample)
+        cases.append((missing_sample, "one weight per source run"))
+
+        for invalid_sample in (-1, 1.5):
+            invalid_weights = copy.deepcopy(manifest)
+            invalid_weights["file_weights_ms"][first_filename][0] = invalid_sample
+            cases.append(
+                (
+                    invalid_weights,
+                    "weights must be non-negative integer milliseconds",
+                )
+            )
+
+        for invalid_manifest, expected_error in cases:
+            with self.subTest(expected_error=expected_error):
+                with self.assertRaisesRegex(ValueError, expected_error):
+                    measured_weights_from_manifest(invalid_manifest)
 
     def test_node_parser_normalizes_startup_and_sums_parametrized_nodes(self):
         log = "\n".join(
@@ -106,15 +204,16 @@ class ScheduledPlaywrightMeasuredBalanceTest(SimpleTestCase):
         self.assertEqual(weights, {"playwright_tests/test_a.py": 4000, "playwright_tests/test_b.py": 3000})
 
     def test_measured_plan_is_stable_complete_disjoint_and_better_balanced(self):
-        measured = measured_weights_from_manifest(_manifest())
-        inventory = _current_inventory()
+        manifest = _manifest()
+        measured = measured_weights_from_manifest(manifest)
+        inventory = sorted(manifest["file_weights_ms"])
         first = build_shard_plan(inventory, measured, 4)
         second = build_shard_plan(list(reversed(inventory)), measured, 4)
         self.assertEqual(first, second)
+        self.assertEqual(len(inventory), 386)
+        self.assertEqual(first.unknown_files, ())
 
-        assigned = [filename for shard in first.files for filename in shard]
-        self.assertCountEqual(assigned, inventory)
-        self.assertEqual(len(assigned), len(set(assigned)))
+        _assert_exact_partition(self, first, inventory)
         self.assertEqual(first.loads_ms, (893753, 893759, 893763, 893765))
         self.assertEqual([len(shard) for shard in first.files], [98, 96, 96, 96])
 
@@ -123,18 +222,175 @@ class ScheduledPlaywrightMeasuredBalanceTest(SimpleTestCase):
         self.assertLess(max(first.loads_ms), max(baseline))
         self.assertGreaterEqual(max(baseline) - max(first.loads_ms), 180_000)
 
+    def test_current_inventory_accepts_only_explicit_unknown_additions(self):
+        measured = measured_weights_from_manifest(_manifest())
+        inventory = _current_inventory()
+        missing_measured = sorted(set(measured) - set(inventory))
+        self.assertFalse(
+            missing_measured,
+            "measured Playwright paths missing from current inventory: " + ", ".join(missing_measured),
+        )
+
+        plan = build_shard_plan(inventory, measured, 4)
+        additions = tuple(sorted(set(inventory) - set(measured)))
+        self.assertEqual(plan.unknown_files, additions)
+        _assert_exact_partition(self, plan, inventory)
+
     def test_unknown_file_is_conservatively_and_deterministically_assigned_once(self):
         measured = measured_weights_from_manifest(_manifest())
-        inventory = _current_inventory() + ["playwright_tests/test_future_unknown.py"]
+        inventory = sorted(measured) + ["playwright_tests/test_future_unknown.py"]
         first = build_shard_plan(inventory, measured, 4)
-        second = build_shard_plan(inventory, measured, 4)
+        second = build_shard_plan(list(reversed(inventory)), measured, 4)
         self.assertEqual(first, second)
         self.assertEqual(first.unknown_files, ("playwright_tests/test_future_unknown.py",))
         self.assertEqual(first.unknown_weight_ms, max(measured.values()))
-        self.assertEqual(
-            sum("playwright_tests/test_future_unknown.py" in shard for shard in first.files),
-            1,
+        _assert_exact_partition(self, first, inventory)
+
+    def test_multiple_unknown_files_are_input_order_independent(self):
+        measured = measured_weights_from_manifest(_manifest())
+        unknown = (
+            "playwright_tests/test_future_alpha.py",
+            "playwright_tests/test_future_zeta.py",
         )
+        inventory = [*measured, *unknown]
+        first = build_shard_plan(inventory, measured, 4)
+        second = build_shard_plan(list(reversed(inventory)), measured, 4)
+
+        self.assertEqual(first, second)
+        self.assertEqual(first.unknown_files, unknown)
+        self.assertEqual(first.unknown_weight_ms, max(measured.values()))
+        _assert_exact_partition(self, first, inventory)
+
+    def test_missing_measured_path_is_named_and_rejected(self):
+        measured = measured_weights_from_manifest(_manifest())
+        missing_path = sorted(measured)[0]
+        inventory = [path for path in measured if path != missing_path]
+
+        with self.assertRaisesRegex(ValueError, missing_path):
+            build_shard_plan(inventory, measured, 4)
+
+    def test_selector_includes_unknown_files_and_prints_actionable_diagnostics(self):
+        tmp_root = REPO_ROOT / ".tmp"
+        tmp_root.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=tmp_root) as temp_dir:
+            root = Path(temp_dir)
+            inventory_dir = root / "playwright_tests"
+            inventory_dir.mkdir()
+            inventory = [
+                "playwright_tests/test_measured.py",
+                "playwright_tests/test_unknown_alpha.py",
+                "playwright_tests/test_unknown_zeta.py",
+            ]
+            for filename in inventory:
+                (root / filename).write_text("")
+
+            manifest = {
+                "schema_version": 1,
+                "source_runs": [{"run_id": run_id} for run_id in (1, 2, 3)],
+                "file_weights_ms": {"playwright_tests/test_measured.py": [10, 20, 30]},
+            }
+            weights_path = root / "weights.json"
+            weights_path.write_text(json.dumps(manifest))
+            original_manifest = weights_path.read_bytes()
+            selected = []
+
+            for shard_index in range(4):
+                output_path = root / f"shard-{shard_index}.txt"
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        str(REPO_ROOT / "scripts" / "playwright_shard_plan.py"),
+                        "--weights",
+                        str(weights_path),
+                        "--inventory",
+                        "playwright_tests",
+                        "--shards",
+                        "4",
+                        "--shard-index",
+                        str(shard_index),
+                        "--output",
+                        str(output_path),
+                    ],
+                    cwd=root,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("conservative fallback weight 20ms", result.stdout)
+                self.assertIn("committed manifest remains unchanged", result.stdout)
+                self.assertIn("playwright_tests/test_unknown_alpha.py", result.stdout)
+                self.assertIn("playwright_tests/test_unknown_zeta.py", result.stdout)
+                selected.extend(output_path.read_text().splitlines())
+
+            self.assertEqual(Counter(selected), Counter({path: 1 for path in inventory}))
+            self.assertEqual(weights_path.read_bytes(), original_manifest)
+
+    def test_pinned_run_evidence_rejects_invalid_metadata(self):
+        source = _synthetic_manifest()["source_runs"][0]
+        valid_metadata = {
+            "headSha": source["head_sha"],
+            "conclusion": "success",
+            "jobs": [{"databaseId": job_id, "conclusion": "success"} for job_id in source["job_ids"]],
+        }
+        cases = []
+
+        wrong_sha = copy.deepcopy(valid_metadata)
+        wrong_sha["headSha"] = "wrong-sha"
+        cases.append((wrong_sha, "SHA does not match pinned evidence"))
+
+        red_run = copy.deepcopy(valid_metadata)
+        red_run["conclusion"] = "failure"
+        cases.append((red_run, "is not green"))
+
+        missing_job = copy.deepcopy(valid_metadata)
+        missing_job["jobs"].pop()
+        cases.append((missing_job, "is missing a pinned shard job"))
+
+        red_job = copy.deepcopy(valid_metadata)
+        red_job["jobs"][0]["conclusion"] = "failure"
+        cases.append((red_job, "has a non-green pinned shard job"))
+
+        for metadata, expected_error in cases:
+            with self.subTest(expected_error=expected_error):
+                with patch(
+                    "scripts.extract_playwright_shard_weights.run_text",
+                    return_value=json.dumps(metadata),
+                ):
+                    with self.assertRaisesRegex(ValueError, expected_error):
+                        validate_run(source)
+
+    def test_extractor_rebuilds_deterministic_fixture_byte_for_byte(self):
+        seed = _synthetic_manifest()
+        rebuilt = _rebuild_synthetic_manifest(copy.deepcopy(seed))
+
+        expected_bytes = json.dumps(seed, indent=2, sort_keys=True) + "\n"
+        rebuilt_bytes = json.dumps(rebuilt, indent=2, sort_keys=True) + "\n"
+        self.assertEqual(rebuilt_bytes, expected_bytes)
+
+    def test_extractor_rejects_source_inventory_disagreement(self):
+        seed = _synthetic_manifest()
+        inventories = [
+            list(SYNTHETIC_FILES),
+            list(SYNTHETIC_FILES),
+            list(SYNTHETIC_FILES[:-1]),
+        ]
+        with (
+            patch("scripts.extract_playwright_shard_weights.validate_run"),
+            patch(
+                "scripts.extract_playwright_shard_weights.inventory_at_sha",
+                side_effect=inventories,
+            ),
+        ):
+            with self.assertRaisesRegex(ValueError, "exact Playwright file inventory"):
+                rebuild_manifest(seed)
+
+    def test_extractor_rejects_selected_node_count_disagreement(self):
+        seed = _synthetic_manifest()
+        seed["source_runs"][1]["expected_selected_nodes"] = 9
+
+        with self.assertRaisesRegex(ValueError, "yielded 8 nodes, expected 9"):
+            _rebuild_synthetic_manifest(seed)
 
     def test_workflow_changes_only_full_suite_assignment_contract(self):
         workflow = _workflow()

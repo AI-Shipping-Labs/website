@@ -1125,6 +1125,37 @@ cmp .github/playwright-full-shard-weights.json \
   .tmp/playwright-full-shard-weights.rebuilt.json
 ```
 
+Reproduction verifies the evidence already committed: it uses the pinned runs
+and must produce a byte-for-byte identical file. Refresh is a separate,
+intentional maintenance change after the selected Playwright inventory has
+stabilized. Use this evidence-based refresh sequence:
+
+1. Land each new `playwright_tests/test_*.py` file with the conservative
+   unknown-file fallback. The feature change does not edit the manifest.
+2. Wait for at least three successful `scheduled-playwright.yml` full-suite
+   runs whose exact source SHAs have the same complete `test_*.py` inventory
+   and the same marker-selection contract.
+3. Prepare a candidate seed under project-local `.tmp/`. Pin every run ID,
+   exact head SHA, all four Playwright shard job database IDs for each run, and
+   the expected selected-node count for each run.
+4. Run `scripts/extract_playwright_shard_weights.py` into a second `.tmp/`
+   candidate. Its validation must reject a non-green run, mismatched SHA or
+   job, source-inventory disagreement, or selected-node-count disagreement.
+5. Review the complete candidate diff. In one dedicated change, intentionally
+   replace `.github/playwright-full-shard-weights.json` and update the pinned
+   provenance and balance constants in
+   `tests/test_scheduled_playwright_balancing.py`.
+6. Re-run the extractor against the committed candidate and require `cmp` to
+   prove a byte-for-byte match before merge.
+
+Never shortcut measured evidence. In particular, do not append a default
+sample directly to `file_weights_ms`, copy another file's weights, auto-write
+or rewrite the manifest from tests, CI, or the selector, scrape mutable GitHub
+data during shard selection, or relax schema, source-count, sample-count,
+green-run, SHA/job, selected-node-count, inventory, or digest checks. Unknown
+files stay explicit and conservatively weighted until the full refresh process
+has real comparable evidence.
+
 The manifest pins each run, SHA, four job IDs, selected-node count, inventory
 digest, and per-run weight digest. Contract tests recompute those digests and
 reject missing samples, so the workflow cannot silently accept incomplete or

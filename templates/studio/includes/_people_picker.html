@@ -1,3 +1,4 @@
+{% load static %}
 {% comment %}
 Reusable Studio people picker (issue #720).
 
@@ -51,6 +52,7 @@ Enter activates the highlighted row, Esc closes the suggestion list.
       role="listbox"
       data-testid="{{ effective_testid_prefix }}-suggestions"></ul>
 </div>
+<script src="{% static 'js/studio/typeahead_lifecycle.js' %}"></script>
 <script>
 (function() {
   var input = document.getElementById('{{ id_prefix }}-search');
@@ -63,7 +65,7 @@ Enter activates the highlighted row, Esc closes the suggestion list.
   var onSelect = input.dataset.onSelect || 'set_value';
   var navigateTemplate = input.dataset.navigateTemplate || '';
   var testidPrefix = '{{ effective_testid_prefix|escapejs }}';
-  var debounce;
+  var lifecycle;
   var activeIndex = -1;
 
   var TIER_NAMES = {0: 'Free', 5: 'Free', 10: 'Basic', 20: 'Main', 30: 'Premium'};
@@ -74,9 +76,7 @@ Enter activates the highlighted row, Esc closes the suggestion list.
   function clearSelection() { hidden.value = ''; }
   function items() { return list.querySelectorAll('li[data-user-id]'); }
 
-  function hideList() {
-    list.classList.add('hidden');
-    list.innerHTML = '';
+  function resetActiveIndex() {
     activeIndex = -1;
   }
 
@@ -155,26 +155,28 @@ Enter activates the highlighted row, Esc closes the suggestion list.
   function render(results) {
     list.innerHTML = '';
     activeIndex = -1;
-    if (!results || !results.length) { hideList(); return; }
+    if (!results || !results.length) {
+      list.classList.add('hidden');
+      return;
+    }
     results.forEach(function(u) { list.appendChild(buildRow(u)); });
     list.classList.remove('hidden');
   }
 
   function activate(u) {
     hidden.value = u.id;
+    lifecycle.select();
     if (onSelect === 'navigate' && navigateTemplate) {
       window.location.href = navigateTemplate.replace('{id}', u.id);
       return;
     }
     if (onSelect === 'submit_form') {
-      hideList();
       var form = hidden.closest('form');
       if (form) { form.submit(); }
       return;
     }
     // set_value: write to the hidden field and notify listeners.
     input.value = u.display_name || u.email;
-    hideList();
     var event;
     try {
       event = new CustomEvent('picker:select', {detail: u, bubbles: true});
@@ -185,21 +187,19 @@ Enter activates the highlighted row, Esc closes the suggestion list.
     input.dispatchEvent(event);
   }
 
-  function search(q) {
-    var qs = 'q=' + encodeURIComponent(q);
-    if (extraQuery) { qs = qs + '&' + extraQuery; }
-    fetch(url + '?' + qs, {credentials: 'same-origin'})
-      .then(function(r) { return r.ok ? r.json() : {results: []}; })
-      .then(function(d) { render(d.results || []); })
-      .catch(function() { hideList(); });
-  }
-
-  input.addEventListener('input', function() {
-    clearSelection();
-    var q = input.value.trim();
-    if (debounce) { clearTimeout(debounce); }
-    if (q.length < 2) { hideList(); return; }
-    debounce = setTimeout(function() { search(q); }, 200);
+  lifecycle = window.StudioTypeaheadLifecycle.create({
+    input: input,
+    list: list,
+    onInput: clearSelection,
+    onClear: resetActiveIndex,
+    fetchResults: function(q) {
+      var qs = 'q=' + encodeURIComponent(q);
+      if (extraQuery) { qs = qs + '&' + extraQuery; }
+      return fetch(url + '?' + qs, {credentials: 'same-origin'})
+        .then(function(r) { return r.ok ? r.json() : {results: []}; })
+        .then(function(d) { return d.results || []; });
+    },
+    renderResults: render,
   });
 
   input.addEventListener('keydown', function(e) {
@@ -223,12 +223,8 @@ Enter activates the highlighted row, Esc closes the suggestion list.
         });
       }
     } else if (e.key === 'Escape') {
-      hideList();
+      lifecycle.escape();
     }
-  });
-
-  input.addEventListener('blur', function() {
-    setTimeout(hideList, 150);
   });
 })();
 </script>

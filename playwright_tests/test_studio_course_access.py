@@ -12,9 +12,12 @@ Usage:
     uv run pytest playwright_tests/test_studio_course_access.py -v
 """
 
+import json
 import os
+from urllib.parse import parse_qs, urlparse
 
 import pytest
+from playwright.sync_api import expect
 
 # Issue #656: this module uses local-only fixtures (DB seeding,
 # session-cookie injection, etc.) and cannot run against the
@@ -62,6 +65,34 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
 
 
+def _lookup_query(request):
+    return parse_qs(urlparse(request.url).query).get("q", [""])[0]
+
+
+def _fulfill_lookup(route, results):
+    route.fulfill(
+        status=200,
+        content_type="application/json",
+        body=json.dumps({"results": results}),
+    )
+
+
+def _release_lookup(page, route, results):
+    with page.expect_response(lambda response: response.url == route.request.url) as info:
+        _fulfill_lookup(route, results)
+    info.value.body()
+    page.evaluate(
+        "() => new Promise(resolve => requestAnimationFrame(() => "
+        "requestAnimationFrame(resolve)))"
+    )
+
+
+def _expect_lookup_dismissed(page):
+    suggestions = page.locator('[data-testid="grant-suggestions"]')
+    expect(suggestions).to_be_hidden()
+    expect(suggestions.locator("li")).to_have_count(0)
+
+
 def _clear_state():
     from content.models import Course, CourseAccess, Enrollment
 
@@ -88,19 +119,66 @@ class TestDesktopGrantSearchAndRevoke:
         _ensure_tiers()
         _create_staff_user("admin@test.com")
         target = _create_user("findme@test.com", tier_slug="main")
+        exact = _create_user("access@test.com", tier_slug="main")
         course = _create_course()
 
         context = _auth_context(browser, "admin@test.com")
         page = context.new_page()
         page.on("dialog", lambda d: d.accept())
 
+        target_result = {"id": target.pk, "email": target.email, "name": "Target"}
+        exact_result = {"id": exact.pk, "email": exact.email, "name": "Exact"}
+        stale_result = {
+            "id": 999999,
+            "email": "stale-access@test.com",
+            "name": "Stale Access",
+        }
+        hold_once = {"access@test.com", "older-access"}
+        pending = {}
+
+        def control_lookup(route):
+            query = _lookup_query(route.request)
+            if query in hold_once:
+                hold_once.remove(query)
+                pending[query] = route
+                return
+            results = [target_result] if query == "findme" else []
+            _fulfill_lookup(route, results)
+
+        page.route("**/studio/courses/*/access/users/search/**", control_lookup)
+
         page.goto(
             f"{django_server}/studio/courses/{course.pk}/access/",
             wait_until="domcontentloaded",
         )
 
-        # Type a fragment to trigger autocomplete
-        page.fill('input[data-testid="grant-email-input"]', "findme")
+        # Exact-email submission remains available after a delayed lookup
+        # resolves post-blur; the late list cannot cover Grant Access.
+        grant_input = page.locator('[data-testid="grant-email-input"]')
+        grant_button = page.locator('[data-testid="grant-submit-btn"]')
+        with page.expect_request(
+            lambda request: _lookup_query(request) == "access@test.com"
+        ):
+            grant_input.fill("access@test.com")
+        grant_input.press("Tab")
+        expect(grant_button).to_be_focused()
+        _release_lookup(page, pending["access@test.com"], [exact_result])
+        _expect_lookup_dismissed(page)
+        expect(page.locator('[data-testid="grant-user-id-input"]')).to_have_value("")
+        grant_button.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "Access granted to access@test.com" in page.content()
+
+        # Select a newer result while an older response is still pending.
+        grant_input = page.locator('[data-testid="grant-email-input"]')
+        with page.expect_request(
+            lambda request: _lookup_query(request) == "older-access"
+        ):
+            grant_input.fill("older-access")
+        with page.expect_response(
+            lambda response: _lookup_query(response.request) == "findme"
+        ):
+            grant_input.fill("findme")
 
         # Wait for the suggestion to appear
         suggestion = page.locator('[data-testid="grant-suggestion"]').first
@@ -108,11 +186,14 @@ class TestDesktopGrantSearchAndRevoke:
         # The suggestion should reference the target user's id
         assert suggestion.get_attribute("data-user-id") == str(target.pk)
         suggestion.click()
+        _release_lookup(page, pending["older-access"], [stale_result])
 
         # Hidden user_id should now be set
-        assert page.locator('[data-testid="grant-user-id-input"]').input_value() == str(
-            target.pk,
+        expect(grant_input).to_have_value("findme@test.com")
+        expect(page.locator('[data-testid="grant-user-id-input"]')).to_have_value(
+            str(target.pk)
         )
+        _expect_lookup_dismissed(page)
 
         page.click('[data-testid="grant-submit-btn"]')
         page.wait_for_load_state("domcontentloaded")
@@ -123,7 +204,9 @@ class TestDesktopGrantSearchAndRevoke:
         assert "Access granted to findme@test.com" in body
 
         # Revoke from desktop button
-        revoke = page.locator('[data-testid="revoke-btn"]').first
+        revoke = page.locator('[data-testid="access-row"]').filter(
+            has_text="findme@test.com"
+        ).locator('[data-testid="revoke-btn"]')
         revoke.click()
         page.wait_for_load_state("domcontentloaded")
 

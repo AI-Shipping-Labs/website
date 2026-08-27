@@ -14,9 +14,12 @@ Usage:
     uv run pytest playwright_tests/test_studio_course_enrollments.py -v
 """
 
+import json
 import os
+from urllib.parse import parse_qs, urlparse
 
 import pytest
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -41,6 +44,34 @@ from django.db import connection  # noqa: E402
 # session-cookie injection, etc.) and cannot run against the
 # deployed dev environment. See _docs/testing-guidelines.md.
 pytestmark = pytest.mark.local_only
+
+
+def _lookup_query(request):
+    return parse_qs(urlparse(request.url).query).get("q", [""])[0]
+
+
+def _fulfill_lookup(route, results):
+    route.fulfill(
+        status=200,
+        content_type="application/json",
+        body=json.dumps({"results": results}),
+    )
+
+
+def _release_lookup(page, route, results):
+    with page.expect_response(lambda response: response.url == route.request.url) as info:
+        _fulfill_lookup(route, results)
+    info.value.body()
+    page.evaluate(
+        "() => new Promise(resolve => requestAnimationFrame(() => "
+        "requestAnimationFrame(resolve)))"
+    )
+
+
+def _expect_lookup_dismissed(page):
+    suggestions = page.locator('[data-testid="enroll-suggestions"]')
+    expect(suggestions).to_be_hidden()
+    expect(suggestions.locator("li")).to_have_count(0)
 
 
 def _clear_enrollment_state():
@@ -156,20 +187,56 @@ class TestScenario2OperatorEnrollsUser:
         _clear_enrollment_state()
         _ensure_tiers()
         _create_staff_user("admin@test.com")
-        _create_user("carol@test.com", tier_slug="main")
+        carol = _create_user("carol@test.com", tier_slug="main")
+        selected = _create_user("selected@test.com", tier_slug="main")
         course_a = _create_course("Intro to AI", slug="intro-to-ai")
         course_b = _create_course("Other Course", slug="other-course")
 
         context = _auth_context(browser, "admin@test.com")
         page = context.new_page()
 
+        carol_result = {"id": carol.pk, "email": carol.email, "name": "Carol"}
+        selected_result = {
+            "id": selected.pk,
+            "email": selected.email,
+            "name": "Selected Learner",
+        }
+        stale_result = {
+            "id": 999999,
+            "email": "stale-enroll@test.com",
+            "name": "Stale Learner",
+        }
+        hold_once = {"carol@test.com", "older-enrollment"}
+        pending = {}
+
+        def control_lookup(route):
+            query = _lookup_query(route.request)
+            if query in hold_once:
+                hold_once.remove(query)
+                pending[query] = route
+                return
+            results = [selected_result] if query == "selected@test.com" else []
+            _fulfill_lookup(route, results)
+
+        page.route("**/studio/courses/*/access/users/search/**", control_lookup)
+
         page.goto(
             f"{django_server}/studio/courses/{course_a.pk}/enrollments/",
             wait_until="domcontentloaded",
         )
 
-        page.fill('input[name="email"]', "carol@test.com")
-        page.click('button:has-text("Enroll user")')
+        enroll_input = page.locator('[data-testid="enroll-email-input"]')
+        enroll_button = page.get_by_role("button", name="Enroll user", exact=True)
+        with page.expect_request(
+            lambda request: _lookup_query(request) == "carol@test.com"
+        ):
+            enroll_input.fill("carol@test.com")
+        enroll_input.press("Tab")
+        expect(enroll_button).to_be_focused()
+        _release_lookup(page, pending["carol@test.com"], [carol_result])
+        _expect_lookup_dismissed(page)
+        expect(page.locator('[data-testid="enroll-user-id-input"]')).to_have_value("")
+        enroll_button.click()
         page.wait_for_load_state("domcontentloaded")
 
         # Lands back on the same page
@@ -189,8 +256,37 @@ class TestScenario2OperatorEnrollsUser:
             f"{django_server}/studio/courses/{course_b.pk}/enrollments/",
             wait_until="domcontentloaded",
         )
+        enroll_input = page.locator('[data-testid="enroll-email-input"]')
+        with page.expect_request(
+            lambda request: _lookup_query(request) == "older-enrollment"
+        ):
+            enroll_input.fill("older-enrollment")
+        with page.expect_response(
+            lambda response: _lookup_query(response.request) == "selected@test.com"
+        ):
+            enroll_input.fill("selected@test.com")
+        suggestion = page.locator('[data-testid="enroll-suggestion"]').filter(
+            has_text="selected@test.com"
+        )
+        expect(suggestion).to_be_visible()
+        suggestion.click()
+        _release_lookup(page, pending["older-enrollment"], [stale_result])
+        expect(enroll_input).to_have_value("selected@test.com")
+        expect(page.locator('[data-testid="enroll-user-id-input"]')).to_have_value(
+            str(selected.pk)
+        )
+        _expect_lookup_dismissed(page)
+        page.get_by_role("button", name="Enroll user", exact=True).click()
+        page.wait_for_load_state("domcontentloaded")
+
         body_b = page.content()
         assert "carol@test.com" not in body_b
+        assert "Enrolled selected@test.com" in body_b
+        from content.models import Enrollment
+
+        assert Enrollment.objects.filter(user=selected, course=course_b).count() == 1
+        assert Enrollment.objects.filter(user=selected, course=course_a).count() == 0
+        connection.close()
 
 
 # ---------------------------------------------------------------------------

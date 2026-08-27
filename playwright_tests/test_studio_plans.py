@@ -15,9 +15,12 @@ scenarios are deliberately narrow:
 3. Non-staff cannot reach the studio plans / sprints pages.
 """
 
+import json
 import os
+from urllib.parse import parse_qs, urlparse
 
 import pytest
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -42,6 +45,34 @@ from django.db import connection  # noqa: E402
 # session-cookie injection, etc.) and cannot run against the
 # deployed dev environment. See _docs/testing-guidelines.md.
 pytestmark = pytest.mark.local_only
+
+
+def _search_query(request):
+    return parse_qs(urlparse(request.url).query).get("q", [""])[0]
+
+
+def _fulfill_people_search(route, results):
+    route.fulfill(
+        status=200,
+        content_type="application/json",
+        body=json.dumps({"results": results}),
+    )
+
+
+def _release_people_search(page, route, results):
+    with page.expect_response(lambda response: response.url == route.request.url) as info:
+        _fulfill_people_search(route, results)
+    info.value.body()
+    page.evaluate(
+        "() => new Promise(resolve => requestAnimationFrame(() => "
+        "requestAnimationFrame(resolve)))"
+    )
+
+
+def _expect_picker_dismissed(page, testid):
+    suggestions = page.locator(f'[data-testid="{testid}"]')
+    expect(suggestions).to_be_hidden()
+    expect(suggestions.locator("li")).to_have_count(0)
 
 
 def _clear_plans_data():
@@ -242,10 +273,11 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
         _ensure_tiers()
         _clear_plans_data()
         _create_staff_user("staff@test.com")
-        _create_user(
+        member = _create_user(
             "member@test.com",
             tier_slug="free",
             email_verified=True,
+            first_name="Member",
         )
         sprint_name = "Sidebar planning sprint"
         sprint_slug = "sidebar-planning-sprint"
@@ -255,6 +287,38 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
 
         context = _auth_context(browser, "staff@test.com")
         page = context.new_page()
+
+        member_result = {
+            "id": member.pk,
+            "email": member.email,
+            "display_name": "Member",
+            "first_name": "Member",
+            "last_name": "",
+            "tier_level": 0,
+            "has_community_access": False,
+        }
+        stale_result = {
+            "id": 999999,
+            "email": "stale-plan@test.com",
+            "display_name": "Stale Plan Member",
+            "first_name": "Stale",
+            "last_name": "Member",
+            "tier_level": 0,
+            "has_community_access": False,
+        }
+        hold_once = {"member@test.com", "escape-old", "older-member"}
+        pending = {}
+
+        def control_people_search(route):
+            query = _search_query(route.request)
+            if query in hold_once:
+                hold_once.remove(query)
+                pending[query] = route
+                return
+            results = [member_result] if query == "member@test.com" else []
+            _fulfill_people_search(route, results)
+
+        page.route("**/studio/api/users/search/**", control_people_search)
 
         # Step 1: land on the dashboard.
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
@@ -295,6 +359,28 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
         page.locator('#studio-sidebar-nav a[href="/studio/plans/"]').click()
         page.wait_for_url(f"{django_server}/studio/plans/")
 
+        # Abandon a held list-filter lookup by tabbing into the adjacent text
+        # search. Its late response must stay dismissed, leaving Filter fully
+        # clickable through the ordinary form flow.
+        list_member = page.locator('[data-testid="plan-list-member-search"]')
+        with page.expect_request(
+            lambda request: _search_query(request) == "member@test.com"
+        ):
+            list_member.fill("member@test.com")
+        list_member.press("Tab")
+        plan_text_search = page.locator('input[name="q"]')
+        expect(plan_text_search).to_be_focused()
+        _release_people_search(
+            page,
+            pending["member@test.com"],
+            [member_result],
+        )
+        _expect_picker_dismissed(page, "plan-list-member-suggestions")
+        plan_text_search.fill("member@test.com")
+        page.get_by_role("button", name="Filter", exact=True).click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "q=member%40test.com" in page.url
+
         # Step 5: create a plan. Same scope-by-header rationale as
         # above: the empty-state CTA renders the same "New plan"
         # accessible name as the header CTA, so we narrow to
@@ -308,16 +394,43 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
         # reusable people picker (testid prefix ``plan-member``). Drive
         # the picker via its real surface: type into the search input,
         # wait for the suggestion list to render, then click the row.
-        page.locator('[data-testid="plan-member-search"]').fill(
-            "member@test.com",
-        )
+        plan_member = page.locator('[data-testid="plan-member-search"]')
+        with page.expect_request(
+            lambda request: _search_query(request) == "escape-old"
+        ):
+            plan_member.fill("escape-old")
+        with page.expect_response(
+            lambda response: _search_query(response.request) == "member@test.com"
+        ):
+            plan_member.fill("member@test.com")
+        expect(
+            page.locator('[data-testid="plan-member-suggestions"]')
+        ).to_be_visible()
+        plan_member.press("Escape")
+        _release_people_search(page, pending["escape-old"], [stale_result])
+        _expect_picker_dismissed(page, "plan-member-suggestions")
+
+        with page.expect_request(
+            lambda request: _search_query(request) == "older-member"
+        ):
+            plan_member.fill("older-member")
+        with page.expect_response(
+            lambda response: _search_query(response.request) == "member@test.com"
+        ):
+            plan_member.fill("member@test.com")
         page.locator(
             '[data-testid="plan-member-suggestions"]'
         ).wait_for(state="visible")
-        page.locator(
-            '[data-testid="plan-member-suggestion"]'
-            '[data-email="member@test.com"]'
-        ).first.click()
+        plan_member.press("ArrowDown")
+        plan_member.press("Enter")
+        _release_people_search(
+            page,
+            pending["older-member"],
+            [stale_result],
+        )
+        expect(plan_member).to_have_value("Member")
+        expect(page.locator('#plan-member-id')).to_have_value(str(member.pk))
+        _expect_picker_dismissed(page, "plan-member-suggestions")
         page.locator('select[name="sprint"]').select_option(
             label=sprint_name,
         )

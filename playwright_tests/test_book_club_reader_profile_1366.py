@@ -161,7 +161,7 @@ class TestReaderProfile:
         finally:
             context.close()
 
-    def test_owner_keeps_notes_private_stays_named_and_reshares(
+    def test_owner_opts_public_and_appears_on_board(
         self, django_server, browser,
     ):
         _ensure_tiers()
@@ -268,20 +268,9 @@ class TestReaderProfile:
         finally:
             context.close()
 
-    def test_anonymous_profile_gate_has_neutral_identity(
-        self, django_server, browser,
-    ):
-        _ensure_tiers()
-        _clear_books()
-        _create_book(chapters=5, required_level=20)
-        _create_user("reader-b@test.com", tier_slug="main")
-        _mark_read("reader-b@test.com", [0])
-        _create_note("reader-b@test.com", 0, "Anonymous must not see this.")
-        target = _user_pk("reader-b@test.com")
-
-        context = browser.new_context()
+        anonymous_context = browser.new_context()
         try:
-            page = context.new_page()
+            page = anonymous_context.new_page()
             page.goto(
                 f"{django_server}/books/{SLUG}/readers/{target}",
                 wait_until="domcontentloaded",
@@ -292,11 +281,11 @@ class TestReaderProfile:
             assert page.locator(
                 '[data-testid="reader-avatar"]',
             ).inner_text() == "A"
-            assert "reader-b" not in page.title().lower()
+            assert "main" not in page.title().lower()
             assert page.locator('[data-testid="book-guest-gate"]').count() == 1
             assert page.locator(
                 '[data-testid="reader-progress-strip"]',
             ).count() == 0
-            assert "Anonymous must not see this" not in page.locator("main").inner_text()
+            assert "Members-only insight" not in page.locator("main").inner_text()
         finally:
-            context.close()
+            anonymous_context.close()

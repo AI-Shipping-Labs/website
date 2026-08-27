@@ -8,6 +8,7 @@ from content.views.home import _get_upcoming_events
 from events.models import Event, EventRegistration
 from events.services.time_windows import (
     past_events_queryset,
+    past_public_events_queryset,
     past_recording_events_queryset,
     upcoming_events_queryset,
 )
@@ -137,6 +138,57 @@ class EventTimeWindowQuerysetTest(TestCase):
             [recorded],
         )
 
+    def test_past_public_helper_has_no_recording_or_stale_status_requirement(self):
+        recorded = _event(
+            'public-recorded',
+            now=self.now,
+            start_offset=timedelta(hours=-2),
+            end_offset=timedelta(minutes=-30),
+            status='completed',
+            recording_url='https://video.test/public-recorded',
+        )
+        without_recording = _event(
+            'public-without-recording',
+            now=self.now,
+            start_offset=timedelta(minutes=-90),
+            end_offset=timedelta(minutes=-10),
+            status='completed',
+        )
+        stale_upcoming = _event(
+            'public-stale-upcoming',
+            now=self.now,
+            start_offset=timedelta(hours=-2),
+            end_offset=timedelta(minutes=-10),
+            status='upcoming',
+        )
+        _event(
+            'unpublished-past',
+            now=self.now,
+            start_offset=timedelta(days=-2),
+            end_offset=timedelta(days=-2, hours=1),
+            status='completed',
+            published=False,
+        )
+        _event(
+            'draft-past',
+            now=self.now,
+            start_offset=timedelta(days=-2),
+            end_offset=timedelta(days=-2, hours=1),
+            status='draft',
+        )
+        _event(
+            'cancelled-past',
+            now=self.now,
+            start_offset=timedelta(days=-2),
+            end_offset=timedelta(days=-2, hours=1),
+            status='cancelled',
+        )
+
+        self.assertCountEqual(
+            past_public_events_queryset(now=self.now),
+            [recorded, without_recording, stale_upcoming],
+        )
+
 
 def _timeline_upcoming_event_ids(response):
     """Collect anchor-event ids from the Upcoming timeline day buckets."""
@@ -192,6 +244,7 @@ class EventsListTimeWindowTest(TestCase):
             end_offset=timedelta(days=-3, hours=1),
             status='completed',
             title='Listed No Recording',
+            tags=['agents'],
         )
         self.stale_upcoming = _event(
             'listed-stale-upcoming',
@@ -200,14 +253,23 @@ class EventsListTimeWindowTest(TestCase):
             end_offset=timedelta(minutes=-1),
             status='upcoming',
             title='Listed Stale Upcoming',
-            recording_url='https://video.test/stale',
+            tags=['agents'],
+        )
+        self.unpublished_past = _event(
+            'listed-unpublished-past',
+            now=self.now,
+            start_offset=timedelta(days=-4),
+            end_offset=timedelta(days=-4, hours=1),
+            status='completed',
+            title='Listed Unpublished Past',
+            published=False,
             tags=['agents'],
         )
         self.draft = _event(
             'listed-draft',
             now=self.now,
-            start_offset=timedelta(days=4),
-            end_offset=timedelta(days=4, hours=1),
+            start_offset=timedelta(days=-5),
+            end_offset=timedelta(days=-5, hours=1),
             status='draft',
             title='Listed Draft',
             recording_url='https://video.test/draft',
@@ -215,8 +277,8 @@ class EventsListTimeWindowTest(TestCase):
         self.cancelled = _event(
             'listed-cancelled',
             now=self.now,
-            start_offset=timedelta(days=5),
-            end_offset=timedelta(days=5, hours=1),
+            start_offset=timedelta(days=-6),
+            end_offset=timedelta(days=-6, hours=1),
             status='cancelled',
             title='Listed Cancelled',
             recording_url='https://video.test/cancelled',
@@ -246,12 +308,19 @@ class EventsListTimeWindowTest(TestCase):
         self.assertEqual(response.context['past_days'], [])
         self.assertEqual(response.context['filter_mode'], 'upcoming')
 
-    def test_past_filter_requires_recording_and_preserves_tag_filter(self):
+    def test_past_filter_includes_recordingless_events_and_preserves_tag_filter(self):
         response = self.client.get('/events?filter=past&tag=agents')
 
         past_ids = _timeline_past_event_ids(response)
 
-        self.assertEqual(past_ids, {self.past_recorded.id, self.stale_upcoming.id})
+        self.assertEqual(
+            past_ids,
+            {
+                self.past_recorded.id,
+                self.past_without_recording.id,
+                self.stale_upcoming.id,
+            },
+        )
         self.assertEqual(response.context['filter_mode'], 'past')
         self.assertEqual(response.context['upcoming_days'], [])
         self.assertEqual(response.context['selected_tags'], ['agents'])
@@ -259,6 +328,27 @@ class EventsListTimeWindowTest(TestCase):
         self.assertIn('agents', response.context['all_past_tags'])
         self.assertIsNotNone(response.context['page_obj'])
         self.assertFalse(response.context['is_paginated'])
+
+    def test_upcoming_and_past_are_complementary_for_public_events(self):
+        upcoming = self.client.get('/events')
+        past = self.client.get('/events?filter=past')
+
+        upcoming_ids = _timeline_upcoming_event_ids(upcoming)
+        past_ids = _timeline_past_event_ids(past)
+
+        self.assertFalse(upcoming_ids & past_ids)
+        self.assertEqual(
+            upcoming_ids | past_ids,
+            {
+                self.future.id,
+                self.past_recorded.id,
+                self.past_without_recording.id,
+                self.stale_upcoming.id,
+            },
+        )
+        self.assertNotIn(self.unpublished_past.id, past_ids)
+        self.assertNotIn(self.draft.id, upcoming_ids | past_ids)
+        self.assertNotIn(self.cancelled.id, upcoming_ids | past_ids)
 
 
 class DashboardRegisteredUpcomingEventsTest(TestCase):

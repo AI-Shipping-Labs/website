@@ -383,7 +383,11 @@ class EventsListPublicEmptyStatesTest(TestCase):
         response = self.client.get('/events?filter=past')
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'No past event recordings yet')
+        self.assertContains(response, 'No past events yet')
+        self.assertContains(
+            response,
+            'Once a session wraps up it will show up here.',
+        )
 
 
 class EventsListMarkdownRenderingTest(TestCase):

@@ -278,7 +278,7 @@ class RecordingsListViewTest(TestCase):
     def test_recordings_list_empty(self):
         Event.objects.all().delete()
         response = self.client.get('/events?filter=past')
-        self.assertContains(response, 'No past event recordings yet')
+        self.assertContains(response, 'No past events yet')
 
 
 class RecordingDetailViewTest(TestCase):

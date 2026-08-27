@@ -295,9 +295,9 @@ def test_events_past_taxonomy_facets_and_pagination_are_normalized(
     _assert_page_head(
         page,
         f'{site_url}/events?filter=past',
-        'Past Event Recordings | AI Shipping Labs',
+        'Past Events | AI Shipping Labs',
     )
-    assert 'recorded AI Shipping Labs events' in _meta(
+    assert 'community calls, book club sessions, and Q&As' in _meta(
         page, 'meta[name="description"]',
     )
 

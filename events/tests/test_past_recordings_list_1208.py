@@ -173,8 +173,14 @@ class EventsPastRecordingsList1208Test(TestCase):
         self.assertIn('Main or above', card)
         self.assertNotIn('Premium', card)
 
-    def test_past_events_without_recordings_are_excluded_without_fake_ctas(self):
-        _past_event('no-recording-event', title='No Recording Event')
+    def test_past_event_without_recording_uses_event_card_anatomy(self):
+        event = _past_event(
+            'community-qa',
+            title='Community Office Hours',
+            kind='q_and_a',
+            required_level=LEVEL_MAIN,
+            tags=['agents'],
+        )
         _past_event(
             'recorded-event',
             title='Recorded Event',
@@ -182,10 +188,42 @@ class EventsPastRecordingsList1208Test(TestCase):
         )
 
         response = self.client.get('/events?filter=past')
+        card = _card_html(response, event.title)
 
+        self.assertContains(response, event.title)
         self.assertContains(response, 'Recorded Event')
-        self.assertNotContains(response, 'No Recording Event')
         self.assertContains(response, 'Watch recording', count=1)
+        self.assertIn('data-testid="past-event-card"', card)
+        self.assertIn(f'href="{event.get_absolute_url()}"', card)
+        self.assertIn('data-testid="event-tier-badge"', card)
+        self.assertIn('Main or above', card)
+        self.assertIn('Q&amp;A', card)
+        self.assertIn('data-lucide="arrow-right"', card)
+        self.assertNotIn('data-testid="past-card-recording-cta"', card)
+        self.assertNotIn('Recording', card)
+
+    def test_recordingless_linked_workshop_uses_event_url_and_event_tier(self):
+        event = _past_event(
+            'community-workshop-session',
+            title='Community Workshop Session',
+            kind='workshop',
+            required_level=LEVEL_PREMIUM,
+        )
+        workshop = _linked_workshop(
+            event,
+            slug='community-workshop-artifact',
+            recording_required_level=LEVEL_MAIN,
+        )
+
+        response = self.client.get('/events?filter=past')
+        card = _card_html(response, event.title)
+
+        self.assertIn('data-testid="past-event-card"', card)
+        self.assertIn(f'href="{event.get_absolute_url()}"', card)
+        self.assertNotIn(f'href="{workshop.get_absolute_url()}"', card)
+        self.assertIn('Premium', card)
+        self.assertNotIn('Main or above', card)
+        self.assertNotIn('Watch recording', card)
 
     def test_tag_filtering_preserves_s3_only_linked_workshops(self):
         agents_event = _past_event(
@@ -196,6 +234,11 @@ class EventsPastRecordingsList1208Test(TestCase):
             tags=['agents'],
         )
         _linked_workshop(agents_event)
+        agents_call = _past_event(
+            'agents-community-call',
+            title='Agents Community Call',
+            tags=['agents'],
+        )
         python_event = _past_event(
             'python-recording',
             title='Python Recording',
@@ -206,18 +249,17 @@ class EventsPastRecordingsList1208Test(TestCase):
         response = self.client.get('/events?filter=past&tag=agents')
         past_ids = {event.id for event in response.context['past_events']}
 
-        self.assertEqual(past_ids, {agents_event.id})
+        self.assertEqual(past_ids, {agents_event.id, agents_call.id})
         self.assertContains(response, 'Agents S3 Workshop')
+        self.assertContains(response, 'Agents Community Call')
         self.assertNotContains(response, 'Python Recording')
         self.assertIn('agents', response.context['all_past_tags'])
         self.assertIn('python', response.context['all_past_tags'])
         self.assertNotIn(python_event.id, past_ids)
 
-    def test_pagination_preserves_expanded_recording_availability(self):
+    def test_pagination_covers_recorded_and_recordingless_past_events(self):
         for index in range(PUBLIC_EVENTS_PER_PAGE + 1):
-            field = {
-                'recording_url': f'https://video.example.test/{index}',
-            }
+            field = {}
             if index == 0:
                 field = {
                     'recording_s3_url': 'https://storage.example.test/first.mp4',

@@ -1,10 +1,10 @@
-"""Mobile coverage for the canonical past-recordings archive.
+"""Mobile coverage for the canonical past-events history.
 
 Issue #512 originally protected a homepage recordings carousel. Issue #1241
-deliberately removed that borrowed-proof section from home; recordings now
+deliberately removed that borrowed-proof section from home; past events now
 remain discoverable at ``/events?filter=past``. These scenarios preserve the
 original narrow-viewport, long-title, card-reachability, responsive, and empty
-state guarantees on the canonical archive while also proving home stays clean.
+state guarantees on the canonical history while also proving home stays clean.
 """
 
 import datetime
@@ -247,7 +247,7 @@ def test_empty_archive_state_no_overflow_on_pixel7(django_server, page):
     expect(page.locator("#resources")).to_have_count(0)
     _open_archive(page, django_server)
     expect(
-        page.get_by_text("No past event recordings yet", exact=True)
+        page.get_by_text("No past events yet", exact=True)
     ).to_be_visible()
     expect(page.get_by_test_id("events-timeline")).to_have_count(0)
     assert _doc_overflow(page) <= 1

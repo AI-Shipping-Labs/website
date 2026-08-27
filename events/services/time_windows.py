@@ -67,6 +67,15 @@ def past_events_queryset(queryset=None, *, now=None, public=True):
     return queryset.filter(past_window_q(now))
 
 
+def past_public_events_queryset(queryset=None, *, now=None):
+    """Return public, published events whose effective end has passed."""
+    return past_events_queryset(
+        queryset,
+        now=now,
+        public=True,
+    ).filter(published=True)
+
+
 def past_recording_events_queryset(queryset=None, *, now=None):
     """Return public finished events that have a publishable recording."""
     has_recording_q = (

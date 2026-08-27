@@ -329,17 +329,17 @@ class EventsCollectionMetadataTest(TestCase):
             '?filter=past', f'{SITE_URL}/events?filter=past',
         )
 
-        self.assertEqual(head.title, 'Past Event Recordings | AI Shipping Labs')
+        self.assertEqual(head.title, 'Past Events | AI Shipping Labs')
         self.assertEqual(
             head.meta['og:title'],
-            ['Past Event Recordings | AI Shipping Labs'],
+            ['Past Events | AI Shipping Labs'],
         )
         self.assertEqual(
             head.meta['twitter:title'],
-            ['Past Event Recordings | AI Shipping Labs'],
+            ['Past Events | AI Shipping Labs'],
         )
         description = head.meta['description'][0]
-        self.assertIn('Browse recorded AI Shipping Labs events', description)
+        self.assertIn('community calls, book club sessions, and Q&As', description)
         self.assertEqual(head.meta['og:description'], [description])
         self.assertEqual(head.meta['twitter:description'], [description])
         self.assertEqual(response.context['filter_mode'], 'past')

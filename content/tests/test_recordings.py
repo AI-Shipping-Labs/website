@@ -211,11 +211,12 @@ class RecordingsListTagFilteringTest(TestCase):
         self.assertNotContains(response, 'Agent Workshop')
         self.assertNotContains(response, 'Django Workshop')
         self.assertNotContains(response, 'MCP Workshop')
-        self.assertContains(response, 'No past event recordings match this filter.')
+        self.assertContains(response, 'No past events match this filter')
+        self.assertContains(response, 'Try another topic or view the full history.')
         self.assertContains(response, 'data-testid="member-empty-state"')
         self.assertContains(response, 'data-empty-kind="filter"')
         self.assertContains(response, 'href="/events?filter=past"')
-        self.assertContains(response, 'View all past event recordings')
+        self.assertContains(response, 'View all past events')
 
     def test_tag_links_in_listing(self):
         response = self.client.get('/events?filter=past')
@@ -373,21 +374,28 @@ class RecordingsListDisplayTest(TestCase):
     def test_empty_list_message(self):
         Event.objects.all().delete()
         response = self.client.get('/events?filter=past')
-        self.assertContains(response, 'No past event recordings yet')
+        self.assertContains(response, 'No past events yet')
+        self.assertContains(
+            response,
+            'Once a session wraps up it will show up here.',
+        )
 
     def test_unpublished_not_shown(self):
         _create_recording_event('draft-recording', published=False)
         response = self.client.get('/events?filter=past')
         self.assertNotContains(response, 'Draft Recording')
 
-    def test_event_without_recording_not_shown(self):
+    def test_finished_event_without_recording_is_shown(self):
         Event.objects.create(
             title='No Recording Event', slug='no-rec-event',
-            start_datetime=timezone.now(), status='completed',
+            start_datetime=timezone.now() - timedelta(hours=2),
+            end_datetime=timezone.now() - timedelta(hours=1),
+            status='completed',
             recording_url='', published=True,
         )
         response = self.client.get('/events?filter=past')
-        self.assertNotContains(response, 'No Recording Event')
+        self.assertContains(response, 'No Recording Event')
+        self.assertContains(response, 'data-testid="past-event-card"')
 
 
 # --- Recording detail display tests ---

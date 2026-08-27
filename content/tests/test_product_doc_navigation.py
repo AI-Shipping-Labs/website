@@ -37,14 +37,26 @@ class ProductDocNavigationTest(SimpleTestCase):
         ]:
             self.assertIn(label, learning_line)
 
-    def test_past_recordings_surface_and_terminology_are_canonical(self):
+    def test_past_events_surface_and_recording_terminology_are_canonical(self):
         self.assertIn(
-            "| Past recordings listing | `/events?filter=past` | Canonical Events surface",
+            "The Past events history includes every public published finished "
+            "event and highlights recordings when available.",
             self.doc,
         )
         self.assertIn(
-            "| Past Recording | A completed Event with an available recording, "
-            "listed canonically at `/events?filter=past`.",
+            "| Past events listing | `/events?filter=past` | Canonical Events surface "
+            "for every public published finished event",
+            self.doc,
+        )
+        self.assertIn(
+            "| Past Recording | A recording available for a completed Event and "
+            "highlighted within the full finished-event history at "
+            "`/events?filter=past`.",
+            self.doc,
+        )
+        self.assertIn(
+            "after the event ends, it becomes discoverable in the full history "
+            "at `/events?filter=past`, with a recording highlighted when available",
             self.doc,
         )
 

@@ -175,7 +175,7 @@ def test_desktop_visitor_taxonomy_journey(django_server, page):
     page.wait_for_load_state("domcontentloaded")
     assert "filter=past" in page.url
     expect(
-        page.get_by_role("heading", name="Past event recordings")
+        page.get_by_role("heading", name="Past events")
     ).to_be_visible()
     standalone_card = page.locator('[data-testid="past-card-event-link"]')
     workshop_card = page.locator('[data-testid="past-card-workshop-link"]')
@@ -259,7 +259,7 @@ def test_mobile_taxonomy_navigation_and_past_recordings(django_server, browser):
 
     page.goto(f"{django_server}/events?filter=past", wait_until="domcontentloaded")
     expect(
-        page.get_by_role("heading", name="Past event recordings")
+        page.get_by_role("heading", name="Past events")
     ).to_be_visible()
 
     page.goto(f"{django_server}/resources", wait_until="domcontentloaded")

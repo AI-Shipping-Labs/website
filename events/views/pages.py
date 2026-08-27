@@ -55,7 +55,7 @@ from events.services.display_time import (
 )
 from events.services.freestyle_evidence import build_freestyle_evidence
 from events.services.series_registration import _eligible_occurrences
-from events.services.time_windows import past_recording_events_queryset
+from events.services.time_windows import past_public_events_queryset
 from events.services.timeline import (
     build_public_upcoming_timeline,
     group_timeline_days,
@@ -69,10 +69,10 @@ EVENTS_PAGE_DESCRIPTION = (
     'Scheduled live community sessions, registration, calendar view, and '
     'recordings from past AI Shipping Labs events.'
 )
-PAST_EVENTS_PAGE_TITLE = 'Past Event Recordings | AI Shipping Labs'
+PAST_EVENTS_PAGE_TITLE = 'Past Events | AI Shipping Labs'
 PAST_EVENTS_PAGE_DESCRIPTION = (
-    'Browse recorded AI Shipping Labs events, including workshops, community '
-    'sessions, and practical AI engineering recordings.'
+    'Browse past AI Shipping Labs workshops, community calls, book club '
+    'sessions, and Q&As, with recordings highlighted when available.'
 )
 _validate_resource_url = URLValidator(schemes=['http', 'https'])
 
@@ -344,8 +344,8 @@ def events_list(request):
     (including the legacy ``all``) resolves to Upcoming, so old links keep
     working without showing a combined view. Both surfaces render as a single
     date-grouped timeline (``events/_events_timeline.html``). The Past surface
-    filters to completed events that have a recording, supports tag filtering
-    via ``?tag=``, and paginates at 20 per page.
+    lists every public published finished event, supports tag filtering via
+    ``?tag=``, and paginates at 20 per page.
     """
     filter_mode = (
         'past'
@@ -372,21 +372,23 @@ def events_list(request):
     all_past_tags = []
 
     if filter_mode == 'past':
-        # Published finished events with any recording field populated.
+        # Published finished events, whether or not a recording is available.
         # Issue #863: cancelled occurrences are hidden from every public list.
-        past_with_recording_qs = (
-            past_recording_events_queryset(now=now)
+        past_public_qs = past_public_events_queryset(now=now)
+        all_past_tags_set = set()
+        for tags in past_public_qs.values_list('tags', flat=True):
+            if tags:
+                all_past_tags_set.update(tags)
+        all_past_tags = sorted(all_past_tags_set)
+
+        past_public_qs = (
+            past_public_qs
             .annotate(_attendee_count=Count('registrations'))
             .select_related('workshop')
             .order_by('-start_datetime')
         )
-        all_past_tags_set = set()
-        for event in past_with_recording_qs:
-            if event.tags:
-                all_past_tags_set.update(event.tags)
-        all_past_tags = sorted(all_past_tags_set)
 
-        past_filtered = _filter_by_tags(past_with_recording_qs, selected_tags)
+        past_filtered = _filter_by_tags(past_public_qs, selected_tags)
         paginator = Paginator(past_filtered, PUBLIC_EVENTS_PER_PAGE)
         page_obj = paginator.get_page(request.GET.get('page'))
         is_paginated = page_obj.has_other_pages()

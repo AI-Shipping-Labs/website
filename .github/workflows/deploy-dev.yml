@@ -72,17 +72,19 @@ jobs:
           end=$(date +%s)
           echo "CI_TIMING phase=uv_sync seconds=$((end - start))"
 
-      # Issue #787: catches model/migration drift before deploy. If a developer
-      # edits a model field (e.g. help_text, choices, max_length) without
-      # running `makemigrations`, this step fails loudly. Re-homed to
+      # Issues #787 and #1474: catch model/migration drift and rolling-deploy
+      # unsafe NOT NULL AddField operations before deploy. Re-homed to
       # deploy-dev.yml (not ci.yml) for the same reason as the OpenAPI drift
       # gate: ci.yml is pull_request-only and this project uses local merges.
-      - name: Check for missing migrations
+      - name: Check migration safety
         run: |
           start=$(date +%s)
           uv run python manage.py makemigrations --check --dry-run
+          migration_check_end=$(date +%s)
+          echo "CI_TIMING phase=makemigrations_check seconds=$((migration_check_end - start))"
+          uv run python scripts/check_migration_safety.py
           end=$(date +%s)
-          echo "CI_TIMING phase=makemigrations_check seconds=$((end - start))"
+          echo "CI_TIMING phase=migration_safety_check seconds=$((end - migration_check_end))"
 
       # Issue #722: the committed _docs/openapi.json must match what the
       # @openapi_spec decorators currently describe. CI fails the build

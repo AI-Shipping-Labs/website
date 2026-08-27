@@ -35,6 +35,14 @@ The reusable rules are:
 - [ ] `makemigrations --check --dry-run`, system checks, OpenAPI drift,
   collectstatic, the Django shards, PostgreSQL migration compatibility, and
   Playwright Core pass.
+- [ ] Adding a physical NOT NULL column to an existing table keeps a valid,
+  persistent `db_default` for the full old/new-image overlap window. A Python
+  `default` and `AddField.preserve_default` are migration-state behavior; they
+  do not provide a default when an old image omits the unknown column from its
+  SQL after the migration. If no suitable database default exists, use an
+  explicitly reviewed expand/contract shape that keeps the column nullable
+  during overlap. Check the graph locally with
+  `uv run python scripts/check_migration_safety.py`.
 - [ ] The frozen prior-release migration matrix passes historical reads and
   writes (including concurrent/duplicate rows that the expand must tolerate).
 - [ ] Any physical-drift fixture (a database that applied an earlier target's

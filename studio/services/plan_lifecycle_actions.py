@@ -40,6 +40,12 @@ def build_plan_lifecycle_action_context(plan):
     return {
         'carry_over_confirmation': carry_confirmation,
         'draft_next_sprint_confirmation': draft_confirmation,
+        # Issue #1455: re-share is a deliberate second delivery, so the
+        # browser confirmation must name both legs it fires.
+        'plan_reshare_confirmation': (
+            f'Re-share this plan with {plan.member.email}? This sends '
+            'another bell notification and another email.'
+        ),
         'plan_editor_return_to': reverse(
             'studio_plan_edit', kwargs={'plan_id': plan.pk},
         ),

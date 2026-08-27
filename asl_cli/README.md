@@ -45,6 +45,48 @@ uv run asl events list --format raw      # compact JSON (for piping)
 uv run asl events list                   # pretty JSON (default)
 ```
 
+### Sharing one sprint plan with its member
+
+A plan is a draft until it is shared. Until `shared_at` is set, the member's
+dashboard keeps showing the "Your plan is being prepared" card, no matter how
+complete the content is. Creating, importing, or patching plan content never
+shares it.
+
+One command performs the default delivery for exactly one plan:
+
+```bash
+uv run asl plans send-ready 116 --dry-run   # preview, zero writes
+uv run asl plans send-ready 116             # share + notify once
+uv run asl plans send-ready 116 --format table
+```
+
+It calls `POST /api/plans/<id>/send-ready-email`, which sets `shared_at`,
+creates the `plan_shared` bell notification, sends the transactional
+`plan_shared` email, and records the durable ready-email log — all exactly
+once. `visibility` is never changed.
+
+The `ready_email.status` field is one of:
+
+| Status | Meaning |
+|---|---|
+| `eligible` | Preview only. A live run would send. |
+| `sent` | This run completed the default delivery. |
+| `already_sent` | A previous default delivery succeeded. Nothing was sent. |
+| `already_shared` | The plan was shared through Studio Re-share or the legacy path without a ready log. Nothing was sent. |
+| `failed_retryable` | Delivery failed. The plan is still unshared; run the same command again. |
+| `in_progress` | Another send for this plan is mid-flight. Nothing was sent. |
+
+`sent`, `already_sent`, `already_shared`, `in_progress`, and previews exit `0`.
+`failed_retryable` prints the structured result and exits `1`, alongside the
+usual API/auth/not-found exit `1`.
+
+There is no `--force`, `--resend`, or bulk fallback. Default delivery is
+idempotent and can never notify the same member twice. To notify a member again
+on purpose, use the confirmed `Re-share with member` action on
+`/studio/plans/<id>/`; that is the only path that deliberately fires a second
+bell notification and email. `asl sprints send-plan-emails <slug>` remains the
+separate sprint-wide bulk action.
+
 ### Stripe tier reconciliation reports
 
 The primary paying-users-versus-Stripe check is one read-only command:

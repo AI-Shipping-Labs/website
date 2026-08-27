@@ -85,6 +85,11 @@ Put private interpretation into internal sections, not member-facing plan text:
 
 ## Import Safely
 
+Every invocation, dry-run included, must choose exactly one delivery intent:
+`--send-ready-email` (notify the member after the content write succeeds) or
+`--no-ready-email` (save content only, leave readiness untouched). The importer
+refuses to run without one of them.
+
 Dry-run first:
 
 ```bash
@@ -93,22 +98,32 @@ python scripts/import_sprint_plan_markdown.py \
   --email member@example.com \
   --source .tmp/plans/member-plan.md \
   --create-if-missing \
+  --no-ready-email \
   --dry-run
 ```
 
-Check the parsed payload: goal, week count, checkpoint count, resources, deliverables, next steps, and internal notes.
+Check the parsed payload: goal, week count, checkpoint count, resources, deliverables, next steps, and internal notes. A dry run never creates, patches, shares, or notifies.
 
-Then import:
+Then import. Use `--send-ready-email` when the plan is reviewed and the member should be notified now:
 
 ```bash
 python scripts/import_sprint_plan_markdown.py \
   --sprint <sprint-slug> \
   --email member@example.com \
   --source .tmp/plans/member-plan.md \
-  --create-if-missing
+  --create-if-missing \
+  --send-ready-email
 ```
 
-Verify after write with `uv run asl plans get <id>` or rerun the importer dry-run and inspect the existing plan.
+Use `--no-ready-email` when the plan still needs review; share it later from
+`/studio/plans/<id>/` or with `uv run asl plans send-ready <id>`.
+
+Delivery runs only after the content PATCH succeeds, and it is idempotent:
+re-running after an ambiguous outcome reports `already_sent` instead of
+notifying twice. A `failed_retryable` result exits non-zero and means the
+content is saved but the plan is still unshared.
+
+Verify after write with `uv run asl plans get <id>` or rerun the importer dry-run and inspect the existing plan. Confirm `shared_at` is set when you intended to notify the member — an unshared plan still shows the member the "Your plan is being prepared" card.
 
 ## Guardrails
 
@@ -118,3 +133,4 @@ Verify after write with `uv run asl plans get <id>` or rerun the importer dry-ru
 - If onboarding is missing or draft, do not create a full plan unless the user explicitly says to proceed anyway.
 - If an existing plan exists, update it only after inspecting it.
 - Use `.tmp/` for local draft plan files.
+- Never re-send a plan-ready email to "make sure" it arrived. Default delivery is idempotent and reports `already_sent`/`already_shared`; only the confirmed Studio `Re-share with member` action notifies a member a second time.

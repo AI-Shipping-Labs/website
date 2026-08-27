@@ -8,6 +8,20 @@ from asl_cli.commands._shared import emit, format_option, get_client, json_optio
 
 API = "/api"
 
+# Flat one-row projection for ``--format table``. JSON/raw output stays the
+# untouched API document so automation keeps the full structured result.
+SEND_READY_COLUMNS = [
+    "plan_id",
+    "member_email",
+    "sprint_slug",
+    "shared_at",
+    "status",
+    "sent",
+    "sent_at",
+    "error",
+]
+SEND_READY_PUBLIC_ERROR = "Plan-ready delivery failed; retry the same action."
+
 
 @click.group()
 def plans():
@@ -20,6 +34,71 @@ def plans():
 def plans_get(plan_id, fmt):
     """Get a single plan."""
     emit(get_client().get(f"{API}/plans/{plan_id}"), fmt)
+
+
+@plans.command("send-ready")
+@click.argument("plan_id", type=int)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Preview the readiness state without sending or writing anything.",
+)
+@format_option
+@click.pass_context
+def plans_send_ready(ctx, plan_id, dry_run, fmt):
+    """Send the plan-ready email for exactly one plan.
+
+    This is the idempotent default delivery: it shares the plan with its
+    member, fires the bell notification and transactional email once, and
+    reports ``already_sent`` or ``already_shared`` instead of notifying
+    again. It never forces a re-send and never touches other plans in the
+    sprint. To deliberately notify a member a second time, use the
+    confirmed ``Re-share with member`` action on the Studio plan page.
+
+    ``--dry-run`` reports the same structured outcome with no writes.
+    """
+    result = get_client().post(
+        f"{API}/plans/{plan_id}/send-ready-email",
+        json_body={"dry_run": True} if dry_run else {},
+    )
+    result = _safe_send_ready_result(result)
+    ready = (result or {}).get("ready_email") or {}
+    if fmt == "table":
+        emit(_send_ready_table_row(result, ready), fmt, columns=SEND_READY_COLUMNS)
+    else:
+        emit(result, fmt)
+    if ready.get("status") == "failed_retryable":
+        click.echo(
+            f"Plan-ready delivery failed for plan {plan_id}; the plan is "
+            "still not shared. Retry the same command.",
+            err=True,
+        )
+        ctx.exit(1)
+
+
+def _send_ready_table_row(result, ready):
+    result = result or {}
+    return {
+        "plan_id": result.get("plan_id"),
+        "member_email": result.get("member_email"),
+        "sprint_slug": result.get("sprint_slug"),
+        "shared_at": result.get("shared_at"),
+        "status": ready.get("status"),
+        "sent": ready.get("sent"),
+        "sent_at": ready.get("sent_at"),
+        "error": ready.get("error"),
+    }
+
+
+def _safe_send_ready_result(result):
+    """Keep provider exception details out of every CLI output format."""
+    safe_result = dict(result or {})
+    ready = dict(safe_result.get("ready_email") or {})
+    if ready.get("status") == "failed_retryable":
+        ready["error"] = SEND_READY_PUBLIC_ERROR
+    safe_result["ready_email"] = ready
+    return safe_result
 
 
 @plans.command("move-unfinished")

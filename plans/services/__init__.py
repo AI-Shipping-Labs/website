@@ -55,13 +55,18 @@ from plans.services.plan_lifecycle import (
     unfinished_plan_item_counts,
 )
 from plans.services.plan_ready_emails import (
+    PLAN_READY_ACTION_STATUSES,
+    PLAN_READY_EMAIL_PUBLIC_ERROR,
     preview_plan_ready_emails,
+    run_plan_ready_action,
     send_plan_ready_email_for_plan,
     send_plan_ready_emails,
 )
 from plans.services.progress import annotate_plan_progress
 
 __all__ = [
+    'PLAN_READY_ACTION_STATUSES',
+    'PLAN_READY_EMAIL_PUBLIC_ERROR',
     'Checkpoint',
     'Deliverable',
     'MoveUnfinishedItemsError',
@@ -88,6 +93,7 @@ __all__ = [
     'preview_partner_intro_emails',
     'randomize_accountability_partners',
     'remove_accountability_partners',
+    'run_plan_ready_action',
     'send_plan_ready_email_for_plan',
     'send_plan_ready_emails',
     'send_partner_intro_emails',

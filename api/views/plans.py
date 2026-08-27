@@ -58,6 +58,7 @@ from plans.services import (
     draft_first_sprint_plan,
     draft_next_sprint_plan,
     move_unfinished_items_to_sprint,
+    run_plan_ready_action,
     send_partner_intro_emails,
     send_plan_ready_email_for_plan,
     send_plan_ready_emails,
@@ -1529,6 +1530,152 @@ def sprint_plans_send_ready_emails(request, slug):
         dry_run=dry_run,
     )
     return JsonResponse(summary, status=200)
+
+
+_PLAN_READY_EMAIL_EXAMPLE = {
+    "plan_id": 116,
+    "member_id": 42,
+    "member_email": "member@example.com",
+    "sprint_slug": "august-2026",
+    "shared_at": "2026-08-14T12:56:44+00:00",
+    "ready_email": {
+        "dry_run": False,
+        "status": "sent",
+        "eligible": False,
+        "requested": True,
+        "sent": True,
+        "skipped_already_sent": False,
+        "skipped_already_shared": False,
+        "failed": False,
+        "retryable": False,
+        "sent_at": "2026-08-14T12:56:44+00:00",
+        "error": "",
+    },
+}
+
+
+@token_required_any_user
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Plans",
+    summary="Send the plan-ready email for one plan",
+    methods={
+        "POST": {
+            "summary": "Send the plan-ready email for one plan (staff-only)",
+            "description": (
+                "Staff-token-only. Default delivery for exactly the "
+                "requested plan, never a sibling plan and never a whole "
+                "sprint. Idempotent: a plan whose default send already "
+                "succeeded returns ``already_sent`` and a plan shared "
+                "through the explicit Studio Re-share path without a ready "
+                "log returns ``already_shared``. Neither sends again nor "
+                "moves ``shared_at``. A recorded failed attempt stays "
+                "retryable. ``dry_run=true`` reports the same structured "
+                "state with no Plan, PlanReadyEmailLog, Notification, or "
+                "EmailLog write and no provider call. There is no force or "
+                "resend option -- an intentional second notification is the "
+                "confirmed Studio Re-share action. ``status`` is one of "
+                "``eligible``, ``sent``, ``already_sent``, "
+                "``already_shared``, ``failed_retryable``, ``in_progress``."
+            ),
+            "request_body": {
+                "properties": {
+                    "dry_run": {"type": "boolean"},
+                },
+                "example": {"dry_run": True},
+            },
+            "responses": {
+                200: {
+                    "description": "Structured single-plan ready outcome.",
+                    "example": _PLAN_READY_EMAIL_EXAMPLE,
+                },
+                400: {
+                    "description": (
+                        "Invalid JSON body or non-object JSON body."
+                    ),
+                    "example": {
+                        "error": "Body must be a JSON object",
+                        "code": "invalid_type",
+                    },
+                },
+                403: {
+                    "description": "Non-staff bearer token.",
+                    "example": {
+                        "error": "Plan-ready email send is staff-only",
+                        "code": "forbidden_staff_only",
+                    },
+                },
+                404: {
+                    "description": "Plan not found.",
+                    "example": {
+                        "error": "Plan not found",
+                        "code": "unknown_plan",
+                    },
+                },
+                422: {
+                    "description": "Invalid dry_run value.",
+                    "example": {
+                        "error": "dry_run must be a boolean",
+                        "code": "validation_error",
+                    },
+                },
+            },
+        },
+    },
+)
+def plan_send_ready_email(request, plan_id):
+    """``POST /api/plans/<id>/send-ready-email`` (issue #1455)."""
+    # Staff gate first: a non-staff bearer must not learn whether a plan
+    # id exists, and must never reach the delivery layer.
+    if not bearer_is_admin(request.user):
+        return error_response(
+            "Plan-ready email send is staff-only",
+            "forbidden_staff_only",
+            status=403,
+        )
+
+    plan = (
+        Plan.objects
+        .select_related("member", "sprint")
+        .filter(pk=plan_id)
+        .first()
+    )
+    if plan is None:
+        return error_response(
+            "Plan not found",
+            "unknown_plan",
+            status=404,
+        )
+
+    if request.body:
+        data, parse_error = parse_json_body(request)
+        if parse_error is not None:
+            return parse_error
+    else:
+        data = {}
+    if not isinstance(data, dict):
+        return error_response(
+            "Body must be a JSON object",
+            "invalid_type",
+            details={"field": "body", "expected": "object"},
+        )
+
+    dry_run = data.get("dry_run", False)
+    if not isinstance(dry_run, bool):
+        return error_response(
+            "dry_run must be a boolean",
+            "validation_error",
+            status=422,
+            details={"field": "dry_run", "expected": "boolean"},
+        )
+
+    result = run_plan_ready_action(
+        plan,
+        actor=request.user,
+        dry_run=dry_run,
+    )
+    return JsonResponse(result, status=200)
 
 
 @token_required_any_user

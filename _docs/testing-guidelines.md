@@ -691,6 +691,35 @@ regressions.
 
 ---
 
+## Lexical AST occurrence ratchets
+
+Syntax-only test policies share `tests/lexical_ast_ratchet.py`. Rule scanners
+must classify their own smallest complete AST anchors; the shared helper does
+not infer bindings, values, provenance, reachability, ownership, or behavioral
+meaning.
+
+Callers provide explicit repository roots to `discover_python_sources`, parse
+the returned normalized paths without importing them, derive the containing
+scope with `lexical_scope_for`, and pass one `AstCandidate` per visible anchor
+to `build_occurrences`. IDs have this fixed shape:
+
+```text
+path::lexical-scope::rule::full-sha256::duplicate-ordinal
+```
+
+Each rule owns independent `RatchetCategory` values: an exact live
+`id -> non-empty reason` mapping, an immutable original ceiling, and the
+reviewed `ceiling_sha256` of that ceiling. `compare_ratchet` only compares and
+reports; it never writes, regenerates, or expands either collection. Retiring
+debt removes its live mapping entry while leaving the ceiling and golden digest
+unchanged. There is no file, directory, owner, or comment exemption API.
+
+Parse, discovery, fingerprint-collision, and lexical-order failures are typed
+fail-closed errors. Manifest comparison reports new, stale, replacement,
+duplicate-ID, overlap, missing-reason, ceiling-growth, and golden-drift
+failures separately. Baseline changes therefore require an independently
+reviewed edit outside the passing test path.
+
 ## Affected-tests selection (`make test-affected`)
 
 Per-issue local verification runs the tests the diff can plausibly break --

@@ -28,6 +28,7 @@ from scripts.affected_tests import (
     CORE_COMMAND,
     DJANGO_COMMAND_SUFFIX,
     ESCALATION_TRIGGERS,
+    FOCUSED_CONTRACT_PATHS,
     HUB_MODULE_MAP,
     PLAYWRIGHT_CORE_COMMAND,
     PLAYWRIGHT_FULL_COMMAND,
@@ -193,12 +194,13 @@ class RuleChainTest(SimpleTestCase):
         # _docs/testing-guidelines.md all have rot guards in RotGuardTest
         # below, which lives in tests/. A diff touching only one of them must
         # therefore run `tests`, not print NO TESTS REQUIRED.
-        for path in ('CLAUDE.md', 'AGENTS.md', 'README.md', '_docs/PROCESS.md',
-                     '_docs/testing-guidelines.md'):
+        for path in ('CLAUDE.md', 'AGENTS.md', 'README.md', '_docs/PROCESS.md'):
             with self.subTest(path=path):
                 plan = plan_for([path])
                 self.assertFalse(plan.no_tests_required)
                 self.assertEqual(plan.django_labels, ['tests'])
+        guideline_plan = plan_for(['_docs/testing-guidelines.md'])
+        self.assertEqual(guideline_plan.django_labels, ['tests.test_affected_tests'])
 
     def test_guarded_doc_artifacts_map_to_their_reading_app(self):
         for path, expected in (
@@ -216,6 +218,20 @@ class RuleChainTest(SimpleTestCase):
     def test_ci_and_script_paths_target_the_tests_package(self):
         plan = plan_for(['.github/workflows/deploy-dev.yml', 'scripts/watch-ci.py', 'Makefile'])
         self.assertEqual(plan.django_labels, ['tests'])
+
+    def test_playwright_owner_inventory_contracts_target_exact_policy_tests(self):
+        plan = plan_for([
+            'scripts/playwright_owner_inventory.py',
+            'scripts/playwright_owner_inventory_ceilings.py',
+            'tests/playwright_owner_inventory_live.json',
+            'tests/test_playwright_owner_inventory.py',
+        ])
+        self.assertEqual(plan.django_labels, ['tests.test_playwright_owner_inventory'])
+        self.assertEqual(plan.unmapped, [])
+
+    def test_affected_test_tool_and_guideline_target_their_exact_contract(self):
+        plan = plan_for(['scripts/affected_tests.py', '_docs/testing-guidelines.md'])
+        self.assertEqual(plan.django_labels, ['tests.test_affected_tests'])
 
     def test_website_paths_add_tests_website_and_core(self):
         plan = plan_for(['website/urls.py'])
@@ -655,9 +671,9 @@ class GuardedDocArtifactTest(SimpleTestCase):
             for owner in sorted(owners):
                 expected = TESTS_PACKAGE if owner == TESTS_PACKAGE else owner
                 with self.subTest(artifact=artifact, owner=owner):
-                    self.assertIn(
-                        expected,
-                        labels,
+                    self.assertTrue(
+                        expected in labels
+                        or any(label.startswith(f'{expected}.') for label in labels),
                         f'{artifact} is read by {owner} tests but the plan selects {labels}. '
                         f'Add it to CONTRACT_PATHS in scripts/affected_tests.py.',
                     )
@@ -665,6 +681,12 @@ class GuardedDocArtifactTest(SimpleTestCase):
 
 @tag('core')
 class ContractPathTest(SimpleTestCase):
+    def test_focused_contracts_target_exact_top_level_test_modules(self):
+        for glob, labels in FOCUSED_CONTRACT_PATHS:
+            with self.subTest(glob=glob):
+                self.assertTrue(labels)
+                self.assertTrue(all(label.startswith('tests.test_') for label in labels))
+
     def test_every_contract_label_is_a_real_target(self):
         known = set(APP_LABELS) | {TESTS_PACKAGE, 'website'}
         for glob, labels in CONTRACT_PATHS:

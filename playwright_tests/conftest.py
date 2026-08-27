@@ -193,6 +193,8 @@ def _assert_pinned_port_is_not_parallel(config):
     in time" — N-1 workers' worth of confusing, unrelated-looking reds. Fail
     fast at configure time with an actionable message instead.
     """
+    if getattr(getattr(config, "option", None), "collectonly", False):
+        return
     if current_xdist_worker_id() is not None:
         return
     if not _base_url_is_local(_resolved_base_url()):
@@ -214,6 +216,8 @@ def _assert_pinned_port_is_not_parallel(config):
 
 def _claim_playwright_worktree_guard(config):
     """Claim the local worktree guard for this pytest session when needed."""
+    if getattr(getattr(config, "option", None), "collectonly", False):
+        return None
     if not _base_url_is_local(_resolved_base_url()):
         return None
 
@@ -322,6 +326,9 @@ def pytest_collection_modifyitems(config, items):
     needs the local DB. Local runs (default ``PLAYWRIGHT_BASE_URL`` unset,
     or set to a 127.0.0.1 / localhost URL) are unaffected.
     """
+    if config.option.collectonly:
+        return
+
     base_url = _resolved_base_url()
     if _base_url_is_local(base_url):
         return

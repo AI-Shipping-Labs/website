@@ -291,7 +291,7 @@ class TestProgressBoard:
         finally:
             context.close()
 
-    def test_default_public_reader_name_links_to_profile(
+    def test_public_reader_name_links_to_profile(
         self, django_server, browser,
     ):
         _ensure_tiers()
@@ -322,7 +322,7 @@ class TestProgressBoard:
         finally:
             context.close()
 
-    def test_private_notes_reader_is_named_locked_and_has_progress_profile(
+    def test_private_reader_is_counted_but_not_named(
         self, django_server, browser,
     ):
         _ensure_tiers()

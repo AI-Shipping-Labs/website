@@ -191,30 +191,22 @@ class TestChapterNoteFlow:
         finally:
             author_ctx.close()
 
-    def test_explicit_private_note_is_hidden_from_other_member(
-        self, django_server, browser,
-    ):
-        _ensure_tiers()
-        _reset_books()
-        _create_book()
-        _create_user("author@test.com", tier_slug="main")
-        _create_user("reader@test.com", tier_slug="main")
-        _create_note(
-            "author@test.com", "inference-engineering", 0,
-            "This note stays private.",
-        )
+        # An explicit private setting still hides the author's note from the
+        # other member, while the default-public assertion above remains in
+        # this baseline owner.
         _set_visibility("author@test.com", "private")
-
-        context = _auth_context(browser, "reader@test.com")
+        private_reader_ctx = _auth_context(browser, "reader@test.com")
         try:
-            page = context.new_page()
+            page = private_reader_ctx.new_page()
             page.goto(
                 f"{django_server}/books/inference-engineering/chapters/0",
                 wait_until="domcontentloaded",
             )
-            assert "This note stays private" not in page.locator("main").inner_text()
+            assert "Speculative decoding is underrated" not in (
+                page.locator("main").inner_text()
+            )
         finally:
-            context.close()
+            private_reader_ctx.close()
 
     def test_chapter_rows_are_real_links(self, django_server, browser):
         _ensure_tiers()

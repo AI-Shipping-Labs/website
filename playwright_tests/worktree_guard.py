@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 LOCK_RELATIVE_PATH = Path(".tmp") / "playwright-session.lock"
+XDIST_WORKER_ENV_VAR = "PYTEST_XDIST_WORKER"
 MAX_COMMAND_ARGS = 12
 MAX_COMMAND_LENGTH = 240
 SECRET_ARG_HINTS = (
@@ -54,6 +55,39 @@ def current_git_worktree_root(cwd=None):
     if not root:
         return Path(__file__).resolve().parents[1]
     return Path(root).resolve()
+
+
+def current_xdist_worker_id(environ=None):
+    """Return this process's pytest-xdist worker id, or ``None``.
+
+    pytest-xdist sets ``PYTEST_XDIST_WORKER`` (``"gw0"``, ``"gw1"``, ...) in
+    every worker subprocess it spawns. The controller process that the user
+    actually invoked (``pytest -n 4 ...``) does NOT have it set, and neither
+    does a plain serial run (``pytest ...`` or ``pytest -n 0 ...``).
+
+    That asymmetry is what lets the guard tell "a sibling worker of the single
+    invocation that already claimed this worktree" apart from "a genuinely
+    separate second Playwright invocation in the same worktree" (issue #1470):
+    only controllers claim the lock, and a second controller is still blocked
+    exactly as before. A separate invocation can never smuggle its workers past
+    the guard, because its own controller fails first and no workers are ever
+    spawned.
+
+    The id is sanitized to ``[A-Za-z0-9_-]`` so it is always safe to embed in a
+    database filename; anything else (empty, whitespace, or an exotic value)
+    is treated as "not a worker".
+    """
+    environ = os.environ if environ is None else environ
+    raw = (environ.get(XDIST_WORKER_ENV_VAR) or "").strip()
+    if not raw:
+        return None
+    sanitized = "".join(char for char in raw if char.isalnum() or char in "-_")
+    return sanitized or None
+
+
+def is_xdist_worker(environ=None):
+    """Return True when this process is a pytest-xdist worker subprocess."""
+    return current_xdist_worker_id(environ=environ) is not None
 
 
 def _redact_key_value(value):

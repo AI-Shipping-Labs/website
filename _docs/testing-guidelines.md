@@ -925,12 +925,21 @@ to block every deploy. To get real Playwright coverage on every push to `main`
 subset focused on deploy-critical user and operator journeys.
 
 ```bash
-make test-playwright-core    # ~100-150 tests, target <8 min local / <15 min CI
+make test-playwright-core    # ~900+ tests, runs 4-way parallel via pytest-xdist
 make test-playwright         # full suite, runs on schedule (every 3h)
 make test-playwright-manual-visual
 ```
 
-`make test-playwright-core` runs `pytest -m core playwright_tests/ -v`. The
+The core subset has grown past 900 tests (~950 at the time of writing; run
+`make test-playwright-core` and read the summary line for the current count).
+It ran ~93 min serially before #1470; the Makefile targets now run it under
+pytest-xdist. See "Parallel Playwright
+with pytest-xdist (`PLAYWRIGHT_XDIST_WORKERS`)" below for the measured runtime,
+the chosen worker default, and the isolation guarantees.
+
+`make test-playwright-core` runs `pytest -m core playwright_tests/ -n 4
+--dist loadfile -v` by default (override the worker count with
+`PLAYWRIGHT_XDIST_WORKERS`). The
 Deploy Dev workflow applies the same core selection with its default marker
 exclusions across four parallel `playwright-core` matrix jobs:
 
@@ -1237,13 +1246,19 @@ resolved as of #885. See "Running Playwright in isolation / parallel across
 worktrees" below: the server fixture now picks a free OS-assigned port per
 session, so concurrent runs from separate worktrees no longer collide.
 
-The remaining unsafe case is two local Playwright pytest sessions inside the
-same git worktree, because they share that checkout's
+The remaining unsafe case is two separate local Playwright pytest invocations
+inside the same git worktree, because they share that checkout's
 `test_playwright_db.sqlite3`. This is now blocked by tooling. A direct
 `uv run pytest playwright_tests/...` invocation or any Makefile Playwright
 target claims `.tmp/playwright-session.lock` before migrations, Django
-`runserver`, browser launch, or fixture seeding. A second local session in the
-same worktree exits quickly with holder details and remediation instructions.
+`runserver`, browser launch, or fixture seeding. A second local invocation in
+the same worktree exits quickly with holder details and remediation
+instructions.
+
+The pytest-xdist workers of a single `-n N` invocation are exempt (#1470): they
+are siblings of the claim their own controller already made, and each one owns a
+private `test_playwright_db_gwN.sqlite3` plus its own server port, so they have
+no shared state to protect.
 
 When `PLAYWRIGHT_BASE_URL` points at a non-local host such as
 `https://dev.aishippinglabs.com`, the suite does not start the local server or
@@ -1301,14 +1316,16 @@ worktrees can now run `make test-playwright` / `make test-playwright-core`
 SIMULTANEOUSLY without interfering. Each agent verifies its own work
 independently — there is no need to serialize on the port.
 
-Do not start two local Playwright pytest sessions inside the same worktree. If
-that happens, the second session fails before it can touch
-`test_playwright_db.sqlite3`, showing the worktree path, current PID, holder
-details when available, and instructions to wait, stop the other run, or use a
-separate worktree. Normal pytest teardown releases the guard. If a pytest
-process is killed, the underlying advisory lock is released by the OS, so stale
-metadata in `.tmp/playwright-session.lock` does not permanently block the next
-run.
+Do not start two local Playwright pytest *invocations* inside the same worktree.
+If that happens, the second invocation fails before it can touch the SQLite test
+database, showing the worktree path, current PID, holder details when available,
+and instructions to wait, stop the other run, or use a separate worktree. Normal
+pytest teardown releases the guard. If a pytest process is killed, the
+underlying advisory lock is released by the OS, so stale metadata in
+`.tmp/playwright-session.lock` does not permanently block the next run.
+
+The pytest-xdist workers of ONE invocation are not "two invocations" and are
+allowed through — see the next section.
 
 ```bash
 make test-playwright          # full active suite
@@ -1316,6 +1333,130 @@ make test-playwright-core     # deploy-critical core subset
 ```
 
 Run those from each worktree concurrently as needed; no port flags required.
+
+### Parallel Playwright with pytest-xdist (`PLAYWRIGHT_XDIST_WORKERS`)
+
+As of #1470 the local Makefile targets run the suite under pytest-xdist:
+
+```
+uv run pytest ... -n $(PLAYWRIGHT_XDIST_WORKERS) --dist loadfile -v
+```
+
+Runtime expectation on the 12-core dev box (measured, not estimated — see
+#1470 for the raw run logs):
+
+| Target | Mode | Wall clock |
+| --- | --- | --- |
+| `test-playwright-core` | Serial (pre-#1470) | 93.7 min / 92.9 min |
+| `test-playwright-core` | `-n 4 --dist loadfile` (default) | 18.7 min / 18.2 min |
+| `test-playwright` (full) | `-n 4 --dist loadfile` (default) | 44.2 min / 42.5 min |
+
+Roughly a 5x reduction on the core subset. Every figure was measured while
+other agents were running their own suites on the same box (load average
+12-50), so they are conservative.
+
+Do not compare these against the interim numbers quoted mid-review on #1470
+(15.6 / 14.3 min). Those were taken before the `settings.TESTING` fix below,
+when workers were silently running the test database in `journal_mode=WAL`
+instead of the intended `DELETE`. The current, slightly slower figures are the
+correct-configuration ones.
+
+`PLAYWRIGHT_XDIST_WORKERS` defaults to `4`, deliberately NOT `-n auto`. Each
+worker runs a full Chromium process tree plus its own in-process Django server,
+and several agents routinely run Playwright at once from separate worktrees on
+the same box; one worker per core would recreate the oversubscription that
+already produces spurious timeout reds (see `SETTLE_TIMEOUT_MS`, #903). Tune it
+per-invocation instead of editing the Makefile:
+
+```bash
+PLAYWRIGHT_XDIST_WORKERS=8 make test-playwright-core   # quiet box, go wider
+PLAYWRIGHT_XDIST_WORKERS=0 make test-playwright-core   # serial, xdist disabled
+```
+
+`--dist loadfile` keeps every test from one module on one worker. This preserves
+intra-module ordering assumptions and per-module setup cost, and mirrors how
+`deploy-dev.yml` already shards the core subset by file. The largest core module
+is ~40 tests out of 900+, so file-granularity imbalance stays bounded.
+
+What makes this safe:
+
+- Port: each worker is an independent pytest session, so `_resolved_local_port()`
+  runs per worker and each gets its own OS-assigned free port (#885 mechanism,
+  unchanged). Verified empirically, not assumed.
+- Database: `playwright_test_database_name()` suffixes the SQLite file with the
+  worker id — `test_playwright_db_gw0.sqlite3`, `test_playwright_db_gw1.sqlite3`,
+  … Serial runs (and the xdist controller) keep the unsuffixed
+  `test_playwright_db.sqlite3`, so the per-worktree isolation from #885 is
+  untouched. The `-shm`/`-wal` sidecars are gitignored alongside the DB files.
+- Guard: only the controller process claims `.tmp/playwright-session.lock`.
+  Workers detect `PYTEST_XDIST_WORKER` and skip the claim, because their own
+  controller already holds it and each worker owns a private database. A
+  genuinely separate second invocation is still blocked exactly as before: its
+  controller never has `PYTEST_XDIST_WORKER` set, hits the held lock, and exits
+  non-zero before spawning any workers.
+
+### `settings.TESTING` inside xdist workers
+
+`website.settings._is_test_command()` used to sniff `sys.argv` only. execnet
+spawns every pytest-xdist worker with `sys.argv == ['-c']`, so each worker of a
+`pytest -n N` run reported `TESTING = False` while the controller reported
+`True` — and the workers are the processes that actually run the tests. That
+silently flipped every `TESTING`-gated behavior: real S3 `list_objects_v2`
+calls from the content sync (`github_sync/media.py`), Logfire initialization
+(`services/observability.py`), the article-image CDN path, and the SQLite
+`journal_mode=DELETE` test tuning. `_is_test_command()` now also treats a
+non-blank `PYTEST_XDIST_WORKER` as a test process.
+
+If you add a new `settings.TESTING` gate, it is now honored identically in
+serial and parallel runs. Do not reintroduce argv-only detection.
+
+### Writing order-independent Playwright tests
+
+`--dist loadfile` changes which module runs after which. A test that only
+passed because of where it landed in the alphabet is now a coin flip, so two
+long-standing hazards became visible and are fixed at the harness level:
+
+- Process-wide `IntegrationSetting` cache. `integrations.config` memoizes every
+  DB override in a module-level dict, and DB overrides beat `settings` and env
+  inside `get_config()`. A `django_db(transaction=True)` teardown empties the
+  table but nothing invalidated that cache, so a value one module seeded kept
+  shadowing every later `settings.X = ...` override in the same process. An
+  autouse `_reset_integration_config_cache` fixture in
+  `playwright_tests/conftest.py` now resets it around every test, in memory
+  only (no DB write, no cross-process stamp), via
+  `integrations.config.reset_local_config_cache()`. Do not add another
+  hand-rolled `clear_config_cache()` fixture to a new module — the conftest
+  owns this now.
+- Seeding must COMMIT to be visible. The in-process `runserver` thread reads
+  through its own database connection, so anything written inside
+  pytest-django's plain `django_db` atomic block is invisible to the browser.
+  A test that seeds rows and then navigates to a page that reads them must use
+  `@pytest.mark.django_db(transaction=True)`. A seeding fixture should request
+  `transactional_db` explicitly so it is ordered after pytest-django's database
+  setup.
+
+If a new Playwright test passes alone and fails inside `make test-playwright`,
+suspect one of those two before suspecting parallelism itself.
+
+### `PLAYWRIGHT_DJANGO_PORT` and `-n`
+
+`PLAYWRIGHT_DJANGO_PORT` pins a single port, so every xdist worker would try to
+bind the same one. Setting it together with `-n > 0` is rejected in
+`pytest_configure` with a `UsageError` rather than left as a footgun: pin the
+port only for a serial (`PLAYWRIGHT_XDIST_WORKERS=0`) debugging run.
+
+CI is deliberately left serial:
+
+- `deploy-dev.yml`'s `playwright-core` job is already a 4-way file-shard matrix,
+  one `ubuntu-latest` runner per shard. GitHub-hosted runners are 2-4 vCPU, so
+  intra-job `-n` on top of the shard matrix would oversubscribe each runner
+  rather than speed it up.
+- `ci.yml`'s `playwright-tests` job (its 4-way shard matrix is the Django `test`
+  job, not this one) is a single unsharded runner. It is still left serial for
+  the same 2-4 vCPU reason, and it only triggers on `pull_request` — this repo
+  merges locally and does not use PRs, so that job effectively never runs.
+
+`-n` is a local-dev lever only.
 
 ### `PLAYWRIGHT_DJANGO_PORT` override
 

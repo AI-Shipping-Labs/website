@@ -92,9 +92,27 @@ def _resolve_secret_key(*, debug, env=None):
 
 
 DEBUG = _bool_env('DEBUG', default=True)
-def _is_test_command(argv=None):
-    """Return True for Django's test runner and pytest entrypoints."""
+def _is_test_command(argv=None, environ=None):
+    """Return True for Django's test runner and pytest entrypoints.
+
+    Issue #1470: argv sniffing alone is blind inside pytest-xdist workers.
+    execnet spawns each worker with its own interpreter command — ``sys.argv``
+    is literally ``['-c']`` — so every worker of a ``pytest -n N`` run reported
+    ``TESTING = False`` while the controller reported True. That silently
+    flipped every TESTING-gated behavior in the workers that actually run the
+    tests: real S3 ``list_objects_v2`` calls from the content sync
+    (``github_sync/media.py``), Logfire initialization
+    (``services/observability.py``), the article-image CDN path, and the
+    SQLite ``journal_mode=DELETE`` test tuning below.
+
+    ``PYTEST_XDIST_WORKER`` is placed in the worker's environment by xdist
+    before the worker interpreter starts, so it is available at settings-import
+    time and makes worker detection agree with the controller.
+    """
     argv = sys.argv if argv is None else argv
+    environ = os.environ if environ is None else environ
+    if (environ.get('PYTEST_XDIST_WORKER') or '').strip():
+        return True
     command_names = {Path(arg).name for arg in argv}
     return (
         'test' in argv

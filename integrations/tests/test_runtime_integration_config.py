@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from integrations.config import clear_config_cache
+from integrations.config import clear_config_cache, get_config, reset_local_config_cache
 from integrations.models import IntegrationSetting
 from integrations.services import ses as ses_service
 from payments.services import _get_stripe_client, verify_webhook_signature
@@ -171,3 +171,46 @@ class SESRuntimeConfigTest(RuntimeConfigTestCase):
         ics = generate_ics(event).decode("utf-8")
 
         self.assertIn("mailto:calendar@example.com", ics)
+
+
+class ResetLocalConfigCacheTest(RuntimeConfigTestCase):
+    """``reset_local_config_cache`` is the DB-free half of the cache clear (#1470)."""
+
+    def test_reset_drops_a_stale_db_override_from_the_in_process_cache(self):
+        """A deleted IntegrationSetting must stop shadowing settings/env.
+
+        This is the leak that made Playwright modules order-dependent: DB
+        overrides win over ``settings`` in ``get_config()``, and nothing
+        invalidated the module-level cache when a test flushed the table.
+        """
+        set_integration("SLACK_INVITE_URL", "https://join.slack.com/db-value", "slack")
+        clear_config_cache()
+        self.assertEqual(
+            get_config("SLACK_INVITE_URL"), "https://join.slack.com/db-value"
+        )
+
+        IntegrationSetting.objects.filter(key="SLACK_INVITE_URL").delete()
+        # Without the reset the deleted row is still served from _cache.
+        self.assertEqual(
+            get_config("SLACK_INVITE_URL"), "https://join.slack.com/db-value"
+        )
+
+        reset_local_config_cache()
+        with override_settings(SLACK_INVITE_URL="https://join.slack.com/settings"):
+            self.assertEqual(
+                get_config("SLACK_INVITE_URL"), "https://join.slack.com/settings"
+            )
+
+    def test_reset_publishes_no_cross_process_stamp(self):
+        """It must be usable from tests that have no database access."""
+        with patch("django.core.cache.caches") as caches:
+            reset_local_config_cache()
+        caches.__getitem__.assert_not_called()
+
+    def test_clear_config_cache_still_publishes_a_stamp(self):
+        """The Studio-save path keeps its cross-process invalidation."""
+        from django.core.cache import caches
+
+        caches["django_q"].delete("integration_settings_stamp")
+        clear_config_cache()
+        self.assertIsNotNone(caches["django_q"].get("integration_settings_stamp"))

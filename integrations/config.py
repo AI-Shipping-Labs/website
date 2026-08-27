@@ -320,6 +320,24 @@ def _populate_cache():
         )
 
 
+def reset_local_config_cache():
+    """Drop THIS process's cache without touching the database.
+
+    ``clear_config_cache()`` also publishes a cross-process stamp, which is a
+    write to the shared ``django_q`` DatabaseCache. That is correct for a
+    Studio save but wrong for a test harness that has to reset state around
+    every test, including tests with no database access at all.
+
+    This is the pure in-memory half: the next ``get_config()`` repopulates from
+    whatever the database currently holds (or, when there is no usable
+    database, falls through to settings/env exactly as on a cold start).
+    """
+    global _cache, _cache_populated, _cache_stamp
+    _cache = {}
+    _cache_populated = False
+    _cache_stamp = None
+
+
 def clear_config_cache():
     """Clear the in-process cache and publish a fresh cross-process stamp.
 
@@ -327,10 +345,7 @@ def clear_config_cache():
     successful upsert/delete on ``IntegrationSetting``. Other processes
     notice the new stamp on their next ``get_config()`` and repopulate.
     """
-    global _cache, _cache_populated, _cache_stamp
-    _cache = {}
-    _cache_populated = False
-    _cache_stamp = None
+    reset_local_config_cache()
     try:
         from django.core.cache import caches  # noqa: PLC0415
         caches[_STAMP_CACHE_ALIAS].set(_STAMP_CACHE_KEY, uuid.uuid4().hex)

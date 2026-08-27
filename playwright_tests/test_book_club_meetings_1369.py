@@ -393,6 +393,12 @@ class TestMergedWeekBlocks:
 
             recap.first.click()
             page.wait_for_url("**/events/**/ie-week-1")
+            # #1458 moved the recap BODY off the event detail page to the
+            # event's own /recap page, leaving a "Read the recap" CTA here.
+            # That commit rewrote its own five inline-body tests but landed
+            # after #1461, so this one still asserted the old inline copy.
+            page.get_by_test_id("event-recap-cta-link").click()
+            page.wait_for_url("**/events/**/ie-week-1/recap")
             assert "KV cache end to end" in page.inner_text("body")
         finally:
             context.close()

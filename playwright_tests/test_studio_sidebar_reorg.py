@@ -15,7 +15,6 @@ matches.
 """
 
 import os
-import re
 
 import pytest
 
@@ -115,29 +114,8 @@ def _assert_all_sidebar_anchors_have_keyboard_focus(page, expected_count):
     assert focused_anchor_indexes == list(range(expected_count))
 
 
-# ---------------------------------------------------------------------------
-# #1473: every role-visible sidebar destination has a real keyboard ring
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize(
-    ("email", "is_superuser", "expected_count"),
-    (
-        ("sidebar-focus-staff-1473@test.com", False, 47),
-        ("sidebar-focus-superuser-1473@test.com", True, 49),
-    ),
-)
-def test_all_role_visible_sidebar_anchors_show_keyboard_focus_ring(
-    django_server, browser, email, is_superuser, expected_count,
-):
-    _ensure_tiers()
-    if is_superuser:
-        _create_staff_user(email)
-    else:
-        _create_non_superuser_staff(email)
-
-    context = _auth_context(browser, email)
+def _new_fully_expanded_sidebar_page(context, django_server):
+    """Open a fresh page with every sidebar destination in the tab order."""
     page = context.new_page()
     page.set_viewport_size({"width": 1280, "height": 1000})
     page.add_init_script(
@@ -170,11 +148,7 @@ def test_all_role_visible_sidebar_anchors_show_keyboard_focus_ring(
         }"""
     )
     assert trigger_button.get_attribute("aria-expanded") == "true"
-
-    restricted = page.get_by_role("link", name=re.compile("^(New user|API tokens)$"))
-    assert restricted.count() == (2 if is_superuser else 0)
-    _assert_all_sidebar_anchors_have_keyboard_focus(page, expected_count)
-    context.close()
+    return page
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +229,16 @@ class TestStaffLandsInStudio:
 
         # Fallback version values such as vN/A are hidden.
         assert "vN/A" not in page.locator("aside#studio-sidebar").inner_text()
+
+        focus_page = _new_fully_expanded_sidebar_page(context, django_server)
+        assert focus_page.locator(
+            '#studio-sidebar-nav a[href="/studio/users/new/"]'
+        ).count() == 1
+        assert focus_page.locator(
+            '#studio-sidebar-nav a[href="/studio/api-tokens/"]'
+        ).count() == 1
+        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 49)
+        focus_page.close()
 
 
 # ---------------------------------------------------------------------------
@@ -460,6 +444,16 @@ class TestNonSuperuserGating:
         assert page.locator(
             '#studio-section-operations [data-testid="api-tokens-nav-link"]'
         ).count() == 0
+
+        focus_page = _new_fully_expanded_sidebar_page(context, django_server)
+        assert focus_page.locator(
+            '#studio-sidebar-nav a[href="/studio/users/new/"]'
+        ).count() == 0
+        assert focus_page.locator(
+            '#studio-sidebar-nav a[href="/studio/api-tokens/"]'
+        ).count() == 0
+        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 47)
+        focus_page.close()
 
 
 # ---------------------------------------------------------------------------

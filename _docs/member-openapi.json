@@ -45,13 +45,13 @@
   "paths": {
     "/member-api/v1/books/reader-profile": {
       "get": {
-        "description": "Returns the authenticated key owner's Book Club reading-profile visibility (``public`` or ``private``). Book-agnostic \u2014 visibility is a single per-user flag. A member with no profile row is reported as ``private`` (the default). Scoped to the key owner only \u2014 never another member's profile. Requires the ``books:read`` scope.",
+        "description": "Returns the authenticated key owner's Book Club reading-profile notes visibility (``public`` or ``private``). Book-agnostic \u2014 visibility is a single per-user flag. Public shares notes in chapter group feeds and on the member's reader profile; private keeps note bodies visible only to the member and staff. A member with no profile row is reported as ``public`` (the default). Scoped to the key owner only \u2014 never another member's profile. Requires the ``books:read`` scope.",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "example": {
-                  "visibility": "private"
+                  "visibility": "public"
                 }
               }
             },
@@ -74,7 +74,7 @@
         ]
       },
       "put": {
-        "description": "Sets the authenticated key owner's reading-profile visibility from the JSON body ``{\"visibility\": \"public\"|\"private\"}`` (``get_or_create`` on the owner). Public lists the member by name on the progress board and shows their notes in other members' group feeds; private hides both. Book-agnostic and scoped to the key owner only \u2014 there is no user parameter. Any value other than ``public`` / ``private`` returns a 400. Reading another member's public profile / notes feed (a rendered web surface) and posting comments (the shared web comment endpoints) are out of scope for the member API; destructive deletes stay Studio/admin-scoped. Requires the ``books:write_profile`` scope.",
+        "description": "Sets the authenticated key owner's reading-profile visibility from the JSON body ``{\"visibility\": \"public\"|\"private\"}`` (``get_or_create`` on the owner). Public shares notes in chapter group feeds and on the member's reader profile; private keeps note bodies visible only to the member and staff. The default is public. Book-agnostic and scoped to the key owner only \u2014 there is no user parameter. Any value other than ``public`` / ``private`` returns a 400. Reading another member's public profile / notes feed (a rendered web surface) and posting comments (the shared web comment endpoints) are out of scope for the member API; destructive deletes stay Studio/admin-scoped. Requires the ``books:write_profile`` scope.",
         "requestBody": {
           "content": {
             "application/json": {

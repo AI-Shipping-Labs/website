@@ -464,11 +464,11 @@ class Note(TimestampedModelMixin, models.Model):
         )
 
 
-# Per-member Book Club reading-profile visibility (issue #1366). A single
-# per-user flag — not per-user-per-book — drives whether a member is named on
-# the progress board (#1367) and whether their notes appear in other members'
-# group feeds (#1365). Default ``private``: a member opts in to public. Absence
-# of a ``ReaderProfile`` row is therefore treated as ``private`` everywhere.
+# Per-member Book Club notes visibility (issues #1366/#1457). A single
+# per-user flag — not per-user-per-book — controls whether a member's notes
+# appear in other members' group feeds and on their reader profile. It does not
+# control whether a reader is named on the progress board. Default ``public``;
+# only an explicit private row hides notes from other members.
 READER_VISIBILITY_PUBLIC = 'public'
 READER_VISIBILITY_PRIVATE = 'private'
 
@@ -479,18 +479,18 @@ READER_VISIBILITY_CHOICES = [
 
 
 class ReaderProfile(TimestampedModelMixin, models.Model):
-    """A member's Book Club reading-profile visibility preference (issue #1366).
+    """A member's Book Club notes-visibility preference (issues #1366/#1457).
 
     One row per member (``OneToOneField``) carrying a single ``visibility``
     flag. The flag is book-agnostic: it mirrors a single-privacy-setting mental
     model (like the newsletter toggle), and per-book granularity is a
     documented future extension (add a ``book`` FK + a ``UniqueConstraint`` on
     ``(user, book)``) reachable without reshaping any caller because every read
-    routes through ``bookclub.profiles.is_reader_public`` /
-    ``public_reader_ids``.
+    routes through ``bookclub.profiles.notes_are_public`` /
+    ``public_note_author_ids``.
 
-    A member with no row is treated as ``private`` — the default. The toggle
-    ``get_or_create``s the row on first use, so no data backfill is needed.
+    A member with no row is treated as ``public`` — the default. The toggle
+    creates the row on first use.
     """
 
     user = models.OneToOneField(
@@ -501,10 +501,11 @@ class ReaderProfile(TimestampedModelMixin, models.Model):
     visibility = models.CharField(
         max_length=10,
         choices=READER_VISIBILITY_CHOICES,
-        default=READER_VISIBILITY_PRIVATE,
+        default=READER_VISIBILITY_PUBLIC,
         help_text=(
-            'Public lists the member by name on the progress board and shows '
-            "their notes in other members' group feeds. Default private."
+            "Public shows this member's book notes to other members in the "
+            'group feed and on their reader profile. Private keeps notes '
+            'visible only to the member (and staff). Default public.'
         ),
     )
 

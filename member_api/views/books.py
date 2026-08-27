@@ -24,7 +24,7 @@ from api.utils import parse_json_body, require_methods
 from bookclub.models import (
     BOOK_STATUS_DRAFT,
     READER_VISIBILITY_CHOICES,
-    READER_VISIBILITY_PRIVATE,
+    READER_VISIBILITY_PUBLIC,
     Book,
     ChapterRead,
     Note,
@@ -410,16 +410,19 @@ _READER_PROFILE_OPENAPI = {
         "summary": "Get the caller's reading-profile visibility",
         "description": (
             "Returns the authenticated key owner's Book Club reading-profile "
-            "visibility (``public`` or ``private``). Book-agnostic — visibility "
-            "is a single per-user flag. A member with no profile row is "
-            "reported as ``private`` (the default). Scoped to the key owner "
+            "notes visibility (``public`` or ``private``). Book-agnostic — "
+            "visibility is a single per-user flag. Public shares notes in "
+            "chapter group feeds and on the member's reader profile; private "
+            "keeps note bodies visible only to the member and staff. A member "
+            "with no profile row is reported as ``public`` (the default). "
+            "Scoped to the key owner "
             "only — never another member's profile. Requires the ``books:read`` "
             "scope."
         ),
         "responses": {
             200: {
                 "description": "The caller's current visibility.",
-                "example": {"visibility": "private"},
+                "example": {"visibility": "public"},
             },
             401: {
                 "description": "Missing key or missing ``books:read`` scope.",
@@ -432,9 +435,10 @@ _READER_PROFILE_OPENAPI = {
         "description": (
             "Sets the authenticated key owner's reading-profile visibility "
             "from the JSON body ``{\"visibility\": \"public\"|\"private\"}`` "
-            "(``get_or_create`` on the owner). Public lists the member by name "
-            "on the progress board and shows their notes in other members' "
-            "group feeds; private hides both. Book-agnostic and scoped to the "
+            "(``get_or_create`` on the owner). Public shares notes in chapter "
+            "group feeds and on the member's reader profile; private keeps "
+            "note bodies visible only to the member and staff. The default is "
+            "public. Book-agnostic and scoped to the "
             "key owner only — there is no user parameter. Any value other than "
             "``public`` / ``private`` returns a 400. Reading another member's "
             "public profile / notes feed (a rendered web surface) and posting "
@@ -474,14 +478,14 @@ _READER_PROFILE_OPENAPI = {
 @require_methods("GET", "PUT")
 @openapi_spec(tag="Books", methods=_READER_PROFILE_OPENAPI)
 def reader_profile(request):
-    """Owner-scoped read/set of the caller's reading-profile visibility (#1366).
+    """Owner-scoped read/set of the caller's Book Club notes visibility (#1366).
 
-    Book-agnostic — visibility is a single per-user flag. Scopes are enforced
-    per method (the decorator takes no scope so read and write diverge): GET
-    requires ``books:read`` while PUT requires ``books:write_profile`` (a
-    progress or notes automation must not be able to flip a member's public /
-    private posture). No user parameter — the endpoint only ever acts on the
-    key owner.
+    Book-agnostic — notes visibility is a single per-user flag. Scopes are
+    enforced per method (the decorator takes no scope so read and write
+    diverge): GET requires ``books:read`` while PUT requires
+    ``books:write_profile`` (a progress or notes automation must not be able to
+    flip a member's notes-sharing posture). No user parameter — the endpoint
+    only ever acts on the key owner.
     """
     required_scope = (
         "books:read" if request.method == "GET" else "books:write_profile"
@@ -494,7 +498,7 @@ def reader_profile(request):
         profile = ReaderProfile.objects.filter(user=request.user).first()
         visibility = (
             profile.visibility if profile is not None
-            else READER_VISIBILITY_PRIVATE
+            else READER_VISIBILITY_PUBLIC
         )
         return JsonResponse({"visibility": visibility})
 

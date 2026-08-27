@@ -416,8 +416,7 @@ class ReaderProfileO2OTest(UserMergeTestBase):
         from bookclub.models import ReaderProfile
 
         canonical, secondary = self._make_pair()
-        # Canonical chose private; secondary was public. The surviving
-        # identity's own choice must win — never silently go more public.
+        # Canonical's explicit private notes choice wins the collision.
         ReaderProfile.objects.create(user=canonical, visibility="private")
         ReaderProfile.objects.create(user=secondary, visibility="public")
 
@@ -434,11 +433,11 @@ class ReaderProfileO2OTest(UserMergeTestBase):
             ReaderProfile.objects.get(user=canonical).visibility, "private",
         )
 
-    def test_repoints_secondary_when_canonical_has_none(self):
+    def test_repoints_secondary_private_choice_when_canonical_has_none(self):
         from bookclub.models import ReaderProfile
 
         canonical, secondary = self._make_pair()
-        ReaderProfile.objects.create(user=secondary, visibility="public")
+        ReaderProfile.objects.create(user=secondary, visibility="private")
 
         response = self._post(
             {"canonical_email": "keep@test.com", "merge_email": "dupe@test.com"}
@@ -446,7 +445,7 @@ class ReaderProfileO2OTest(UserMergeTestBase):
         self.assertEqual(response.status_code, 200, response.content)
 
         self.assertEqual(
-            ReaderProfile.objects.get(user=canonical).visibility, "public",
+            ReaderProfile.objects.get(user=canonical).visibility, "private",
         )
         self.assertFalse(ReaderProfile.objects.filter(user=secondary).exists())
 

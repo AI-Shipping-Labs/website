@@ -45,7 +45,7 @@ from bookclub.models import (
     Note,
     ReaderProfile,
 )
-from bookclub.profiles import is_reader_public, public_reader_ids
+from bookclub.profiles import notes_are_public, public_note_author_ids
 from bookclub.reading import (
     build_reader_rows,
     viewer_read_numbers,
@@ -655,9 +655,8 @@ def chapter_detail(request, slug, number):
     )
 
     # Group notes feed: members' notes for this chapter, newest first. #1366
-    # flips the private-profile exclusion on: a note whose author is a private,
-    # non-self reader is not shown to other members. One ``public_reader_ids``
-    # query partitions the authors (no N+1).
+    # excludes notes whose author explicitly keeps their notes private. One
+    # ``public_note_author_ids`` query partitions the authors (no N+1).
     #
     # #1461: the viewer's own note is excluded from the feed. The own-note card
     # is the single canonical self surface; keeping the note in the feed too
@@ -669,7 +668,7 @@ def chapter_detail(request, slug, number):
         .select_related('user')
         .order_by('-created_at')
     )
-    public_author_ids = public_reader_ids({n.user_id for n in all_notes})
+    public_author_ids = public_note_author_ids({n.user_id for n in all_notes})
     visible_notes = [
         note for note in all_notes
         if note.user_id == request.user.id or note.user_id in public_author_ids
@@ -765,32 +764,27 @@ def _reader_profile_url(book, user_id):
 
 
 def reader_profile(request, slug, user_id):
-    """``/books/<slug>/readers/<user_id>`` — a member's public reading profile.
+    """``/books/<slug>/readers/<user_id>`` — a member's reading profile.
 
-    Access mirrors ``book_detail`` exactly, then layers a visibility gate:
+    Access mirrors ``book_detail``; visibility gates only the notes feed:
 
     - Draft -> 404 non-staff; cancelled / unknown slug -> 404.
     - The target must be a participant (>= 1 ``ChapterRead`` OR >= 1 ``Note``
       on the book's chapters); a non-participant -> 404.
-    - Visibility: a private profile is a 404 to everyone except the owner and
-      staff. The message never distinguishes "private" from "does not exist" —
-      a private profile's existence is never revealed.
+    - A private-notes profile remains reachable to members with book access;
+      progress and note count render, but note bodies do not.
     - Tier gate (mirrors ``book_detail`` / the board): a guest / below-tier
-      viewer who passes the visibility gate sees the public header plus exactly
-      one gated-access card and NO notes feed — participation content (other
-      members' notes) never leaks below the gate. Members with access get the
-      chapters-read progress strip, the two stats, and the target's notes.
-    - The owner always sees their own profile (public or private) with a
-      visibility toggle; staff can view any profile (support/preview).
+      viewer sees a neutral identity plus exactly one gated-access card and no
+      stats, progress, or notes.
+    - The owner always sees their own notes and visibility toggle; staff can
+      view any participant's notes (support/preview).
     """
     book, is_staff = _resolve_book_or_404(request, slug)
 
     target = get_user_model().objects.filter(pk=user_id).first()
-    private_or_missing = Http404(
-        "This reader's profile is private or does not exist.",
-    )
+    missing_profile = Http404('This reader has not started this book.')
     if target is None:
-        raise private_or_missing
+        raise missing_profile
 
     is_owner = (
         request.user.is_authenticated and request.user.id == target.id
@@ -804,14 +798,24 @@ def reader_profile(request, slug, user_id):
         or Note.objects.filter(user=target, chapter__book=book).exists()
     )
     if not is_participant and not is_owner:
-        raise private_or_missing
+        raise missing_profile
 
-    target_public = is_reader_public(target)
-    if not target_public and not is_owner and not is_staff:
-        # Never reveal that a private profile exists.
-        raise private_or_missing
-
+    notes_public = notes_are_public(target)
     is_member = can_access(request.user, book)
+    context = {
+        'book': book,
+        'target': target,
+        'is_member': is_member,
+        'is_owner': is_owner,
+        'notes_public': notes_public,
+    }
+
+    if not is_member:
+        # Below-tier / anonymous viewers receive a neutral header + one gate;
+        # never expose the participant's identity or reading activity.
+        context.update(_gate_context(request, book))
+        return render(request, 'bookclub/reader_profile.html', context)
+
     chapters = list(book.chapters.all())
     read_numbers = set(
         ChapterRead.objects.filter(user=target, chapter__book=book)
@@ -820,33 +824,26 @@ def reader_profile(request, slug, user_id):
     for chapter in chapters:
         chapter.target_read = chapter.number in read_numbers
 
-    context = {
-        'book': book,
-        'target': target,
+    can_view_notes = notes_public or is_owner or is_staff
+    notes = []
+    if can_view_notes:
+        notes = list(
+            Note.objects.filter(user=target, chapter__book=book)
+            .select_related('chapter')
+            .order_by('-created_at')
+        )
+        for note in notes:
+            note.is_own = note.user_id == request.user.id
+
+    context.update({
         'chapters': chapters,
-        'is_member': is_member,
-        'is_owner': is_owner,
-        'target_public': target_public,
         'chapters_read': len(read_numbers),
         'notes_shared': Note.objects.filter(
             user=target, chapter__book=book,
         ).count(),
-    }
-
-    if not is_member:
-        # Below-tier / anonymous viewer of a public profile: header + gate,
-        # never other members' notes.
-        context.update(_gate_context(request, book))
-        return render(request, 'bookclub/reader_profile.html', context)
-
-    notes = list(
-        Note.objects.filter(user=target, chapter__book=book)
-        .select_related('chapter')
-        .order_by('-created_at')
-    )
-    for note in notes:
-        note.is_own = note.user_id == request.user.id
-    context['notes'] = notes
+        'can_view_notes': can_view_notes,
+        'notes': notes,
+    })
     return render(request, 'bookclub/reader_profile.html', context)
 
 

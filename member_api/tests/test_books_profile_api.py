@@ -1,7 +1,7 @@
-"""Member Book Club reading-profile visibility API (issue #1366).
+"""Member Book Club notes-visibility API (issues #1366 and #1457).
 
 Exercises the owner-scoped, book-agnostic ``GET`` (``books:read``) / ``PUT``
-(``books:write_profile``) surface for the caller's reading-profile visibility,
+(``books:write_profile``) surface for the caller's notes visibility,
 plus scope enforcement, bad-value rejection, and OpenAPI registration.
 """
 
@@ -57,12 +57,12 @@ class MemberReaderProfileApiTest(TestCase):
 
     # ---- GET -------------------------------------------------------------
 
-    def test_get_missing_row_reports_private(self):
+    def test_get_missing_row_reports_public(self):
         response = self.client.get(
             PROFILE_URL, **self._auth(self.readonly_plaintext),
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["visibility"], "private")
+        self.assertEqual(response.json()["visibility"], "public")
 
     def test_get_reflects_write(self):
         self._put(self.write_plaintext, {"visibility": "public"})
@@ -149,3 +149,11 @@ class MemberReaderProfileApiTest(TestCase):
             "/member-api/v1/books/reader-profile",
             document["paths"],
         )
+        operations = document["paths"][
+            "/member-api/v1/books/reader-profile"
+        ]
+        for method in ("get", "put"):
+            description = operations[method]["description"]
+            self.assertIn("notes", description)
+            self.assertIn("public", description)
+            self.assertNotIn("progress board", description)

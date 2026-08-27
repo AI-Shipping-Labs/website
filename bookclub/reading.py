@@ -13,7 +13,7 @@ from django.db.models import Count
 
 from accounts.utils.display import display_name as _display_name
 from bookclub.models import ChapterRead, Note
-from bookclub.profiles import public_reader_ids
+from bookclub.profiles import public_note_author_ids
 
 
 def viewer_read_numbers(user, book):
@@ -61,9 +61,9 @@ def build_reader_rows(viewer, book, *, include_self):
 
     Query budget is fixed, independent of roster size (no N+1): one aggregate
     for read counts, one for note counts, one bulk fetch of the ``User`` rows,
-    one ``public_reader_ids`` lookup. Returns ``(rows, distinct_readers)``
-    where ``distinct_readers`` counts every reader with >= 1 read (including
-    private readers, who count but are not individually listed — #1366).
+    one ``public_note_author_ids`` lookup. Returns ``(rows,
+    distinct_readers)`` where ``distinct_readers`` counts every reader with
+    >= 1 read. Notes visibility never removes a named roster row (#1457).
     """
     total = book.chapters.count()
 
@@ -97,17 +97,14 @@ def build_reader_rows(viewer, book, *, include_self):
         u.pk: u
         for u in get_user_model().objects.filter(pk__in=reader_ids)
     }
-    # #1366: one query partitions the roster into public / private. A private
-    # reader still counts in ``distinct_readers`` above but is not listed as a
-    # named row to others; the viewer's OWN row is always shown (you-first).
-    public_ids = public_reader_ids(reader_ids)
+    # #1457: one query marks which readers' notes are public. Visibility only
+    # explains the Notes cell; every reader remains named on the board.
+    public_note_ids = public_note_author_ids(reader_ids)
 
     rows = []
     for uid, member in members.items():
         is_self = uid == viewer_id
-        is_private = uid not in public_ids
-        if is_private and not is_self:
-            continue
+        notes_private = uid not in public_note_ids
         chapters_read = read_counts.get(uid, 0)
         pct = round(chapters_read / total * 100) if total else 0
         rows.append({
@@ -117,7 +114,7 @@ def build_reader_rows(viewer, book, *, include_self):
             'total': total,
             'pct': pct,
             'is_self': is_self,
-            'is_private': is_private,
+            'notes_private': notes_private,
         })
 
     # You-first, then chapters read desc, notes shared desc, display_name asc.

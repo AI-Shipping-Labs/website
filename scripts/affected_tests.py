@@ -149,6 +149,20 @@ ESCALATION_TRIGGERS: tuple[tuple[str, str], ...] = (
 #: Rule 5. Soft triggers: note only, no forced local full Playwright.
 DEPENDENCY_MANIFESTS: tuple[str, ...] = ('pyproject.toml', 'uv.lock')
 
+#: Focused tooling/data contracts with exact top-level Django test owners.
+#: These entries are checked before the broader ``scripts/*`` contract rule so
+#: policy-only changes do not expand to every module under ``tests``.
+FOCUSED_CONTRACT_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ('scripts/affected_tests.py', ('tests.test_affected_tests',)),
+    ('_docs/testing-guidelines.md', ('tests.test_affected_tests',)),
+    ('scripts/playwright_owner_inventory.py', ('tests.test_playwright_owner_inventory',)),
+    (
+        'scripts/playwright_owner_inventory_ceilings.py',
+        ('tests.test_playwright_owner_inventory',),
+    ),
+    ('tests/playwright_owner_inventory_live.json', ('tests.test_playwright_owner_inventory',)),
+)
+
 #: Rule 3. Contract surfaces: files that are not app source but that a real
 #: test asserts. Each entry maps a glob to the labels that own it, and matching
 #: here also exempts the path from rule 1 (so a guarded doc artifact can never
@@ -498,6 +512,15 @@ def build_plan(
 
     for path in relevant:
         top = _top_dir(path)
+
+        focused_contract = next(
+            (labels_for_path for glob, labels_for_path in FOCUSED_CONTRACT_PATHS
+             if fnmatch.fnmatchcase(path, glob)),
+            None,
+        )
+        if focused_contract is not None:
+            labels.update(focused_contract)
+            continue
 
         # Rule 3 -- contract surfaces (CI/build tooling and guarded doc artifacts).
         contract = contract_labels(path)

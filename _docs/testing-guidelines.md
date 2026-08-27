@@ -731,7 +731,7 @@ rule 2 (escalation), which sets a flag and lets the file fall through.
 |---|---|---|
 | 1 | `_docs/**`, `docs/**`, `specs/**`, and top-level markdown (`README.md`) -- minus anything claimed by rule 3 | nothing -- a docs-only diff short-circuits to `NO TESTS REQUIRED`. Markdown anywhere else is treated as code, because a lot of it is asserted by real tests: `email_app/email_templates/*.md` are the shipped email bodies (rule 8 -> `email_app`), and `.claude/**` has content guards in `tests/` (rule 3). |
 | 2 | escalation triggers (table below) | sets Playwright to `full`, then falls through to the remaining rules |
-| 3 | `.github/**`, `scripts/**`, `Makefile`, `Dockerfile`, `docker-compose.yml`, `entrypoint.sh`, `Procfile.dev`, `deploy/**`, `package*.json`, `.claude/**`, `manage.py` | `tests` |
+| 3 | `.github/**`, `scripts/**`, `Makefile`, `Dockerfile`, `docker-compose.yml`, `entrypoint.sh`, `Procfile.dev`, `deploy/**`, `package*.json`, `.claude/**`, `manage.py` | `tests`. Focused exceptions map `scripts/affected_tests.py` and the Playwright owner inventory script/ceiling/live-manifest files to their exact policy modules. |
 | 3 | guarded doc artifacts -- see the table below | the app whose tests read them; also exempts the path from rule 1 |
 | 4 | `website/**` | `tests` + `website` + `make test-core` + full Playwright (every-request blast radius) |
 | 5 | `pyproject.toml`, `uv.lock` | `make test-core` plus a note -- soft trigger, rely on CI for the full suite |
@@ -916,6 +916,60 @@ one, the tag travels with the deletion. There is no separate registry to
 maintain -- the tag IS the registry.
 
 ---
+
+## Exact Playwright owner baseline
+
+`scripts/playwright_owner_inventory.py` freezes the final pytest-collected owner
+of every `playwright_tests/test_*.py` item. The owner schema is the exact
+collection path plus every class parent plus the unparameterized pytest function
+name, for example:
+
+```text
+playwright_tests/test_account_page.py::TestScenarioNewsletterToggle::test_toggle_off_and_on
+```
+
+The collector runs pytest's normal import, decorator, plugin,
+`pytest_generate_tests`, and collection-hook path with `--collect-only`. It uses
+runtime `pytest.Function` metadata only; it does not parse source or infer
+fixtures, receivers, helpers, control flow, decorators, or navigation methods.
+Parameterized items collapse only when they belong to one final callable and
+have unique final parameter IDs. Ambiguous normalization, duplicate callable
+owners, unsupported item types, and source/collection drift fail closed.
+
+The current baseline was independently collected from exact `origin/main` SHA
+`e238f4bf44411cd7d8d50d59b3359acc38aa4c64`: 2,559 parameterized items normalize
+to 2,339 owners. `tests/playwright_owner_inventory_live.json` partitions them
+exactly into 2,258 `LEGACY_DECLARED_BROWSER` owners and 81
+`LEGACY_NON_BROWSER` owners. Every non-browser entry carries a category, review
+reason, and relocation destination. No file, module, class, or path wildcard is
+an approval.
+
+The two initial exact ceilings live independently in
+`scripts/playwright_owner_inventory_ceilings.py`. Live sets may only shrink:
+when an owner is deleted, relocated, or later migrated to the explicit runtime
+declaration contract, remove its live entry and leave its ceiling untouched.
+Never add, remove, or replace a ceiling ID. A new owner, renamed/replacement
+owner, stale live owner, overlap, missing review field, or ceiling change emits
+the exact ID and required next action.
+
+Run the focused collection gate with:
+
+```bash
+uv run python scripts/playwright_owner_inventory.py check
+uv run python manage.py test tests.test_playwright_owner_inventory --parallel 4
+```
+
+Collect-only inventory bypasses the Playwright session lock and local URL
+resolution. Pytest does not set up fixtures, so this path does not migrate the
+Playwright database, start Django's server, or launch Chromium. Normal selected
+test runs are unchanged and retain all existing lock, database, server, browser,
+marker, skip, retry, timeout, and fixture behavior.
+
+This baseline intentionally blocks every new Playwright owner. Issue #1451 is
+the sole planned growth path: it must add the explicit final-callable declaration
+and real synchronous Playwright navigation evidence before new owners can be
+accepted. Until that contract lands, do not classify a new owner as legacy and
+do not grow either ceiling.
 
 ## Core Playwright subset (`make test-playwright-core`)
 

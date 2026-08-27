@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import date, timedelta
 from unittest.mock import patch
 
@@ -18,6 +19,7 @@ from accounts.services.privacy import (
     REDACTED,
     SCHEMA_VERSION,
     _book_club_export,
+    _comments_export,
     build_user_data_export,
     delete_account_for_privacy,
 )
@@ -25,7 +27,16 @@ from analytics.models import UserActivity
 from bookclub.models import Book, Chapter, ChapterRead, Note, ReaderProfile
 from comments.models import Comment
 from community.models import UnmatchedBookedCall
-from content.models import Course, Enrollment, Project, UserContentCompletion
+from content.models import (
+    Course,
+    Enrollment,
+    Module,
+    Project,
+    Unit,
+    UserContentCompletion,
+    Workshop,
+    WorkshopPage,
+)
 from content.models.download import Download, DownloadDeliveryGrant
 from content.models.peer_review import CourseCertificate
 from crm.models import CRMRecord, SlackMessage, SlackThread
@@ -378,6 +389,336 @@ class PrivacyExportUuidSerialisationTest(TestCase):
 
         with self.assertRaises(TypeError):
             self.client.get("/account/api/data-export")
+
+
+@tag("core")
+class PrivacyCommentContextExportTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.exporting_user = User.objects.create_user(
+            email="comment-export@test.com",
+            first_name="Exporting",
+        )
+        cls.other_user = User.objects.create_user(
+            email="private-owner@test.com",
+            first_name="Private Owner",
+        )
+
+        cls.course = _course("comment-context-course")
+        cls.course.title = "Search Systems"
+        cls.course.save(update_fields=["title"])
+        cls.module = Module.objects.create(
+            course=cls.course,
+            title="Indexes",
+            slug="indexes",
+        )
+        cls.unit = Unit.objects.create(
+            module=cls.module,
+            title="Vector search",
+            slug="vector-search",
+            content_id=uuid.uuid4(),
+        )
+
+        cls.workshop = Workshop.objects.create(
+            slug="production-agents-comment-context",
+            title="Production Agents",
+            status="published",
+            date=date(2026, 8, 27),
+        )
+        cls.workshop_page = WorkshopPage.objects.create(
+            workshop=cls.workshop,
+            slug="set-up-agent",
+            title="Set up the agent",
+            content_id=uuid.uuid4(),
+        )
+
+        cls.book = Book.objects.create(
+            title="Inference Engineering",
+            slug="inference-engineering-comment-context",
+            author="Operator Author",
+            status="current",
+        )
+        cls.chapter = Chapter.objects.create(
+            book=cls.book,
+            number=3,
+            title="Batching",
+        )
+        cls.other_note = Note.objects.create(
+            chapter=cls.chapter,
+            user=cls.other_user,
+            body="private note source that must not leak",
+        )
+        cls.own_chapter = Chapter.objects.create(
+            book=cls.book,
+            number=4,
+            title="Serving",
+        )
+        cls.own_note = Note.objects.create(
+            chapter=cls.own_chapter,
+            user=cls.exporting_user,
+            body="the exporting member's own note",
+        )
+
+        cls.sprint = Sprint.objects.create(
+            slug="august-shipping-comment-context",
+            name="August Shipping Sprint",
+            start_date=date(2026, 8, 1),
+            duration_weeks=4,
+            status="active",
+            min_tier_level=0,
+        )
+        cls.other_plan = Plan.objects.create(
+            member=cls.other_user,
+            sprint=cls.sprint,
+            title="Ship evaluation harness",
+            goal="private plan goal that must not leak",
+            summary_goal="private plan body that must not leak",
+        )
+
+    def test_comments_include_all_context_types_for_own_other_and_replies(self):
+        course_comment = Comment.objects.create(
+            user=self.exporting_user,
+            content_id=self.unit.content_id,
+            body="How is this index built?",
+        )
+        workshop_comment = Comment.objects.create(
+            user=self.exporting_user,
+            content_id=self.workshop_page.content_id,
+            body="Where should this agent run?",
+        )
+        note_comment = Comment.objects.create(
+            user=self.exporting_user,
+            content_id=self.other_note.comment_content_id,
+            body="This batching observation helped",
+        )
+        note_reply = Comment.objects.create(
+            user=self.exporting_user,
+            content_id=self.other_note.comment_content_id,
+            parent=note_comment,
+            body="Following up on the same thread",
+        )
+        own_note_comment = Comment.objects.create(
+            user=self.exporting_user,
+            content_id=self.own_note.comment_content_id,
+            body="A reminder on my own note",
+        )
+        plan_comment = Comment.objects.create(
+            user=self.exporting_user,
+            content_id=self.other_plan.comment_content_id,
+            body="How will you evaluate it?",
+        )
+
+        comments = _comments_export(self.exporting_user)
+        rows = {row["body"]: row for row in comments}
+
+        self.assertEqual(
+            rows[course_comment.body]["content_type"],
+            "course_unit",
+        )
+        self.assertEqual(
+            rows[course_comment.body]["content_label"],
+            "Course unit: Search Systems — Vector search",
+        )
+        self.assertEqual(
+            rows[workshop_comment.body]["content_type"],
+            "workshop_page",
+        )
+        self.assertEqual(
+            rows[workshop_comment.body]["content_label"],
+            "Workshop tutorial: Production Agents — Set up the agent",
+        )
+        expected_note_context = {
+            "content_type": "book_club_note",
+            "content_label": (
+                "Book Club note: Inference Engineering — Chapter 3: Batching"
+            ),
+        }
+        for comment in (note_comment, note_reply):
+            self.assertEqual(
+                {
+                    "content_type": rows[comment.body]["content_type"],
+                    "content_label": rows[comment.body]["content_label"],
+                },
+                expected_note_context,
+            )
+        self.assertEqual(rows[note_reply.body]["parent_id"], note_comment.pk)
+        self.assertEqual(
+            rows[own_note_comment.body]["content_label"],
+            "Book Club note: Inference Engineering — Chapter 4: Serving",
+        )
+        self.assertEqual(
+            rows[plan_comment.body]["content_type"],
+            "sprint_plan",
+        )
+        self.assertEqual(
+            rows[plan_comment.body]["content_label"],
+            "Sprint plan: August Shipping Sprint — Ship evaluation harness",
+        )
+
+        course_row = rows[course_comment.body]
+        self.assertEqual(
+            list(course_row),
+            [
+                "id",
+                "content_id",
+                "parent_id",
+                "body",
+                "created_at",
+                "updated_at",
+                "content_type",
+                "content_label",
+            ],
+        )
+        self.assertEqual(course_row["id"], course_comment.pk)
+        self.assertEqual(course_row["content_id"], str(self.unit.content_id))
+        self.assertIsNone(course_row["parent_id"])
+        self.assertEqual(course_row["created_at"], course_comment.created_at.isoformat())
+        self.assertEqual(course_row["updated_at"], course_comment.updated_at.isoformat())
+
+        rendered = json.dumps(comments)
+        for private_value in (
+            self.other_note.body,
+            self.other_plan.goal,
+            self.other_plan.summary_goal,
+            self.other_user.email,
+            self.other_user.first_name,
+        ):
+            self.assertNotIn(private_value, rendered)
+
+    def test_unknown_owner_is_preserved(self):
+        content_id = uuid.uuid4()
+        comment = Comment.objects.create(
+            user=self.exporting_user,
+            content_id=content_id,
+            body="Keep this orphaned discussion",
+        )
+
+        row = _comments_export(self.exporting_user)[0]
+
+        self.assertEqual(row["id"], comment.pk)
+        self.assertEqual(row["content_id"], str(content_id))
+        self.assertEqual(row["body"], comment.body)
+        self.assertEqual(row["content_type"], "unknown")
+        self.assertIsNone(row["content_label"])
+
+    def test_collision_precedence_matches_notification_resolution(self):
+        unit_id = self.unit.content_id
+        workshop_id = self.workshop_page.content_id
+        note_id = self.other_note.comment_content_id
+
+        WorkshopPage.objects.create(
+            workshop=self.workshop,
+            slug="unit-collision",
+            title="Unit collision page",
+            content_id=unit_id,
+        )
+        unit_collision_chapter = Chapter.objects.create(
+            book=self.book,
+            number=10,
+            title="Unit collision chapter",
+        )
+        Note.objects.create(
+            chapter=unit_collision_chapter,
+            user=self.other_user,
+            body="unit collision note",
+            comment_content_id=unit_id,
+        )
+        workshop_collision_chapter = Chapter.objects.create(
+            book=self.book,
+            number=11,
+            title="Workshop collision chapter",
+        )
+        Note.objects.create(
+            chapter=workshop_collision_chapter,
+            user=self.other_user,
+            body="workshop collision note",
+            comment_content_id=workshop_id,
+        )
+        for index, content_id in enumerate((unit_id, workshop_id, note_id), start=1):
+            sprint = Sprint.objects.create(
+                slug=f"collision-sprint-{index}",
+                name=f"Collision Sprint {index}",
+                start_date=date(2026, 9, index),
+                duration_weeks=1,
+                status="draft",
+                min_tier_level=0,
+            )
+            Plan.objects.create(
+                member=self.other_user,
+                sprint=sprint,
+                title=f"Collision plan {index}",
+                comment_content_id=content_id,
+            )
+
+        for body, content_id in (
+            ("unit wins", unit_id),
+            ("workshop wins", workshop_id),
+            ("note wins", note_id),
+            ("plan resolves", self.other_plan.comment_content_id),
+        ):
+            Comment.objects.create(
+                user=self.exporting_user,
+                content_id=content_id,
+                body=body,
+            )
+
+        rows = {row["body"]: row for row in _comments_export(self.exporting_user)}
+
+        self.assertEqual(rows["unit wins"]["content_type"], "course_unit")
+        self.assertEqual(rows["workshop wins"]["content_type"], "workshop_page")
+        self.assertEqual(rows["note wins"]["content_type"], "book_club_note")
+        self.assertEqual(rows["plan resolves"]["content_type"], "sprint_plan")
+
+    def test_optional_owner_models_degrade_to_unknown(self):
+        comment = Comment.objects.create(
+            user=self.exporting_user,
+            content_id=self.unit.content_id,
+            body="Known only when owner models are installed",
+        )
+
+        def optional_models_unavailable(app_label, model_name):
+            if (app_label, model_name) == ("comments", "Comment"):
+                return Comment
+            return None
+
+        with patch(
+            "accounts.services.privacy._model",
+            side_effect=optional_models_unavailable,
+        ):
+            rows = _comments_export(self.exporting_user)
+
+        self.assertEqual(rows[0]["id"], comment.pk)
+        self.assertEqual(rows[0]["content_type"], "unknown")
+        self.assertIsNone(rows[0]["content_label"])
+
+    def test_comment_context_query_count_is_fixed_at_five(self):
+        light = User.objects.create_user(email="comment-query-light@test.com")
+        heavy = User.objects.create_user(email="comment-query-heavy@test.com")
+        Comment.objects.create(
+            user=light,
+            content_id=self.unit.content_id,
+            body="one comment",
+        )
+        content_ids = (
+            self.unit.content_id,
+            self.workshop_page.content_id,
+            self.other_note.comment_content_id,
+            self.other_plan.comment_content_id,
+        )
+        for index in range(40):
+            Comment.objects.create(
+                user=heavy,
+                content_id=content_ids[index % len(content_ids)],
+                body=f"comment {index}",
+            )
+
+        with self.assertNumQueries(5):
+            light_rows = _comments_export(light)
+        with self.assertNumQueries(5):
+            heavy_rows = _comments_export(heavy)
+
+        self.assertEqual(len(light_rows), 1)
+        self.assertEqual(len(heavy_rows), 40)
 
 
 @tag("core")

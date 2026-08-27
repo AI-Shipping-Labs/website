@@ -32,7 +32,7 @@ from integrations.config import (
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = "2026-08-26.1"
+SCHEMA_VERSION = "2026-08-27.1"
 REDACTED = "[privacy-redacted]"
 SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 SENSITIVE_METADATA_KEY_PARTS = (
@@ -935,11 +935,7 @@ def _communications_activity(user):
             Q(user=user),
             ["id", "title", "body", "url", "notification_type", "read", "created_at"],
         ),
-        "comments": _values(
-            _model("comments", "Comment"),
-            Q(user=user),
-            ["id", "content_id", "parent_id", "body", "created_at", "updated_at"],
-        ),
+        "comments": _comments_export(user),
         "comment_votes": _values(
             _model("comments", "CommentVote"),
             Q(user=user),
@@ -1061,6 +1057,102 @@ def _model(app_label, model_name):
         return apps.get_model(app_label, model_name)
     except LookupError:
         return None
+
+
+def _comments_export(user):
+    """Export comments with readable, privacy-safe thread context."""
+    model = _model("comments", "Comment")
+    if model is None:
+        return []
+
+    fields = ["id", "content_id", "parent_id", "body", "created_at", "updated_at"]
+    rows = list(model.objects.filter(user=user).values(*fields))
+    contexts = _comment_content_contexts({row["content_id"] for row in rows})
+    unknown = {"content_type": "unknown", "content_label": None}
+
+    return [
+        {
+            **{key: _plain(value) for key, value in row.items()},
+            **contexts.get(row["content_id"], unknown),
+        }
+        for row in rows
+    ]
+
+
+def _comment_content_contexts(content_ids):
+    """Bulk-resolve comment hosts in notification-resolver precedence order."""
+    contexts = {}
+    if not content_ids:
+        return contexts
+
+    unit_model = _model("content", "Unit")
+    if unit_model is not None:
+        for unit in (
+            unit_model.objects
+            .filter(content_id__in=content_ids)
+            .select_related("module__course")
+        ):
+            contexts.setdefault(
+                unit.content_id,
+                {
+                    "content_type": "course_unit",
+                    "content_label": (
+                        f"Course unit: {unit.module.course.title} — {unit.title}"
+                    ),
+                },
+            )
+
+    page_model = _model("content", "WorkshopPage")
+    if page_model is not None:
+        for page in (
+            page_model.objects
+            .filter(content_id__in=content_ids)
+            .select_related("workshop")
+        ):
+            contexts.setdefault(
+                page.content_id,
+                {
+                    "content_type": "workshop_page",
+                    "content_label": (
+                        f"Workshop tutorial: {page.workshop.title} — {page.title}"
+                    ),
+                },
+            )
+
+    note_model = _model("bookclub", "Note")
+    if note_model is not None:
+        for note in (
+            note_model.objects
+            .filter(comment_content_id__in=content_ids)
+            .select_related("chapter__book")
+        ):
+            contexts.setdefault(
+                note.comment_content_id,
+                {
+                    "content_type": "book_club_note",
+                    "content_label": (
+                        f"Book Club note: {note.chapter.book.title} — "
+                        f"Chapter {note.chapter.number}: {note.chapter.title}"
+                    ),
+                },
+            )
+
+    plan_model = _model("plans", "Plan")
+    if plan_model is not None:
+        for plan in (
+            plan_model.objects
+            .filter(comment_content_id__in=content_ids)
+            .select_related("sprint")
+        ):
+            contexts.setdefault(
+                plan.comment_content_id,
+                {
+                    "content_type": "sprint_plan",
+                    "content_label": f"Sprint plan: {plan.sprint.name} — {plan.title}",
+                },
+            )
+
+    return contexts
 
 
 def _values(model, filters, fields):

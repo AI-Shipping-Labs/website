@@ -14,6 +14,10 @@ import os
 import pytest
 
 from playwright_tests.conftest import (
+    SETTLE_TIMEOUT_MS,
+    settle_click,
+)
+from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
 from playwright_tests.conftest import (
@@ -85,6 +89,46 @@ def _canonical_event_count(email):
     return n
 
 
+def _fill_merge_form_and_preview(page, canonical_email, secondary_email):
+    """Fill both merge inputs and submit the preview, overlay-safe.
+
+    Both inputs are typeaheads (``templates/studio/users/merge.html``): each
+    ``input`` event schedules a 200 ms debounced ``/studio/api/users/search/``
+    fetch whose results render into an ``absolute z-20`` suggestion list. That
+    list sits directly above the "Preview merge" button.
+
+    ``hide()`` only runs from the input's own ``blur`` handler, so a response
+    that resolves AFTER that blur re-shows the list with no further blur left to
+    close it: the canonical list stays pinned over "Preview merge", hit-testing
+    reports it intercepting pointer events, the mousedown that would dismiss it
+    never reaches the page, and the click retries until it times out. This is a
+    real product-JS defect (reproduced while measuring #1470's parallel runs),
+    not a #1470 regression, and it is reported separately; the harness works
+    around it here so the core suite stays deterministic.
+
+    The workaround is ordering, not force-clicking: let both searches settle,
+    then blur each input once more AFTER the last response has landed, so no
+    late ``render()`` can re-show either list. The submit is still a real button
+    click through the real form.
+    """
+    page.locator('[data-testid="merge-canonical-input"]').fill(canonical_email)
+    page.locator('[data-testid="merge-secondary-input"]').fill(secondary_email)
+    # Both debounced searches have completed; nothing further can re-show a list
+    # except a new `input` event, and clicking does not produce one.
+    page.wait_for_load_state("networkidle")
+    # Re-focus the canonical input (its own dropdown renders below it, so it is
+    # never intercepted), then blur to a neutral element. Focusing canonical
+    # blurs secondary; clicking the heading blurs canonical.
+    page.locator('[data-testid="merge-canonical-input"]').click()
+    page.locator("h1").first.click()
+    for list_id in ("merge-canonical-suggestions", "merge-secondary-suggestions"):
+        page.locator(f'[data-testid="{list_id}"]').wait_for(
+            state="hidden", timeout=SETTLE_TIMEOUT_MS
+        )
+    settle_click(page.locator('[data-testid="merge-preview-submit"]'))
+    page.wait_for_load_state("domcontentloaded")
+
+
 @pytest.mark.django_db(transaction=True)
 class TestPreviewThenConfirm:
     """Staff previews a merge, reviews the plan, and commits it."""
@@ -108,10 +152,7 @@ class TestPreviewThenConfirm:
             wait_until="domcontentloaded",
         )
 
-        page.locator('[data-testid="merge-canonical-input"]').fill("keep@test.com")
-        page.locator('[data-testid="merge-secondary-input"]').fill("dupe@test.com")
-        page.locator('[data-testid="merge-preview-submit"]').click()
-        page.wait_for_load_state("domcontentloaded")
+        _fill_merge_form_and_preview(page, "keep@test.com", "dupe@test.com")
 
         # Plan shows the moved event registration row + deactivation notice.
         assert page.locator('[data-testid="merge-preview"]').count() == 1
@@ -170,10 +211,7 @@ class TestPreviewIsDryRun:
             f"{django_server}/studio/users/merge/",
             wait_until="domcontentloaded",
         )
-        page.locator('[data-testid="merge-canonical-input"]').fill("keep@test.com")
-        page.locator('[data-testid="merge-secondary-input"]').fill("dupe@test.com")
-        page.locator('[data-testid="merge-preview-submit"]').click()
-        page.wait_for_load_state("domcontentloaded")
+        _fill_merge_form_and_preview(page, "keep@test.com", "dupe@test.com")
         assert page.locator('[data-testid="merge-preview"]').count() == 1
 
         # Without confirming, secondary is untouched.
@@ -203,10 +241,7 @@ class TestSelfMergeStopped:
             f"{django_server}/studio/users/merge/",
             wait_until="domcontentloaded",
         )
-        page.locator('[data-testid="merge-canonical-input"]').fill("solo@test.com")
-        page.locator('[data-testid="merge-secondary-input"]').fill("solo@test.com")
-        page.locator('[data-testid="merge-preview-submit"]').click()
-        page.wait_for_load_state("domcontentloaded")
+        _fill_merge_form_and_preview(page, "solo@test.com", "solo@test.com")
 
         err = page.locator('[data-testid="merge-error-self-merge"]')
         assert err.count() == 1
@@ -233,10 +268,7 @@ class TestUnknownEmail:
             f"{django_server}/studio/users/merge/",
             wait_until="domcontentloaded",
         )
-        page.locator('[data-testid="merge-canonical-input"]').fill("keep@test.com")
-        page.locator('[data-testid="merge-secondary-input"]').fill("ghost@test.com")
-        page.locator('[data-testid="merge-preview-submit"]').click()
-        page.wait_for_load_state("domcontentloaded")
+        _fill_merge_form_and_preview(page, "keep@test.com", "ghost@test.com")
 
         err = page.locator('[data-testid="merge-error-secondary"]')
         assert err.count() == 1

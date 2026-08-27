@@ -32,6 +32,15 @@ pytest claims a repo-local ``.tmp/playwright-session.lock``. A second local
 session in the same git worktree fails fast with holder details. Non-local
 ``PLAYWRIGHT_BASE_URL`` runs do not claim this guard because they do not touch
 the local SQLite test database.
+
+pytest-xdist parallelism (issue #1470): ``make test-playwright[-core]`` runs
+``pytest -n <workers> --dist loadfile``. Each xdist worker is a full pytest
+session in its own subprocess, so it independently resolves its own free
+``runserver`` port (above) AND its own SQLite test database file
+(``test_playwright_db_gw0.sqlite3``, see ``playwright_test_database_name``).
+Only the controller process claims the worktree guard; workers detect
+``PYTEST_XDIST_WORKER`` and skip claiming, so sibling workers of one invocation
+run together while a genuinely separate second invocation is still blocked.
 """
 
 import os
@@ -45,12 +54,27 @@ import pytest
 from django.core.management import call_command
 from playwright.sync_api import sync_playwright
 
-from playwright_tests.worktree_guard import PlaywrightWorktreeGuard, WorktreeGuardAlreadyHeld
+from playwright_tests.worktree_guard import (
+    PlaywrightWorktreeGuard,
+    WorktreeGuardAlreadyHeld,
+    current_xdist_worker_id,
+)
 from website.test_database_guard import assert_playwright_database_is_safe
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 DJANGO_HOST = "127.0.0.1"
+
+# Stem of the per-worktree SQLite test database file. Must keep "test" in the
+# name: ``website.test_database_guard`` refuses to start the in-process
+# runserver against anything that does not look test-owned.
+PLAYWRIGHT_TEST_DB_STEM = "test_playwright_db"
+
+# Sentinel for "read the worker id from the ambient environment". Distinct from
+# ``None``, which explicitly means "serial run, no worker suffix" — the naming
+# rule has to be assertable for both cases from inside a test that is itself
+# running in an xdist worker.
+_AMBIENT_WORKER = object()
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "0.0.0.0", "::1"}
 
@@ -147,9 +171,61 @@ def base_url_is_local():
     return _base_url_is_local(_resolved_base_url())
 
 
+def requested_xdist_worker_count(config):
+    """Return the ``-n`` worker count requested on the command line, or 0.
+
+    ``-n auto`` / ``-n logical`` are resolved by xdist into an int before we
+    see them; anything unparseable is reported as 0 (no parallelism claimed).
+    """
+    raw = getattr(config.option, "numprocesses", None)
+    try:
+        return max(int(raw), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _assert_pinned_port_is_not_parallel(config):
+    """Reject ``PLAYWRIGHT_DJANGO_PORT`` combined with ``-n`` (issue #1470).
+
+    A pinned port is a single port. Every xdist worker starts its own
+    ``runserver``, so under ``-n N`` all N workers would try to bind that one
+    port: the first wins and the rest die with "Django dev server did not start
+    in time" — N-1 workers' worth of confusing, unrelated-looking reds. Fail
+    fast at configure time with an actionable message instead.
+    """
+    if current_xdist_worker_id() is not None:
+        return
+    if not _base_url_is_local(_resolved_base_url()):
+        return
+    if _parse_port_override(os.environ.get("PLAYWRIGHT_DJANGO_PORT")) is None:
+        return
+    workers = requested_xdist_worker_count(config)
+    if workers <= 0:
+        return
+    raise pytest.UsageError(
+        "PLAYWRIGHT_DJANGO_PORT cannot be combined with pytest-xdist "
+        f"parallelism (-n {workers}): a pinned port can only be bound by one "
+        "Django server, but each xdist worker starts its own.\n"
+        "Either drop PLAYWRIGHT_DJANGO_PORT and let each worker take a free "
+        "OS-assigned port, or run serially with PLAYWRIGHT_XDIST_WORKERS=0 "
+        "(equivalently -n 0)."
+    )
+
+
 def _claim_playwright_worktree_guard(config):
     """Claim the local worktree guard for this pytest session when needed."""
     if not _base_url_is_local(_resolved_base_url()):
+        return None
+
+    if current_xdist_worker_id() is not None:
+        # pytest-xdist worker (issue #1470). The controller process of THIS
+        # invocation already holds the worktree lock; its workers are siblings
+        # of that single claim, not competing sessions, and each one owns a
+        # private SQLite database + runserver port. Claiming again would
+        # deadlock the run against its own controller. A genuinely separate
+        # second invocation is still blocked, because its controller — which
+        # never has PYTEST_XDIST_WORKER set — hits the held lock and exits
+        # before it can spawn any workers.
         return None
 
     guard = PlaywrightWorktreeGuard.for_current_worktree()
@@ -170,12 +246,51 @@ def _release_playwright_worktree_guard(config):
     delattr(config, "_playwright_worktree_guard")
 
 
+def pytest_configure(config):
+    _assert_pinned_port_is_not_parallel(config)
+
+
 def pytest_sessionstart(session):
     _claim_playwright_worktree_guard(session.config)
 
 
 def pytest_sessionfinish(session, exitstatus):
     _release_playwright_worktree_guard(session.config)
+
+
+@pytest.fixture(autouse=True)
+def _reset_integration_config_cache():
+    """Drop the process-wide IntegrationSetting cache around every test (#1470).
+
+    ``integrations.config`` memoizes every ``IntegrationSetting`` row in a
+    module-level ``_cache``, and DB overrides win over ``settings`` and env in
+    ``get_config()``. Nothing invalidates that cache when a
+    ``django_db(transaction=True)`` test truncates the table at teardown, and
+    the cross-process stamp lives in the ``django_q`` DatabaseCache table,
+    which the same flush also truncates — so a value seeded by one module
+    survives, invisibly, into every later test in the same process.
+
+    Serially the poison usually gets healed by chance (some later module calls
+    ``clear_config_cache()``, which republishes a stamp). Under
+    ``--dist loadfile`` the file order changes per worker, so whether a module
+    runs before or after its accidental antidote becomes a coin flip. That is
+    what made ``test_workshop_copy_file.py`` (a stale
+    ``AWS_S3_CONTENT_BUCKET`` sending the sync at real S3 with blank
+    credentials) and ``test_plan_sprints_ingest_889.py`` (a stale Slack
+    channel/environment value making the ingest no-op and return ``None``)
+    order-dependent.
+
+    Resetting here is in-memory only — no DB write, no stamp — so it is safe
+    for tests with no database access: the next ``get_config()`` simply
+    repopulates from whatever the database currently holds. That the 33
+    Playwright modules already hand-rolling ``clear_config_cache()`` in their
+    own fixtures exist at all is the evidence this belongs in one place.
+    """
+    from integrations.config import reset_local_config_cache
+
+    reset_local_config_cache()
+    yield
+    reset_local_config_cache()
 
 
 def pytest_terminal_summary(terminalreporter):
@@ -222,16 +337,54 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip_local)
 
 
+def playwright_test_database_name(base_dir, worker_id=_AMBIENT_WORKER):
+    """Return the SQLite test database path for this pytest process.
+
+    Serial runs (and the xdist controller) get ``test_playwright_db.sqlite3``,
+    unchanged from before #1470, so the existing per-worktree isolation from
+    #885 is untouched: each git worktree still owns exactly one such file under
+    its own ``BASE_DIR``.
+
+    Under ``pytest -n N`` every worker additionally gets its own suffixed file
+    (``test_playwright_db_gw0.sqlite3``, ``test_playwright_db_gw1.sqlite3``, …).
+    Workers run concurrently in one worktree, so without the suffix they would
+    all migrate, seed, and truncate the same SQLite file and corrupt or lock
+    each other's fixture state. The suffix is the standard pytest-django +
+    pytest-xdist isolation pattern.
+
+    ``worker_id`` defaults to the ambient ``current_xdist_worker_id()``; pass it
+    explicitly (``None`` for a serial run, ``"gw0"`` for a worker) so the naming
+    rule is assertable without spawning real workers.
+    """
+    if worker_id is _AMBIENT_WORKER:
+        worker_id = current_xdist_worker_id()
+    suffix = f"_{worker_id}" if worker_id else ""
+    return str(Path(base_dir) / f"{PLAYWRIGHT_TEST_DB_STEM}{suffix}.sqlite3")
+
+
+def apply_playwright_test_database(database_settings, base_dir, worker_id=_AMBIENT_WORKER):
+    """Point ``database_settings`` at this process's Playwright test database.
+
+    No-op for non-SQLite engines. For SQLite the Playwright name is
+    authoritative and overwrites any earlier ``TEST['NAME']`` (including the
+    ``DJANGO_TEST_DB_NAME`` value applied in ``website/settings.py``) — that is
+    the pre-#1470 behavior, preserved verbatim so the Playwright suite can
+    never be pointed at the Django unittest runner's database.
+    """
+    if database_settings.get('ENGINE') != 'django.db.backends.sqlite3':
+        return database_settings
+    database_settings.setdefault('TEST', {})['NAME'] = playwright_test_database_name(
+        base_dir, worker_id=worker_id
+    )
+    return database_settings
+
+
 @pytest.fixture(scope="session")
 def django_db_modify_db_settings():
     """Force Playwright pytest runs onto a dedicated test database file."""
     from django.conf import settings
 
-    database_settings = settings.DATABASES['default']
-    if database_settings.get('ENGINE') == 'django.db.backends.sqlite3':
-        database_settings.setdefault('TEST', {})['NAME'] = str(
-            Path(settings.BASE_DIR) / 'test_playwright_db.sqlite3'
-        )
+    apply_playwright_test_database(settings.DATABASES['default'], settings.BASE_DIR)
 
 
 def _start_django_server():

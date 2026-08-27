@@ -8,7 +8,12 @@ from urllib.parse import quote
 
 import pytest
 
-from playwright_tests.conftest import auth_context, create_staff_user, ensure_tiers
+from playwright_tests.conftest import (
+    SETTLE_TIMEOUT_MS,
+    auth_context,
+    create_staff_user,
+    ensure_tiers,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -64,7 +69,13 @@ class TestIssue1288UserSupport:
         page.get_by_text("No aliases yet.").wait_for()
         page.get_by_test_id("user-alias-input").fill(other.email)
         page.get_by_test_id("user-alias-add-submit").click()
-        assert page.get_by_text("already a primary account email", exact=False).is_visible()
+        # The submit POSTs and redirects back; `is_visible()` does NOT auto-wait,
+        # so asserting it directly races the reload and goes red on a loaded box
+        # (seen while measuring #1470's parallel runs). Wait for the conflict
+        # message to render first, then assert on it.
+        conflict = page.get_by_text("already a primary account email", exact=False)
+        conflict.wait_for(state="visible", timeout=SETTLE_TIMEOUT_MS)
+        assert conflict.is_visible()
         context.close()
 
     def test_check_now_refreshes_slack_and_preserves_id(self, django_server, browser):

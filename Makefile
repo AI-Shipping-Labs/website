@@ -103,21 +103,44 @@ coverage:
 	uv run coverage run manage.py test
 	uv run coverage report --fail-under=85
 
+# Local Playwright parallelism (#1470). pytest-xdist splits the suite across
+# PLAYWRIGHT_XDIST_WORKERS worker processes; each worker is an independent
+# pytest session with its own free OS-assigned port (#885) and its own
+# test_playwright_db_gwN.sqlite3 file, so workers cannot contend on the DB.
+#
+# Default 4, deliberately NOT `-n auto` (= one worker per core, 12 here).
+# Each worker runs a Chromium process tree plus an in-process Django server,
+# and this box routinely runs several agents' Playwright suites at once from
+# separate worktrees; `-n auto` would multiply that into the oversubscription
+# that already produces spurious timeout reds (see SETTLE_TIMEOUT_MS in
+# playwright_tests/conftest.py, #903). 4 matches the CI shard count and the
+# existing `make test-judge -n 4`. Tune without editing code:
+#   PLAYWRIGHT_XDIST_WORKERS=8 make test-playwright-core   # quiet box
+#   PLAYWRIGHT_XDIST_WORKERS=0 make test-playwright-core   # serial, no xdist
+#
+# --dist loadfile keeps every test from one module on one worker: module-level
+# ordering assumptions and per-module setup cost are preserved, and it mirrors
+# how deploy-dev.yml already shards the core subset by file. The largest core
+# module is ~40 of ~950 tests, so file-granularity imbalance stays bounded.
+PLAYWRIGHT_XDIST_WORKERS ?= 4
+PLAYWRIGHT_XDIST_FLAGS = -n $(PLAYWRIGHT_XDIST_WORKERS) --dist loadfile
+
 # Run the full active Playwright end-to-end suite.
 # The local-server fixture picks a free OS-assigned port per session (#885),
 # so concurrent runs from separate worktrees no longer collide on a fixed
-# port. A repo-local pytest guard blocks two local Playwright sessions inside
-# the same worktree because they would share test_playwright_db.sqlite3.
+# port. A repo-local pytest guard blocks two separate local Playwright
+# invocations inside the same worktree; the xdist workers of ONE invocation
+# are allowed through because each owns a private SQLite database.
 # Set PLAYWRIGHT_DJANGO_PORT only to pin a known port.
 test-playwright: css-build
-	uv run pytest -m "not visual_regression" playwright_tests/ -v
+	uv run pytest -m "not visual_regression" playwright_tests/ $(PLAYWRIGHT_XDIST_FLAGS) -v
 
 # Run only the core subset of Playwright tests (auth, access control, payments,
 # one happy path each for events/courses/sprints/plans, notifications, and
 # minimal Studio operator coverage). Runs on every push to main via Deploy Dev.
 # See _docs/testing-guidelines.md ("Core Playwright subset") for the tagging policy.
 test-playwright-core: css-build
-	uv run pytest -m "core and not visual_regression" playwright_tests/ -v
+	uv run pytest -m "core and not visual_regression" playwright_tests/ $(PLAYWRIGHT_XDIST_FLAGS) -v
 
 # Run screenshot-generator/manual-review Playwright tests on demand.
 test-playwright-manual-visual: css-build

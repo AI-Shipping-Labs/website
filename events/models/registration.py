@@ -138,3 +138,51 @@ class SeriesRegistration(models.Model):
 
     def __str__(self):
         return f'{self.user} - {self.series}'
+
+
+class SeriesOccurrenceOptOut(models.Model):
+    """One session a series registrant deliberately skips (issue #1460).
+
+    Registering for any occurrence of a series now creates the standing
+    ``SeriesRegistration`` flag, so a plain per-occurrence cancel would be
+    a visual no-op: the event page would fall back to the standing flag and
+    keep claiming "You're registered", and the next fan-out would re-create
+    the row. This record is the explicit "I hold the standing flag but I am
+    not attending this one session" marker.
+
+    It is honoured by:
+
+    - ``enroll_user_in_series`` / ``enroll_series_registrants_in_event``,
+      which never re-register an opted-out occurrence (counted in the
+      ``skipped_opted_out`` bucket).
+    - the event detail view, which forces ``registration_source = 'none'``
+      so the cancelled session offers "Register" again.
+
+    It is cleared when the user registers for that occurrence again through
+    any path, when they re-register for the whole series, and when their
+    ``SeriesRegistration`` for the series is deleted (clean slate).
+    """
+
+    series = models.ForeignKey(
+        'events.EventSeries',
+        on_delete=models.CASCADE,
+        related_name='occurrence_opt_outs',
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='series_occurrence_opt_outs',
+    )
+    event = models.ForeignKey(
+        'events.Event',
+        on_delete=models.CASCADE,
+        related_name='series_opt_outs',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('event', 'user')]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.user} - opted out of {self.event}'

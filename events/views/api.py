@@ -13,9 +13,17 @@ from django.views.decorators.http import require_http_methods, require_POST
 from accounts.services.timezones import is_valid_timezone
 from accounts.services.verification import resolve_unverified_ttl_days
 from content.access import LEVEL_OPEN, can_access
-from events.models import Event, EventRegistration, EventSeries
+from events.models import (
+    Event,
+    EventRegistration,
+    EventSeries,
+    SeriesOccurrenceOptOut,
+)
 from events.services.series_registration import (
+    clear_series_opt_outs,
     enroll_user_in_series,
+    record_series_opt_out,
+    register_occurrence_with_series,
     series_registration_summary,
 )
 from events.views.pages import _resolve_cancel_state
@@ -23,6 +31,13 @@ from events.views.pages import _resolve_cancel_state
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
+
+# Issue #1460: registering for one occurrence of a series registers the
+# whole series by default. ``scope="event"`` is the secondary
+# "Just this session" path and keeps the pre-#1460 behaviour.
+SCOPE_SERIES = 'series'
+SCOPE_EVENT = 'event'
+VALID_REGISTER_SCOPES = (SCOPE_SERIES, SCOPE_EVENT)
 
 # Rate-limit knobs for the anonymous email-submit branch (issue #672).
 # Mirrors the cache-add pattern shipped under #448; no new library is
@@ -143,6 +158,117 @@ def _send_event_verification_email(user):
         return None
 
 
+def _parse_register_scope(request):
+    """Return the requested registration scope, or ``None`` when invalid.
+
+    The field is optional; omitting it means ``"series"`` (issue #1460 —
+    whole-series registration is the default). A malformed body is treated
+    as an empty body so the authenticated no-body POST keeps working.
+    """
+    try:
+        data = json.loads(request.body or b"{}")
+    except (json.JSONDecodeError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    scope = data.get('scope')
+    if scope is None or scope == '':
+        return SCOPE_SERIES
+    if scope not in VALID_REGISTER_SCOPES:
+        return None
+    return scope
+
+
+def _create_registration_with_scope(user, event, scope):
+    """Create the per-event registration, honouring the requested scope.
+
+    With ``scope="series"`` on an occurrence that belongs to a series, the
+    standing ``SeriesRegistration`` flag is created and the fan-out runs
+    across the series' eligible upcoming occurrences. The fan-out — not
+    this function — creates the row for ``event`` itself, so this
+    occurrence stays inside ``new_events`` and the series calendar invite
+    covers it.
+
+    Returns ``(registration, series_summary)``. ``series_summary`` is
+    ``None`` whenever no fan-out ran (standalone event or
+    ``scope="event"``).
+    """
+    series_summary = None
+    if event.event_series_id is not None:
+        # Registering for an occurrence always clears a previous opt-out
+        # for it, whatever the scope: the click is an explicit request to
+        # attend this session again.
+        SeriesOccurrenceOptOut.objects.filter(event=event, user=user).delete()
+        if scope == SCOPE_SERIES:
+            series_summary = register_occurrence_with_series(user, event)
+
+    registration = None
+    if series_summary is not None:
+        registration = EventRegistration.objects.filter(
+            event=event, user=user,
+        ).first()
+    if registration is None:
+        # No fan-out, or (defensively) a fan-out that did not cover this
+        # occurrence. Either way the per-event row is what the caller
+        # promised the user.
+        registration = EventRegistration.objects.create(event=event, user=user)
+        from analytics.activity import record_event_register
+        record_event_register(user, event)
+    return registration, series_summary
+
+
+def _send_registration_emails(user, event, registration, series_summary):
+    """Send exactly ONE confirmation email for this registration (#1460).
+
+    A series fan-out that covered 2+ sessions sends the series invite with
+    a multi-VEVENT ``.ics`` and suppresses the per-event confirmation;
+    every other case keeps the per-event confirmation unchanged.
+    """
+    new_events = (series_summary or {}).get('new_events') or []
+    if (
+        series_summary is not None
+        and series_summary.get('total_occurrences', 0) >= 2
+        and new_events
+    ):
+        try:
+            from events.services.series_invite import (
+                send_series_registration_invite,
+            )
+            send_series_registration_invite(user, event.event_series, new_events)
+        except Exception:
+            logger.exception(
+                'Failed to send series registration email for series "%s" '
+                'to user %s',
+                event.event_series.slug, user.email,
+            )
+        return
+
+    if registration is None:
+        return
+    try:
+        from events.services.registration_email import (
+            send_registration_confirmation,
+        )
+        send_registration_confirmation(registration)
+    except Exception:
+        logger.exception(
+            'Failed to send registration email for event "%s" to user %s',
+            event.slug, user.email,
+        )
+
+
+def _series_response_fields(event, series_summary):
+    """Return the additive series fields for a register response."""
+    if series_summary is None:
+        return {}
+    summary = dict(series_summary)
+    summary.pop('new_events', None)
+    return {
+        'series_slug': event.event_series.slug,
+        'summary': summary,
+    }
+
+
 def _register_anonymous(request, event):
     """Anonymous email-only event registration path (issue #513).
 
@@ -234,21 +360,16 @@ def _register_anonymous(request, event):
                 'already_registered': True,
             }, status=201)
 
-        registration = EventRegistration.objects.create(
-            event=event, user=existing_user,
+        # Issue #1460: the anonymous form applies the same whole-series
+        # default as the authenticated path (D7). Access is still
+        # re-checked per occurrence, so a Free account only picks up the
+        # level-0 sessions.
+        registration, series_summary = _create_registration_with_scope(
+            existing_user, event, SCOPE_SERIES,
         )
-        from analytics.activity import record_event_register
-        record_event_register(existing_user, event)
-        try:
-            from events.services.registration_email import (
-                send_registration_confirmation,
-            )
-            send_registration_confirmation(registration)
-        except Exception:
-            logger.exception(
-                'Failed to send registration email for event "%s" to user %s',
-                event.slug, existing_user.email,
-            )
+        _send_registration_emails(
+            existing_user, event, registration, series_summary,
+        )
 
         # Issue #672, gap 1: an existing unverified user also needs the
         # claim-account magic link in their inbox. Verified accounts
@@ -263,31 +384,23 @@ def _register_anonymous(request, event):
             'event_slug': event.slug,
             'registered_at': registration.registered_at.isoformat(),
             'account_created': False,
+            **_series_response_fields(event, series_summary),
         }, status=201)
 
     # No existing user — create a free, unverified one.
     user = _create_unverified_subscriber(
         email, preferred_timezone=submitted_timezone,
     )
-    registration = EventRegistration.objects.create(event=event, user=user)
-    from analytics.activity import record_event_register
-    record_event_register(user, event)
+    registration, series_summary = _create_registration_with_scope(
+        user, event, SCOPE_SERIES,
+    )
 
     # Send registration confirmation (with .ics) AND the verification
     # email so the user can claim the account. Both emails are sent
     # because they serve different jobs: registration carries the
     # calendar invite, verification surfaces "we created an account"
     # and lets the user verify + sign in.
-    try:
-        from events.services.registration_email import (
-            send_registration_confirmation,
-        )
-        send_registration_confirmation(registration)
-    except Exception:
-        logger.exception(
-            'Failed to send registration email for event "%s" to user %s',
-            event.slug, user.email,
-        )
+    _send_registration_emails(user, event, registration, series_summary)
 
     _send_event_verification_email(user)
 
@@ -296,6 +409,7 @@ def _register_anonymous(request, event):
         'event_slug': event.slug,
         'registered_at': registration.registered_at.isoformat(),
         'account_created': True,
+        **_series_response_fields(event, series_summary),
     }, status=201)
 
 
@@ -307,13 +421,22 @@ def register_for_event(request, slug):
     anonymous users post ``{"email": "..."}`` and the view auto-creates a
     free unverified account on free events (``required_level == 0``).
 
+    Issue #1460: on an occurrence that belongs to a series the default
+    scope is the WHOLE series. The optional ``scope`` field selects it
+    explicitly: ``"series"`` (default) creates the standing
+    ``SeriesRegistration`` flag and fans out across the series' eligible
+    upcoming occurrences; ``"event"`` is the secondary "Just this session"
+    path and creates a single ``EventRegistration`` with no standing flag.
+    On an event with no series both scopes behave identically.
+
     Returns:
-        201 on success, with ``account_created`` true/false in the body
+        201 on success, with ``account_created`` true/false in the body,
+            plus ``series_slug`` and ``summary`` when a fan-out ran
         401 if anonymous and no email body provided
         403 if tier too low (or anonymous attempt on a gated event)
         404 if event not found or draft
         409 if already registered or event not upcoming
-        400 on invalid JSON or invalid email
+        400 on invalid JSON, invalid email, or an unrecognised ``scope``
     """
     event = get_object_or_404(Event, slug=slug)
     if event.status == 'draft':
@@ -343,6 +466,13 @@ def register_for_event(request, slug):
             status=401,
         )
 
+    scope = _parse_register_scope(request)
+    if scope is None:
+        return JsonResponse(
+            {'error': "Invalid scope. Use 'series' or 'event'."},
+            status=400,
+        )
+
     # Check access (tier level) for the authenticated user.
     if not can_access(request.user, event):
         return JsonResponse(
@@ -359,35 +489,29 @@ def register_for_event(request, slug):
             status=409,
         )
 
-    # Register the user
-    registration = EventRegistration.objects.create(
-        event=event, user=request.user,
+    # Register the user. The activity row for the CRM timeline
+    # (issue #853) is recorded inside the helper / fan-out.
+    registration, series_summary = _create_registration_with_scope(
+        request.user, event, scope,
     )
-
-    # Record an `event_register` activity row for the CRM timeline
-    # (issue #853). Defensive — never raises into the registration path.
-    from analytics.activity import record_event_register
-    record_event_register(request.user, event)
 
     # Issue #768: event registration is a real platform action — flip
     # ``account_activated`` for the authenticated user. Idempotent.
     from accounts.utils.activation import mark_activated
     mark_activated(request.user)
 
-    # Send confirmation email with calendar invite (non-blocking)
-    try:
-        from events.services.registration_email import send_registration_confirmation
-        send_registration_confirmation(registration)
-    except Exception:
-        logger.exception(
-            'Failed to send registration email for event "%s" to user %s',
-            event.slug, request.user.email,
-        )
+    # Send exactly one confirmation email (non-blocking): the series
+    # invite when the fan-out covered 2+ sessions, the per-event
+    # confirmation otherwise.
+    _send_registration_emails(
+        request.user, event, registration, series_summary,
+    )
 
     return JsonResponse({
         'status': 'registered',
         'event_slug': event.slug,
         'registered_at': registration.registered_at.isoformat(),
+        **_series_response_fields(event, series_summary),
     }, status=201)
 
 
@@ -395,10 +519,19 @@ def register_for_event(request, slug):
 def unregister_from_event(request, slug):
     """Unregister the authenticated user from an event.
 
+    Issue #1460: cancelling one session of a series must actually stick.
+    When the user holds the standing ``SeriesRegistration`` flag for this
+    occurrence's series we additionally record a
+    ``SeriesOccurrenceOptOut``, so the event page stops claiming they are
+    registered and no later fan-out re-enrols them. The standing flag
+    itself is never deleted here — cancelling the whole series stays on
+    the series page.
+
     Returns:
-        200 on success
+        200 on success, with ``series_opt_out`` true/false
         401 if not authenticated
-        404 if event not found or not registered
+        404 if event not found, or the user has neither a per-event
+            registration nor the standing series flag
     """
     if not request.user.is_authenticated:
         return JsonResponse(
@@ -420,7 +553,9 @@ def unregister_from_event(request, slug):
         event=event, user=request.user,
     ).delete()
 
-    if deleted_count == 0:
+    series_opt_out = record_series_opt_out(request.user, event)
+
+    if deleted_count == 0 and not series_opt_out:
         return JsonResponse(
             {'error': 'Not registered for this event'},
             status=404,
@@ -429,6 +564,7 @@ def unregister_from_event(request, slug):
     return JsonResponse({
         'status': 'unregistered',
         'event_slug': event.slug,
+        'series_opt_out': series_opt_out,
     })
 
 
@@ -477,6 +613,9 @@ def series_registration(request, series_slug):
                 status=404,
             )
         flag.delete()
+        # Issue #1460: deleting the standing flag is a clean slate — the
+        # per-session opt-outs it explained go with it.
+        clear_series_opt_outs(request.user, series)
 
         # Drop only FUTURE occurrences; past attended occurrences stay.
         future_event_ids = [
@@ -513,6 +652,9 @@ def series_registration(request, series_slug):
         }, status=200)
 
     SeriesRegistration.objects.create(series=series, user=request.user)
+    # Issue #1460: registering for the whole series again is an explicit
+    # "give me everything" — earlier per-session opt-outs are cleared.
+    clear_series_opt_outs(request.user, series)
     summary = enroll_user_in_series(request.user, series)
     new_events = summary.pop('new_events', [])
 
@@ -561,7 +703,12 @@ def cancel_registration_action(request, slug):
     if state == 'confirm':
         registration = ctx['registration']
         event = ctx['event']
+        cancelling_user = registration.user
         registration.delete()
+        # Issue #1460: the inbox cancel link is a real per-session cancel,
+        # so it records the same opt-out as the on-page control. Without
+        # it the standing series flag would re-register the user.
+        record_series_opt_out(cancelling_user, event)
         ctx = {
             'event': event,
             'event_url': ctx['event_url'],

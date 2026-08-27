@@ -326,6 +326,7 @@ class SeriesRegistrationApiTest(TierSetupMixin, TestCase):
                 'registered': 2,
                 'skipped_already': 0,
                 'skipped_no_access': 1,
+                'skipped_opted_out': 0,
                 'total_occurrences': 3,
             },
         )
@@ -416,11 +417,17 @@ class SeriesRegistrationApiTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_per_event_registration_independent_of_series(self):
-        """A single occurrence can be registered without a series flag."""
+        """``scope="event"`` registers one session without a series flag.
+
+        Issue #1460 made whole-series the DEFAULT scope of the per-event
+        endpoint; this is the secondary "Just this session" path.
+        """
         self.client.force_login(self.user)
         single = Event.objects.filter(event_series=self.series).first()
         response = self.client.post(
             f'/api/events/{single.slug}/register',
+            data={'scope': 'event'},
+            content_type='application/json',
         )
         self.assertEqual(response.status_code, 201)
         self.assertTrue(

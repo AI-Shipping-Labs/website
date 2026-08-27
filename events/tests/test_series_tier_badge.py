@@ -190,9 +190,12 @@ class SeriesTierBadgeAuthenticatedTest(TierSetupMixin, TestCase):
         self.assertIn('Free', _badge_html_for_level(html, LEVEL_OPEN))
         self.assertIn('Main or above', _badge_html_for_level(html, LEVEL_MAIN))
 
-        # The aggregate authenticated-only note is unchanged.
+        # The aggregate authenticated-only note names the tier that
+        # unlocks the highest-gated session (issue #1460, D10).
         self.assertContains(response, 'series-tier-note')
-        self.assertContains(response, 'require a higher tier')
+        self.assertContains(
+            response, '1 session in this series requires Main',
+        )
 
         # The gated session shows the unchanged "Upgrade to register" pill.
         self.assertContains(response, 'series-event-state-no-access')

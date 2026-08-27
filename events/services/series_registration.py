@@ -14,12 +14,19 @@ these hold):
 - The user ``can_access`` it (tier). Inaccessible occurrences are counted
   in ``skipped_no_access`` rather than blocking the whole action.
 - The user is not already registered (counted in ``skipped_already``).
+- The user has not deliberately opted out of that session (issue #1460 —
+  counted in ``skipped_opted_out``). A ``SeriesOccurrenceOptOut`` is
+  never overridden by a later fan-out.
 """
 
 import logging
 
 from content.access import can_access
-from events.models import EventRegistration
+from events.models import (
+    EventRegistration,
+    SeriesOccurrenceOptOut,
+    SeriesRegistration,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +42,17 @@ def _eligible_occurrences(series):
         status__in=('draft', 'cancelled'),
     )
     return [event for event in candidates if event.is_upcoming]
+
+
+def _opted_out_event_ids(user, occurrences):
+    """Return the ids of ``occurrences`` this user deliberately skipped."""
+    if not occurrences:
+        return set()
+    return set(
+        SeriesOccurrenceOptOut.objects.filter(
+            user=user, event__in=occurrences,
+        ).values_list('event_id', flat=True)
+    )
 
 
 def enroll_user_in_series(user, series):
@@ -56,6 +74,7 @@ def enroll_user_in_series(user, series):
             'registered': int,        # new EventRegistration rows created
             'skipped_already': int,   # already registered for the occurrence
             'skipped_no_access': int, # tier too low
+            'skipped_opted_out': int, # deliberately cancelled session
             'total_occurrences': int, # eligible upcoming occurrences seen
         }
     """
@@ -63,6 +82,7 @@ def enroll_user_in_series(user, series):
         'registered': 0,
         'skipped_already': 0,
         'skipped_no_access': 0,
+        'skipped_opted_out': 0,
         'total_occurrences': 0,
     }
 
@@ -74,11 +94,17 @@ def enroll_user_in_series(user, series):
             user=user, event__in=occurrences,
         ).values_list('event_id', flat=True)
     )
+    opted_out_ids = _opted_out_event_ids(user, occurrences)
 
     new_events = []
     for event in occurrences:
         if event.id in already_registered_ids:
             summary['skipped_already'] += 1
+            continue
+        # Issue #1460: a deliberately cancelled session is never silently
+        # re-registered by a later fan-out.
+        if event.id in opted_out_ids:
+            summary['skipped_opted_out'] += 1
             continue
         if not can_access(user, event):
             summary['skipped_no_access'] += 1
@@ -96,6 +122,70 @@ def enroll_user_in_series(user, series):
     return summary
 
 
+def clear_series_opt_outs(user, series):
+    """Drop every opt-out ``user`` holds for ``series`` (clean slate).
+
+    Called when the user re-registers for the whole series and when their
+    ``SeriesRegistration`` is deleted, so a later registration starts from
+    the default "every session" intent rather than resurrecting stale
+    per-session cancellations.
+    """
+    deleted, _ = SeriesOccurrenceOptOut.objects.filter(
+        user=user, series=series,
+    ).delete()
+    return deleted
+
+
+def record_series_opt_out(user, event):
+    """Record that ``user`` is skipping this one session of its series.
+
+    Only meaningful for a user who holds the standing
+    ``SeriesRegistration`` for the occurrence's series: without the flag
+    there is nothing that would re-register them, so no row is written.
+
+    Returns ``True`` when the opt-out exists after the call (whether it
+    was created now or already present), ``False`` otherwise.
+    """
+    series_id = event.event_series_id
+    if series_id is None:
+        return False
+    if not SeriesRegistration.objects.filter(
+        series_id=series_id, user=user,
+    ).exists():
+        return False
+
+    SeriesOccurrenceOptOut.objects.get_or_create(
+        event=event, user=user, defaults={'series_id': series_id},
+    )
+    return True
+
+
+def register_occurrence_with_series(user, event):
+    """Register ``user`` for ``event`` AND the rest of its series (#1460).
+
+    This is the default scope of the per-occurrence register endpoint:
+    signing up for one session of a series expresses the standing intent
+    to attend the whole series. It creates the ``SeriesRegistration`` flag
+    (idempotent) and then runs the ordinary fan-out, which also creates
+    the ``EventRegistration`` row for ``event`` itself — deliberately, so
+    this occurrence lands in ``new_events`` and the series calendar invite
+    covers it.
+
+    Any opt-out on ``event`` is cleared first: clicking Register on a
+    session you previously cancelled is an explicit request for it back.
+
+    Returns the fan-out summary (including ``new_events``), or ``None``
+    when the event does not belong to a series.
+    """
+    series = event.event_series
+    if series is None:
+        return None
+
+    SeriesOccurrenceOptOut.objects.filter(event=event, user=user).delete()
+    SeriesRegistration.objects.get_or_create(series=series, user=user)
+    return enroll_user_in_series(user, series)
+
+
 def series_registration_summary(user, series):
     """Return the current fan-out summary without creating any rows.
 
@@ -111,6 +201,7 @@ def series_registration_summary(user, series):
         'registered': 0,
         'skipped_already': 0,
         'skipped_no_access': 0,
+        'skipped_opted_out': 0,
         'total_occurrences': 0,
     }
 
@@ -122,10 +213,13 @@ def series_registration_summary(user, series):
             user=user, event__in=occurrences,
         ).values_list('event_id', flat=True)
     )
+    opted_out_ids = _opted_out_event_ids(user, occurrences)
 
     for event in occurrences:
         if event.id in already_registered_ids:
             summary['skipped_already'] += 1
+        elif event.id in opted_out_ids:
+            summary['skipped_opted_out'] += 1
         elif not can_access(user, event):
             summary['skipped_no_access'] += 1
         else:
@@ -191,6 +285,26 @@ def promote_event_registrations_to_series(event):
     return summary
 
 
+class EnrollmentCount(int):
+    """The enrolled-user count, carrying the skipped-opt-out bucket.
+
+    ``enroll_series_registrants_in_event`` has always returned the number
+    of users it enrolled, and its callers (Studio, the API, the
+    publication lifecycle) treat the result as a plain integer. Issue
+    #1460 adds a second bucket — users who deliberately opted out of this
+    session — that the caller may want to surface without changing the
+    established return contract, so the count is an ``int`` subclass with
+    ``skipped_opted_out`` attached.
+    """
+
+    skipped_opted_out = 0
+
+    def __new__(cls, value, skipped_opted_out=0):
+        obj = super().__new__(cls, value)
+        obj.skipped_opted_out = skipped_opted_out
+        return obj
+
+
 def enroll_series_registrants_in_event(event):
     """Auto-enroll existing series registrants into a new occurrence.
 
@@ -205,17 +319,17 @@ def enroll_series_registrants_in_event(event):
     """
     series = event.event_series
     if series is None:
-        return 0
+        return EnrollmentCount(0)
 
     try:
         if not event.is_upcoming:
-            return 0
+            return EnrollmentCount(0)
 
         registrant_user_ids = (
             series.series_registrations.values_list('user_id', flat=True)
         )
         if not registrant_user_ids:
-            return 0
+            return EnrollmentCount(0)
 
         from accounts.models import User
 
@@ -224,12 +338,23 @@ def enroll_series_registrants_in_event(event):
                 event=event, user_id__in=registrant_user_ids,
             ).values_list('user_id', flat=True)
         )
+        # Issue #1460: users who deliberately cancelled this session keep
+        # their standing series flag but must never be re-enrolled here.
+        opted_out_user_ids = set(
+            SeriesOccurrenceOptOut.objects.filter(
+                event=event, user_id__in=registrant_user_ids,
+            ).values_list('user_id', flat=True)
+        )
 
         enrolled = 0
+        skipped_opted_out = 0
         enrolled_user_ids = []
         users = User.objects.filter(id__in=registrant_user_ids)
         for user in users:
             if user.id in already_registered_ids:
+                continue
+            if user.id in opted_out_user_ids:
+                skipped_opted_out += 1
                 continue
             if not can_access(user, event):
                 continue
@@ -254,10 +379,10 @@ def enroll_series_registrants_in_event(event):
                     'event "%s"',
                     getattr(event, 'slug', '?'),
                 )
-        return enrolled
+        return EnrollmentCount(enrolled, skipped_opted_out)
     except Exception:
         logger.exception(
             'Failed to auto-enroll series registrants for event "%s"',
             getattr(event, 'slug', '?'),
         )
-        return 0
+        return EnrollmentCount(0)

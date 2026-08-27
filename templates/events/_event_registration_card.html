@@ -1,3 +1,4 @@
+{% load accounts_extras %}
 {# Issue #713: time-derived gate; registration card disappears once the event ends. #}
 {% if event.is_upcoming and is_external_event %}
 {% comment %}
@@ -56,6 +57,12 @@
             <span class="text-foreground" data-testid="event-anonymous-registered-email">{{ anon_registered_email }}</span>{% if anon_registered_account_created %},
             plus a verification link to activate your free account{% endif %}.
           </p>
+          {% if event.event_series_id and series_session_accessible >= 2 %}
+          {# Issue #1460 (D7): confirm the whole-series scope the form promised. #}
+          <p class="text-sm text-muted-foreground" data-testid="event-anonymous-registered-series-note">
+            Your signup covers all {{ series_session_accessible }} sessions in {{ event.event_series.name }} you can attend on a free account.
+          </p>
+          {% endif %}
         </div>
       </div>
       <div class="mt-5 flex flex-wrap items-center gap-3">
@@ -82,6 +89,22 @@
           so you can manage your registration, and we'll send a calendar invite and
           a verification link to activate the account. You can unsubscribe at any time.
         </p>
+        {% if event.event_series_id and series_session_accessible >= 2 %}
+        {% comment %}
+          Issue #1460 (D7): the anonymous form keeps its single submit
+          button and discloses the whole-series scope in copy instead of
+          adding a second, worse two-submit choice.
+        {% endcomment %}
+        <p class="mt-2 text-sm text-muted-foreground" data-testid="event-anonymous-series-scope-note">
+          This session is part of {{ event.event_series.name }}. Signing up covers all {{ series_session_accessible }} sessions in the series you can attend on a free account, including new sessions added later.
+        </p>
+        {% if series_session_locked > 0 %}
+        <p class="mt-2 text-sm text-muted-foreground" data-testid="event-series-tier-note">
+          {{ series_session_locked }} session{{ series_session_locked|pluralize }} in this series require{{ series_session_locked|pluralize:"s," }} {{ series_locked_tier_name }}.
+          <a href="/membership" class="text-accent hover:underline" data-testid="event-series-tier-upgrade-link">Upgrade</a>
+        </p>
+        {% endif %}
+        {% endif %}
         <form id="event-anon-register-form" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-stretch" novalidate>
           <label class="sr-only" for="event-anon-email">Email address</label>
           <input id="event-anon-email"
@@ -119,8 +142,12 @@
       Issue #1077: the registered block renders for both per-occurrence
       registrants and series-only registrants. ``registration_source`` is
       'event' (per-occurrence row, possibly alongside a series flag) or
-      'series' (covered by the standing series flag only). The copy and the
-      cancel control branch on it.
+      'series' (covered by the standing series flag only).
+
+      Issue #1460: registering for one session registers the whole series by
+      default, so the heading names the session counts the view computed
+      (N accessible of M total) and every effectively-registered member gets
+      a real per-session cancel control.
     {% endcomment %}
     <div data-testid="event-registered-confirmation">
       <div class="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -129,10 +156,23 @@
             <i data-lucide="check" class="h-5 w-5 text-green-400"></i>
           </div>
           <div>
-            {% if registration_source == 'series' %}
-            <p class="font-semibold text-foreground" data-testid="event-registered-heading">You're registered for this series</p>
+            {% comment %}
+              Issue #1460: the series summary is only rendered for a member
+              who actually holds the standing flag, and it prints the real
+              registered count (R of M) unless every session is accessible
+              AND registered. A single-session registrant with no flag keeps
+              the plain heading and is offered the series below.
+            {% endcomment %}
+            {% if event.event_series_id and series_session_total >= 2 and is_series_registered %}
+            <p class="font-semibold text-foreground" data-testid="event-registered-heading"><span data-testid="event-registered-series-summary">{% if series_fully_registered %}You're registered for all {{ series_session_total }} sessions in {{ event.event_series.name }}{% else %}You're registered for {{ series_session_registered }} of {{ series_session_total }} sessions in {{ event.event_series.name }}{% endif %}</span></p>
             {% else %}
             <p class="font-semibold text-foreground" data-testid="event-registered-heading">You're registered!</p>
+            {% endif %}
+            {% if series_session_locked > 0 %}
+            <p class="mt-1 text-sm text-muted-foreground" data-testid="event-series-tier-note">
+              {{ series_session_locked }} session{{ series_session_locked|pluralize }} in this series require{{ series_session_locked|pluralize:"s," }} {{ series_locked_tier_name }}.
+              <a href="/membership" class="text-accent hover:underline" data-testid="event-series-tier-upgrade-link">Upgrade</a>
+            </p>
             {% endif %}
           </div>
         </div>
@@ -175,46 +215,90 @@
       </div>
       {% endif %}
 
-      {% if registration_source == 'series' %}
       {% comment %}
-        Issue #1077: series-only registration. There is no per-occurrence
-        ``EventRegistration`` row to delete, so the per-occurrence cancel
-        button would be a no-op — render a link to the series page instead.
+        Issue #1460: every effectively-registered member gets a working
+        per-session cancel. For a series occurrence the cancel deletes the
+        per-session row (when there is one) and records a
+        SeriesOccurrenceOptOut so the standing flag does not silently
+        re-register them; the standing series registration itself is
+        managed from the series page.
       {% endcomment %}
-      <div class="mt-5 border-t border-border pt-4" data-testid="event-series-registration-manage">
+      <div class="mt-5 border-t border-border pt-4" {% if is_series_registered %}data-testid="event-series-registration-manage"{% endif %}>
+        {% if is_series_registered %}
         <p class="text-sm text-muted-foreground" data-testid="event-series-registration-explainer">
-          You're registered for every upcoming session in this series.
+          {% if series_fully_registered %}You're registered for every upcoming session in this series. {% endif %}New sessions added to the series are registered automatically.
         </p>
+        {% endif %}
+        <div class="mt-3 flex justify-end">
+          <button type="button"
+                  class="{% button_classes 'destructive' extra='w-full sm:w-auto' %}"
+                  id="unregister-btn"
+                  data-testid="{% if event.event_series_id %}event-cancel-session-button{% else %}event-cancel-registration-button{% endif %}"
+                  {% if event.event_series_id %}data-cancel-confirm="Cancel your spot for this session? You'll stay registered for the other sessions in {{ event.event_series.name }}."{% endif %}
+                  data-event-unregister-button>
+            {% if event.event_series_id %}Cancel this session{% else %}Cancel registration{% endif %}
+          </button>
+        </div>
+        {% if is_series_registered %}
         <a href="{{ event.event_series.get_absolute_url }}"
-           class="mt-3 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline"
+           class="mt-3 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline"
            data-testid="event-manage-series-registration-link">
           <i data-lucide="settings" class="h-4 w-4"></i>
           Manage series registration
         </a>
+        {% elif show_register_rest_of_series %}
+        <a href="{{ event.event_series.get_absolute_url }}"
+           class="mt-3 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline"
+           data-testid="event-register-rest-of-series-link">
+          <i data-lucide="calendar-plus" class="h-4 w-4"></i>
+          Register for the rest of {{ event.event_series.name }}
+        </a>
+        {% endif %}
       </div>
-      {% else %}
-      <div class="mt-5 flex justify-end border-t border-border pt-4">
-        <button type="button"
-                class="w-full rounded-lg border border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-red-500/50 hover:text-red-400 sm:w-auto"
-                id="unregister-btn"
-                data-event-unregister-button>
-          Cancel registration
-        </button>
-      </div>
-      {% endif %}
     </div>
   {% else %}
+    {% comment %}
+      Issue #1460: on a series occurrence the primary CTA registers the
+      whole series (the endpoint's default scope). The plain-text
+      "Just this session" control posts scope="event" and keeps the
+      single-session behaviour. ``series_session_accessible`` (N) and
+      ``series_session_locked`` (K) are computed in the view.
+    {% endcomment %}
     <div class="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
       <div class="w-full sm:w-auto text-center sm:text-left">
-        <p class="font-semibold text-foreground">Register for this event</p>
+        <p class="font-semibold text-foreground">{% if event.event_series_id %}Register for this session{% else %}Register for this event{% endif %}</p>
       </div>
       <button type="button"
-              class="w-full sm:w-auto rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+              class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}"
               id="register-btn"
+              data-register-scope="series"
+              data-testid="{% if event.event_series_id and series_session_accessible >= 2 %}event-register-series-button{% else %}event-register-button{% endif %}"
               data-event-register-button>
-        Register
+        {% if event.event_series_id and series_session_accessible >= 2 %}Register for all {{ series_session_accessible }} sessions{% else %}Register{% endif %}
       </button>
     </div>
+    {% if event.event_series_id %}
+    {% if series_session_accessible >= 2 %}
+    <div class="mt-4 flex justify-end">
+      <button type="button"
+              class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline"
+              data-register-scope="event"
+              data-testid="event-register-single-button"
+              data-event-register-button>
+        Just this session
+      </button>
+    </div>
+    {% endif %}
+    <p class="mt-4 text-sm text-muted-foreground" data-testid="event-series-scope-note">
+      This session is part of {{ event.event_series.name }}. New sessions added to the series are registered automatically.
+    </p>
+    {% if series_session_locked > 0 %}
+    <p class="mt-2 text-sm text-muted-foreground" data-testid="event-series-tier-note">
+      {{ series_session_locked }} session{{ series_session_locked|pluralize }} in this series require{{ series_session_locked|pluralize:"s," }} {{ series_locked_tier_name }}.
+      <a href="/membership" class="text-accent hover:underline" data-testid="event-series-tier-upgrade-link">Upgrade</a>
+    </p>
+    {% endif %}
+    {% endif %}
   {% endif %}
 </div>
 {% endif %}

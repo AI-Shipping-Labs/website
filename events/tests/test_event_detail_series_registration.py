@@ -146,16 +146,21 @@ class EventDetailRegistrationCardTemplateTest(TierSetupMixin, TestCase):
     def test_series_only_shows_series_heading_and_manage_link(self):
         SeriesRegistration.objects.create(series=self.series, user=self.user)
         resp = self.client.get(self.event.get_absolute_url())
-        self.assertContains(resp, "You're registered for this series")
+        # Issue #1460: the single-session series still uses the plain
+        # heading; the manage link stays as a secondary line.
+        self.assertContains(resp, "You're registered!")
         self.assertContains(resp, 'data-testid="event-manage-series-registration-link"')
         self.assertContains(resp, self.series.get_absolute_url())
         # The series variant keeps the calendar control.
         self.assertContains(resp, 'data-testid="event-add-to-calendar"')
 
-    def test_series_only_hides_per_occurrence_cancel_button(self):
+    def test_series_only_shows_per_occurrence_cancel_button(self):
+        """Issue #1460: a series-only registrant can skip one session."""
         SeriesRegistration.objects.create(series=self.series, user=self.user)
         resp = self.client.get(self.event.get_absolute_url())
-        self.assertNotContains(resp, 'data-event-unregister-button')
+        self.assertContains(resp, 'data-event-unregister-button')
+        self.assertContains(resp, 'data-testid="event-cancel-session-button"')
+        self.assertContains(resp, 'Cancel this session')
 
     def test_series_only_does_not_show_register_button(self):
         SeriesRegistration.objects.create(series=self.series, user=self.user)
@@ -169,12 +174,13 @@ class EventDetailRegistrationCardTemplateTest(TierSetupMixin, TestCase):
         self.assertContains(resp, 'data-event-unregister-button')
         self.assertNotContains(resp, 'data-testid="event-manage-series-registration-link"')
 
-    def test_both_present_shows_cancel_not_series_link(self):
+    def test_both_present_shows_cancel_and_manage_link(self):
         SeriesRegistration.objects.create(series=self.series, user=self.user)
         EventRegistration.objects.create(event=self.event, user=self.user)
         resp = self.client.get(self.event.get_absolute_url())
         self.assertContains(resp, 'data-event-unregister-button')
-        self.assertNotContains(resp, 'data-testid="event-manage-series-registration-link"')
+        # Issue #1460: the standing flag is disclosed alongside the cancel.
+        self.assertContains(resp, 'data-testid="event-manage-series-registration-link"')
 
     def test_unregistered_shows_register_button(self):
         resp = self.client.get(self.event.get_absolute_url())

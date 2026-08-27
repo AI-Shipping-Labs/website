@@ -30,12 +30,18 @@
   function registerForEvent(slug, button) {
     setButtonBusy(button, 'Registering...');
 
+    // Issue #1460: the primary CTA registers the whole series ("series",
+    // the endpoint default); the secondary "Just this session" control
+    // posts "event". Standalone events ignore the field.
+    const scope = (button && button.dataset.registerScope) || 'series';
+
     fetch(`/api/events/${slug}/register`, {
       method: 'POST',
       headers: {
         'X-CSRFToken': getCookie('csrftoken'),
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ scope }),
     })
       .then((response) => {
         if (response.ok) {
@@ -79,7 +85,11 @@
   }
 
   function unregisterFromEvent(slug, button) {
-    if (!confirm('Are you sure you want to cancel your registration?')) return;
+    // Issue #1460: a session inside a series says so, because the rest of
+    // the series registration survives the cancel.
+    const confirmMessage = (button && button.dataset.cancelConfirm)
+      || 'Are you sure you want to cancel your registration?';
+    if (!confirm(confirmMessage)) return;
 
     setButtonBusy(button, 'Cancelling...');
 
@@ -294,12 +304,16 @@
 
   const root = document.querySelector('[data-event-detail]');
   const slug = root ? root.dataset.eventSlug : null;
-  const registerBtn = document.querySelector('[data-event-register-button]');
+  // Issue #1460: a series occurrence renders two register controls (whole
+  // series + just this session), so every one of them is bound.
+  const registerBtns = document.querySelectorAll('[data-event-register-button]');
   const unregisterBtn = document.querySelector('[data-event-unregister-button]');
   const displays = document.querySelectorAll('[data-event-time-display]');
 
-  if (registerBtn && slug) {
-    registerBtn.addEventListener('click', () => registerForEvent(slug, registerBtn));
+  if (slug) {
+    registerBtns.forEach((btn) => {
+      btn.addEventListener('click', () => registerForEvent(slug, btn));
+    });
   }
   if (unregisterBtn && slug) {
     unregisterBtn.addEventListener('click', () => unregisterFromEvent(slug, unregisterBtn));

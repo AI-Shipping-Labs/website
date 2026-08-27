@@ -3,14 +3,14 @@
 {% load member_badges %}
 
 {% block title %}{{ series.name }} | AI Shipping Labs{% endblock %}
-{% block meta_description %}Series page for {{ series.name }} — listing every upcoming and past occurrence.{% endblock %}
+{% block meta_description %}Series page for {{ series.name }} — listing every upcoming and past session.{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ site_url }}{{ series.get_absolute_url }}">{% endblock %}
 
 {% block og_tags %}
 {% comment %}Issue #896: the series uses its auto-generated banner as the OG/Twitter
    image when one is set, falling back to the site default otherwise.{% endcomment %}
 <meta property="og:title" content="{{ series.name }}">
-<meta property="og:description" content="Series page for {{ series.name }} — every upcoming and past occurrence.">
+<meta property="og:description" content="Series page for {{ series.name }} — every upcoming and past session.">
 <meta property="og:url" content="{{ site_url }}{{ series.get_absolute_url }}">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="{{ site_name }}">
@@ -20,7 +20,7 @@
 <meta property="og:image:alt" content="{{ series.name }}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{ series.name }}">
-<meta name="twitter:description" content="Series page for {{ series.name }} — every upcoming and past occurrence.">
+<meta name="twitter:description" content="Series page for {{ series.name }} — every upcoming and past session.">
 <meta name="twitter:image" content="{% if series.auto_banner_url %}{{ series.auto_banner_url }}{% else %}{{ site_url }}{% static 'ai-shipping-labs.jpg' %}{% endif %}">
 <meta name="twitter:creator" content="@Al_Grigor">
 {% endblock %}
@@ -106,7 +106,7 @@
           </p>
           {% if has_tier_locked %}
           <p class="mt-2 text-xs text-muted-foreground" data-testid="series-tier-note">
-            {{ tier_locked_count }} session{{ tier_locked_count|pluralize }} require a higher tier.
+            {{ tier_locked_count }} session{{ tier_locked_count|pluralize }} in this series require{{ tier_locked_count|pluralize:"s," }} {{ tier_locked_tier_name }}.
             <a href="{{ pricing_url }}" class="text-accent hover:underline">Upgrade</a>
           </p>
           {% endif %}

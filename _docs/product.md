@@ -153,8 +153,8 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 | Events listing | `/events` | Scheduled live/community event discovery with upcoming sessions, default past-event history, status/tier badges, registration state, and a past-event-recordings filter | Everyone (listing visible) | Shipped |
 | Events calendar | `/events/calendar` | Monthly calendar and mobile agenda for scheduled live/community events with links to event details | Everyone | Shipped |
 | Event detail | `/events/<id>/<slug>` | Announcement page for a scheduled session: status, dates, location, timezone, description, registration button, and join link near start time. Workshop-linked past events show a "View workshop writeup" handoff because recording, materials, learning objectives, and core tools live on the workshop. Legacy past standalone events still render inline recording resources. | Open events: everyone; gated: tier-dependent | Shipped |
-| Event registration | `/api/events/<slug>/register` | POST to register for an event | Authenticated users with access | Shipped |
-| Event unregistration | `/api/events/<slug>/unregister` | POST to unregister from an event | Authenticated users | Shipped |
+| Event registration | `/api/events/<slug>/register` | POST to register for an event. On a session that belongs to an event series the default scope is the whole series: it creates the standing series registration and registers the member for every eligible upcoming session they can access, including sessions added later. `scope="event"` is the secondary "Just this session" path. | Authenticated users with access; anonymous email signup on free sessions | Shipped |
+| Event unregistration | `/api/events/<slug>/unregister` | POST to unregister from an event. On a session of a series the member stays registered for the rest of the series and the cancelled session is recorded as a deliberate skip. | Authenticated users | Shipped |
 
 ### Membership & Payments
 
@@ -320,6 +320,8 @@ Member goes to `/account/` -> sees current tier, billing period end date -> want
 | Download | A downloadable file (PDF, slides, notebook) | Asset, attachment |
 | Member Benefit | A tier-owned entitlement or participation mode shown compactly and, when it has a description, explained on `/membership#activities` | Resource, content type |
 | Event | A scheduled live/community session with registration and join flow | Resource, recording library |
+| Event series | A recurring set of related events (book club, cohort calls) sharing one series page. Registering for any one of them registers the member for the whole series, including sessions added later. | Recurring event, group |
+| Session | One event inside an event series, in all user-facing copy. `Occurrence` stays internal (code, API field names, Studio). | Occurrence, instance, episode |
 | Instructor | A person who teaches courses, workshops, or speaks at events; identified by a stable `instructor_id` slug and referenced from yaml | Speaker, presenter, author |
 | Poll | A vote on a topic or course idea | Survey, questionnaire |
 | Option | A choice within a poll that members can vote on | Answer, item |

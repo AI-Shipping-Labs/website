@@ -33,10 +33,12 @@
     const total = summary.total_occurrences || 0;
     const noAccess = summary.skipped_no_access || 0;
     let text;
+    // Issue #1460 (D10): user-facing copy says "session", never
+    // "occurrence" — that stays an internal / Studio word.
     if (noAccess > 0) {
-      text = `Registered for ${registered} of ${total} occurrences — ${noAccess} require a higher tier.`;
+      text = `Registered for ${registered} of ${total} sessions — ${noAccess} require a higher tier.`;
     } else {
-      const noun = registered === 1 ? 'occurrence' : 'occurrences';
+      const noun = registered === 1 ? 'session' : 'sessions';
       text = `Registered for ${registered} ${noun}.`;
     }
     return text;

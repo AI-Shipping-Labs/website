@@ -35,6 +35,7 @@ from events.models import (
     EventJoinClick,
     EventRegistration,
     EventSeries,
+    SeriesOccurrenceOptOut,
     SeriesRegistration,
 )
 from events.models.event import HIDDEN_FROM_PUBLIC_STATUSES, PUBLIC_EVENT_STATUSES
@@ -53,6 +54,7 @@ from events.services.display_time import (
     should_display_event_location,
 )
 from events.services.freestyle_evidence import build_freestyle_evidence
+from events.services.series_registration import _eligible_occurrences
 from events.services.time_windows import past_recording_events_queryset
 from events.services.timeline import (
     build_public_upcoming_timeline,
@@ -663,6 +665,7 @@ def event_detail(request, event_id, slug):
     # which cancel control to render.
     is_registered = False
     is_series_registered = False
+    is_series_opted_out = False
     if user.is_authenticated:
         is_registered = EventRegistration.objects.filter(
             event=event, user=user,
@@ -671,6 +674,13 @@ def event_detail(request, event_id, slug):
             is_series_registered = SeriesRegistration.objects.filter(
                 series_id=event.event_series_id, user=user,
             ).exists()
+            if is_series_registered:
+                # Issue #1460: a deliberate per-session cancel. The standing
+                # flag still stands for the rest of the series, but THIS
+                # session must offer registration again.
+                is_series_opted_out = SeriesOccurrenceOptOut.objects.filter(
+                    event=event, user=user,
+                ).exists()
 
     # A per-occurrence row wins over the standing series flag so the
     # per-occurrence "Cancel registration" button stays available when both
@@ -678,11 +688,74 @@ def event_detail(request, event_id, slug):
     # ``notify_cancellation``).
     if is_registered:
         registration_source = 'event'
-    elif is_series_registered:
+    elif is_series_registered and not is_series_opted_out:
         registration_source = 'series'
     else:
         registration_source = 'none'
     is_effectively_registered = registration_source != 'none'
+
+    # Issue #1460: session counts for the series-scoped registration copy.
+    # Computed once here so the template never does arithmetic:
+    #   M = every eligible upcoming session of the series (all tiers)
+    #   N = the subset this viewer can access (includes this session)
+    #   K = M - N, the gated remainder, named by the highest tier needed.
+    #   R = the sessions this viewer is actually registered for.
+    series_session_total = 0
+    series_session_accessible = 0
+    series_session_locked = 0
+    series_session_registered = 0
+    series_locked_tier_name = ''
+    if event.event_series_id is not None and event.is_upcoming:
+        occurrences = _eligible_occurrences(event.event_series)
+        series_session_total = len(occurrences)
+        locked_levels = []
+        for occurrence in occurrences:
+            if can_access(user, occurrence):
+                series_session_accessible += 1
+            else:
+                locked_levels.append(occurrence.required_level)
+        series_session_locked = len(locked_levels)
+        if locked_levels:
+            series_locked_tier_name = get_required_tier_name(
+                max(locked_levels),
+            )
+        # R counts real ``EventRegistration`` rows, so a gated sibling or a
+        # session the member deliberately cancelled is never claimed as
+        # registered. The only addition is THIS session when the standing
+        # flag alone covers it (``registration_source == 'series'``), which
+        # is exactly what the card above it is telling the member.
+        if user.is_authenticated and occurrences:
+            registered_ids = set(
+                EventRegistration.objects.filter(
+                    user=user, event__in=occurrences,
+                ).values_list('event_id', flat=True)
+            )
+            series_session_registered = len(registered_ids)
+            if (
+                registration_source == 'series'
+                and event.id not in registered_ids
+            ):
+                series_session_registered += 1
+
+    # "You're registered for ALL sessions" is only true when the standing
+    # flag exists AND every eligible session is both accessible and really
+    # registered. Anything less renders the "{R} of {M}" copy, and the
+    # explainer line follows the same switch so the card cannot contradict
+    # itself (issue #1460, tester finding on the first review round).
+    series_fully_registered = (
+        is_series_registered
+        and series_session_total > 0
+        and series_session_registered == series_session_total
+        and series_session_accessible == series_session_total
+    )
+
+    # A pre-#1460 signup (per-occurrence row, no standing flag) is offered
+    # the rest of the series rather than being stuck on one session.
+    show_register_rest_of_series = (
+        registration_source == 'event'
+        and event.event_series_id is not None
+        and not is_series_registered
+    )
 
     # Build gating context for the upcoming-event registration CTA. The
     # event detail page is announcement-only (issue #426) — recording
@@ -792,6 +865,18 @@ def event_detail(request, event_id, slug):
         'is_series_registered': is_series_registered,
         'is_effectively_registered': is_effectively_registered,
         'registration_source': registration_source,
+        # Issue #1460: whole-series registration is the default scope, so
+        # the card needs the session counts, the gated remainder and its
+        # tier name, and the "rest of the series" offer for legacy
+        # single-session signups.
+        'is_series_opted_out': is_series_opted_out,
+        'series_session_total': series_session_total,
+        'series_session_accessible': series_session_accessible,
+        'series_session_locked': series_session_locked,
+        'series_session_registered': series_session_registered,
+        'series_fully_registered': series_fully_registered,
+        'series_locked_tier_name': series_locked_tier_name,
+        'show_register_rest_of_series': show_register_rest_of_series,
         'show_event_location': should_display_event_location(event),
         'show_zoom_link': show_join_link,
         'required_tier_name': required_tier_name,
@@ -1146,6 +1231,14 @@ def event_series_public(request, series_id, slug):
         1 for e in events if e.user_reg_state == 'no_access'
     )
     has_tier_locked = tier_locked_count > 0
+    # Issue #1460 (D10): the note names the tier that unlocks the
+    # highest-gated session, matching the event-page copy.
+    tier_locked_tier_name = ''
+    if has_tier_locked:
+        tier_locked_tier_name = get_required_tier_name(max(
+            e.required_level for e in events
+            if e.user_reg_state == 'no_access'
+        ))
 
     return render(request, 'events/event_series.html', {
         'series': series,
@@ -1156,6 +1249,7 @@ def event_series_public(request, series_id, slug):
         'upcoming_count': upcoming_count,
         'tier_locked_count': tier_locked_count,
         'has_tier_locked': has_tier_locked,
+        'tier_locked_tier_name': tier_locked_tier_name,
         'series_register_url': f'/api/events/series/{series.slug}/register',
         # Login redirect target for anonymous visitors clicking register.
         'login_next': series.get_absolute_url(),

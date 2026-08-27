@@ -8,12 +8,23 @@ Scenarios:
 1. Series-registered member sees the registered state + series heading.
 2. Series registrant manages registration from the occurrence page.
 3. Per-occurrence registrant keeps the single-event cancel flow.
-4. Member registered for both series and occurrence sees per-occurrence cancel.
+4. Member registered for both series and occurrence sees per-occurrence cancel
+   alongside the series-manage link (issue #1460).
 5. Member unregistered from one occurrence but still on the series stays
    effectively registered.
 6. Standalone event (no series) is unaffected.
 7. Anonymous visitor sees the normal registration card on a series occurrence.
 8. Series registrant can join near start time.
+
+Issue #1460 extends this module (same surface, no new inventory file):
+9. Registering for week 1 registers the whole book club.
+10. "Just this session" registers a single session with no standing flag.
+11. A free member on a mixed-access series is told what is locked.
+12. A whole-series registrant skips one week and the page tells the truth.
+13. The skipped week can be registered again.
+14. A pre-existing single-session registrant is offered the rest of the series.
+15. A standalone event registers and cancels unchanged.
+16. Anonymous email signup covers the whole series.
 
 Usage:
     uv run pytest playwright_tests/test_event_detail_series_registration_1077.py -v
@@ -43,9 +54,11 @@ def _reset_event_state():
         Event,
         EventRegistration,
         EventSeries,
+        SeriesOccurrenceOptOut,
         SeriesRegistration,
     )
 
+    SeriesOccurrenceOptOut.objects.all().delete()
     SeriesRegistration.objects.all().delete()
     EventRegistration.objects.all().delete()
     Event.objects.all().delete()
@@ -146,9 +159,10 @@ class TestSeriesRegisteredSeesRegistered:
             '[data-testid="event-registered-confirmation"]'
         ).is_visible()
         assert page.locator("[data-event-register-button]").count() == 0
-        # Series heading.
+        # Issue #1460: a one-session series keeps the plain heading; the
+        # standing flag is disclosed by the manage link below.
         assert (
-            "You're registered for this series"
+            "You're registered!"
             in page.locator('[data-testid="event-registered-heading"]').inner_text()
         )
         # Add to calendar present for this occurrence.
@@ -185,8 +199,10 @@ class TestSeriesRegistrantManagesFromOccurrence:
             wait_until="domcontentloaded",
         )
 
-        # No per-occurrence cancel button.
-        assert page.locator("[data-event-unregister-button]").count() == 0
+        # Issue #1460: a series registrant can skip this one session.
+        assert page.locator(
+            '[data-testid="event-cancel-session-button"]'
+        ).is_visible()
 
         page.locator(
             '[data-testid="event-manage-series-registration-link"]'
@@ -258,11 +274,11 @@ class TestBothRegistrationsShowCancel:
             wait_until="domcontentloaded",
         )
 
-        # Per-occurrence wins: cancel button present, no series-manage link.
+        # Per-occurrence cancel plus the series-manage link (issue #1460).
         assert page.locator("[data-event-unregister-button]").is_visible()
         assert page.locator(
             '[data-testid="event-manage-series-registration-link"]'
-        ).count() == 0
+        ).is_visible()
 
         ctx.close()
 
@@ -289,10 +305,12 @@ class TestUnregisteredOccurrenceStillSeriesRegistered:
         )
 
         assert (
-            "You're registered for this series"
+            "You're registered!"
             in page.locator('[data-testid="event-registered-heading"]').inner_text()
         )
-        assert page.locator("[data-event-unregister-button]").count() == 0
+        assert page.locator(
+            '[data-testid="event-cancel-session-button"]'
+        ).is_visible()
 
         ctx.close()
 
@@ -378,3 +396,384 @@ class TestSeriesRegistrantCanJoin:
         assert "Click here to join" in join.inner_text()
 
         ctx.close()
+
+
+REGISTERED_CONFIRMATION = '[data-testid="event-registered-confirmation"]'
+SERIES_SUMMARY = '[data-testid="event-registered-series-summary"]'
+SERIES_BUTTON = '[data-testid="event-register-series-button"]'
+SINGLE_BUTTON = '[data-testid="event-register-single-button"]'
+SCOPE_NOTE = '[data-testid="event-series-scope-note"]'
+TIER_NOTE = '[data-testid="event-series-tier-note"]'
+CANCEL_SESSION = '[data-testid="event-cancel-session-button"]'
+CANCEL_REGISTRATION = '[data-testid="event-cancel-registration-button"]'
+REST_OF_SERIES = '[data-testid="event-register-rest-of-series-link"]'
+HEADING = '[data-testid="event-registered-heading"]'
+SERIES_EXPLAINER = '[data-testid="event-series-registration-explainer"]'
+
+
+def _make_book_club(prefix, sessions=4, gated_from=None):
+    """Create a 4-session free series, optionally gating later sessions."""
+    series = _make_series(f"{prefix}-series", "AI Engineering Book Club")
+    events = []
+    for position in range(1, sessions + 1):
+        gated = gated_from is not None and position >= gated_from
+        events.append(
+            _make_occurrence(
+                f"{prefix}-week-{position}",
+                f"Week {position}",
+                series=series,
+                offset_days=7 * position,
+                position=position,
+                required_level=20 if gated else 0,
+            )
+        )
+    return series, events
+
+
+def _registration_count(email):
+    from django.db import connection
+
+    from accounts.models import User
+    from events.models import EventRegistration
+
+    user = User.objects.get(email=email)
+    count = EventRegistration.objects.filter(user=user).count()
+    connection.close()
+    return count
+
+
+def _has_series_flag(email):
+    from django.db import connection
+
+    from accounts.models import User
+    from events.models import SeriesRegistration
+
+    user = User.objects.get(email=email)
+    exists = SeriesRegistration.objects.filter(user=user).exists()
+    connection.close()
+    return exists
+
+
+def _open(page, django_server, event):
+    page.goto(
+        f"{django_server}{event.get_absolute_url()}",
+        wait_until="domcontentloaded",
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+class TestWholeSeriesSignup:
+    def test_registering_week_one_registers_the_whole_club(
+        self, django_server, browser
+    ):
+        _reset_event_state()
+        email = "main-1460a@test.com"
+        _create_user(email, tier_slug="main")
+        series, weeks = _make_book_club("bc1460a")
+
+        ctx = _auth_context(browser, email)
+        page = ctx.new_page()
+        _open(page, django_server, weeks[0])
+
+        assert "Register for all 4 sessions" in page.locator(
+            SERIES_BUTTON
+        ).inner_text()
+        assert "AI Engineering Book Club" in page.locator(
+            SCOPE_NOTE
+        ).inner_text()
+
+        page.locator(SERIES_BUTTON).click()
+        page.locator(REGISTERED_CONFIRMATION).wait_for(state="visible")
+        assert (
+            "You're registered for all 4 sessions in AI Engineering Book Club"
+            in page.locator(SERIES_SUMMARY).inner_text()
+        )
+        assert (
+            "You're registered for every upcoming session in this series."
+            in page.locator(SERIES_EXPLAINER).inner_text()
+        )
+
+        # The series page shows every session registered.
+        page.goto(
+            f"{django_server}{series.get_absolute_url()}",
+            wait_until="domcontentloaded",
+        )
+        assert page.locator(
+            '[data-testid="series-event-state-registered"]'
+        ).count() == 4
+        assert page.locator(
+            '[data-testid="series-registered-state"]'
+        ).is_visible()
+
+        # A session the member never visited is registered too.
+        _open(page, django_server, weeks[2])
+        assert page.locator(REGISTERED_CONFIRMATION).is_visible()
+
+        ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestJustThisSession:
+    def test_secondary_control_registers_one_session_only(
+        self, django_server, browser
+    ):
+        _reset_event_state()
+        email = "main-1460b@test.com"
+        _create_user(email, tier_slug="main")
+        series, weeks = _make_book_club("bc1460b")
+
+        ctx = _auth_context(browser, email)
+        page = ctx.new_page()
+        _open(page, django_server, weeks[1])
+
+        page.locator(SINGLE_BUTTON).click()
+        page.locator(REGISTERED_CONFIRMATION).wait_for(state="visible")
+
+        # Only week 2 registered; no standing flag.
+        page.goto(
+            f"{django_server}{series.get_absolute_url()}",
+            wait_until="domcontentloaded",
+        )
+        assert page.locator(
+            '[data-testid="series-event-state-registered"]'
+        ).count() == 1
+        assert page.locator(
+            '[data-testid="series-register-button"]'
+        ).is_visible()
+        assert _registration_count(email) == 1
+        assert _has_series_flag(email) is False
+
+        ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestMixedAccessSeries:
+    def test_free_member_sees_what_is_locked(self, django_server, browser):
+        _reset_event_state()
+        email = "free-1460c@test.com"
+        _create_user(email, tier_slug="free")
+        series, weeks = _make_book_club("bc1460c", gated_from=2)
+
+        ctx = _auth_context(browser, email)
+        page = ctx.new_page()
+        _open(page, django_server, weeks[0])
+
+        assert (
+            "3 sessions in this series require Main."
+            in page.locator(TIER_NOTE).inner_text()
+        )
+
+        page.locator('[data-event-register-button]').first.click()
+        page.locator(REGISTERED_CONFIRMATION).wait_for(state="visible")
+        assert (
+            "You're registered for 1 of 4 sessions"
+            in page.locator(SERIES_SUMMARY).inner_text()
+        )
+        assert (
+            "3 sessions in this series require Main."
+            in page.locator(TIER_NOTE).inner_text()
+        )
+        assert (
+            "every upcoming session"
+            not in page.locator(SERIES_EXPLAINER).inner_text()
+        )
+
+        page.locator(
+            '[data-testid="event-series-tier-upgrade-link"]'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/membership" in page.url
+
+        # The gated sessions still offer an upgrade on the series page.
+        page.goto(
+            f"{django_server}{series.get_absolute_url()}",
+            wait_until="domcontentloaded",
+        )
+        assert page.locator(
+            '[data-testid="series-event-state-no-access"]'
+        ).count() == 3
+
+        ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestSkipOneWeek:
+    def test_cancelling_one_week_keeps_the_rest(self, django_server, browser):
+        _reset_event_state()
+        email = "main-1460d@test.com"
+        _create_user(email, tier_slug="main")
+        series, weeks = _make_book_club("bc1460d")
+
+        ctx = _auth_context(browser, email)
+        page = ctx.new_page()
+        _open(page, django_server, weeks[0])
+        page.locator(SERIES_BUTTON).click()
+        page.locator(REGISTERED_CONFIRMATION).wait_for(state="visible")
+
+        # Cancel week 3 only.
+        _open(page, django_server, weeks[2])
+        page.on("dialog", lambda dialog: dialog.accept())
+        page.locator(CANCEL_SESSION).click()
+        page.locator(SERIES_BUTTON).wait_for(state="visible")
+        assert page.locator(REGISTERED_CONFIRMATION).count() == 0
+
+        # Week 4 is untouched, and its summary tells the truth about the
+        # cancelled week instead of still claiming all four (issue #1460).
+        _open(page, django_server, weeks[3])
+        assert page.locator(REGISTERED_CONFIRMATION).is_visible()
+        summary = page.locator(SERIES_SUMMARY).inner_text()
+        assert "You're registered for 3 of 4 sessions" in summary
+        assert "all 4 sessions" not in summary
+        explainer = page.locator(SERIES_EXPLAINER).inner_text()
+        assert "every upcoming session" not in explainer
+        assert "New sessions added to the series" in explainer
+
+        # And the series page tells the same story.
+        page.goto(
+            f"{django_server}{series.get_absolute_url()}",
+            wait_until="domcontentloaded",
+        )
+        assert page.locator(
+            '[data-testid="series-event-state-registered"]'
+        ).count() == 3
+
+        ctx.close()
+
+    def test_registering_again_restores_the_skipped_week(
+        self, django_server, browser
+    ):
+        _reset_event_state()
+        email = "main-1460e@test.com"
+        _create_user(email, tier_slug="main")
+        series, weeks = _make_book_club("bc1460e")
+
+        ctx = _auth_context(browser, email)
+        page = ctx.new_page()
+        _open(page, django_server, weeks[0])
+        page.locator(SERIES_BUTTON).click()
+        page.locator(REGISTERED_CONFIRMATION).wait_for(state="visible")
+
+        _open(page, django_server, weeks[2])
+        page.on("dialog", lambda dialog: dialog.accept())
+        page.locator(CANCEL_SESSION).click()
+        page.locator(SERIES_BUTTON).wait_for(state="visible")
+
+        page.locator(SERIES_BUTTON).click()
+        page.locator(REGISTERED_CONFIRMATION).wait_for(state="visible")
+
+        page.goto(
+            f"{django_server}{series.get_absolute_url()}",
+            wait_until="domcontentloaded",
+        )
+        assert page.locator(
+            '[data-testid="series-event-state-registered"]'
+        ).count() == 4
+
+        ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestLegacySingleSessionRegistrant:
+    def test_offered_the_rest_of_the_series(self, django_server, browser):
+        _reset_event_state()
+        email = "main-1460f@test.com"
+        _create_user(email, tier_slug="main")
+        series, weeks = _make_book_club("bc1460f")
+        _event_register(email, weeks[0])
+
+        ctx = _auth_context(browser, email)
+        page = ctx.new_page()
+        _open(page, django_server, weeks[0])
+
+        # No standing flag: the heading stays plain and no contradictory
+        # whole-series claim renders above the offer (issue #1460).
+        assert (
+            "You're registered!"
+            in page.locator(HEADING).inner_text()
+        )
+        assert page.locator(SERIES_SUMMARY).count() == 0
+        assert page.locator(SERIES_EXPLAINER).count() == 0
+
+        link = page.locator(REST_OF_SERIES)
+        assert "Register for the rest of AI Engineering Book Club" in (
+            link.inner_text()
+        )
+        link.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert series.get_absolute_url() in page.url
+
+        page.locator('[data-testid="series-register-button"]').click()
+        page.locator(
+            '[data-testid="series-registered-state"]'
+        ).wait_for(state="visible")
+        assert page.locator(
+            '[data-testid="series-event-state-registered"]'
+        ).count() == 4
+
+        ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestStandaloneEventUnchanged:
+    def test_standalone_register_and_cancel(self, django_server, browser):
+        _reset_event_state()
+        email = "main-1460g@test.com"
+        _create_user(email, tier_slug="main")
+        event = _make_occurrence("standalone-1460g", "Standalone Session")
+
+        ctx = _auth_context(browser, email)
+        page = ctx.new_page()
+        _open(page, django_server, event)
+
+        assert page.locator(SCOPE_NOTE).count() == 0
+        assert page.locator(SINGLE_BUTTON).count() == 0
+        assert page.locator("#register-btn").inner_text().strip() == "Register"
+
+        page.locator("#register-btn").click()
+        page.locator(REGISTERED_CONFIRMATION).wait_for(state="visible")
+        cancel = page.locator(CANCEL_REGISTRATION)
+        assert "Cancel registration" in cancel.inner_text()
+
+        page.on("dialog", lambda dialog: dialog.accept())
+        cancel.click()
+        page.locator("#register-btn").wait_for(state="visible")
+
+        ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestAnonymousSeriesSignup:
+    def test_email_signup_covers_the_series(self, django_server, browser):
+        _reset_event_state()
+        series, sessions = _make_book_club("bc1460h", sessions=3)
+        email = "anon-1460h@test.com"
+
+        ctx = browser.new_context()
+        page = ctx.new_page()
+        _open(page, django_server, sessions[1])
+
+        note = page.locator(
+            '[data-testid="event-anonymous-series-scope-note"]'
+        )
+        assert "AI Engineering Book Club" in note.inner_text()
+        assert "all 3 sessions" in note.inner_text()
+
+        page.fill("#event-anon-email", email)
+        page.locator("#event-anon-submit-btn").click()
+        page.locator(
+            '[data-testid="event-anonymous-registered-confirmation"]'
+        ).wait_for(state="visible")
+        assert "all 3 sessions in AI Engineering Book Club" in page.locator(
+            '[data-testid="event-anonymous-registered-series-note"]'
+        ).inner_text()
+        ctx.close()
+
+        assert _registration_count(email) == 3
+        assert _has_series_flag(email) is True
+
+        # The new account sees session 3 as registered.
+        signed_in = _auth_context(browser, email)
+        page = signed_in.new_page()
+        _open(page, django_server, sessions[2])
+        assert page.locator(REGISTERED_CONFIRMATION).is_visible()
+        signed_in.close()

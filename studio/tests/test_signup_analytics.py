@@ -1507,7 +1507,8 @@ class SignupAnalyticsSidebarTest(TestCase):
         # Find the Signup analytics anchor and check it has the active classes.
         idx = body.find('href="/studio/signup-analytics/"')
         self.assertGreater(idx, -1)
-        snippet = body[idx:idx + 400]
+        anchor_end = body.index('</a>', idx) + len('</a>')
+        snippet = body[idx:anchor_end]
         self.assertIn('bg-secondary text-foreground', snippet)
         self.assertIn('<span>Signup analytics</span>', snippet)
 

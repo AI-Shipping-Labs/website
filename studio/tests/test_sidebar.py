@@ -1,4 +1,4 @@
-"""Tests for the reorganised Studio sidebar (issues #570, #592).
+"""Tests for the reorganised Studio sidebar (issues #570, #592, #1473).
 
 Covers the structural expectations the spec calls out:
 
@@ -15,12 +15,24 @@ Covers the structural expectations the spec calls out:
   active page (server-rendered, no JS required).
 """
 
+import re
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from studio.templatetags.studio_filters import studio_sidebar_state
 
 User = get_user_model()
+
+CANONICAL_FOCUS_CLASSES = {
+    'focus-visible:outline-none',
+    'focus-visible:ring-2',
+    'focus-visible:ring-accent',
+    'focus-visible:ring-offset-2',
+    'focus-visible:ring-offset-background',
+}
+ANCHOR_RE = re.compile(r'<a\s[^>]*>')
+CLASS_RE = re.compile(r'class="([^"]*)"')
 
 
 class StudioSidebarStructureTest(TestCase):
@@ -44,6 +56,12 @@ class StudioSidebarStructureTest(TestCase):
         response = self.client.get('/studio/')
         self.assertEqual(response.status_code, 200)
         return response
+
+    def _sidebar_anchors(self, response):
+        body = response.content.decode()
+        nav_start = body.index('id="studio-sidebar-nav"')
+        nav_end = body.index('</nav>', nav_start)
+        return ANCHOR_RE.findall(body[nav_start:nav_end])
 
     # ------------------------------------------------------------------
     # Top utility row + dashboard link order
@@ -229,6 +247,29 @@ class StudioSidebarStructureTest(TestCase):
                 self.assertNotContains(
                     response, f'<span>{label}</span>', html=True,
                 )
+
+    def test_every_rendered_nav_anchor_has_canonical_focus_classes(self):
+        for superuser, expected_count in ((False, 47), (True, 49)):
+            with self.subTest(superuser=superuser):
+                response = self._get_studio_dashboard(superuser=superuser)
+                anchors = self._sidebar_anchors(response)
+                self.assertEqual(len(anchors), expected_count)
+
+                for anchor in anchors:
+                    classes = set(CLASS_RE.search(anchor).group(1).split())
+                    self.assertTrue(
+                        CANONICAL_FOCUS_CLASSES <= classes,
+                        f'missing canonical focus classes: {anchor}',
+                    )
+
+                rendered = ' '.join(anchors)
+                self.assertIn('href="/studio/email-log/"', rendered)
+                if superuser:
+                    self.assertIn('href="/studio/users/new/"', rendered)
+                    self.assertIn('href="/studio/api-tokens/"', rendered)
+                else:
+                    self.assertNotIn('href="/studio/users/new/"', rendered)
+                    self.assertNotIn('href="/studio/api-tokens/"', rendered)
 
     # ------------------------------------------------------------------
     # Preserved test-id hooks

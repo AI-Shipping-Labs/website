@@ -1,4 +1,4 @@
-"""End-to-end tests for the reorganised Studio sidebar (issues #570, #576).
+"""End-to-end tests for the reorganised Studio sidebar (issues #570, #576, #1473).
 
 The Studio sidebar is split into a small top utility row
 (``Back to website`` + theme toggle), a Dashboard link, and eight
@@ -15,6 +15,7 @@ matches.
 """
 
 import os
+import re
 
 import pytest
 
@@ -75,6 +76,105 @@ def _create_non_superuser_staff(email):
     ``create_user(is_staff=True)`` instead.
     """
     return _create_user(email, is_staff=True)
+
+
+def _assert_all_sidebar_anchors_have_keyboard_focus(page, expected_count):
+    """Tab through every rendered nav anchor and verify its visible ring."""
+    anchors = page.locator("#studio-sidebar-nav a")
+    assert anchors.count() == expected_count
+
+    # Start normal document traversal without programmatically focusing a
+    # target. Every assertion below follows an actual keyboard Tab press.
+    assert page.evaluate("document.activeElement === document.body")
+    focused_anchor_indexes = []
+    for _ in range(120):
+        page.keyboard.press("Tab")
+        focus = page.evaluate(
+            """() => {
+                const active = document.activeElement;
+                const anchors = Array.from(
+                    document.querySelectorAll('#studio-sidebar-nav a')
+                );
+                return {
+                    index: anchors.indexOf(active),
+                    focusVisible: active.matches(':focus-visible'),
+                    boxShadow: getComputedStyle(active).boxShadow,
+                };
+            }"""
+        )
+        if focus["index"] < 0:
+            continue
+
+        assert focus["index"] == len(focused_anchor_indexes)
+        assert focus["focusVisible"] is True
+        assert focus["boxShadow"] != "none"
+        focused_anchor_indexes.append(focus["index"])
+        if len(focused_anchor_indexes) == expected_count:
+            break
+
+    assert focused_anchor_indexes == list(range(expected_count))
+
+
+# ---------------------------------------------------------------------------
+# #1473: every role-visible sidebar destination has a real keyboard ring
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize(
+    ("email", "is_superuser", "expected_count"),
+    (
+        ("sidebar-focus-staff-1473@test.com", False, 47),
+        ("sidebar-focus-superuser-1473@test.com", True, 49),
+    ),
+)
+def test_all_role_visible_sidebar_anchors_show_keyboard_focus_ring(
+    django_server, browser, email, is_superuser, expected_count,
+):
+    _ensure_tiers()
+    if is_superuser:
+        _create_staff_user(email)
+    else:
+        _create_non_superuser_staff(email)
+
+    context = _auth_context(browser, email)
+    page = context.new_page()
+    page.set_viewport_size({"width": 1280, "height": 1000})
+    page.add_init_script(
+        """localStorage.setItem('studio-nav-open', JSON.stringify({
+            events: true,
+            content: true,
+            people: true,
+            planning: true,
+            onboarding: true,
+            communication: true,
+            tracking: true,
+            operations: true
+        }))"""
+    )
+    page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+
+    for slug in (
+        "events", "content", "people", "planning", "onboarding",
+        "communication", "tracking", "operations",
+    ):
+        assert _section_button(page, slug).get_attribute("aria-expanded") == "true"
+
+    trigger_button = page.locator("[data-studio-trigger-toggle]")
+    page.evaluate(
+        """() => {
+            const button = document.querySelector('[data-studio-trigger-toggle]');
+            const children = document.getElementById('studio-triggers-children');
+            button.setAttribute('aria-expanded', 'true');
+            children.classList.remove('hidden');
+        }"""
+    )
+    assert trigger_button.get_attribute("aria-expanded") == "true"
+
+    restricted = page.get_by_role("link", name=re.compile("^(New user|API tokens)$"))
+    assert restricted.count() == (2 if is_superuser else 0)
+    _assert_all_sidebar_anchors_have_keyboard_focus(page, expected_count)
+    context.close()
 
 
 # ---------------------------------------------------------------------------

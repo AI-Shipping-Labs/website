@@ -3,6 +3,7 @@
 import copy
 import json
 import os
+import uuid
 from pathlib import Path
 
 import pytest
@@ -311,7 +312,10 @@ class TestAccountPrivacyBookClubExport1466:
     ):
         email = "privacy-uuid-1466@test.com"
         with django_db_blocker.unblock():
+            from bookclub.models import Book, Chapter, Note
             from comments.models import Comment
+            from content.models import Course, Module, Unit, Workshop, WorkshopPage
+            from plans.models import Plan, Sprint
             from voting.models import Poll, PollOption, PollVote
 
             user, _, _, note = _seed_book_club_reading(
@@ -319,10 +323,100 @@ class TestAccountPrivacyBookClubExport1466:
                 book_slug="privacy-uuid-1466",
                 note_body="my note, with a thread under it",
             )
-            Comment.objects.create(
+            own_note_comment = Comment.objects.create(
                 user=user,
                 content_id=note.comment_content_id,
                 body="replying on my own note thread",
+            )
+            course = Course.objects.create(
+                title="Search Systems",
+                slug="search-systems-comment-context-1471",
+                status="published",
+            )
+            module = Module.objects.create(
+                course=course,
+                title="Indexes",
+                slug="indexes",
+            )
+            unit = Unit.objects.create(
+                module=module,
+                title="Vector search",
+                slug="vector-search",
+                content_id=uuid.uuid4(),
+            )
+            course_comment = Comment.objects.create(
+                user=user,
+                content_id=unit.content_id,
+                body="How is this index built?",
+            )
+            workshop = Workshop.objects.create(
+                title="Production Agents",
+                slug="production-agents-comment-context-1471",
+                status="published",
+                date=timezone.localdate(),
+            )
+            workshop_page = WorkshopPage.objects.create(
+                workshop=workshop,
+                title="Set up the agent",
+                slug="set-up-the-agent",
+                content_id=uuid.uuid4(),
+            )
+            workshop_comment = Comment.objects.create(
+                user=user,
+                content_id=workshop_page.content_id,
+                body="Where should this agent run?",
+            )
+            other = create_user(
+                "private-comment-owner-1471@test.com",
+                tier_slug="main",
+            )
+            other.first_name = "Private Comment Owner"
+            other.save(update_fields=["first_name"])
+            context_book = Book.objects.create(
+                title="Inference Engineering",
+                slug="inference-engineering-comment-context-1471",
+                author="Operator Author",
+                status="current",
+            )
+            context_chapter = Chapter.objects.create(
+                book=context_book,
+                number=3,
+                title="Batching",
+            )
+            other_note = Note.objects.create(
+                chapter=context_chapter,
+                user=other,
+                body="another member's private note source",
+            )
+            note_comment = Comment.objects.create(
+                user=user,
+                content_id=other_note.comment_content_id,
+                body="Batching makes sense now",
+            )
+            note_reply = Comment.objects.create(
+                user=user,
+                content_id=other_note.comment_content_id,
+                parent=note_comment,
+                body="Following up on batching",
+            )
+            sprint = Sprint.objects.create(
+                name="August Shipping Sprint",
+                slug="august-shipping-comment-context-1471",
+                start_date=timezone.localdate(),
+                min_tier_level=0,
+                status="active",
+            )
+            other_plan = Plan.objects.create(
+                member=other,
+                sprint=sprint,
+                title="Ship evaluation harness",
+                goal="another member's private plan goal",
+                summary_goal="another member's private plan body",
+            )
+            plan_comment = Comment.objects.create(
+                user=user,
+                content_id=other_plan.comment_content_id,
+                body="How will you evaluate it?",
             )
             poll = Poll.objects.create(title="Next topic", allow_proposals=True)
             option = PollOption.objects.create(
@@ -341,11 +435,40 @@ class TestAccountPrivacyBookClubExport1466:
             payload = _download_export(page, email)
 
             comments = payload["communications_activity"]["comments"]
-            assert [row["body"] for row in comments] == [
-                "replying on my own note thread"
-            ]
-            assert comments[0]["content_id"] == note_content_id
-            assert isinstance(comments[0]["content_id"], str)
+            rows = {row["body"]: row for row in comments}
+            assert len(rows) == 6
+            assert rows[own_note_comment.body]["content_type"] == "book_club_note"
+            assert rows[own_note_comment.body]["content_id"] == note_content_id
+            assert isinstance(rows[own_note_comment.body]["content_id"], str)
+            assert rows[course_comment.body]["content_type"] == "course_unit"
+            assert rows[course_comment.body]["content_label"] == (
+                "Course unit: Search Systems — Vector search"
+            )
+            assert rows[workshop_comment.body]["content_type"] == "workshop_page"
+            assert rows[workshop_comment.body]["content_label"] == (
+                "Workshop tutorial: Production Agents — Set up the agent"
+            )
+            expected_note_label = (
+                "Book Club note: Inference Engineering — Chapter 3: Batching"
+            )
+            assert rows[note_comment.body]["content_type"] == "book_club_note"
+            assert rows[note_comment.body]["content_label"] == expected_note_label
+            assert rows[note_reply.body]["content_label"] == expected_note_label
+            assert rows[note_reply.body]["parent_id"] == note_comment.pk
+            assert rows[plan_comment.body]["content_type"] == "sprint_plan"
+            assert rows[plan_comment.body]["content_label"] == (
+                "Sprint plan: August Shipping Sprint — Ship evaluation harness"
+            )
+            rendered = json.dumps(payload)
+            for private_value in (
+                other_note.body,
+                other.email,
+                other.first_name,
+                other_plan.goal,
+                other_plan.summary_goal,
+            ):
+                assert private_value not in rendered
+            assert payload["manifest"]["schema_version"] == SCHEMA_VERSION
 
             votes = payload["communications_activity"]["poll_votes"]
             assert votes[0]["poll_id"] == poll_id

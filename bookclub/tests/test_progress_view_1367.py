@@ -3,8 +3,8 @@
 The calm, you-first roster of readers ordered by chapters read. Covers
 routing, tier gating (no roster leak below the gate), you-first ordering,
 count correctness, a fixed query budget (no N+1), the absence of every
-gamification element, the header stat, and dead-link safety (reader-profile
-route #1366 is not built, so names stay plain text).
+gamification element, the header stat, reader-profile links, and private-note
+lock affordances.
 """
 
 from datetime import date
@@ -75,9 +75,9 @@ class ProgressBoardTestMixin:
         cls.free_user.save()
 
     @classmethod
-    def _member(cls, email, first_name='', visibility=READER_VISIBILITY_PUBLIC):
-        # Board rows are opt-in (#1366): a reader must be public to be listed
-        # by name to others, so the ordering/count fixtures default to public.
+    def _member(cls, email, first_name='', visibility=None):
+        # No profile row means notes are public by default (#1457). Visibility
+        # never controls whether this member is named on the board.
         user = User.objects.create_user(
             email=email, password='pw', first_name=first_name,
         )
@@ -398,9 +398,7 @@ class ProgressHeaderStatTest(ProgressBoardTestMixin, TestCase):
         response = self.client.get(self.url)
         self.assertContains(response, '2 readers reading along')
 
-    def test_private_reader_counts_but_is_not_listed(self):
-        # #1366 live: a private, non-self reader is excluded from named rows
-        # but still counts toward the "reading along" header stat.
+    def test_private_notes_reader_is_counted_and_listed(self):
         private = self._member(
             'private@test.com', visibility=READER_VISIBILITY_PRIVATE,
         )
@@ -411,21 +409,25 @@ class ProgressHeaderStatTest(ProgressBoardTestMixin, TestCase):
             self.viewer, self.book, include_self=True,
         )
         row_pks = [r['member'].pk for r in rows]
-        self.assertNotIn(private.pk, row_pks)  # not listed
+        self.assertIn(private.pk, row_pks)
         self.assertIn(self.viewer.pk, row_pks)
-        self.assertEqual(distinct, 2)  # still counted
+        self.assertEqual(distinct, 2)
+        private_row = next(r for r in rows if r['member'].pk == private.pk)
+        self.assertTrue(private_row['notes_private'])
 
-    def test_reader_with_no_profile_row_is_private_by_default(self):
-        # Absence of a ReaderProfile row means private (the default) -> a
-        # non-self reader without a row is not listed by name to others.
+    def test_reader_with_no_profile_row_is_public_and_listed(self):
         no_profile = self._member('no-profile@test.com', visibility=None)
         _mark_read(no_profile, self.chapters, 2)
         _mark_read(self.viewer, self.chapters, 1)
         rows, distinct = build_reader_rows(
             self.viewer, self.book, include_self=True,
         )
-        self.assertNotIn(no_profile.pk, [r['member'].pk for r in rows])
-        self.assertEqual(distinct, 2)  # still counted
+        self.assertIn(no_profile.pk, [r['member'].pk for r in rows])
+        self.assertEqual(distinct, 2)
+        no_profile_row = next(
+            r for r in rows if r['member'].pk == no_profile.pk
+        )
+        self.assertFalse(no_profile_row['notes_private'])
 
     def test_public_reader_is_listed(self):
         # A public, non-self reader is listed by name.
@@ -474,8 +476,7 @@ class ProgressNameLinkTest(ProgressBoardTestMixin, TestCase):
         )
         self.assertContains(response, f'href="{own_url}"')
 
-    def test_only_public_and_self_rows_are_emitted_as_links(self):
-        # A private non-self reader is never emitted as a named row/link.
+    def test_private_notes_reader_is_emitted_as_a_profile_link(self):
         private = self._member(
             'hidden@test.com', visibility=READER_VISIBILITY_PRIVATE,
         )
@@ -483,14 +484,56 @@ class ProgressNameLinkTest(ProgressBoardTestMixin, TestCase):
         _mark_read(self.viewer, self.chapters, 1)
         self.client.force_login(self.viewer)
         response = self.client.get(self.url)
-        self.assertNotContains(
+        self.assertContains(
             response, f'progress-name-{private.pk}',
         )
         private_url = reverse(
             'bookclub_reader_profile',
             kwargs={'slug': self.book.slug, 'user_id': private.pk},
         )
-        self.assertNotContains(response, f'href="{private_url}"')
+        self.assertContains(response, f'href="{private_url}"')
+
+
+class ProgressPrivateNotesAffordanceTest(ProgressBoardTestMixin, TestCase):
+    def test_private_non_self_note_count_has_accessible_lock(self):
+        private = self._member(
+            'locked@test.com', visibility=READER_VISIBILITY_PRIVATE,
+        )
+        _mark_read(private, self.chapters, 2)
+        Note.objects.create(
+            user=private, chapter=self.chapters[0], body='Locked note',
+        )
+        self.client.force_login(self.viewer)
+        response = self.client.get(self.url)
+        notes_cell = response.content.decode().split(
+            f'data-testid="progress-notes-{private.pk}"', 1,
+        )[1].split('</td>', 1)[0]
+        self.assertIn('data-lucide="lock"', notes_cell)
+        self.assertIn('Notes private', notes_cell)
+
+    def test_lock_is_absent_for_public_zero_note_and_self_rows(self):
+        public = self._member('public@test.com')
+        private_zero = self._member(
+            'private-zero@test.com', visibility=READER_VISIBILITY_PRIVATE,
+        )
+        _set_visibility(self.viewer, READER_VISIBILITY_PRIVATE)
+        _mark_read(public, self.chapters, 1)
+        _mark_read(private_zero, self.chapters, 1)
+        _mark_read(self.viewer, self.chapters, 1)
+        Note.objects.create(
+            user=public, chapter=self.chapters[0], body='Public note',
+        )
+        Note.objects.create(
+            user=self.viewer, chapter=self.chapters[0], body='Own note',
+        )
+        self.client.force_login(self.viewer)
+        response = self.client.get(self.url)
+        content = response.content.decode()
+        for user in (public, private_zero, self.viewer):
+            notes_cell = content.split(
+                f'data-testid="progress-notes-{user.pk}"', 1,
+            )[1].split('</td>', 1)[0]
+            self.assertNotIn('data-lucide="lock"', notes_cell)
 
 
 class ProgressFirstMoverTest(ProgressBoardTestMixin, TestCase):

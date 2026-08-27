@@ -13,6 +13,8 @@ Exercises the rendered per-chapter reader page:
    place, the own-note card hosts its own comment thread and the API hint, a
    heavily formatted note does not outrank the page, and chapter 0's bottom
    nav offers a route back to the roadmap.
+6. Notes are shared with no profile row by default, while an explicit private
+   setting still hides another member's note.
 
 Model-level rules (one-note-per-member, scope/tier gating, the member API,
 the notification resolver) are covered faster by Django TestCase modules.
@@ -82,14 +84,14 @@ def _create_note(email, slug, number, body):
     return content_id
 
 
-def _set_public(email):
-    """Opt a reader into a public profile so others see their notes (#1366)."""
+def _set_visibility(email, visibility):
+    """Set whether other members may read this member's notes."""
     from accounts.models import User
     from bookclub.models import ReaderProfile
 
     user = User.objects.get(email=email)
     ReaderProfile.objects.update_or_create(
-        user=user, defaults={"visibility": "public"},
+        user=user, defaults={"visibility": visibility},
     )
     connection.close()
 
@@ -149,8 +151,7 @@ class TestChapterNoteFlow:
         _create_book()
         _create_user("author@test.com", tier_slug="main")
         _create_user("reader@test.com", tier_slug="main")
-        # The author opts public so their note appears in the reader's feed.
-        _set_public("author@test.com")
+        # No ReaderProfile row: notes are public by default (#1457).
         _create_note(
             "author@test.com", "inference-engineering", 0,
             "Speculative decoding is underrated.",
@@ -189,6 +190,31 @@ class TestChapterNoteFlow:
             assert "your note" in page.content().lower()
         finally:
             author_ctx.close()
+
+    def test_explicit_private_note_is_hidden_from_other_member(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _reset_books()
+        _create_book()
+        _create_user("author@test.com", tier_slug="main")
+        _create_user("reader@test.com", tier_slug="main")
+        _create_note(
+            "author@test.com", "inference-engineering", 0,
+            "This note stays private.",
+        )
+        _set_visibility("author@test.com", "private")
+
+        context = _auth_context(browser, "reader@test.com")
+        try:
+            page = context.new_page()
+            page.goto(
+                f"{django_server}/books/inference-engineering/chapters/0",
+                wait_until="domcontentloaded",
+            )
+            assert "This note stays private" not in page.locator("main").inner_text()
+        finally:
+            context.close()
 
     def test_chapter_rows_are_real_links(self, django_server, browser):
         _ensure_tiers()
@@ -249,7 +275,6 @@ class TestOwnNoteRendersOnce:
         _create_book()
         _create_user("main@test.com", tier_slug="main")
         _create_user("author@test.com", tier_slug="main")
-        _set_public("author@test.com")
         _create_note("main@test.com", "inference-engineering", 0,
                      "My own takeaway line.")
         _create_note("author@test.com", "inference-engineering", 0,
@@ -364,7 +389,6 @@ class TestOwnNoteRendersOnce:
         _create_book()
         _create_user("main@test.com", tier_slug="main")
         _create_user("author@test.com", tier_slug="main")
-        _set_public("author@test.com")
         _create_note(
             "author@test.com", "inference-engineering", 0,
             "## Their loud heading\n\nA paragraph of context.\n\n"

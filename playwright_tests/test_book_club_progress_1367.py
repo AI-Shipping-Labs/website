@@ -9,7 +9,7 @@ Exercises the rendered, de-gamified, you-first roster at
 3. A first reader is welcomed with a nudge, not a dead-end.
 4. A below-tier member and an anonymous visitor see the gate, no roster.
 5. The board is calm — no points / streak / rank / leaderboard chrome.
-6. Reader names are plain text, not broken profile links.
+6. Every reader is named and links to a profile, even with private notes.
 7. A non-member never sees the board link on book detail.
 8. A draft book keeps its board private (404).
 
@@ -76,7 +76,7 @@ def _mark_read(email, slug, numbers):
 
 
 def _set_visibility(email, visibility):
-    """Set a reader's profile visibility (#1366). Public = named on the board."""
+    """Set whether other members can read this reader's notes."""
     from accounts.models import User
     from bookclub.models import ReaderProfile
 
@@ -84,6 +84,16 @@ def _set_visibility(email, visibility):
     ReaderProfile.objects.update_or_create(
         user=user, defaults={"visibility": visibility},
     )
+    connection.close()
+
+
+def _create_note(email, number, body):
+    from accounts.models import User
+    from bookclub.models import Book, Note
+
+    user = User.objects.get(email=email)
+    chapter = Book.objects.get(slug=SLUG).chapters.get(number=number)
+    Note.objects.create(chapter=chapter, user=user, body=body)
     connection.close()
 
 
@@ -109,10 +119,6 @@ class TestProgressBoard:
         _mark_read("main@test.com", SLUG, [0, 1])
         _mark_read("reader-fast@test.com", SLUG, [0, 1, 2, 3])
         _mark_read("reader-slow@test.com", SLUG, [0])
-        # Other readers are named on the board only if they opted public (#1366).
-        _set_visibility("reader-fast@test.com", "public")
-        _set_visibility("reader-slow@test.com", "public")
-
         me = _user_pk("main@test.com")
         fast = _user_pk("reader-fast@test.com")
         slow = _user_pk("reader-slow@test.com")
@@ -136,6 +142,9 @@ class TestProgressBoard:
             assert page.locator(
                 '[data-testid="progress-reader-count"]',
             ).is_visible()
+            assert "3 readers reading along" in page.locator(
+                '[data-testid="progress-reader-count"]',
+            ).inner_text()
 
             own_row = page.locator(f'[data-testid="progress-row-{me}"]')
             assert own_row.get_attribute("aria-current") == "true"
@@ -268,8 +277,6 @@ class TestProgressBoard:
         _create_user("reader-fast@test.com", tier_slug="main")
         _mark_read("main@test.com", SLUG, [0, 1])
         _mark_read("reader-fast@test.com", SLUG, [0, 1, 2, 3])
-        _set_visibility("reader-fast@test.com", "public")
-
         context = _auth_context(browser, "main@test.com")
         try:
             page = context.new_page()
@@ -284,8 +291,9 @@ class TestProgressBoard:
         finally:
             context.close()
 
-    def test_public_reader_name_links_to_profile(self, django_server, browser):
-        # #1366: a public reader's name links to their reader-profile page.
+    def test_default_public_reader_name_links_to_profile(
+        self, django_server, browser,
+    ):
         _ensure_tiers()
         _clear_books()
         _create_book(chapters=5)
@@ -293,7 +301,6 @@ class TestProgressBoard:
         _create_user("reader-fast@test.com", tier_slug="main")
         _mark_read("main@test.com", SLUG, [0])
         _mark_read("reader-fast@test.com", SLUG, [0, 1])
-        _set_visibility("reader-fast@test.com", "public")
         other = _user_pk("reader-fast@test.com")
 
         context = _auth_context(browser, "main@test.com")
@@ -315,11 +322,9 @@ class TestProgressBoard:
         finally:
             context.close()
 
-    def test_private_reader_is_counted_but_not_named(
+    def test_private_notes_reader_is_named_locked_and_has_progress_profile(
         self, django_server, browser,
     ):
-        # #1366: a private, non-self reader is not listed by name but still
-        # counts in the "N reading along" header stat.
         _ensure_tiers()
         _clear_books()
         _create_book(chapters=5)
@@ -327,6 +332,8 @@ class TestProgressBoard:
         _create_user("hidden@test.com", tier_slug="main")
         _mark_read("main@test.com", SLUG, [0])
         _mark_read("hidden@test.com", SLUG, [0, 1, 2, 3])
+        _create_note("hidden@test.com", 0, "Private batching note one.")
+        _create_note("hidden@test.com", 1, "Private batching note two.")
         _set_visibility("hidden@test.com", "private")
         hidden = _user_pk("hidden@test.com")
 
@@ -337,20 +344,32 @@ class TestProgressBoard:
                 f"{django_server}/books/{SLUG}/progress",
                 wait_until="domcontentloaded",
             )
-            # Not a named row.
-            assert page.locator(
-                f'[data-testid="progress-row-{hidden}"]',
-            ).count() == 0
-            # But counted in the header stat (2 readers reading along).
+            row = page.locator(f'[data-testid="progress-row-{hidden}"]')
+            assert row.is_visible()
+            assert "4 of 5" in row.inner_text()
+            notes = page.locator(f'[data-testid="progress-notes-{hidden}"]')
+            assert "2" in notes.inner_text()
+            assert notes.get_by_text("Notes private", exact=True).count() == 1
+            assert notes.locator('[data-lucide="lock"]').count() == 1
             assert "2 readers reading along" in page.locator(
                 '[data-testid="progress-reader-count"]',
             ).inner_text()
-            # Their private profile is a 404 to others (privacy not revealed).
-            response = page.goto(
-                f"{django_server}/books/{SLUG}/readers/{hidden}",
-                wait_until="domcontentloaded",
-            )
-            assert response.status == 404
+            page.locator(f'[data-testid="progress-name-{hidden}"]').click()
+            page.wait_for_load_state("domcontentloaded")
+            assert page.url.endswith(f"/books/{SLUG}/readers/{hidden}")
+            assert page.locator(
+                '[data-testid="reader-progress-strip"]',
+            ).is_visible()
+            assert "4" in page.locator(
+                '[data-testid="reader-chapters-read"]',
+            ).inner_text()
+            assert "2" in page.locator(
+                '[data-testid="reader-notes-shared"]',
+            ).inner_text()
+            assert page.get_by_text("Notes are private", exact=True).is_visible()
+            body = page.locator("main").inner_text()
+            assert "Private batching note one" not in body
+            assert "Private batching note two" not in body
         finally:
             context.close()
 

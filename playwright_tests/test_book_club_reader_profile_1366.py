@@ -3,12 +3,11 @@
 Exercises the rendered profile surface at /books/<slug>/readers/<user_id> and
 the visibility mechanism it owns:
 
-1. A member opens a public reader's profile from the progress board, sees the
-   Public badge, the two stats, the progress strip, and the reader's notes,
-   then comments on a note via the shared thread.
-2. An owner opts their profile public with the toggle and then appears as a
-   named, linked row on the board to a second member.
-3. A free member is tier-gated out of a public profile: header + gate, no notes.
+1. A member opens a default-public reader profile from the progress board,
+   sees stats, progress and notes, then comments via the shared thread.
+2. An owner keeps notes private, remains named on the board, still reads their
+   own note, and can share it again.
+3. Free and anonymous viewers see a neutral identity plus one gate, no notes.
 
 Model-level rules (helper partition, owner-scoped toggle 403/400, member API)
 are covered faster by Django TestCase modules.
@@ -118,8 +117,6 @@ class TestReaderProfile:
         _mark_read("reader-b@test.com", [0, 1, 2])
         _create_note("reader-b@test.com", 0, "The KV cache is the whole game.")
         _create_note("reader-b@test.com", 1, "Batching amortizes the load.")
-        _set_visibility("reader-b@test.com", "public")
-        _set_visibility("main@test.com", "public")
         _mark_read("main@test.com", [0])
         b_id = _user_pk("reader-b@test.com")
 
@@ -164,7 +161,7 @@ class TestReaderProfile:
         finally:
             context.close()
 
-    def test_owner_opts_public_and_appears_on_board(
+    def test_owner_keeps_notes_private_stays_named_and_reshares(
         self, django_server, browser,
     ):
         _ensure_tiers()
@@ -174,55 +171,61 @@ class TestReaderProfile:
         _create_user("second@test.com", tier_slug="main")
         _mark_read("main@test.com", [0, 1])
         _mark_read("second@test.com", [0])
-        _set_visibility("second@test.com", "public")
+        _create_note("main@test.com", 0, "My owner-only note.")
         me = _user_pk("main@test.com")
 
-        # main@ starts private (default) -> not named on the board to others.
+        owner_ctx = _auth_context(browser, "main@test.com")
         second_ctx = _auth_context(browser, "second@test.com")
         try:
-            page = second_ctx.new_page()
-            page.goto(
+            owner_page = owner_ctx.new_page()
+            owner_page.goto(
+                f"{django_server}/books/{SLUG}/readers/{me}",
+                wait_until="domcontentloaded",
+            )
+            assert "notes public" in owner_page.locator(
+                '[data-testid="reader-visibility-badge"]',
+            ).inner_text().lower()
+            assert owner_page.get_by_role(
+                "button", name="Keep notes private",
+            ).is_visible()
+            owner_page.locator('[data-testid="reader-make-private"]').click()
+            owner_page.wait_for_load_state("domcontentloaded")
+            assert "notes private" in owner_page.locator(
+                '[data-testid="reader-visibility-badge"]',
+            ).inner_text().lower()
+            assert "still appear by name on the progress board" in (
+                owner_page.locator(
+                    '[data-testid="reader-private-hint"]',
+                ).inner_text()
+            )
+            assert "My owner-only note" in owner_page.locator("main").inner_text()
+
+            second_page = second_ctx.new_page()
+            second_page.goto(
                 f"{django_server}/books/{SLUG}/progress",
                 wait_until="domcontentloaded",
             )
-            assert page.locator(
-                f'[data-testid="progress-row-{me}"]',
-            ).count() == 0
-        finally:
-            second_ctx.close()
+            row = second_page.locator(f'[data-testid="progress-row-{me}"]')
+            assert row.count() == 1
+            assert row.locator('[data-lucide="lock"]').count() == 1
+            name = second_page.locator(f'[data-testid="progress-name-{me}"]')
+            assert name.get_attribute("href").endswith(f"/readers/{me}")
+            name.click()
+            second_page.wait_for_load_state("domcontentloaded")
+            assert second_page.get_by_text(
+                "Notes are private", exact=True,
+            ).is_visible()
+            assert "My owner-only note" not in second_page.locator("main").inner_text()
 
-        # Owner opens their own profile and flips to public.
-        owner_ctx = _auth_context(browser, "main@test.com")
-        try:
-            page = owner_ctx.new_page()
-            page.goto(f"{django_server}/books/{SLUG}", wait_until="domcontentloaded")
-            page.locator('[data-testid="book-reader-profile-link"]').click()
-            page.wait_for_load_state("domcontentloaded")
-            assert page.url.endswith(f"/readers/{me}")
-            assert "private" in page.locator(
+            owner_page.locator('[data-testid="reader-make-public"]').click()
+            owner_page.wait_for_load_state("domcontentloaded")
+            assert "notes public" in owner_page.locator(
                 '[data-testid="reader-visibility-badge"]',
             ).inner_text().lower()
-            page.locator('[data-testid="reader-make-public"]').click()
-            page.wait_for_load_state("domcontentloaded")
-            assert "public" in page.locator(
-                '[data-testid="reader-visibility-badge"]',
-            ).inner_text().lower()
+            second_page.reload(wait_until="domcontentloaded")
+            assert "My owner-only note" in second_page.locator("main").inner_text()
         finally:
             owner_ctx.close()
-
-        # Now the second member sees main@ as a named, linked row.
-        second_ctx = _auth_context(browser, "second@test.com")
-        try:
-            page = second_ctx.new_page()
-            page.goto(
-                f"{django_server}/books/{SLUG}/progress",
-                wait_until="domcontentloaded",
-            )
-            row = page.locator(f'[data-testid="progress-row-{me}"]')
-            assert row.count() == 1
-            name = page.locator(f'[data-testid="progress-name-{me}"]')
-            assert name.get_attribute("href").endswith(f"/readers/{me}")
-        finally:
             second_ctx.close()
 
     def test_free_member_is_gated_out_of_public_profile(
@@ -245,17 +248,55 @@ class TestReaderProfile:
                 f"{django_server}/books/{SLUG}/readers/{target}",
                 wait_until="domcontentloaded",
             )
-            # Public header renders (name), then a single gated-access card.
-            # The visibility badge is owner-only, so it is absent here.
-            assert page.get_by_role("heading", level=1).is_visible()
+            # Neutral header, then a single gated-access card.
+            assert page.get_by_role(
+                "heading", level=1, name="A reader", exact=True,
+            ).is_visible()
+            assert page.locator(
+                '[data-testid="reader-avatar"]',
+            ).inner_text() == "A"
+            assert "main" not in page.title().lower()
             assert page.locator(
                 '[data-testid="reader-visibility-badge"]',
             ).count() == 0
-            assert page.locator('[data-testid="book-guest-gate"]').is_visible()
+            assert page.locator('[data-testid="book-guest-gate"]').count() == 1
             # No notes feed leaks below the gate.
             assert page.locator(
                 '[data-testid="reader-notes-feed"]',
             ).count() == 0
             assert "Members-only insight" not in page.locator("main").inner_text()
+        finally:
+            context.close()
+
+    def test_anonymous_profile_gate_has_neutral_identity(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _clear_books()
+        _create_book(chapters=5, required_level=20)
+        _create_user("reader-b@test.com", tier_slug="main")
+        _mark_read("reader-b@test.com", [0])
+        _create_note("reader-b@test.com", 0, "Anonymous must not see this.")
+        target = _user_pk("reader-b@test.com")
+
+        context = browser.new_context()
+        try:
+            page = context.new_page()
+            page.goto(
+                f"{django_server}/books/{SLUG}/readers/{target}",
+                wait_until="domcontentloaded",
+            )
+            assert page.get_by_role(
+                "heading", level=1, name="A reader", exact=True,
+            ).is_visible()
+            assert page.locator(
+                '[data-testid="reader-avatar"]',
+            ).inner_text() == "A"
+            assert "reader-b" not in page.title().lower()
+            assert page.locator('[data-testid="book-guest-gate"]').count() == 1
+            assert page.locator(
+                '[data-testid="reader-progress-strip"]',
+            ).count() == 0
+            assert "Anonymous must not see this" not in page.locator("main").inner_text()
         finally:
             context.close()

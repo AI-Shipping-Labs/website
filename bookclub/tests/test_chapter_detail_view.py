@@ -255,12 +255,12 @@ class ChapterGroupFeedTest(ChapterDetailFixture):
         self.assertNotContains(response, 'Hidden')
         self.assertContains(response, 'Mine')
 
-    def test_reader_with_no_profile_is_private_by_default_in_feed(self):
-        # No ReaderProfile row -> private default -> hidden from other members.
+    def test_reader_with_no_profile_is_public_by_default_in_feed(self):
+        # No ReaderProfile row -> public default -> visible to other members.
         Note.objects.create(chapter=self.ch0, user=self.other_main, body='Ghost')
         self.client.force_login(self.main_user)
         response = self.client.get(self._url(0))
-        self.assertNotContains(response, 'Ghost')
+        self.assertContains(response, 'Ghost')
 
     def test_empty_feed_renders_member_empty_state(self):
         self.client.force_login(self.main_user)

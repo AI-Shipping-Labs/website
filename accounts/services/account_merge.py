@@ -347,10 +347,10 @@ def _strategy_enrollment(plan, related_model, field_name, canonical, secondary):
 def _strategy_reader_profile(plan, related_model, field_name, canonical, secondary):
     """bookclub.ReaderProfile: O2O on a non-PK ``user`` — one visibility flag.
 
-    Keep canonical's profile if it exists: the surviving identity's own privacy
-    choice wins, so a merge never silently makes a reader more public than they
-    chose. If canonical has none, repoint secondary's row (preserving their
-    opt-in). Drop secondary's on collision.
+    Keep canonical's profile if it exists: the surviving identity's explicit
+    notes-visibility choice wins. If canonical has none, repoint secondary's
+    row, preserving an explicit private choice there. Drop secondary's row on
+    collision; this precedence is unchanged by the public default (#1457).
     """
     sec = related_model.objects.filter(user=secondary).first()
     if sec is None:

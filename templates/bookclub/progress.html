@@ -60,11 +60,10 @@
               <td class="px-4 py-4 align-top sm:px-5">
                 <div class="flex items-center gap-3">
                   <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-border bg-background text-xs font-semibold" aria-hidden="true">{{ row.member|display_name|slice:":1"|upper }}</div>
-                  {% comment %} Reader names link to the reader-profile page
-                  (#1366). Only public readers and the viewer's own row are
-                  emitted here (private non-self readers are collapsed into the
-                  header count), so every link is reachable — no dead links,
-                  no leaks. {% endcomment %}
+                  {% comment %} Every reader who marked a chapter read is named
+                  and links to their reader profile. Notes visibility does not
+                  remove a reader from this community roster (#1457).
+                  {% endcomment %}
                   <a href="{% url 'bookclub_reader_profile' slug=book.slug user_id=row.member.pk %}" class="text-sm font-medium text-foreground transition-colors hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="progress-name-{{ row.member.pk }}">{{ row.member|display_name }}{% if row.is_self %} (you){% endif %}</a>
                 </div>
               </td>
@@ -76,7 +75,7 @@
                   <span class="whitespace-nowrap text-sm text-muted-foreground" data-testid="progress-count-{{ row.member.pk }}">{{ row.chapters_read }} of {{ row.total }}</span>
                 </div>
               </td>
-              <td class="px-4 py-4 text-right align-top text-sm text-muted-foreground sm:px-5" data-testid="progress-notes-{{ row.member.pk }}">{{ row.notes_shared }}</td>
+              <td class="px-4 py-4 text-right align-top text-sm text-muted-foreground sm:px-5" data-testid="progress-notes-{{ row.member.pk }}">{{ row.notes_shared }}{% if row.notes_private and not row.is_self and row.notes_shared %} <i data-lucide="lock" class="inline h-3.5 w-3.5" aria-hidden="true"></i><span class="sr-only">Notes private</span>{% endif %}</td>
             </tr>
             {% endfor %}
           </tbody>

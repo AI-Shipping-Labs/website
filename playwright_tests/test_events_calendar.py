@@ -205,7 +205,7 @@ class TestScenario1VisitorBrowsesEventsAndReadsDetails:
         page.wait_for_url("**/events?filter=past")
         past_section = page.locator('[data-testid="events-past-section"]')
         assert past_section.get_by_role(
-            "heading", level=2, name="Past event recordings"
+            "heading", level=2, name="Past events"
         ).count() == 1
         assert "Intro to LLMs" in past_section.inner_text()
         assert "AI Prompt Engineering Workshop" not in past_section.inner_text()

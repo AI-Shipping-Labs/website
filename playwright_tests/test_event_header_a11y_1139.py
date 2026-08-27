@@ -169,7 +169,7 @@ def test_past_recordings_view_single_heading_level_and_lock(django_server, page)
     past_h2 = [
         t.strip() for t in past_section.locator("h2").all_inner_texts() if t.strip()
     ]
-    assert past_h2 == ["Past event recordings"], (
+    assert past_h2 == ["Past events"], (
         f"past section should have exactly the section <h2>, got {past_h2!r}"
     )
 

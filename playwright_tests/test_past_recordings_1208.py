@@ -149,9 +149,11 @@ def test_past_recordings_list_ctas_gating_and_s3_safety(django_server, browser):
         event_required_level=30,
         tags=["gated"],
     )
-    _create_standalone_event(
+    recordingless = _create_standalone_event(
         "No Recording Past Event",
         "no-recording-past-event",
+        required_level=20,
+        tags=["community"],
     )
 
     context = _auth_context(browser, "basic-1208@test.com")
@@ -159,8 +161,34 @@ def test_past_recordings_list_ctas_gating_and_s3_safety(django_server, browser):
     try:
         page.goto(f"{django_server}/events?filter=past", wait_until="domcontentloaded")
         expect(page.locator('[data-testid="past-recording-card"]')).to_have_count(4)
-        expect(page.locator("body")).not_to_contain_text("No Recording Past Event")
+        expect(page.locator('[data-testid="past-event-card"]')).to_have_count(1)
 
+        recordingless_card = page.get_by_test_id("past-event-card")
+        expect(recordingless_card).to_contain_text("No Recording Past Event")
+        expect(recordingless_card.get_by_test_id("event-card-kind")).to_have_text(
+            "Event"
+        )
+        expect(recordingless_card.get_by_test_id("event-tier-badge")).to_contain_text(
+            "Main or above"
+        )
+        expect(
+            recordingless_card.get_by_test_id("past-card-recording-cta")
+        ).to_have_count(0)
+        expect(recordingless_card.get_by_text("Recording", exact=True)).to_have_count(0)
+        expect(
+            recordingless_card.locator(
+                'svg.lucide-arrow-right, i[data-lucide="arrow-right"]'
+            )
+        ).to_have_count(1)
+        recordingless_link = recordingless_card.get_by_test_id("past-card-event-link")
+        expect(recordingless_link).to_have_attribute(
+            "href", recordingless.get_absolute_url()
+        )
+        recordingless_link.click()
+        expect(page).to_have_url(re.compile(rf".*{recordingless.get_absolute_url()}$"))
+        expect(page.get_by_text("This event has ended. No recording is available.")).to_be_visible()
+
+        page.goto(f"{django_server}/events?filter=past", wait_until="domcontentloaded")
         standalone_card = _card(page, "Standalone Past Recording")
         expect(standalone_card).to_be_visible()
         standalone_cta = standalone_card.locator(
@@ -247,10 +275,15 @@ def test_past_recordings_tag_filter_includes_s3_only_workshops(django_server, pa
 
     expect(_card(page, "Agents S3 Workshop")).to_be_visible()
     expect(page.locator("body")).not_to_contain_text("Python Standalone Recording")
-    expect(page.locator("body")).not_to_contain_text("Agents Event Without Recording")
+    recordingless_card = page.get_by_test_id("past-event-card")
+    expect(recordingless_card).to_contain_text("Agents Event Without Recording")
+    expect(recordingless_card.get_by_test_id("past-card-recording-cta")).to_have_count(0)
     assert "amazonaws.com" not in page.content()
 
     page.locator('a:has-text("Clear")').click()
     expect(page).to_have_url(re.compile(r".*/events\?filter=past$"))
     expect(_card(page, "Agents S3 Workshop")).to_be_visible()
     expect(_card(page, "Python Standalone Recording")).to_be_visible()
+    expect(page.get_by_test_id("past-event-card")).to_contain_text(
+        "Agents Event Without Recording"
+    )

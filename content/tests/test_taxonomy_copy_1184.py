@@ -198,10 +198,10 @@ class PublicTaxonomyCopy1184Test(TierSetupMixin, TestCase):
             'Monthly calendar view of scheduled AI Shipping Labs live community events',
         )
 
-    def test_past_recordings_filter_preserves_standalone_and_workshop_links(self):
+    def test_past_events_filter_preserves_standalone_and_workshop_links(self):
         response = self.client.get('/events?filter=past')
 
-        self.assertContains(response, 'Past event recordings')
+        self.assertContains(response, 'Past events')
         self.assertNotContains(response, 'Catch up on live sessions you missed')
         self.assertNotContains(response, 'legacy discovery')
         self.assertNotContains(response, 'canonical learning artifact')

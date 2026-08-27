@@ -736,8 +736,8 @@ class TestScenario8EmptyStateNoRecordings:
 
         # Helpful empty state message (post-unification copy on
         # /events?filter=past).
-        assert "No past event recordings yet" in body
-        assert "Check back soon!" in body
+        assert "No past events yet" in body
+        assert "Once a session wraps up it will show up here." in body
         empty_state = page.locator('[data-testid="member-empty-state"]')
         assert empty_state.count() == 1
         assert empty_state.get_attribute("data-empty-kind") == "fresh"
@@ -781,20 +781,21 @@ class TestScenario9EmptyStateNoMatchingTag:
         assert recording_cards.count() == 0
 
         # Empty state message (post-unification copy on /events?filter=past).
-        assert "No past event recordings match this filter." in body
+        assert "No past events match this filter" in body
+        assert "Try another topic or view the full history." in body
         empty_state = page.locator('[data-testid="member-empty-state"]')
         assert empty_state.count() == 1
         assert empty_state.get_attribute("data-empty-kind") == "filter"
 
-        # "View all past event recordings" link points back to /events?filter=past.
+        # "View all past events" link points back to /events?filter=past.
         view_all_link = page.locator(
-            'a:has-text("View all past event recordings")'
+            'a:has-text("View all past events")'
         )
         assert view_all_link.count() >= 1
         href = view_all_link.first.get_attribute("href")
         assert "/events?filter=past" in href
 
-        # Step 2: Click "View all past event recordings"
+        # Step 2: Click "View all past events"
         view_all_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 

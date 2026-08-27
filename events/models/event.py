@@ -184,7 +184,7 @@ class Event(
     """Event for community activities.
 
     Also stores recording data inline (previously in a separate Recording model).
-    Completed events with a recording_url are shown on /events?filter=past.
+    Public published finished events are shown on /events?filter=past.
     """
 
     slug = models.SlugField(max_length=300, unique=True)
@@ -303,7 +303,10 @@ class Event(
     )
     published = models.BooleanField(
         default=True,
-        help_text='Controls visibility on the /events?filter=past page.',
+        help_text=(
+            'Controls visibility on the public past events list '
+            '(/events?filter=past).'
+        ),
     )
     published_at = models.DateTimeField(
         null=True, blank=True,

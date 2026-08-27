@@ -82,9 +82,9 @@
       {% endif %}
 
       {% if filter_mode == 'past' %}
-      <!-- Past event recordings timeline -->
+      <!-- Past events timeline -->
       <div data-testid="events-past-section">
-        <h2 class="sr-only" data-testid="events-collection-heading">Past event recordings</h2>
+        <h2 class="sr-only" data-testid="events-collection-heading">Past events</h2>
         {% if past_days %}
         {% include "events/_events_timeline.html" with days=past_days %}
 
@@ -116,9 +116,9 @@
 
         {% else %}
         {% if selected_tags %}
-        {% member_empty_state title='No past event recordings match this filter' body='No past event recordings match this filter.' icon='video' kind='filter' primary_cta_label='View all past event recordings' primary_cta_url='/events?filter=past' %}
+        {% member_empty_state title='No past events match this filter' body='Try another topic or view the full history.' icon='calendar' kind='filter' primary_cta_label='View all past events' primary_cta_url='/events?filter=past' %}
         {% else %}
-        {% member_empty_state title='No past event recordings yet' body='Check back soon!' icon='video' kind='fresh' %}
+        {% member_empty_state title='No past events yet' body='Once a session wraps up it will show up here.' icon='calendar' kind='fresh' %}
         {% endif %}
         {% endif %}
       </div>

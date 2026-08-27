@@ -121,15 +121,28 @@ class TestJustEndedEventMovesToPast:
 
         _run_cron()
 
-        # The public Past filter is a recordings archive, so an ended event
-        # without a recording simply leaves Upcoming and remains reachable
-        # at its canonical detail URL.
+        # The public collections are complementary: an ended event leaves
+        # Upcoming and enters Past even when no recording is available.
         page.goto(f"{django_server}/events", wait_until="domcontentloaded")
         upcoming_section = page.locator(
             '[data-testid="events-upcoming-section"]'
         )
         assert upcoming_section.count() == 1
         assert "Today Just Ended" not in upcoming_section.inner_text()
+
+        page.goto(
+            f"{django_server}/events?filter=past", wait_until="domcontentloaded"
+        )
+        past_card = page.get_by_test_id("past-event-card")
+        assert "Today Just Ended" in past_card.inner_text()
+        assert past_card.get_by_test_id("past-card-recording-cta").count() == 0
+        assert past_card.get_by_text("Recording", exact=True).count() == 0
+        past_card.get_by_test_id("past-card-event-link").click()
+        page.wait_for_load_state("domcontentloaded")
+        assert event.get_absolute_url() in page.url
+        assert "This event has ended. No recording is available." in (
+            page.locator("main").inner_text()
+        )
 
         # Detail page shows the Past badge. Issue #713 made the status
         # pill time-derived: any event with ``is_past`` true renders
@@ -466,12 +479,13 @@ class TestPublicEventsUpcomingCountDrops:
         assert "Public Later" in after_text
         assert "Public Ended" not in after_text
 
-        # Past is a recordings archive; this event has no recording and is
-        # intentionally absent there even though its DB lifecycle completed.
+        # Past remains time-derived after the DB lifecycle transition and does
+        # not require a recording.
         page.goto(f"{django_server}/events?filter=past", wait_until="domcontentloaded")
-        assert "Public Ended" not in page.get_by_test_id(
+        assert "Public Ended" in page.get_by_test_id(
             'events-past-section'
         ).inner_text()
+        assert page.get_by_test_id('past-event-card').count() == 1
 
 
 # Suppress unused-import warnings for import-only modules above.

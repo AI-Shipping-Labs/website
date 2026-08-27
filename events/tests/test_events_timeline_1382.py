@@ -6,7 +6,7 @@ Covers the presentation behaviors introduced by the redesign:
 - a series renders its stable title, access, session count, and next time in
   one row rather than listing every occurrence,
 - event rows stay text-first even when authored or generated banners exist,
-- past recordings show the "Watch recording" CTA.
+- past events show recordings with a "Watch recording" CTA when available.
 """
 
 from datetime import UTC, datetime, time, timedelta
@@ -94,7 +94,7 @@ class TimelineDefaultUpcomingOnlyTest(TestCase):
         self.assertContains(
             past,
             '<h2 class="sr-only" data-testid="events-collection-heading">'
-            'Past event recordings</h2>',
+            'Past events</h2>',
             html=True,
         )
 
@@ -261,6 +261,28 @@ class TimelineSeriesCardTest(TestCase):
             response.content.decode().count('data-testid="event-series-card"'),
             1,
         )
+
+    def test_recordingless_past_occurrence_stays_an_individual_event_row(self):
+        past_occurrence = Event.objects.create(
+            title='Build Club Finished Session',
+            slug='build-club-finished-session-1382',
+            start_datetime=timezone.now() - timedelta(days=2),
+            end_datetime=timezone.now() - timedelta(days=2, hours=-1),
+            timezone='UTC',
+            status='completed',
+            origin='studio',
+            event_series=self.series,
+            series_position=0,
+            published=True,
+        )
+
+        response = self.client.get('/events?filter=past')
+
+        self.assertContains(response, past_occurrence.title)
+        self.assertContains(response, 'data-testid="past-event-card"')
+        self.assertContains(response, f'href="{past_occurrence.get_absolute_url()}"')
+        self.assertNotContains(response, 'data-testid="event-series-card"')
+        self.assertNotContains(response, 'data-testid="past-card-recording-cta"')
 
 
 class TimelineThumbnailTest(TestCase):

@@ -1,9 +1,11 @@
 {% load member_badges %}
 {% comment %}
-Shared timeline row for Upcoming events, grouped Series, and Past recordings.
+Shared timeline row for Upcoming events, grouped Series, and Past events.
 All variants use the same signal/title/context/meta anatomy and fixed access
-tier slot. Past recordings retain a separate final recording link so workshop
-cards can still open their workshop from the body without nesting anchors.
+tier slot. Past events with recordings retain a separate final recording link
+so workshop cards can still open their workshop from the body without nesting
+anchors. Recording-less past events use the same whole-card navigation as
+Upcoming rows.
 
 Required context: ``card_variant`` ("upcoming", "series", or "past") plus
 ``event`` + ``display_time`` for event variants, or ``row`` for Series.
@@ -38,13 +40,15 @@ Required context: ``card_variant`` ("upcoming", "series", or "past") plus
   </a>
 </article>
 {% endwith %}{% else %}
-<article class="group rounded-lg border border-border bg-card px-5 pt-5 {% if card_variant == 'past' %}pb-2{% else %}pb-5{% endif %} transition-colors hover:border-accent/50" data-testid="{% if card_variant == 'past' %}past-recording-card{% else %}upcoming-event-card{% endif %}">
-  {% if card_variant == 'past' %}
+<article class="group rounded-lg border border-border bg-card px-5 pt-5 {% if card_variant == 'past' and event.has_recording %}pb-2{% else %}pb-5{% endif %} transition-colors hover:border-accent/50" data-testid="{% if card_variant == 'past' and event.has_recording %}past-recording-card{% elif card_variant == 'past' %}past-event-card{% else %}upcoming-event-card{% endif %}">
+  {% if card_variant == 'past' and event.has_recording %}
     {% if event.kind == 'workshop' and event.workshop %}
     <a href="{{ event.workshop.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="past-card-workshop-link">
     {% else %}
     <a href="{{ event.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="past-card-event-link">
     {% endif %}
+  {% elif card_variant == 'past' %}
+    <a href="{{ event.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="past-card-event-link">
   {% else %}
     {% firstof event.event_series.get_absolute_url event.get_absolute_url as event_card_href %}
     <a href="{{ event_card_href }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="event-card-link">
@@ -52,15 +56,15 @@ Required context: ``card_variant`` ("upcoming", "series", or "past") plus
     <div class="flex items-start justify-between gap-4">
       <div class="min-w-0 flex-1">
         <div class="flex flex-wrap items-center gap-2">
-          {% if card_variant == 'past' and event.kind == 'workshop' and event.workshop %}
+          {% if card_variant == 'past' and event.has_recording and event.kind == 'workshop' and event.workshop %}
           {% member_access_badge event.workshop.recording_required_level testid="past-card-recording-tier" %}
-          {% elif card_variant == 'past' %}
+          {% elif card_variant == 'past' and event.has_recording %}
           {% member_access_badge event.required_level testid="past-card-recording-tier" %}
           {% else %}
           {% member_access_badge event.required_level testid="event-tier-badge" %}
           {% endif %}
           <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground" data-testid="event-card-kind">
-            {% if card_variant == 'past' %}{% if event.kind == 'workshop' and event.workshop %}<span data-testid="past-card-workshop-badge">Workshop recording</span>{% else %}Recording{% endif %}{% elif event.event_series %}Series{% elif event.kind == 'standard' %}Event{% else %}{{ event.get_kind_display }}{% endif %}
+            {% if card_variant == 'past' and event.has_recording %}{% if event.kind == 'workshop' and event.workshop %}<span data-testid="past-card-workshop-badge">Workshop recording</span>{% else %}Recording{% endif %}{% elif event.event_series and card_variant != 'past' %}Series{% elif event.kind == 'standard' %}Event{% else %}{{ event.get_kind_display }}{% endif %}
           </p>
         </div>
         <h3 class="mt-2 text-lg font-semibold text-foreground transition-colors group-hover:text-accent">{{ event.title }}</h3>
@@ -91,7 +95,7 @@ Required context: ``card_variant`` ("upcoming", "series", or "past") plus
         </div>
         {% endif %}
       </div>
-      {% if card_variant != 'past' %}
+      {% if card_variant != 'past' or not event.has_recording %}
       <div class="flex flex-shrink-0 items-center">
         <i data-lucide="arrow-right" class="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-accent" aria-hidden="true"></i>
       </div>
@@ -100,6 +104,7 @@ Required context: ``card_variant`` ("upcoming", "series", or "past") plus
   </a>
   {% if card_variant == 'past' %}
     {% include "events/_upcoming_event_card_tags.html" with tag_row_class="mt-3 flex flex-wrap gap-1.5" %}
+    {% if event.has_recording %}
     {% if event.kind == 'workshop' and event.workshop %}
     <a href="{% url 'workshop_video' event.workshop.url_key %}" class="mt-3 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="past-card-recording-cta">
     {% else %}
@@ -109,6 +114,7 @@ Required context: ``card_variant`` ("upcoming", "series", or "past") plus
       Watch recording
       <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
     </a>
+    {% endif %}
   {% endif %}
 </article>
 {% endif %}

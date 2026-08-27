@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load static %}
 
 {% block studio_title %}Enrollments - {{ course.title }}{% endblock %}
 
@@ -165,6 +166,7 @@
   </ul>
 </div>
 
+<script src="{% static 'js/studio/typeahead_lifecycle.js' %}"></script>
 <script>
 (function() {
   var input = document.getElementById('enroll-email');
@@ -172,14 +174,16 @@
   var list = document.getElementById('enroll-suggestions');
   if (!input || !hidden || !list) { return; }
   var url = input.dataset.searchUrl;
-  var debounce;
+  var lifecycle;
 
   function clearSelection() { hidden.value = ''; }
-  function hideList() { list.classList.add('hidden'); list.innerHTML = ''; }
 
   function render(items) {
     list.innerHTML = '';
-    if (!items.length) { hideList(); return; }
+    if (!items.length) {
+      list.classList.add('hidden');
+      return;
+    }
     items.forEach(function(u) {
       var li = document.createElement('li');
       li.className = 'cursor-pointer px-4 py-3 hover:bg-secondary text-sm text-foreground';
@@ -198,28 +202,23 @@
         e.preventDefault();
         input.value = u.email;
         hidden.value = u.id;
-        hideList();
+        lifecycle.select();
       });
       list.appendChild(li);
     });
     list.classList.remove('hidden');
   }
 
-  input.addEventListener('input', function() {
-    clearSelection();
-    var q = input.value.trim();
-    if (debounce) { clearTimeout(debounce); }
-    if (q.length < 2) { hideList(); return; }
-    debounce = setTimeout(function() {
-      fetch(url + '?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+  lifecycle = window.StudioTypeaheadLifecycle.create({
+    input: input,
+    list: list,
+    onInput: clearSelection,
+    fetchResults: function(q) {
+      return fetch(url + '?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
         .then(function(r) { return r.ok ? r.json() : { results: [] }; })
-        .then(function(d) { render(d.results || []); })
-        .catch(function() { hideList(); });
-    }, 200);
-  });
-
-  input.addEventListener('blur', function() {
-    setTimeout(hideList, 150);
+        .then(function(d) { return d.results || []; });
+    },
+    renderResults: render,
   });
 })();
 </script>

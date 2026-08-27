@@ -1,5 +1,5 @@
 {% extends "studio/base.html" %}
-{% load studio_filters %}
+{% load static studio_filters %}
 
 {% block studio_title %}Merge accounts{% endblock %}
 
@@ -239,17 +239,20 @@
 {% endif %}{# /not result #}
 
 {# Autocomplete: fill the email input directly on suggestion select. #}
+<script src="{% static 'js/studio/typeahead_lifecycle.js' %}"></script>
 <script>
 (function() {
   function wire(inputId, listId) {
     var input = document.getElementById(inputId);
     var list = document.getElementById(listId);
     if (!input || !list) { return; }
-    var debounce;
-    function hide() { list.classList.add('hidden'); list.innerHTML = ''; }
+    var lifecycle;
     function render(results) {
       list.innerHTML = '';
-      if (!results || !results.length) { hide(); return; }
+      if (!results || !results.length) {
+        list.classList.add('hidden');
+        return;
+      }
       results.forEach(function(u) {
         var li = document.createElement('li');
         li.className = 'cursor-pointer px-4 py-2 hover:bg-secondary text-sm';
@@ -265,25 +268,23 @@
         li.addEventListener('mousedown', function(e) {
           e.preventDefault();
           input.value = u.email;
-          hide();
+          lifecycle.select();
         });
         list.appendChild(li);
       });
       list.classList.remove('hidden');
     }
-    input.addEventListener('input', function() {
-      var q = input.value.trim();
-      if (debounce) { clearTimeout(debounce); }
-      if (q.length < 2) { hide(); return; }
-      debounce = setTimeout(function() {
-        fetch('/studio/api/users/search/?q=' + encodeURIComponent(q),
-              {credentials: 'same-origin'})
+    lifecycle = window.StudioTypeaheadLifecycle.create({
+      input: input,
+      list: list,
+      fetchResults: function(q) {
+        return fetch(input.dataset.searchUrl + '?q=' + encodeURIComponent(q),
+                     {credentials: 'same-origin'})
           .then(function(r) { return r.ok ? r.json() : {results: []}; })
-          .then(function(d) { render(d.results || []); })
-          .catch(hide);
-      }, 200);
+          .then(function(d) { return d.results || []; });
+      },
+      renderResults: render,
     });
-    input.addEventListener('blur', function() { setTimeout(hide, 150); });
   }
   wire('merge-canonical-search', 'merge-canonical-suggestions');
   wire('merge-secondary-search', 'merge-secondary-suggestions');

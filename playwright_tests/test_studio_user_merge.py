@@ -9,14 +9,13 @@ Usage:
     uv run pytest playwright_tests/test_studio_user_merge.py -v
 """
 
+import json
 import os
+from urllib.parse import parse_qs, urlparse
 
 import pytest
+from playwright.sync_api import expect
 
-from playwright_tests.conftest import (
-    SETTLE_TIMEOUT_MS,
-    settle_click,
-)
 from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
@@ -90,43 +89,39 @@ def _canonical_event_count(email):
 
 
 def _fill_merge_form_and_preview(page, canonical_email, secondary_email):
-    """Fill both merge inputs and submit the preview, overlay-safe.
-
-    Both inputs are typeaheads (``templates/studio/users/merge.html``): each
-    ``input`` event schedules a 200 ms debounced ``/studio/api/users/search/``
-    fetch whose results render into an ``absolute z-20`` suggestion list. That
-    list sits directly above the "Preview merge" button.
-
-    ``hide()`` only runs from the input's own ``blur`` handler, so a response
-    that resolves AFTER that blur re-shows the list with no further blur left to
-    close it: the canonical list stays pinned over "Preview merge", hit-testing
-    reports it intercepting pointer events, the mousedown that would dismiss it
-    never reaches the page, and the click retries until it times out. This is a
-    real product-JS defect (reproduced while measuring #1470's parallel runs),
-    not a #1470 regression, and it is reported separately; the harness works
-    around it here so the core suite stays deterministic.
-
-    The workaround is ordering, not force-clicking: let both searches settle,
-    then blur each input once more AFTER the last response has landed, so no
-    late ``render()`` can re-show either list. The submit is still a real button
-    click through the real form.
-    """
+    """Fill both merge inputs and submit with the ordinary browser journey."""
     page.locator('[data-testid="merge-canonical-input"]').fill(canonical_email)
     page.locator('[data-testid="merge-secondary-input"]').fill(secondary_email)
-    # Both debounced searches have completed; nothing further can re-show a list
-    # except a new `input` event, and clicking does not produce one.
-    page.wait_for_load_state("networkidle")
-    # Re-focus the canonical input (its own dropdown renders below it, so it is
-    # never intercepted), then blur to a neutral element. Focusing canonical
-    # blurs secondary; clicking the heading blurs canonical.
-    page.locator('[data-testid="merge-canonical-input"]').click()
-    page.locator("h1").first.click()
-    for list_id in ("merge-canonical-suggestions", "merge-secondary-suggestions"):
-        page.locator(f'[data-testid="{list_id}"]').wait_for(
-            state="hidden", timeout=SETTLE_TIMEOUT_MS
-        )
-    settle_click(page.locator('[data-testid="merge-preview-submit"]'))
+    page.locator('[data-testid="merge-preview-submit"]').click()
     page.wait_for_load_state("domcontentloaded")
+
+
+def _query_for(request):
+    return parse_qs(urlparse(request.url).query).get("q", [""])[0]
+
+
+def _fulfill_search(route, results):
+    route.fulfill(
+        status=200,
+        content_type="application/json",
+        body=json.dumps({"results": results}),
+    )
+
+
+def _release_search(page, route, results):
+    with page.expect_response(lambda response: response.url == route.request.url) as info:
+        _fulfill_search(route, results)
+    info.value.body()
+    page.evaluate(
+        "() => new Promise(resolve => requestAnimationFrame(() => "
+        "requestAnimationFrame(resolve)))"
+    )
+
+
+def _assert_suggestions_dismissed(page, testid):
+    suggestions = page.locator(f'[data-testid="{testid}"]')
+    expect(suggestions).to_be_hidden()
+    expect(suggestions.locator("li")).to_have_count(0)
 
 
 @pytest.mark.django_db(transaction=True)
@@ -152,7 +147,114 @@ class TestPreviewThenConfirm:
             wait_until="domcontentloaded",
         )
 
-        _fill_merge_form_and_preview(page, "keep@test.com", "dupe@test.com")
+        keep_result = {
+            "id": canonical_pk,
+            "email": "keep@test.com",
+            "display_name": "Keep Account",
+            "first_name": "Keep",
+            "last_name": "Account",
+        }
+        dupe_result = {
+            "id": _user_id_for("dupe@test.com"),
+            "email": "dupe@test.com",
+            "display_name": "Duplicate Account",
+            "first_name": "Duplicate",
+            "last_name": "Account",
+        }
+        stale_result = {
+            "id": 999999,
+            "email": "stale@test.com",
+            "display_name": "Stale Account",
+            "first_name": "Stale",
+            "last_name": "Account",
+        }
+        results_by_query = {
+            "keep@test.com": [keep_result],
+            "dupe@test.com": [dupe_result],
+        }
+        hold_once = {
+            "keep@test.com",
+            "dupe@test.com",
+            "older-keep",
+            "older-dupe",
+        }
+        pending = {}
+
+        def control_search(route):
+            query = _query_for(route.request)
+            if query in hold_once:
+                hold_once.remove(query)
+                pending[query] = route
+                return
+            _fulfill_search(route, results_by_query.get(query, []))
+
+        page.route("**/studio/api/users/search/**", control_search)
+        canonical = page.locator('[data-testid="merge-canonical-input"]')
+        secondary = page.locator('[data-testid="merge-secondary-input"]')
+        submit = page.locator('[data-testid="merge-preview-submit"]')
+
+        # A response that arrives after either input blurs cannot reopen its
+        # list or intercept the ordinary Preview merge click.
+        with page.expect_request(lambda request: _query_for(request) == "keep@test.com"):
+            canonical.fill("keep@test.com")
+        canonical.press("Tab")
+        expect(secondary).to_be_focused()
+        _release_search(page, pending["keep@test.com"], [keep_result])
+        _assert_suggestions_dismissed(page, "merge-canonical-suggestions")
+
+        with page.expect_request(lambda request: _query_for(request) == "dupe@test.com"):
+            secondary.fill("dupe@test.com")
+        secondary.press("Tab")
+        expect(submit).to_be_focused()
+        _release_search(page, pending["dupe@test.com"], [dupe_result])
+        _assert_suggestions_dismissed(page, "merge-secondary-suggestions")
+
+        submit.click()
+        page.wait_for_load_state("domcontentloaded")
+        expect(page.locator('[data-testid="merge-preview"]')).to_be_visible()
+
+        # Repeat through pointer selection while an older response remains in
+        # flight. Releasing each stale response must preserve the selected
+        # account and keep its list empty.
+        page.goto(
+            f"{django_server}/studio/users/merge/",
+            wait_until="domcontentloaded",
+        )
+        canonical = page.locator('[data-testid="merge-canonical-input"]')
+        secondary = page.locator('[data-testid="merge-secondary-input"]')
+
+        with page.expect_request(lambda request: _query_for(request) == "older-keep"):
+            canonical.fill("older-keep")
+        with page.expect_response(
+            lambda response: _query_for(response.request) == "keep@test.com"
+        ):
+            canonical.fill("keep@test.com")
+        keep_suggestion = page.locator(
+            '[data-testid="merge-canonical-search-suggestion"]'
+        ).filter(has_text="keep@test.com")
+        expect(keep_suggestion).to_be_visible()
+        keep_suggestion.click()
+        _release_search(page, pending["older-keep"], [stale_result])
+        expect(canonical).to_have_value("keep@test.com")
+        _assert_suggestions_dismissed(page, "merge-canonical-suggestions")
+
+        with page.expect_request(lambda request: _query_for(request) == "older-dupe"):
+            secondary.fill("older-dupe")
+        with page.expect_response(
+            lambda response: _query_for(response.request) == "dupe@test.com"
+        ):
+            secondary.fill("dupe@test.com")
+        dupe_suggestion = page.locator(
+            '[data-testid="merge-secondary-search-suggestion"]'
+        ).filter(has_text="dupe@test.com")
+        expect(dupe_suggestion).to_be_visible()
+        dupe_suggestion.click()
+        _release_search(page, pending["older-dupe"], [stale_result])
+        expect(secondary).to_have_value("dupe@test.com")
+        _assert_suggestions_dismissed(page, "merge-secondary-suggestions")
+
+        page.locator('[data-testid="merge-preview-submit"]').click()
+        page.wait_for_load_state("domcontentloaded")
 
         # Plan shows the moved event registration row + deactivation notice.
         assert page.locator('[data-testid="merge-preview"]').count() == 1

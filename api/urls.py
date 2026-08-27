@@ -132,6 +132,7 @@ from api.views.plans import (
     plan_draft_first_sprint_apply,
     plan_draft_next_sprint,
     plan_move_unfinished,
+    plan_send_ready_email,
     sprint_partner_intro_emails,
     sprint_plans_bulk_import,
     sprint_plans_collection,
@@ -697,6 +698,13 @@ urlpatterns = [
         "plans/<int:plan_id>/move-unfinished",
         plan_move_unfinished,
         name="api_plan_move_unfinished",
+    ),
+    # Idempotent single-plan ready delivery (issue #1455). Staff-only;
+    # same service as the Studio "Share with member" detail action.
+    path(
+        "plans/<int:plan_id>/send-ready-email",
+        plan_send_ready_email,
+        name="api_plan_send_ready_email",
     ),
     # Carry-over + AI next-sprint draft (issue #891, Phase 3). Staff-only;
     # same shared service as the Studio "Draft next sprint plan" button.

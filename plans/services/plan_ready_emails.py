@@ -1,4 +1,15 @@
-"""Bulk plan-ready email service for sprint plans (issue #1055)."""
+"""Plan-ready email services for sprint plans (issues #1055, #1093, #1455).
+
+Three layers live here:
+
+- ``send_plan_ready_emails`` -- the sprint-wide bulk action (#1055).
+- ``send_plan_ready_email_for_plan`` -- the idempotent one-plan default
+  delivery used by plan creation (#1093).
+- ``run_plan_ready_action`` -- the #1455 outcome layer wrapping the
+  one-plan delivery with an explicit, side-effect-free preview and a
+  stable status vocabulary shared by Studio, the API, the ``asl`` CLI,
+  and the markdown importer.
+"""
 
 import logging
 
@@ -15,6 +26,12 @@ from plans.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Provider details belong in the durable internal log and server logs only.
+# Keep every public surface on the same stable, retry-oriented message.
+PLAN_READY_EMAIL_PUBLIC_ERROR = (
+    'Plan-ready delivery failed; retry the same action.'
+)
 
 
 def _plan_identity(plan):
@@ -68,7 +85,7 @@ def _ready_email_result(*, requested, sent=False, skipped=False, failed=False, e
         'sent': sent,
         'skipped_already_sent': skipped,
         'failed': failed,
-        'error': error,
+        'error': PLAN_READY_EMAIL_PUBLIC_ERROR if failed else '',
     }
 
 
@@ -85,11 +102,16 @@ def send_plan_ready_email_for_plan(plan, *, actor):
         return _ready_email_result(requested=True, skipped=True)
 
     try:
-        delivery = NotificationService.create_plan_shared_delivery(plan)
-        if delivery.email_log is None:
-            raise RuntimeError(
-                delivery.email_error or 'plan_shared email was not logged',
+        # The notification row is created before the provider call. Keep it
+        # in the same transaction so a failed attempt cannot leave a bell
+        # behind that a later retry would duplicate.
+        with transaction.atomic():
+            delivery = NotificationService.create_plan_shared_delivery(
+                plan,
+                swallow_email_errors=False,
             )
+            if delivery.email_log is None:
+                raise RuntimeError('plan_shared email was not logged')
     except Exception as exc:
         logger.exception(
             'Failed to send individual plan-ready email to %s for plan %s',
@@ -150,7 +172,7 @@ def send_plan_ready_emails(*, sprint, actor, dry_run=False):
         summary['eligible_count'] += 1
         if log and log.status == PLAN_READY_EMAIL_STATUS_FAILED:
             failed_row = dict(row)
-            failed_row['last_error'] = log.last_error
+            failed_row['last_error'] = PLAN_READY_EMAIL_PUBLIC_ERROR
             summary['failed_previous_attempts'].append(failed_row)
             summary['failed_previous_attempts_count'] += 1
 
@@ -171,11 +193,13 @@ def send_plan_ready_emails(*, sprint, actor, dry_run=False):
             continue
 
         try:
-            delivery = NotificationService.create_plan_shared_delivery(plan)
-            if delivery.email_log is None:
-                raise RuntimeError(
-                    delivery.email_error or 'plan_shared email was not logged',
+            with transaction.atomic():
+                delivery = NotificationService.create_plan_shared_delivery(
+                    plan,
+                    swallow_email_errors=False,
                 )
+                if delivery.email_log is None:
+                    raise RuntimeError('plan_shared email was not logged')
         except Exception as exc:
             logger.exception(
                 'Failed to send bulk plan-ready email to %s for plan %s',
@@ -184,7 +208,7 @@ def send_plan_ready_emails(*, sprint, actor, dry_run=False):
             )
             _mark_plan_send_failed(log, exc)
             failed = _plan_identity(plan)
-            failed['last_error'] = str(exc)
+            failed['last_error'] = PLAN_READY_EMAIL_PUBLIC_ERROR
             summary['failed'].append(failed)
             summary['failed_count'] += 1
             continue
@@ -196,6 +220,134 @@ def send_plan_ready_emails(*, sprint, actor, dry_run=False):
         summary['sent_count'] += 1
 
     return summary
+
+
+PLAN_READY_ACTION_ELIGIBLE = 'eligible'
+PLAN_READY_ACTION_SENT = 'sent'
+PLAN_READY_ACTION_ALREADY_SENT = 'already_sent'
+PLAN_READY_ACTION_ALREADY_SHARED = 'already_shared'
+PLAN_READY_ACTION_FAILED_RETRYABLE = 'failed_retryable'
+PLAN_READY_ACTION_IN_PROGRESS = 'in_progress'
+
+PLAN_READY_ACTION_STATUSES = (
+    PLAN_READY_ACTION_ELIGIBLE,
+    PLAN_READY_ACTION_SENT,
+    PLAN_READY_ACTION_ALREADY_SENT,
+    PLAN_READY_ACTION_ALREADY_SHARED,
+    PLAN_READY_ACTION_FAILED_RETRYABLE,
+    PLAN_READY_ACTION_IN_PROGRESS,
+)
+
+
+def _ready_action_outcome(status, *, dry_run, sent_at=None, error=''):
+    """Build the stable one-plan outcome payload.
+
+    Every boolean is derived from ``status`` so the flags can never
+    disagree with the reported status.
+    """
+    return {
+        'dry_run': dry_run,
+        'status': status,
+        'eligible': status == PLAN_READY_ACTION_ELIGIBLE,
+        # A preview never asks the delivery layer for anything; a live
+        # call always does, even when the state short-circuits it.
+        'requested': not dry_run,
+        'sent': status == PLAN_READY_ACTION_SENT,
+        'skipped_already_sent': status == PLAN_READY_ACTION_ALREADY_SENT,
+        'skipped_already_shared': status == PLAN_READY_ACTION_ALREADY_SHARED,
+        'failed': status == PLAN_READY_ACTION_FAILED_RETRYABLE,
+        'retryable': status == PLAN_READY_ACTION_FAILED_RETRYABLE,
+        'sent_at': sent_at.isoformat() if sent_at else None,
+        'error': (
+            PLAN_READY_EMAIL_PUBLIC_ERROR
+            if status == PLAN_READY_ACTION_FAILED_RETRYABLE
+            else ''
+        ),
+    }
+
+
+def _classify_plan_ready_state(plan, log):
+    """Read-only readiness classification for one plan."""
+    if log is not None and log.status == PLAN_READY_EMAIL_STATUS_SENT:
+        return PLAN_READY_ACTION_ALREADY_SENT
+    if log is not None and log.status == PLAN_READY_EMAIL_STATUS_SENDING:
+        return PLAN_READY_ACTION_IN_PROGRESS
+    if plan.shared_at is not None:
+        # Shared through the legacy/explicit re-share path (#732) without a
+        # successful ready log. Never auto-deliver again -- an intentional
+        # second notification is the confirmed Studio Re-share action.
+        return PLAN_READY_ACTION_ALREADY_SHARED
+    return PLAN_READY_ACTION_ELIGIBLE
+
+
+def _ready_action_envelope(plan, outcome):
+    return {
+        'plan_id': plan.pk,
+        'member_id': plan.member_id,
+        'member_email': plan.member.email,
+        'sprint_slug': plan.sprint.slug,
+        'shared_at': plan.shared_at.isoformat() if plan.shared_at else None,
+        'ready_email': outcome,
+    }
+
+
+def run_plan_ready_action(plan, *, actor, dry_run=False):
+    """Default plan-ready delivery for exactly one plan (issue #1455).
+
+    This is the single contract behind the Studio ``Share with member``
+    action, ``POST /api/plans/<id>/send-ready-email``, ``asl plans
+    send-ready``, and the markdown importer. It is idempotent: a plan
+    that already completed a successful default send, or that was shared
+    through the explicit #732 re-share path, is reported rather than
+    notified again. It never forces a re-send, never unshares, and never
+    touches ``visibility`` or sibling plans.
+
+    ``dry_run=True`` performs no ``Plan``, ``PlanReadyEmailLog``,
+    ``Notification``, or ``EmailLog`` write and no provider call.
+    """
+    log = PlanReadyEmailLog.objects.filter(plan=plan).first()
+    status = _classify_plan_ready_state(plan, log)
+
+    if dry_run or status != PLAN_READY_ACTION_ELIGIBLE:
+        sent_at = log.sent_at if (
+            log is not None and status == PLAN_READY_ACTION_ALREADY_SENT
+        ) else None
+        return _ready_action_envelope(
+            plan,
+            _ready_action_outcome(status, dry_run=dry_run, sent_at=sent_at),
+        )
+
+    result = send_plan_ready_email_for_plan(plan, actor=actor)
+    plan.refresh_from_db()
+    log = PlanReadyEmailLog.objects.filter(plan=plan).first()
+
+    if result['sent']:
+        outcome = _ready_action_outcome(
+            PLAN_READY_ACTION_SENT,
+            dry_run=False,
+            sent_at=log.sent_at if log else None,
+        )
+    elif result['failed']:
+        outcome = _ready_action_outcome(
+            PLAN_READY_ACTION_FAILED_RETRYABLE,
+            dry_run=False,
+            error=result['error'],
+        )
+    else:
+        # The durable guard was claimed between classification and send:
+        # either another request completed it, or one is mid-flight.
+        concurrent = _classify_plan_ready_state(plan, log)
+        outcome = _ready_action_outcome(
+            concurrent
+            if concurrent != PLAN_READY_ACTION_ELIGIBLE
+            else PLAN_READY_ACTION_IN_PROGRESS,
+            dry_run=False,
+            sent_at=log.sent_at if (
+                log is not None
+                and concurrent == PLAN_READY_ACTION_ALREADY_SENT
+            ) else None,
+        )
+    return _ready_action_envelope(plan, outcome)
 
 
 def _claim_plan_for_send(plan, *, actor):

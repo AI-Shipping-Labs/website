@@ -17,6 +17,7 @@ from plans.models import (
     Sprint,
 )
 from plans.services import (
+    PLAN_READY_EMAIL_PUBLIC_ERROR,
     preview_plan_ready_emails,
     send_plan_ready_email_for_plan,
     send_plan_ready_emails,
@@ -186,12 +187,13 @@ class PlanReadyEmailServiceTest(TestCase):
         self.assertTrue(result['requested'])
         self.assertFalse(result['sent'])
         self.assertTrue(result['failed'])
-        self.assertIn('SES rejected solo@test.com', result['error'])
+        self.assertEqual(result['error'], PLAN_READY_EMAIL_PUBLIC_ERROR)
         plan.refresh_from_db()
         self.assertIsNone(plan.shared_at)
         log = PlanReadyEmailLog.objects.get(plan=plan)
         self.assertEqual(log.status, PLAN_READY_EMAIL_STATUS_FAILED)
         self.assertIn('SES rejected solo@test.com', log.last_error)
+        self.assertEqual(Notification.objects.count(), 0)
         self.assertEqual(EmailLog.objects.count(), 0)
 
     @patch('email_app.services.email_service.EmailService._send_ses')
@@ -200,6 +202,12 @@ class PlanReadyEmailServiceTest(TestCase):
         mock_ses.side_effect = [RuntimeError('SES down'), 'ses-2']
 
         failed = send_plan_ready_email_for_plan(plan, actor=self.staff)
+        self.assertEqual(
+            Notification.objects.filter(
+                user=plan.member, notification_type='plan_shared',
+            ).count(),
+            0,
+        )
         retried = send_plan_ready_emails(sprint=self.sprint, actor=self.staff)
 
         self.assertTrue(failed['failed'])
@@ -209,6 +217,18 @@ class PlanReadyEmailServiceTest(TestCase):
         self.assertEqual(
             PlanReadyEmailLog.objects.get(plan=plan).status,
             PLAN_READY_EMAIL_STATUS_SENT,
+        )
+        self.assertEqual(
+            Notification.objects.filter(
+                user=plan.member, notification_type='plan_shared',
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=plan.member, email_type='plan_shared',
+            ).count(),
+            1,
         )
 
     @patch('email_app.services.email_service.EmailService._send_ses')
@@ -263,6 +283,10 @@ class PlanReadyEmailServiceTest(TestCase):
             {row['member_email'] for row in summary['failed']},
             {'bad@test.com'},
         )
+        self.assertEqual(
+            summary['failed'][0]['last_error'],
+            PLAN_READY_EMAIL_PUBLIC_ERROR,
+        )
         for plan in (good, other):
             plan.refresh_from_db()
             self.assertIsNotNone(plan.shared_at)
@@ -275,6 +299,9 @@ class PlanReadyEmailServiceTest(TestCase):
         failed_log = PlanReadyEmailLog.objects.get(plan=bad)
         self.assertEqual(failed_log.status, PLAN_READY_EMAIL_STATUS_FAILED)
         self.assertIn('SES rejected bad@test.com', failed_log.last_error)
+        self.assertFalse(
+            Notification.objects.filter(user=bad.member).exists(),
+        )
 
     @patch('email_app.services.email_service.EmailService._send_ses')
     def test_dry_run_has_no_side_effects(self, mock_ses):

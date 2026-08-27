@@ -863,12 +863,12 @@ class Plan(TimestampedModelMixin, models.Model):
 
 
 class PlanReadyEmailLog(TimestampedModelMixin, models.Model):
-    """Durable per-plan guard for bulk plan-ready email sends.
+    """Durable per-plan guard for default plan-ready email sends.
 
-    The single-plan Share/Re-share action intentionally remains reusable.
-    This row only guards the sprint-level bulk ready-email action so browser
-    retries, double-clicks, and repeated API calls cannot create duplicate
-    successful default sends for the same plan.
+    The explicit Studio Re-share action intentionally remains reusable. This
+    row guards both the single-plan default action and the sprint-level bulk
+    action, so browser retries, double-clicks, and repeated API calls cannot
+    create duplicate successful default sends for the same plan.
     """
 
     plan = models.OneToOneField(

@@ -62,6 +62,7 @@ from plans.services import (
     eligible_move_target_sprints,
     find_carry_over_source_plan,
     move_unfinished_items_to_sprint,
+    run_plan_ready_action,
     send_plan_ready_email_for_plan,
     unfinished_plan_item_counts,
 )
@@ -523,49 +524,126 @@ def interview_note_delete(request, plan_id, note_id):
     return HttpResponseTemporaryRedirect(target)
 
 
-@staff_required
-@require_POST
-def plan_share(request, plan_id):
-    """Share / re-share a sprint plan with the member (issue #732).
+def _flash_plan_ready_outcome(request, plan, result):
+    """Flash the truthful outcome of one default ready delivery."""
+    email = plan.member.email
+    status = result['ready_email']['status']
+    if status == 'sent':
+        messages.success(
+            request,
+            f'Plan shared with {email}. The plan-ready notification and '
+            'email were sent.',
+        )
+    elif status == 'already_sent':
+        messages.info(
+            request,
+            f'Plan was already shared with {email} and the plan-ready '
+            'email was already sent. Nothing was sent again.',
+        )
+    elif status == 'already_shared':
+        messages.info(
+            request,
+            f'Plan is already shared with {email}. Nothing was sent again '
+            '— use Re-share with member to notify them another time.',
+        )
+    elif status == 'in_progress':
+        messages.info(
+            request,
+            f'A plan-ready email for {email} is already being sent. '
+            'Nothing was sent again.',
+        )
+    else:
+        messages.warning(
+            request,
+            f'The plan-ready email to {email} failed. The plan is still '
+            'not shared — you can retry Share with member.',
+        )
 
-    Stamps ``Plan.shared_at`` to ``timezone.now()`` and fires the
-    ``plan_shared`` bell + transactional email via
-    :meth:`NotificationService.create_plan_shared`.
 
-    Re-share is allowed by design — every POST creates a fresh
-    notification and a fresh email log. The template wraps the
-    re-share button in a JS ``confirm()`` prompt so a stray click
-    does not surprise-notify the member.
-
-    The save is the source of truth: even if the notification helper
-    raises (unlikely — it already swallows SES exceptions), the
-    ``shared_at`` save has already committed.
-    """
-    plan = get_object_or_404(
-        Plan.objects.select_related('member', 'sprint'),
-        pk=plan_id,
-    )
-    was_already_shared = plan.shared_at is not None
+def _reshare_plan_and_flash(request, plan):
+    """Explicit, confirmed second delivery (issue #732 semantics)."""
+    email = plan.member.email
     plan.mark_shared()
-
     try:
-        NotificationService.create_plan_shared(plan)
+        delivery = NotificationService.create_plan_shared_delivery(plan)
     except Exception:
         logger.exception(
             'Failed to fire plan_shared notification for plan %s',
             plan.pk,
         )
-
-    if was_already_shared:
-        messages.success(
-            request, f'Re-shared plan with {plan.member.email}.'
+        messages.warning(
+            request,
+            f'Re-shared plan with {email}, but the notification could not '
+            'be delivered.',
         )
+        return
+    if delivery.email_log is None:
+        messages.warning(
+            request,
+            f'Re-shared plan with {email} and created the bell '
+            'notification, but the email failed to send.',
+        )
+        return
+    messages.success(
+        request,
+        f'Re-shared plan with {email}. A new bell notification and email '
+        'were sent.',
+    )
+
+
+@staff_required
+@require_POST
+def plan_share(request, plan_id):
+    """Share / re-share a sprint plan with the member (#732, #1455).
+
+    Every POST must carry an explicit ``intent`` so a browser replay or
+    a stray click can never be reinterpreted from the plan's current
+    database state:
+
+    ``intent=ready``
+        The idempotent default delivery. Runs the shared one-plan
+        service (:func:`plans.services.run_plan_ready_action`), which
+        stamps ``shared_at`` and records the durable ``PlanReadyEmailLog``
+        only on a successful send. Replaying it after success reports
+        already-sent instead of notifying the member twice, and a plan
+        shared through the legacy path is reported rather than re-sent.
+
+    ``intent=reshare``
+        The intentional, browser-confirmed second delivery. Keeps #732
+        behavior — a fresh ``shared_at``, a fresh bell, and a fresh
+        email — but reports an email failure truthfully instead of
+        claiming unqualified success.
+
+    A missing, unknown, or state-incompatible intent performs no
+    delivery at all.
+    """
+    plan = get_object_or_404(
+        Plan.objects.select_related('member', 'sprint'),
+        pk=plan_id,
+    )
+    return_url = lifecycle_return_url(request, plan)
+    intent = (request.POST.get('intent') or '').strip()
+
+    if intent == 'ready':
+        result = run_plan_ready_action(plan, actor=request.user)
+        _flash_plan_ready_outcome(request, plan, result)
+    elif intent == 'reshare':
+        if plan.shared_at is None:
+            messages.warning(
+                request,
+                'This plan has not been shared yet, so it cannot be '
+                're-shared. Use Share with member instead.',
+            )
+        else:
+            _reshare_plan_and_flash(request, plan)
     else:
-        messages.success(
-            request, f'Plan shared with {plan.member.email}.'
+        messages.error(
+            request,
+            'Nothing was sent: the share request did not specify a valid '
+            'action.',
         )
 
-    return redirect('studio_plan_edit', plan_id=plan.pk)
+    return redirect(return_url)
 
 
 @staff_required

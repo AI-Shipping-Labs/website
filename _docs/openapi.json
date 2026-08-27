@@ -9613,6 +9613,116 @@
         ]
       }
     },
+    "/api/plans/{plan_id}/send-ready-email": {
+      "post": {
+        "description": "Staff-token-only. Default delivery for exactly the requested plan, never a sibling plan and never a whole sprint. Idempotent: a plan whose default send already succeeded returns ``already_sent`` and a plan shared through the explicit Studio Re-share path without a ready log returns ``already_shared``. Neither sends again nor moves ``shared_at``. A recorded failed attempt stays retryable. ``dry_run=true`` reports the same structured state with no Plan, PlanReadyEmailLog, Notification, or EmailLog write and no provider call. There is no force or resend option -- an intentional second notification is the confirmed Studio Re-share action. ``status`` is one of ``eligible``, ``sent``, ``already_sent``, ``already_shared``, ``failed_retryable``, ``in_progress``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "dry_run": true
+              },
+              "schema": {
+                "properties": {
+                  "dry_run": {
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "member_email": "member@example.com",
+                  "member_id": 42,
+                  "plan_id": 116,
+                  "ready_email": {
+                    "dry_run": false,
+                    "eligible": false,
+                    "error": "",
+                    "failed": false,
+                    "requested": true,
+                    "retryable": false,
+                    "sent": true,
+                    "sent_at": "2026-08-14T12:56:44+00:00",
+                    "skipped_already_sent": false,
+                    "skipped_already_shared": false,
+                    "status": "sent"
+                  },
+                  "shared_at": "2026-08-14T12:56:44+00:00",
+                  "sprint_slug": "august-2026"
+                }
+              }
+            },
+            "description": "Structured single-plan ready outcome."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_type",
+                  "error": "Body must be a JSON object"
+                }
+              }
+            },
+            "description": "Invalid JSON body or non-object JSON body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_staff_only",
+                  "error": "Plan-ready email send is staff-only"
+                }
+              }
+            },
+            "description": "Non-staff bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_plan",
+                  "error": "Plan not found"
+                }
+              }
+            },
+            "description": "Plan not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "error": "dry_run must be a boolean"
+                }
+              }
+            },
+            "description": "Invalid dry_run value."
+          }
+        },
+        "summary": "Send the plan-ready email for one plan (staff-only)",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
     "/api/plans/{plan_id}/weeks": {
       "get": {
         "parameters": [

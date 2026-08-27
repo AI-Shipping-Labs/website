@@ -31,6 +31,7 @@ INTERNAL_NOTE_SECTIONS = (
     ("Internal Action Items", "action_item"),
     ("Sources", "source"),
 )
+READY_EMAIL_PUBLIC_ERROR = "Plan-ready delivery failed; retry the same action."
 
 
 def load_env(path: Path) -> None:
@@ -281,7 +282,42 @@ def create_empty_plan(client: ApiClient, *, sprint: str, email: str) -> dict[str
     return plan
 
 
-def main() -> int:
+def send_ready_email(client: ApiClient, plan_id: int) -> dict[str, Any]:
+    """Run the idempotent one-plan ready delivery (issue #1455).
+
+    Only ever called after a successful content PATCH. The endpoint is
+    idempotent, so re-running the importer after an ambiguous client
+    outcome reports ``already_sent`` instead of notifying twice.
+    """
+    _, result = client.request(
+        f"/plans/{plan_id}/send-ready-email",
+        method="POST",
+        payload={},
+    )
+    return result
+
+
+def ready_email_report(result: dict[str, Any]) -> dict[str, Any]:
+    """Allowlist the provider-safe fields of a ready-delivery result."""
+    ready = result.get("ready_email") or {}
+    failed = ready.get("status") == "failed_retryable"
+    return {
+        "plan_id": result.get("plan_id"),
+        "member_email": result.get("member_email"),
+        "sprint_slug": result.get("sprint_slug"),
+        "shared_at": result.get("shared_at"),
+        "status": ready.get("status"),
+        "sent": ready.get("sent"),
+        "skipped_already_sent": ready.get("skipped_already_sent"),
+        "skipped_already_shared": ready.get("skipped_already_shared"),
+        "failed": ready.get("failed"),
+        "retryable": ready.get("retryable"),
+        "sent_at": ready.get("sent_at"),
+        "error": READY_EMAIL_PUBLIC_ERROR if failed else "",
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Create/update a sprint plan from a local markdown plan file.",
     )
@@ -305,6 +341,24 @@ def main() -> int:
         help="Create an empty API plan before patching when none exists.",
     )
     parser.add_argument("--dry-run", action="store_true", help="Print payload only")
+    delivery = parser.add_mutually_exclusive_group(required=True)
+    delivery.add_argument(
+        "--send-ready-email",
+        action="store_true",
+        help=(
+            "After the content PATCH succeeds, run the idempotent one-plan "
+            "ready delivery so the member is notified and the plan leaves "
+            "the preparation state."
+        ),
+    )
+    delivery.add_argument(
+        "--no-ready-email",
+        action="store_true",
+        help=(
+            "Persist plan content only. Readiness and any existing "
+            "shared_at are left exactly as they are."
+        ),
+    )
     parser.add_argument(
         "--base-url",
         default="https://aishippinglabs.com",
@@ -320,7 +374,8 @@ def main() -> int:
         default="API_SHIPPING_LABS_API_TOKEN",
         help="Environment variable name for the API token.",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    intent = "send-ready-email" if args.send_ready_email else "no-ready-email"
 
     load_env(Path(args.env_file))
     token = os.environ.get(args.token_env)
@@ -354,24 +409,59 @@ def main() -> int:
         print(json.dumps({
             "source": str(source),
             "plan_id": plan_id,
+            "ready_email_intent": intent,
+            "ready_email": {
+                "requested": False,
+                "status": "dry_run",
+                "note": (
+                    "Dry run: no plan was created, patched, shared, or "
+                    "notified."
+                ),
+            },
             "payload": payload,
         }, indent=2, ensure_ascii=False))
         return 0
 
     assert plan_id is not None
     status, updated = client.request(f"/plans/{plan_id}", method="PATCH", payload=payload)
-    print(json.dumps({
+    report = {
         "status": status,
         "id": updated["id"],
         "user_email": updated["user_email"],
         "sprint": updated["sprint"],
+        "shared_at": updated.get("shared_at"),
+        "ready_email_intent": intent,
         "weeks": len(updated.get("weeks", [])),
         "checkpoints": sum(len(w.get("checkpoints", [])) for w in updated.get("weeks", [])),
         "resources": len(updated.get("resources", [])),
         "deliverables": len(updated.get("deliverables", [])),
         "next_steps": len(updated.get("next_steps", [])),
         "interview_notes": len(updated.get("interview_notes", [])),
-    }, indent=2, ensure_ascii=False))
+    }
+
+    if not args.send_ready_email:
+        report["ready_email"] = {
+            "requested": False,
+            "status": "not_requested",
+            "note": (
+                "Content saved. No member notification was requested and "
+                "plan readiness was left unchanged."
+            ),
+        }
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        return 0
+
+    ready = send_ready_email(client, int(updated["id"]))
+    report["ready_email"] = ready_email_report(ready)
+    report["shared_at"] = ready.get("shared_at", report["shared_at"])
+    print(json.dumps(report, indent=2, ensure_ascii=False))
+    if report["ready_email"]["status"] == "failed_retryable":
+        print(
+            "Plan-ready delivery failed; the plan content is saved but the "
+            "plan remains unshared. Re-run the same command to retry.",
+            file=sys.stderr,
+        )
+        return 4
     return 0
 
 

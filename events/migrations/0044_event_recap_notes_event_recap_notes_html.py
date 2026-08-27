@@ -9,15 +9,17 @@ class Migration(migrations.Migration):
         ('events', '0043_alter_eventseries_cadence_and_more'),
     ]
 
+    # Both columns keep a database-level default so an image that predates them
+    # can still INSERT events while a rolling deploy overlaps the two versions.
     operations = [
         migrations.AddField(
             model_name='event',
             name='recap_notes',
-            field=models.TextField(blank=True, default='', help_text='Studio/API-authored recap notes for this event (Markdown). Never written by content sync.'),
+            field=models.TextField(blank=True, db_default='', default='', help_text='Studio/API-authored recap notes for this event (Markdown). Never written by content sync.'),
         ),
         migrations.AddField(
             model_name='event',
             name='recap_notes_html',
-            field=models.TextField(blank=True, default='', editable=False, help_text='Rendered HTML for recap_notes.'),
+            field=models.TextField(blank=True, db_default='', default='', editable=False, help_text='Rendered HTML for recap_notes.'),
         ),
     ]

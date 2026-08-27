@@ -9,6 +9,7 @@ from datetime import timedelta
 from django.core.management import call_command
 from django.db import close_old_connections, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
+from django.db.migrations.loader import MigrationLoader
 from django.db.models.fields import NOT_PROVIDED
 from django.test import TransactionTestCase, tag
 from django.utils import timezone
@@ -81,20 +82,36 @@ R1_EXPAND_LEAVES = (
 # old-image compatibility floor must never move with graph.leaf_nodes().
 PRODUCTION_DC075646_LEAVES = R1_EXPAND_LEAVES
 
-POST_R1_CORRECTED_LEAVES = tuple(
-    (app, "0018_questionnaire_response_audit_actions")
-    if app == "community"
-    else (app, "0056_reconcile_workshop_preview_tokens")
-    if app == "content"
-    else (app, "0021_reconcile_emaillog_subject_default")
-    if app == "email_app"
-    else (app, "0027_reconcile_synclog_observability_indexes")
-    if app == "integrations"
-    else (app, "0008_response_review_queue")
-    if app == "questionnaires"
-    else (app, migration)
-    for app, migration in PRODUCTION_DC075646_LEAVES
+# The five migrations that repaired the post-R1 drift (#1298). The corrected
+# side must still contain them; ``tests.test_r1_target_constants`` fails loudly
+# if one is ever dropped or squashed away.
+R1_CORRECTION_MIGRATIONS = (
+    ("community", "0018_questionnaire_response_audit_actions"),
+    ("content", "0056_reconcile_workshop_preview_tokens"),
+    ("email_app", "0021_reconcile_emaillog_subject_default"),
+    ("integrations", "0027_reconcile_synclog_observability_indexes"),
+    ("questionnaires", "0008_response_review_queue"),
 )
+
+
+def _current_graph_leaves():
+    """Return every leaf of the on-disk migration graph.
+
+    The three constants above are frozen literals on purpose: they are
+    old-image compatibility floors and must never move. This one is the exact
+    opposite. It is the *new* image's schema, and every test below runs the
+    current concrete models against it (``reconcile_r1_expand``, the
+    ``Current*`` model handles). Pinning it to the R1-era leaf list froze
+    ``events`` at 0042 while the real models kept moving, so the first ordinary
+    column added to a reconciled model (``events.0044`` recap notes, #1458)
+    made all four overlap tests fail on a stale target rather than on a real
+    incompatibility.
+    """
+
+    return tuple(sorted(MigrationLoader(None, ignore_no_migrations=True).graph.leaf_nodes()))
+
+
+POST_R1_CORRECTED_LEAVES = _current_graph_leaves()
 
 ORIGINAL_CB4_MIGRATION_LEAVES = tuple(
     (app, "0018_questionnaire_response_audit_actions")

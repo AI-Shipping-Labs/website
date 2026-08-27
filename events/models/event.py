@@ -398,15 +398,20 @@ class Event(
     # so "content sync never clobbers Studio notes" stays a trivially
     # checkable invariant rather than a precedence rule buried in the sync
     # pipeline. ``recap_body_html`` resolves which of the two wins.
+    # ``db_default`` (not just ``default``) so an image that predates these
+    # columns can keep inserting events during a rolling deploy: without it
+    # Django adds the column NOT NULL and then drops the database default, so
+    # the old image's INSERT (which omits the column) fails the not-null
+    # constraint. See _docs/expand-contract-releases.md.
     recap_notes = models.TextField(
-        blank=True, default='',
+        blank=True, default='', db_default='',
         help_text=(
             'Studio/API-authored recap notes for this event (Markdown). '
             'Never written by content sync.'
         ),
     )
     recap_notes_html = models.TextField(
-        blank=True, default='', editable=False,
+        blank=True, default='', db_default='', editable=False,
         help_text='Rendered HTML for recap_notes.',
     )
 

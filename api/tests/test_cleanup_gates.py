@@ -31,6 +31,7 @@ from django.utils import timezone
 from accounts.models import Token
 from api.openapi import OPENAPI_SPEC_ATTR, build_spec
 from api.urls import urlpatterns
+from comments.models import Comment
 from content.models import (
     Course,
     Module,
@@ -209,6 +210,39 @@ class CleanupGatesCountsTest(TestCase):
             status="cancelled",
         )
 
+        # --- orphaned_comment_threads: 2 old orphan UUIDs only ---
+        old_ids = [uuid.uuid4(), uuid.uuid4()]
+        for index, content_id in enumerate(old_ids):
+            comment = Comment.objects.create(
+                user=learner,
+                content_id=content_id,
+                body=f"Old orphan {index}",
+            )
+            Comment.objects.filter(pk=comment.pk).update(
+                created_at=now - timedelta(days=8 + index),
+                updated_at=now - timedelta(days=8 + index),
+            )
+        recent = Comment.objects.create(
+            user=learner,
+            content_id=uuid.uuid4(),
+            body="Recent transient UUID",
+        )
+        Comment.objects.filter(pk=recent.pk).update(
+            created_at=now - timedelta(hours=2),
+            updated_at=now - timedelta(hours=2),
+        )
+        unit_a.content_id = uuid.uuid4()
+        unit_a.save(update_fields=["content_id"])
+        owned = Comment.objects.create(
+            user=learner,
+            content_id=unit_a.content_id,
+            body="Old but owned",
+        )
+        Comment.objects.filter(pk=owned.pk).update(
+            created_at=now - timedelta(days=30),
+            updated_at=now - timedelta(days=30),
+        )
+
     def _get(self):
         response = self.client.get(
             URL, HTTP_AUTHORIZATION=f"Token {self.token.key}",
@@ -224,6 +258,7 @@ class CleanupGatesCountsTest(TestCase):
                 "null_completed_unit_progress",
                 "workshops_missing_content_id",
                 "completed_future_events",
+                "orphaned_comment_threads",
                 "generated_at",
             },
         )
@@ -234,6 +269,7 @@ class CleanupGatesCountsTest(TestCase):
             "null_completed_unit_progress",
             "workshops_missing_content_id",
             "completed_future_events",
+            "orphaned_comment_threads",
         ):
             self.assertIsInstance(body[key], int)
             self.assertGreaterEqual(body[key], 0)
@@ -260,6 +296,10 @@ class CleanupGatesCountsTest(TestCase):
         self.assertEqual(expected, 2)
         self.assertEqual(body["completed_future_events"], expected)
 
+    def test_orphaned_threads_exclude_recent_and_registered_owner_ids(self):
+        body = self._get()
+        self.assertEqual(body["orphaned_comment_threads"], 2)
+
     def test_generated_at_is_tz_aware_iso8601(self):
         from django.utils.dateparse import parse_datetime
 
@@ -274,12 +314,14 @@ class CleanupGatesCountsTest(TestCase):
             UserCourseProgress.objects.count(),
             Workshop.objects.count(),
             Event.objects.count(),
+            Comment.objects.count(),
         )
         self._get()
         counts_after = (
             UserCourseProgress.objects.count(),
             Workshop.objects.count(),
             Event.objects.count(),
+            Comment.objects.count(),
         )
         self.assertEqual(counts_before, counts_after)
 
@@ -328,6 +370,7 @@ class CleanupGatesCleanStateTest(TestCase):
         self.assertEqual(body["null_completed_unit_progress"], 0)
         self.assertEqual(body["workshops_missing_content_id"], 0)
         self.assertEqual(body["completed_future_events"], 0)
+        self.assertEqual(body["orphaned_comment_threads"], 0)
 
 
 class CleanupGatesTimezoneBoundaryTest(TestCase):
@@ -387,6 +430,7 @@ class CleanupGatesOpenApiTest(TestCase):
                 "null_completed_unit_progress",
                 "workshops_missing_content_id",
                 "completed_future_events",
+                "orphaned_comment_threads",
                 "generated_at",
             },
         )

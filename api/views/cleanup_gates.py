@@ -23,6 +23,8 @@ add one entry to ``GATE_COUNTS`` (plus the OpenAPI example below). No
 change to auth, routing, or response assembly is required.
 """
 
+from datetime import timedelta
+
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -30,6 +32,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.utils import require_methods
+from comments.threads import orphaned_thread_queryset
 from content.models import UserCourseProgress, Workshop
 from events.models import Event
 
@@ -71,12 +74,19 @@ def _count_completed_future_events():
     ).count()
 
 
+def _count_orphaned_comment_threads():
+    """Ownerless comment UUIDs whose newest row is at least seven days old."""
+    cutoff = timezone.now() - timedelta(days=7)
+    return orphaned_thread_queryset(cutoff=cutoff).count()
+
+
 # Ordered mapping of gate name -> zero-arg count callable. See the module
 # docstring for the one-line-extension contract.
 GATE_COUNTS = {
     "null_completed_unit_progress": _count_null_completed_unit_progress,
     "workshops_missing_content_id": _count_workshops_missing_content_id,
     "completed_future_events": _count_completed_future_events,
+    "orphaned_comment_threads": _count_orphaned_comment_threads,
 }
 
 
@@ -84,6 +94,7 @@ _RESPONSE_EXAMPLE = {
     "null_completed_unit_progress": 0,
     "workshops_missing_content_id": 0,
     "completed_future_events": 0,
+    "orphaned_comment_threads": 0,
     "generated_at": "2026-06-26T10:00:00+00:00",
 }
 

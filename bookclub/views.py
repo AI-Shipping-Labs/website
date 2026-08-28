@@ -52,6 +52,7 @@ from bookclub.reading import (
     viewer_reading_progress,
 )
 from bookclub.summaries import summary_excerpt, summary_paragraphs
+from comments.models import Comment
 from content.access import (
     build_gated_access_copy,
     can_access,
@@ -653,6 +654,11 @@ def chapter_detail(request, slug, number):
     own_note = (
         Note.objects.filter(user=request.user, chapter=chapter).first()
     )
+    own_note_comment_count = (
+        Comment.objects.filter(content_id=own_note.comment_content_id).count()
+        if own_note is not None
+        else 0
+    )
 
     # Group notes feed: members' notes for this chapter, newest first. #1366
     # excludes notes whose author explicitly keeps their notes private. One
@@ -682,6 +688,7 @@ def chapter_detail(request, slug, number):
     context.update({
         'viewer_read': chapter.number in read_numbers,
         'own_note': own_note,
+        'own_note_comment_count': own_note_comment_count,
         'editing': request.GET.get('edit') == '1',
         'group_notes': group_notes,
         'notes_count': len(visible_notes),

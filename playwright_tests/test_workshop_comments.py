@@ -570,4 +570,60 @@ class TestContentIsolationAcrossSurfaces:
         assert 'WORKSHOP_QUESTION_FINGERPRINT' in body
         assert 'UNIT_QUESTION_FINGERPRINT' not in body
 
+        # A sync-style row rebuild reuses the stable UUIDs. Registry-only
+        # owners must keep both Q&A rows and their mapped notifications.
+        from comments.models import Comment
+        from content.models import Unit, WorkshopPage
+        from notifications.models import Notification
+
+        unit_content_id = unit.content_id
+        page_content_id = intro_page.content_id
+        unit_notice = Notification.objects.create(
+            user=author,
+            title='Unit Q&A notification survives rebuild',
+            notification_type='content_comment',
+            thread_content_id=unit_content_id,
+        )
+        page_notice = Notification.objects.create(
+            user=author,
+            title='Workshop Q&A notification survives rebuild',
+            notification_type='content_comment',
+            thread_content_id=page_content_id,
+        )
+        unit.delete()
+        intro_page.delete()
+        Unit.objects.create(
+            module=unit.module,
+            title=unit.title,
+            slug=unit.slug,
+            sort_order=unit.sort_order,
+            is_preview=True,
+            content_id=unit_content_id,
+            body=unit.body,
+        )
+        WorkshopPage.objects.create(
+            workshop=intro_page.workshop,
+            slug=intro_page.slug,
+            title=intro_page.title,
+            sort_order=intro_page.sort_order,
+            body=intro_page.body,
+            content_id=page_content_id,
+        )
+        assert Comment.objects.filter(content_id=unit_content_id).exists()
+        assert Comment.objects.filter(content_id=page_content_id).exists()
+        assert Notification.objects.filter(pk=unit_notice.pk).exists()
+        assert Notification.objects.filter(pk=page_notice.pk).exists()
+        connection.close()
+
+        page.goto(
+            f'{django_server}/courses/c-iso/m-iso/u-iso',
+            wait_until='networkidle',
+        )
+        assert 'UNIT_QUESTION_FINGERPRINT' in page.content()
+        page.goto(
+            f'{django_server}/workshops/ws-iso/tutorial/intro',
+            wait_until='networkidle',
+        )
+        assert 'WORKSHOP_QUESTION_FINGERPRINT' in page.content()
+
         ctx.close()

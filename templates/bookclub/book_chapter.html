@@ -104,6 +104,9 @@
               <textarea name="body" rows="5" placeholder="Write your takeaway… Markdown supported."
                         class="w-full rounded-md border border-border bg-background px-4 py-2 text-base text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="own-note-body">{% if editing %}{{ own_note.body }}{% endif %}</textarea>
               <p class="mt-2 text-xs text-muted-foreground">Markdown supported. Fence a code block with <code class="rounded bg-muted px-1 py-0.5 font-mono">```</code>; use <code class="rounded bg-muted px-1 py-0.5 font-mono">```mermaid</code> to render a diagram.</p>
+              {% if editing and own_note_comment_count %}
+              <p class="mt-2 text-xs text-muted-foreground" data-testid="own-note-clear-warning">Clearing this note also deletes the {{ own_note_comment_count }} comment{{ own_note_comment_count|pluralize }} on it.</p>
+              {% endif %}
               <button type="submit" class="{% button_classes 'primary' extra='mt-4' %}" data-testid="own-note-post">Post note</button>
             </form>
             <p class="mt-6 text-xs text-muted-foreground" data-testid="own-note-api-hint">

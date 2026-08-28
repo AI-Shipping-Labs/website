@@ -3,7 +3,9 @@
 from datetime import date
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase, tag
+from django.test.utils import CaptureQueriesContext
 
 from bookclub.models import (
     READER_VISIBILITY_PRIVATE,
@@ -13,7 +15,10 @@ from bookclub.models import (
     Note,
     ReaderProfile,
 )
+from comments.models import Comment, CommentVote
 from content.access import LEVEL_MAIN
+from notifications.models import Notification
+from notifications.services.notification_service import content_comment_urls
 from payments.models import Tier
 
 User = get_user_model()
@@ -158,6 +163,50 @@ class ChapterNoteWriteTest(ChapterDetailFixture):
             Note.objects.filter(user=self.main_user, chapter=self.ch0).count(), 0,
         )
 
+    def test_empty_body_deletes_thread_vote_notice_and_closes_old_api_ids(self):
+        note = Note.objects.create(
+            user=self.main_user,
+            chapter=self.ch0,
+            body='A note with discussion',
+        )
+        content_id = note.comment_content_id
+        comment = Comment.objects.create(
+            content_id=content_id,
+            user=self.other_main,
+            body='A reply from another reader',
+        )
+        vote = CommentVote.objects.create(comment=comment, user=self.main_user)
+        notification = Notification.objects.create(
+            user=self.main_user,
+            title='New comment on your note',
+            url=content_comment_urls(note)[0],
+            notification_type='content_comment',
+            thread_content_id=content_id,
+        )
+
+        self.client.force_login(self.main_user)
+        response = self.client.post(self._url(0) + '/note', {'body': '   '})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Note.objects.filter(pk=note.pk).exists())
+        self.assertFalse(Comment.objects.filter(pk=comment.pk).exists())
+        self.assertFalse(CommentVote.objects.filter(pk=vote.pk).exists())
+        self.assertFalse(Notification.objects.filter(pk=notification.pk).exists())
+
+        self.client.logout()
+        listed = self.client.get(f'/api/comments/{content_id}')
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json(), {'comments': []})
+
+        self.client.force_login(self.free_user)
+        replied = self.client.post(
+            f'/api/comments/{comment.pk}/reply',
+            data='{"body":"Back door"}',
+            content_type='application/json',
+        )
+        self.assertEqual(replied.status_code, 404)
+        self.assertEqual(replied.json(), {'error': 'Comment not found'})
+
     def test_note_write_redirects_back_to_chapter(self):
         self.client.force_login(self.main_user)
         response = self.client.post(self._url(0) + '/note', {'body': 'x'})
@@ -216,6 +265,70 @@ class ChapterNoteWriteTest(ChapterDetailFixture):
         response = self.client.post(self._url(0) + '/note', {'body': 'x'})
         self.assertEqual(response.status_code, 403)
         self.assertEqual(Note.objects.count(), 0)
+
+
+class ChapterNoteClearWarningTest(ChapterDetailFixture):
+    def test_editing_warns_only_when_the_own_note_has_comments(self):
+        note = Note.objects.create(
+            user=self.main_user,
+            chapter=self.ch0,
+            body='Discussed note',
+        )
+        for index in range(2):
+            Comment.objects.create(
+                content_id=note.comment_content_id,
+                user=self.other_main,
+                body=f'Comment {index}',
+            )
+        Note.objects.create(
+            user=self.main_user,
+            chapter=self.ch1,
+            body='Quiet note',
+        )
+        self.client.force_login(self.main_user)
+
+        written = self.client.get(self._url(0))
+        self.assertNotContains(written, 'own-note-clear-warning')
+
+        editing = self.client.get(self._url(0) + '?edit=1')
+        self.assertContains(editing, 'data-testid="own-note-clear-warning"')
+        self.assertContains(
+            editing,
+            'Clearing this note also deletes the 2 comments on it.',
+        )
+
+        quiet = self.client.get(self._url(1) + '?edit=1')
+        self.assertNotContains(quiet, 'own-note-clear-warning')
+        self.assertNotContains(quiet, 'Clearing this note also deletes')
+
+    def test_comment_count_adds_one_query_only_when_an_own_note_exists(self):
+        self.client.force_login(self.main_user)
+
+        with CaptureQueriesContext(connection) as without_note:
+            response = self.client.get(self._url(0))
+        self.assertEqual(response.status_code, 200)
+        without_count_queries = [
+            query['sql']
+            for query in without_note
+            if 'comments_comment' in query['sql'].lower()
+        ]
+        self.assertEqual(without_count_queries, [])
+
+        Note.objects.create(
+            user=self.main_user,
+            chapter=self.ch0,
+            body='Count this thread',
+        )
+        with CaptureQueriesContext(connection) as with_note:
+            response = self.client.get(self._url(0))
+        self.assertEqual(response.status_code, 200)
+        with_count_queries = [
+            query['sql']
+            for query in with_note
+            if 'comments_comment' in query['sql'].lower()
+        ]
+        self.assertEqual(len(with_count_queries), 1, with_count_queries)
+        self.assertIn('COUNT(', with_count_queries[0].upper())
 
 
 class ChapterGroupFeedTest(ChapterDetailFixture):

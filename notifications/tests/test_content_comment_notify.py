@@ -97,6 +97,7 @@ class ContentCommentNotifyTest(TestCase):
         self.assertEqual(
             note.url, '/courses/ml-zoomcamp/module-1/intro#qa-section',
         )
+        self.assertEqual(note.thread_content_id, self.unit.content_id)
 
     def test_reply_on_workshop_page_uses_reply_title(self):
         top = self._comment(self.page.content_id, body='First question')
@@ -106,6 +107,7 @@ class ContentCommentNotifyTest(TestCase):
         self.assertEqual(note.user, self.author)
         self.assertEqual(note.title, 'New reply on Setup')
         self.assertTrue(note.url.endswith('/tutorial/setup#qa-section'))
+        self.assertEqual(note.thread_content_id, self.page.content_id)
 
     def test_reply_notifies_parent_author_and_linked_content_author(self):
         top = self._comment(
@@ -122,6 +124,10 @@ class ContentCommentNotifyTest(TestCase):
         self.assertEqual(
             set(notes.values_list('user_id', flat=True)),
             {self.author.pk, self.asker.pk},
+        )
+        self.assertEqual(
+            set(notes.values_list('thread_content_id', flat=True)),
+            {self.unit.content_id},
         )
         direct_reply = notes.get(user=self.asker)
         self.assertEqual(direct_reply.title, 'New reply to your comment')
@@ -336,6 +342,7 @@ class ContentCommentPlanNotifyTest(TestCase):
             notification_type='content_comment',
         )
         self.assertEqual(note.title, 'New comment on your plan')
+        self.assertEqual(note.thread_content_id, self.plan.comment_content_id)
         self.assertEqual(
             note.url,
             reverse(
@@ -392,6 +399,10 @@ class ContentCommentPlanNotifyTest(TestCase):
         self.assertEqual(
             set(notes.values_list('user_id', flat=True)),
             {self.owner.pk, self.teammate.pk},
+        )
+        self.assertEqual(
+            set(notes.values_list('thread_content_id', flat=True)),
+            {self.plan.comment_content_id},
         )
         self.assertEqual(
             notes.get(user=self.teammate).url,
@@ -547,6 +558,10 @@ class ContentCommentBookNoteNotifyTest(TestCase):
         self.assertEqual(
             set(notes.values_list('url', flat=True)),
             {expected_url},
+        )
+        self.assertEqual(
+            set(notes.values_list('thread_content_id', flat=True)),
+            {self.note.comment_content_id},
         )
         self.assertEqual(
             notes.get(user=self.note_owner).title,

@@ -13,15 +13,18 @@ auth (401 unauth + non-staff).
 """
 
 import json
+from datetime import date
 from unittest import mock
 
 from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 
 from accounts.models import EmailAlias, TierOverride, Token
 from analytics.models import UserAttribution
+from bookclub.models import Book, Chapter, Note
+from comments.models import Comment
 from community.models import CommunityAuditLog
 from content.models import Course, Enrollment
 from crm.models import CRMRecord
@@ -448,6 +451,51 @@ class ReaderProfileO2OTest(UserMergeTestBase):
             ReaderProfile.objects.get(user=canonical).visibility, "private",
         )
         self.assertFalse(ReaderProfile.objects.filter(user=secondary).exists())
+
+
+@tag("core")
+class BookNoteCollisionThreadTest(UserMergeTestBase):
+    def test_dropped_secondary_note_thread_is_deleted_and_canonical_survives(self):
+        canonical, secondary = self._make_pair()
+        commenter = User.objects.create_user(email="commenter@test.com")
+        book = Book.objects.create(
+            title="Merge Book",
+            slug="merge-book",
+            author="Author",
+            status="current",
+            start_date=date(2026, 8, 1),
+        )
+        chapter = Chapter.objects.create(book=book, number=1, title="One")
+        canonical_note = Note.objects.create(
+            user=canonical,
+            chapter=chapter,
+            body="Keep this note",
+        )
+        dropped_note = Note.objects.create(
+            user=secondary,
+            chapter=chapter,
+            body="Drop this duplicate",
+        )
+        kept_comment = Comment.objects.create(
+            user=commenter,
+            content_id=canonical_note.comment_content_id,
+            body="Keep this thread",
+        )
+        dropped_comment = Comment.objects.create(
+            user=commenter,
+            content_id=dropped_note.comment_content_id,
+            body="Drop this thread",
+        )
+
+        response = self._post(
+            {"canonical_email": "keep@test.com", "merge_email": "dupe@test.com"}
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(Note.objects.filter(pk=canonical_note.pk).exists())
+        self.assertFalse(Note.objects.filter(pk=dropped_note.pk).exists())
+        self.assertTrue(Comment.objects.filter(pk=kept_comment.pk).exists())
+        self.assertFalse(Comment.objects.filter(pk=dropped_comment.pk).exists())
 
 
 class TierOverrideReconcileTest(UserMergeTestBase):

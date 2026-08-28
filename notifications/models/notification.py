@@ -62,6 +62,12 @@ class Notification(models.Model):
         choices=NOTIFICATION_TYPE_CHOICES,
         default='new_content',
     )
+    thread_content_id = models.UUIDField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Exact comment-thread UUID for content-comment notifications.',
+    )
     read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 

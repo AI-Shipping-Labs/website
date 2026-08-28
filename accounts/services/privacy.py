@@ -311,12 +311,14 @@ def delete_account_for_privacy(user, request_context=None):
         summary = _empty_summary()
         _delete_user_sessions(user, summary)
         _erase_local_slack_threads(user, summary)
+        _erase_owned_comment_threads(user, summary)
         _anonymize_member_projects(user, summary)
         _detach_payment_diagnostics(user, summary, email)
         _scrub_matching_webhook_payloads(identifiers, summary)
 
         _, deleted_counts = user.delete()
-        summary["erased"].update({key: value for key, value in sorted(deleted_counts.items()) if value})
+        for key, value in sorted(deleted_counts.items()):
+            _increment(summary, "erased", key, value)
 
         log = _create_privacy_log(
             user=None,
@@ -1517,6 +1519,58 @@ def _delete_user_sessions(user, summary):
             session.delete()
             deleted += 1
     _increment(summary, "erased", "sessions", deleted)
+
+
+def _erase_owned_comment_threads(user, summary):
+    """Delete ephemeral threads before their owner UUIDs cascade away."""
+    comment_model = _model("comments", "Comment")
+    if comment_model is None:
+        return
+
+    from comments.threads import delete_thread, thread_owners
+
+    owned_thread_count = 0
+    other_member_comment_count = 0
+    own_comment_count = 0
+    notification_count = 0
+    seen_content_ids = set()
+
+    for owner in thread_owners():
+        if not owner.cascade_thread_delete or owner.user_field is None:
+            continue
+        model = _model(owner.app_label, owner.model_name)
+        if model is None:
+            continue
+        instances = model.objects.filter(**{owner.user_field: user})
+        for instance in instances:
+            content_id = getattr(instance, owner.content_id_field)
+            if content_id in seen_content_ids:
+                continue
+            seen_content_ids.add(content_id)
+            comments = comment_model.objects.filter(content_id=content_id)
+            other_member_comment_count += comments.exclude(user=user).count()
+            own_comment_count += comments.filter(user=user).count()
+            deleted = delete_thread(instance, content_id)
+            notification_count += deleted["notifications"]
+            owned_thread_count += 1
+
+    _increment(summary, "erased", "owned_comment_threads", owned_thread_count)
+    _increment(
+        summary,
+        "erased",
+        "thread_comments_from_other_members",
+        other_member_comment_count,
+    )
+    _increment(
+        summary,
+        "erased",
+        "thread_comment_notifications",
+        notification_count,
+    )
+    # These rows would ordinarily be counted by ``user.delete()``. The
+    # pre-pass must remove the whole owned thread first, so preserve their
+    # established model-key accounting before that cascade runs.
+    _increment(summary, "erased", "comments.Comment", own_comment_count)
 
 
 def _erase_local_slack_threads(user, summary):

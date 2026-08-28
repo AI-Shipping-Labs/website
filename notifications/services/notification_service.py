@@ -362,33 +362,53 @@ def _direct_reply_user_can_read(content, user):
     return True
 
 
-def _content_comment_url(content, recipient):
-    """Return the existing thread URL appropriate for ``recipient``."""
+def content_comment_urls(content):
+    """Return every deep-link URL a content-comment notice can receive."""
     from bookclub.models import Note
     from plans.models import Plan
 
     if isinstance(content, Note):
-        return f'{content.get_absolute_url()}#qa-section-{content.pk}'
+        return (f'{content.get_absolute_url()}#qa-section-{content.pk}',)
     if isinstance(content, Plan):
         from django.urls import reverse  # noqa: PLC0415
 
+        return (
+            reverse(
+                'my_plan_detail',
+                kwargs={
+                    'sprint_slug': content.sprint.slug,
+                    'plan_id': content.pk,
+                },
+            ) + '#qa-section',
+            reverse(
+                'member_plan_detail',
+                kwargs={
+                    'sprint_slug': content.sprint.slug,
+                    'plan_id': content.pk,
+                },
+            ) + '#qa-section',
+            reverse(
+                'studio_plan_detail',
+                kwargs={'plan_id': content.pk},
+            ) + '#qa-section',
+        )
+    if hasattr(content, 'get_absolute_url'):
+        return (content.get_absolute_url() + '#qa-section',)
+    return ()
+
+
+def _content_comment_url(content, recipient):
+    """Return the existing thread URL appropriate for ``recipient``."""
+    from plans.models import Plan
+
+    urls = content_comment_urls(content)
+    if isinstance(content, Plan):
         if recipient.pk == content.member_id:
-            route = 'my_plan_detail'
-            kwargs = {
-                'sprint_slug': content.sprint.slug,
-                'plan_id': content.pk,
-            }
-        elif recipient.is_staff:
-            route = 'studio_plan_detail'
-            kwargs = {'plan_id': content.pk}
-        else:
-            route = 'member_plan_detail'
-            kwargs = {
-                'sprint_slug': content.sprint.slug,
-                'plan_id': content.pk,
-            }
-        return reverse(route, kwargs=kwargs) + '#qa-section'
-    return content.get_absolute_url() + '#qa-section'
+            return urls[0]
+        if recipient.is_staff:
+            return urls[2]
+        return urls[1]
+    return urls[0] if urls else ''
 
 
 class NotificationService:
@@ -601,6 +621,7 @@ class NotificationService:
                 body=body,
                 url=_content_comment_url(content, recipient),
                 notification_type='content_comment',
+                thread_content_id=comment.content_id,
             )
             for recipient_id, recipient in recipients.items()
         ]

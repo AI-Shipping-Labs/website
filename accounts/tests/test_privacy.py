@@ -26,6 +26,7 @@ from accounts.services.privacy import (
 from analytics.models import UserActivity
 from bookclub.models import Book, Chapter, ChapterRead, Note, ReaderProfile
 from comments.models import Comment
+from comments.threads import delete_thread
 from community.models import UnmatchedBookedCall
 from content.models import (
     Course,
@@ -44,6 +45,7 @@ from email_app.models import EmailLog
 from events.models import Event, EventRegistration
 from integrations.models import WebhookLog
 from notifications.models import Notification
+from notifications.services.notification_service import content_comment_urls
 from payments.models import (
     ConversionAttribution,
     PaymentAccountMismatch,
@@ -1030,6 +1032,91 @@ class PrivacyDeletionGuardTest(TierSetupMixin, TestCase):
             old_user_id=old_user_id,
             row_count_summary={},
         )
+
+
+@tag("core")
+class PrivacyOwnedCommentThreadErasureTest(TestCase):
+    @patch("accounts.services.privacy.notify_privacy_staff")
+    def test_owned_threads_are_pre_erased_counted_and_receiver_stays_idempotent(
+        self,
+        _notify,
+    ):
+        owner = User.objects.create_user(email="thread-owner@test.com")
+        other = User.objects.create_user(email="thread-other@test.com")
+        book = Book.objects.create(
+            title="Privacy Threads",
+            slug="privacy-threads",
+            author="Author",
+            status="current",
+            start_date=date(2026, 8, 1),
+        )
+        chapter = Chapter.objects.create(book=book, number=1, title="One")
+        note = Note.objects.create(chapter=chapter, user=owner, body="Erase")
+        plan = Plan.objects.create(
+            member=owner,
+            sprint=_sprint("privacy-thread-sprint"),
+            goal="Erase",
+        )
+        content_ids = [note.comment_content_id, plan.comment_content_id]
+
+        Comment.objects.create(
+            user=owner,
+            content_id=note.comment_content_id,
+            body="Owner-authored row",
+        )
+        for index in range(2):
+            Comment.objects.create(
+                user=other,
+                content_id=note.comment_content_id,
+                body=f"Other note row {index}",
+            )
+        Comment.objects.create(
+            user=other,
+            content_id=plan.comment_content_id,
+            body="Other plan row",
+        )
+        for url, content_id in (
+            (content_comment_urls(note)[0], note.comment_content_id),
+            (content_comment_urls(plan)[1], plan.comment_content_id),
+        ):
+            Notification.objects.create(
+                user=other,
+                title="Thread notice",
+                url=url,
+                notification_type="content_comment",
+                thread_content_id=content_id,
+            )
+        legacy = Notification.objects.create(
+            user=other,
+            title="Legacy same note URL",
+            url=content_comment_urls(note)[0],
+            notification_type="content_comment",
+        )
+        unrelated = Notification.objects.create(
+            user=other,
+            title="Keep",
+            url="/keep#qa-section",
+            notification_type="content_comment",
+            thread_content_id=uuid.uuid4(),
+        )
+
+        with patch("comments.threads.delete_thread", wraps=delete_thread) as erased:
+            result = delete_account_for_privacy(owner)
+
+        self.assertTrue(result.success)
+        self.assertFalse(Comment.objects.filter(content_id__in=content_ids).exists())
+        self.assertTrue(Notification.objects.filter(pk=legacy.pk).exists())
+        self.assertTrue(Notification.objects.filter(pk=unrelated.pk).exists())
+        summary = result.row_count_summary["erased"]
+        self.assertEqual(summary["owned_comment_threads"], 2)
+        self.assertEqual(summary["thread_comments_from_other_members"], 3)
+        self.assertEqual(summary["thread_comment_notifications"], 2)
+        self.assertEqual(summary["comments.Comment"], 1)
+        # Two privacy pre-pass calls plus the deliberately redundant Note/Plan
+        # post_delete receiver calls during the subsequent user cascade.
+        self.assertEqual(erased.call_count, 4)
+        log = PrivacyRequestLog.objects.get(request_type="delete")
+        self.assertEqual(log.row_count_summary, result.row_count_summary)
 
 
 @tag("core")

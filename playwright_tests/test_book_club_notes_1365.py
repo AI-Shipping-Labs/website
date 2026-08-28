@@ -25,6 +25,7 @@ Usage:
 
 import datetime
 import os
+import uuid
 
 import pytest
 
@@ -96,6 +97,34 @@ def _set_visibility(email, visibility):
     connection.close()
 
 
+def _seed_preserved_notifications(email, thread_content_id):
+    """Add unrelated and unmappable bell rows beside the mapped notice."""
+    from accounts.models import User
+    from notifications.models import Notification
+
+    user = User.objects.get(email=email)
+    mapped = Notification.objects.get(
+        user=user,
+        notification_type='content_comment',
+        thread_content_id=thread_content_id,
+    )
+    legacy = Notification.objects.create(
+        user=user,
+        title='Legacy comment notification stays',
+        url=mapped.url,
+        notification_type='content_comment',
+    )
+    unrelated = Notification.objects.create(
+        user=user,
+        title='Unrelated comment notification stays',
+        url='/notifications',
+        notification_type='content_comment',
+        thread_content_id=uuid.uuid4(),
+    )
+    connection.close()
+    return legacy.title, unrelated.title
+
+
 @pytest.mark.django_db(transaction=True)
 class TestChapterNoteFlow:
     def test_member_writes_note_and_edits_in_place(self, django_server, browser):
@@ -151,10 +180,15 @@ class TestChapterNoteFlow:
         _create_book()
         _create_user("author@test.com", tier_slug="main")
         _create_user("reader@test.com", tier_slug="main")
+        _create_user("free@test.com", tier_slug="free")
         # No ReaderProfile row: notes are public by default (#1457).
-        _create_note(
+        content_id = _create_note(
             "author@test.com", "inference-engineering", 0,
             "Speculative decoding is underrated.",
+        )
+        _create_note(
+            "author@test.com", "inference-engineering", 1,
+            "A quiet note with no discussion.",
         )
 
         # Reader opens the chapter and comments on the author's note.
@@ -177,8 +211,17 @@ class TestChapterNoteFlow:
                 " && document.querySelector('.qa-thread .qa-list').textContent"
                 ".includes('Totally agree')"
             )
+            comment_id = int(
+                note_card.locator('[data-comment-id]').first.get_attribute(
+                    'data-comment-id',
+                )
+            )
         finally:
             reader_ctx.close()
+
+        legacy_title, unrelated_title = _seed_preserved_notifications(
+            'author@test.com', content_id,
+        )
 
         # The note author gets a bell notification about their note.
         author_ctx = _auth_context(browser, "author@test.com")
@@ -187,9 +230,112 @@ class TestChapterNoteFlow:
             page.goto(
                 f"{django_server}/notifications", wait_until="domcontentloaded",
             )
-            assert "your note" in page.content().lower()
+            notifications_html = page.content()
+            assert "your note" in notifications_html.lower()
+            assert legacy_title in notifications_html
+            assert unrelated_title in notifications_html
+
+            page.goto(
+                f"{django_server}/books/inference-engineering/chapters/0",
+                wait_until="domcontentloaded",
+            )
+            page.locator('[data-testid="own-note-edit"]').click()
+            warning = page.locator('[data-testid="own-note-clear-warning"]')
+            warning.wait_for(state='visible')
+            assert warning.inner_text() == (
+                'Clearing this note also deletes the 1 comment on it.'
+            )
+
+            page.goto(
+                f"{django_server}/books/inference-engineering/chapters/1?edit=1",
+                wait_until="domcontentloaded",
+            )
+            assert page.locator(
+                '[data-testid="own-note-clear-warning"]',
+            ).count() == 0
+
+            page.goto(
+                f"{django_server}/books/inference-engineering/chapters/0?edit=1",
+                wait_until="domcontentloaded",
+            )
+            page.locator('[data-testid="own-note-body"]').fill('')
+            page.locator('[data-testid="own-note-post"]').click()
+            page.wait_for_load_state('domcontentloaded')
+            assert page.locator('[data-testid="own-note-composer"]').is_visible()
+            assert 'Totally agree' not in page.content()
+
+            erased = page.request.get(
+                f"{django_server}/api/comments/{content_id}",
+            )
+            assert erased.status == 200
+            assert erased.json() == {'comments': []}
+
+            page.goto(
+                f"{django_server}/notifications", wait_until="domcontentloaded",
+            )
+            notifications_html = page.content()
+            assert "your note" not in notifications_html.lower()
+            assert legacy_title in notifications_html
+            assert unrelated_title in notifications_html
         finally:
             author_ctx.close()
+
+        anonymous_ctx = browser.new_context()
+        try:
+            erased = anonymous_ctx.request.get(
+                f"{django_server}/api/comments/{content_id}",
+            )
+            assert erased.status == 200
+            assert erased.json() == {'comments': []}
+        finally:
+            anonymous_ctx.close()
+
+        free_ctx = _auth_context(browser, "free@test.com")
+        try:
+            page = free_ctx.new_page()
+            page.goto(f'{django_server}/', wait_until='domcontentloaded')
+            reply_status = page.evaluate(
+                """async ({url, commentId}) => {
+                    const csrf = document.cookie
+                        .split('; ')
+                        .find(row => row.startsWith('csrftoken='))
+                        ?.split('=')[1] || '';
+                    const response = await fetch(
+                        `${url}/api/comments/${commentId}/reply`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': csrf,
+                            },
+                            body: JSON.stringify({body: 'Back door'}),
+                        },
+                    );
+                    return response.status;
+                }""",
+                {'url': django_server, 'commentId': comment_id},
+            )
+            assert reply_status == 404
+            vote_status = page.evaluate(
+                """async ({url, commentId}) => {
+                    const csrf = document.cookie
+                        .split('; ')
+                        .find(row => row.startsWith('csrftoken='))
+                        ?.split('=')[1] || '';
+                    const response = await fetch(
+                        `${url}/api/comments/${commentId}/vote`,
+                        {
+                            method: 'POST',
+                            headers: {'X-CSRFToken': csrf},
+                        },
+                    );
+                    return response.status;
+                }""",
+                {'url': django_server, 'commentId': comment_id},
+            )
+            assert vote_status == 404
+        finally:
+            free_ctx.close()
 
         # An explicit private setting still hides the author's note from the
         # other member, while the default-public assertion above remains in

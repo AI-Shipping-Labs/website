@@ -15,6 +15,7 @@ SKILL_PATH = SKILL_DIR / "SKILL.md"
 SKILL_README_PATH = SKILL_DIR / "README.md"
 PLANS_SKILL_PATH = SKILL_DIR / "plans.md"
 BOOKS_SKILL_PATH = SKILL_DIR / "books.md"
+EVENTS_SKILL_PATH = SKILL_DIR / "events.md"
 
 
 @tag("core")
@@ -42,6 +43,10 @@ class MemberApiUsageDocsArtifactTest(TestCase):
             "share plans",
             "edit narrative fields",
             "cohort teammates' plans",
+            "/member-api/v1/events/{event_id}",
+            "Every active member key can use every deployed member endpoint",
+            "attendee_count",
+            "never return a roster",
         ]
         for needle in required:
             with self.subTest(needle=needle):
@@ -50,6 +55,15 @@ class MemberApiUsageDocsArtifactTest(TestCase):
         self.assertNotIn("Bearer", text)
         self.assertNotIn("/api/plans", text)
         self.assertNotIn("/studio/", text)
+        for internal_name in (
+            "plans:read",
+            "plans:write",
+            "books:read",
+            "books:write_notes",
+            "insufficient_scope",
+            "under-scoped",
+        ):
+            self.assertNotIn(internal_name, text)
 
     def test_downloadable_skill_catalog_is_present_and_safe(self):
         # The top-level SKILL.md is the catalog: shared auth + key setup, the
@@ -64,6 +78,8 @@ class MemberApiUsageDocsArtifactTest(TestCase):
         # Catalog points at every family.
         self.assertIn("plans.md", text)
         self.assertIn("books.md", text)
+        self.assertIn("events.md", text)
+        self.assertIn("Every active key has the same deployed", text)
         # Shared safe-surface rules live in the catalog.
         self.assertIn("Do not call `/api/`, `/studio/`, Django admin", text)
         self.assertIn("CRM notes", text)
@@ -72,6 +88,20 @@ class MemberApiUsageDocsArtifactTest(TestCase):
         self.assertIn("other members' data", text)
         self.assertIn("PRs against `skills/ai-shipping-labs-member-api/`", text)
         self.assertNotIn("Bearer", text)
+        self.assertIsNone(re.search(r"asl_member_[A-Za-z0-9]{16,}", text))
+
+    def test_events_family_skill_is_present_and_safe(self):
+        self.assertTrue(EVENTS_SKILL_PATH.exists())
+        text = EVENTS_SKILL_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("GET  /member-api/v1/events/{event_id}", text)
+        self.assertIn("POST /member-api/v1/events/{event_id}/register", text)
+        self.assertIn("whole series", text)
+        self.assertIn("never include a", text.lower())
+        self.assertIn("attendee_count", text)
+        self.assertNotIn("events:read", text)
+        self.assertNotIn("events:register", text)
+        self.assertNotIn("under-scoped", text)
         self.assertIsNone(re.search(r"asl_member_[A-Za-z0-9]{16,}", text))
 
     def test_plans_family_skill_is_present_and_safe(self):

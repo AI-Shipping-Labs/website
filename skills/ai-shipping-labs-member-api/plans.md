@@ -169,7 +169,7 @@ Tell the user exactly what changed and what was verified. Do not expose the key.
 - Use `PUT /weeks/{week_id}/note` to create or replace a week note.
 - Use `PATCH /progress` only for checkbox/done state.
 - Keep retries narrow. If a request fails, fix that payload and retry; do not rerun the whole update blindly.
-- Treat `401` as a missing, revoked, or under-scoped key.
+- Treat `401` as a missing, malformed, or revoked key.
 - Treat `404` as inaccessible or nonexistent for this key.
 - Treat `422` as a validation error in the payload.
 

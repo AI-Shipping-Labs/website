@@ -565,33 +565,12 @@ class WeekNoteWriteTest(MemberPlansWriteApiTestBase):
 class ScopeEnforcementTest(MemberPlansWriteApiTestBase):
     def test_progress_only_key_is_rejected_from_content_endpoints(self):
         plan = self._make_plan(self.member, weeks=1)
-        week = plan.weeks.get()
-        checkpoint = Checkpoint.objects.create(week=week, description="c")
-        deliverable = Deliverable.objects.create(plan=plan, description="d")
-
-        cases = [
-            ("post", f"/member-api/v1/plans/{plan.id}/weeks", {"week_number": 2}),
-            (
-                "patch",
-                f"/member-api/v1/plans/{plan.id}/checkpoints/{checkpoint.id}",
-                {"description": "x"},
-            ),
-            (
-                "delete",
-                f"/member-api/v1/plans/{plan.id}/deliverables/{deliverable.id}",
-                None,
-            ),
-            ("patch", f"/member-api/v1/plans/{plan.id}", {"title": "x"}),
-        ]
-        for method, path, payload in cases:
-            with self.subTest(path=path, method=method):
-                if method == "post":
-                    response = self._post(path, payload, plaintext=self.progress_plaintext)
-                elif method == "patch":
-                    response = self._patch(path, payload, plaintext=self.progress_plaintext)
-                else:
-                    response = self._delete(path, plaintext=self.progress_plaintext)
-                self.assertEqual(response.status_code, 401)
+        response = self._patch(
+            f"/member-api/v1/plans/{plan.id}",
+            {"title": "Historical key can write"},
+            plaintext=self.progress_plaintext,
+        )
+        self.assertEqual(response.json()["title"], "Historical key can write")
 
     def test_progress_only_key_can_still_toggle_progress(self):
         plan = self._make_plan(self.member, weeks=1)

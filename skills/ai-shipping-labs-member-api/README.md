@@ -6,7 +6,7 @@ member-owned API key.
 
 `SKILL.md` is the catalog: it holds the shared auth and key setup and points to
 one reference doc per API family. Load the catalog first, then read the family
-that matches the task (`plans.md` / `books.md` are supporting material, not
+that matches the task (`plans.md`, `books.md`, and `events.md` are supporting material, not
 standalone skills):
 
 - `plans.md` — the member Plans API: list, fetch, download, and edit the
@@ -15,6 +15,8 @@ standalone skills):
 - `books.md` — the member Book Club API: per-chapter read state, the
   member's own chapter notes, reading progress for a book, and the reader
   profile.
+- `events.md` — accessible event discovery, detail, and self-registration,
+  including whole-series registration behavior.
 
 For the full API endpoint surface and request shapes across every family, use
 the member API docs:

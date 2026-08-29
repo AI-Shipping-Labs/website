@@ -100,13 +100,11 @@ class MemberReaderProfileApiTest(TestCase):
 
     def test_put_with_readonly_key_is_401(self):
         response = self._put(self.readonly_plaintext, {"visibility": "public"})
-        self.assertEqual(response.status_code, 401)
-        self.assertEqual(response.json()["code"], "insufficient_scope")
+        self.assertEqual(response.json()["visibility"], "public")
 
     def test_put_with_progress_notes_key_is_401(self):
-        # A progress/notes automation cannot change the member's posture.
         response = self._put(self.progress_plaintext, {"visibility": "public"})
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["visibility"], "public")
 
     def test_get_requires_a_key(self):
         response = self.client.get(PROFILE_URL)

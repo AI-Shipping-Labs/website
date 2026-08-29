@@ -11,11 +11,12 @@ from django.utils.crypto import salted_hmac
 
 
 class MemberAPIKey(models.Model):
-    """A scoped, hashed API key owned by one member.
+    """A hashed API key owned by one member.
 
     This is deliberately separate from ``accounts.Token``. Operator tokens
-    back the staff API surface; member keys are scoped and authenticate only
-    through the member API helper in ``accounts.auth``.
+    back the staff API surface; member keys authenticate only through the
+    member API helper in ``accounts.auth``. ``scopes`` remains internal
+    compatibility metadata, but every valid key has the same capabilities.
     """
 
     KEY_PREFIX = "asl_member_"
@@ -28,6 +29,8 @@ class MemberAPIKey(models.Model):
         "books:write_progress",
         "books:write_notes",
         "books:write_profile",
+        "events:read",
+        "events:register",
     })
     DEFAULT_SCOPES = (
         "plans:read",
@@ -37,6 +40,8 @@ class MemberAPIKey(models.Model):
         "books:write_progress",
         "books:write_notes",
         "books:write_profile",
+        "events:read",
+        "events:register",
     )
 
     user = models.ForeignKey(
@@ -98,6 +103,12 @@ class MemberAPIKey(models.Model):
 
     @classmethod
     def authenticate(cls, plaintext_key, *, required_scopes=()):
+        """Authenticate an active key regardless of stored scope metadata.
+
+        ``required_scopes`` is retained for source compatibility with existing
+        decorators. Member API capabilities are deployment-defined, so a
+        historical key is never narrowed by its stored JSON list.
+        """
         if not plaintext_key or not plaintext_key.startswith(cls.KEY_PREFIX):
             return None
 
@@ -106,12 +117,9 @@ class MemberAPIKey(models.Model):
             lookup_prefix=lookup_prefix,
             revoked_at__isnull=True,
         )
-        required = set(required_scopes or [])
         for candidate in candidates:
             if not check_password(plaintext_key, candidate.key_hash):
                 continue
-            if required and not required.issubset(set(candidate.scopes or [])):
-                return None
             return candidate
         return None
 

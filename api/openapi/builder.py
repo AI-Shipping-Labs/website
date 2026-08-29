@@ -120,7 +120,8 @@ def _build_request_body(body_spec):
 
     Input shape::
 
-        {"required": ["name", ...], "properties": {...}, "example": {...}}
+        {"required": ["name", ...], "properties": {...}, "example": {...},
+         "body_required": False}
 
     Output is an OpenAPI ``requestBody`` object with one
     ``application/json`` content type.
@@ -134,7 +135,7 @@ def _build_request_body(body_spec):
     if "example" in body_spec:
         content["example"] = body_spec["example"]
     return {
-        "required": True,
+        "required": body_spec.get("body_required", True),
         "content": {"application/json": content},
     }
 

@@ -26,18 +26,18 @@
     },
     "securitySchemes": {
       "tokenAuth": {
-        "description": "Send the header ``Authorization: Token <asl_member_...>``. Keys are member-owned, scoped to the owner's data, and cannot authenticate against the staff/operator ``/api/`` surface.",
+        "description": "Send the header ``Authorization: Token <asl_member_...>``. Keys are member-owned, use fixed capabilities, and cannot authenticate against the staff/operator ``/api/`` surface.",
         "scheme": "bearer",
         "type": "http"
       }
     }
   },
   "externalDocs": {
-    "description": "Member Plans API usage guide",
+    "description": "Member API usage guide",
     "url": "https://github.com/AI-Shipping-Labs/website/blob/main/docs/member-api/plans.md"
   },
   "info": {
-    "description": "Member API for AI Shipping Labs. All endpoints accept JSON in and return JSON out. Authentication is via the ``Authorization: Token <key>`` header where ``<key>`` is a member-owned API key starting with ``asl_member_``. Member keys are scoped to the owner's data; plan endpoints only return or update plans owned by that key owner.",
+    "description": "Member API for AI Shipping Labs. All endpoints accept JSON in and return JSON out. Authentication is via the ``Authorization: Token <key>`` header where ``<key>`` is a member-owned API key starting with ``asl_member_``. Every valid key has the same deployed member API capabilities and acts only as its owner against that member's own data. Keys cannot access Studio or staff APIs.",
     "title": "AI Shipping Labs Member API",
     "version": "1.0.0"
   },
@@ -45,7 +45,7 @@
   "paths": {
     "/member-api/v1/books/reader-profile": {
       "get": {
-        "description": "Returns the authenticated key owner's Book Club reading-profile notes visibility (``public`` or ``private``). Book-agnostic \u2014 visibility is a single per-user flag. Public shares notes in chapter group feeds and on the member's reader profile; private keeps note bodies visible only to the member and staff. A member with no profile row is reported as ``public`` (the default). Scoped to the key owner only \u2014 never another member's profile. Requires the ``books:read`` scope.",
+        "description": "Returns the authenticated key owner's Book Club reading-profile notes visibility (``public`` or ``private``). Book-agnostic \u2014 visibility is a single per-user flag. Public shares notes in chapter group feeds and on the member's reader profile; private keeps note bodies visible only to the member and staff. A member with no profile row is reported as ``public`` (the default). Limited to the key owner only \u2014 never another member's profile.",
         "responses": {
           "200": {
             "content": {
@@ -65,7 +65,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``books:read`` scope."
+            "description": "Missing or invalid member API key."
           }
         },
         "summary": "Get the caller's reading-profile visibility",
@@ -74,7 +74,7 @@
         ]
       },
       "put": {
-        "description": "Sets the authenticated key owner's reading-profile visibility from the JSON body ``{\"visibility\": \"public\"|\"private\"}`` (``get_or_create`` on the owner). Public shares notes in chapter group feeds and on the member's reader profile; private keeps note bodies visible only to the member and staff. The default is public. Book-agnostic and scoped to the key owner only \u2014 there is no user parameter. Any value other than ``public`` / ``private`` returns a 400. Reading another member's public profile / notes feed (a rendered web surface) and posting comments (the shared web comment endpoints) are out of scope for the member API; destructive deletes stay Studio/admin-scoped. Requires the ``books:write_profile`` scope.",
+        "description": "Sets the authenticated key owner's reading-profile visibility from the JSON body ``{\"visibility\": \"public\"|\"private\"}`` (``get_or_create`` on the owner). Public shares notes in chapter group feeds and on the member's reader profile; private keeps note bodies visible only to the member and staff. The default is public. Book-agnostic and limited to the key owner only \u2014 there is no user parameter. Any value other than ``public`` / ``private`` returns a 400. Reading another member's public profile / notes feed (a rendered web surface) and posting comments (the shared web comment endpoints) are out of scope for the member API; destructive deletes stay Studio/admin-scoped.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -129,7 +129,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``books:write_profile`` scope."
+            "description": "Missing or invalid member API key."
           }
         },
         "summary": "Set the caller's reading-profile visibility",
@@ -140,7 +140,7 @@
     },
     "/member-api/v1/books/{slug}/chapters/{number}/note": {
       "delete": {
-        "description": "Idempotently deletes the key owner's note for the chapter. Destructive deletes of other members' notes stay Studio/admin scoped. Requires the ``books:write_notes`` scope.",
+        "description": "Idempotently deletes the key owner's note for the chapter. Destructive deletes of other members' notes stay Studio/admin scoped.",
         "parameters": [
           {
             "in": "path",
@@ -171,7 +171,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``books:write_notes`` scope."
+            "description": "Missing or invalid member API key."
           },
           "403": {
             "content": {
@@ -200,7 +200,7 @@
         ]
       },
       "get": {
-        "description": "Returns the authenticated key owner's own note for the chapter, or 404 if they have not written one. Scoped to the key owner only \u2014 never another member's note, and never the group feed of other members' notes (that is a rendered web surface). Requires the ``books:read`` scope.",
+        "description": "Returns the authenticated key owner's own note for the chapter, or 404 if they have not written one. Limited to the key owner only \u2014 never another member's note, and never the group feed of other members' notes (that is a rendered web surface).",
         "parameters": [
           {
             "in": "path",
@@ -250,7 +250,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``books:read`` scope."
+            "description": "Missing or invalid member API key."
           },
           "403": {
             "content": {
@@ -279,7 +279,7 @@
         ]
       },
       "put": {
-        "description": "Creates or replaces the key owner's single note for the chapter (``update_or_create`` on owner + chapter). ``body`` is required and is markdown \u2014 a fenced ```mermaid block renders as a diagram on the web, other fenced blocks render as code. The rendered, sanitised HTML is returned as ``body_html``. The first save flips the account's activation flag. Posting comments on a note and reading the group feed are out of scope for the member API \u2014 comments use the shared web endpoints. Requires the ``books:write_notes`` scope.",
+        "description": "Creates or replaces the key owner's single note for the chapter (``update_or_create`` on owner + chapter). ``body`` is required and is markdown \u2014 a fenced ```mermaid block renders as a diagram on the web, other fenced blocks render as code. The rendered, sanitised HTML is returned as ``body_html``. The first save flips the account's activation flag. Posting comments on a note and reading the group feed are out of scope for the member API \u2014 comments use the shared web endpoints.",
         "parameters": [
           {
             "in": "path",
@@ -331,7 +331,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``books:write_notes`` scope."
+            "description": "Missing or invalid member API key."
           },
           "403": {
             "content": {
@@ -372,7 +372,7 @@
     },
     "/member-api/v1/books/{slug}/chapters/{number}/read": {
       "delete": {
-        "description": "Idempotently removes the caller's read row for the chapter (delete if present). A repeated call is a no-op. Returns the updated ``done`` / ``total``. Requires the ``books:write_progress`` scope.",
+        "description": "Idempotently removes the caller's read row for the chapter (delete if present). A repeated call is a no-op. Returns the updated ``done`` / ``total``.",
         "parameters": [
           {
             "in": "path",
@@ -412,7 +412,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``books:write_progress`` scope."
+            "description": "Missing or invalid member API key."
           },
           "403": {
             "content": {
@@ -441,7 +441,7 @@
         ]
       },
       "put": {
-        "description": "Idempotently marks the chapter read for the authenticated key owner (``get_or_create``). A repeated call is a no-op. Returns the updated ``done`` / ``total``. Requires the ``books:write_progress`` scope.",
+        "description": "Idempotently marks the chapter read for the authenticated key owner (``get_or_create``). A repeated call is a no-op. Returns the updated ``done`` / ``total``.",
         "parameters": [
           {
             "in": "path",
@@ -482,7 +482,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``books:write_progress`` scope."
+            "description": "Missing or invalid member API key."
           },
           "403": {
             "content": {
@@ -513,7 +513,7 @@
     },
     "/member-api/v1/books/{slug}/reading": {
       "get": {
-        "description": "Returns the authenticated key owner's per-chapter read state for the book plus ``total`` / ``done`` / ``pct``. Scoped to the key owner only \u2014 never another member's state. Requires the ``books:read`` scope.",
+        "description": "Returns the authenticated key owner's per-chapter read state for the book plus ``total`` / ``done`` / ``pct``. Limited to the key owner only \u2014 never another member's state.",
         "parameters": [
           {
             "in": "path",
@@ -563,7 +563,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``books:read`` scope."
+            "description": "Missing or invalid member API key."
           },
           "403": {
             "content": {
@@ -589,6 +589,983 @@
         "summary": "Get the caller's reading state for a book",
         "tags": [
           "Books"
+        ]
+      }
+    },
+    "/member-api/v1/events": {
+      "get": {
+        "description": "Lists event sessions the key owner can access. Use filter=upcoming (default) or filter=past. External events remain discoverable.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "default": "upcoming",
+              "enum": [
+                "upcoming",
+                "past"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "events": {
+                      "items": {
+                        "properties": {
+                          "attendee_count": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "effective_end_datetime": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "end_datetime": {
+                            "format": "date-time",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "external_registration_url": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "id": {
+                            "type": "integer"
+                          },
+                          "is_registered": {
+                            "type": "boolean"
+                          },
+                          "kind": {
+                            "enum": [
+                              "standard",
+                              "workshop",
+                              "meetup",
+                              "q_and_a"
+                            ],
+                            "type": "string"
+                          },
+                          "location": {
+                            "type": "string"
+                          },
+                          "member_endpoint_url": {
+                            "type": "string"
+                          },
+                          "registration_available": {
+                            "type": "boolean"
+                          },
+                          "registration_source": {
+                            "enum": [
+                              "event",
+                              "series",
+                              "none"
+                            ],
+                            "type": "string"
+                          },
+                          "registration_targets": {
+                            "items": {
+                              "enum": [
+                                "series",
+                                "event"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "required_level": {
+                            "type": "integer"
+                          },
+                          "required_tier_label": {
+                            "type": "string"
+                          },
+                          "series": {
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "slug": {
+                                "type": "string"
+                              },
+                              "url": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "slug",
+                              "name",
+                              "url"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "start_datetime": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "status": {
+                            "enum": [
+                              "draft",
+                              "upcoming",
+                              "completed",
+                              "cancelled"
+                            ],
+                            "type": "string"
+                          },
+                          "tags": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "time_status": {
+                            "enum": [
+                              "upcoming",
+                              "past",
+                              "draft"
+                            ],
+                            "type": "string"
+                          },
+                          "timezone": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "slug",
+                          "title",
+                          "url",
+                          "kind",
+                          "start_datetime",
+                          "end_datetime",
+                          "effective_end_datetime",
+                          "timezone",
+                          "location",
+                          "tags",
+                          "status",
+                          "time_status",
+                          "required_level",
+                          "required_tier_label",
+                          "series",
+                          "attendee_count",
+                          "external_registration_url",
+                          "is_registered",
+                          "registration_source",
+                          "registration_available",
+                          "registration_targets",
+                          "member_endpoint_url"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "pagination": {
+                      "properties": {
+                        "page": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "page_size": {
+                          "const": 20,
+                          "type": "integer"
+                        },
+                        "total": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "total_pages": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "page",
+                        "page_size",
+                        "total",
+                        "total_pages"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "events",
+                    "pagination"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of accessible event sessions."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid member API key."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid filter or page."
+          }
+        },
+        "summary": "List accessible events",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/member-api/v1/events/{event_id}": {
+      "get": {
+        "description": "Returns website-visible event detail and the key owner's registration state. It never returns a roster, email address, meeting id, or raw community-event provider URL.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "attendee_count": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "banner_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "description_html": {
+                      "type": "string"
+                    },
+                    "effective_end_datetime": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "end_datetime": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "external_registration_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "hosts": {
+                      "items": {
+                        "properties": {
+                          "bio": {
+                            "type": "string"
+                          },
+                          "bio_html": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "photo_url": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "slug",
+                          "name",
+                          "title",
+                          "bio",
+                          "bio_html",
+                          "photo_url"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "instructors": {
+                      "items": {
+                        "properties": {
+                          "bio": {
+                            "type": "string"
+                          },
+                          "bio_html": {
+                            "type": "string"
+                          },
+                          "instructor_id": {
+                            "type": "string"
+                          },
+                          "links": {
+                            "items": {
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "photo_url": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "instructor_id",
+                          "name",
+                          "bio",
+                          "bio_html",
+                          "photo_url",
+                          "links"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "is_registered": {
+                      "type": "boolean"
+                    },
+                    "join_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "kind": {
+                      "enum": [
+                        "standard",
+                        "workshop",
+                        "meetup",
+                        "q_and_a"
+                      ],
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    },
+                    "member_endpoint_url": {
+                      "type": "string"
+                    },
+                    "registration_available": {
+                      "type": "boolean"
+                    },
+                    "registration_source": {
+                      "enum": [
+                        "event",
+                        "series",
+                        "none"
+                      ],
+                      "type": "string"
+                    },
+                    "registration_targets": {
+                      "items": {
+                        "enum": [
+                          "series",
+                          "event"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "required_level": {
+                      "type": "integer"
+                    },
+                    "required_tier_label": {
+                      "type": "string"
+                    },
+                    "series": {
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "slug",
+                        "name",
+                        "url"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "start_datetime": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "status": {
+                      "enum": [
+                        "draft",
+                        "upcoming",
+                        "completed",
+                        "cancelled"
+                      ],
+                      "type": "string"
+                    },
+                    "tags": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "time_status": {
+                      "enum": [
+                        "upcoming",
+                        "past",
+                        "draft"
+                      ],
+                      "type": "string"
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "slug",
+                    "title",
+                    "url",
+                    "kind",
+                    "start_datetime",
+                    "end_datetime",
+                    "effective_end_datetime",
+                    "timezone",
+                    "location",
+                    "tags",
+                    "status",
+                    "time_status",
+                    "required_level",
+                    "required_tier_label",
+                    "series",
+                    "attendee_count",
+                    "external_registration_url",
+                    "is_registered",
+                    "registration_source",
+                    "registration_available",
+                    "registration_targets",
+                    "member_endpoint_url",
+                    "description",
+                    "description_html",
+                    "instructors",
+                    "hosts",
+                    "banner_url",
+                    "join_url"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Member-safe event detail."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid member API key."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The key owner's tier cannot access this event."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unknown, draft, or retired event."
+          }
+        },
+        "summary": "Get accessible event detail",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/member-api/v1/events/{event_id}/register": {
+      "post": {
+        "description": "Registers only the authenticated key owner. The optional request field scope chooses the registration target: series (the default for a series session) or event (only this session). It is not a key permission.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "scope": "event"
+              },
+              "schema": {
+                "properties": {
+                  "scope": {
+                    "enum": [
+                      "series",
+                      "event"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "attendee_count": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "banner_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "description_html": {
+                      "type": "string"
+                    },
+                    "effective_end_datetime": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "end_datetime": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "external_registration_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "hosts": {
+                      "items": {
+                        "properties": {
+                          "bio": {
+                            "type": "string"
+                          },
+                          "bio_html": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "photo_url": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "slug",
+                          "name",
+                          "title",
+                          "bio",
+                          "bio_html",
+                          "photo_url"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "instructors": {
+                      "items": {
+                        "properties": {
+                          "bio": {
+                            "type": "string"
+                          },
+                          "bio_html": {
+                            "type": "string"
+                          },
+                          "instructor_id": {
+                            "type": "string"
+                          },
+                          "links": {
+                            "items": {
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "photo_url": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "instructor_id",
+                          "name",
+                          "bio",
+                          "bio_html",
+                          "photo_url",
+                          "links"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "is_registered": {
+                      "type": "boolean"
+                    },
+                    "join_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "kind": {
+                      "enum": [
+                        "standard",
+                        "workshop",
+                        "meetup",
+                        "q_and_a"
+                      ],
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    },
+                    "member_endpoint_url": {
+                      "type": "string"
+                    },
+                    "registered_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "registration_available": {
+                      "type": "boolean"
+                    },
+                    "registration_source": {
+                      "enum": [
+                        "event",
+                        "series",
+                        "none"
+                      ],
+                      "type": "string"
+                    },
+                    "registration_status": {
+                      "enum": [
+                        "registered"
+                      ],
+                      "type": "string"
+                    },
+                    "registration_targets": {
+                      "items": {
+                        "enum": [
+                          "series",
+                          "event"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "required_level": {
+                      "type": "integer"
+                    },
+                    "required_tier_label": {
+                      "type": "string"
+                    },
+                    "series": {
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "slug",
+                        "name",
+                        "url"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "series_slug": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "start_datetime": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "status": {
+                      "enum": [
+                        "draft",
+                        "upcoming",
+                        "completed",
+                        "cancelled"
+                      ],
+                      "type": "string"
+                    },
+                    "summary": {
+                      "properties": {
+                        "registered": {
+                          "type": "integer"
+                        },
+                        "skipped_already": {
+                          "type": "integer"
+                        },
+                        "skipped_no_access": {
+                          "type": "integer"
+                        },
+                        "skipped_opted_out": {
+                          "type": "integer"
+                        },
+                        "total_occurrences": {
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "tags": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "time_status": {
+                      "enum": [
+                        "upcoming",
+                        "past",
+                        "draft"
+                      ],
+                      "type": "string"
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "slug",
+                    "title",
+                    "url",
+                    "kind",
+                    "start_datetime",
+                    "end_datetime",
+                    "effective_end_datetime",
+                    "timezone",
+                    "location",
+                    "tags",
+                    "status",
+                    "time_status",
+                    "required_level",
+                    "required_tier_label",
+                    "series",
+                    "attendee_count",
+                    "external_registration_url",
+                    "is_registered",
+                    "registration_source",
+                    "registration_available",
+                    "registration_targets",
+                    "member_endpoint_url",
+                    "description",
+                    "description_html",
+                    "instructors",
+                    "hosts",
+                    "banner_url",
+                    "join_url",
+                    "registration_status",
+                    "registered_at"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Registration created."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid member API key."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The key owner's tier cannot access this event."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unknown, draft, or retired event."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Closed, duplicate, or externally hosted event."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid body or unsupported target field."
+          }
+        },
+        "summary": "Register yourself for an event",
+        "tags": [
+          "Events"
         ]
       }
     },
@@ -645,7 +1622,7 @@
     },
     "/member-api/v1/plans/{plan_id}": {
       "get": {
-        "description": "Returns one owned plan with member-safe nested content. Cohort visibility does not grant member API read access. Requires the ``plans:read`` scope.",
+        "description": "Returns one owned plan with member-safe nested content. Cohort visibility does not grant member API read access.",
         "parameters": [
           {
             "in": "path",
@@ -668,7 +1645,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:read`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -687,7 +1664,7 @@
         ]
       },
       "patch": {
-        "description": "Partially updates plan-level fields (title, goal, summary.*, focus.*, accountability, visibility). Only supplied keys change. ``visibility`` accepts ``private`` or ``cohort``; ``public`` is reserved and rejected. Requires the ``plans:write`` scope. Returns the full plan detail.",
+        "description": "Partially updates plan-level fields (title, goal, summary.*, focus.*, accountability, visibility). Only supplied keys change. ``visibility`` accepts ``private`` or ``cohort``; ``public`` is reserved and rejected. Returns the full plan detail.",
         "parameters": [
           {
             "in": "path",
@@ -759,7 +1736,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -790,7 +1767,7 @@
     },
     "/member-api/v1/plans/{plan_id}/checkpoints/{checkpoint_id}": {
       "delete": {
-        "description": "Deletes an owned checkpoint. Requires ``plans:write``.",
+        "description": "Deletes an owned checkpoint.",
         "parameters": [
           {
             "in": "path",
@@ -821,7 +1798,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -850,7 +1827,7 @@
         ]
       },
       "patch": {
-        "description": "Updates ``description`` / ``position`` / ``done`` on an owned checkpoint. Supplying ``week_id`` (a week of the same plan) moves it to that week. Requires ``plans:write``.",
+        "description": "Updates ``description`` / ``position`` / ``done`` on an owned checkpoint. Supplying ``week_id`` (a week of the same plan) moves it to that week.",
         "parameters": [
           {
             "in": "path",
@@ -910,7 +1887,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -941,7 +1918,7 @@
     },
     "/member-api/v1/plans/{plan_id}/deliverables": {
       "post": {
-        "description": "Adds a plan-level deliverable. ``description`` is required. Requires ``plans:write``.",
+        "description": "Adds a plan-level deliverable. ``description`` is required.",
         "parameters": [
           {
             "in": "path",
@@ -992,7 +1969,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -1023,7 +2000,7 @@
     },
     "/member-api/v1/plans/{plan_id}/deliverables/{deliverable_id}": {
       "delete": {
-        "description": "Deletes an owned deliverable. Requires ``plans:write``.",
+        "description": "Deletes an owned deliverable.",
         "parameters": [
           {
             "in": "path",
@@ -1054,7 +2031,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -1083,7 +2060,7 @@
         ]
       },
       "patch": {
-        "description": "Updates ``description`` / ``position`` / ``done`` on an owned deliverable. Requires ``plans:write``.",
+        "description": "Updates ``description`` / ``position`` / ``done`` on an owned deliverable.",
         "parameters": [
           {
             "in": "path",
@@ -1139,7 +2116,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -1214,7 +2191,7 @@
     },
     "/member-api/v1/plans/{plan_id}/next-steps": {
       "post": {
-        "description": "Adds a plan-level next step. ``description`` is required. ``kind`` is ``pre_sprint`` (default) or ``next_step``. Requires ``plans:write``.",
+        "description": "Adds a plan-level next step. ``description`` is required. ``kind`` is ``pre_sprint`` (default) or ``next_step``.",
         "parameters": [
           {
             "in": "path",
@@ -1273,7 +2250,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -1304,7 +2281,7 @@
     },
     "/member-api/v1/plans/{plan_id}/next-steps/{next_step_id}": {
       "delete": {
-        "description": "Deletes an owned next step. Requires ``plans:write``.",
+        "description": "Deletes an owned next step.",
         "parameters": [
           {
             "in": "path",
@@ -1335,7 +2312,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -1364,7 +2341,7 @@
         ]
       },
       "patch": {
-        "description": "Updates ``description`` / ``kind`` / ``position`` / ``done`` on an owned next step. Requires ``plans:write``.",
+        "description": "Updates ``description`` / ``kind`` / ``position`` / ``done`` on an owned next step.",
         "parameters": [
           {
             "in": "path",
@@ -1428,7 +2405,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -1563,7 +2540,7 @@
     },
     "/member-api/v1/plans/{plan_id}/resources": {
       "post": {
-        "description": "Adds a plan-level resource link. ``title`` is required. ``url`` is optional but must be a valid URL. Requires ``plans:write``.",
+        "description": "Adds a plan-level resource link. ``title`` is required. ``url`` is optional but must be a valid URL.",
         "parameters": [
           {
             "in": "path",
@@ -1620,7 +2597,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -1651,7 +2628,7 @@
     },
     "/member-api/v1/plans/{plan_id}/resources/{resource_id}": {
       "delete": {
-        "description": "Deletes an owned resource. Requires ``plans:write``.",
+        "description": "Deletes an owned resource.",
         "parameters": [
           {
             "in": "path",
@@ -1682,7 +2659,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -1711,7 +2688,7 @@
         ]
       },
       "patch": {
-        "description": "Updates ``title`` / ``url`` / ``note`` / ``position`` on an owned resource. Requires ``plans:write``.",
+        "description": "Updates ``title`` / ``url`` / ``note`` / ``position`` on an owned resource.",
         "parameters": [
           {
             "in": "path",
@@ -1772,7 +2749,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -1803,7 +2780,7 @@
     },
     "/member-api/v1/plans/{plan_id}/weeks": {
       "post": {
-        "description": "Adds a week to the owned plan. ``week_number`` is required, a positive integer, and unique per plan. Requires ``plans:write``.",
+        "description": "Adds a week to the owned plan. ``week_number`` is required, a positive integer, and unique per plan.",
         "parameters": [
           {
             "in": "path",
@@ -1857,7 +2834,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -1888,7 +2865,7 @@
     },
     "/member-api/v1/plans/{plan_id}/weeks/{week_id}": {
       "delete": {
-        "description": "Deletes an owned week and cascades its checkpoints and week note. Requires ``plans:write``.",
+        "description": "Deletes an owned week and cascades its checkpoints and week note.",
         "parameters": [
           {
             "in": "path",
@@ -1919,7 +2896,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -1948,7 +2925,7 @@
         ]
       },
       "patch": {
-        "description": "Updates ``week_number`` / ``theme`` / ``position`` on an owned week. Requires ``plans:write``.",
+        "description": "Updates ``week_number`` / ``theme`` / ``position`` on an owned week.",
         "parameters": [
           {
             "in": "path",
@@ -2007,7 +2984,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -2038,7 +3015,7 @@
     },
     "/member-api/v1/plans/{plan_id}/weeks/{week_id}/checkpoints": {
       "post": {
-        "description": "Adds a checkpoint to an owned week. ``description`` is required. An optional ``done`` sets initial completion. Requires ``plans:write``.",
+        "description": "Adds a checkpoint to an owned week. ``description`` is required. An optional ``done`` sets initial completion.",
         "parameters": [
           {
             "in": "path",
@@ -2098,7 +3075,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -2129,7 +3106,7 @@
     },
     "/member-api/v1/plans/{plan_id}/weeks/{week_id}/note": {
       "delete": {
-        "description": "Removes the week's note if present. Requires ``plans:write``.",
+        "description": "Removes the week's note if present.",
         "parameters": [
           {
             "in": "path",
@@ -2160,7 +3137,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {
@@ -2189,7 +3166,7 @@
         ]
       },
       "put": {
-        "description": "Creates or replaces the singleton note for an owned week and sets the key owner as author. ``body`` is required. Requires ``plans:write``.",
+        "description": "Creates or replaces the singleton note for an owned week and sets the key owner as author. ``body`` is required.",
         "parameters": [
           {
             "in": "path",
@@ -2241,7 +3218,7 @@
                 }
               }
             },
-            "description": "Missing key or missing ``plans:write`` scope."
+            "description": "Missing or invalid member API key."
           },
           "404": {
             "content": {

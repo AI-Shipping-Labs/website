@@ -29,7 +29,7 @@ def docs_page(request):
 @require_GET
 def openapi_json(request):
     if request.headers.get("Authorization"):
-        return member_api_key_required("plans:read")(_openapi_json)(request)
+        return member_api_key_required()(_openapi_json)(request)
     if not getattr(request.user, "is_authenticated", False):
         from django.contrib.auth.views import redirect_to_login
 

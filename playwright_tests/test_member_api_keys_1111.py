@@ -27,6 +27,12 @@ class TestMemberAPIKeysAccountUI:
         page.goto(f"{django_server}/account/#api-keys", wait_until="domcontentloaded")
         expect(page.locator('[data-testid="member-api-keys-section"]')).to_be_visible()
         expect(page.locator('[data-testid="member-api-keys-empty"]')).to_be_visible()
+        section = page.locator('[data-testid="member-api-keys-section"]')
+        expect(section).to_contain_text("acts only as you against your own member data")
+        expect(section).to_contain_text("cannot access Studio or staff APIs")
+        expect(section.get_by_text("Scopes", exact=True)).to_have_count(0)
+        for internal_name in ("plans:read", "books:write_notes", "events:read"):
+            expect(section.get_by_text(internal_name, exact=True)).to_have_count(0)
         # Issue #1127: the guide link points at the on-site docs page and
         # opens in a new tab.
         guide_link = page.locator('[data-testid="member-api-usage-guide-link"]')
@@ -59,6 +65,9 @@ class TestMemberAPIKeysAccountUI:
         assert "local codex" in page.locator(
             '[data-testid="member-api-key-row"]'
         ).first.inner_text()
+        expect(page.locator('[data-testid="member-api-key-row"]')).not_to_contain_text(
+            "plans:"
+        )
 
         connection.close()
         context.close()

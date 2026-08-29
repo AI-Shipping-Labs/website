@@ -197,7 +197,10 @@ def member_api_key_required(*required_scopes):
             member_key.mark_used(request)
             request.user = member_key.user
             request.member_api_key = member_key
-            request.member_api_scopes = set(member_key.scopes or [])
+            # Stored scope lists are compatibility metadata only. Expose the
+            # deployment's complete capability set to legacy per-method
+            # guards until those internal guards are retired.
+            request.member_api_scopes = set(MemberAPIKey.SUPPORTED_SCOPES)
             return view_func(request, *args, **kwargs)
 
         return wrapper

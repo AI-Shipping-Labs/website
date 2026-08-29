@@ -1,6 +1,6 @@
-# Member Plans API
+# Member API
 
-Use the AI Shipping Labs member API to read and update your own sprint plans from local tools and agents.
+Use the AI Shipping Labs member API to work with your own sprint plans, Book Club activity, and event registration from local tools and agents.
 
 Base URL:
 
@@ -14,7 +14,7 @@ Authentication:
 Authorization: Token <asl_member_...>
 ```
 
-The key belongs to the signed-in member who created it. Plan endpoints only return or update that member's own plans.
+The key belongs to the signed-in member who created it. Every valid key has the same capabilities and acts only as that member. It cannot access Studio or staff APIs.
 
 ## Create A Key
 
@@ -155,26 +155,15 @@ curl -sS -X PATCH \
 
 Send only the collections you want to update. Validation failures roll back the entire request.
 
-## Scopes
+## Key Capabilities
 
-Each member key carries a set of scopes. New keys are created with all of them by default.
-
-| Scope | Grants |
-| --- | --- |
-| `plans:read` | Read your own plans (`GET`). |
-| `plans:write_progress` | Toggle `done` on existing items via `PATCH /plans/{plan_id}/progress`. |
-| `plans:write` | Edit plan content: create / update / delete weeks, checkpoints, deliverables, next steps, resources, week notes, and edit narrative fields. |
-| `books:read` | Read your own Book Club reading state (`GET /books/{slug}/reading`) and your own chapter note (`GET /books/{slug}/chapters/{number}/note`). |
-| `books:write_progress` | Mark your own chapters read / unread (`PUT` / `DELETE /books/{slug}/chapters/{number}/read`). |
-| `books:write_notes` | Write or clear your own chapter note (`PUT` / `DELETE /books/{slug}/chapters/{number}/note`). Kept separate from `books:write_progress` so a progress-tracking automation cannot publish public notes. |
-
-The scopes are checked independently: `plans:write` is not a superset of `plans:write_progress`. A request to a content-editing endpoint with a key that lacks the required scope returns `401`.
+Every active member key can use every deployed member endpoint. You do not choose permissions when creating a key and do not need to replace an existing key when a new endpoint family is added. All member endpoints remain owner-only.
 
 ## Book Club Reading
 
-The Book Club endpoints track which chapters you have read. Every endpoint is owner-scoped: there is no request parameter that can target another member, so a key only ever reads or mutates its own reading state. Access mirrors the site — a book gated above your tier returns `403`, and an unknown or draft book (or unknown chapter number) returns `404`.
+The Book Club endpoints track which chapters you have read. Every endpoint is owner-only: there is no request parameter that can target another member, so a key only ever reads or mutates its own reading state. Access mirrors the site — a book gated above your tier returns `403`, and an unknown or draft book (or unknown chapter number) returns `404`.
 
-`GET /books/{slug}/reading` (scope `books:read`) returns your per-chapter state plus totals:
+`GET /books/{slug}/reading` returns your per-chapter state plus totals:
 
 ```bash
 curl -sS \
@@ -195,7 +184,7 @@ curl -sS \
 }
 ```
 
-`PUT /books/{slug}/chapters/{number}/read` (scope `books:write_progress`) marks a chapter read; `DELETE` on the same path marks it unread. Both are idempotent — repeating the call is a no-op — and return the updated `done` / `total`:
+`PUT /books/{slug}/chapters/{number}/read` marks a chapter read; `DELETE` on the same path marks it unread. Both are idempotent — repeating the call is a no-op — and return the updated `done` / `total`:
 
 ```bash
 curl -sS -X PUT \
@@ -206,9 +195,9 @@ curl -sS -X PUT \
 
 ### Your own chapter note
 
-Each member may keep one note per chapter. The note endpoint is owner-scoped: it only ever reads or mutates your own note — never another member's, and never the group feed of other members' notes (that is a rendered web surface). Posting comments on a note also stays on the shared web endpoints and is out of scope for the member API.
+Each member may keep one note per chapter. The note endpoint is owner-only: it only ever reads or mutates your own note — never another member's, and never the group feed of other members' notes (that is a rendered web surface). Posting comments on a note also stays on the shared web endpoints and is not part of the member API.
 
-`PUT /books/{slug}/chapters/{number}/note` (scope `books:write_notes`) upserts your note; `body` is required and `diagram` (mermaid source) is optional. `DELETE` on the same path clears it (idempotent). `GET` (scope `books:read`) returns your own note or `404` if you have not written one:
+`PUT /books/{slug}/chapters/{number}/note` upserts your note; `body` is required and `diagram` (mermaid source) is optional. `DELETE` on the same path clears it (idempotent). `GET` returns your own note or `404` if you have not written one:
 
 ```bash
 curl -sS -X PUT \
@@ -223,7 +212,7 @@ curl -sS -X PUT \
 
 ## Editing Plan Content
 
-Reshape your own plan structure and narrative with the `plans:write` scope. Every write is owner-scoped (you can only touch your own plan) and atomic (a validation error changes nothing). Item ordering follows `position` (ascending), so set `position` on create or `PATCH` to reorder. A bulk reorder endpoint that accepts an ordered id list is deferred; the position-per-`PATCH` approach covers the build-and-iterate loop.
+Reshape your own plan structure and narrative through the plan endpoints. Every write is owner-only (you can only touch your own plan) and atomic (a validation error changes nothing). Item ordering follows `position` (ascending), so set `position` on create or `PATCH` to reorder. A bulk reorder endpoint that accepts an ordered id list is deferred; the position-per-`PATCH` approach covers the build-and-iterate loop.
 
 The recommended loop for an agent: `GET` the plan detail, decide the changes, apply them with the calls below, then `GET` again and repeat until the plan matches what the member wants.
 
@@ -354,20 +343,6 @@ Missing or invalid key:
 
 The status code is `401`.
 
-Valid key without the scope a content-editing endpoint requires (for example a `plans:read` / `plans:write_progress` key calling a `plans:write` endpoint):
-
-```json
-{
-  "error": "Member API key is missing the required scope",
-  "code": "insufficient_scope",
-  "details": {
-    "required_scope": "plans:write"
-  }
-}
-```
-
-The status code is `401`.
-
 Plan not owned by the key owner, or missing:
 
 ```json
@@ -395,7 +370,7 @@ The status code is `422`.
 
 ## Data Boundaries
 
-The member API is scoped to the signed-in key owner's own plans, and this holds for the write surface too: progress updates only ever touch the caller's own plan items.
+The member API is limited to the signed-in key owner's own plans, and this holds for the write surface too: progress updates only ever touch the caller's own plan items.
 
 The API never exposes or lets you modify internal notes, CRM notes, onboarding answers, staff context, or other members' data:
 
@@ -408,4 +383,18 @@ Writes stay deliberately narrow: the progress endpoint only toggles the done sta
 
 ## V1 Limitations
 
-Version 1 cannot create plans, delete plans, or share plans, and it cannot read cohort teammates' plans. It can edit narrative fields, weeks, checkpoints, deliverables, next steps, resources, and week notes on your own plans (with the `plans:write` scope), list plans, get one owned plan, download owned plan Markdown, and update progress on existing owned plan items. A dedicated bulk-reorder endpoint is deferred; reorder by setting `position`.
+Version 1 cannot create plans, delete plans, or share plans, and it cannot read cohort teammates' plans. It can edit narrative fields, weeks, checkpoints, deliverables, next steps, resources, and week notes on your own plans, list plans, get one owned plan, download owned plan Markdown, and update progress on existing owned plan items. A dedicated bulk-reorder endpoint is deferred; reorder by setting `position`.
+
+## Events
+
+Every valid member key can discover accessible sessions, read event details, and register its owner:
+
+```text
+GET  /member-api/v1/events?filter=upcoming
+GET  /member-api/v1/events/{event_id}
+POST /member-api/v1/events/{event_id}/register
+```
+
+Event routes use the immutable integer event ID. Registration is self-only: there is no email, user, guest, or attendee target. For a session in a series, omitting the request field `scope` registers for the series by default; send `{"scope":"event"}` for only that session. Here `scope` chooses the registration target, not key permissions.
+
+External events return their public host-platform registration URL and do not create an in-app registration. Event responses include only aggregate `attendee_count`; they never return a roster, attendee identities, email addresses, meeting IDs, or raw community-event provider URLs.

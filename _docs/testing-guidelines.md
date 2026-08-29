@@ -720,6 +720,42 @@ duplicate-ID, overlap, missing-reason, ceiling-growth, and golden-drift
 failures separately. Baseline changes therefore require an independently
 reviewed edit outside the passing test path.
 
+### Literal status-200 assertion ratchet
+
+`tests/status_200_assertion_ratchet.py` scans every Python file below the root
+`tests/`, discovered top-level app `tests/` trees, `asl_cli/tests/`, and
+`playwright_tests/`. It parses source without importing or executing it and
+examines module code, test methods, and helpers alike.
+
+The direct category recognizes only plain `assert` equality/identity comparisons
+between a direct `.status_code` attribute and one exact AST spelling (`200`,
+`HTTPStatus.OK`, `status.HTTP_200_OK`, or
+`rest_framework.status.HTTP_200_OK`), plus literal
+`self.assertEqual`/`self.assertIs` calls whose first two and only positional
+arguments are the status attribute and expected value. Any other complete
+assertion anchor that visibly contains both the direct `.status_code` AST
+attribute and an exact expected spelling enters the independent unknown-shape
+category. This includes chained, boolean, nested call or comparison, container,
+keyword, extra-argument, reversed-unittest, and unsupported-receiver forms.
+Plain-assert diagnostic messages and unittest positional/`msg=` diagnostic
+slots are excluded from the visible-operand walk: they cannot supply either
+the status attribute or expected spelling. A real operand pair still enters
+the direct or unknown category even when that assertion also has a message.
+
+Do not add a recognized status-200 anchor even when the test already asserts a
+strong outcome. Assert the specific content, state, or redirect contract
+instead. Existing entries may only be removed from
+`tests/status_200_assertion_live.py`; the original tuples and golden digests
+in `tests/status_200_assertion_ceilings.py` never shrink or grow.
+
+This lexical rule does not resolve imports or aliases and does not infer values
+that are not present as an exact spelling in the assertion AST. Names and
+aliases for the expected value, generated AST, `getattr`, and dynamic
+attributes are explicit v1 limitations, not evidence that the repository is
+free of such patterns. Exact spellings remain visible when nested inside calls,
+containers, properties, or other runtime expressions and therefore classify as
+unknown when the complete assertion is not direct grammar.
+
 ## Affected-tests selection (`make test-affected`)
 
 Per-issue local verification runs the tests the diff can plausibly break --

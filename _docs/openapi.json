@@ -4901,6 +4901,173 @@
         ]
       }
     },
+    "/api/events/id/{event_id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authoritative event identity."
+          },
+          "404": {
+            "description": "Event not found."
+          }
+        },
+        "summary": "Retrieve an event by numeric ID",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/api/events/id/{event_id}/guest-invitations": {
+      "post": {
+        "description": "Creates or reuses one event-specific registration and sends the ordinary attendee invitation. It never creates a standing series registration or host access. Set dry_run=true to validate without creating a user, registration, delivery, or email log.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "email": "guest@example.com"
+              },
+              "schema": {
+                "properties": {
+                  "dry_run": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "email": {
+                    "format": "email",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "email"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "attempt_count": 1,
+                  "dry_run": false,
+                  "email_status": "sent",
+                  "event_id": 49,
+                  "event_slug": "setting-up-a-remote-environment-for-agentic-workloads",
+                  "event_title": "Setting up a remote environment for agentic workloads",
+                  "guest_email": "guest@example.com",
+                  "registration_id": 123,
+                  "registration_status": "registered"
+                }
+              }
+            },
+            "description": "Existing or dry-run invitation state."
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "attempt_count": 1,
+                  "dry_run": false,
+                  "email_status": "sent",
+                  "event_id": 49,
+                  "event_slug": "setting-up-a-remote-environment-for-agentic-workloads",
+                  "event_title": "Setting up a remote environment for agentic workloads",
+                  "guest_email": "guest@example.com",
+                  "registration_id": 123,
+                  "registration_status": "registered"
+                }
+              }
+            },
+            "description": "Registration created and invitation attempted."
+          },
+          "404": {
+            "description": "Event not found."
+          },
+          "409": {
+            "description": "Event, alias, account, or host conflict."
+          },
+          "422": {
+            "description": "Invalid request body or guest email."
+          }
+        },
+        "summary": "Invite one guest to one event session",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/api/events/id/{event_id}/guest-invitations/{registration_id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "registration_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "attempt_count": 1,
+                  "dry_run": false,
+                  "email_status": "sent",
+                  "event_id": 49,
+                  "event_slug": "setting-up-a-remote-environment-for-agentic-workloads",
+                  "event_title": "Setting up a remote environment for agentic workloads",
+                  "guest_email": "guest@example.com",
+                  "registration_id": 123,
+                  "registration_status": "registered"
+                }
+              }
+            },
+            "description": "Authoritative invitation state."
+          },
+          "404": {
+            "description": "Event or guest invitation not found."
+          }
+        },
+        "summary": "Read back one event guest invitation",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
     "/api/events/{slug}": {
       "delete": {
         "parameters": [

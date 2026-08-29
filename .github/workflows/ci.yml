@@ -333,8 +333,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
-      - name: Prove verification resend exactly once
-        run: uv run python manage.py test accounts.tests.test_email_auth.ResendVerificationConcurrencyTest --verbosity 2
+      - name: Run PostgreSQL-tagged verification tests
+        run: uv run python manage.py test --tag=postgresql --verbosity 2
 
   playwright-tests:
     name: Playwright E2E Tests

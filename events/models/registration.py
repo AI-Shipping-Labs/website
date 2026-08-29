@@ -106,6 +106,47 @@ class HostInviteDelivery(models.Model):
         )
 
 
+class GuestInviteDelivery(models.Model):
+    """Durable initial-delivery state for one staff guest invitation."""
+
+    STATUS_PENDING = 'pending'
+    STATUS_SENDING = 'sending'
+    STATUS_SENT = 'sent'
+    STATUS_FAILED = 'failed'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_SENDING, 'Sending'),
+        (STATUS_SENT, 'Sent'),
+        (STATUS_FAILED, 'Failed'),
+    ]
+
+    ERROR_PROVIDER = 'provider_error'
+    ERROR_TIMEOUT = 'provider_timeout'
+    ERROR_CONNECTION = 'provider_connection_error'
+    ERROR_CONFIGURATION = 'provider_configuration_error'
+    ERROR_UNAVAILABLE = 'provider_unavailable'
+    ERROR_REJECTED = 'provider_rejected'
+
+    registration = models.OneToOneField(
+        EventRegistration,
+        on_delete=models.CASCADE,
+        related_name='guest_invite_delivery',
+    )
+    guest_email = models.EmailField()
+    status = models.CharField(
+        max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING,
+    )
+    attempt_count = models.PositiveIntegerField(default=0)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    sent_ics_sequence = models.PositiveIntegerField(null=True, blank=True)
+    last_error = models.CharField(max_length=64, blank=True, default='')
+    email_log = models.ForeignKey(
+        'email_app.EmailLog', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='+',
+    )
+
+
 class SeriesRegistration(models.Model):
     """Standing intent to attend an entire event series (issue #857).
 

@@ -153,6 +153,10 @@ DEPENDENCY_MANIFESTS: tuple[str, ...] = ('pyproject.toml', 'uv.lock')
 #: These entries are checked before the broader ``scripts/*`` contract rule so
 #: policy-only changes do not expand to every module under ``tests``.
 FOCUSED_CONTRACT_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        '.agents/skills/ai-shipping-labs-events/*',
+        ('api.tests.test_events.EventsSkillDocSyncTest',),
+    ),
     ('scripts/affected_tests.py', ('tests.test_affected_tests',)),
     ('_docs/testing-guidelines.md', ('tests.test_affected_tests',)),
     ('scripts/playwright_owner_inventory.py', ('tests.test_playwright_owner_inventory',)),

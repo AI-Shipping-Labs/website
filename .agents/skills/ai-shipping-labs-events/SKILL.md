@@ -31,6 +31,8 @@ uv run asl event-series --help
 - `asl events sync-zoom <slug>` — idempotently PATCH the existing Zoom
   meeting from the currently stored event state; it does not edit the event or
   notify attendees
+- `asl events invite-guest <event-id> --email guest@example.com [--dry-run]`
+  — safely invites one ordinary attendee to one event session by numeric ID
 
 GitHub-origin events are read-only (`editable: false`); only Studio/API-origin events can be created and patched.
 
@@ -102,16 +104,24 @@ every newly created or newly published event, unless Alexey explicitly opts
 out. This is separate from host assignment: never replace `host_email` with
 the Gmail address and never use Gmail in `host_ids`.
 
-Use the supported `asl events` guest-invitation command once issue #1494 is
-implemented. Until that command exists, report that the guest invite is
-pending instead of using raw HTTP, bypassing CSRF, or temporarily reassigning
-`host_email`.
+Immediately after the event create/read-back, invite Gmail through the supported
+CLI workflow:
 
-For a series occurrence, the guest invitation should use whole-series scope so
-future eligible occurrences automatically include Gmail. For a standalone
-event, use event-only scope. Treat an already-registered response as a
-successful idempotent outcome, then GET the event again for the ordinary
-safe-write read-back.
+```bash
+uv run asl events invite-guest <event-id> \
+  --email alexey.s.grigoriev@gmail.com
+```
+
+Never substitute raw HTTP, the browser/CSRF registration route, or a temporary
+`host_email` reassignment. The command is always event-only, including for a
+series session: it does not create a standing series registration or fan out to
+sibling sessions. Use `--dry-run` to validate without creating or sending.
+
+`registered` / `sent` means the first invitation succeeded.
+`already_registered` / `already_sent` is a successful idempotent repeat.
+`failed_retryable` exits non-zero; rerun the identical command to reuse the
+registration and retry delivery. Every output format includes the bounded
+event, guest, registration, delivery, and `verified` read-back summary.
 
 ## Event series (`asl event-series --help`)
 

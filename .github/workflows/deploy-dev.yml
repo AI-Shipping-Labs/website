@@ -369,8 +369,8 @@ jobs:
       - name: Run serial production-baseline migration matrix
         run: uv run python manage.py test tests.test_r1_migration_compatibility --verbosity 2
 
-      - name: Prove verification resend exactly once
-        run: uv run python manage.py test accounts.tests.test_email_auth.ResendVerificationConcurrencyTest --verbosity 2
+      - name: Run PostgreSQL-tagged verification tests
+        run: uv run python manage.py test --tag=postgresql --verbosity 2
 
   playwright-core:
     name: Playwright Core E2E (${{ matrix.shard_name }})

@@ -21,6 +21,7 @@ Commands are organized into groups, max 2 levels: `asl <group> <command>`. Use `
 ```bash
 uv run asl events --help
 uv run asl events create --help
+uv run asl events invite-guest --help
 ```
 
 ### Flags instead of JSON
@@ -44,6 +45,18 @@ uv run asl events list --format table    # aligned table
 uv run asl events list --format raw      # compact JSON (for piping)
 uv run asl events list                   # pretty JSON (default)
 ```
+
+Invite one ordinary attendee to one event by numeric ID. The command performs
+the required event read, invitation write, and invitation read-back itself:
+
+```bash
+uv run asl events invite-guest 49 --email guest@example.com
+uv run asl events invite-guest 49 --email guest@example.com --dry-run
+```
+
+Repeats after a successful send return `already_registered` / `already_sent`
+without sending again. `failed_retryable` exits non-zero; rerun the same command
+to retry the existing registration.
 
 ### Sharing one sprint plan with its member
 

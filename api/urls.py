@@ -67,6 +67,11 @@ from api.views.enrollments import (
     sprint_enrollment_detail,
     sprint_enrollments_collection,
 )
+from api.views.event_guest_invitations import (
+    event_by_id,
+    event_guest_invitation_detail,
+    event_guest_invitations,
+)
 from api.views.event_series import (
     event_series_collection,
     event_series_detail,
@@ -364,6 +369,21 @@ urlpatterns = [
         "events",
         events_collection,
         name="api_events_collection",
+    ),
+    path(
+        "events/id/<int:event_id>",
+        event_by_id,
+        name="api_event_by_id",
+    ),
+    path(
+        "events/id/<int:event_id>/guest-invitations",
+        event_guest_invitations,
+        name="api_event_guest_invitations",
+    ),
+    path(
+        "events/id/<int:event_id>/guest-invitations/<int:registration_id>",
+        event_guest_invitation_detail,
+        name="api_event_guest_invitation_detail",
     ),
     # Register the ``regenerate-banner`` action BEFORE the bare ``<slug>``
     # detail so the slug converter never swallows the literal suffix (issue

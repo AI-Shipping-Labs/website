@@ -46,6 +46,94 @@ def events_get(slug, fmt):
     emit(get_client().get(f"{API}/events/{slug}"), fmt)
 
 
+GUEST_SUMMARY_COLUMNS = [
+    "event_id",
+    "event_slug",
+    "event_title",
+    "guest_email",
+    "registration_id",
+    "registration_status",
+    "email_status",
+    "verified",
+]
+
+
+def _guest_summary(post_result, read_back=None):
+    summary = {key: post_result.get(key) for key in GUEST_SUMMARY_COLUMNS[:-1]}
+    if read_back is None:
+        summary["verified"] = True
+        return summary
+
+    identity_matches = all(
+        read_back.get(key) == post_result.get(key)
+        for key in ("event_id", "event_slug", "event_title", "guest_email", "registration_id")
+    )
+    state_matches = (
+        read_back.get("registration_status") == "registered"
+        and read_back.get("email_status")
+        == {
+            "sent": "sent",
+            "already_sent": "sent",
+            "failed_retryable": "failed_retryable",
+        }.get(post_result.get("email_status"))
+    )
+    summary["verified"] = identity_matches and state_matches
+    return summary
+
+
+@events.command("invite-guest")
+@click.argument("event_id", type=click.IntRange(min=1))
+@click.option("--email", required=True, help="Exact guest email address.")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Validate and preview without creating or sending anything.",
+)
+@format_option
+def events_invite_guest(event_id, email, dry_run, fmt):
+    """Invite one ordinary guest to one event session by numeric ID.
+
+    Performs GET-before, POST, and GET-after verification. Repeating a
+    successful invitation is safe and does not send another calendar email.
+    First success reports registered / sent; a repeat reports
+    already_registered / already_sent. A failed_retryable delivery exits
+    non-zero; run the same command again. verified confirms the read-back
+    matched the requested event, guest, registration, and delivery state.
+    """
+    client = get_client()
+    event = client.get(f"{API}/events/id/{event_id}")
+    if event.get("id") != event_id:
+        raise click.ClickException("Event identity verification failed before write.")
+
+    post_result = client.post(
+        f"{API}/events/id/{event_id}/guest-invitations",
+        json_body={"email": email, "dry_run": dry_run},
+    )
+    if (
+        post_result.get("event_id") != event_id
+        or post_result.get("event_slug") != event.get("slug")
+        or post_result.get("event_title") != event.get("title")
+    ):
+        raise click.ClickException("Guest invitation target verification failed.")
+
+    if dry_run:
+        summary = _guest_summary(post_result)
+    else:
+        registration_id = post_result.get("registration_id")
+        if not isinstance(registration_id, int):
+            raise click.ClickException("Guest invitation returned no registration ID.")
+        read_back = client.get(
+            f"{API}/events/id/{event_id}/guest-invitations/{registration_id}",
+        )
+        summary = _guest_summary(post_result, read_back)
+        if not summary["verified"]:
+            raise click.ClickException("Guest invitation read-after-write verification failed.")
+
+    emit(summary, fmt, columns=GUEST_SUMMARY_COLUMNS)
+    if summary["email_status"] == "failed_retryable":
+        raise click.exceptions.Exit(1)
+
+
 EVENT_FLAGS = [
     click.option("--title", default=None),
     click.option("--slug", default=None, help="URL slug (auto-derived from title if omitted)."),

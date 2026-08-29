@@ -185,6 +185,22 @@ class RuleChainTest(SimpleTestCase):
                 self.assertFalse(plan.no_tests_required)
                 self.assertEqual(plan.django_labels, ['member_api'])
 
+    def test_canonical_event_skill_maps_to_its_exact_api_guard(self):
+        plan = plan_for([
+            '.agents/skills/ai-shipping-labs-events/SKILL.md',
+        ])
+
+        self.assertFalse(plan.no_tests_required)
+        self.assertEqual(
+            plan.django_labels,
+            ['api.tests.test_events.EventsSkillDocSyncTest'],
+        )
+        self.assertEqual(plan.extra_commands, [])
+        self.assertEqual(plan.unmapped, [])
+        self.assertFalse(any(
+            note.startswith('WARN unmapped:') for note in plan.notes
+        ))
+
     def test_member_api_guide_maps_to_member_api(self):
         plan = plan_for(['docs/member-api/plans.md'])
         self.assertEqual(plan.django_labels, ['member_api'])
@@ -681,11 +697,18 @@ class GuardedDocArtifactTest(SimpleTestCase):
 
 @tag('core')
 class ContractPathTest(SimpleTestCase):
-    def test_focused_contracts_target_exact_top_level_test_modules(self):
+    def test_focused_contracts_target_exact_django_test_modules(self):
         for glob, labels in FOCUSED_CONTRACT_PATHS:
             with self.subTest(glob=glob):
                 self.assertTrue(labels)
-                self.assertTrue(all(label.startswith('tests.test_') for label in labels))
+                self.assertTrue(all(
+                    label.startswith('tests.test_')
+                    or (
+                        label.split('.')[0] in APP_LABELS
+                        and '.tests.test_' in label
+                    )
+                    for label in labels
+                ))
 
     def test_every_contract_label_is_a_real_target(self):
         known = set(APP_LABELS) | {TESTS_PACKAGE, 'website'}

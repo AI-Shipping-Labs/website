@@ -10,9 +10,8 @@ DEPLOY_DEV_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "deploy-dev.yml
 CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 DEPLOY_PROD_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "deploy-prod.yml"
 DEPLOY_SCRIPT_PATH = REPO_ROOT / "deploy" / "deploy_dev.sh"
-RESEND_CONCURRENCY_TEST = (
-    "uv run python manage.py test "
-    "accounts.tests.test_email_auth.ResendVerificationConcurrencyTest --verbosity 2"
+POSTGRESQL_TAGGED_TESTS = (
+    "uv run python manage.py test --tag=postgresql --verbosity 2"
 )
 
 
@@ -242,12 +241,12 @@ class DeployDevWakeWorkflowTest(SimpleTestCase):
             "--exclude-tag=postgres_migration",
             migration_step["run"],
         )
-        race_step = next(
+        postgres_tests_step = next(
             step
             for step in postgres_job["steps"]
-            if step.get("name") == "Prove verification resend exactly once"
+            if step.get("name") == "Run PostgreSQL-tagged verification tests"
         )
-        self.assertEqual(race_step["run"], RESEND_CONCURRENCY_TEST)
+        self.assertEqual(postgres_tests_step["run"], POSTGRESQL_TAGGED_TESTS)
 
     def test_pull_request_requires_non_skipping_postgresql_race(self):
         workflow = _load_yaml(CI_WORKFLOW_PATH)
@@ -257,12 +256,12 @@ class DeployDevWakeWorkflowTest(SimpleTestCase):
         self.assertFalse(postgres_job.get("continue-on-error", False))
         self.assertEqual(postgres_job["name"], "PostgreSQL 16 Verification")
         self.assertEqual(postgres_job["services"]["postgres"]["image"], "postgres:16")
-        race_step = next(
+        postgres_tests_step = next(
             step
             for step in postgres_job["steps"]
-            if step.get("name") == "Prove verification resend exactly once"
+            if step.get("name") == "Run PostgreSQL-tagged verification tests"
         )
-        self.assertEqual(race_step["run"], RESEND_CONCURRENCY_TEST)
+        self.assertEqual(postgres_tests_step["run"], POSTGRESQL_TAGGED_TESTS)
 
     def test_deploy_verification_uses_shared_action_with_exact_version_match(self):
         workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)

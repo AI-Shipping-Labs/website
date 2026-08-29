@@ -234,9 +234,20 @@ start, cancellation, timeout, hang, superseded/no-verdict result, or while any
 role or process may still use the path. Current incident/recovery paths are not
 retroactively removable merely because this helper exists.
 
+The post-green handoff is a delivery-pipeline completion gate for every
+worktree used by the issue. Report every removed path exactly. For every path
+that remains protected, report the exact classifier reason codes and errors;
+that attributable retention report completes the gate for the path but never
+authorizes force, recursive deletion, fabricated evidence, role cancellation,
+or bypassing any safety veto. Until #1443 provides a repository bridge, the
+authoritative external active-agent registry check remains required before the
+orchestrator asserts `--roles-ended`; OS process absence is not role-completion
+evidence.
+
 ### Mandatory Steps (never skip)
 
 - Every issue goes through ALL stages: PM groom → SWE implement → Tester review → PM acceptance → Commit → Local merge → Push → Oncall CI check
+- After a terminal green On-Call handoff, the orchestrator must complete the attributable worktree cleanup handoff: verify all roles ended in the authoritative active-agent registry, close or adopt the lifecycle lease, review the dry-run classification and exact plan digest, remove each eligible worktree one path at a time, and report every exact removed path or retained path with its fail-closed reason codes and errors. The issue pipeline is not operationally complete until every worktree used for the issue has one of those outcomes; retention never permits force or bypass.
 - Tester must run the full workflow from `.claude/agents/tester.md` including Step 7 (capture screenshots). Screenshots are used by agents to verify pages rendered correctly, not just for human review
 - Both the software engineer (final check before handoff) and the tester (Step 4) derive the local test scope from `scripts/affected_tests.py` and run exactly what it emits, via `make test-affected`. The helper maps the diff — including uncommitted and untracked work — to Django test labels plus a core-vs-full Playwright decision, and forwards the worst exit code. Neither role widens the scope by hand: a wrong plan is a bug in the mapping, to be fixed in `scripts/affected_tests.py` and `tests/test_affected_tests.py` (or filed), not papered over with a bigger run. Print the plan without running it with `uv run python scripts/affected_tests.py [--json]`
 - The escalation table in `scripts/affected_tests.py` (`ESCALATION_TRIGGERS`, documented in `_docs/testing-guidelines.md` under "Affected-tests selection") is authoritative for when local Playwright escalates from `make test-playwright-core` to `make test-playwright`. It supersedes the prose list that used to live here. The full Playwright suite also runs automatically every 3 hours via `.github/workflows/scheduled-playwright.yml`

@@ -59,7 +59,10 @@ class SyntheticRepo:
     def __init__(self):
         temp_root = PROJECT_ROOT / ".tmp" / "test-cleanup-agent-worktrees"
         temp_root.mkdir(parents=True, exist_ok=True)
-        self.root = Path(tempfile.mkdtemp(prefix="repo-", dir=temp_root)).resolve()
+        self.sandbox = Path(tempfile.mkdtemp(prefix="repo-", dir=temp_root)).resolve()
+        self.root = self.sandbox / "main"
+        self.root.mkdir()
+        self.external_worktrees = self.sandbox / "external-worktrees"
         self.git("init", "-b", "main")
         self.git("config", "user.email", "tests@example.com")
         self.git("config", "user.name", "Cleanup Tests")
@@ -69,8 +72,8 @@ class SyntheticRepo:
         self.git("update-ref", "refs/remotes/origin/main", self.head)
 
     def close(self):
-        assert self.root.is_relative_to(PROJECT_ROOT / ".tmp")
-        shutil.rmtree(self.root, ignore_errors=True)
+        assert self.sandbox.is_relative_to(PROJECT_ROOT / ".tmp")
+        shutil.rmtree(self.sandbox, ignore_errors=True)
 
     def git(self, *args, cwd=None, check=True):
         return subprocess.run(
@@ -85,8 +88,8 @@ class SyntheticRepo:
     def head(self):
         return self.git("rev-parse", "HEAD").stdout.decode().strip()
 
-    def add_worktree(self, name="agent-1442", *, detached=False):
-        path = self.root / ".claude" / "worktrees" / name
+    def add_worktree(self, name="agent-1442", *, detached=False, parent=None):
+        path = (parent or self.root / ".claude" / "worktrees") / name
         path.parent.mkdir(parents=True, exist_ok=True)
         if detached:
             self.git("worktree", "add", "--detach", path, self.head)
@@ -137,6 +140,79 @@ class SyntheticRepoTestCase(SimpleTestCase):
     def tearDown(self):
         self.synthetic.close()
         super().tearDown()
+
+
+@tag("core")
+class RepositoryContractTest(SyntheticRepoTestCase):
+    def install_shipped_gitignore(self):
+        contents = PROJECT_ROOT.joinpath(".gitignore").read_text()
+        patterns = {line.strip() for line in contents.splitlines()}
+        self.assertIn(".claude/worktrees", patterns)
+        self.assertNotIn(".claude/worktrees/", patterns)
+        self.synthetic.root.joinpath(".gitignore").write_text(contents)
+
+    def untracked_paths(self):
+        result = self.synthetic.git(
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+        )
+        return result.stdout.decode().splitlines()
+
+    def test_shipped_ignore_rule_ignores_symlink_object_only_at_configured_path(self):
+        self.install_shipped_gitignore()
+        claude = self.synthetic.root / ".claude"
+        claude.mkdir()
+        self.synthetic.external_worktrees.mkdir()
+        claude.joinpath("worktrees").symlink_to(
+            self.synthetic.external_worktrees,
+            target_is_directory=True,
+        )
+        claude.joinpath("visible.txt").write_text("visible\n")
+
+        paths = self.untracked_paths()
+
+        self.assertNotIn("?? .claude/worktrees", paths)
+        self.assertIn("?? .claude/visible.txt", paths)
+        self.assertEqual(
+            self.synthetic.git("check-ignore", "--quiet", ".claude/worktrees").returncode,
+            0,
+        )
+
+    def test_shipped_ignore_rule_ignores_normal_directory_and_descendants(self):
+        self.install_shipped_gitignore()
+        worktrees = self.synthetic.root / ".claude" / "worktrees"
+        worktrees.mkdir(parents=True)
+        worktrees.joinpath("agent", "valuable.txt").parent.mkdir()
+        worktrees.joinpath("agent", "valuable.txt").write_text("ignored\n")
+        self.synthetic.root.joinpath(".claude", "visible.txt").write_text("visible\n")
+
+        paths = self.untracked_paths()
+
+        self.assertNotIn("?? .claude/worktrees/agent/valuable.txt", paths)
+        self.assertIn("?? .claude/visible.txt", paths)
+        self.assertEqual(
+            self.synthetic.git(
+                "check-ignore",
+                "--quiet",
+                ".claude/worktrees/agent/valuable.txt",
+            ).returncode,
+            0,
+        )
+
+    def test_process_contract_makes_post_green_cleanup_an_attributable_gate(self):
+        process = PROJECT_ROOT.joinpath("_docs", "PROCESS.md").read_text()
+        normalized = " ".join(process.split())
+
+        for required in (
+            "delivery-pipeline completion gate for every",
+            "Report every removed path exactly",
+            "exact classifier reason codes and errors",
+            "never authorizes force",
+            "authoritative external active-agent registry check remains required",
+            "OS process absence is not role-completion evidence",
+        ):
+            self.assertIn(required, normalized)
 
 
 @tag("core")
@@ -310,6 +386,89 @@ class LeaseContractTest(SyntheticRepoTestCase):
 
 @tag("core")
 class ClassificationContractTest(SyntheticRepoTestCase):
+    def test_symlinked_boundary_uses_same_semantics_for_every_cleanup_mode(self):
+        boundary = self.synthetic.root / ".claude" / "worktrees"
+        boundary.parent.mkdir(parents=True, exist_ok=True)
+        resolved_boundary = self.synthetic.external_worktrees
+        resolved_boundary.mkdir()
+        boundary.symlink_to(resolved_boundary, target_is_directory=True)
+        path = self.synthetic.add_worktree("classified")
+        service = self.synthetic.service()
+        self.synthetic.terminal(service, path)
+
+        plan = service.classify_path(path)
+
+        self.assertEqual(service.boundary(), resolved_boundary)
+        self.assertEqual(plan.classification, cleanup.ELIGIBLE_REMOVE)
+
+        removed = service.remove(path=path, issue=1442, plan_digest=plan.plan_digest)
+        self.assertEqual(removed.exit_status, 0)
+        self.assertFalse(path.exists())
+
+        adopted = self.synthetic.add_worktree("adopted")
+        service.close_lease(
+            path=adopted,
+            issue=1442,
+            merge_sha=self.synthetic.head,
+            run_id="12345",
+            run_head_sha=self.synthetic.head,
+            adopt_legacy=True,
+        )
+        self.assertEqual(service.classify_path(adopted).classification, cleanup.ELIGIBLE_REMOVE)
+
+        stale = self.synthetic.add_worktree("stale")
+        self.synthetic.terminal(service, stale)
+        shutil.rmtree(stale)
+        stale_plan = next(plan for plan in service.classify_stale() if plan.path == str(stale))
+        self.assertEqual(stale_plan.classification, cleanup.STALE_REGISTRATION_ELIGIBLE_PRUNE)
+
+    def test_strict_boundary_rejects_equal_prefix_sibling_outside_and_ambiguous_paths(self):
+        configured = self.synthetic.root / ".claude" / "worktrees"
+        configured.parent.mkdir(parents=True, exist_ok=True)
+        boundary = self.synthetic.external_worktrees
+        boundary.mkdir()
+        configured.symlink_to(boundary, target_is_directory=True)
+        inside = self.synthetic.add_worktree("inside")
+        prefix_sibling = self.synthetic.add_worktree(
+            "prefix-sibling",
+            parent=boundary.parent / f"{boundary.name}-sibling",
+        )
+        outside = self.synthetic.add_worktree("outside", parent=self.synthetic.sandbox / "outside")
+        service = self.synthetic.service()
+
+        self.assertEqual(service.classify_path(self.synthetic.root).classification, cleanup.PROTECTED_SHARED_MAIN)
+        for path in (boundary, prefix_sibling, outside):
+            plan = service.classify_path(path)
+            self.assertEqual(plan.classification, cleanup.RETAIN_MISSING_OR_UNCLASSIFIED)
+            self.assertNotEqual(plan.classification, cleanup.ELIGIBLE_REMOVE)
+
+        worktrees = service.worktrees()
+        registered_inside = next(worktree for worktree in worktrees if worktree.path == inside)
+        service.worktrees = lambda: [*worktrees, registered_inside]
+        ambiguous = service.classify_path(inside)
+        self.assertEqual(ambiguous.classification, cleanup.RETAIN_MISSING_OR_UNCLASSIFIED)
+        with self.assertRaisesMessage(cleanup.CleanupError, "exactly one registered worktree"):
+            service.create_lease(path=inside, issue=1476, role="software-engineer")
+
+    def test_broken_looping_and_non_directory_boundaries_fail_closed(self):
+        configured = self.synthetic.root / ".claude" / "worktrees"
+        configured.parent.mkdir(parents=True, exist_ok=True)
+        service = self.synthetic.service()
+
+        configured.symlink_to(self.synthetic.sandbox / "missing", target_is_directory=True)
+        with self.assertRaisesMessage(cleanup.CleanupError, "cannot be resolved safely"):
+            service.classify()
+
+        configured.unlink()
+        configured.symlink_to(configured)
+        with self.assertRaisesMessage(cleanup.CleanupError, "cannot be resolved safely"):
+            service.classify()
+
+        configured.unlink()
+        configured.write_text("not a directory\n")
+        with self.assertRaisesMessage(cleanup.CleanupError, "is not a directory"):
+            service.classify()
+
     def test_shared_main_outside_and_broken_directory_are_protected(self):
         broken = self.synthetic.root / ".claude" / "worktrees" / "broken"
         broken.mkdir(parents=True)

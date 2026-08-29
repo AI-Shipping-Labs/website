@@ -37,6 +37,6 @@ playwright_tests/screenshots/
 .django_cache/
 
 # Claude Code local artifacts (agent worktrees, scheduler lock)
-.claude/worktrees/
+.claude/worktrees
 .claude/scheduled_tasks.lock
 *.sqlite3-journal

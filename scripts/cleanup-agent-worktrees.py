@@ -327,7 +327,14 @@ class CleanupService:
         return matches[0]
 
     def boundary(self, worktrees: Sequence[Worktree] | None = None) -> Path:
-        return self.shared_main(worktrees).path / ".claude" / "worktrees"
+        configured = self.shared_main(worktrees).path / ".claude" / "worktrees"
+        try:
+            resolved = configured.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise CleanupError("agent worktree boundary cannot be resolved safely") from exc
+        if not resolved.is_dir():
+            raise CleanupError("agent worktree boundary is not a directory")
+        return resolved
 
     def _lease_path(self, path: Path) -> Path:
         return self.lease_dir / f"{lease_key(path)}.json"
@@ -375,12 +382,13 @@ class CleanupService:
         return target
 
     def _registered_candidate(self, path: Path) -> Worktree:
-        matches = [wt for wt in self.worktrees() if wt.path == path]
+        worktrees = self.worktrees()
+        matches = [wt for wt in worktrees if wt.path == path]
         if len(matches) != 1:
             raise CleanupError("candidate must be exactly one registered worktree")
-        if path == self.shared_main().path:
+        if path == self.shared_main(worktrees).path:
             raise CleanupError("shared main cannot have an agent lifecycle lease")
-        if not is_below(path, self.boundary()):
+        if not is_below(path, self.boundary(worktrees)):
             raise CleanupError("candidate is outside the agent worktree boundary")
         return matches[0]
 
@@ -606,6 +614,7 @@ class CleanupService:
             "mode": "remove",
             "repository": str(main.path),
             "common_dir": str(self.common_dir),
+            "boundary": str(boundary),
             "path": str(path),
             "issue": issue,
             "branch": wt.branch,
@@ -657,42 +666,46 @@ class CleanupService:
         origin_main = _decode(self._git("rev-parse", "origin/main").stdout)
         plans = [self._candidate_plan(wt, main=main, boundary=boundary, origin_main=origin_main) for wt in worktrees]
         registered = {wt.path for wt in worktrees}
-        if boundary.is_dir():
-            for entry in sorted(boundary.iterdir(), key=lambda path: path.name):
-                path = canonical(entry)
-                if path in registered:
-                    continue
-                facts = {
-                    "mode": "remove",
-                    "path": str(path),
-                    "classification": RETAIN_MISSING_OR_UNCLASSIFIED,
-                    "reason": "existing directory is not registered",
-                }
-                plans.append(
-                    Plan(
-                        timestamp=self.now(),
-                        actor=self.actor,
-                        mode="remove",
-                        repository=str(main.path),
-                        common_dir=str(self.common_dir),
-                        path=str(path),
-                        issue=None,
-                        branch=None,
-                        detached=False,
-                        head="",
-                        origin_main=origin_main,
-                        lease_state="missing-or-invalid",
-                        terminal_run_id=None,
-                        terminal_run_head=None,
-                        terminal_result=None,
-                        process_ids=[],
-                        process_reasons=[],
-                        classification=RETAIN_MISSING_OR_UNCLASSIFIED,
-                        reasons=[RETAIN_MISSING_OR_UNCLASSIFIED],
-                        errors=["existing directory is not registered"],
-                        facts=facts,
-                    ).seal()
-                )
+        try:
+            entries = sorted(boundary.iterdir(), key=lambda path: path.name)
+        except OSError as exc:
+            raise CleanupError("agent worktree boundary cannot be enumerated safely") from exc
+        for entry in entries:
+            path = canonical(entry)
+            if path in registered:
+                continue
+            facts = {
+                "mode": "remove",
+                "boundary": str(boundary),
+                "path": str(path),
+                "classification": RETAIN_MISSING_OR_UNCLASSIFIED,
+                "reason": "existing directory is not registered",
+            }
+            plans.append(
+                Plan(
+                    timestamp=self.now(),
+                    actor=self.actor,
+                    mode="remove",
+                    repository=str(main.path),
+                    common_dir=str(self.common_dir),
+                    path=str(path),
+                    issue=None,
+                    branch=None,
+                    detached=False,
+                    head="",
+                    origin_main=origin_main,
+                    lease_state="missing-or-invalid",
+                    terminal_run_id=None,
+                    terminal_run_head=None,
+                    terminal_result=None,
+                    process_ids=[],
+                    process_reasons=[],
+                    classification=RETAIN_MISSING_OR_UNCLASSIFIED,
+                    reasons=[RETAIN_MISSING_OR_UNCLASSIFIED],
+                    errors=["existing directory is not registered"],
+                    facts=facts,
+                ).seal()
+            )
         return sorted(plans, key=lambda plan: plan.path)
 
     def classify_path(self, path: Path) -> Plan:
@@ -822,6 +835,7 @@ class CleanupService:
             errors = list(dict.fromkeys(errors))
             facts = {
                 "mode": "prune-metadata",
+                "boundary": str(boundary),
                 "path": str(wt.path),
                 "head": wt.head,
                 "branch": wt.branch,

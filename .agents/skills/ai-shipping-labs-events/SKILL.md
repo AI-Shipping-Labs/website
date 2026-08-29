@@ -1,6 +1,6 @@
 ---
 name: ai-shipping-labs-events
-description: Create and manage AI Shipping Labs events and workshops in production. Use when asked to "create an event", "schedule a workshop", "set up an event series", "add a Zoom event", "make a recurring event", "publish a workshop", cancel/reschedule an occurrence, or bulk-create Zoom meetings for a series. Events are created via the production API; workshops are git content synced from the workshops-content repo.
+description: Create and manage AI Shipping Labs events and workshops in production. Use when asked to "create an event", "schedule a workshop", "set up an event series", "add a Zoom event", "make a recurring event", "publish a workshop", invite an event guest, assign an event host, cancel/reschedule an occurrence, or bulk-create Zoom meetings for a series. Events are created via the production API; workshops are git content synced from the workshops-content repo.
 metadata:
   short-description: Create and manage events, event series, and workshops
 ---
@@ -36,7 +36,8 @@ GitHub-origin events are read-only (`editable: false`); only Studio/API-origin e
 
 ### Key create flags
 
-Run `uv run asl events create --help` for the full list. Required: `--title`, `--start-datetime`.
+Run `uv run asl events create --help` for the full list. Production currently
+requires `--title`, `--description`, and `--start-datetime`.
 
 - `--kind standard|workshop|meetup|q_and_a`
 - `--platform zoom|custom`
@@ -44,8 +45,10 @@ Run `uv run asl events create --help` for the full list. Required: `--title`, `-
 - `--publish` / `--no-publish` (default: published for create)
 - `--timezone Europe/Berlin`
 - `--required-level open|registered|basic|main|premium`
-- `--host-email host@example.com` (auto-registers that user as attendee)
-- `--host-ids 1,2` (comma-separated host profile ids)
+- `--host-email host@example.com` (operational host account; auto-registers
+  that platform user as an attendee and sends host access/calendar email)
+- `--host-ids 1,2` (visible host profile cards; this is independent of
+  `host_email`)
 - `--tags sprint:may-2026,workshop` (comma-separated)
 - `--create-zoom` (provisions a real Zoom meeting; idempotent)
 - `--generate-banner` / `--no-generate-banner`
@@ -55,15 +58,54 @@ Run `uv run asl events create --help` for the full list. Required: `--title`, `-
 ```bash
 uv run asl events create \
   --title "Office Hours" \
+  --description "Open office hours for questions and project help." \
   --start-datetime "2026-05-05T17:00:00+02:00" \
   --timezone Europe/Berlin \
   --required-level open \
+  --host-email alexey@datatalks.club \
+  --host-ids 1 \
   --create-zoom
 ```
 
 Defaults make the event visible: `status=upcoming`, `published=true`. Pass `--status draft` to keep it hidden.
 
 The create call never rolls back on a Zoom problem: if Zoom fails, the event is still created with a `zoom_error` string. Retry with `asl events update <slug> --create-zoom`.
+
+### Alexey host and calendar guest
+
+For events operated by Alexey, always use both host fields:
+
+- `--host-email alexey@datatalks.club` — Alexey's work/platform account and
+  operational host identity.
+- `--host-ids 1` — Alexey Grigorev's visible event-host profile. Setting only
+  `host_email` leaves the serialized `hosts` list empty and no host card is
+  shown on the event page.
+
+After every create or host update, follow the safe-write protocol and confirm
+that the read-back contains:
+
+```json
+{
+  "host_email": "alexey@datatalks.club",
+  "hosts": [{"id": 1, "slug": "alexey-grigorev"}]
+}
+```
+
+Also invite `alexey.s.grigoriev@gmail.com` as an ordinary attendee/guest on
+every newly created or newly published event, unless Alexey explicitly opts
+out. This is separate from host assignment: never replace `host_email` with
+the Gmail address and never use Gmail in `host_ids`.
+
+Use the supported `asl events` guest-invitation command once issue #1494 is
+implemented. Until that command exists, report that the guest invite is
+pending instead of using raw HTTP, bypassing CSRF, or temporarily reassigning
+`host_email`.
+
+For a series occurrence, the guest invitation should use whole-series scope so
+future eligible occurrences automatically include Gmail. For a standalone
+event, use event-only scope. Treat an already-registered response as a
+successful idempotent outcome, then GET the event again for the ordinary
+safe-write read-back.
 
 ## Event series (`asl event-series --help`)
 

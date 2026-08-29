@@ -61,13 +61,19 @@ uv run asl events create \
   --description "Open office hours for questions and project help." \
   --start-datetime "2026-05-05T17:00:00+02:00" \
   --timezone Europe/Berlin \
-  --required-level open \
+  --required-level main \
   --host-email alexey@datatalks.club \
   --host-ids 1 \
   --create-zoom
 ```
 
 Defaults make the event visible: `status=upcoming`, `published=true`. Pass `--status draft` to keep it hidden.
+
+When Alexey asks to create an event without naming an audience, default to
+`--required-level main`: these events are normally for Main members and above.
+Use `open`, `registered`, `basic`, or `premium` only when Alexey explicitly
+requests that audience. Include the chosen `required_level` in the post-create
+GET verification; do not rely on the API's `open` default.
 
 The create call never rolls back on a Zoom problem: if Zoom fails, the event is still created with a `zoom_error` string. Retry with `asl events update <slug> --create-zoom`.
 

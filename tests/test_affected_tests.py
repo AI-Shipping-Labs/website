@@ -660,7 +660,7 @@ class GuardedDocArtifactTest(SimpleTestCase):
         self.assertIn('skills/ai-shipping-labs-member-api', found)
         self.assertIn('member_api', found['skills/ai-shipping-labs-member-api'])
         self.assertIn('_docs/design-system.md', found)
-        for top_level in ('CLAUDE.md', 'README.md'):
+        for top_level in ('CLAUDE.md', 'AGENTS.md', 'README.md'):
             self.assertIn(top_level, found)
             self.assertIn(TESTS_PACKAGE, found[top_level])
 
@@ -738,6 +738,7 @@ COMMAND_IS_PROHIBITED = re.compile(
 #: Files whose text is an instruction an agent will follow.
 AGENT_FACING_FILES = (
     'CLAUDE.md',
+    'AGENTS.md',
     'README.md',
     '_docs/PROCESS.md',
     '.claude/agents/software-engineer.md',
@@ -833,16 +834,24 @@ class RotGuardTest(SimpleTestCase):
         self.assertIsNotNone(recipe, 'test-core target not found')
         self.assertIn('--parallel 4', recipe.group(1))
 
-    def test_claude_md_points_at_the_affected_tests_helper(self):
-        # CLAUDE.md is auto-loaded into every agent's context and declares
-        # itself as overriding default behaviour, so it outranks the agent
-        # definitions in practice. It must not tell agents to run the full
-        # local Django suite.
-        text = (REPO_ROOT / 'CLAUDE.md').read_text()
-        self.assertIn('make test-affected', text)
-        self.assertIn('scripts/affected_tests.py', text)
-        self.assertNotIn('uv run python manage.py test --parallel', text)
-        self.assertNotIn('uv run python -m pytest playwright_tests/', text)
+    def test_root_agent_instructions_delegate_to_the_canonical_helper_policy(self):
+        # Claude loads the bootstrap while Codex-style agents load AGENTS.md
+        # directly. Pin both halves of that explicit one-hop contract without
+        # duplicating the canonical testing policy back into CLAUDE.md.
+        claude_text = (REPO_ROOT / 'CLAUDE.md').read_text()
+        agents_text = (REPO_ROOT / 'AGENTS.md').read_text()
+        delegation_directives = [
+            line.strip()
+            for line in claude_text.splitlines()
+            if line.lstrip().startswith('@')
+        ]
+        self.assertEqual(
+            delegation_directives,
+            ['@AGENTS.md'],
+            'CLAUDE.md must delegate exactly once to the root AGENTS.md',
+        )
+        self.assertIn('make test-affected', agents_text)
+        self.assertIn('scripts/affected_tests.py', agents_text)
 
     def test_software_engineer_agent_does_not_mandate_the_full_local_suite(self):
         text = (REPO_ROOT / '.claude' / 'agents' / 'software-engineer.md').read_text()

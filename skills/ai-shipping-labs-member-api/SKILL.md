@@ -1,12 +1,12 @@
 ---
 name: ai-shipping-labs-member-api
-description: Catalog for the AI Shipping Labs member API. Use to discover which member-API family fits the task (Plans or Book Club), then read that family's reference doc (plans.md / books.md). Covers shared auth with a member-owned API key against /member-api/v1 — a member acting on their own data only, never Studio or staff endpoints.
+description: Catalog for the AI Shipping Labs member API. Use to discover which family fits the task (Plans, Book Club, or Events), then read its reference doc. Covers shared auth with a member-owned API key against /member-api/v1 — a member acting on their own data only, never Studio or staff endpoints.
 ---
 
 # AI Shipping Labs Member API
 
 This is the catalog for the AI Shipping Labs member API. The member API lets a
-member act on their own data with a member-owned API key. It is scoped to the
+member act on their own data with a member-owned API key. It is limited to the
 key owner: it never exposes Studio, staff, CRM, onboarding, or other members'
 data.
 
@@ -16,6 +16,7 @@ Pick the family that matches the task and read its reference doc:
 |--------|--------------|-----------|
 | Plans | List, fetch, download, and edit the member's own sprint plans — weeks, checkpoints, deliverables, next steps, resources, week notes, and progress. | [`plans.md`](plans.md) |
 | Book Club | Read and update the member's own Book Club activity — per-chapter read state, per-chapter notes (markdown), reading progress for a book, and the reader profile. | [`books.md`](books.md) |
+| Events | Discover accessible events, fetch event detail, and register the key owner for one session or a whole series. | [`events.md`](events.md) |
 
 Everything below is shared by every family.
 
@@ -43,6 +44,7 @@ https://aishippinglabs.com/member-api/docs
 ```
 
 Members create and manage their keys at `/account/#api-keys`.
+Every active key has the same deployed member API capabilities. Members do not choose permissions and existing keys automatically work with newly added endpoint families.
 
 ## Key Setup
 
@@ -76,7 +78,7 @@ from any member-API skill. Member API keys cannot access CRM notes, onboarding a
 
 ## Error Handling (all families)
 
-- Treat `401` as a missing, revoked, or under-scoped key.
+- Treat `401` as a missing, malformed, or revoked key.
 - Treat `404` as inaccessible or nonexistent for this key.
 - Treat `422` as a validation error in the payload.
 - Keep retries narrow: fix the failing payload and retry that one request; do

@@ -13,7 +13,7 @@ https://aishippinglabs.com/member-api/v1
 Authorization: Token <asl_member_...>
 ```
 
-Scope: every endpoint here is the key owner's own data. You can read your own
+Boundary: every endpoint here is the key owner's own data. You can read your own
 note, never another member's note, and never the group feed of other members'
 notes (that is a rendered web surface, not an API resource).
 
@@ -92,7 +92,7 @@ reading surfaces).
 - `body` is required on note upsert; an empty body is a validation error.
 - Chapter `number` is 0-based.
 - Only ever touch the key owner's own data — never another member's note.
-- `401` = bad/under-scoped key; `404` = unknown/draft book, unknown chapter, or
+- `401` = missing, malformed, or revoked key; `404` = unknown/draft book, unknown chapter, or
   no note yet; `422` = payload validation error.
 
 ## Contributions

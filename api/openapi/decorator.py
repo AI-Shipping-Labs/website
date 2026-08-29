@@ -22,7 +22,9 @@ Shape -- the decorator takes only keyword arguments:
 - ``methods`` (required): dict mapping HTTP-method strings (``"GET"``,
   ``"POST"``, ...) to per-operation metadata. Each per-method dict can
   carry ``summary``, ``description``, ``query``, ``path_params``,
-  ``request_body``, and ``responses``. See ``api/views/sprints.py``
+  ``request_body``, and ``responses``. A request-body spec may set
+  ``body_required`` to false when an endpoint accepts no body. See
+  ``api/views/sprints.py``
   for the canonical example.
 
 The shapes inside ``methods`` are intentionally minimal -- they map

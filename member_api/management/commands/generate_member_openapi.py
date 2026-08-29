@@ -2,6 +2,7 @@
 
 import difflib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -20,15 +21,40 @@ MEMBER_API_DESCRIPTION = (
     "Member API for AI Shipping Labs. All endpoints accept JSON in and "
     "return JSON out. Authentication is via the ``Authorization: Token "
     "<key>`` header where ``<key>`` is a member-owned API key starting "
-    "with ``asl_member_``. Member keys are scoped to the owner's data; "
-    "plan endpoints only return or update plans owned by that key owner."
+    "with ``asl_member_``. Every valid key has the same deployed member API "
+    "capabilities and acts only as its owner against that member's own data. "
+    "Keys cannot access Studio or staff APIs."
 )
 
 MEMBER_TOKEN_DESCRIPTION = (
     "Send the header ``Authorization: Token <asl_member_...>``. Keys are "
-    "member-owned, scoped to the owner's data, and cannot authenticate "
+    "member-owned, use fixed capabilities, and cannot authenticate "
     "against the staff/operator ``/api/`` surface."
 )
+
+
+_SCOPE_SENTENCE_RE = re.compile(
+    r"\s*(?:Requires (?:the )?``[^`]+`` scope\.|"
+    r"Requires ``[^`]+``\.|"
+    r"Missing key or missing ``[^`]+`` scope\.|"
+    r"Missing or invalid key or scope\.)"
+)
+
+
+def _hide_internal_scope_copy(value):
+    """Remove legacy internal permission names from the member document."""
+    if isinstance(value, dict):
+        return {key: _hide_internal_scope_copy(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_hide_internal_scope_copy(item) for item in value]
+    if isinstance(value, str):
+        if re.search(r"missing ``[^`]+`` scope", value, flags=re.IGNORECASE):
+            return "Missing or invalid member API key."
+        cleaned = _SCOPE_SENTENCE_RE.sub("", value)
+        cleaned = cleaned.replace("Scoped to the key owner", "Limited to the key owner")
+        cleaned = cleaned.replace("scoped to the key owner", "limited to the key owner")
+        return cleaned
+    return value
 
 
 class Command(BaseCommand):
@@ -53,8 +79,9 @@ class Command(BaseCommand):
             description=MEMBER_API_DESCRIPTION,
             token_description=MEMBER_TOKEN_DESCRIPTION,
         )
+        document = _hide_internal_scope_copy(document)
         document["externalDocs"] = {
-            "description": "Member Plans API usage guide",
+            "description": "Member API usage guide",
             "url": MEMBER_API_USAGE_GUIDE_URL,
         }
         generated_bytes = self._serialize(document)

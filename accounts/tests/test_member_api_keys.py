@@ -44,6 +44,8 @@ class MemberAPIKeyModelTest(TestCase):
                 "books:write_notes",
                 "books:write_profile",
                 "books:write_progress",
+                "events:read",
+                "events:register",
                 "plans:read",
                 "plans:write",
                 "plans:write_progress",
@@ -109,6 +111,13 @@ class MemberAPIKeyAccountViewTest(TestCase):
         api_idx = body.index('id="api-keys"')
         self.assertLess(email_idx, api_idx)
         self.assertNotIn("Scope: <span", body)
+        self.assertNotIn(">Scopes<", body)
+        self.assertNotIn("plans:read", body)
+        self.assertNotIn("books:write_notes", body)
+        self.assertContains(
+            response,
+            "Every key has the same capabilities, acts only as you against your own member data, and cannot access Studio or staff APIs.",
+        )
 
     def test_newsletter_only_account_does_not_show_api_keys(self):
         user = User.objects.create_user(

@@ -337,7 +337,7 @@
             API keys
           </h2>
           <p class="mt-2 text-sm text-muted-foreground">
-            Create scoped member keys to connect local tools to your own data through the member API — your sprint plans and your Book Club reading and notes. Keys act only on your own data; they cannot be used for Studio or staff API access.
+            Create a key to connect local tools to the member API — including your sprint plans, Book Club reading and notes, and events. Every key has the same capabilities, acts only as you against your own member data, and cannot access Studio or staff APIs.
           </p>
         </div>
 
@@ -398,7 +398,6 @@
               <tr>
                 <th scope="col" class="py-3 pr-4 font-medium">Name</th>
                 <th scope="col" class="px-4 py-3 font-medium">Prefix</th>
-                <th scope="col" class="px-4 py-3 font-medium">Scopes</th>
                 <th scope="col" class="px-4 py-3 font-medium">Created</th>
                 <th scope="col" class="px-4 py-3 font-medium">Last used</th>
                 <th scope="col" class="py-3 pl-4 font-medium">Status</th>
@@ -409,13 +408,6 @@
               <tr data-testid="member-api-key-row">
                 <td class="py-3 pr-4 font-medium text-foreground">{{ key.name }}</td>
                 <td class="px-4 py-3 font-mono text-xs text-muted-foreground" data-testid="member-api-key-prefix">{{ key.masked_prefix }}</td>
-                <td class="px-4 py-3">
-                  <div class="flex flex-wrap gap-2">
-                    {% for scope in key.scopes %}
-                    <span class="rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-muted-foreground">{{ scope }}</span>
-                    {% endfor %}
-                  </div>
-                </td>
                 <td class="px-4 py-3 text-muted-foreground">{{ key.created_at|member_short_datetime }}</td>
                 <td class="px-4 py-3 text-muted-foreground">
                   {% if key.last_used_at %}{{ key.last_used_at|member_short_datetime }}{% else %}Never{% endif %}

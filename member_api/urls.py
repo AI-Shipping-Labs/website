@@ -9,6 +9,7 @@ from member_api.views.books import (
     reader_profile,
 )
 from member_api.views.docs import docs_page, openapi_json
+from member_api.views.events import event_detail, event_register, events_collection
 from member_api.views.plans import (
     checkpoint_collection,
     checkpoint_detail,
@@ -31,6 +32,17 @@ urlpatterns = [
     path("openapi.json", openapi_json, name="member_api_openapi_json"),
     path("docs", docs_page, name="member_api_docs"),
     path("v1/plans", plans_collection, name="member_api_plans_collection"),
+    path("v1/events", events_collection, name="member_api_events_collection"),
+    path(
+        "v1/events/<int:event_id>",
+        event_detail,
+        name="member_api_event_detail",
+    ),
+    path(
+        "v1/events/<int:event_id>/register",
+        event_register,
+        name="member_api_event_register",
+    ),
     path("v1/plans/<int:plan_id>", plan_detail, name="member_api_plan_detail"),
     path(
         "v1/plans/<int:plan_id>/markdown",

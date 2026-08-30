@@ -756,6 +756,40 @@ free of such patterns. Exact spellings remain visible when nested inside calls,
 containers, properties, or other runtime expressions and therefore classify as
 unknown when the complete assertion is not direct grammar.
 
+### Visible `assert_called_once` reference ratchet
+
+`tests/assert_called_once_ratchet.py` scans the same complete Python test-source
+surface and emits one occurrence for every loaded `ast.Attribute` whose exact
+attribute is `assert_called_once`. The attribute is the anchor, so its
+surrounding call never emits a second occurrence. Each anchor belongs to one
+mechanically exclusive category:
+
+- `DIRECT_BARE_CALL`: the attribute is the exact callable of a call with no
+  positional arguments or keywords.
+- `UNKNOWN_CALL_SHAPE`: the attribute is the exact callable of a call with any
+  positional argument, keyword, star-argument, or keyword expansion.
+- `NONCALL_REFERENCE`: every other loaded reference, including bound-method
+  aliases, containers, returns, pass-through calls, comparisons, and
+  decorators.
+- `UNKNOWN_DYNAMIC_REFERENCE`: an exact literal
+  `getattr(receiver, "assert_called_once")` call. Opaque computed names and
+  aliased `getattr` functions are not inferred.
+
+Receiver spelling, provenance, mock identity, neighboring argument-aware
+assertions, call-history inspection, control flow, and independent outcomes do
+not affect classification. Exact near misses such as
+`assert_called_once_with` are not anchors. Strings, comments, manifests, and
+diagnostics are parsed as their ordinary AST forms and do not become
+occurrences merely because their text contains the prohibited name.
+
+Replace a new bare call with an argument-aware API such as
+`assert_called_once_with`, `assert_called_with`, `assert_any_call`, or
+`assert_has_calls`, or remove it in favor of an assertion on the owned
+observable effect. Replace bound and literal dynamic references with a direct
+argument-aware call. Existing entries may only be removed from
+`tests/assert_called_once_live.py`; the four initial tuples and golden digests
+in `tests/assert_called_once_ceilings.py` never shrink or grow.
+
 ## Affected-tests selection (`make test-affected`)
 
 Per-issue local verification runs the tests the diff can plausibly break --

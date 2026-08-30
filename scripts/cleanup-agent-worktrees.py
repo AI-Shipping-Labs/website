@@ -208,6 +208,10 @@ class Plan:
     path_exists: bool | None = None
     roles_ended_asserted: bool | None = None
     terminal_evidence_present: bool | None = None
+    terminal_issue_disposition: str | None = None
+    terminal_issue_number: int | None = None
+    terminal_issue_state: str | None = None
+    terminal_issue_labels: list[str] | None = None
     lease_actor: str | None = None
     lease_role: str | None = None
     lease_created_at: str | None = None
@@ -516,6 +520,10 @@ class CleanupService:
             errors.append("lease path mismatch")
         if data.get("state") not in {"active", "terminal"}:
             errors.append("lease state invalid")
+        if "issue_disposition" in data:
+            errors.append("lease issue disposition must be nested in terminal evidence")
+        if data.get("state") == "active" and "terminal" in data:
+            errors.append("active lease contains contradictory terminal evidence")
         if not isinstance(data.get("issue"), int) or isinstance(data.get("issue"), bool) or data.get("issue", 0) < 1:
             errors.append("lease issue invalid")
         for key in ("actor", "created_at", "updated_at"):
@@ -796,16 +804,70 @@ class CleanupService:
             },
         )
 
-    def _validate_run(self, lease: dict[str, Any]) -> tuple[bool, str, dict[str, Any] | None]:
+    @staticmethod
+    def _issue_disposition(lease: dict[str, Any]) -> tuple[str | None, str]:
         terminal = lease.get("terminal")
         if not isinstance(terminal, dict):
-            return False, "terminal evidence missing", None
+            return None, "terminal evidence missing"
+        if "issue_disposition" not in terminal:
+            return "closed", ""
+        disposition = terminal.get("issue_disposition")
+        if disposition != "human_pending" or not isinstance(disposition, str):
+            return None, "terminal issue disposition is invalid"
+        return disposition, ""
+
+    @staticmethod
+    def _normalized_run_evidence(payload: Any) -> dict[str, Any] | None:
+        if not isinstance(payload, dict):
+            return None
+        return {
+            key: payload.get(key)
+            for key in ("databaseId", "status", "conclusion", "workflowName", "headSha")
+        }
+
+    @staticmethod
+    def _normalized_issue_evidence(
+        payload: Any,
+        *,
+        disposition: str,
+    ) -> tuple[dict[str, Any] | None, str]:
+        if not isinstance(payload, dict):
+            return None, "issue payload is not an object"
+        number = payload.get("number")
+        state = payload.get("state")
+        evidence: dict[str, Any] = {"number": number, "state": state}
+        if disposition == "closed":
+            return evidence, ""
+
+        if "labels" not in payload or not isinstance(payload.get("labels"), list):
+            evidence["labels"] = None
+            return evidence, "human-pending issue labels payload is missing or malformed"
+        names: list[str] = []
+        for label in payload["labels"]:
+            if not isinstance(label, dict):
+                evidence["labels"] = None
+                return evidence, "human-pending issue label object is malformed"
+            name = label.get("name")
+            if not isinstance(name, str) or not name:
+                evidence["labels"] = None
+                return evidence, "human-pending issue label object is malformed"
+            names.append(name)
+        evidence["labels"] = sorted(names)
+        return evidence, ""
+
+    def _validate_run(self, lease: dict[str, Any]) -> tuple[bool, str, dict[str, Any]]:
+        terminal = lease.get("terminal")
+        if not isinstance(terminal, dict):
+            return False, "terminal evidence missing", {}
         required = {"merge_sha", "run_id", "run_head_sha", "result", "roles_ended"}
         missing = sorted(required - terminal.keys())
         if missing:
-            return False, f"terminal evidence missing:{','.join(missing)}", None
+            return False, f"terminal evidence missing:{','.join(missing)}", {}
         if terminal.get("result") != "success" or terminal.get("roles_ended") is not True:
-            return False, "terminal result or role completion is not successful", None
+            return False, "terminal result or role completion is not successful", {}
+        disposition, disposition_error = self._issue_disposition(lease)
+        if disposition_error or disposition is None:
+            return False, disposition_error, {}
         try:
             payload = self.gh_runner(
                 (
@@ -819,7 +881,15 @@ class CleanupService:
                 )
             )
         except Exception as exc:
-            return False, f"run lookup failed:{type(exc).__name__}", None
+            return False, f"run lookup failed:{type(exc).__name__}", {"issue_disposition": disposition}
+        run_evidence = self._normalized_run_evidence(payload)
+        evidence: dict[str, Any] = {
+            "issue_disposition": disposition,
+            "run": run_evidence,
+            "issue": None,
+        }
+        if run_evidence is None:
+            return False, "run evidence mismatch", evidence
         valid = (
             str(payload.get("databaseId")) == str(terminal["run_id"])
             and payload.get("status") == "completed"
@@ -828,7 +898,8 @@ class CleanupService:
             and payload.get("headSha") == terminal["run_head_sha"]
         )
         if not valid:
-            return False, "run evidence mismatch", payload
+            return False, "run evidence mismatch", evidence
+        issue_fields = "number,state,labels" if disposition == "human_pending" else "number,state"
         try:
             issue_payload = self.gh_runner(
                 (
@@ -838,14 +909,39 @@ class CleanupService:
                     "--repo",
                     REPO_SLUG,
                     "--json",
-                    "number,state",
+                    issue_fields,
                 )
             )
         except Exception as exc:
-            return False, f"issue lookup failed:{type(exc).__name__}", payload
-        if issue_payload.get("number") != lease["issue"] or issue_payload.get("state") != "CLOSED":
-            return False, "issue terminal evidence mismatch", payload
-        return True, "", payload
+            return False, f"issue lookup failed:{type(exc).__name__}", evidence
+        issue_evidence, issue_payload_error = self._normalized_issue_evidence(
+            issue_payload,
+            disposition=disposition,
+        )
+        evidence["issue"] = issue_evidence
+        if issue_payload_error:
+            return False, issue_payload_error, evidence
+        if issue_evidence is None:
+            return False, "issue terminal evidence mismatch", evidence
+        issue_number = issue_evidence.get("number")
+        if (
+            not isinstance(issue_number, int)
+            or isinstance(issue_number, bool)
+            or issue_number != lease["issue"]
+        ):
+            if disposition == "closed":
+                return False, "issue terminal evidence mismatch", evidence
+            return False, "issue number does not exactly match terminal lease", evidence
+        if disposition == "closed":
+            if issue_evidence.get("state") != "CLOSED":
+                return False, "issue terminal evidence mismatch", evidence
+            return True, "", evidence
+        if issue_evidence.get("state") != "OPEN":
+            return False, "human-pending terminal evidence requires state OPEN", evidence
+        labels = issue_evidence.get("labels")
+        if not isinstance(labels, list) or labels.count("human") != 1:
+            return False, "human-pending terminal evidence requires exactly one case-sensitive human label", evidence
+        return True, "", evidence
 
     def _is_ancestor(self, older: str, newer: str) -> tuple[bool, str]:
         if not older or not newer:
@@ -857,6 +953,22 @@ class CleanupService:
             return False, "not ancestor"
         return False, _decode(result.stderr) or f"ancestry exit {result.returncode}"
 
+    @staticmethod
+    def _issue_plan_fields(evidence: dict[str, Any]) -> tuple[str | None, int | None, str | None, list[str] | None]:
+        disposition = evidence.get("issue_disposition")
+        issue = evidence.get("issue")
+        if not isinstance(issue, dict):
+            return disposition if isinstance(disposition, str) else None, None, None, None
+        number = issue.get("number")
+        state = issue.get("state")
+        labels = issue.get("labels")
+        return (
+            disposition if isinstance(disposition, str) else None,
+            number if isinstance(number, int) and not isinstance(number, bool) else None,
+            state if isinstance(state, str) else None,
+            list(labels) if isinstance(labels, list) else None,
+        )
+
     def close_lease(
         self,
         *,
@@ -866,6 +978,7 @@ class CleanupService:
         run_id: str,
         run_head_sha: str,
         adopt_legacy: bool = False,
+        human_pending: bool = False,
     ) -> Path:
         path = canonical(path)
         if issue < 1:
@@ -908,6 +1021,8 @@ class CleanupService:
             "closed_by": self.actor,
             "closed_at": self.now(),
         }
+        if human_pending:
+            terminal["issue_disposition"] = "human_pending"
         prospective = {**lease, "state": "terminal", "updated_at": self.now(), "terminal": terminal}
         valid, reason, _ = self._validate_run(prospective)
         if not valid:
@@ -1538,6 +1653,7 @@ class CleanupService:
 
         terminal = lease.get("terminal", {}) if lease else {}
         evidence_valid = False
+        terminal_evidence: dict[str, Any] = {}
         merge_on_main = False
         merge_on_run = False
         if lease and lease.get("state") == "active":
@@ -1545,7 +1661,7 @@ class CleanupService:
                 reasons.append(RETAIN_ACTIVE_LIFECYCLE)
                 errors.append("active lease migration requires authoritative --roles-ended assertion")
         elif lease and lease.get("state") == "terminal":
-            evidence_valid, evidence_error, _ = self._validate_run(lease)
+            evidence_valid, evidence_error, terminal_evidence = self._validate_run(lease)
             merge_on_main, merge_main_error = self._is_ancestor(str(terminal.get("merge_sha", "")), origin_main)
             merge_on_run, merge_run_error = self._is_ancestor(
                 str(terminal.get("merge_sha", "")), str(terminal.get("run_head_sha", ""))
@@ -1633,6 +1749,7 @@ class CleanupService:
             "lease": lease,
             "roles_ended_asserted": roles_ended,
             "terminal_evidence_present": isinstance(terminal, dict) and bool(terminal),
+            "terminal_evidence": terminal_evidence,
             "evidence_valid": evidence_valid,
             "merge_on_main": merge_on_main,
             "merge_on_run": merge_on_run,
@@ -1649,6 +1766,7 @@ class CleanupService:
             "reasons": reasons,
             "errors": errors,
         }
+        disposition, issue_number, issue_state, issue_labels = self._issue_plan_fields(terminal_evidence)
         return Plan(
             timestamp=self.now(),
             actor=self.actor,
@@ -1690,6 +1808,10 @@ class CleanupService:
             path_exists=path.exists(),
             roles_ended_asserted=roles_ended,
             terminal_evidence_present=isinstance(terminal, dict) and bool(terminal),
+            terminal_issue_disposition=disposition,
+            terminal_issue_number=issue_number,
+            terminal_issue_state=issue_state,
+            terminal_issue_labels=issue_labels,
             lease_actor=lease.get("actor") if lease else None,
             lease_role=lease.get("role") if lease else None,
             lease_created_at=lease.get("created_at") if lease else None,
@@ -2051,6 +2173,7 @@ class CleanupService:
         merge_on_main = False
         merge_on_run = False
         evidence_valid = False
+        terminal_evidence: dict[str, Any] = {}
         terminal: dict[str, Any] = lease.get("terminal", {}) if lease else {}
 
         if path == main.path:
@@ -2092,7 +2215,7 @@ class CleanupService:
                     errors.append(ancestry_error)
 
             if lease_state == "terminal":
-                evidence_valid, evidence_error, _ = self._validate_run(lease)
+                evidence_valid, evidence_error, terminal_evidence = self._validate_run(lease)
                 merge_sha = str(terminal.get("merge_sha", ""))
                 run_head = str(terminal.get("run_head_sha", ""))
                 merge_on_main, merge_main_error = self._is_ancestor(merge_sha, origin_main)
@@ -2131,12 +2254,14 @@ class CleanupService:
             "dirty": dirty,
             "head_on_main": head_on_main,
             "evidence_valid": evidence_valid,
+            "terminal_evidence": terminal_evidence,
             "merge_on_main": merge_on_main,
             "merge_on_run": merge_on_run,
             "classification": classification,
             "reasons": reasons,
             "errors": errors,
         }
+        disposition, issue_number, issue_state, issue_labels = self._issue_plan_fields(terminal_evidence)
         return Plan(
             timestamp=self.now(),
             actor=self.actor,
@@ -2171,6 +2296,10 @@ class CleanupService:
             registered=True,
             path_exists=path.exists(),
             terminal_evidence_present=isinstance(lease.get("terminal"), dict) if lease else False,
+            terminal_issue_disposition=disposition,
+            terminal_issue_number=issue_number,
+            terminal_issue_state=issue_state,
+            terminal_issue_labels=issue_labels,
             lease_actor=lease.get("actor") if lease else None,
             lease_role=lease.get("role") if lease else None,
             lease_created_at=lease.get("created_at") if lease else None,
@@ -2258,9 +2387,92 @@ class CleanupService:
             ).seal()
         return matches[0]
 
+    def _registered_path_plan(self, path: Path) -> Plan | None:
+        """Recompute one registered candidate without unrelated GitHub lookups."""
+
+        worktrees = self.worktrees()
+        main = self.shared_main(worktrees)
+        boundary = self.boundary(worktrees)
+        matches = [worktree for worktree in worktrees if worktree.path == path]
+        if len(matches) != 1:
+            return None
+        origin_main = _decode(self._git("rev-parse", "origin/main").stdout)
+        return self._candidate_plan(matches[0], main=main, boundary=boundary, origin_main=origin_main)
+
+    def _post_removal_branch_revalidation_errors(self, *, path: Path, plan: Plan) -> list[str]:
+        """Revalidate sealed terminal/local facts after removal and before branch deletion."""
+
+        errors: list[str] = []
+        worktrees = self.worktrees()
+        try:
+            main = self.shared_main(worktrees)
+            boundary = self.boundary(worktrees)
+        except CleanupError as exc:
+            return [str(exc)]
+        if str(main.path) != plan.repository:
+            errors.append("shared main changed after worktree removal")
+        if str(boundary) != plan.boundary:
+            errors.append("agent worktree boundary changed after worktree removal")
+        if path.exists():
+            errors.append("candidate path reappeared after worktree removal")
+        if any(worktree.path == path for worktree in worktrees):
+            errors.append("candidate remains registered after worktree removal")
+        if plan.branch and any(worktree.branch == plan.branch for worktree in worktrees):
+            errors.append("candidate branch became attached to another worktree")
+
+        process = self.process_scanner.scan(path)
+        if not process.complete:
+            errors.extend(process.errors or ("process visibility is incomplete after worktree removal",))
+        if process.uses:
+            errors.append("candidate has active process use after worktree removal")
+
+        lookup = self._lookup_lease(path, worktrees=worktrees, main=main, boundary=boundary)
+        lease = lookup.lease
+        if (
+            lookup.source != "canonical"
+            or lookup.errors
+            or lookup.content_digest != plan.lease_content_digest
+            or lease != plan.facts.get("lease")
+        ):
+            errors.append("terminal lease changed after worktree removal")
+            return list(dict.fromkeys(errors))
+
+        evidence_valid, evidence_error, terminal_evidence = self._validate_run(lease)
+        if not evidence_valid:
+            errors.append(evidence_error)
+        if terminal_evidence != plan.facts.get("terminal_evidence"):
+            errors.append("terminal GitHub evidence changed after worktree removal")
+
+        origin_main = _decode(self._git("rev-parse", "origin/main").stdout)
+        if origin_main != plan.origin_main:
+            errors.append("origin/main changed after worktree removal")
+        terminal = lease.get("terminal", {})
+        merge_on_main, merge_main_error = self._is_ancestor(str(terminal.get("merge_sha", "")), origin_main)
+        merge_on_run, merge_run_error = self._is_ancestor(
+            str(terminal.get("merge_sha", "")),
+            str(terminal.get("run_head_sha", "")),
+        )
+        if not merge_on_main:
+            errors.append(f"merge SHA is no longer on origin/main: {merge_main_error}")
+        if not merge_on_run:
+            errors.append(f"merge SHA is no longer on successful run head: {merge_run_error}")
+
+        if plan.branch:
+            branch_tip = self._git("rev-parse", f"refs/heads/{plan.branch}", check=False)
+            if branch_tip.returncode:
+                errors.append("attached branch disappeared before merged-safe deletion")
+            else:
+                tip = _decode(branch_tip.stdout)
+                if tip != plan.head:
+                    errors.append("attached branch tip changed after worktree removal")
+                merged, reason = self._is_ancestor(tip, origin_main)
+                if not merged:
+                    errors.append(f"branch is no longer proven merged: {reason}")
+        return list(dict.fromkeys(errors))
+
     def remove(self, *, path: Path, issue: int, plan_digest: str) -> Plan:
         path = canonical(path)
-        plan = self.classify_path(path)
+        plan = self._registered_path_plan(path) or self.classify_path(path)
         remove_action = f"git worktree remove {path}"
         plan.requested_actions = [remove_action]
         if plan.branch:
@@ -2280,16 +2492,13 @@ class CleanupService:
             return plan
         plan.completed_actions.append(remove_action)
         if plan.branch:
-            branch_tip = self._git("rev-parse", f"refs/heads/{plan.branch}", check=False)
-            if branch_tip.returncode:
+            revalidation_errors = self._post_removal_branch_revalidation_errors(path=path, plan=plan)
+            if revalidation_errors:
                 plan.exit_status = 1
-                plan.errors.append("attached branch disappeared before merged-safe deletion")
-                return plan
-            tip = _decode(branch_tip.stdout)
-            merged, reason = self._is_ancestor(tip, plan.origin_main)
-            if not merged:
-                plan.exit_status = 1
-                plan.errors.append(f"branch is no longer proven merged: {reason}")
+                plan.errors.append(
+                    "branch deletion revalidation refused after worktree removal:"
+                    + ";".join(revalidation_errors)
+                )
                 return plan
             deleted = self._git("branch", "-d", plan.branch, check=False)
             if deleted.returncode:
@@ -2328,11 +2537,12 @@ class CleanupService:
                 reasons.append(RETAIN_MISSING_OR_UNCLASSIFIED)
                 errors.append("terminal legacy alias must be reconciled before metadata pruning")
             valid = False
+            terminal_evidence: dict[str, Any] = {}
             head_on_main = False
             merge_main = False
             merge_run = False
             if lease and lease.get("state") == "terminal":
-                valid, evidence_error, _ = self._validate_run(lease)
+                valid, evidence_error, terminal_evidence = self._validate_run(lease)
                 merge_main, main_error = self._is_ancestor(str(terminal.get("merge_sha", "")), origin_main)
                 merge_run, run_error = self._is_ancestor(
                     str(terminal.get("merge_sha", "")), str(terminal.get("run_head_sha", ""))
@@ -2370,6 +2580,7 @@ class CleanupService:
                 "lease_lookup": lookup.facts(),
                 "lease_errors": lease_errors,
                 "evidence_valid": valid,
+                "terminal_evidence": terminal_evidence,
                 "head_on_main": head_on_main,
                 "merge_on_main": merge_main,
                 "merge_on_run": merge_run,
@@ -2380,6 +2591,7 @@ class CleanupService:
                 "errors": errors,
                 "delete_merged_branches": delete_merged_branches,
             }
+            disposition, issue_number, issue_state, issue_labels = self._issue_plan_fields(terminal_evidence)
             plans.append(
                 Plan(
                     timestamp=self.now(),
@@ -2420,6 +2632,10 @@ class CleanupService:
                     registered=True,
                     path_exists=wt.path.exists(),
                     terminal_evidence_present=isinstance(lease.get("terminal"), dict) if lease else False,
+                    terminal_issue_disposition=disposition,
+                    terminal_issue_number=issue_number,
+                    terminal_issue_state=issue_state,
+                    terminal_issue_labels=issue_labels,
                     lease_actor=lease.get("actor") if lease else None,
                     lease_role=lease.get("role") if lease else None,
                     lease_created_at=lease.get("created_at") if lease else None,
@@ -2468,14 +2684,15 @@ class CleanupService:
             for plan in plans:
                 if not plan.branch:
                     continue
-                branch_tip = self._git("rev-parse", f"refs/heads/{plan.branch}", check=False)
-                if branch_tip.returncode:
-                    result["errors"].append(f"{plan.branch}: branch disappeared before merged-safe deletion")
-                    result["exit_status"] = 1
-                    continue
-                merged, reason = self._is_ancestor(_decode(branch_tip.stdout), plan.origin_main)
-                if not merged:
-                    result["errors"].append(f"{plan.branch}: branch is not proven merged: {reason}")
+                revalidation_errors = self._post_removal_branch_revalidation_errors(
+                    path=canonical(plan.path),
+                    plan=plan,
+                )
+                if revalidation_errors:
+                    result["errors"].append(
+                        f"{plan.branch}: branch deletion revalidation refused after metadata prune:"
+                        + ";".join(revalidation_errors)
+                    )
                     result["exit_status"] = 1
                     continue
                 deleted = self._git("branch", "-d", plan.branch, check=False)
@@ -2518,6 +2735,10 @@ HUMAN_PLAN_FIELDS: tuple[str, ...] = (
     "path_exists",
     "roles_ended_asserted",
     "terminal_evidence_present",
+    "terminal_issue_disposition",
+    "terminal_issue_number",
+    "terminal_issue_state",
+    "terminal_issue_labels",
     "lease_actor",
     "lease_role",
     "lease_created_at",
@@ -2620,6 +2841,11 @@ def build_parser() -> argparse.ArgumentParser:
         close.add_argument("--run-id", required=True)
         close.add_argument("--run-head-sha", required=True)
         close.add_argument(
+            "--human-pending",
+            action="store_true",
+            help="Seal the distinct open-issue-with-exact-human-label terminal disposition",
+        )
+        close.add_argument(
             "--roles-ended",
             action="store_true",
             required=True,
@@ -2681,6 +2907,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 run_id=args.run_id,
                 run_head_sha=args.run_head_sha,
                 adopt_legacy=command == "lease-adopt",
+                human_pending=args.human_pending,
             )
             print(json.dumps({"action": command, "path": str(target), "actor": args.actor}, sort_keys=True))
             return 0

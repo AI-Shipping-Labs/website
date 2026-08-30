@@ -122,6 +122,18 @@ class FailingBranchDeleteRunner(RecordingRunner):
         return self.delegate(args, cwd=cwd)
 
 
+class AfterWorktreeRemoveRunner(RecordingRunner):
+    def __init__(self, callback):
+        super().__init__()
+        self.callback = callback
+
+    def __call__(self, args, *, cwd=None):
+        result = super().__call__(args, cwd=cwd)
+        if list(args[:3]) == ["git", "worktree", "remove"] and result.returncode == 0:
+            self.callback()
+        return result
+
+
 class SyntheticRepo:
     """A disposable repository whose entire graph lives below project .tmp."""
 
@@ -230,7 +242,7 @@ class SyntheticRepo:
         lease_path.write_text(json.dumps(lease, sort_keys=True, indent=2) + "\n")
         return lease_path, lease
 
-    def terminal(self, service, path, *, issue=1442):
+    def terminal(self, service, path, *, issue=1442, human_pending=False):
         service.create_lease(path=path, issue=issue, role="software-engineer")
         service.close_lease(
             path=path,
@@ -238,6 +250,7 @@ class SyntheticRepo:
             merge_sha=self.head,
             run_id="12345",
             run_head_sha=self.head,
+            human_pending=human_pending,
         )
 
 
@@ -324,6 +337,11 @@ class RepositoryContractTest(SyntheticRepoTestCase):
             "lease-reconcile --apply --path",
             "`lease-adopt` must never be used",
             "migration success is not cleanup eligibility",
+            "--roles-ended --human-pending",
+            '`terminal.issue_disposition = "human_pending"`',
+            "Worktree and merged-branch removal is operational cleanup only",
+            "remains open and labeled `human`",
+            "uses only read-only `gh issue view`",
         ):
             self.assertIn(required, normalized)
 
@@ -498,6 +516,393 @@ class LeaseContractTest(SyntheticRepoTestCase):
 
 
 @tag("core")
+class HumanPendingLeaseContractTest(SyntheticRepoTestCase):
+    def mutable_human_service(self, *, issue=1547, labels=None, state="OPEN", runner=None):
+        service = self.synthetic.service(runner=runner)
+        observed = {
+            "issue": {
+                "number": issue,
+                "state": state,
+                "labels": labels if labels is not None else [{"name": "human"}],
+            },
+            "calls": [],
+        }
+
+        def github(args):
+            observed["calls"].append(tuple(args))
+            if list(args[:2]) == ["issue", "view"]:
+                return observed["issue"]
+            return self.synthetic.gh(args)
+
+        service.gh_runner = github
+        return service, observed
+
+    def test_cli_flag_is_explicit_on_both_terminal_commands(self):
+        parser = cleanup.build_parser()
+        required = [
+            "--path",
+            "candidate",
+            "--issue",
+            "1547",
+            "--merge-sha",
+            "a" * 40,
+            "--run-id",
+            "12345",
+            "--run-head-sha",
+            "b" * 40,
+            "--roles-ended",
+        ]
+
+        for command in ("lease-close", "lease-adopt"):
+            with self.subTest(command=command):
+                ordinary = parser.parse_args(["--actor", "orchestrator", command, *required])
+                explicit = parser.parse_args(
+                    ["--actor", "orchestrator", command, *required, "--human-pending"]
+                )
+                self.assertFalse(ordinary.human_pending)
+                self.assertTrue(explicit.human_pending)
+
+    def test_human_pending_close_seals_exact_evidence_in_plan_and_digest(self):
+        path = self.synthetic.add_worktree("human-pending")
+        service, observed = self.mutable_human_service(
+            labels=[{"name": "P1"}, {"name": "human"}, {"name": "infra"}],
+        )
+        service.create_lease(path=path, issue=1547, role="software-engineer")
+
+        lease_path = service.close_lease(
+            path=path,
+            issue=1547,
+            merge_sha=self.synthetic.head,
+            run_id="12345",
+            run_head_sha=self.synthetic.head,
+            human_pending=True,
+        )
+        lease = json.loads(lease_path.read_text())
+        plan = service.classify_path(path)
+
+        self.assertEqual(lease["terminal"]["issue_disposition"], "human_pending")
+        self.assertEqual(plan.classification, cleanup.ELIGIBLE_REMOVE)
+        self.assertEqual(plan.terminal_issue_disposition, "human_pending")
+        self.assertEqual(plan.terminal_issue_number, 1547)
+        self.assertEqual(plan.terminal_issue_state, "OPEN")
+        self.assertEqual(plan.terminal_issue_labels, ["P1", "human", "infra"])
+        self.assertEqual(
+            plan.facts["terminal_evidence"]["issue"],
+            {"number": 1547, "state": "OPEN", "labels": ["P1", "human", "infra"]},
+        )
+        issue_calls = [call for call in observed["calls"] if call[:2] == ("issue", "view")]
+        self.assertTrue(issue_calls)
+        self.assertTrue(all(call[-1] == "number,state,labels" for call in issue_calls))
+        self.assertTrue(all(call[3:5] == ("--repo", cleanup.REPO_SLUG) for call in issue_calls))
+
+        prior_digest = plan.plan_digest
+        observed["issue"]["labels"] = list(reversed(observed["issue"]["labels"]))
+        self.assertEqual(service.classify_path(path).plan_digest, prior_digest)
+        observed["issue"]["labels"].append({"name": "enhancement"})
+        self.assertNotEqual(service.classify_path(path).plan_digest, prior_digest)
+
+    def test_ordinary_mode_refuses_open_human_without_rewriting_active_or_absent_evidence(self):
+        close_path = self.synthetic.add_worktree("ordinary-close-open")
+        service, _ = self.mutable_human_service()
+        lease_path = service.create_lease(path=close_path, issue=1547, role="tester")
+        before = lease_path.read_bytes()
+
+        with self.assertRaisesMessage(cleanup.CleanupError, "issue terminal evidence mismatch"):
+            service.close_lease(
+                path=close_path,
+                issue=1547,
+                merge_sha=self.synthetic.head,
+                run_id="12345",
+                run_head_sha=self.synthetic.head,
+            )
+        self.assertEqual(lease_path.read_bytes(), before)
+
+        adopt_path = self.synthetic.add_worktree("ordinary-adopt-open")
+        with self.assertRaisesMessage(cleanup.CleanupError, "issue terminal evidence mismatch"):
+            service.close_lease(
+                path=adopt_path,
+                issue=1547,
+                merge_sha=self.synthetic.head,
+                run_id="12345",
+                run_head_sha=self.synthetic.head,
+                adopt_legacy=True,
+            )
+        self.assertFalse(service._lease_path(adopt_path).exists())
+
+    def test_human_pending_mode_refuses_closed_issue_for_close_and_adopt_atomically(self):
+        for adopt in (False, True):
+            with self.subTest(adopt=adopt):
+                path = self.synthetic.add_worktree(f"closed-human-{adopt}")
+                service, _ = self.mutable_human_service(state="CLOSED")
+                prior = None
+                if not adopt:
+                    lease_path = service.create_lease(path=path, issue=1547, role="tester")
+                    prior = lease_path.read_bytes()
+                with self.assertRaisesMessage(cleanup.CleanupError, "requires state OPEN"):
+                    service.close_lease(
+                        path=path,
+                        issue=1547,
+                        merge_sha=self.synthetic.head,
+                        run_id="12345",
+                        run_head_sha=self.synthetic.head,
+                        adopt_legacy=adopt,
+                        human_pending=True,
+                    )
+                if adopt:
+                    self.assertFalse(service._lease_path(path).exists())
+                else:
+                    self.assertEqual(service._lease_path(path).read_bytes(), prior)
+
+    def test_every_ambiguous_or_malformed_human_label_payload_fails_closed(self):
+        path = self.synthetic.add_worktree("label-matrix")
+        service, observed = self.mutable_human_service()
+        self.synthetic.terminal(service, path, issue=1547, human_pending=True)
+        cases = {
+            "missing": {"number": 1547, "state": "OPEN"},
+            "null": {"number": 1547, "state": "OPEN", "labels": None},
+            "not-list": {"number": 1547, "state": "OPEN", "labels": {}},
+            "string-entry": {"number": 1547, "state": "OPEN", "labels": ["human"]},
+            "missing-name": {"number": 1547, "state": "OPEN", "labels": [{}]},
+            "blank-name": {"number": 1547, "state": "OPEN", "labels": [{"name": ""}]},
+            "absent": {"number": 1547, "state": "OPEN", "labels": [{"name": "infra"}]},
+            "wrong-case": {"number": 1547, "state": "OPEN", "labels": [{"name": "Human"}]},
+            "similar": {"number": 1547, "state": "OPEN", "labels": [{"name": "human-pending"}]},
+            "duplicate": {
+                "number": 1547,
+                "state": "OPEN",
+                "labels": [{"name": "human"}, {"name": "human"}],
+            },
+            "wrong-number": {"number": 1548, "state": "OPEN", "labels": [{"name": "human"}]},
+            "boolean-number": {"number": True, "state": "OPEN", "labels": [{"name": "human"}]},
+            "wrong-state": {"number": 1547, "state": "open", "labels": [{"name": "human"}]},
+        }
+        lease_before = service._lease_path(path).read_bytes()
+
+        for name, payload in cases.items():
+            with self.subTest(name=name):
+                observed["issue"] = payload
+                plan = service.classify_path(path)
+                self.assertEqual(plan.classification, cleanup.RETAIN_TERMINAL_EVIDENCE_MISSING)
+                self.assertNotEqual(plan.classification, cleanup.ELIGIBLE_REMOVE)
+                self.assertTrue(plan.errors)
+                self.assertEqual(service._lease_path(path).read_bytes(), lease_before)
+                self.assertTrue(path.exists())
+
+        observed["issue"] = ["not-an-object"]
+        malformed = service.classify_path(path)
+        self.assertEqual(malformed.classification, cleanup.RETAIN_TERMINAL_EVIDENCE_MISSING)
+        self.assertIn("issue payload is not an object", malformed.errors)
+
+    def test_unknown_blank_non_string_and_misplaced_dispositions_fail_closed(self):
+        values = ("closed", "", None, 7, ["human_pending"], {"mode": "human_pending"})
+        for index, value in enumerate(values):
+            with self.subTest(value=value):
+                path = self.synthetic.add_worktree(f"bad-disposition-{index}")
+                service, _ = self.mutable_human_service()
+                self.synthetic.terminal(service, path, issue=1547, human_pending=True)
+                lease, errors = service.read_lease(path)
+                self.assertEqual(errors, [])
+                lease["terminal"]["issue_disposition"] = value
+                service._write_lease(path, lease)
+
+                plan = service.classify_path(path)
+                self.assertEqual(plan.classification, cleanup.RETAIN_TERMINAL_EVIDENCE_MISSING)
+                self.assertIn("terminal issue disposition is invalid", plan.errors)
+                self.assertTrue(path.exists())
+
+        misplaced_path = self.synthetic.add_worktree("misplaced-disposition")
+        service, _ = self.mutable_human_service()
+        lease_path = service.create_lease(path=misplaced_path, issue=1547, role="tester")
+        misplaced = json.loads(lease_path.read_text())
+        misplaced["issue_disposition"] = "human_pending"
+        lease_path.write_text(json.dumps(misplaced, sort_keys=True, indent=2) + "\n")
+        self.assertEqual(
+            service.classify_path(misplaced_path).classification,
+            cleanup.RETAIN_MISSING_OR_UNCLASSIFIED,
+        )
+
+    def test_legacy_closed_disposition_never_reinterprets_reopened_human_issue(self):
+        path = self.synthetic.add_worktree("legacy-closed")
+        service = self.synthetic.service()
+        self.synthetic.terminal(service, path, issue=1547)
+        closed_plan = service.classify_path(path)
+        self.assertEqual(closed_plan.terminal_issue_disposition, "closed")
+        self.assertEqual(closed_plan.classification, cleanup.ELIGIBLE_REMOVE)
+
+        original = service.gh_runner
+
+        def reopened(args):
+            if list(args[:2]) == ["issue", "view"]:
+                return {"number": 1547, "state": "OPEN", "labels": [{"name": "human"}]}
+            return original(args)
+
+        service.gh_runner = reopened
+        reopened_plan = service.classify_path(path)
+        self.assertEqual(reopened_plan.terminal_issue_disposition, "closed")
+        self.assertEqual(reopened_plan.classification, cleanup.RETAIN_TERMINAL_EVIDENCE_MISSING)
+
+    def test_github_lookup_failure_retains_human_pending_evidence(self):
+        path = self.synthetic.add_worktree("lookup-failure")
+        service, _ = self.mutable_human_service()
+        self.synthetic.terminal(service, path, issue=1547, human_pending=True)
+        original = service.gh_runner
+
+        def failing(args):
+            if list(args[:2]) == ["issue", "view"]:
+                raise cleanup.CleanupError("offline")
+            return original(args)
+
+        service.gh_runner = failing
+        plan = service.classify_path(path)
+        self.assertEqual(plan.classification, cleanup.RETAIN_TERMINAL_EVIDENCE_MISSING)
+        self.assertIn("issue lookup failed:CleanupError", plan.errors)
+
+    def test_human_pending_close_keeps_run_and_ancestry_failures_atomic(self):
+        for failure in ("run", "ancestry"):
+            with self.subTest(failure=failure):
+                path = self.synthetic.add_worktree(f"human-{failure}-failure")
+                service, observed = self.mutable_human_service()
+                lease_path = service.create_lease(path=path, issue=1547, role="on-call")
+                before = lease_path.read_bytes()
+                if failure == "run":
+                    original = service.gh_runner
+
+                    def failed_run(args):
+                        if list(args[:2]) == ["run", "view"]:
+                            payload = self.synthetic.gh(args)
+                            payload["conclusion"] = "failure"
+                            return payload
+                        return original(args)
+
+                    service.gh_runner = failed_run
+                    merge_sha = self.synthetic.head
+                else:
+                    merge_sha = "f" * 40
+
+                with self.assertRaises(cleanup.CleanupError):
+                    service.close_lease(
+                        path=path,
+                        issue=1547,
+                        merge_sha=merge_sha,
+                        run_id="12345",
+                        run_head_sha=self.synthetic.head,
+                        human_pending=True,
+                    )
+                self.assertEqual(lease_path.read_bytes(), before)
+                self.assertTrue(path.exists())
+                self.assertEqual(observed["issue"]["state"], "OPEN")
+
+    def test_close_and_adopt_refuse_every_invalid_human_issue_shape_atomically(self):
+        invalid_cases = {
+            "open-without-human": {"number": 1547, "state": "OPEN", "labels": [{"name": "infra"}]},
+            "closed-with-human": {"number": 1547, "state": "CLOSED", "labels": [{"name": "human"}]},
+            "duplicate-human": {
+                "number": 1547,
+                "state": "OPEN",
+                "labels": [{"name": "human"}, {"name": "human"}],
+            },
+            "mismatched-number": {"number": 9999, "state": "OPEN", "labels": [{"name": "human"}]},
+            "malformed-label": {"number": 1547, "state": "OPEN", "labels": [{"color": "fff"}]},
+            "missing-labels": {"number": 1547, "state": "OPEN"},
+        }
+        for adopt in (False, True):
+            for index, (name, payload) in enumerate(invalid_cases.items()):
+                with self.subTest(adopt=adopt, name=name):
+                    path = self.synthetic.add_worktree(f"publish-{adopt}-{index}")
+                    service, observed = self.mutable_human_service()
+                    observed["issue"] = payload
+                    before = None
+                    if not adopt:
+                        lease_path = service.create_lease(path=path, issue=1547, role="tester")
+                        before = lease_path.read_bytes()
+                    with self.assertRaises(cleanup.CleanupError):
+                        service.close_lease(
+                            path=path,
+                            issue=1547,
+                            merge_sha=self.synthetic.head,
+                            run_id="12345",
+                            run_head_sha=self.synthetic.head,
+                            adopt_legacy=adopt,
+                            human_pending=True,
+                        )
+                    if adopt:
+                        self.assertFalse(service._lease_path(path).exists())
+                    else:
+                        self.assertEqual(service._lease_path(path).read_bytes(), before)
+                    self.assertTrue(path.exists())
+                    self.assertEqual(
+                        self.synthetic.git(
+                            "show-ref",
+                            "--verify",
+                            f"refs/heads/worktree-publish-{adopt}-{index}",
+                        ).returncode,
+                        0,
+                    )
+
+    def test_close_and_adopt_leave_evidence_absent_or_unchanged_on_issue_lookup_error(self):
+        for adopt in (False, True):
+            with self.subTest(adopt=adopt):
+                path = self.synthetic.add_worktree(f"lookup-publish-{adopt}")
+                service, _ = self.mutable_human_service()
+                before = None
+                if not adopt:
+                    lease_path = service.create_lease(path=path, issue=1547, role="tester")
+                    before = lease_path.read_bytes()
+                original = service.gh_runner
+
+                def github(args):
+                    if list(args[:2]) == ["issue", "view"]:
+                        raise OSError("offline")
+                    return original(args)
+
+                service.gh_runner = github
+                with self.assertRaisesMessage(cleanup.CleanupError, "issue lookup failed:OSError"):
+                    service.close_lease(
+                        path=path,
+                        issue=1547,
+                        merge_sha=self.synthetic.head,
+                        run_id="12345",
+                        run_head_sha=self.synthetic.head,
+                        adopt_legacy=adopt,
+                        human_pending=True,
+                    )
+                if adopt:
+                    self.assertFalse(service._lease_path(path).exists())
+                else:
+                    self.assertEqual(service._lease_path(path).read_bytes(), before)
+                self.assertTrue(path.exists())
+
+    def test_every_deploy_run_payload_drift_retains_human_pending_lease(self):
+        path = self.synthetic.add_worktree("human-run-matrix")
+        service, _ = self.mutable_human_service()
+        self.synthetic.terminal(service, path, issue=1547, human_pending=True)
+        valid_run = self.synthetic.gh(("run", "view", "12345"))
+        cases = {
+            "missing": {},
+            "not-object": [],
+            "wrong-id": {**valid_run, "databaseId": 54321},
+            "incomplete": {**valid_run, "status": "in_progress"},
+            "failed": {**valid_run, "conclusion": "failure"},
+            "wrong-workflow": {**valid_run, "workflowName": "CI"},
+            "wrong-head": {**valid_run, "headSha": "f" * 40},
+        }
+        issue_payload = {"number": 1547, "state": "OPEN", "labels": [{"name": "human"}]}
+
+        for name, run_payload in cases.items():
+            with self.subTest(name=name):
+                def github(args, *, current=run_payload):
+                    if list(args[:2]) == ["run", "view"]:
+                        return current
+                    return issue_payload
+
+                service.gh_runner = github
+                plan = service.classify_path(path)
+                self.assertEqual(plan.classification, cleanup.RETAIN_TERMINAL_EVIDENCE_MISSING)
+                self.assertIn("run evidence mismatch", plan.errors)
+                self.assertTrue(path.exists())
+
+
+@tag("core")
 class LegacyAliasReconciliationContractTest(SyntheticRepoTestCase):
     def setUp(self):
         super().setUp()
@@ -539,6 +944,41 @@ class LegacyAliasReconciliationContractTest(SyntheticRepoTestCase):
             )
         self.assertEqual(source.read_bytes(), before)
         self.assertFalse(service._lease_path(path).exists())
+
+    def test_human_pending_terminal_alias_revalidates_and_migrates_without_conversion(self):
+        path = self.synthetic.add_worktree("legacy-human-terminal")
+        service = self.synthetic.service(actor="migration-operator")
+        source, lease = self.synthetic.write_legacy_lease(service, path, issue=1547, state="terminal")
+        lease["terminal"]["issue_disposition"] = "human_pending"
+        source.write_text(json.dumps(lease, sort_keys=True, indent=2) + "\n")
+        observed = {"issue": {"number": 1547, "state": "OPEN", "labels": [{"name": "human"}]}}
+
+        def github(args):
+            if list(args[:2]) == ["issue", "view"]:
+                return observed["issue"]
+            return self.synthetic.gh(args)
+
+        service.gh_runner = github
+        reviewed = service.reconcile_lease_plan(path=path, roles_ended=True)
+        self.assertEqual(reviewed.classification, cleanup.ELIGIBLE_LEASE_MIGRATION)
+        self.assertEqual(reviewed.terminal_issue_disposition, "human_pending")
+
+        observed["issue"]["labels"] = [{"name": "human-pending"}]
+        drifted = service.reconcile_lease_plan(path=path, roles_ended=True)
+        self.assertIn(cleanup.RETAIN_TERMINAL_EVIDENCE_MISSING, drifted.reasons)
+        self.assertNotEqual(drifted.plan_digest, reviewed.plan_digest)
+        self.assertEqual(source.read_bytes(), json.dumps(lease, sort_keys=True, indent=2).encode() + b"\n")
+
+        observed["issue"]["labels"] = [{"name": "human"}]
+        result = service.migrate_lease(
+            path=path,
+            plan_digest=reviewed.plan_digest,
+            roles_ended=True,
+        )
+        migrated, errors = service.read_lease(path)
+        self.assertEqual(result.exit_status, 0)
+        self.assertEqual(errors, [])
+        self.assertEqual(migrated["terminal"]["issue_disposition"], "human_pending")
 
     def test_reconciliation_plan_has_stable_attributable_human_and_json_fields(self):
         path = self.synthetic.add_worktree("legacy-output")
@@ -2578,6 +3018,105 @@ class ApplyContractTest(SyntheticRepoTestCase):
         self.assertEqual(result.exit_status, 0)
         self.assertEqual(result.completed_actions, [f"git worktree remove {path}"])
 
+    def test_human_pending_issue_drift_before_apply_refuses_every_mutation(self):
+        path = self.synthetic.add_worktree("human-before-apply")
+        runner = RecordingRunner()
+        service = self.synthetic.service(runner=runner)
+        observed = {"issue": {"number": 1547, "state": "OPEN", "labels": [{"name": "human"}]}}
+
+        def github(args):
+            if list(args[:2]) == ["issue", "view"]:
+                return observed["issue"]
+            return self.synthetic.gh(args)
+
+        service.gh_runner = github
+        self.synthetic.terminal(service, path, issue=1547, human_pending=True)
+        reviewed = service.classify_path(path)
+        lease_before = service._lease_path(path).read_bytes()
+        observed["issue"] = {"number": 1547, "state": "OPEN", "labels": [{"name": "infra"}]}
+
+        result = service.remove(path=path, issue=1547, plan_digest=reviewed.plan_digest)
+
+        self.assertEqual(result.exit_status, 2)
+        self.assertTrue(path.exists())
+        self.assertEqual(service._lease_path(path).read_bytes(), lease_before)
+        self.assertEqual(
+            self.synthetic.git("show-ref", "--verify", "refs/heads/worktree-human-before-apply").returncode,
+            0,
+        )
+        mutations = [
+            args for args, _ in runner.calls if args[:3] in (["git", "worktree", "remove"], ["git", "branch", "-d"])
+        ]
+        self.assertEqual(mutations, [])
+
+    def test_human_pending_apply_removes_only_local_delivered_state_and_never_writes_issue(self):
+        path = self.synthetic.add_worktree("human-success")
+        runner = RecordingRunner()
+        service = self.synthetic.service(runner=runner)
+        issue_payload = {
+            "number": 1547,
+            "state": "OPEN",
+            "labels": [{"name": "human"}, {"name": "P1"}],
+        }
+        calls = []
+
+        def github(args):
+            calls.append(tuple(args))
+            if list(args[:2]) == ["issue", "view"]:
+                return issue_payload
+            return self.synthetic.gh(args)
+
+        service.gh_runner = github
+        self.synthetic.terminal(service, path, issue=1547, human_pending=True)
+        reviewed = service.classify_path(path)
+
+        result = service.remove(path=path, issue=1547, plan_digest=reviewed.plan_digest)
+
+        self.assertEqual(result.exit_status, 0)
+        self.assertFalse(path.exists())
+        self.assertNotEqual(
+            self.synthetic.git("show-ref", "--verify", "refs/heads/worktree-human-success", check=False).returncode,
+            0,
+        )
+        self.assertEqual(issue_payload["state"], "OPEN")
+        self.assertEqual([label["name"] for label in issue_payload["labels"]], ["human", "P1"])
+        issue_calls = [call for call in calls if call[:2] == ("issue", "view")]
+        self.assertGreaterEqual(len(issue_calls), 3)
+        self.assertTrue(all(call[:2] == ("issue", "view") for call in issue_calls))
+
+    def test_human_pending_issue_drift_after_removal_retains_branch_with_partial_report(self):
+        path = self.synthetic.add_worktree("human-after-remove")
+        observed = {"issue": {"number": 1547, "state": "OPEN", "labels": [{"name": "human"}]}}
+
+        def drift_issue():
+            observed["issue"] = {"number": 1547, "state": "CLOSED", "labels": [{"name": "human"}]}
+
+        runner = AfterWorktreeRemoveRunner(drift_issue)
+        service = self.synthetic.service(runner=runner)
+
+        def github(args):
+            if list(args[:2]) == ["issue", "view"]:
+                return observed["issue"]
+            return self.synthetic.gh(args)
+
+        service.gh_runner = github
+        self.synthetic.terminal(service, path, issue=1547, human_pending=True)
+        reviewed = service.classify_path(path)
+
+        result = service.remove(path=path, issue=1547, plan_digest=reviewed.plan_digest)
+
+        self.assertEqual(result.exit_status, 1)
+        self.assertEqual(result.completed_actions, [f"git worktree remove {path}"])
+        self.assertIn("branch deletion revalidation refused after worktree removal", result.errors[-1])
+        self.assertIn("requires state OPEN", result.errors[-1])
+        self.assertFalse(path.exists())
+        self.assertEqual(
+            self.synthetic.git("show-ref", "--verify", "refs/heads/worktree-human-after-remove").returncode,
+            0,
+        )
+        branch_deletes = [args for args, _ in runner.calls if args[:3] == ["git", "branch", "-d"]]
+        self.assertEqual(branch_deletes, [])
+
 
 @tag("core")
 class StaleMetadataContractTest(SyntheticRepoTestCase):
@@ -2695,6 +3234,40 @@ class StaleMetadataContractTest(SyntheticRepoTestCase):
             self.synthetic.git("show-ref", "--verify", f"refs/heads/{explicit_branch}", check=False).returncode,
             0,
         )
+
+    def test_human_pending_stale_prune_uses_same_sealed_issue_validation(self):
+        path = self.synthetic.add_worktree("stale-human")
+        service = self.synthetic.service()
+        observed = {"issue": {"number": 1547, "state": "OPEN", "labels": [{"name": "human"}]}}
+
+        def github(args):
+            if list(args[:2]) == ["issue", "view"]:
+                return observed["issue"]
+            return self.synthetic.gh(args)
+
+        service.gh_runner = github
+        self.synthetic.terminal(service, path, issue=1547, human_pending=True)
+        lease_before = service._lease_path(path).read_bytes()
+        shutil.rmtree(path)
+        eligible = service.classify_stale()
+        self.assertEqual(eligible[0].classification, cleanup.STALE_REGISTRATION_ELIGIBLE_PRUNE)
+        self.assertEqual(eligible[0].terminal_issue_disposition, "human_pending")
+
+        observed["issue"] = {"number": 1547, "state": "OPEN", "labels": [{"name": "Human"}]}
+        result = service.prune_stale(plan_digest=service.stale_digest(eligible))
+
+        self.assertEqual(result["exit_status"], 2)
+        self.assertIn("digest", result["errors"][0])
+        listed = cleanup.parse_worktree_porcelain(service._git("worktree", "list", "--porcelain", "-z").stdout)
+        self.assertIn(path, [worktree.path for worktree in listed])
+
+        observed["issue"] = {"number": 1547, "state": "OPEN", "labels": [{"name": "human"}]}
+        fresh = service.classify_stale()
+        applied = service.prune_stale(plan_digest=service.stale_digest(fresh))
+        self.assertEqual(applied["exit_status"], 0)
+        self.assertEqual(service._lease_path(path).read_bytes(), lease_before)
+        preserved = json.loads(lease_before)
+        self.assertEqual(preserved["terminal"]["issue_disposition"], "human_pending")
 
 
 @tag("core")

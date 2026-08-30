@@ -14,9 +14,11 @@ from urllib.parse import urlsplit
 import pytest
 
 from playwright_tests.conftest import base_url_is_local, goto_with_retry
+from scripts.browser_journey_policy import browser_journey
 
 
 @pytest.mark.core
+@browser_journey
 def test_sitemap_xml_is_served(django_server, page):
     """Every deployed sitemap entry stays on its configured deployment."""
     response = goto_with_retry(page, f"{django_server}/sitemap.xml")
@@ -42,7 +44,4 @@ def test_sitemap_xml_is_served(django_server, page):
         for location in locations
         if (parsed := urlsplit(location))[:2] != expected[:2]
     }
-    assert not unexpected, (
-        f"Sitemap has {len(locations)} entries with unexpected origin(s): "
-        f"{sorted(unexpected)}"
-    )
+    assert not unexpected, f"Sitemap has {len(locations)} entries with unexpected origin(s): {sorted(unexpected)}"

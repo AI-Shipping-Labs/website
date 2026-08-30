@@ -538,7 +538,6 @@
     "playwright_tests/test_dev_smoke_register_form.py::test_register_page_renders_form",
     "playwright_tests/test_dev_smoke_resources.py::test_resources_listing_renders",
     "playwright_tests/test_dev_smoke_robots.py::test_robots_allows_crawling_and_dev_targets_expose_noindex",
-    "playwright_tests/test_dev_smoke_sitemap.py::test_sitemap_xml_is_served",
     "playwright_tests/test_dev_smoke_unknown_route.py::test_unknown_route_returns_404",
     "playwright_tests/test_dev_smoke_workshops.py::test_workshops_listing_renders",
     "playwright_tests/test_download_delivery_1264.py::TestDownloadDelivery1264::test_anonymous_catalog_hands_off_to_clean_detail_form",

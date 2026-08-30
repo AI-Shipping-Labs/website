@@ -196,6 +196,112 @@ Legacy paths without a lease require `lease-adopt` with the same terminal
 evidence and `--roles-ended`, after the orchestrator checks its registry. Never
 adopt a malformed lease or infer role completion from an absent OS process.
 
+Leases created before `.claude/worktrees` became a symlink may be stored under
+the historical shared-main alias path and its corresponding key. The helper
+recognizes only the exact direct-child alias for the same canonical candidate;
+canonical records remain primary, and malformed, alternate-root, nested,
+duplicate, or canonical/alias-colliding evidence remains protected. A valid
+historical active lease stays active. `lease-adopt` must never be used over
+valid, malformed, ambiguous, or conflicting historical evidence. Ambiguous
+classification, reconciliation, and adoption refusals report every conflicting
+source filename and key in deterministic order for attributable manual review.
+Lease evidence and migration artifacts must be lstat-verified regular files and
+read without following symlinks. External, broken, looping, directory, FIFO, or
+other non-regular entries are retained as attributable invalid evidence.
+
+Review and migrate one historical record explicitly. For an active lease,
+assert `--roles-ended` only after checking the authoritative active-agent
+registry; OS process absence is not sufficient. The same assertion must be
+present in the reviewed plan and apply request. The reconciliation digest also
+binds the exact matching registration snapshot: canonical path, HEAD, branch
+ref, detached, locked, and prunable state. Apply recomputes every field and
+refuses same-registration drift before changing lease files. Every present
+source, target, and migration artifact is additionally bound by no-follow file
+identity and content digest. The digest also seals the complete directory-wide
+manifest of `.json` entry names, kinds, identities, sizes, and content digests,
+including records that were not associated with the reviewed candidate. Before
+each authoritative create, link, publication, or quarantine move, apply
+rechecks the boundary, registration, candidate existence, process snapshot,
+role assertion, origin/main, attributable migration actor, and that complete
+manifest, including expected absences and transaction-created entries. Recovery never discards
+staged evidence until the canonical bytes are revalidated against it, every
+legacy and temporary entry is still absent as reviewed, and the resulting
+lookup has exactly one authoritative canonical record:
+
+The reviewed digest contains the public lease-directory path, strict resolved
+path, no-follow `lstat`, and independently opened directory device, inode, and
+mode. Apply recomputes those facts before mutation and refuses a replacement
+directory even if it contains hardlinks to every reviewed evidence inode. At
+apply start, the helper opens the reviewed lease directory once with no-follow
+semantics and pins the same device/inode/mode identity. Every transaction read,
+create, link, and rename is relative to that descriptor. Before and after each
+commit, the public lease-directory path must independently resolve and open
+without following a link to the same pinned identity. A parent-directory
+replacement can therefore neither redirect the transaction nor be mistaken
+for success.
+
+Migration never deletes mutable evidence. Exact reviewed entries move with
+atomic no-clobber `renameat2` into unique non-`.json` quarantine names. The
+moved inode is verified after the syscall; a foreign regular file or symlink is
+atomically moved back before refusal. Successful migration permanently retains
+the last-known-good source and temporary evidence in quarantine. Those entries
+are ignored by authoritative lookup and require a separate future review if
+they are ever cleaned. Failed temporary writes are likewise retained rather
+than risking deletion of a replacement. Immediately after writing and syncing
+`.migration-new`, its still-open descriptor identity, exact bytes, actor, and
+time are bound before the directory sync. Any pathname swap refuses.
+
+Each quarantine syscall also receives the exact complete `.json` manifest
+expected immediately before and after that one transition. If evidence appears
+inside the scan-to-`renameat2` window, the helper no-clobber renames the exact
+moved inode back to its reviewed pathname, syncs the directory, verifies the
+restored snapshot and absence of the quarantine name, and only then refuses.
+The newly appeared evidence is never changed. A refusal may not leave the
+reviewed source moved merely because the drift arrived at the syscall boundary.
+
+The exact reviewed legacy source is hardlinked to the staged recovery name
+before canonical publication. Recovery explicitly recognizes every adjacent
+staged, canonical-linked, and quarantined state. For compatibility with an
+interruption at the older link-first boundary, the exact
+legacy+canonical+`.migration-new` state without a staged name is recoverable
+only when the legacy record is the one strict historical alias, canonical and
+new are the same regular inode and bytes, their lifecycle meaning and
+provenance exactly match that source, the actor is the current attributable
+actor, and no additional JSON evidence exists. Recovery then recreates the
+staged hardlink before any further authoritative transition.
+
+Every recovery continuation is actor-bound. The operator applying a recovery
+plan must be the same attributable actor recorded in `path_migration`; a
+different actor cannot complete or inherit another operator's interrupted
+transaction. Cross-actor recovery remains fail-closed with every artifact
+unchanged for the original actor or manual review.
+
+Final success is the last transaction action. It rescans the pinned directory
+and public lookup for canonical, legacy-alias, or temporary collisions,
+revalidates the exact reviewed canonical provenance, and then rescans the
+complete sealed `.json` manifest after public lookup returns. A directory entry
+appearing during that final lookup refuses before success is recorded. Nothing
+is deleted or otherwise mutated after that proof.
+
+```bash
+uv run python scripts/cleanup-agent-worktrees.py \
+  --repo . --actor "orchestrator:<session-id>" --json \
+  lease-reconcile --path .claude/worktrees/<name> --roles-ended
+
+uv run python scripts/cleanup-agent-worktrees.py \
+  --repo . --actor "orchestrator:<session-id>" --json \
+  lease-reconcile --apply --path .claude/worktrees/<name> \
+  --roles-ended --plan-digest <reviewed-reconciliation-digest>
+```
+
+Terminal records do not need a new role assertion, but their stored
+`roles_ended` evidence and exact closed-issue, successful `Deploy Dev`, run-head,
+merge, and ancestry evidence are revalidated before migration. Reconciliation
+changes only the stored path/key, preserves lifecycle meaning, and records the
+old alias key plus migration actor/time. It never closes, adopts, prunes, or
+removes anything. After migration, run a fresh normal classification and use a
+separate cleanup digest/request; migration success is not cleanup eligibility.
+
 #### Remove one unchanged eligible candidate
 
 Review/post the dry-run record. Apply only the exact candidate and digest from

@@ -790,6 +790,74 @@ argument-aware call. Existing entries may only be removed from
 `tests/assert_called_once_live.py`; the four initial tuples and golden digests
 in `tests/assert_called_once_ceilings.py` never shrink or grow.
 
+### Direct layout-token assertion ratchet
+
+`tests/layout_assertion_ratchet.py` scans the same normalized repository test
+trees as the other lexical policies. It enforces one deliberately narrow
+syntax contract: a direct layout-token literal in an assertion operand requires
+the exact local decorator spelling `@pytest.mark.visual_regression` on the
+containing function/method or the class that directly owns that method or
+class-body assertion.
+
+Module `pytestmark`, Django `tag`, aliases, decorator calls, factories,
+lookalikes, inherited markers, outer classes, and outer functions are not
+exemptions. A nested function or class must own its own exact marker. The rule
+does not prove that `pytest` is imported authentically; a fake or rebound local
+name with the exact AST spelling remains a code-review concern.
+
+Recognized anchors and semantic operands are versioned source registries:
+
+- Python `>=3.13` `unittest.TestCase` assertion methods use
+  `python>=3.13-unittest-v1`.
+- Locked Playwright `1.58.0` sync `expect` matchers use
+  `playwright-1.58.0-sync-expect-v1`.
+- Plain `assert` inspects only its test expression, never its message.
+- Unittest assertions inspect only their documented semantic positions and
+  exclude `msg` positions.
+- Playwright assertions inspect the direct `expect` value and documented
+  matcher expectation operands, excluding the `expect` message and matcher
+  `timeout`.
+
+Excluded message, timeout, and unknown-keyword values never supply debt to the
+outer anchor. Assertion-like calls nested inside those subtrees are still
+discovered independently and classify from their own bounded operands.
+
+Another attribute call whose method starts with `assert`, `to_`, or
+`not_to_` is not promoted into either sanctioned registry. If one of its direct
+positional operands carries a matching token, it enters the independent
+`UNKNOWN_UNMARKED_ASSERTION_CALL` category. Its keyword values are not
+inspected because their semantic or diagnostic role is unknown.
+
+Operand traversal is intentionally bounded. It accepts direct string
+constants, literal segments of direct f-strings, and direct operands reached
+only through boolean operations, unary `not`, and comparisons. It does not
+descend through calls, attributes, subscripts, binary operations, collections,
+comprehensions, lambdas, or formatted f-string values. Constants, aliases,
+parametrization, helpers, `.format`, `%`, `.join`, branches, and runtime-built
+strings are unsupported forms for normal review. No absence of a direct token
+should be described as proof that an assertion has no visual semantics or is
+token-free.
+
+Eligible literal text is split only on the ASCII whitespace set: space, tab,
+LF, CR, form feed, and vertical tab. Complete tokens are matched against the
+checked-in exact/prefix/variant vocabulary and hex-color grammar. The
+tokenizer, Python registry, Playwright registry, and vocabulary each have a
+reviewed version or golden SHA-256 in the scanner and deterministic policy
+tests. The passing path never regenerates those artifacts from current tests.
+
+The smallest matching assertion owns a literal, so a nested assertion-like
+anchor cannot also charge the same literal to an outer anchor. One unmarked
+anchor emits one occurrence with its sorted unique token set. Repeated anchors
+receive stable duplicate ordinals; changing the token set produces stale-old
+plus new-current replacement debt.
+
+Existing exact occurrences live in `tests/layout_assertion_live.py`; the
+independent original ceilings and golden digests live in
+`tests/layout_assertion_ceilings.py`. Adding the exact marker retires live
+entries, which must then be deleted from the live manifest. Removing or
+changing the marker exposes each direct assertion as new debt. Live entries
+only shrink, and immutable ceilings never change.
+
 ## Affected-tests selection (`make test-affected`)
 
 Per-issue local verification runs the tests the diff can plausibly break --

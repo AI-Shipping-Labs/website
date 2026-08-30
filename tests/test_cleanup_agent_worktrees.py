@@ -65,7 +65,7 @@ def snapshot_preexisting_real_state():
         str(configured_boundary),
         configured_boundary.is_symlink(),
         os.readlink(configured_boundary) if configured_boundary.is_symlink() else None,
-        str(configured_boundary.resolve(strict=True)),
+        str(configured_boundary.resolve(strict=False)),
     )
 
     processes = []

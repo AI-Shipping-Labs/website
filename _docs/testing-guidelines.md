@@ -858,6 +858,55 @@ entries, which must then be deleted from the live manifest. Removing or
 changing the marker exposes each direct assertion as new debt. Live entries
 only shrink, and immutable ceilings never change.
 
+### Visible Python source-inspection syntax ratchet
+
+`tests/source_inspection_ratchet.py` scans the same complete Python test-source
+surface without importing or executing it. It emits mechanically disjoint
+occurrences for six exact anchor categories:
+
+- `INSPECT_API_REFERENCE`: a loaded attribute named exactly `getsource`,
+  `getsourcelines`, or `findsource`, regardless of receiver or use;
+- `INSPECT_API_IMPORT`: each matching alias in an exact absolute
+  `from inspect import ...` statement, including `as` aliases;
+- `UNKNOWN_DYNAMIC_INSPECT_REFERENCE`: an exact `getattr(...)` or
+  `builtins.getattr(...)` call whose second positional argument is one of those
+  three direct string constants;
+- `DIRECT_PY_OPEN`: an exact `open(...)` or `builtins.open(...)` call whose
+  first positional argument matches the bounded literal Python-path grammar;
+- `DIRECT_PY_PATH_READ`: an exact `.read_text()` or `.read_bytes()` call whose
+  receiver matches that grammar; and
+- `UNKNOWN_VISIBLE_PY_PATH_READ`: the same exact open/path-read anchors when
+  the relevant path subtree contains a direct `.py` or `.pyw` string but uses
+  an unsupported path shape.
+
+The bounded grammar accepts direct string constants, exact `Path(...)` or
+`pathlib.Path(...)` wrappers with one positional path expression, and `/`
+composition made entirely from those literal forms. Every component remains
+lexically visible and the final component must end exactly in `.py` or `.pyw`.
+Modes, encodings, and other non-path arguments do not create extra anchors.
+An inspect attribute used as a callable is still its one attribute occurrence;
+an originating `open` is the occurrence rather than later `.read()` or
+`.readlines()` calls on its handle.
+
+This is deliberately not dataflow or ownership analysis. It does not resolve
+the filesystem, normalize `..`, authenticate imports, follow aliases,
+variables, helpers, handles, bound methods, callers, return values, branches,
+or infer through `os.path.join`, `joinpath`, `with_suffix`, subscripts,
+formatted strings, containers, or generated names. Unsupported exact path-read
+anchors with a directly visible Python suffix fail closed in the unknown
+category. A path or inspect API name hidden wholly behind a name or runtime
+expression is an explicit v1 limitation, not evidence that the syntax is safe.
+Comments, prose, snippet strings, diagnostic text, non-Python suffixes, and
+exact-name near misses are not occurrences.
+
+Every new visible anchor fails even if it targets test-owned code or sits next
+to a behavioral assertion. Rewrite it as a behavioral test against the owned
+public outcome. A genuinely essential static guard needs a separately groomed
+policy decision; do not add it to a live manifest or immutable ceiling.
+Existing entries may only be removed from
+`tests/source_inspection_live.py`; the six initial tuples and reviewed golden
+digests in `tests/source_inspection_ceilings.py` never shrink or grow.
+
 ## Affected-tests selection (`make test-affected`)
 
 Per-issue local verification runs the tests the diff can plausibly break --

@@ -235,9 +235,11 @@ class CredentialLifecycleTest(UserMergeTestBase):
             {"canonical_email": "keep@test.com", "merge_email": "dupe@test.com"}
         )
 
-        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertFalse(body["dry_run"])
+        self.assertFalse(body["already_merged"])
         self.assertEqual(
-            response.json()["credentials"],
+            body["credentials"],
             {"member_api_keys_revoked": 1, "operator_tokens_deleted": 0},
         )
 
@@ -256,7 +258,7 @@ class CredentialLifecycleTest(UserMergeTestBase):
         self.assertIsNotNone(authenticated)
         self.assertEqual(authenticated.user_id, canonical.pk)
 
-        moved_models = {entry["model"] for entry in response.json()["moved"]}
+        moved_models = {entry["model"] for entry in body["moved"]}
         self.assertNotIn("accounts.MemberAPIKey", moved_models)
         self.assertNotIn("accounts.Token", moved_models)
 
@@ -290,12 +292,14 @@ class CredentialLifecycleTest(UserMergeTestBase):
             }
         )
 
-        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertFalse(body["dry_run"])
+        self.assertFalse(body["already_merged"])
         expected_credentials = {
             "member_api_keys_revoked": 2,
             "operator_tokens_deleted": 2,
         }
-        self.assertEqual(response.json()["credentials"], expected_credentials)
+        self.assertEqual(body["credentials"], expected_credentials)
 
         for token, plaintext in secondary_tokens:
             self.assertFalse(Token.objects.filter(pk=token.pk).exists())
@@ -313,7 +317,7 @@ class CredentialLifecycleTest(UserMergeTestBase):
         self.assertIsNotNone(authenticated_key)
         self.assertEqual(authenticated_key.user_id, canonical.pk)
 
-        moved_models = {entry["model"] for entry in response.json()["moved"]}
+        moved_models = {entry["model"] for entry in body["moved"]}
         self.assertNotIn("accounts.MemberAPIKey", moved_models)
         self.assertNotIn("accounts.Token", moved_models)
 
@@ -337,9 +341,11 @@ class CredentialLifecycleTest(UserMergeTestBase):
             {"canonical_email": canonical.email, "merge_email": secondary.email}
         )
 
-        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertFalse(body["dry_run"])
+        self.assertFalse(body["already_merged"])
         self.assertEqual(
-            response.json()["credentials"],
+            body["credentials"],
             {"member_api_keys_revoked": 0, "operator_tokens_deleted": 1},
         )
         self.assertFalse(Token.objects.filter(pk=operator_token.pk).exists())
@@ -384,12 +390,14 @@ class CredentialLifecycleTest(UserMergeTestBase):
             }
         )
 
-        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertTrue(body["dry_run"])
+        self.assertFalse(body["already_merged"])
         self.assertEqual(
-            response.json()["credentials"],
+            body["credentials"],
             {"member_api_keys_revoked": 1, "operator_tokens_deleted": 1},
         )
-        moved_models = {entry["model"] for entry in response.json()["moved"]}
+        moved_models = {entry["model"] for entry in body["moved"]}
         self.assertNotIn("accounts.MemberAPIKey", moved_models)
         self.assertNotIn("accounts.Token", moved_models)
 

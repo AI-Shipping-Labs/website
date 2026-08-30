@@ -59,6 +59,7 @@ from playwright_tests.worktree_guard import (
     WorktreeGuardAlreadyHeld,
     current_xdist_worker_id,
 )
+from scripts.browser_journey_policy import register_browser_journey_policy
 from website.test_database_guard import assert_playwright_database_is_safe
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
@@ -252,6 +253,27 @@ def _release_playwright_worktree_guard(config):
 
 def pytest_configure(config):
     _assert_pinned_port_is_not_parallel(config)
+    register_browser_journey_policy(config)
+
+
+@pytest.hookimpl(hookwrapper=True, tryfirst=True)
+def pytest_runtest_makereport(item, call):
+    """Keep policy authority fail-closed after removable plugin hooks."""
+
+    yield
+    import sys as runtime_sys
+
+    authority_dispatch = runtime_sys.audit
+    if not (
+        authority_dispatch.__class__ is [].append.__class__
+        and authority_dispatch.__self__ is runtime_sys
+        and authority_dispatch.__module__ == "sys"
+        and authority_dispatch.__name__ == "audit"
+    ):
+        raise pytest.UsageError(
+            "Playwright browser journey policy integrity failed: the process authority dispatch identity changed."
+        )
+    authority_dispatch("asl.browser_journey_policy.verify.v1", item.config)
 
 
 def pytest_sessionstart(session):
@@ -307,41 +329,7 @@ def pytest_terminal_summary(terminalreporter):
     if final_resources is None:
         return
     contexts, pages = final_resources
-    terminalreporter.write_line(
-        f"Playwright session browser final state: {contexts} contexts / {pages} pages"
-    )
-
-
-def pytest_collection_modifyitems(config, items):
-    """Skip local-only / creates_data tests when running against a deployed env.
-
-    When ``PLAYWRIGHT_BASE_URL`` points at a non-local host the in-process
-    Django server is not started and the SQLite test database does not exist.
-    Tests explicitly marked ``local_only`` or ``creates_data`` are skipped so
-    the dev suite only runs the anonymous, read-only subset. Tests that carry
-    the pytest-django ``django_db`` marker are NOT auto-skipped here: many
-    Playwright tests use ``django_db`` to allow stray ORM reads in helpers
-    that never actually touch the local DB on a dev-targeted run. Each such
-    file is responsible for tagging itself ``local_only`` when it genuinely
-    needs the local DB. Local runs (default ``PLAYWRIGHT_BASE_URL`` unset,
-    or set to a 127.0.0.1 / localhost URL) are unaffected.
-    """
-    if config.option.collectonly:
-        return
-
-    base_url = _resolved_base_url()
-    if _base_url_is_local(base_url):
-        return
-
-    skip_local = pytest.mark.skip(
-        reason=(
-            f"Skipped: requires local Django runserver "
-            f"(PLAYWRIGHT_BASE_URL={base_url!r} is non-local)."
-        )
-    )
-    for item in items:
-        if item.get_closest_marker("local_only") or item.get_closest_marker("creates_data"):
-            item.add_marker(skip_local)
+    terminalreporter.write_line(f"Playwright session browser final state: {contexts} contexts / {pages} pages")
 
 
 def playwright_test_database_name(base_dir, worker_id=_AMBIENT_WORKER):
@@ -378,11 +366,9 @@ def apply_playwright_test_database(database_settings, base_dir, worker_id=_AMBIE
     the pre-#1470 behavior, preserved verbatim so the Playwright suite can
     never be pointed at the Django unittest runner's database.
     """
-    if database_settings.get('ENGINE') != 'django.db.backends.sqlite3':
+    if database_settings.get("ENGINE") != "django.db.backends.sqlite3":
         return database_settings
-    database_settings.setdefault('TEST', {})['NAME'] = playwright_test_database_name(
-        base_dir, worker_id=worker_id
-    )
+    database_settings.setdefault("TEST", {})["NAME"] = playwright_test_database_name(base_dir, worker_id=worker_id)
     return database_settings
 
 
@@ -391,7 +377,7 @@ def django_db_modify_db_settings():
     """Force Playwright pytest runs onto a dedicated test database file."""
     from django.conf import settings
 
-    apply_playwright_test_database(settings.DATABASES['default'], settings.BASE_DIR)
+    apply_playwright_test_database(settings.DATABASES["default"], settings.BASE_DIR)
 
 
 def _start_django_server():
@@ -405,8 +391,8 @@ def _start_django_server():
     # Disable Slack API calls for E2E tests so no real messages are posted.
     # post_slack_announcement() exits early when token/channel are empty (line 102),
     # and SlackCommunityService reads SLACK_BOT_TOKEN from settings in __init__.
-    settings.SLACK_BOT_TOKEN = ''
-    settings.SLACK_ANNOUNCEMENTS_CHANNEL_ID = ''
+    settings.SLACK_BOT_TOKEN = ""
+    settings.SLACK_ANNOUNCEMENTS_CHANNEL_ID = ""
     settings.SLACK_COMMUNITY_CHANNEL_IDS = []
 
     # Disable Amazon SES for E2E tests so no real emails are sent (issue #509).
@@ -416,14 +402,14 @@ def _start_django_server():
     # that slips past the gate would still fail with InvalidClientTokenId rather
     # than reach a real account.
     settings.SES_ENABLED = False
-    settings.AWS_ACCESS_KEY_ID = ''
-    settings.AWS_SECRET_ACCESS_KEY = ''
+    settings.AWS_ACCESS_KEY_ID = ""
+    settings.AWS_SECRET_ACCESS_KEY = ""
 
     # Silence the SES-disabled-in-prod system check (email_app.E001) during
     # Playwright runs — we deliberately disable SES here for E2E (see above),
     # and pytest-django defaults DEBUG=False, so without this the runserver
     # thread would raise SystemCheckError at startup and kill every E2E test.
-    settings.SILENCED_SYSTEM_CHECKS = ['email_app.E001']
+    settings.SILENCED_SYSTEM_CHECKS = ["email_app.E001"]
 
     assert_playwright_database_is_safe(connection.settings_dict)
 
@@ -476,7 +462,7 @@ def django_server(request):
     free port). When ``PLAYWRIGHT_BASE_URL`` points at a remote host
     (dev / prod), no local server is started, no port is allocated, and the
     configured URL is yielded as-is — local-only and ``django_db`` tests have
-    already been skipped by ``pytest_collection_modifyitems``.
+    already been skipped by the configured browser-journey policy selector.
     """
     base_url = _resolved_base_url()
     if not _base_url_is_local(base_url):
@@ -541,13 +527,9 @@ def _close_browser_contexts(browser):
         try:
             context.close()
         except Exception as exc:  # noqa: BLE001 - aggregate every teardown failure
-            close_errors.append(
-                f"context {index}: {type(exc).__name__}: {exc}"
-            )
+            close_errors.append(f"context {index}: {type(exc).__name__}: {exc}")
 
-    _remaining, remaining_contexts, remaining_pages = _browser_resource_snapshot(
-        browser
-    )
+    _remaining, remaining_contexts, remaining_pages = _browser_resource_snapshot(browser)
     return {
         "before_contexts": context_count,
         "before_pages": page_count,
@@ -564,16 +546,8 @@ def _browser_lifecycle_error(nodeid, phase, cleanup):
         "Playwright per-node browser lifecycle violation.",
         f"Node: {nodeid}",
         f"Phase: {phase}",
-        (
-            "Before cleanup: "
-            f"{cleanup['before_contexts']} contexts / "
-            f"{cleanup['before_pages']} pages"
-        ),
-        (
-            "After cleanup: "
-            f"{cleanup['after_contexts']} contexts / "
-            f"{cleanup['after_pages']} pages"
-        ),
+        (f"Before cleanup: {cleanup['before_contexts']} contexts / {cleanup['before_pages']} pages"),
+        (f"After cleanup: {cleanup['after_contexts']} contexts / {cleanup['after_pages']} pages"),
         f"Context close errors ({len(close_errors)}):",
     ]
     lines.extend(f"- {error}" for error in close_errors)
@@ -611,9 +585,7 @@ def _browser_node_lifecycle(request):
     yield
 
     cleanup = _close_browser_contexts(browser)
-    if cleanup["close_errors"] or (
-        cleanup["after_contexts"], cleanup["after_pages"]
-    ) != (0, 0):
+    if cleanup["close_errors"] or (cleanup["after_contexts"], cleanup["after_pages"]) != (0, 0):
         raise AssertionError(
             _browser_lifecycle_error(
                 request.node.nodeid,
@@ -748,9 +720,7 @@ def settle_click(locator, *, timeout=SETTLE_TIMEOUT_MS):
 
 def expand_studio_sidebar_section(page, slug):
     """Expand a Studio sidebar section if it is currently collapsed."""
-    button = page.locator(
-        f'#studio-sidebar-nav [aria-controls="studio-section-{slug}"]'
-    )
+    button = page.locator(f'#studio-sidebar-nav [aria-controls="studio-section-{slug}"]')
     if button.get_attribute("aria-expanded") != "true":
         button.click()
     page.locator(f"#studio-sidebar-nav #studio-section-{slug}").wait_for(
@@ -775,9 +745,7 @@ def ensure_tiers():
         {"slug": "premium", "name": "Premium", "level": 30},
     ]
     for tier_data in TIERS:
-        Tier.objects.get_or_create(
-            slug=tier_data["slug"], defaults=tier_data
-        )
+        Tier.objects.get_or_create(slug=tier_data["slug"], defaults=tier_data)
     connection.close()
 
 
@@ -795,12 +763,10 @@ def ensure_site_config_tiers():
 
     from content.models import SiteConfig
 
-    fixture_path = Path(__file__).parent.parent / 'content' / 'tests' / 'fixtures' / 'tiers.yaml'
+    fixture_path = Path(__file__).parent.parent / "content" / "tests" / "fixtures" / "tiers.yaml"
     with open(fixture_path) as f:
         tiers_data = yaml.safe_load(f)
-    SiteConfig.objects.update_or_create(
-        key='tiers', defaults={'data': tiers_data}
-    )
+    SiteConfig.objects.update_or_create(key="tiers", defaults={"data": tiers_data})
     connection.close()
 
 
@@ -882,9 +848,7 @@ def create_session_for_user(email):
     user = User.objects.get(email=email)
     session = SessionStore()
     session[SESSION_KEY] = str(user.pk)
-    session[BACKEND_SESSION_KEY] = (
-        "django.contrib.auth.backends.ModelBackend"
-    )
+    session[BACKEND_SESSION_KEY] = "django.contrib.auth.backends.ModelBackend"
     session[HASH_SESSION_KEY] = user.get_session_auth_hash()
     session.create()
     session_key = session.session_key
@@ -898,18 +862,20 @@ def auth_context(browser, email):
     """Create an authenticated browser context for the given user."""
     session_key = create_session_for_user(email)
     context = browser.new_context(viewport=VIEWPORT)
-    context.add_cookies([
-        {
-            "name": "sessionid",
-            "value": session_key,
-            "domain": "127.0.0.1",
-            "path": "/",
-        },
-        {
-            "name": "csrftoken",
-            "value": "e2e-test-csrf-token-value",
-            "domain": "127.0.0.1",
-            "path": "/",
-        },
-    ])
+    context.add_cookies(
+        [
+            {
+                "name": "sessionid",
+                "value": session_key,
+                "domain": "127.0.0.1",
+                "path": "/",
+            },
+            {
+                "name": "csrftoken",
+                "value": "e2e-test-csrf-token-value",
+                "domain": "127.0.0.1",
+                "path": "/",
+            },
+        ]
+    )
     return context

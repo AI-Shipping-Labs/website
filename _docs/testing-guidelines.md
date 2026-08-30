@@ -1001,21 +1001,91 @@ Parameterized items collapse only when they belong to one final callable and
 have unique final parameter IDs. Ambiguous normalization, duplicate callable
 owners, unsupported item types, and source/collection drift fail closed.
 
-The current baseline was independently collected from exact `origin/main` SHA
+The initial baseline was independently collected from exact `origin/main` SHA
 `e238f4bf44411cd7d8d50d59b3359acc38aa4c64`: 2,559 parameterized items normalize
-to 2,339 owners. `tests/playwright_owner_inventory_live.json` partitions them
-exactly into 2,258 `LEGACY_DECLARED_BROWSER` owners and 81
-`LEGACY_NON_BROWSER` owners. Every non-browser entry carries a category, review
-reason, and relocation destination. No file, module, class, or path wildcard is
-an approval.
+to 2,339 owners. The current `tests/playwright_owner_inventory_live.json`
+partitions the remaining grandfathered debt into 2,257
+`LEGACY_DECLARED_BROWSER` owners and 81 `LEGACY_NON_BROWSER` owners. One owner
+has migrated to the explicit declaration described below. Every non-browser
+entry carries a category, review reason, and relocation destination. No file,
+module, class, or path wildcard is an approval.
 
 The two initial exact ceilings live independently in
 `scripts/playwright_owner_inventory_ceilings.py`. Live sets may only shrink:
 when an owner is deleted, relocated, or later migrated to the explicit runtime
 declaration contract, remove its live entry and leave its ceiling untouched.
-Never add, remove, or replace a ceiling ID. A new owner, renamed/replacement
-owner, stale live owner, overlap, missing review field, or ceiling change emits
-the exact ID and required next action.
+Never add, remove, or replace a ceiling ID. Ceiling content digests make
+same-size replacement debt fail as well as count growth. A new owner,
+renamed/replacement owner, stale live owner, overlap, missing review field, or
+ceiling change emits the exact ID and required next action.
+
+The sole growth path is the central `@browser_journey` decorator from
+`scripts/browser_journey_policy.py`. Apply it directly to the final collected
+test callable. It returns that callable unchanged and records its exact
+identity; inherited marks, copied decorator attributes, paths, source text,
+helper names, arbitrary `__func__` attributes, and replacement callables do not
+inherit the declaration. A class test method is accepted only when the exact
+collected class owns the descriptor under the collected method name, the bound
+receiver matches that class or its collected instance, and the function's name
+and qualified name match that owner context. Synthetic `MethodType` values,
+donor rebinding, inherited declarations, and aliases do not transfer ownership.
+Declaration-time callable metadata is frozen as well, so rewriting a donor's
+name or qualified name after decoration cannot manufacture a class owner. A
+newly declared owner is never added to either live set or ceiling. When a
+grandfathered journey migrates, remove only its live entry.
+
+Every selected declared item must successfully call the real synchronous
+Playwright `Page.goto` or `Page.set_content` during its setup or call phase.
+Direct calls, `goto_with_retry`, ordinary helpers, and function-scoped setup
+fixtures count because they reach the same observed Page method. Failed calls,
+fake objects with matching method names, `page.request`, unreachable code,
+teardown calls, and another item's calls do not count. Parameterized cases are
+proved independently and a missing proof names the exact parameterized node
+ID. Declared owners may not use an unconditional `skip`, `manual_visual`, or
+`slow_platform`: every declaration must remain selected by the required local
+scheduled lane where runtime proof is enforced. Inactive conditional
+`skipif(False)` and `xfail(False)` markers are allowed because the item still
+executes and proves its Page journey. An active conditional marker or direct
+`pytest.skip()` / `pytest.xfail()` call fails in setup, call, or teardown rather
+than escaping that proof. The existing canonical remote selector may still
+skip `local_only` and `creates_data` items when a deployed
+`PLAYWRIGHT_BASE_URL` is selected; the same items execute normally in their
+required local lane. That exemption is recorded by the central selector and
+cannot be obtained by calling a public marker helper or adding an ordinary
+skip/stash value. The policy captures the resolved off-local mode once during
+startup and creates a structurally local-only or remote-capable closure. The
+local hook contains no remote reason, stash key, token, or authorization branch,
+so importing and changing module globals, mutating plugin attributes, or
+replaying the hook cannot mint a local authorization. The canonical plugin and
+a separate integrity guard retain the exact originally registered instance,
+class, remote-authorization method, and pytest hook identities. A third
+installation seal independently rechecks those identities at the report
+boundary. Exact one-shot installation evidence and the final verifier are held
+by a process-lifetime Python audit hook. The callback is handed directly to the
+runtime audit registry and is not retained in the pytest config or stash, this
+module, a public record class, the registrar, or a registered plugin. Python
+provides no API to enumerate or remove installed audit hooks. The Playwright
+conftest first requires the exact built-in `sys.audit` dispatch shape, deriving
+its callable class from a fresh built-in object's method rather than a mutable
+public `types` alias, and then emits the fixed verification audit event at its
+own report boundary. The registrar performs the same non-constructible built-in
+identity check before emitting its one-shot registration event or reading
+startup configuration. Rebinding the public `sys.audit` attribute or a public
+type alias therefore fails closed instead of silencing the permanent callback.
+Replacing or deleting arbitrary stash values
+and removing the policy, guard, and seal during late setup also fails closed,
+and the original audit authority rejects replay after full plugin removal and
+an environment/config mutation. Removal, replacement,
+duplicate registration, re-registration, security-method shadowing, or an
+attempted reinstall fails closed through the final setup/call report boundary.
+The public policy constructor is local-only and cannot accept a remote mode.
+The final callable
+and node ID are checked after every collection-modification hook completes, at
+the actual pytest call boundary, and in reporting. Policy state is keyed by
+stable item identity, not the mutable node ID. A later replacement is accepted
+only when that exact final callable explicitly carries its own central
+`@browser_journey` declaration and proves its own successful Page journey;
+copied wrapper metadata is not a declaration.
 
 Run the focused collection gate with:
 
@@ -1028,13 +1098,8 @@ Collect-only inventory bypasses the Playwright session lock and local URL
 resolution. Pytest does not set up fixtures, so this path does not migrate the
 Playwright database, start Django's server, or launch Chromium. Normal selected
 test runs are unchanged and retain all existing lock, database, server, browser,
-marker, skip, retry, timeout, and fixture behavior.
-
-This baseline intentionally blocks every new Playwright owner. Issue #1451 is
-the sole planned growth path: it must add the explicit final-callable declaration
-and real synchronous Playwright navigation evidence before new owners can be
-accepted. Until that contract lands, do not classify a new owner as legacy and
-do not grow either ceiling.
+marker, skip, retry, timeout, and fixture behavior while enforcing the explicit
+declaration and item-local runtime proof for migrated and new owners.
 
 ## Core Playwright subset (`make test-playwright-core`)
 

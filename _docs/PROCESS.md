@@ -186,6 +186,56 @@ uv run python scripts/cleanup-agent-worktrees.py \
   classify --path .claude/worktrees/<name>
 ```
 
+An issue that intentionally remains open for a `[HUMAN]` acceptance criterion
+uses a separate, explicit terminal disposition. After the code is merged,
+`Deploy Dev` is green, the `human` label is present, and every role has ended,
+run one of these commands from shared main:
+
+```bash
+uv run python scripts/cleanup-agent-worktrees.py \
+  --repo . --actor "orchestrator:<session-id>" \
+  lease-close --path .claude/worktrees/<name> --issue <issue> \
+  --merge-sha <merge-sha> --run-id <deploy-dev-run-id> \
+  --run-head-sha <run-head-sha> --roles-ended --human-pending
+
+# Use only when lifecycle evidence is genuinely absent.
+uv run python scripts/cleanup-agent-worktrees.py \
+  --repo . --actor "orchestrator:<session-id>" \
+  lease-adopt --path .claude/worktrees/<name> --issue <issue> \
+  --merge-sha <merge-sha> --run-id <deploy-dev-run-id> \
+  --run-head-sha <run-head-sha> --roles-ended --human-pending
+```
+
+`--human-pending` is never inferred. It seals
+`terminal.issue_disposition = "human_pending"` and requires the exact matching
+issue in `AI-Shipping-Labs/website` to be `OPEN` with exactly one
+case-sensitive `human` label entry. Other valid labels may coexist. Missing,
+duplicate, renamed, differently cased, or malformed labels fail closed. A
+closed issue is invalid in this mode even when its `human` label remains. In
+ordinary mode, the issue must be `CLOSED`; a reopened legacy closed-issue lease
+is never reinterpreted as human-pending. Existing terminal leases without a
+disposition retain their closed-issue meaning.
+
+Continue with the same read-only review and one-candidate apply sequence:
+
+```bash
+uv run python scripts/cleanup-agent-worktrees.py \
+  --repo . --actor "orchestrator:<session-id>" --json \
+  classify --path .claude/worktrees/<name>
+
+uv run python scripts/cleanup-agent-worktrees.py \
+  --repo . --actor "orchestrator:<session-id>" --json \
+  remove --apply --path .claude/worktrees/<name> --issue <issue> \
+  --plan-digest <reviewed-plan-digest>
+```
+
+Record the exact removed path and merged branch, or the retained path with its
+reason codes and evidence errors. Worktree and merged-branch removal is
+operational cleanup only. The product issue remains open and labeled `human`
+until a human verifies the pending criterion and closes it. The cleanup helper
+uses only read-only `gh issue view`; it never edits, labels, comments on,
+closes, or reopens the issue.
+
 The default/no-subcommand invocation is also a read-only classification of all
 registered worktrees plus existing unregistered directories under
 `.claude/worktrees/`. Missing or malformed leases, dirty or untracked changes,
@@ -295,12 +345,13 @@ uv run python scripts/cleanup-agent-worktrees.py \
 ```
 
 Terminal records do not need a new role assertion, but their stored
-`roles_ended` evidence and exact closed-issue, successful `Deploy Dev`, run-head,
-merge, and ancestry evidence are revalidated before migration. Reconciliation
-changes only the stored path/key, preserves lifecycle meaning, and records the
-old alias key plus migration actor/time. It never closes, adopts, prunes, or
-removes anything. After migration, run a fresh normal classification and use a
-separate cleanup digest/request; migration success is not cleanup eligibility.
+`roles_ended` evidence, sealed closed-issue or human-pending issue disposition,
+successful `Deploy Dev`, run-head, merge, and ancestry evidence are revalidated
+before migration. Reconciliation changes only the stored path/key, preserves
+the exact disposition and other lifecycle meaning, and records the old alias
+key plus migration actor/time. It never closes, adopts, prunes, or removes
+anything. After migration, run a fresh normal classification and use a separate
+cleanup digest/request; migration success is not cleanup eligibility.
 
 #### Remove one unchanged eligible candidate
 
@@ -314,10 +365,14 @@ uv run python scripts/cleanup-agent-worktrees.py \
   --plan-digest <reviewed-plan-digest>
 ```
 
-Apply recomputes every fact and refuses drift. It uses non-force
-`git worktree remove`; an attached branch is removed afterward only through
-merged-safe `git branch -d`. It never uses recursive deletion or force. Run one
-candidate at a time and report both removed and retained paths/reason codes.
+Apply recomputes every fact, re-fetches the sealed issue evidence immediately
+before the first Git mutation, and refuses drift. It uses non-force
+`git worktree remove`. Before a later merged-safe `git branch -d`, it revalidates
+the issue, run, ancestry, lease, process, removed-path, branch-tip, and
+`origin/main` facts. A refusal at that later boundary reports the worktree
+removal as completed and retains the recoverable branch. It never recreates a
+worktree, uses recursive deletion, or uses force. Run one candidate at a time
+and report both removed and retained paths/reason codes.
 
 Already-absent stale Git registrations are a separate mode:
 
@@ -333,7 +388,9 @@ existing unregistered directory or broken `.git` backlink is retained for
 manual recovery. Local branches are retained by default; include
 `--delete-merged-branches` in both the reviewed dry run and apply invocation to
 request explicit post-prune `git branch -d` cleanup. The option is part of the
-plan digest and never force-deletes an unmerged branch.
+plan digest and never force-deletes an unmerged branch. Stale classification,
+apply, and any requested post-prune branch deletion revalidate the same sealed
+closed-issue or human-pending disposition and refuse issue-label drift.
 
 Do not run cleanup at role/process startup, role launch, merge, push, watcher
 start, cancellation, timeout, hang, superseded/no-verdict result, or while any

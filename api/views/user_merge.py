@@ -66,13 +66,14 @@ def _find_user(email):
             "summary": "Merge two accounts (irreversible; dry_run first)",
             "description": (
                 "Consolidates the ``merge_email`` account into the "
-                "``canonical_email`` account: repoints every owned row, "
-                "reconciles profile / entitlement fields by precedence (UNION "
-                "tags, OR ``email_verified``, higher ``tier`` wins, surviving "
-                "subscription dictates billing fields), records ``merge_email`` "
-                "as an ``EmailAlias`` of canonical so future Stripe/relay events "
-                "route correctly, and deactivates the secondary login. Runs in "
-                "ONE transaction.\n\n"
+                "``canonical_email`` account: repoints eligible owned rows, "
+                "revokes the secondary account's member API keys, deletes its "
+                "operator tokens, reconciles profile / entitlement fields by "
+                "precedence (UNION tags, OR ``email_verified``, higher ``tier`` "
+                "wins, surviving subscription dictates billing fields), records "
+                "``merge_email`` as an ``EmailAlias`` of canonical so future "
+                "Stripe/relay events route correctly, and deactivates the "
+                "secondary login. Runs in ONE transaction.\n\n"
                 "IRREVERSIBLE: there is no automated un-merge. Always run "
                 "``dry_run: true`` first to review the plan; a dry run computes "
                 "the full plan against the real DB and persists NOTHING.\n\n"
@@ -115,6 +116,10 @@ def _find_user(email):
                                 "dropped": 1,
                             }
                         ],
+                        "credentials": {
+                            "member_api_keys_revoked": 2,
+                            "operator_tokens_deleted": 1,
+                        },
                         "reconciled": {"email_verified": {"to": True}},
                         "tier_overrides": {"deactivated": [], "kept_active": None},
                         "stripe": {},
@@ -240,6 +245,10 @@ def merge_users(request):
                     "dry_run": dry_run,
                     "already_merged": True,
                     "moved": [],
+                    "credentials": {
+                        "member_api_keys_revoked": 0,
+                        "operator_tokens_deleted": 0,
+                    },
                     "reconciled": {},
                     "tier_overrides": {"deactivated": [], "kept_active": None},
                     "stripe": {},

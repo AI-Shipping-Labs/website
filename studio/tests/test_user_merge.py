@@ -13,7 +13,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import EmailAlias
+from accounts.models import EmailAlias, MemberAPIKey, Token
 from community.models import CommunityAuditLog
 from email_app.models import EmailLog
 from events.models import Event, EventRegistration
@@ -121,6 +121,10 @@ class PreviewIsNoOpTest(MergeUITestBase):
         )
         EventRegistration.objects.create(event=event, user=secondary)
         EmailLog.objects.create(user=secondary, email_type="campaign")
+        member_key, member_plaintext = MemberAPIKey.create_for_user(
+            user=secondary,
+            name="preview key",
+        )
 
         response = self._preview("keep@test.com", "dupe@test.com")
         self.assertEqual(response.status_code, 200)
@@ -129,6 +133,15 @@ class PreviewIsNoOpTest(MergeUITestBase):
         self.assertContains(response, 'data-testid="merge-preview"')
         self.assertContains(response, "events.EventRegistration")
         self.assertContains(response, 'data-testid="merge-plan-deactivate-notice"')
+        self.assertContains(response, 'data-testid="merge-plan-credentials"')
+        self.assertContains(
+            response,
+            'data-testid="merge-plan-member-api-keys-revoked"',
+        )
+        self.assertEqual(
+            response.context["plan"]["credentials"],
+            {"member_api_keys_revoked": 1, "operator_tokens_deleted": 0},
+        )
         # Confirm form present for a clean merge.
         self.assertContains(response, 'data-testid="merge-confirm-submit"')
 
@@ -137,6 +150,9 @@ class PreviewIsNoOpTest(MergeUITestBase):
             EventRegistration.objects.filter(user=secondary).count(), 1
         )
         self.assertEqual(EmailLog.objects.filter(user=canonical).count(), 0)
+        member_key.refresh_from_db()
+        self.assertIsNone(member_key.revoked_at)
+        self.assertEqual(MemberAPIKey.authenticate(member_plaintext).pk, member_key.pk)
         self.assertFalse(EmailAlias.objects.filter(user=canonical).exists())
         secondary.refresh_from_db()
         self.assertTrue(secondary.is_active)
@@ -160,9 +176,24 @@ class ConfirmRealMergeTest(MergeUITestBase):
         self._login_staff()
         canonical, secondary = self._make_pair()
         EmailLog.objects.create(user=secondary, email_type="campaign")
+        member_key, member_plaintext = MemberAPIKey.create_for_user(
+            user=secondary,
+            name="confirmed key",
+        )
 
         response = self._confirm(canonical.pk, secondary.pk)
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["result"]["credentials"],
+            {"member_api_keys_revoked": 1, "operator_tokens_deleted": 0},
+        )
+        self.assertContains(
+            response,
+            'data-testid="merge-plan-member-api-keys-revoked"',
+        )
+        member_key.refresh_from_db()
+        self.assertIsNotNone(member_key.revoked_at)
+        self.assertIsNone(MemberAPIKey.authenticate(member_plaintext))
 
         # Real merge happened.
         self.assertEqual(EmailLog.objects.filter(user=canonical).count(), 1)
@@ -288,6 +319,8 @@ class StaffMergeTest(MergeUITestBase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="merge-conflict-staff"')
         self.assertContains(response, 'data-testid="merge-force-ack"')
+        self.assertContains(response, "Any operator API tokens")
+        self.assertContains(response, "will be deleted.")
 
     def test_staff_account_merges_with_force(self):
         self._login_staff()
@@ -297,8 +330,22 @@ class StaffMergeTest(MergeUITestBase):
         secondary = User.objects.create_user(
             email="colleague@test.com", password="x", is_staff=True
         )
+        operator_token, operator_plaintext = Token.create_for_user(
+            user=secondary,
+            name="secondary operator",
+        )
         response = self._confirm(canonical.pk, secondary.pk, force=True)
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["result"]["credentials"],
+            {"member_api_keys_revoked": 0, "operator_tokens_deleted": 1},
+        )
+        self.assertContains(
+            response,
+            'data-testid="merge-plan-operator-tokens-deleted"',
+        )
+        self.assertFalse(Token.objects.filter(pk=operator_token.pk).exists())
+        self.assertIsNone(Token.authenticate(operator_plaintext))
         secondary.refresh_from_db()
         self.assertFalse(secondary.is_active)
 

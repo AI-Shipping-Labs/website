@@ -1,12 +1,13 @@
 """Account-merge engine (issue #841 / slice 840b).
 
 Consolidate a *secondary* (merged-in) ``accounts.User`` into a *canonical*
-(surviving) one: repoint every owned row, reconcile scalar profile / entitlement
-fields by precedence, record the secondary email as an ``EmailAlias`` of
-canonical (so future relay / billing webhooks route correctly via #840a's
-resolver), then deactivate the secondary login. Irreversible data movement plus
-billing, so the whole thing runs inside one ``transaction.atomic()`` and ships a
-mandatory ``dry_run`` plan as the safety net.
+(surviving) one: repoint eligible owned rows, revoke the secondary's member API
+keys, delete its operator tokens, reconcile scalar profile / entitlement fields
+by precedence, record the secondary email as an ``EmailAlias`` of canonical (so
+future relay / billing webhooks route correctly via #840a's resolver), then
+deactivate the secondary login. Irreversible data movement plus billing, so the
+whole thing runs inside one ``transaction.atomic()`` and ships a mandatory
+``dry_run`` plan as the safety net.
 
 Design notes
 ------------
@@ -94,6 +95,10 @@ class MergePlan:
         self.dry_run = dry_run
         self.already_merged = False
         self.moved = []  # list of {model, field, moved, dropped?, kept_canonical?, added?}
+        self.credentials = {
+            "member_api_keys_revoked": 0,
+            "operator_tokens_deleted": 0,
+        }
         self.reconciled = {}  # field -> change summary
         self.tier_overrides = {"deactivated": [], "kept_active": None}
         self.stripe = {}
@@ -113,6 +118,7 @@ class MergePlan:
             "dry_run": self.dry_run,
             "already_merged": self.already_merged,
             "moved": self.moved,
+            "credentials": self.credentials,
             "reconciled": self.reconciled,
             "tier_overrides": self.tier_overrides,
             "stripe": self.stripe,
@@ -365,16 +371,44 @@ def _strategy_reader_profile(plan, related_model, field_name, canonical, seconda
     plan.record_move(related_model._meta.label, field_name, moved=0, dropped=1)
 
 
+def _strategy_member_api_key(
+    plan, related_model, field_name, canonical, secondary
+):
+    """Revoke secondary member credentials without changing their owner.
+
+    Revoked rows remain attached to the retired identity as durable security
+    history. Canonical keys are deliberately outside the queryset.
+    """
+    revoked = related_model.objects.filter(
+        **{field_name: secondary},
+        revoked_at__isnull=True,
+    ).update(revoked_at=timezone.now())
+    plan.credentials["member_api_keys_revoked"] = revoked
+
+
+def _strategy_operator_token(
+    plan, related_model, field_name, canonical, secondary
+):
+    """Delete secondary operator credentials instead of transferring them."""
+    tokens = related_model.objects.filter(**{field_name: secondary})
+    deleted = tokens.count()
+    if deleted:
+        tokens.delete()
+    plan.credentials["operator_tokens_deleted"] = deleted
+
+
 # Keyed by ``(app_label.ModelName, field_name)``.
 #
 # These cover the cases the generic unique-key walker cannot express correctly:
 # the O2O collisions, the more-complete tie-break, the partial-active enrollment,
-# and -- critically -- the two models whose ``user``-bearing unique constraint is
-# NOT a row-identity drop key (allauth ``EmailAddress``'s per-user ``primary``
-# STATE invariant, and ``EmailLog``'s campaign-history index the spec wants
-# preserved as plain repoint). See ``_unique_keys_for`` for the general
+# and -- critically -- models whose ownership cannot be treated as a generic
+# move: allauth ``EmailAddress``'s per-user ``primary`` STATE invariant,
+# ``EmailLog``'s campaign-history index, and the non-transferable credential
+# state in ``MemberAPIKey`` / ``Token``. See ``_unique_keys_for`` for the general
 # state-flag classification that backstops anything not enumerated here.
 _SPECIAL_STRATEGIES = {
+    ("accounts.MemberAPIKey", "user"): _strategy_member_api_key,
+    ("accounts.Token", "user"): _strategy_operator_token,
     ("analytics.UserAttribution", "user"): _strategy_user_attribution,
     ("crm.CRMRecord", "user"): _strategy_crm_record,
     ("content.UserCourseProgress", "user"): _strategy_course_progress,

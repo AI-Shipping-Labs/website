@@ -21,7 +21,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
 
-from accounts.models import EmailAlias, TierOverride, Token
+from accounts.models import EmailAlias, MemberAPIKey, TierOverride, Token
 from analytics.models import UserAttribution
 from bookclub.models import Book, Chapter, Note
 from comments.models import Comment
@@ -211,6 +211,265 @@ class EmailLogCampaignRepointTest(UserMergeTestBase):
         # Plain repoint records ``moved`` only -- no ``dropped`` key at all.
         self.assertEqual(entry["moved"], 1)
         self.assertNotIn("dropped", entry)
+
+
+class CredentialLifecycleTest(UserMergeTestBase):
+    def test_real_merge_revokes_secondary_member_keys_without_repointing(self):
+        canonical, secondary = self._make_pair()
+        canonical_key, canonical_plaintext = MemberAPIKey.create_for_user(
+            user=canonical,
+            name="canonical",
+        )
+        active_key, active_plaintext = MemberAPIKey.create_for_user(
+            user=secondary,
+            name="active secondary",
+        )
+        revoked_key, _ = MemberAPIKey.create_for_user(
+            user=secondary,
+            name="already revoked",
+        )
+        revoked_key.revoke()
+        original_revoked_at = revoked_key.revoked_at
+
+        response = self._post(
+            {"canonical_email": "keep@test.com", "merge_email": "dupe@test.com"}
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(
+            response.json()["credentials"],
+            {"member_api_keys_revoked": 1, "operator_tokens_deleted": 0},
+        )
+
+        active_key.refresh_from_db()
+        self.assertEqual(active_key.user_id, secondary.pk)
+        self.assertIsNotNone(active_key.revoked_at)
+        self.assertIsNone(MemberAPIKey.authenticate(active_plaintext))
+
+        revoked_key.refresh_from_db()
+        self.assertEqual(revoked_key.user_id, secondary.pk)
+        self.assertEqual(revoked_key.revoked_at, original_revoked_at)
+
+        canonical_key.refresh_from_db()
+        self.assertEqual(canonical_key.user_id, canonical.pk)
+        authenticated = MemberAPIKey.authenticate(canonical_plaintext)
+        self.assertIsNotNone(authenticated)
+        self.assertEqual(authenticated.user_id, canonical.pk)
+
+        moved_models = {entry["model"] for entry in response.json()["moved"]}
+        self.assertNotIn("accounts.MemberAPIKey", moved_models)
+        self.assertNotIn("accounts.Token", moved_models)
+
+    def test_forced_staff_merge_deletes_tokens_and_audits_all_credentials(self):
+        canonical = User.objects.create_user(
+            email="keep@test.com", password="x", is_staff=True
+        )
+        secondary = User.objects.create_user(
+            email="dupe@test.com", password="x", is_staff=True
+        )
+        canonical_key, canonical_key_plaintext = MemberAPIKey.create_for_user(
+            user=canonical,
+            name="canonical member key",
+        )
+        for name in ("secondary key one", "secondary key two"):
+            MemberAPIKey.create_for_user(user=secondary, name=name)
+        canonical_token, canonical_token_plaintext = Token.create_for_user(
+            user=canonical,
+            name="canonical operator",
+        )
+        secondary_tokens = [
+            Token.create_for_user(user=secondary, name=name)
+            for name in ("secondary operator one", "secondary operator two")
+        ]
+
+        response = self._post(
+            {
+                "canonical_email": canonical.email,
+                "merge_email": secondary.email,
+                "force": True,
+            }
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        expected_credentials = {
+            "member_api_keys_revoked": 2,
+            "operator_tokens_deleted": 2,
+        }
+        self.assertEqual(response.json()["credentials"], expected_credentials)
+
+        for token, plaintext in secondary_tokens:
+            self.assertFalse(Token.objects.filter(pk=token.pk).exists())
+            self.assertIsNone(Token.authenticate(plaintext))
+
+        canonical_token.refresh_from_db()
+        self.assertEqual(canonical_token.user_id, canonical.pk)
+        authenticated_token = Token.authenticate(canonical_token_plaintext)
+        self.assertIsNotNone(authenticated_token)
+        self.assertEqual(authenticated_token.user_id, canonical.pk)
+
+        canonical_key.refresh_from_db()
+        self.assertEqual(canonical_key.user_id, canonical.pk)
+        authenticated_key = MemberAPIKey.authenticate(canonical_key_plaintext)
+        self.assertIsNotNone(authenticated_key)
+        self.assertEqual(authenticated_key.user_id, canonical.pk)
+
+        moved_models = {entry["model"] for entry in response.json()["moved"]}
+        self.assertNotIn("accounts.MemberAPIKey", moved_models)
+        self.assertNotIn("accounts.Token", moved_models)
+
+        audit_details = json.loads(
+            CommunityAuditLog.objects.get(action="merge_accounts").details
+        )
+        self.assertEqual(audit_details["credentials"], expected_credentials)
+
+    def test_merge_deletes_token_left_on_a_demoted_secondary_user(self):
+        canonical, secondary = self._make_pair()
+        secondary.is_staff = True
+        secondary.save(update_fields=["is_staff"])
+        operator_token, operator_plaintext = Token.create_for_user(
+            user=secondary,
+            name="token created while staff",
+        )
+        secondary.is_staff = False
+        secondary.save(update_fields=["is_staff"])
+
+        response = self._post(
+            {"canonical_email": canonical.email, "merge_email": secondary.email}
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(
+            response.json()["credentials"],
+            {"member_api_keys_revoked": 0, "operator_tokens_deleted": 1},
+        )
+        self.assertFalse(Token.objects.filter(pk=operator_token.pk).exists())
+        self.assertIsNone(Token.authenticate(operator_plaintext))
+
+    def test_credential_dry_run_reports_actions_without_persisting_them(self):
+        canonical = User.objects.create_user(
+            email="keep@test.com", password="x", is_staff=True
+        )
+        secondary = User.objects.create_user(
+            email="dupe@test.com", password="x", is_staff=True
+        )
+        canonical_key, canonical_key_plaintext = MemberAPIKey.create_for_user(
+            user=canonical,
+            name="canonical member key",
+        )
+        active_key, active_plaintext = MemberAPIKey.create_for_user(
+            user=secondary,
+            name="secondary member key",
+        )
+        revoked_key, _ = MemberAPIKey.create_for_user(
+            user=secondary,
+            name="already revoked",
+        )
+        revoked_key.revoke()
+        original_revoked_at = revoked_key.revoked_at
+        canonical_token, canonical_token_plaintext = Token.create_for_user(
+            user=canonical,
+            name="canonical operator",
+        )
+        secondary_token, secondary_token_plaintext = Token.create_for_user(
+            user=secondary,
+            name="secondary operator",
+        )
+
+        response = self._post(
+            {
+                "canonical_email": canonical.email,
+                "merge_email": secondary.email,
+                "dry_run": True,
+                "force": True,
+            }
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(
+            response.json()["credentials"],
+            {"member_api_keys_revoked": 1, "operator_tokens_deleted": 1},
+        )
+        moved_models = {entry["model"] for entry in response.json()["moved"]}
+        self.assertNotIn("accounts.MemberAPIKey", moved_models)
+        self.assertNotIn("accounts.Token", moved_models)
+
+        active_key.refresh_from_db()
+        self.assertEqual(active_key.user_id, secondary.pk)
+        self.assertIsNone(active_key.revoked_at)
+        authenticated_key = MemberAPIKey.authenticate(active_plaintext)
+        self.assertIsNotNone(authenticated_key)
+        self.assertEqual(authenticated_key.user_id, secondary.pk)
+
+        revoked_key.refresh_from_db()
+        self.assertEqual(revoked_key.user_id, secondary.pk)
+        self.assertEqual(revoked_key.revoked_at, original_revoked_at)
+
+        secondary_token.refresh_from_db()
+        self.assertEqual(secondary_token.user_id, secondary.pk)
+        authenticated_token = Token.authenticate(secondary_token_plaintext)
+        self.assertIsNotNone(authenticated_token)
+        self.assertEqual(authenticated_token.user_id, secondary.pk)
+
+        self.assertEqual(
+            MemberAPIKey.authenticate(canonical_key_plaintext).pk,
+            canonical_key.pk,
+        )
+        self.assertEqual(
+            Token.authenticate(canonical_token_plaintext).pk,
+            canonical_token.pk,
+        )
+        secondary.refresh_from_db()
+        self.assertTrue(secondary.is_active)
+        self.assertFalse(EmailAlias.objects.filter(user=canonical).exists())
+        self.assertFalse(
+            CommunityAuditLog.objects.filter(action="merge_accounts").exists()
+        )
+
+    def test_later_failure_rolls_back_credential_revocation_and_deletion(self):
+        from accounts.services.account_merge import merge_accounts
+
+        canonical = User.objects.create_user(
+            email="keep@test.com", password="x", is_staff=True
+        )
+        secondary = User.objects.create_user(
+            email="dupe@test.com", password="x", is_staff=True
+        )
+        member_key, member_plaintext = MemberAPIKey.create_for_user(
+            user=secondary,
+            name="secondary member key",
+        )
+        operator_token, operator_plaintext = Token.create_for_user(
+            user=secondary,
+            name="secondary operator",
+        )
+
+        with mock.patch(
+            "accounts.services.account_merge._reconcile_tier_overrides",
+            side_effect=RuntimeError("boom"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "boom"):
+                merge_accounts(
+                    canonical,
+                    secondary,
+                    actor_label="credential-rollback-test",
+                    force=True,
+                )
+
+        member_key.refresh_from_db()
+        self.assertEqual(member_key.user_id, secondary.pk)
+        self.assertIsNone(member_key.revoked_at)
+        self.assertEqual(MemberAPIKey.authenticate(member_plaintext).pk, member_key.pk)
+
+        operator_token.refresh_from_db()
+        self.assertEqual(operator_token.user_id, secondary.pk)
+        self.assertEqual(Token.authenticate(operator_plaintext).pk, operator_token.pk)
+
+        secondary.refresh_from_db()
+        self.assertTrue(secondary.is_active)
+        self.assertFalse(EmailAlias.objects.filter(user=canonical).exists())
+        self.assertFalse(
+            CommunityAuditLog.objects.filter(action="merge_accounts").exists()
+        )
 
 
 class AtomicityTest(UserMergeTestBase):
@@ -774,15 +1033,74 @@ class IdempotentNoOpTest(UserMergeTestBase):
             CommunityAuditLog.objects.filter(action="merge_accounts").count(), 1
         )
 
+        canonical.is_staff = True
+        canonical.save(update_fields=["is_staff"])
+        canonical_key, canonical_key_plaintext = MemberAPIKey.create_for_user(
+            user=canonical,
+            name="canonical member key",
+        )
+        canonical_token, canonical_token_plaintext = Token.create_for_user(
+            user=canonical,
+            name="canonical operator token",
+        )
+        key_state = {
+            "user_id": canonical_key.user_id,
+            "key_hash": canonical_key.key_hash,
+            "lookup_prefix": canonical_key.lookup_prefix,
+            "revoked_at": canonical_key.revoked_at,
+        }
+        token_state = {
+            "user_id": canonical_token.user_id,
+            "key_hash": canonical_token.key_hash,
+            "lookup_prefix": canonical_token.lookup_prefix,
+        }
+
         second = self._post(
-            {"canonical_email": "keep@test.com", "merge_email": "dupe@test.com"}
+            {
+                "canonical_email": "keep@test.com",
+                "merge_email": "dupe@test.com",
+                "force": True,
+            }
         )
         self.assertEqual(second.status_code, 200)
         self.assertTrue(second.json()["already_merged"])
+        self.assertEqual(
+            second.json()["credentials"],
+            {"member_api_keys_revoked": 0, "operator_tokens_deleted": 0},
+        )
         # No new audit row.
         self.assertEqual(
             CommunityAuditLog.objects.filter(action="merge_accounts").count(), 1
         )
+
+        canonical_key.refresh_from_db()
+        self.assertEqual(
+            {
+                "user_id": canonical_key.user_id,
+                "key_hash": canonical_key.key_hash,
+                "lookup_prefix": canonical_key.lookup_prefix,
+                "revoked_at": canonical_key.revoked_at,
+            },
+            key_state,
+        )
+        authenticated_key = MemberAPIKey.authenticate(canonical_key_plaintext)
+        self.assertIsNotNone(authenticated_key)
+        self.assertEqual(authenticated_key.pk, canonical_key.pk)
+        self.assertEqual(authenticated_key.user_id, canonical.pk)
+
+        canonical_token.refresh_from_db()
+        self.assertEqual(
+            {
+                "user_id": canonical_token.user_id,
+                "key_hash": canonical_token.key_hash,
+                "lookup_prefix": canonical_token.lookup_prefix,
+            },
+            token_state,
+        )
+        authenticated_token = Token.authenticate(canonical_token_plaintext)
+        self.assertIsNotNone(authenticated_token)
+        self.assertEqual(authenticated_token.pk, canonical_token.pk)
+        self.assertEqual(authenticated_token.user_id, canonical.pk)
 
 
 class AuthTest(UserMergeTestBase):

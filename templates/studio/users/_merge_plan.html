@@ -6,7 +6,7 @@ the post-merge result. Expects ``plan`` in context.
 
   {# Per-table row moves. #}
   <div data-testid="merge-plan-moved">
-    <h3 class="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Rows moved</h3>
+    <h3 class="text-xs font-medium uppercase text-muted-foreground mb-2">Rows moved</h3>
     {% if plan.moved %}
     <table class="w-full">
       <thead>
@@ -35,9 +35,24 @@ the post-merge result. Expects ``plan`` in context.
     {% endif %}
   </div>
 
+  {# Non-transferable credential changes. #}
+  <div data-testid="merge-plan-credentials">
+    <h3 class="text-xs font-medium uppercase text-muted-foreground mb-2">Credentials</h3>
+    <dl class="space-y-1">
+      <div class="flex justify-between gap-4" data-testid="merge-plan-member-api-keys-revoked">
+        <dt class="text-muted-foreground">Member API keys revoked</dt>
+        <dd class="text-foreground">{{ plan.credentials.member_api_keys_revoked }}</dd>
+      </div>
+      <div class="flex justify-between gap-4" data-testid="merge-plan-operator-tokens-deleted">
+        <dt class="text-muted-foreground">Operator tokens deleted</dt>
+        <dd class="text-foreground">{{ plan.credentials.operator_tokens_deleted }}</dd>
+      </div>
+    </dl>
+  </div>
+
   {# Scalar reconciliation. #}
   <div data-testid="merge-plan-reconciled">
-    <h3 class="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Profile / entitlement reconciliation</h3>
+    <h3 class="text-xs font-medium uppercase text-muted-foreground mb-2">Profile / entitlement reconciliation</h3>
     {% if plan.reconciled %}
     <dl class="space-y-1">
       {% for field, change in plan.reconciled.items %}
@@ -54,7 +69,7 @@ the post-merge result. Expects ``plan`` in context.
 
   {# Tier-override changes. #}
   <div data-testid="merge-plan-tier-overrides">
-    <h3 class="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Tier overrides</h3>
+    <h3 class="text-xs font-medium uppercase text-muted-foreground mb-2">Tier overrides</h3>
     {% if plan.tier_overrides.deactivated %}
     <p class="text-foreground mb-1">Deactivated:</p>
     <ul class="list-disc list-inside text-muted-foreground">
@@ -76,7 +91,7 @@ the post-merge result. Expects ``plan`` in context.
 
   {# Stripe reconciliation. #}
   <div data-testid="merge-plan-stripe">
-    <h3 class="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Stripe</h3>
+    <h3 class="text-xs font-medium uppercase text-muted-foreground mb-2">Stripe</h3>
     {% if plan.stripe %}
     <dl class="space-y-1">
       {% for key, value in plan.stripe.items %}
@@ -94,7 +109,7 @@ the post-merge result. Expects ``plan`` in context.
   {# Conflicts (e.g. dropped subscription under force). #}
   {% if plan.conflicts %}
   <div data-testid="merge-plan-conflicts">
-    <h3 class="text-xs font-medium uppercase tracking-wider text-red-400 mb-2">Conflicts</h3>
+    <h3 class="text-xs font-medium uppercase text-red-400 mb-2">Conflicts</h3>
     <ul class="list-disc list-inside text-red-300">
       {% for c in plan.conflicts %}
       <li data-testid="merge-plan-conflict-row">

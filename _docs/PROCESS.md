@@ -234,6 +234,126 @@ start, cancellation, timeout, hang, superseded/no-verdict result, or while any
 role or process may still use the path. Current incident/recovery paths are not
 retroactively removable merely because this helper exists.
 
+#### Unmerged agent branch retirement
+
+Normal worktree cleanup never invokes archive retirement automatically. An
+unmerged branch remains `RETAIN_UNMERGED_HEAD`, and that attributable retention
+is a valid cleanup-gate outcome. Retirement is a later, separate operator
+decision; it is not part of startup, role launch, merge, push, On-Call,
+cancellation, timeout, worktree removal, metadata prune, or lease maintenance.
+
+For one exact agent branch, review a read-only archive-retirement plan only
+after the branch is unattached and its owning issue has exact accepted
+supersession plus terminal-green evidence:
+
+```bash
+uv run python scripts/retire-agent-branches.py \
+  --repo . --actor "orchestrator:<session-id>" --json \
+  archive-retire --branch worktree-agent-<issue> --roles-ended
+```
+
+The `--roles-ended` flag is an attributable assertion that the orchestrator
+checked the authoritative active-agent registry. The helper also refuses active
+or malformed leases, live or incompletely scanned processes, recovery
+directories, attached worktrees, open/`human`/blocked issues, incomplete Git or
+GitHub evidence, already-merged tips, multi-commit divergence, and unique
+patches without an exact Alexey/Valeria supersession decision.
+
+Positive owner evidence is machine-readable, not inferred from prose. A
+terminal decision comment must contain exactly the marker
+`agent_branch_terminal_v1` followed by one JSON line with only `decision` set
+to `accepted-terminal-green` and a decimal-string `run_id`. Unique-patch
+supersession must contain exactly `agent_branch_supersession_v1` followed by one
+JSON line with only `decision` set to `retire-as-superseded`, exact `branch`,
+full `tip`, full `replacement_commit`, and a non-empty `reason`. Extra prose,
+unknown fields, duplicates, ambiguity, negation, or a non-owner author fail
+closed. Duplicate JSON keys and repeated identical evidence comments are also
+ambiguous; exactly one positive structured authorization may qualify. Both
+lines must be ASCII with one LF between them, no leading/trailing blank line,
+wrapping, carriage return, non-breaking space, or Unicode lookalike. The JSON
+must be the exact compact, lexicographically key-sorted serialization. A
+withdrawal, retention instruction, `never` statement, or other contradictory
+owner comment coexisting with positive evidence protects the branch. The
+record stores the exact immutable GitHub comment URL for each authorization;
+restore re-fetches those comments and accepts them only while their entire body
+still matches the canonical schema and decision enum.
+
+Apply accepts one exact agent branch and the unchanged reviewed digest. Before
+an expected-old-tip compare-and-delete it compare-creates an immutable,
+tip-addressed backup ref, creates an annotated local archive ref, and writes a
+common-Git-dir retirement record. It independently verifies all three:
+
+```bash
+uv run python scripts/retire-agent-branches.py \
+  --repo . --actor "orchestrator:<session-id>" --json \
+  archive-retire --branch worktree-agent-<issue> --roles-ended \
+  --apply --plan-digest <reviewed-plan-digest>
+```
+
+The backup, archive, and record are permanent local recovery evidence; the
+helper never pushes, expires, deletes, or rewrites them. The backup ref name
+binds the exact branch and tip and is never removed, including on rollback or a
+collision. A separate digest-bound restore compare-and-creates only the
+original local branch at that exact tip. The record and annotated archive must
+bind the requested branch, branch-derived issue, tip, and both derived recovery
+refs exactly. Restore leaves all recovery evidence intact and does not check
+out or create a worktree.
+
+The common Git directory is pinned by its resolved no-follow directory inode
+and rechecked before every mutation. The record directory and file are opened
+relative to pinned no-follow directory handles and must remain regular objects
+physically inside that directory. Lifecycle lease scanning uses the same
+common-Git-relative contract and seals every entry's kind, inode, complete
+bytes, and metadata. It also seals the lease directory's no-follow path and
+descriptor identity even when the directory is empty. Symlinked, replaced,
+malformed, changed, or incompletely scanned lease evidence protects the branch.
+Recovery scanning seals the configured entry lstat identity, symlink target,
+resolved directory inode, complete entry manifest, and scan-completeness state.
+A broken, looped, unreadable, replaced, or identity-changing recovery boundary
+also protects it.
+
+Apply holds the exact record inode locked and revalidates its content and
+identity at the mutation boundary. Source deletion is one atomic Git ref
+transaction that verifies the exact annotated archive-ref OID, permanent
+backup tip, and source tip before deleting. Restore verifies the archive and
+backup and compare-creates the source in one transaction. Both flows verify
+the locked record and every worktree/lease/process/recovery fact immediately
+before and after the transaction. Retirement also refetches the full issue,
+labels, owner-comment authorization, workflow run, and main/replacement
+provenance immediately before and after source deletion. Any authority drift
+fails closed and compare-recreates an absent source from the sealed tip. A
+failed post-delete condition
+compare-creates an absent source from the sealed tip without trusting a drifted
+archive; a collision leaves the permanent backup intact. A failed restore is
+rolled back only while the permanent backup still proves reachability.
+
+Restore never treats matching local record/archive/backup bytes as sufficient
+authority. It derives the issue from the requested exact branch, fetches that
+exact issue again, and requires the safe closed state, allowed owner, exact
+same-issue patch match or canonical supersession, stored authorization comment
+URLs and bodies, replacement ancestry, and exact successful terminal run ID,
+head, result, and workflow. These facts are digest-bound and revalidated before
+and after compare-create, so a locally forged cross-issue recovery triplet
+cannot establish retirement provenance.
+
+Review and apply restore separately:
+
+```bash
+uv run python scripts/retire-agent-branches.py \
+  --repo . --actor "orchestrator:<session-id>" --json \
+  restore --branch worktree-agent-<issue> --roles-ended
+
+uv run python scripts/retire-agent-branches.py \
+  --repo . --actor "orchestrator:<session-id>" --json \
+  restore --branch worktree-agent-<issue> --roles-ended \
+  --apply --plan-digest <reviewed-restore-digest>
+```
+
+Neither flow checks out commits, creates/removes worktrees, merges, rebases,
+cherry-picks, resets, commits, pushes, prunes, touches remote refs, kills
+processes, or mutates lifecycle leases. Never use this helper as a bulk sweep,
+and never treat an audit table or similar commit subject as deletion authority.
+
 The post-green handoff is a delivery-pipeline completion gate for every
 worktree used by the issue. Report every removed path exactly. For every path
 that remains protected, report the exact classifier reason codes and errors;

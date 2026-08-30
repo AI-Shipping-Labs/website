@@ -2,11 +2,13 @@
 
 import datetime
 import os
+import re
 import uuid
 from pathlib import Path
 
 import pytest
 from django.utils import timezone
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -439,11 +441,20 @@ class TestStudioActionCells:
         page.goto(f"{django_server}/studio/sync/", wait_until="domcontentloaded")
 
         sync_now = page.get_by_role("button", name="Sync now").first
-        assert "whitespace-nowrap" in sync_now.get_attribute("class")
-        assert "border-blue-500/40" in sync_now.get_attribute("class")
-        sync_now.click()
-        assert page.get_by_text("Sync queued").first.is_visible()
+        expect(sync_now).to_have_text("Sync now")
+        expect(sync_now).to_have_class(re.compile(r"\bwhitespace-nowrap\b"))
+        expect(sync_now).to_have_class(re.compile(r"\bborder-blue-500/40\b"))
+
+        with page.expect_navigation(wait_until="domcontentloaded"):
+            sync_now.click()
+
+        expect(page).to_have_url(f"{django_server}/studio/sync/")
+        messages_region = page.locator('[data-testid="messages-region"]')
+        expect(messages_region).to_be_visible()
+        expect(messages_region).to_contain_text("Sync queued for AI-Shipping-Labs/action-cell-content (1 source).")
 
         page.set_viewport_size({"width": 390, "height": 844})
-        assert "whitespace-nowrap" in sync_now.get_attribute("class")
+        redirected_sync_now = page.get_by_role("button", name="Sync now").first
+        expect(redirected_sync_now).to_have_text("Sync now")
+        expect(redirected_sync_now).to_have_class(re.compile(r"\bwhitespace-nowrap\b"))
         context.close()

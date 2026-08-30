@@ -21,6 +21,7 @@ from django.test import SimpleTestCase, tag
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODULE_PATH = PROJECT_ROOT / "scripts" / "retire-agent-branches.py"
+TEST_RUNNER_OUTPUT_PATHS = frozenset({"test-output.log"})
 _spec = importlib.util.spec_from_file_location("retire_agent_branches", MODULE_PATH)
 assert _spec and _spec.loader
 retire = importlib.util.module_from_spec(_spec)
@@ -51,9 +52,14 @@ def preexisting_repository_manifest():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     ).stdout.split(b"\0")
+    # Deploy Dev pipes this shard through ``tee test-output.log``.  That live,
+    # workflow-owned transcript is expected to grow while tests execute; it is
+    # not repository state that the retirement helper can or should preserve.
+    # Keep every tracked and other non-ignored untracked path in the seal.
     return tuple(
         (relative, path_identity(PROJECT_ROOT / relative))
         for relative in sorted(raw.decode(errors="strict") for raw in paths if raw)
+        if relative not in TEST_RUNNER_OUTPUT_PATHS
     )
 
 

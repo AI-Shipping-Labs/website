@@ -1680,7 +1680,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
             sync_log.errors,
         )
 
-    def test_copy_file_path_traversal_logs_error(self):
+    def test_copy_file_path_traversal_fails_repo_before_workshop_mutation(self):
         folder = '2026/2026-04-21-demo'
         self._write_yaml_no_description(
             folder, extra='copy_file: ../other/README.md\n',
@@ -1688,15 +1688,10 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
 
         sync_log = sync_repo(self.source, self.repo)
 
-        workshop = Workshop.objects.get(slug='demo')
-        self.assertEqual(workshop.description, '')
-        self.assertTrue(
-            any(
-                'must be a filename' in e.get('error', '')
-                for e in sync_log.errors
-            ),
-            sync_log.errors,
-        )
+        self.assertEqual(sync_log.status, 'failed')
+        self.assertEqual(sync_log.errors[0]['step'], 'filesystem_boundary')
+        self.assertEqual(sync_log.errors[0]['kind'], 'outside_checkout')
+        self.assertFalse(Workshop.objects.filter(slug='demo').exists())
 
     def test_copy_file_subdir_logs_error(self):
         folder = '2026/2026-04-21-demo'

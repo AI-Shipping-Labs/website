@@ -9,6 +9,10 @@ from django.core.management.base import BaseCommand, CommandError
 from content.models import Article
 from integrations.models import ContentSource
 from integrations.services.article_images import build_article_image_manifest
+from integrations.services.github_sync.checkout import (
+    checkout_is_file,
+    checkout_session,
+)
 from integrations.services.github_sync.parsing import _parse_markdown_file
 from integrations.services.github_sync.repo import clone_or_pull_repo
 
@@ -68,54 +72,58 @@ class Command(BaseCommand):
         repo_dir = options["repo_dir"]
         try:
             if repo_dir:
-                repo_dir = os.path.realpath(repo_dir)
-                if not os.path.isdir(repo_dir):
-                    raise CommandError(f"--repo-dir does not exist: {repo_dir}")
+                repo_dir = os.path.abspath(repo_dir)
             else:
                 temp_dir = tempfile.mkdtemp(prefix="article-image-backfill-")
                 clone_or_pull_repo(source.repo_name, temp_dir, source.is_private)
                 repo_dir = temp_dir
 
-            articles = Article.objects.filter(source_repo=source.repo_name)
-            if options["article"]:
-                articles = articles.filter(slug__in=options["article"])
-            for article in articles.order_by("slug"):
-                totals["scanned"] += 1
-                source_file = os.path.realpath(os.path.join(repo_dir, article.source_path))
-                if os.path.commonpath((repo_dir, source_file)) != repo_dir or not os.path.isfile(source_file):
-                    totals["skipped"] += 1
-                    self.stdout.write(f"SKIP {article.slug}: controlled source file missing")
-                    continue
-                try:
-                    metadata, body = _parse_markdown_file(source_file)
-                    cover = metadata.get("cover_image", "") or metadata.get("cover_image_url", "")
-                    manifest, stats = build_article_image_manifest(
-                        source=source,
-                        repo_dir=repo_dir,
-                        rel_path=article.source_path,
-                        body=body,
-                        cover_image=cover,
-                        dry_run=options["dry_run"],
-                    )
-                    totals["generated"] += stats.generated
-                    totals["reused"] += stats.reused
-                    totals["skipped"] += stats.skipped
-                    totals["failed"] += stats.failed
-                    for error in stats.errors:
-                        self.stderr.write(
-                            f"WARN {article.slug} {error.get('image', '')}: {error.get('error', 'unknown error')}"
+            with checkout_session(repo_dir, preload=True):
+                articles = Article.objects.filter(source_repo=source.repo_name)
+                if options["article"]:
+                    articles = articles.filter(slug__in=options["article"])
+                for article in articles.order_by("slug"):
+                    totals["scanned"] += 1
+                    source_file = os.path.join(repo_dir, article.source_path)
+                    if not checkout_is_file(source_file):
+                        totals["skipped"] += 1
+                        self.stdout.write(
+                            f"SKIP {article.slug}: controlled source file missing"
                         )
-                    if not options["dry_run"] and (
-                        manifest != article.image_manifest
-                        or stats.complete != article.image_manifest_complete
-                    ):
-                        Article.objects.filter(pk=article.pk).update(
-                            image_manifest=manifest,
-                            image_manifest_complete=stats.complete,
+                        continue
+                    try:
+                        metadata, body = _parse_markdown_file(source_file)
+                        cover = metadata.get("cover_image", "") or metadata.get(
+                            "cover_image_url", ""
                         )
-                except (OSError, ValueError) as exc:
-                    totals["failed"] += 1
-                    self.stderr.write(f"WARN {article.slug}: {exc}")
+                        manifest, stats = build_article_image_manifest(
+                            source=source,
+                            repo_dir=repo_dir,
+                            rel_path=article.source_path,
+                            body=body,
+                            cover_image=cover,
+                            dry_run=options["dry_run"],
+                        )
+                        totals["generated"] += stats.generated
+                        totals["reused"] += stats.reused
+                        totals["skipped"] += stats.skipped
+                        totals["failed"] += stats.failed
+                        for error in stats.errors:
+                            self.stderr.write(
+                                f"WARN {article.slug} {error.get('image', '')}: "
+                                f"{error.get('error', 'unknown error')}"
+                            )
+                        if not options["dry_run"] and (
+                            manifest != article.image_manifest
+                            or stats.complete != article.image_manifest_complete
+                        ):
+                            Article.objects.filter(pk=article.pk).update(
+                                image_manifest=manifest,
+                                image_manifest_complete=stats.complete,
+                            )
+                    except (OSError, ValueError) as exc:
+                        totals["failed"] += 1
+                        self.stderr.write(f"WARN {article.slug}: {exc}")
         finally:
             if temp_dir:
                 shutil.rmtree(temp_dir, ignore_errors=True)

@@ -1,6 +1,7 @@
 """Image URL rewriting and S3 media upload helpers."""
 
 import hashlib
+import io
 import mimetypes
 import os
 import re
@@ -10,6 +11,11 @@ from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
 
 from integrations.config import get_config, s3_content_upload_enabled
+from integrations.services.github_sync.checkout import (
+    checkout_read_bytes,
+    checkout_scope,
+    checkout_walk,
+)
 from integrations.services.github_sync.common import IMAGE_EXTENSIONS, logger
 
 
@@ -143,14 +149,8 @@ def rewrite_cover_image_url(
 
 def _md5_file(filepath, chunk_size=8192):
     """Compute the MD5 hex digest of a file."""
-    md5 = hashlib.md5()
-    with open(filepath, 'rb') as f:
-        while True:
-            chunk = f.read(chunk_size)
-            if not chunk:
-                break
-            md5.update(chunk)
-    return md5.hexdigest()
+    del chunk_size  # Retained for compatibility with legacy callers.
+    return hashlib.md5(checkout_read_bytes(filepath)).hexdigest()
 
 
 def upload_images_to_s3(content_dir, source):
@@ -166,6 +166,11 @@ def upload_images_to_s3(content_dir, source):
     Returns:
         dict: {'uploaded': int, 'skipped': int, 'errors': list}
     """
+    with checkout_scope(content_dir, preload=True):
+        return _upload_images_to_s3_from_checkout(content_dir, source)
+
+
+def _upload_images_to_s3_from_checkout(content_dir, source):
     # Issue #532: kill-switch for tests / local dev. ``TESTING`` is True
     # under ``manage.py test`` (set in website/settings.py), so CI/Playwright/
     # unit tests never make a real ``list_objects_v2`` round-trip against AWS
@@ -250,7 +255,7 @@ def upload_images_to_s3(content_dir, source):
             'file': '', 'error': str(e), 'step': 's3_list',
         })
 
-    for root, dirs, files in os.walk(content_dir):
+    for root, dirs, files in checkout_walk(content_dir):
         # Skip .git directory
         if '.git' in root:
             continue
@@ -264,15 +269,16 @@ def upload_images_to_s3(content_dir, source):
             s3_key = f'{repo_short}/{rel_path}'
 
             # Compute local MD5 and compare against S3 ETag
-            local_md5 = _md5_file(filepath)
+            source_bytes = checkout_read_bytes(filepath)
+            local_md5 = hashlib.md5(source_bytes).hexdigest()
             if s3_key in existing_etags and existing_etags[s3_key] == local_md5:
                 stats['skipped'] += 1
                 continue
 
             try:
                 content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
-                s3.upload_file(
-                    filepath, bucket, s3_key,
+                s3.upload_fileobj(
+                    io.BytesIO(source_bytes), bucket, s3_key,
                     ExtraArgs={
                         'ContentType': content_type,
                         'CacheControl': 'public, max-age=86400',
@@ -293,8 +299,13 @@ def upload_images_to_s3(content_dir, source):
 
 def _collect_image_paths(content_dir):
     """Return a set of all image file paths relative to content_dir."""
+    with checkout_scope(content_dir, preload=True):
+        return _collect_image_paths_from_checkout(content_dir)
+
+
+def _collect_image_paths_from_checkout(content_dir):
     image_paths = set()
-    for root, dirs, files in os.walk(content_dir):
+    for root, dirs, files in checkout_walk(content_dir):
         if '.git' in root:
             continue
         for filename in files:

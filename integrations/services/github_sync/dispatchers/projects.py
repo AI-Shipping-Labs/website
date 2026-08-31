@@ -5,6 +5,7 @@ import os
 from django.utils import timezone
 
 from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
+from integrations.services.github_sync.checkout import raise_if_checkout_error
 from integrations.services.github_sync.common import logger
 from integrations.services.github_sync.media import (
     _check_broken_image_refs,
@@ -185,6 +186,7 @@ def _dispatch_projects(source, repo_dir, file_list, commit_sha, stats,
             _enqueue_banner_if_missing('project', project.pk)
 
         except Exception as e:
+            raise_if_checkout_error(e)
             fallback_slug = os.path.splitext(filename)[0]
             try:
                 failed_slug = metadata.get('slug', fallback_slug)
@@ -209,5 +211,4 @@ def _dispatch_projects(source, repo_dir, file_list, commit_sha, stats,
     deleted_count = stale.count()
     stale.update(published=False, status='pending_review')
     stats['deleted'] += deleted_count
-
 

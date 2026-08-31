@@ -153,7 +153,7 @@ class UploadImagesToS3StepTaggingTest(TestCase):
         mock_paginator = MagicMock()
         mock_paginator.paginate.return_value = [{'Contents': []}]
         mock_s3.get_paginator.return_value = mock_paginator
-        mock_s3.upload_file.side_effect = S3UploadFailedError('Access Denied')
+        mock_s3.upload_fileobj.side_effect = S3UploadFailedError('Access Denied')
 
         result = upload_images_to_s3(self.temp_dir, self.source)
 
@@ -196,7 +196,7 @@ class UploadImagesToS3StepTaggingTest(TestCase):
         ]
         self.assertEqual(len(list_errors), 1)
         self.assertEqual(list_errors[0]['file'], '')
-        mock_s3.upload_file.assert_called_once()
+        mock_s3.upload_fileobj.assert_called_once()
 
 
 class WorkshopSyncCoverImageValidationTest(TestCase):

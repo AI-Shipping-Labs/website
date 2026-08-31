@@ -33,6 +33,13 @@ import re
 
 import frontmatter
 
+from integrations.services.github_sync.checkout import (
+    active_checkout,
+    checkout_is_file,
+    checkout_read_text,
+    checkout_scope,
+)
+
 # ATX H1: a single ``#`` followed by whitespace and at least one
 # non-whitespace char. We exclude H2+ (``## ...``) and inspect only the
 # first non-blank line of the body.
@@ -86,7 +93,7 @@ def _strip_leading_h1(body):
 
 def _read_markdown_body(filepath):
     """Read a markdown file and return its body with frontmatter stripped."""
-    post = frontmatter.load(filepath, encoding='utf-8')
+    post = frontmatter.loads(checkout_read_text(filepath))
     return post.content
 
 
@@ -142,6 +149,19 @@ def resolve_copy_file_content(folder, copy_file_setting, default='README.md'):
           ``copy_file``: ``(None, error_string)`` so the caller can append
           it to its own ``sync_errors`` list.
     """
+    if active_checkout() is not None:
+        return _resolve_copy_file_content_from_checkout(
+            folder, copy_file_setting, default,
+        )
+    with checkout_scope(folder):
+        return _resolve_copy_file_content_from_checkout(
+            folder, copy_file_setting, default,
+        )
+
+
+def _resolve_copy_file_content_from_checkout(
+    folder, copy_file_setting, default='README.md',
+):
     explicit_set = bool(copy_file_setting)
 
     if explicit_set:
@@ -174,7 +194,7 @@ def resolve_copy_file_content(folder, copy_file_setting, default='README.md'):
             )
 
         candidate_path = os.path.join(folder, candidate)
-        if not os.path.isfile(candidate_path):
+        if not checkout_is_file(candidate_path):
             return (
                 None,
                 f'copy_file {copy_file_setting!r} not found in {folder}',
@@ -187,7 +207,7 @@ def resolve_copy_file_content(folder, copy_file_setting, default='README.md'):
         if default is None:
             return (None, None)
         default_path = os.path.join(folder, default)
-        if not os.path.isfile(default_path):
+        if not checkout_is_file(default_path):
             return (None, None)
         source_path = default_path
 

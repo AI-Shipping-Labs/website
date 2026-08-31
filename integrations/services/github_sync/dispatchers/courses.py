@@ -3,6 +3,14 @@
 import os
 
 from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
+from integrations.services.github_sync.checkout import (
+    checkout_exists,
+    checkout_is_dir,
+    checkout_is_file,
+    checkout_listdir,
+    checkout_scandir,
+    raise_if_checkout_error,
+)
 from integrations.services.github_sync.common import GitHubSyncError, logger
 from integrations.services.github_sync.dispatchers.instructors import (
     _attach_instructors_to_course,
@@ -312,6 +320,7 @@ def _sync_single_course(
         _enqueue_banner_if_missing('course', course.pk)
 
     except Exception as e:
+        raise_if_checkout_error(e)
         try:
             failed_slug = (course_data or {}).get(
                 'slug', os.path.basename(course_dir.rstrip(os.sep)),
@@ -404,7 +413,7 @@ def _resolve_course_description(course_data, course_dir, course_ignore_patterns)
 
     readme_path = os.path.join(course_dir, 'README.md')
     if (
-        not os.path.isfile(readme_path)
+        not checkout_is_file(readme_path)
         or _matches_ignore_patterns('README.md', course_ignore_patterns)
     ):
         return ''
@@ -536,12 +545,12 @@ def _build_course_unit_lookup(course_dir, course_ignore_patterns=None, stats=Non
             failures are only logged.
     """
     lookup = {}
-    if not os.path.isdir(course_dir):
+    if not checkout_is_dir(course_dir):
         return lookup
 
     course_ignore_patterns = course_ignore_patterns or []
 
-    for entry in sorted(os.scandir(course_dir), key=lambda e: e.name):
+    for entry in checkout_scandir(course_dir):
         if (
             not entry.is_dir()
             or entry.name.startswith('.')
@@ -557,7 +566,7 @@ def _build_course_unit_lookup(course_dir, course_ignore_patterns=None, stats=Non
             continue
 
         module_yaml_path = os.path.join(entry.path, 'module.yaml')
-        if not os.path.exists(module_yaml_path):
+        if not checkout_exists(module_yaml_path):
             continue
 
         # Best-effort: skip modules whose YAML can't be parsed. We don't want
@@ -591,14 +600,14 @@ def _build_course_unit_lookup(course_dir, course_ignore_patterns=None, stats=Non
         module_ignore_patterns = [str(p) for p in raw_module_ignore]
 
         files = {}
-        for filename in os.listdir(entry.path):
+        for filename in checkout_listdir(entry.path):
             if (
                 not filename.lower().endswith('.md')
                 or filename.startswith('.')
             ):
                 continue
             filepath = os.path.join(entry.path, filename)
-            if not os.path.isfile(filepath):
+            if not checkout_is_file(filepath):
                 continue
 
             # Same _is_ignored check _sync_module_units uses: a file matched
@@ -693,10 +702,10 @@ def _build_workshop_page_lookup(
             slug-only key; when omitted, ``workshop_slug`` is used.
     """
     lookup = {}
-    if not os.path.isdir(workshop_dir):
+    if not checkout_is_dir(workshop_dir):
         return lookup
 
-    for filename in sorted(os.listdir(workshop_dir)):
+    for filename in checkout_listdir(workshop_dir):
         if (
             not filename.endswith('.md')
             or filename.upper() == 'README.MD'
@@ -705,7 +714,7 @@ def _build_workshop_page_lookup(
             continue
 
         filepath = os.path.join(workshop_dir, filename)
-        if not os.path.isfile(filepath):
+        if not checkout_is_file(filepath):
             continue
 
         # Best-effort: a parse error here just means we can't resolve links
@@ -743,7 +752,7 @@ def _build_workshop_page_lookup(
         path_key = workshop_url_key or workshop_slug
         landing_url = f'/workshops/{path_key}'
         readme_path = os.path.join(workshop_dir, 'README.md')
-        if os.path.isfile(readme_path):
+        if checkout_is_file(readme_path):
             lookup['README.md'] = {
                 'slug': '',
                 'title': workshop_title,
@@ -766,7 +775,7 @@ def _build_workshop_page_lookup(
                 and copy_file.upper() != 'README.MD'
             ):
                 copy_path = os.path.join(workshop_dir, copy_file)
-                if os.path.isfile(copy_path):
+                if checkout_is_file(copy_path):
                     lookup[copy_file] = {
                         'slug': '',
                         'title': workshop_title,
@@ -955,7 +964,7 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
         course_dir, course_ignore_patterns=course_ignore_patterns,
     )
 
-    for entry in sorted(os.scandir(course_dir), key=lambda e: e.name):
+    for entry in checkout_scandir(course_dir):
         if not entry.is_dir() or entry.name.startswith('.') or entry.name == 'images':
             continue
 
@@ -966,7 +975,7 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
             continue
 
         module_yaml_path = os.path.join(entry.path, 'module.yaml')
-        if not os.path.exists(module_yaml_path):
+        if not checkout_exists(module_yaml_path):
             continue
 
         try:
@@ -1066,6 +1075,7 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
             )
 
         except Exception as e:
+            raise_if_checkout_error(e)
             stats['errors'].append({
                 'file': os.path.relpath(module_yaml_path, repo_dir),
                 'error': str(e),
@@ -1129,7 +1139,7 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
 
     # README at module root -> Module.overview (issue #222), unless ignored.
     readme_filename = None
-    for name in os.listdir(module_dir):
+    for name in checkout_listdir(module_dir):
         if name.lower() == 'readme.md':
             readme_filename = name
             break
@@ -1187,6 +1197,7 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 # totals (issue #225).
                 stats['unchanged'] += 1
         except Exception as e:
+            raise_if_checkout_error(e)
             stats['errors'].append({
                 'file': readme_rel,
                 'error': str(e),
@@ -1200,7 +1211,7 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
             'overview', 'overview_html', 'overview_source_path',
         ])
 
-    for filename in sorted(os.listdir(module_dir)):
+    for filename in checkout_listdir(module_dir):
         if not filename.endswith('.md') or filename.upper() == 'README.MD':
             continue
 
@@ -1379,6 +1390,7 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
             })
 
         except Exception as e:
+            raise_if_checkout_error(e)
             stats['errors'].append({
                 'file': rel_path,
                 'error': str(e),

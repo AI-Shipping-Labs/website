@@ -2878,13 +2878,13 @@ class S3ImageUploadTest(TestCase):
 
         self.assertEqual(result['uploaded'], 1)
         self.assertEqual(result['skipped'], 0)
-        mock_s3.upload_file.assert_called_once()
-        filepath, bucket, key = mock_s3.upload_file.call_args[0]
-        self.assertTrue(filepath.endswith('hero.png'))
+        mock_s3.upload_fileobj.assert_called_once()
+        fileobj, bucket, key = mock_s3.upload_fileobj.call_args[0]
+        self.assertEqual(fileobj.getvalue(), self.img_content)
         self.assertEqual(bucket, 'test-bucket')
         self.assertEqual(key, 'content/hero.png')
         self.assertEqual(
-            mock_s3.upload_file.call_args.kwargs['ExtraArgs']['ContentType'],
+            mock_s3.upload_fileobj.call_args.kwargs['ExtraArgs']['ContentType'],
             'image/png',
         )
 
@@ -2914,7 +2914,7 @@ class S3ImageUploadTest(TestCase):
 
         self.assertEqual(result['uploaded'], 0)
         self.assertEqual(result['skipped'], 1)
-        mock_s3.upload_file.assert_not_called()
+        mock_s3.upload_fileobj.assert_not_called()
 
     @override_settings(
         AWS_S3_CONTENT_BUCKET='test-bucket',
@@ -2942,9 +2942,9 @@ class S3ImageUploadTest(TestCase):
 
         self.assertEqual(result['uploaded'], 1)
         self.assertEqual(result['skipped'], 0)
-        mock_s3.upload_file.assert_called_once()
-        filepath, bucket, key = mock_s3.upload_file.call_args[0]
-        self.assertTrue(filepath.endswith('hero.png'))
+        mock_s3.upload_fileobj.assert_called_once()
+        fileobj, bucket, key = mock_s3.upload_fileobj.call_args[0]
+        self.assertEqual(fileobj.getvalue(), self.img_content)
         self.assertEqual(bucket, 'test-bucket')
         self.assertEqual(key, 'content/hero.png')
 
@@ -2973,7 +2973,7 @@ class S3ImageUploadTest(TestCase):
         result = upload_images_to_s3(self.temp_dir, self.source)
 
         self.assertEqual(result['uploaded'], 0)
-        mock_s3.upload_file.assert_not_called()
+        mock_s3.upload_fileobj.assert_not_called()
 
     @override_settings(
         AWS_S3_CONTENT_BUCKET='test-bucket',
@@ -2990,7 +2990,7 @@ class S3ImageUploadTest(TestCase):
         mock_paginator = MagicMock()
         mock_paginator.paginate.return_value = [{'Contents': []}]
         mock_s3.get_paginator.return_value = mock_paginator
-        mock_s3.upload_file.side_effect = S3UploadFailedError('Access Denied')
+        mock_s3.upload_fileobj.side_effect = S3UploadFailedError('Access Denied')
 
         result = upload_images_to_s3(self.temp_dir, self.source)
 
@@ -3055,7 +3055,7 @@ class S3ImageUploadTest(TestCase):
         self.assertEqual(result['errors'][0]['step'], 's3_list')
         self.assertEqual(result['errors'][0]['file'], '')
         self.assertTrue(any('Failed to list S3 objects' in line for line in logs.output))
-        mock_s3.upload_file.assert_called_once()
+        mock_s3.upload_fileobj.assert_called_once()
 
     @override_settings(
         AWS_S3_CONTENT_BUCKET='test-bucket',
@@ -3106,7 +3106,7 @@ class S3ImageUploadTest(TestCase):
         mock_paginator = MagicMock()
         mock_paginator.paginate.return_value = [{'Contents': []}]
         mock_s3.get_paginator.return_value = mock_paginator
-        mock_s3.upload_file.side_effect = TypeError('bad upload state')
+        mock_s3.upload_fileobj.side_effect = TypeError('bad upload state')
 
         with self.assertRaises(TypeError):
             upload_images_to_s3(self.temp_dir, self.source)

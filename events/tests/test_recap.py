@@ -549,11 +549,10 @@ class SyncEventsRecapFileTest(TestCase):
             ))
             sync_log = sync_content_source(self._make_source(), repo_dir=tmp)
 
-        self.assertEqual(len(sync_log.errors), 1)
-        self.assertIn('recap_file must be relative', sync_log.errors[0]['error'])
-        event = Event.objects.get(slug='bad-path')
-        self.assertEqual(event.recap_html, '')
-        self.assertFalse(event.has_recap)
+        self.assertEqual(sync_log.status, 'failed')
+        self.assertEqual(sync_log.errors[0]['step'], 'filesystem_boundary')
+        self.assertEqual(sync_log.errors[0]['kind'], 'absolute_path')
+        self.assertFalse(Event.objects.filter(slug='bad-path').exists())
 
     def test_sync_logs_error_for_escaping_recap_file(self):
         from integrations.services.github import sync_content_source
@@ -568,11 +567,10 @@ class SyncEventsRecapFileTest(TestCase):
             ))
             sync_log = sync_content_source(self._make_source(), repo_dir=tmp)
 
-        self.assertEqual(len(sync_log.errors), 1)
-        self.assertIn('recap_file escapes content repo', sync_log.errors[0]['error'])
-        event = Event.objects.get(slug='bad-path')
-        self.assertEqual(event.recap_html, '')
-        self.assertFalse(event.has_recap)
+        self.assertEqual(sync_log.status, 'failed')
+        self.assertEqual(sync_log.errors[0]['step'], 'filesystem_boundary')
+        self.assertEqual(sync_log.errors[0]['kind'], 'outside_checkout')
+        self.assertFalse(Event.objects.filter(slug='bad-path').exists())
 
     def test_sync_logs_error_for_invalid_recap_frontmatter(self):
         from integrations.services.github import sync_content_source
@@ -615,8 +613,7 @@ class SyncEventsRecapFileTest(TestCase):
             ))
             sync_log = sync_content_source(self._make_source(), repo_dir=tmp)
 
-        self.assertEqual(len(sync_log.errors), 1)
-        self.assertIn('Include path escapes content repo', sync_log.errors[0]['error'])
-        event = Event.objects.get(slug='bad-include')
-        self.assertEqual(event.recap_html, '')
-        self.assertFalse(event.has_recap)
+        self.assertEqual(sync_log.status, 'failed')
+        self.assertEqual(sync_log.errors[0]['step'], 'filesystem_boundary')
+        self.assertEqual(sync_log.errors[0]['kind'], 'outside_checkout')
+        self.assertFalse(Event.objects.filter(slug='bad-include').exists())

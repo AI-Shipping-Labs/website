@@ -8,6 +8,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from events.services.timestamps import normalize_event_timestamps_for_sync
+from integrations.services.github_sync.checkout import raise_if_checkout_error
 from integrations.services.github_sync.common import logger
 from integrations.services.github_sync.dispatchers.hosts import _attach_hosts_to_event, _resolve_hosts_for_event_yaml
 from integrations.services.github_sync.dispatchers.instructors import (
@@ -703,6 +704,7 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
             _attach_hosts_to_event(event, resolved_hosts)
 
         except Exception as e:
+            raise_if_checkout_error(e)
             # Intentional broad catch: a single malformed event file must
             # not abort the whole sync; the error is recorded into
             # ``stats['errors']`` and surfaced in the SyncLog row.

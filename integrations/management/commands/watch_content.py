@@ -19,6 +19,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from integrations.models import ContentSource
 from integrations.services.github import sync_content_source
+from integrations.services.github_sync.checkout import checkout_is_dir
 from integrations.services.github_sync.dispatchers.tiers import _sync_tiers_yaml
 
 # File extensions that should trigger a sync
@@ -169,7 +170,7 @@ class Command(BaseCommand):
         repo_dir = os.path.expanduser(options['repo_dir'])
         debounce = options['debounce']
 
-        if not os.path.isdir(repo_dir):
+        if not checkout_is_dir(repo_dir):
             raise CommandError(f'Directory does not exist: {repo_dir}')
 
         # The watcher debounces against a single repo. We pick the

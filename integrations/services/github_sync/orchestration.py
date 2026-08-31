@@ -9,6 +9,14 @@ from django.db import DatabaseError, IntegrityError
 from django.utils import timezone
 
 from integrations.models import ContentSource, SyncLog
+from integrations.services.github_sync.checkout import (
+    ContentCheckout,
+    ContentCheckoutError,
+    active_checkout,
+    checkout_is_file,
+    checkout_listdir,
+    checkout_walk,
+)
 from integrations.services.github_sync.common import (
     CONTENT_EXTENSIONS,
     IMAGE_EXTENSIONS,
@@ -42,6 +50,7 @@ class PreparedRepo:
     repo_dir: str
     temp_dir: str | None
     commit_sha: str
+    checkout: ContentCheckout
 
 
 @dataclass(frozen=True)
@@ -157,9 +166,10 @@ def sync_content_source(source, repo_dir=None, batch_id=None, force=False):
     prepared = None
     try:
         prepared = _prepare_repo(source, repo_dir)
-        pipeline_result = _run_content_pipeline(
-            source, prepared.repo_dir, prepared.commit_sha, sync_log,
-        )
+        with prepared.checkout.activate():
+            pipeline_result = _run_content_pipeline(
+                source, prepared.repo_dir, prepared.commit_sha, sync_log,
+            )
         _finish_successful_sync(source, sync_log, prepared, pipeline_result)
     except Exception as e:
         # Intentional broad catch: this is the worker-task boundary for a
@@ -294,20 +304,43 @@ def _start_sync_log(source, batch_id):
 def _prepare_repo(source, repo_dir):
     if repo_dir is None:
         temp_dir = tempfile.mkdtemp(prefix='github-sync-')
-        commit_sha = clone_or_pull_repo(
-            source.repo_name, temp_dir, source.is_private,
-        )
+        try:
+            commit_sha = clone_or_pull_repo(
+                source.repo_name, temp_dir, source.is_private,
+            )
+            checkout = ContentCheckout(temp_dir).__enter__()
+        except BaseException:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            raise
         return PreparedRepo(
             repo_dir=temp_dir, temp_dir=temp_dir, commit_sha=commit_sha,
+            checkout=checkout,
         )
 
     # For testing / --from-disk, resolve the SHA from the local clone if
     # possible; otherwise fall back to the legacy ``test-commit-sha`` marker.
-    commit_sha = _resolve_local_repo_sha(repo_dir) or 'test-commit-sha'
-    return PreparedRepo(repo_dir=repo_dir, temp_dir=None, commit_sha=commit_sha)
+    checkout = ContentCheckout(repo_dir).__enter__()
+    try:
+        commit_sha = _resolve_local_repo_sha(repo_dir, checkout) or 'test-commit-sha'
+    except BaseException:
+        checkout.__exit__(None, None, None)
+        raise
+    return PreparedRepo(
+        repo_dir=checkout.root,
+        temp_dir=None,
+        commit_sha=commit_sha,
+        checkout=checkout,
+    )
 
 
 def _run_content_pipeline(source, repo_dir, commit_sha, sync_log):
+    # Freeze every sync-eligible repository entry before the first S3 or
+    # content/tier database side effect. All later readers receive cached
+    # immutable bytes from this checkout session.
+    checkout = active_checkout()
+    if checkout is None:
+        raise ContentCheckoutError('', 'missing_checkout_session')
+    checkout.preload()
     _enforce_max_content_files(source, repo_dir)
     s3_stats = upload_images_to_s3(repo_dir, source)
     s3_errors = s3_stats.get('errors', [])
@@ -375,7 +408,10 @@ def _mark_sync_failed(source, sync_log, error, prepared):
     logger.exception('Sync failed for %s', source.repo_name)
     sync_log.status = 'failed'
     sync_log.finished_at = timezone.now()
-    sync_log.errors = [{'file': '', 'error': str(error)}]
+    if isinstance(error, ContentCheckoutError):
+        sync_log.errors = [error.as_error()]
+    else:
+        sync_log.errors = [{'file': '', 'error': str(error)}]
     if prepared is not None and prepared.commit_sha:
         sync_log.commit_sha = prepared.commit_sha
     sync_log.save()
@@ -386,6 +422,8 @@ def _mark_sync_failed(source, sync_log, error, prepared):
 
 
 def _cleanup_prepared_repo(prepared):
+    if prepared:
+        prepared.checkout.__exit__(None, None, None)
     if prepared and prepared.temp_dir and os.path.exists(prepared.temp_dir):
         shutil.rmtree(prepared.temp_dir, ignore_errors=True)
 
@@ -490,8 +528,11 @@ class RepoFileClassifier:
         )
 
     def _claim_structured_subtrees(self):
-        for root, dirs, files in os.walk(self.repo_dir, topdown=True):
+        for root, dirs, files in checkout_walk(self.repo_dir):
             self._prune_git_dirs(dirs)
+            rel_root = os.path.relpath(root, self.repo_dir)
+            if rel_root != '.' and self._is_under_claimed(rel_root + os.sep):
+                continue
             if 'course.yaml' in files:
                 self._claim_subtree(root, self.course_dirs)
                 dirs[:] = []
@@ -513,7 +554,7 @@ class RepoFileClassifier:
         return False
 
     def _classify_unclaimed_files(self):
-        for root, dirs, files in os.walk(self.repo_dir, topdown=True):
+        for root, dirs, files in checkout_walk(self.repo_dir):
             self._prune_git_dirs(dirs)
             for filename in files:
                 self._classify_file(root, filename)
@@ -717,7 +758,7 @@ def _build_cross_workshop_lookup(workshop_dirs, repo_dir, errors=None):
 
         pages = {}
         try:
-            page_filenames = sorted(os.listdir(workshop_path))
+            page_filenames = checkout_listdir(workshop_path)
         except OSError:
             page_filenames = []
         for filename in page_filenames:
@@ -728,7 +769,7 @@ def _build_cross_workshop_lookup(workshop_dirs, repo_dir, errors=None):
             ):
                 continue
             page_path = os.path.join(workshop_path, filename)
-            if not os.path.isfile(page_path):
+            if not checkout_is_file(page_path):
                 continue
             try:
                 metadata, _ = _parse_markdown_file(page_path)
@@ -856,7 +897,7 @@ def _sync_repo(source, repo_dir, commit_sha, sync_log, known_images=None):
 def _count_content_files(content_dir):
     """Count content files (.md, .yaml, .yml) in a directory tree."""
     count = 0
-    for root, dirs, files in os.walk(content_dir):
+    for root, dirs, files in checkout_walk(content_dir):
         if '.git' in root:
             continue
         for filename in files:

@@ -12,6 +12,12 @@ from django.core.management.base import BaseCommand, CommandError
 
 from integrations.models import ContentSource
 from integrations.services.github import sync_content_source
+from integrations.services.github_sync.checkout import (
+    ContentCheckoutError,
+    checkout_is_dir,
+    checkout_is_file,
+    checkout_scope,
+)
 from integrations.services.github_sync.dispatchers.tiers import _sync_tiers_yaml
 
 
@@ -29,7 +35,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         from_disk = options['from_disk']
 
-        if from_disk and not os.path.isdir(from_disk):
+        if from_disk and not checkout_is_dir(from_disk):
             raise CommandError(
                 f'Disk path does not exist: {from_disk}\n'
                 f'Clone it first: git clone git@github.com:AI-Shipping-Labs/content.git {from_disk}'
@@ -45,6 +51,7 @@ class Command(BaseCommand):
         total_created = 0
         total_updated = 0
         has_errors = False
+        boundary_failed = False
 
         for source in sources:
             self.stdout.write(f'Syncing {source.repo_name}...')
@@ -60,12 +67,23 @@ class Command(BaseCommand):
                 self.stdout.write(f'  {created} created, {updated} updated')
                 for error in (result.errors or []):
                     error_msg = error.get('error', str(error)) if isinstance(error, dict) else str(error)
+                    if (
+                        isinstance(error, dict)
+                        and error.get('filesystem_boundary') is True
+                    ):
+                        boundary_failed = True
                     self.stderr.write(
                         self.style.ERROR(
                             f'  ERROR [{source.repo_name}]: {error_msg}'
                         )
                     )
                     has_errors = True
+            except ContentCheckoutError as e:
+                boundary_failed = True
+                self.stderr.write(
+                    self.style.ERROR(f'  FAILED [{source.repo_name}]: {e}')
+                )
+                has_errors = True
             except Exception as e:
                 self.stderr.write(
                     self.style.ERROR(f'  FAILED [{source.repo_name}]: {e}')
@@ -74,22 +92,25 @@ class Command(BaseCommand):
 
         # Keep local-disk sync semantics identical to production GitHub sync:
         # write the full config blob and the scalar Tier fields together.
-        if from_disk:
-            tiers_path = os.path.join(from_disk, 'tiers.yaml')
-            if os.path.isfile(tiers_path):
-                self.stdout.write('Syncing tiers.yaml...')
-                try:
-                    result = _sync_tiers_yaml(from_disk)
-                    if result['synced']:
-                        self.stdout.write('  tiers.yaml synced to database')
-                    else:
+        if from_disk and not boundary_failed:
+            with checkout_scope(from_disk):
+                tiers_path = os.path.join(from_disk, 'tiers.yaml')
+                if checkout_is_file(tiers_path):
+                    self.stdout.write('Syncing tiers.yaml...')
+                    try:
+                        result = _sync_tiers_yaml(from_disk)
+                        if result['synced']:
+                            self.stdout.write('  tiers.yaml synced to database')
+                        else:
+                            self.stderr.write(
+                                self.style.ERROR('  FAILED to sync tiers.yaml')
+                            )
+                            has_errors = True
+                    except Exception as e:
                         self.stderr.write(
-                            self.style.ERROR('  FAILED to sync tiers.yaml')
+                            self.style.ERROR(f'  FAILED to sync tiers.yaml: {e}')
                         )
                         has_errors = True
-                except Exception as e:
-                    self.stderr.write(self.style.ERROR(f'  FAILED to sync tiers.yaml: {e}'))
-                    has_errors = True
 
         self.stdout.write('')
         self.stdout.write(

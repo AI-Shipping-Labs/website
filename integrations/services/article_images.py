@@ -7,7 +7,6 @@ import hashlib
 import io
 import logging
 import os
-import re
 from dataclasses import dataclass, field
 
 import boto3
@@ -16,6 +15,14 @@ from django.conf import settings
 from PIL import Image, ImageCms, ImageOps, UnidentifiedImageError
 
 from integrations.config import get_config, s3_content_upload_enabled
+from integrations.services.github_sync.checkout import (
+    MAX_IMAGE_SNAPSHOT_BYTES,
+    active_checkout,
+    checkout_is_file,
+    checkout_read_bytes,
+    checkout_scope,
+    extract_authored_image_references,
+)
 from integrations.services.github_sync.media import (
     _repo_short,
     _resolve_image_path,
@@ -27,15 +34,11 @@ logger = logging.getLogger(__name__)
 VARIANT_WIDTHS = (320, 480, 768, 1200, 1600)
 WEBP_QUALITY = 82
 JPEG_QUALITY = 85
-MAX_SOURCE_BYTES = 25 * 1024 * 1024
+MAX_SOURCE_BYTES = MAX_IMAGE_SNAPSHOT_BYTES
 MAX_SOURCE_PIXELS = 40_000_000
 MAX_SOURCE_DIMENSION = 12_000
 IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 SUPPORTED_FORMATS = {"JPEG": ("jpg", "image/jpeg"), "PNG": ("png", "image/png"), "WEBP": ("webp", "image/webp")}
-
-_MARKDOWN_IMAGE_RE = re.compile(r'!\[[^\]]*\]\((?P<url>[^)\s]+)(?:\s+["\'][^"\']*["\'])?\)')
-_HTML_IMAGE_RE = re.compile(r'<img\b[^>]*\bsrc=["\'](?P<url>[^"\']+)["\']', re.IGNORECASE)
-
 
 @dataclass
 class VariantStats:
@@ -51,26 +54,20 @@ class ArticleImageError(ValueError):
     """A controlled image cannot safely be transformed."""
 
 
-def extract_article_image_references(body, cover_image=""):
-    """Return authored image references in stable first-seen order."""
-    refs = []
-    if cover_image:
-        refs.append(str(cover_image).strip())
-    refs.extend(match.group("url") for match in _MARKDOWN_IMAGE_RE.finditer(body or ""))
-    refs.extend(match.group("url") for match in _HTML_IMAGE_RE.finditer(body or ""))
-    return list(dict.fromkeys(ref for ref in refs if ref))
-
-
 def _controlled_path(reference, *, repo_dir, base_dir):
     if reference.startswith(("http://", "https://", "data:", "//")):
         return None
-    relative = _resolve_image_path(reference, base_dir)
-    repo_root = os.path.realpath(repo_dir)
-    candidate = os.path.realpath(os.path.join(repo_root, relative))
-    try:
-        if os.path.commonpath((repo_root, candidate)) != repo_root:
+    checkout = active_checkout()
+    if checkout is not None:
+        relative = checkout.authored_image_relative(
+            reference, base_dir=base_dir,
+        )
+        if relative is None:
             return None
-    except ValueError:
+    else:
+        relative = _resolve_image_path(reference, base_dir)
+    candidate = os.path.join(repo_dir, relative)
+    if checkout is None and (relative == '..' or relative.startswith(f'..{os.sep}')):
         return None
     return relative, candidate
 
@@ -81,12 +78,15 @@ def _public_original_url(reference, *, source, rel_path):
     return rewrite_cover_image_url(reference, source, rel_path)
 
 
-def _open_source(path):
-    size = os.path.getsize(path)
+def _open_source(source):
+    source_bytes = (
+        source if isinstance(source, bytes) else checkout_read_bytes(source)
+    )
+    size = len(source_bytes)
     if size > MAX_SOURCE_BYTES:
         raise ArticleImageError(f"source exceeds {MAX_SOURCE_BYTES} byte limit")
     try:
-        image = Image.open(path)
+        image = Image.open(io.BytesIO(source_bytes))
     except (UnidentifiedImageError, ValueError) as exc:
         raise ArticleImageError("source is corrupt or unsupported") from exc
     # Preserve filesystem/open OSError for the caller: a transient read or
@@ -193,17 +193,41 @@ def build_article_image_manifest(
     Absolute references are intentionally ignored. Errors are isolated per
     image and returned as structured warnings for the sync log.
     """
+    with checkout_scope(repo_dir, preload=True):
+        return _build_article_image_manifest_from_checkout(
+            source=source,
+            repo_dir=repo_dir,
+            rel_path=rel_path,
+            body=body,
+            cover_image=cover_image,
+            dry_run=dry_run,
+            client=client,
+        )
+
+
+def _build_article_image_manifest_from_checkout(
+    *,
+    source,
+    repo_dir,
+    rel_path,
+    body,
+    cover_image="",
+    dry_run=False,
+    client=None,
+):
     stats = VariantStats()
     manifest = {}
     base_dir = os.path.dirname(rel_path)
     work_items = []
-    for reference in extract_article_image_references(body, str(cover_image or "").strip()):
+    for reference in extract_authored_image_references(
+        body, str(cover_image or "").strip(),
+    ):
         resolved = _controlled_path(reference, repo_dir=repo_dir, base_dir=base_dir)
         if resolved is None:
             stats.skipped += 1
             continue
         relative, path = resolved
-        if not os.path.isfile(path):
+        if not checkout_is_file(path):
             stats.skipped += 1
             continue
         work_items.append((reference, relative, path))
@@ -240,12 +264,13 @@ def build_article_image_manifest(
     for reference, relative, path in work_items:
         original_url = _public_original_url(reference, source=source, rel_path=rel_path)
         try:
-            with open(path, "rb") as source_file:
-                source_bytes = source_file.read(MAX_SOURCE_BYTES + 1)
+            source_bytes = checkout_read_bytes(
+                path, max_bytes=MAX_SOURCE_BYTES + 1,
+            )
             if len(source_bytes) > MAX_SOURCE_BYTES:
                 raise ArticleImageError(f"source exceeds {MAX_SOURCE_BYTES} byte limit")
             source_hash = hashlib.sha256(source_bytes).hexdigest()
-            image, source_format, _ = _open_source(path)
+            image, source_format, _ = _open_source(source_bytes)
             source_ext, source_mime = SUPPORTED_FORMATS[source_format]
             variants = []
             for width in VARIANT_WIDTHS:

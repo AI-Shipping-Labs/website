@@ -52,6 +52,7 @@ from urllib.parse import urlparse
 
 import pytest
 from django.core.management import call_command
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 from playwright_tests.worktree_guard import (
@@ -617,9 +618,9 @@ def page(browser):
 # test-harness constants, not runtime product settings, so they are plain
 # module-level defaults and do NOT go through the IntegrationSetting framework.
 # Rationale: the scheduled dev suite runs against a live ECS service that can
-# briefly serve a 5xx while a rolling deploy swaps tasks. A bounded retry
-# absorbs that transient blip; a persistent 5xx still fails (we return the last
-# response so the caller's assertion produces the normal failure message).
+# briefly serve a 5xx or time out while a rolling deploy swaps tasks. A bounded
+# retry absorbs that transient blip; a persistent 5xx still returns the last
+# response, while persistent navigation timeouts re-raise their final error.
 GOTO_RETRY_ATTEMPTS = 3
 GOTO_RETRY_BACKOFF_SECONDS = 2.0
 
@@ -661,11 +662,11 @@ def goto_with_retry(
     with zero added sleep.
 
     On a retryable result (``response is None`` or ``status >= 500``, decided by
-    ``_is_retryable_status``) it sleeps a constant ``backoff_seconds`` and
-    retries, up to ``attempts`` total attempts. If every attempt is retryable it
-    returns the LAST response (it does NOT raise and does NOT fabricate a 200),
-    so the caller's existing ``assert response.status == expected_status``
-    produces the normal, readable failure — a persistent 5xx still fails.
+    ``_is_retryable_status``), or a Playwright navigation ``TimeoutError``, it
+    sleeps a constant ``backoff_seconds`` and retries, up to ``attempts`` total
+    attempts. Persistent returned failures preserve the existing behavior and
+    return the last response. Persistent timeouts re-raise the final exception
+    with its Playwright diagnostic context. Other exceptions are never caught.
 
     ``expected_status`` is accepted so call sites read self-documentingly (e.g.
     ``expected_status=404`` for the unknown-route test) but it does NOT change
@@ -674,7 +675,13 @@ def goto_with_retry(
     """
     response = None
     for attempt in range(attempts):
-        response = page.goto(url, wait_until=wait_until)
+        try:
+            response = page.goto(url, wait_until=wait_until)
+        except PlaywrightTimeoutError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(backoff_seconds)
+            continue
         status = response.status if response is not None else None
         if not _is_retryable_status(status):
             return response

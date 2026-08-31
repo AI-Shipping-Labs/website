@@ -125,6 +125,14 @@ class ScheduledPlaywrightDevWakeWorkflowTest(SimpleTestCase):
         )
         self.assertIn("Open or update failure issue", workflow_text)
 
+    def test_playwright_matrix_is_serialized_for_single_low_capacity_dev_task(self):
+        workflow = _load_yaml(SCHEDULED_WORKFLOW_PATH)
+        strategy = workflow["jobs"]["playwright-dev"]["strategy"]
+
+        self.assertFalse(strategy["fail-fast"])
+        self.assertEqual(strategy["max-parallel"], 1)
+        self.assertEqual(len(strategy["matrix"]["include"]), 4)
+
 
 @tag("core")
 class DeployDevWakeWorkflowTest(SimpleTestCase):

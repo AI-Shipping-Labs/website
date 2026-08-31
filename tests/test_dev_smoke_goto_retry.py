@@ -15,6 +15,8 @@ requires the retry logic to be proven without standing up the dev stack.
 from unittest import mock
 
 from django.test import SimpleTestCase, tag
+from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from playwright_tests.conftest import _is_retryable_status, goto_with_retry
 
@@ -30,8 +32,8 @@ class StubPage:
     """Stub ``page`` whose ``goto`` returns a scripted sequence of responses.
 
     ``responses`` is a list consumed one entry per ``goto`` call. Each entry is
-    either a ``FakeResponse`` or ``None`` (navigation error). Records every call
-    so tests can assert the exact attempt count.
+    either a ``FakeResponse``, ``None`` (navigation error), or an exception to
+    raise. Records every call so tests can assert the exact attempt count.
     """
 
     def __init__(self, responses):
@@ -43,7 +45,10 @@ class StubPage:
         # If the script runs short, keep returning the last scripted value so a
         # "persistent" sequence of length 1 still represents every attempt.
         index = min(len(self.calls) - 1, len(self._responses) - 1)
-        return self._responses[index]
+        outcome = self._responses[index]
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
 
 
 def _no_sleep():
@@ -90,6 +95,39 @@ class GotoWithRetryTest(SimpleTestCase):
         self.assertEqual(len(page.calls), 2)
         # One backoff between the two attempts.
         self.assertEqual(sleep.call_count, 1)
+
+    def test_timeout_then_200_retries_with_exact_attempt_and_backoff_counts(self):
+        page = StubPage([PlaywrightTimeoutError("transient timeout"), FakeResponse(200)])
+        with _no_sleep() as sleep:
+            response = goto_with_retry(page, "/", attempts=3, backoff_seconds=1.25)
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(page.calls, [("/", "domcontentloaded")] * 2)
+        sleep.assert_called_once_with(1.25)
+
+    def test_persistent_timeouts_reraise_last_after_exact_attempts_and_backoffs(self):
+        timeouts = [PlaywrightTimeoutError(f"timeout {number}") for number in range(1, 4)]
+        page = StubPage(timeouts)
+        with _no_sleep() as sleep, self.assertRaises(PlaywrightTimeoutError) as raised:
+            goto_with_retry(page, "/outage", attempts=3, backoff_seconds=0.5)
+
+        self.assertIs(raised.exception, timeouts[-1])
+        self.assertEqual(page.calls, [("/outage", "domcontentloaded")] * 3)
+        self.assertEqual(sleep.call_args_list, [mock.call(0.5), mock.call(0.5)])
+
+    def test_non_timeout_playwright_and_programming_errors_are_not_swallowed(self):
+        for error in (
+            PlaywrightError("non-timeout browser failure"),
+            RuntimeError("broken page stub"),
+        ):
+            with self.subTest(error=type(error).__name__):
+                page = StubPage([error, FakeResponse(200)])
+                with _no_sleep() as sleep, self.assertRaises(type(error)) as raised:
+                    goto_with_retry(page, "/")
+
+                self.assertIs(raised.exception, error)
+                self.assertEqual(page.calls, [("/", "domcontentloaded")])
+                sleep.assert_not_called()
 
     def test_persistent_500_returns_500_after_exactly_attempts_calls(self):
         page = StubPage([FakeResponse(500)])

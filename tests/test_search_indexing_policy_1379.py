@@ -38,7 +38,6 @@ class ProductionRouteClassifierTest(SimpleTestCase):
             '/courses/example/submit',
             '/courses/example/reviews',
             '/courses/example/reviews/1',
-            '/events/1/host/manage',
             '/events/1/example/join',
             '/events/example/cancel-registration',
             '/sprints/example/board',

@@ -30,7 +30,10 @@ _spec.loader.exec_module(retire)
 
 
 def path_identity(path):
-    metadata = path.lstat()
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return ("absent",)
     if path.is_symlink():
         return ("symlink", metadata.st_mode, os.readlink(path))
     if path.is_file():

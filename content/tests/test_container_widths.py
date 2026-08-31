@@ -48,7 +48,6 @@ NON_MEMBER_PREFIXES = (
 CHROME_GUTTER_EXEMPT = frozenset(
     {
         "templates/includes/header.html",
-        "templates/events/host_management_denied.html",
     }
 )
 
@@ -109,8 +108,6 @@ AUDITED_PAGE_WIDTHS = {
     "templates/content/course_detail.html": "max-w-3xl",
     "templates/content/workshop_detail.html": "max-w-3xl",
     "templates/content/workshop_video.html": "max-w-3xl",
-    # Was max-w-4xl, the only 4xl on the site.
-    "templates/events/host_management.html": "max-w-5xl",
     # Were max-w-lg, off the scale entirely.
     "templates/events/cancel_registration_confirm.html": "max-w-2xl",
     "templates/events/cancel_registration_result.html": "max-w-2xl",

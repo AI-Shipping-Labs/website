@@ -185,6 +185,32 @@ def rebuild_manifest(seed: dict) -> dict:
     return output
 
 
+def prune_manifest_to_current_inventory(
+    manifest: dict,
+    current_inventory: list[str],
+) -> tuple[dict, list[str]]:
+    """Drop measured files that no longer exist in the current checkout."""
+    output = dict(manifest)
+    source_runs = [dict(source) for source in manifest["source_runs"]]
+    current = set(current_inventory)
+    measured = manifest["file_weights_ms"]
+    removed = sorted(set(measured) - current)
+    retained = {
+        filename: measured[filename]
+        for filename in sorted(measured)
+        if filename in current
+    }
+    output["source_runs"] = source_runs
+    output["file_weights_ms"] = retained
+    output["inventory_sha256"] = canonical_inventory_digest(list(retained))
+    for source_index, source in enumerate(source_runs):
+        source["file_weights_sha256"] = canonical_weights_digest({
+            filename: samples[source_index]
+            for filename, samples in retained.items()
+        })
+    return output, removed
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, required=True)
@@ -193,11 +219,21 @@ def main() -> int:
 
     seed = json.loads(args.manifest.read_text())
     rebuilt = rebuild_manifest(seed)
+    current_inventory = sorted(
+        path.as_posix()
+        for path in Path("playwright_tests").glob("test_*.py")
+        if path.is_file()
+    )
+    rebuilt, removed = prune_manifest_to_current_inventory(
+        rebuilt, current_inventory,
+    )
     args.output.write_text(json.dumps(rebuilt, indent=2, sort_keys=True) + "\n")
     print(
         f"Wrote {len(rebuilt['file_weights_ms'])} file weights from "
         f"{len(rebuilt['source_runs'])} pinned green runs to {args.output}."
     )
+    if removed:
+        print(f"Pruned deleted Playwright files: {removed}.")
     return 0
 
 

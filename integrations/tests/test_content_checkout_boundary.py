@@ -157,7 +157,9 @@ class ContentCheckoutBoundaryTest(SimpleTestCase):
         socket_path = self.root / 'blocked.yaml'
         server = socket.socket(socket.AF_UNIX)
         self.addCleanup(server.close)
-        server.bind(str(socket_path))
+        # Keep the AF_UNIX address below Linux's 108-byte limit even when the
+        # repository itself lives in a deeply nested agent worktree.
+        server.bind(os.path.relpath(socket_path, Path.cwd()))
         with self.assertRaises(ContentCheckoutError) as socket_error:
             with checkout_session(self.root, preload=True):
                 pass

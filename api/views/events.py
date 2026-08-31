@@ -838,9 +838,10 @@ def _maybe_enqueue_banner(event, generate_banner):
                         "format": "email",
                         "description": (
                             "Optional. Email address of a platform user who "
-                            "should be auto-registered as the event host "
-                            "attendee. Blank or non-resolvable emails do not "
-                            "create a host registration."
+                            "should receive an ordinary attendee registration "
+                            "for the event. This field grants no event "
+                            "administration capability. Blank or non-resolvable "
+                            "emails do not create a registration."
                         ),
                     },
                     "recording_url": {
@@ -1042,7 +1043,7 @@ def events_collection(request):
     zoom_error = _maybe_create_zoom_meeting(event, create_zoom)
     # Run the shared occurrence lifecycle after the save transaction and
     # create_zoom step. Series enrollment stays best-effort/idempotent, while
-    # the host's normal registration email can carry zoom_join_url when set.
+    # the host receives the ordinary attendee registration lifecycle.
     run_occurrence_publication_lifecycle(event)
     # Banner enqueue runs LAST in the compose-time chain (zoom -> host
     # registration -> banner) so any populated state is current. Soft-fails
@@ -1099,11 +1100,12 @@ def events_collection(request):
                         "format": "email",
                         "description": (
                             "Optional. Email address of a platform user who "
-                            "should be auto-registered as the event host "
-                            "attendee. Adding a resolvable host to a "
-                            "published upcoming event sends the normal "
-                            "registration confirmation. Empty string clears "
-                            "the field."
+                            "should receive an ordinary attendee registration "
+                            "for the event. This field grants no event "
+                            "administration capability. Adding a resolvable "
+                            "user to a published upcoming event sends the "
+                            "ordinary registration confirmation. Empty string "
+                            "clears the field."
                         ),
                     },
                     "recording_url": {

@@ -21,9 +21,6 @@ audience-specific URL rules:
   ``public_feed`` audience, keeping public detail URLs and anonymous-safe
   gated descriptions because feed subscribers are unauthenticated.
 
-Host-only invites explicitly use the ``host`` audience: they share the
-same UID/SEQUENCE as attendee invites but keep non-attendee public detail
-URLs rather than switching to the attendee join flow.
 """
 
 from datetime import timedelta
@@ -49,11 +46,9 @@ MAX_DESCRIPTION_CHARS = 2000
 
 AUDIENCE_ATTENDEE = 'attendee'
 AUDIENCE_PUBLIC_FEED = 'public_feed'
-AUDIENCE_HOST = 'host'
 VALID_AUDIENCES = {
     AUDIENCE_ATTENDEE,
     AUDIENCE_PUBLIC_FEED,
-    AUDIENCE_HOST,
 }
 
 
@@ -135,17 +130,16 @@ def build_vevent(event, audience=AUDIENCE_ATTENDEE, attendee_email=None,
                  method='REQUEST', dtstamp=None):
     """Build a single ``VEVENT`` component for ``event``.
 
-    Shared between attendee invites, host invites, and the public feed.
+    Shared between attendee invites and the public feed.
     All audiences keep the same UID, DTSTART/DTEND, SEQUENCE, organizer,
     and summary shape so calendar clients update one entry by UID. URL,
     LOCATION, and gated DESCRIPTION behavior vary by audience:
     attendee community events use ``/events/<id>/<slug>/join``; public feed
-    events use public detail URLs and anonymous-safe gated stubs; host
-    invites use the non-attendee public detail URL.
+    events use public detail URLs and anonymous-safe gated stubs.
 
     Args:
         event: ``events.models.Event`` instance.
-        audience: One of ``attendee``, ``public_feed``, or ``host``.
+        audience: One of ``attendee`` or ``public_feed``.
         attendee_email: Optional recipient email for emailed attendee invites.
         method: iCalendar method. ``CANCEL`` adds ``STATUS:CANCELLED``.
 
@@ -173,15 +167,15 @@ def build_vevent(event, audience=AUDIENCE_ATTENDEE, attendee_email=None,
     # exists solely for discovery on the anonymous, unauthenticated feed
     # at ``/events/calendar.ics`` so a subscriber who never registered can
     # tell at a glance which sessions need a paid tier. It is deliberately
-    # NOT added to attendee or host invites (registration email + per-event
-    # ``.ics`` download, host invite, series invite/cancel, reschedule
-    # invite): those recipients already registered or host the event and
-    # know the tier, so the prefix is noise there (issue #1072).
+    # NOT added to attendee invites (registration email + per-event ``.ics``
+    # download, host registration, series invite/cancel, reschedule invite):
+    # those recipients are already registered and know the tier, so the
+    # prefix is noise there (issue #1072).
     #
     # The ``[Hosted on X]`` prefix for external events is a separate sibling
     # prefix and still applies to ALL audiences. When both apply on the
     # public feed the documented order is ``[Members only] [Hosted on X]
-    # <title>``; on attendee/host invites it is ``[Hosted on X] <title>``.
+    # <title>``; on attendee invites it is ``[Hosted on X] <title>``.
     required_level = getattr(event, 'required_level', 0) or 0
     is_gated = required_level > 0
     summary = event.title
@@ -260,9 +254,8 @@ def build_vevent(event, audience=AUDIENCE_ATTENDEE, attendee_email=None,
     vevent.add('description', body)
 
     # Attendee community invites point at the gated/tracked join redirect.
-    # Public feed and host invites keep the public detail URL because they
-    # are non-attendee surfaces. External events keep existing public
-    # detail/external-host behavior unless a real attendee path exists.
+    # Public feeds keep the public detail URL. External events keep existing
+    # public detail/external-host behavior unless a real attendee path exists.
     if is_external:
         vevent.add('url', detail_url)
     else:
@@ -307,8 +300,7 @@ def generate_ics(event, method='REQUEST', audience=AUDIENCE_ATTENDEE,
         event: ``Event`` model instance.
         method: iCalendar method (``REQUEST`` for new/update,
             ``CANCEL`` for cancellation).
-        audience: ``attendee`` by default. Use ``host`` for host-only
-            invites that should not switch to the attendee join flow.
+        audience: ``attendee`` by default.
         attendee_email: Optional recipient email to stamp as ``ATTENDEE``.
 
     Returns:

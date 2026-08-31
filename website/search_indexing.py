@@ -41,12 +41,8 @@ _PRIVATE_ROUTE_NAMES = frozenset({
     'project_submit',
     'peer_review_dashboard',
     'peer_review_form',
-    # Event action and host workspaces. Public event and series pages remain
-    # indexable for signed-in visitors.
-    'event_host_manage',
-    'event_host_update',
-    'event_host_create_zoom',
-    'event_host_notify',
+    # Event action workspaces. Public event and series pages remain indexable
+    # for signed-in visitors.
     'event_join',
     'event_join_legacy',
     'event_cancel_registration',

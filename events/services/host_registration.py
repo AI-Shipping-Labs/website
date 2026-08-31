@@ -47,27 +47,6 @@ def is_host_registration(registration):
     return host_user is not None and host_user.pk == registration.user_id
 
 
-def build_host_management_links(event):
-    """Build signed links to the current host's safe management landing."""
-    from events.services.host_access import build_host_access_url
-
-    host_user = resolve_host_user(event)
-    if host_user is None:
-        return {}
-    manage_url = build_host_access_url(event, host_user)
-    return {
-        'edit_url': build_host_access_url(event, host_user, anchor='edit'),
-        'manage_url': build_host_access_url(
-            event, host_user, anchor='registrations',
-        ),
-        'create_zoom_url': build_host_access_url(
-            event, host_user, anchor='zoom',
-        ),
-        'studio_url': manage_url,
-        'zoom_join_url': getattr(event, 'zoom_join_url', '') or '',
-    }
-
-
 def maybe_register_host_as_attendee(event):
     """Create an ``EventRegistration`` for the resolved host user.
 

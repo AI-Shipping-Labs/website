@@ -13,6 +13,7 @@ class EmailCampaign(models.Model):
     STATUS_CHOICES = [
         ('draft', 'Draft'),
         ('sending', 'Sending'),
+        ('needs_attention', 'Needs attention'),
         ('sent', 'Sent'),
     ]
 
@@ -132,6 +133,14 @@ class EmailCampaign(models.Model):
     sent_count = models.IntegerField(
         default=0,
         help_text='Number of recipients.',
+    )
+    audience_snapshotted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            'When the immutable delivery audience and batch schedules were '
+            'created for this campaign.'
+        ),
     )
     is_archived = models.BooleanField(
         default=False,

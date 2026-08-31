@@ -7,6 +7,7 @@ from django.http import JsonResponse
 from django.urls import path, reverse
 
 from email_app.models import EmailCampaign
+from email_app.services.campaign_dispatch import claim_and_enqueue_campaign
 from studio.admin_links import studio_link
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ class EmailCampaignAdmin(admin.ModelAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         """Make all fields readonly for sent/sending campaigns."""
-        if obj and obj.status in ('sending', 'sent'):
+        if obj and obj.status in ('sending', 'needs_attention', 'sent'):
             return [
                 'subject', 'body', 'target_min_level',
                 'status', 'sent_at', 'sent_count', 'created_at',
@@ -151,27 +152,29 @@ class EmailCampaignAdmin(admin.ModelAdmin):
         except EmailCampaign.DoesNotExist:
             return JsonResponse({'error': 'Campaign not found'}, status=404)
 
-        if campaign.status != 'draft':
+        try:
+            result = claim_and_enqueue_campaign(
+                campaign.pk,
+                source='Django admin campaign action',
+            )
+        except Exception:
+            logger.exception('Failed to claim and enqueue campaign %s', campaign.pk)
             return JsonResponse({
                 'status': 'error',
-                'message': f'Campaign is already {campaign.status}.',
-            }, status=400)
-
-        # Enqueue the background job
-        from jobs.tasks import async_task, build_task_name
-        task_id = async_task(
-            'email_app.tasks.send_campaign.send_campaign',
-            campaign_id=campaign.pk,
-            task_name=build_task_name(
-                'Send campaign',
-                f'#{campaign.pk} {campaign.subject}',
-                'Django admin campaign action',
-            ),
-        )
+                'message': 'Campaign could not be queued; it remains a draft.',
+            }, status=503)
+        if not result.claimed:
+            return JsonResponse({
+                'status': 'error',
+                'message': (
+                    f'Campaign is already {result.campaign.status}; '
+                    'no second send was queued.'
+                ),
+            }, status=409)
 
         logger.info(
             "Enqueued campaign %s for sending (task_id=%s)",
-            campaign_id, task_id,
+            campaign_id, result.task_id,
         )
 
         # Set a flash message so the user sees context after the redirect.
@@ -189,7 +192,7 @@ class EmailCampaignAdmin(admin.ModelAdmin):
         return JsonResponse({
             'status': 'ok',
             'message': flash_message,
-            'task_id': str(task_id) if task_id else None,
+            'task_id': result.task_id,
             'redirect_url': redirect_url,
         })
 

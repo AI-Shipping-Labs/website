@@ -384,6 +384,7 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_campaign_delete',
         'studio_campaign_duplicate',
         'studio_campaign_recipients',
+        'studio_campaign_delivery_resolve',
         'studio_campaign_recipient_count',
         'studio_campaign_recount',
         'studio_campaign_send',

@@ -1526,6 +1526,7 @@
               "description": "Filter to campaigns with the given status.",
               "enum": [
                 "draft",
+                "needs_attention",
                 "sending",
                 "sent"
               ],
@@ -1963,7 +1964,7 @@
     },
     "/api/campaigns/{campaign_id}/recipients": {
       "get": {
-        "description": "Returns campaign recipient visibility for staff automation. Draft campaigns return ``mode=preview`` from the same ``EmailCampaign.get_eligible_recipients()`` audience logic used by Studio. Sending/sent campaigns return ``mode=sent`` with actual ``EmailLog`` rows, including engagement and bounce/complaint disposition.",
+        "description": "Returns campaign recipient visibility for staff automation. Draft campaigns return ``mode=preview`` from the same ``EmailCampaign.get_eligible_recipients()`` audience logic used by Studio. Sending/needs-attention/sent campaigns return ``mode=sent`` with the durable delivery ledger, linked ``EmailLog`` engagement, and bounce/complaint disposition.",
         "parameters": [
           {
             "in": "path",
@@ -1984,15 +1985,27 @@
                   "mode": "sent",
                   "recipients": [
                     {
+                      "attempt_count": 1,
                       "bounce_diagnostic": "smtp; 550 no mailbox",
                       "bounce_subtype": "General",
                       "bounce_type": "Permanent",
+                      "claim_expires_at": "2026-04-15T12:05:29+00:00",
+                      "claimed_at": "2026-04-15T11:59:59+00:00",
                       "clicks": 0,
+                      "completed_at": "2026-04-15T12:00:00+00:00",
+                      "delivery_id": 12,
+                      "delivery_state": "sent",
                       "disposition": "bounced",
                       "email": "alice@example.com",
                       "email_log_id": 10,
+                      "last_error": "",
                       "opens": 1,
+                      "resolution": "",
+                      "resolved_at": null,
+                      "resolved_by": null,
                       "sent_at": "2026-04-15T12:00:00+00:00",
+                      "ses_message_id": "ses-message-id",
+                      "updated_at": "2026-04-15T12:00:00+00:00",
                       "user": {
                         "email": "alice@example.com",
                         "id": 42

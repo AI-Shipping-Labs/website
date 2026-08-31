@@ -30,6 +30,7 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -72,6 +73,38 @@ def _seed_one_eligible_recipient(email="recipient@test.com"):
         unsubscribed=False,
         is_staff=False,
     )
+
+
+def _create_ambiguous_delivery(subject):
+    from django.utils import timezone
+
+    from email_app.models import CampaignDelivery, EmailCampaign
+
+    recipient = _create_user(
+        f"{subject.lower().replace(' ', '-')}@test.com",
+        tier_slug="free",
+        email_verified=True,
+        unsubscribed=False,
+        is_staff=False,
+    )
+    campaign = EmailCampaign.objects.create(
+        subject=subject,
+        body="Body content",
+        status="needs_attention",
+        audience_snapshotted_at=timezone.now(),
+    )
+    delivery = CampaignDelivery.objects.create(
+        campaign=campaign,
+        user=recipient,
+        recipient_user_pk=recipient.pk,
+        recipient_email=recipient.email,
+        state=CampaignDelivery.State.AMBIGUOUS,
+        attempt_count=1,
+        last_error="Transport outcome indeterminate.",
+        completed_at=timezone.now(),
+    )
+    connection.close()
+    return campaign, delivery
 
 
 # ---------------------------------------------------------------
@@ -231,4 +264,89 @@ class TestStaffConfirmsDelete:
         # And the record is really gone.
         from email_app.models import EmailCampaign
         assert not EmailCampaign.objects.filter(pk=campaign.pk).exists()
+        connection.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestStaffReconcilesAmbiguousDelivery:
+    @pytest.mark.core
+    @browser_journey
+    def test_duplicate_risk_confirmations_gate_retry_and_assume_sent(
+        self,
+        django_server,
+        browser,
+    ):
+        _ensure_tiers()
+        _clear_campaigns()
+        _create_staff_user("admin@test.com")
+        campaign, delivery = _create_ambiguous_delivery("Retry Ambiguous")
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        recipients_url = (
+            f"{django_server}/studio/campaigns/{campaign.pk}/recipients?attention=1"
+        )
+        page.goto(recipients_url, wait_until="domcontentloaded")
+
+        dismissed = []
+
+        def dismiss_retry(dialog):
+            dismissed.append(dialog.message)
+            dialog.dismiss()
+
+        page.once("dialog", dismiss_retry)
+        page.locator('[data-testid="campaign-delivery-retry"]').click()
+        assert dismissed == [
+            "SES may already have accepted this email. Retrying can send a duplicate. Retry anyway?"
+        ]
+        assert page.get_by_test_id("campaign-delivery-state").get_by_text(
+            "Ambiguous",
+            exact=True,
+        ).is_visible()
+
+        accepted = []
+
+        def accept_retry(dialog):
+            accepted.append(dialog.message)
+            dialog.accept()
+
+        page.once("dialog", accept_retry)
+        page.locator('[data-testid="campaign-delivery-retry"]').click()
+        page.wait_for_load_state("domcontentloaded")
+        assert accepted == dismissed
+        assert page.get_by_text(
+            f"Queued retry for {delivery.recipient_email}.",
+            exact=True,
+        ).is_visible()
+        assert page.get_by_test_id("campaign-delivery-state").get_by_text(
+            "Pending",
+            exact=True,
+        ).is_visible()
+
+        assume_campaign, assume_delivery = _create_ambiguous_delivery(
+            "Assume Ambiguous",
+        )
+        page.goto(
+            f"{django_server}/studio/campaigns/{assume_campaign.pk}/recipients?attention=1",
+            wait_until="domcontentloaded",
+        )
+        assume_messages = []
+
+        def accept_assume(dialog):
+            assume_messages.append(dialog.message)
+            dialog.accept()
+
+        page.once("dialog", accept_assume)
+        page.locator('[data-testid="campaign-delivery-assume"]').click()
+        page.wait_for_load_state("domcontentloaded")
+        assert assume_messages == [
+            "Mark this recipient as assumed delivered without sending again?"
+        ]
+        assert page.get_by_text(
+            f"Marked {assume_delivery.recipient_email} as assumed sent without resending.",
+            exact=True,
+        ).is_visible()
+        assert page.get_by_test_id("campaign-delivery-state").get_by_text(
+            "Assumed sent",
+            exact=True,
+        ).is_visible()
         connection.close()

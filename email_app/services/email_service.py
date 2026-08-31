@@ -99,6 +99,20 @@ class RenderedEmailSendResult:
         return self.skip_reason is None
 
 
+@dataclass(frozen=True)
+class PreparedRenderedEmail:
+    """A rendered message whose local validation and consent checks passed."""
+
+    to_email: str = ''
+    subject: str = ''
+    full_html: str = ''
+    email_type: str = ''
+    unsubscribe_url: str | None = None
+    cc: object = None
+    bcc: object = None
+    skip_reason: str | None = None
+
+
 def _normalize_cc(cc):
     """Normalize a ``cc`` argument into a list of non-empty email strings.
 
@@ -298,6 +312,34 @@ class EmailService:
         campaign or event. A promotional opt-out returns a distinct no-send
         result and never reaches the private SES transport.
         """
+        prepared = self.prepare_rendered(
+            user,
+            subject,
+            body_html,
+            email_type=email_type,
+            campaign_id=campaign_id,
+            footer_note=footer_note,
+            cc=cc,
+            bcc=bcc,
+        )
+        if prepared.skip_reason is not None:
+            return RenderedEmailSendResult(skip_reason=prepared.skip_reason)
+        ses_message_id = self.send_prepared(prepared)
+        return RenderedEmailSendResult(ses_message_id=ses_message_id)
+
+    def prepare_rendered(
+        self,
+        user,
+        subject,
+        body_html,
+        *,
+        email_type,
+        campaign_id=None,
+        footer_note=None,
+        cc=None,
+        bcc=None,
+    ):
+        """Complete every local operation before a caller claims transport."""
         if getattr(user, "pk", None):
             user.refresh_from_db()
 
@@ -311,7 +353,7 @@ class EmailService:
                 getattr(user, "pk", None),
                 skip_reason,
             )
-            return RenderedEmailSendResult(skip_reason=skip_reason)
+            return PreparedRenderedEmail(skip_reason=skip_reason)
 
         unsubscribe_url = None
         if email_kind == EMAIL_KIND_PROMOTIONAL:
@@ -328,16 +370,27 @@ class EmailService:
             footer_note=footer_note,
             verify_email_url=verify_email_url,
         )
-        ses_message_id = self._send_ses(
-            user.email,
-            subject,
-            full_html,
+        return PreparedRenderedEmail(
+            to_email=user.email,
+            subject=subject,
+            full_html=full_html,
             email_type=email_type,
             unsubscribe_url=unsubscribe_url,
             cc=cc,
             bcc=bcc,
         )
-        return RenderedEmailSendResult(ses_message_id=ses_message_id)
+
+    def send_prepared(self, prepared):
+        """Cross only the SES transport boundary for a prepared message."""
+        return self._send_ses(
+            prepared.to_email,
+            prepared.subject,
+            prepared.full_html,
+            email_type=prepared.email_type,
+            unsubscribe_url=prepared.unsubscribe_url,
+            cc=prepared.cc,
+            bcc=prepared.bcc,
+        )
 
     @staticmethod
     def _delivery_decision(user, email_type):

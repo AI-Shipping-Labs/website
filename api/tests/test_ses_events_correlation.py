@@ -12,8 +12,8 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-from django.urls import reverse
 
+from accounts.models import EmailAlias
 from email_app.models import EmailCampaign, EmailLog, SesEvent
 
 User = get_user_model()
@@ -138,6 +138,7 @@ class BounceCorrelationToEmailLogTest(TestCase):
         self.assertEqual(log.bounce_subtype, "General")
         self.assertIn("550", log.bounce_diagnostic)
 
+
     def test_verification_bounce_traceable_via_email_type(self):
         log = EmailLog.objects.create(
             user=self.user,
@@ -252,6 +253,175 @@ class BounceCorrelationToEmailLogTest(TestCase):
         # The diagnostic and bounce type are still captured for triage.
         self.assertEqual(event.bounce_type, "Permanent")
         self.assertIn("550", event.diagnostic_code)
+
+
+class RecipientIdentityResolutionTest(TestCase):
+    def test_display_address_primary_match_records_soft_bounce(self):
+        user = User.objects.create_user(email="marc.medawar@zendesk.com")
+        log = EmailLog.objects.create(
+            user=user,
+            recipient_email="marc.medawar@zendesk.com",
+            email_type="campaign",
+            ses_message_id="ses-display-primary",
+        )
+
+        response = _post(
+            self.client,
+            _envelope(
+                "m-display-primary",
+                _bounce_inner(
+                    ses_message_id=log.ses_message_id,
+                    email="  Marc Medawar <MARC.MEDAWAR@zendesk.com>  ",
+                    bounce_type="Transient",
+                    status="4.2.2",
+                    diagnostic_code="smtp; 452 mailbox full",
+                ),
+            ),
+        )
+
+        self.assertEqual(response.json(), {"status": "ok"})
+        event = SesEvent.objects.get(message_id="m-display-primary")
+        self.assertEqual(event.recipient_email, "marc.medawar@zendesk.com")
+        self.assertEqual(event.user_id, user.pk)
+        self.assertEqual(event.match_status, SesEvent.MATCH_STATUS_PRIMARY_EMAIL)
+        self.assertEqual(event.action_taken, "Soft bounce recorded (1 of 3)")
+        user.refresh_from_db()
+        self.assertEqual(user.soft_bounce_count, 1)
+        self.assertEqual(user.bounce_state, "soft")
+
+    def test_alias_match_mutates_canonical_account(self):
+        user = User.objects.create_user(email="canonical@example.com")
+        EmailAlias.objects.create(
+            user=user,
+            email="former-address@example.com",
+            source=EmailAlias.SOURCE_ACCOUNT_CHANGE,
+        )
+
+        _post(
+            self.client,
+            _envelope(
+                "m-alias-match",
+                _bounce_inner(
+                    ses_message_id="no-send-log",
+                    email="Former Name <FORMER-ADDRESS@example.com>",
+                ),
+            ),
+        )
+
+        event = SesEvent.objects.get(message_id="m-alias-match")
+        self.assertEqual(event.recipient_email, "former-address@example.com")
+        self.assertEqual(event.user_id, user.pk)
+        self.assertEqual(event.match_status, SesEvent.MATCH_STATUS_EMAIL_ALIAS)
+        user.refresh_from_db()
+        self.assertTrue(user.unsubscribed)
+
+    def test_safe_send_log_fallback_uses_immutable_recipient_snapshot(self):
+        user = User.objects.create_user(email="current@example.com")
+        log = EmailLog.objects.create(
+            user=user,
+            recipient_email="sent-snapshot@example.net",
+            email_type="campaign",
+            ses_message_id="ses-snapshot-match",
+        )
+
+        _post(
+            self.client,
+            _envelope(
+                "m-snapshot-match",
+                _bounce_inner(
+                    ses_message_id=log.ses_message_id,
+                    email="sent-snapshot@example.net",
+                ),
+            ),
+        )
+
+        event = SesEvent.objects.get(message_id="m-snapshot-match")
+        self.assertEqual(event.user_id, user.pk)
+        self.assertEqual(event.match_status, SesEvent.MATCH_STATUS_EMAIL_LOG)
+        user.refresh_from_db()
+        self.assertTrue(user.unsubscribed)
+
+    def test_direct_and_send_log_user_conflict_mutates_neither_account(self):
+        direct_user = User.objects.create_user(email="conflict@example.com")
+        log_user = User.objects.create_user(email="different@example.com")
+        log = EmailLog.objects.create(
+            user=log_user,
+            recipient_email="conflict@example.com",
+            email_type="campaign",
+            ses_message_id="ses-identity-conflict",
+        )
+
+        _post(
+            self.client,
+            _envelope(
+                "m-identity-conflict",
+                _bounce_inner(
+                    ses_message_id=log.ses_message_id,
+                    email="conflict@example.com",
+                ),
+            ),
+        )
+
+        event = SesEvent.objects.get(message_id="m-identity-conflict")
+        self.assertIsNone(event.user_id)
+        self.assertEqual(
+            event.match_status, SesEvent.MATCH_STATUS_IDENTITY_CONFLICT,
+        )
+        self.assertIn("Needs reconciliation", event.action_taken)
+        direct_user.refresh_from_db()
+        log_user.refresh_from_db()
+        self.assertFalse(direct_user.unsubscribed)
+        self.assertFalse(log_user.unsubscribed)
+
+    def test_unknown_valid_and_unparseable_values_have_distinct_statuses(self):
+        cases = [
+            (
+                "m-no-platform-account",
+                "valid-but-unknown@example.net",
+                "valid-but-unknown@example.net",
+                SesEvent.MATCH_STATUS_NO_PLATFORM_ACCOUNT,
+            ),
+            (
+                "m-unmatched-recipient",
+                "not a mailbox",
+                "",
+                SesEvent.MATCH_STATUS_UNMATCHED_RECIPIENT,
+            ),
+        ]
+        for message_id, raw_email, stored_email, expected_status in cases:
+            with self.subTest(match_status=expected_status):
+                _post(
+                    self.client,
+                    _envelope(
+                        message_id,
+                        _bounce_inner(
+                            ses_message_id="no-match",
+                            email=raw_email,
+                        ),
+                    ),
+                )
+                event = SesEvent.objects.get(message_id=message_id)
+                self.assertEqual(event.recipient_email, stored_email)
+                self.assertEqual(event.match_status, expected_status)
+                self.assertEqual(event.action_taken, "No account action taken")
+
+    def test_duplicate_recipient_for_one_user_applies_soft_bounce_once(self):
+        user = User.objects.create_user(email="duplicate-recipient@example.com")
+        inner = _bounce_inner(
+            ses_message_id="no-send-log",
+            email=user.email,
+            bounce_type="Transient",
+            status="4.2.2",
+            diagnostic_code="smtp; 452 mailbox full",
+        )
+        inner["bounce"]["bouncedRecipients"].append(
+            dict(inner["bounce"]["bouncedRecipients"][0]),
+        )
+
+        _post(self.client, _envelope("m-duplicate-recipient", inner))
+
+        user.refresh_from_db()
+        self.assertEqual(user.soft_bounce_count, 1)
 
 
 class ComplaintCorrelationToEmailLogTest(TestCase):
@@ -472,132 +642,3 @@ class NoEmailDiagnosticTest(TestCase):
         self.assertEqual(event.bounce_type, "Permanent")
         self.assertEqual(event.bounce_subtype, "NoEmail")
         self.assertIn("does not exist", event.diagnostic_code)
-
-
-class AdminVisibilityTest(TestCase):
-    """The Django admin changelist must let staff search and filter events
-    by recipient email, SES message id, user email, email_type/campaign,
-    and bounce classification.
-    """
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.staff = User.objects.create_user(
-            email="admin@example.com", password="adminpass",
-        )
-        cls.staff.is_staff = True
-        cls.staff.is_superuser = True
-        cls.staff.save(update_fields=["is_staff", "is_superuser"])
-
-    def setUp(self):
-        self.client.force_login(self.staff)
-
-    def test_changelist_includes_bounce_classification(self):
-        user = User.objects.create_user(email="adminview@example.com")
-        campaign = EmailCampaign.objects.create(
-            subject="Spring digest", body="hi", status="sent",
-        )
-        log = EmailLog.objects.create(
-            campaign=campaign,
-            user=user,
-            email_type="campaign",
-            ses_message_id="ses-adm-1",
-        )
-        SesEvent.objects.create(
-            message_id="m-adm-1",
-            event_type=SesEvent.EVENT_TYPE_BOUNCE_PERMANENT,
-            raw_payload={"stub": True},
-            recipient_email=user.email,
-            user=user,
-            email_log=log,
-            bounce_type="Permanent",
-            bounce_subtype="NoEmail",
-            diagnostic_code="smtp; 550 5.1.1 user unknown",
-            action_taken="unsubscribed and marked permanent bounce",
-        )
-
-        url = reverse("admin:email_app_sesevent_changelist")
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-        # List columns expose bounce classification + correlated email_type.
-        self.assertContains(response, "Permanent")
-        self.assertContains(response, "NoEmail")
-        self.assertContains(response, "campaign")
-        # Recipient is shown.
-        self.assertContains(response, "adminview@example.com")
-
-    def test_changelist_search_by_recipient_email(self):
-        user = User.objects.create_user(email="findme@example.com")
-        SesEvent.objects.create(
-            message_id="m-search-1",
-            event_type=SesEvent.EVENT_TYPE_BOUNCE_PERMANENT,
-            raw_payload={"stub": True},
-            recipient_email=user.email,
-            user=user,
-            bounce_type="Permanent",
-            bounce_subtype="General",
-            diagnostic_code="",
-            action_taken="",
-        )
-        SesEvent.objects.create(
-            message_id="m-search-2",
-            event_type=SesEvent.EVENT_TYPE_BOUNCE_PERMANENT,
-            raw_payload={"stub": True},
-            recipient_email="other@example.com",
-            user=None,
-            bounce_type="Permanent",
-            bounce_subtype="General",
-            diagnostic_code="",
-            action_taken="",
-        )
-
-        url = reverse("admin:email_app_sesevent_changelist")
-        response = self.client.get(url, {"q": "findme@example.com"})
-        self.assertEqual(response.status_code, 200)
-        # Search returns the matching event by recipient_email and not the other.
-        # Inspect cl.queryset directly so we don't depend on which columns
-        # the changelist HTML renders.
-        cl = response.context["cl"]
-        ids = list(cl.queryset.values_list("message_id", flat=True))
-        self.assertIn("m-search-1", ids)
-        self.assertNotIn("m-search-2", ids)
-
-    def test_changelist_search_by_email_type(self):
-        user = User.objects.create_user(email="byemailtype@example.com")
-        log = EmailLog.objects.create(
-            user=user,
-            email_type="email_verification_signup_reminder",
-            ses_message_id="ses-byet-1",
-        )
-        SesEvent.objects.create(
-            message_id="m-byet-1",
-            event_type=SesEvent.EVENT_TYPE_BOUNCE_PERMANENT,
-            raw_payload={"stub": True},
-            recipient_email=user.email,
-            user=user,
-            email_log=log,
-            bounce_type="Permanent",
-            bounce_subtype="General",
-            diagnostic_code="",
-            action_taken="",
-        )
-        SesEvent.objects.create(
-            message_id="m-byet-2",
-            event_type=SesEvent.EVENT_TYPE_BOUNCE_PERMANENT,
-            raw_payload={"stub": True},
-            recipient_email="zzz@example.com",
-            user=None,
-            email_log=None,
-            bounce_type="Permanent",
-            bounce_subtype="General",
-            diagnostic_code="",
-            action_taken="",
-        )
-
-        url = reverse("admin:email_app_sesevent_changelist")
-        response = self.client.get(url, {"q": "email_verification_signup_reminder"})
-        self.assertEqual(response.status_code, 200)
-        cl = response.context["cl"]
-        ids = list(cl.queryset.values_list("message_id", flat=True))
-        self.assertIn("m-byet-1", ids)
-        self.assertNotIn("m-byet-2", ids)

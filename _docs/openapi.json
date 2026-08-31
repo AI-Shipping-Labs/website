@@ -10721,7 +10721,7 @@
     },
     "/api/ses-events": {
       "get": {
-        "description": "Newest-first list of ``SesEvent`` rows across every recipient, including events whose ``user`` FK is ``None`` (addresses with no ``User`` row). Lets an operator reconcile a campaign's bounces by window, campaign (``email_log``), recipient substring, or event type. ``raw_payload`` is deliberately excluded. ``count`` is the total number of matching rows across all pages, distinct from the page length. Token-gated (staff tokens only).",
+        "description": "Newest-first list of ``SesEvent`` rows across every recipient, including events whose ``user`` FK is ``None`` (addresses with no ``User`` row). Lets an operator reconcile a campaign's bounces by window, campaign (``campaign``), exact send (``email_log``), recipient substring, or event type. ``raw_payload`` is deliberately excluded. ``count`` is the total number of matching rows across all pages, distinct from the page length. Token-gated (staff tokens only).",
         "parameters": [
           {
             "in": "query",
@@ -10756,6 +10756,15 @@
             "required": false,
             "schema": {
               "description": "Exact ``email_log_id`` filter (correlate one campaign's send).",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "campaign",
+            "required": false,
+            "schema": {
+              "description": "Positive EmailCampaign id; matches events whose correlated EmailLog belongs to that campaign. Combines with ``email_log`` and all other filters using AND.",
               "type": "integer"
             }
           },
@@ -10803,9 +10812,11 @@
                       "diagnostic_code": "smtp; 550 user unknown",
                       "email_log_id": 42,
                       "event_type": "bounce_permanent",
+                      "match_status": "primary_email",
                       "message_id": "11111111-2222-3333-4444-555555555555",
                       "received_at": "2026-05-19T08:30:00+00:00",
-                      "recipient_email": "alice@example.com"
+                      "recipient_email": "alice@example.com",
+                      "user_id": 123
                     }
                   ]
                 }
@@ -15549,9 +15560,11 @@
                       "diagnostic_code": "smtp; 550 user unknown",
                       "email_log_id": 42,
                       "event_type": "bounce_permanent",
+                      "match_status": "primary_email",
                       "message_id": "11111111-2222-3333-4444-555555555555",
                       "received_at": "2026-05-19T08:30:00+00:00",
-                      "recipient_email": "alice@example.com"
+                      "recipient_email": "alice@example.com",
+                      "user_id": 123
                     }
                   ]
                 }

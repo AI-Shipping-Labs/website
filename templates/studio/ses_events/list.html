@@ -16,21 +16,33 @@
 {% comment %}
   Stats strip — independent of the active filter. PM ruling on simplicity:
   three top-line counters covering the last 30 days, no per-user / per-tag
-  breakdowns. The current-filter total is the pager's "Showing N of T".
+  breakdowns. Each whole card is a link to that exact global UTC window.
 {% endcomment %}
+<p class="mb-3 text-sm text-muted-foreground" data-testid="ses-event-summary-scope">
+  All SES activity · last 30 UTC calendar days
+</p>
 <div class="grid grid-cols-3 gap-2 sm:gap-4 mb-6" data-testid="ses-event-stats">
-  <div class="bg-card border border-border rounded-lg p-4">
-    <p class="text-sm text-muted-foreground">Bounces (30d)</p>
+  <a href="{{ summary_links.bounce }}"
+     class="bg-card border border-border rounded-lg p-4 hover:border-accent/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+     aria-label="View {{ last_30d_bounce_permanent }} permanent bounces from the last 30 UTC calendar days"
+     data-testid="ses-event-stat-bounce-link">
+    <p class="text-sm text-muted-foreground">Permanent bounces (30d)</p>
     <p class="text-xl font-semibold text-red-400" data-testid="ses-event-stat-bounce">{{ last_30d_bounce_permanent }}</p>
-  </div>
-  <div class="bg-card border border-border rounded-lg p-4">
+  </a>
+  <a href="{{ summary_links.complaint }}"
+     class="bg-card border border-border rounded-lg p-4 hover:border-accent/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+     aria-label="View {{ last_30d_complaint }} complaints from the last 30 UTC calendar days"
+     data-testid="ses-event-stat-complaint-link">
     <p class="text-sm text-muted-foreground">Complaints (30d)</p>
     <p class="text-xl font-semibold text-red-400" data-testid="ses-event-stat-complaint">{{ last_30d_complaint }}</p>
-  </div>
-  <div class="bg-card border border-border rounded-lg p-4">
+  </a>
+  <a href="{{ summary_links.total }}"
+     class="bg-card border border-border rounded-lg p-4 hover:border-accent/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+     aria-label="View all {{ last_30d_total }} SES events from the last 30 UTC calendar days"
+     data-testid="ses-event-stat-total-link">
     <p class="text-sm text-muted-foreground">Total events (30d)</p>
     <p class="text-xl font-semibold text-foreground" data-testid="ses-event-stat-total">{{ last_30d_total }}</p>
-  </div>
+  </a>
 </div>
 
 {% comment %}
@@ -46,13 +58,15 @@
   {% if campaign_id %}
   <div class="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground"
        data-testid="ses-event-campaign-filter">
-    Campaign filter:
-    {% if campaign %}
-    <a href="{% url 'studio_campaign_detail' campaign.pk %}" class="text-accent hover:underline">{{ campaign.subject }}</a>
-    {% else %}
-    <span class="font-mono">{{ campaign_id }}</span>
-    {% endif %}
-    <a href="{% url 'studio_ses_event_list' %}" class="ml-3 text-xs text-muted-foreground hover:text-foreground">Clear</a>
+    <p>
+      Campaign filter:
+      <a href="{% url 'studio_campaign_detail' campaign.pk %}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ campaign.subject }}</a>
+    </p>
+    <p class="mt-1">Shows only SES events correlated through this campaign's EmailLog records.</p>
+    <div class="mt-2 flex flex-wrap gap-3 text-xs">
+      <a href="{{ campaign_recipients_url }}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="ses-event-campaign-recipients-link">View campaign recipients</a>
+      <a href="{% url 'studio_ses_event_list' %}" class="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Clear campaign</a>
+    </div>
   </div>
   {% endif %}
   {% if identity_user %}
@@ -133,7 +147,16 @@
   </details>
 </div>
 
-{% if has_any_event %}
+<div class="mb-3 text-sm text-muted-foreground" data-testid="ses-event-current-results">
+  <span class="font-medium text-foreground">Current results: {{ filtered_total }}</span>
+  {% if campaign %}<span> for {{ campaign.subject }}</span>{% endif %}
+  {% if campaign or current_filter_labels %}<span> · campaign/active-filter scope</span>{% else %}<span> · all-time unfiltered scope</span>{% endif %}
+  {% if current_filter_labels %}
+  <span class="block mt-1">Active filters: {{ current_filter_labels|join:', ' }}</span>
+  {% endif %}
+</div>
+
+{% if has_any_event or filters_active %}
 <div class="{% studio_list_class 'wrapper' %}" data-testid="studio-ses-events-list">
   {% if show_pager %}{% include "studio/includes/list_pager.html" with pager_testid_prefix="ses-event-list-pager" %}{% endif %}
   <table class="{% studio_list_class 'table' %}">
@@ -186,9 +209,9 @@
         <td class="px-6 py-3 text-sm text-foreground" data-label="Recipient">
           {% if row.event.recipient_email %}
             <span class="font-mono">{{ row.event.recipient_email }}</span>
-            {% if row.event.user_id %}
-            <a href="{% url 'studio_user_detail' row.event.user_id %}"
-               class="ml-1 inline-flex items-center text-muted-foreground hover:text-accent"
+            {% if row.identity.user %}
+            <a href="{% url 'studio_user_detail' row.identity.user.pk %}"
+               class="ml-1 inline-flex items-center text-muted-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                title="Open user profile"
                data-testid="ses-event-user-link">
               <i data-lucide="user" class="w-3.5 h-3.5"></i>
@@ -196,6 +219,9 @@
             {% endif %}
           {% else %}
             <span class="text-muted-foreground">&mdash;</span>
+          {% endif %}
+          {% if row.identity.match_status %}
+          <span class="mt-1 block text-xs text-muted-foreground" data-testid="ses-event-match-status">{{ row.identity.match_label }}</span>
           {% endif %}
         </td>
         <td class="px-6 py-3 text-sm text-muted-foreground" data-label="Bounce type">
@@ -241,8 +267,8 @@
           {% endif %}
         </td>
         <td class="px-6 py-3 text-sm text-muted-foreground" data-label="Action taken">
-          {% if row.event.action_taken %}
-            <span title="{{ row.event.action_taken }}">{{ row.event.action_taken|truncatechars:60 }}</span>
+          {% if row.identity.action_label %}
+            <span title="{{ row.identity.action_label }}">{{ row.identity.action_label|truncatechars:60 }}</span>
           {% else %}
             <span>&mdash;</span>
           {% endif %}
@@ -256,8 +282,7 @@
         </td>
       </tr>
       {% empty %}
-        {% url 'studio_ses_event_list' as ses_clear_url %}
-        {% studio_empty_state 'filter' entity_label='SES event' entity_label_plural='SES events' clear_url=ses_clear_url colspan=7 %}
+        {% studio_empty_state 'filter' entity_label='SES event' entity_label_plural='SES events' clear_url=empty_recovery_url colspan=7 empty_message=empty_message recovery_label=empty_recovery_label %}
       {% endfor %}
     </tbody>
   </table>

@@ -69,7 +69,6 @@ import re
 import urllib.request
 from datetime import timezone as datetime_timezone
 
-from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.http import HttpResponse, JsonResponse
@@ -79,17 +78,17 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from accounts.utils.bounce import (
+    SOFT_BOUNCE_THRESHOLD,
     mark_permanent_bounce,
     record_soft_bounce,
 )
 from api.openapi import openapi_spec
 from email_app.models import EmailLog, SesEvent
+from email_app.services.ses_identity import resolve_recipient_identity
 from integrations.config import get_config
 from integrations.services.ses import validate_sns_notification
 
 logger = logging.getLogger(__name__)
-
-User = get_user_model()
 
 __all__ = [
     "ses_events",
@@ -362,12 +361,12 @@ def _handle_bounce(payload, inner, message_id):
     bounce_subtype = bounce.get("bounceSubType", "") or ""
     recipients = bounce.get("bouncedRecipients", []) or []
     diagnostic = _first_recipient_diagnostic(recipients)
-    addresses = [
+    raw_addresses = [
         (r.get("emailAddress") or "").strip()
         for r in recipients
         if isinstance(r, dict)
     ]
-    addresses = [a for a in addresses if a]
+    raw_addresses = [address for address in raw_addresses if address]
 
     # Issue #827: SES sometimes mislabels a hard 5xx SMTP rejection as
     # ``bounceType=Transient``. When the per-recipient SMTP status /
@@ -399,7 +398,7 @@ def _handle_bounce(payload, inner, message_id):
     matched_log = _find_email_log(ses_mail_id)
     bounce_timestamp = _parse_event_timestamp(inner, "bounce")
 
-    if not addresses:
+    if not raw_addresses:
         _record_event(
             message_id=message_id,
             event_type=event_type,
@@ -411,6 +410,7 @@ def _handle_bounce(payload, inner, message_id):
             bounce_type=bounce_type,
             bounce_subtype=bounce_subtype,
             diagnostic_code=diagnostic,
+            match_status=SesEvent.MATCH_STATUS_UNMATCHED_RECIPIENT,
         )
         if matched_log is not None:
             _stamp_email_log_bounce(
@@ -422,47 +422,49 @@ def _handle_bounce(payload, inner, message_id):
             )
         return JsonResponse({"status": "ok"}, status=200)
 
+    identities = [
+        resolve_recipient_identity(address, email_log=matched_log)
+        for address in raw_addresses
+    ]
+
     # Single audit row -- captures the first (or only) recipient. With multiple
     # bounced recipients in one notification, the action_taken summarises.
-    first_address = addresses[0]
+    first_identity = identities[0]
     actions = []
-    matched_user = None
-    for address in addresses:
-        user = _find_user(address)
+    mutated_user_ids = set()
+    for identity in identities:
+        user = identity.user
         if user is None:
-            actions.append(f"{address}: no matching user")
+            if identity.match_status == SesEvent.MATCH_STATUS_IDENTITY_CONFLICT:
+                actions.append(f"Needs reconciliation: {identity.detail}")
+            else:
+                actions.append("No account action taken")
             continue
-        if matched_user is None:
-            matched_user = user
+        if user.pk in mutated_user_ids:
+            continue
+        mutated_user_ids.add(user.pk)
         if smtp_permanent_override:
             mark_permanent_bounce(user, diagnostic=diagnostic)
             actions.append(
                 f"SES mislabeled Transient->permanent (status={override_status}); "
-                f"{address}: unsubscribed and marked permanent bounce"
+                "unsubscribed after permanent bounce"
             )
         elif bounce_type == "Permanent":
             mark_permanent_bounce(user, diagnostic=diagnostic)
-            actions.append(f"{address}: unsubscribed and marked permanent bounce")
+            actions.append("Unsubscribed after permanent bounce")
         elif bounce_type == "Transient":
             new_count, flipped = record_soft_bounce(user, diagnostic=diagnostic)
             if flipped:
                 actions.append(
-                    f"{address}: soft bounce threshold reached, "
-                    f"unsubscribed and marked permanent bounce"
+                    f"Unsubscribed after {SOFT_BOUNCE_THRESHOLD} soft bounces"
                 )
             else:
                 actions.append(
-                    f"{address}: soft_bounce_count={new_count}"
+                    f"Soft bounce recorded ({new_count} of "
+                    f"{SOFT_BOUNCE_THRESHOLD})"
                 )
         else:
-            actions.append(f"{address}: bounce type {bounce_type!r}; logged only")
-
-    # Prefer the EmailLog's user when correlation succeeded, since the log
-    # is the authoritative record of who we sent to. Fall back to the
-    # email-address lookup otherwise.
-    correlated_user = (
-        matched_log.user if matched_log is not None else matched_user
-    )
+            actions.append("No account action taken")
 
     try:
         with transaction.atomic():
@@ -470,8 +472,9 @@ def _handle_bounce(payload, inner, message_id):
                 message_id=message_id,
                 event_type=event_type,
                 raw_payload=payload,
-                recipient_email=first_address,
-                user=correlated_user,
+                recipient_email=first_identity.recipient_email,
+                user=first_identity.user,
+                match_status=first_identity.match_status,
                 action_taken="; ".join(actions)[:255],
                 email_log=matched_log,
                 bounce_type=bounce_type,
@@ -512,12 +515,12 @@ def _handle_complaint(payload, inner, message_id):
         or complaint.get("complaintSubType")
         or ""
     )
-    addresses = [
+    raw_addresses = [
         (r.get("emailAddress") or "").strip()
         for r in recipients
         if isinstance(r, dict)
     ]
-    addresses = [a for a in addresses if a]
+    raw_addresses = [address for address in raw_addresses if address]
 
     existing = SesEvent.objects.filter(message_id=message_id).first()
     if existing is not None:
@@ -527,7 +530,7 @@ def _handle_complaint(payload, inner, message_id):
     matched_log = _find_email_log(ses_mail_id)
     complaint_timestamp = _parse_event_timestamp(inner, "complaint")
 
-    if not addresses:
+    if not raw_addresses:
         _record_event(
             message_id=message_id,
             event_type=SesEvent.EVENT_TYPE_COMPLAINT,
@@ -537,27 +540,32 @@ def _handle_complaint(payload, inner, message_id):
             action_taken="no recipients in payload; logged only",
             email_log=matched_log,
             diagnostic_code=diagnostic,
+            match_status=SesEvent.MATCH_STATUS_UNMATCHED_RECIPIENT,
         )
         if matched_log is not None:
             _stamp_email_log_complaint(matched_log, complaint_timestamp)
         return JsonResponse({"status": "ok"}, status=200)
 
-    first_address = addresses[0]
+    identities = [
+        resolve_recipient_identity(address, email_log=matched_log)
+        for address in raw_addresses
+    ]
+    first_identity = identities[0]
     actions = []
-    matched_user = None
-    for address in addresses:
-        user = _find_user(address)
+    mutated_user_ids = set()
+    for identity in identities:
+        user = identity.user
         if user is None:
-            actions.append(f"{address}: no matching user")
+            if identity.match_status == SesEvent.MATCH_STATUS_IDENTITY_CONFLICT:
+                actions.append(f"Needs reconciliation: {identity.detail}")
+            else:
+                actions.append("No account action taken")
             continue
-        if matched_user is None:
-            matched_user = user
+        if user.pk in mutated_user_ids:
+            continue
+        mutated_user_ids.add(user.pk)
         _mark_complaint(user)
-        actions.append(f"{address}: unsubscribed for complaint")
-
-    correlated_user = (
-        matched_log.user if matched_log is not None else matched_user
-    )
+        actions.append("Unsubscribed after complaint")
 
     try:
         with transaction.atomic():
@@ -565,8 +573,9 @@ def _handle_complaint(payload, inner, message_id):
                 message_id=message_id,
                 event_type=SesEvent.EVENT_TYPE_COMPLAINT,
                 raw_payload=payload,
-                recipient_email=first_address,
-                user=correlated_user,
+                recipient_email=first_identity.recipient_email,
+                user=first_identity.user,
+                match_status=first_identity.match_status,
                 action_taken="; ".join(actions)[:255],
                 email_log=matched_log,
                 diagnostic_code=diagnostic,
@@ -712,13 +721,6 @@ def _handle_engagement(*, payload, inner, message_id, notification_type):
 # ---------------------------------------------------------------------------
 # DB helpers
 # ---------------------------------------------------------------------------
-
-
-def _find_user(email):
-    """Look up a User by email (case-insensitive), or None."""
-    if not email:
-        return None
-    return User.objects.filter(email__iexact=email).first()
 
 
 def _find_email_log(ses_message_id):
@@ -930,6 +932,7 @@ def _record_event(
     bounce_type="",
     bounce_subtype="",
     diagnostic_code="",
+    match_status="",
 ):
     """Insert a SesEvent row, swallowing duplicate-MessageId races.
 
@@ -950,6 +953,7 @@ def _record_event(
             bounce_type=bounce_type or "",
             bounce_subtype=bounce_subtype or "",
             diagnostic_code=diagnostic_code or "",
+            match_status=match_status or "",
         )
     except IntegrityError:
         logger.info(

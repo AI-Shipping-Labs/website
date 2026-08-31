@@ -182,6 +182,8 @@ class SesEventsListBasicTest(SesEventsListTestBase):
         perm = next(r for r in body["ses_events"] if r["message_id"] == "ev-perm")
         self.assertEqual(perm["bounce_type"], "Permanent")
         self.assertEqual(perm["diagnostic_code"], "smtp; 550 user unknown")
+        self.assertEqual(perm["user_id"], self.bounced_user.pk)
+        self.assertEqual(perm["match_status"], "primary_email")
 
 
 class SesEventsListWindowFilterTest(SesEventsListTestBase):
@@ -233,6 +235,37 @@ class SesEventsListEmailLogFilterTest(SesEventsListTestBase):
         for row in body["ses_events"]:
             self.assertEqual(row["email_log_id"], self.campaign_log.id)
         self.assertEqual(body["count"], 2)
+
+
+class SesEventsListCampaignFilterTest(SesEventsListTestBase):
+    def test_campaign_filter_returns_only_correlated_campaign_events(self):
+        body = self._get(f"?campaign={self.campaign.pk}").json()
+        ids = {row["message_id"] for row in body["ses_events"]}
+        self.assertEqual(ids, {"ev-perm", "ev-transient"})
+        self.assertEqual(body["count"], 2)
+
+    def test_campaign_and_email_log_filters_combine_with_and(self):
+        body = self._get(
+            f"?campaign={self.campaign.pk}&email_log={self.campaign_log.pk}",
+        ).json()
+        self.assertEqual(body["count"], 2)
+
+        other_log = EmailLog.objects.create(
+            user=self.bounced_user,
+            recipient_email=self.bounced_user.email,
+            email_type="welcome",
+            ses_message_id="other-send",
+        )
+        body = self._get(
+            f"?campaign={self.campaign.pk}&email_log={other_log.pk}",
+        ).json()
+        self.assertEqual(body["count"], 0)
+        self.assertEqual(body["ses_events"], [])
+
+    def test_unknown_positive_campaign_is_empty(self):
+        body = self._get("?campaign=999999").json()
+        self.assertEqual(body["count"], 0)
+        self.assertEqual(body["ses_events"], [])
 
 
 class SesEventsListRecipientFilterTest(SesEventsListTestBase):
@@ -306,6 +339,15 @@ class SesEventsListValidationTest(SesEventsListTestBase):
         resp = self._get("?email_log=abc")
         self.assertEqual(resp.status_code, 422)
         self.assertEqual(resp.json()["details"]["field"], "email_log")
+
+    def test_invalid_campaign_values_are_rejected(self):
+        for value in ("abc", "0", "-1"):
+            with self.subTest(campaign=value):
+                response = self._get(f"?campaign={value}")
+                self.assertEqual(response.status_code, 422)
+                self.assertEqual(
+                    response.json()["details"]["field"], "campaign",
+                )
 
 
 class SesEventsListAuthTest(SesEventsListTestBase):

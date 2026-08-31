@@ -557,6 +557,16 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "TestStaffReconcilesAmbiguousDelivery::"
         "test_duplicate_risk_confirmations_gate_retry_and_assume_sent"
     )
+    ses_1552_owners = frozenset({
+        "playwright_tests/test_studio_ses_events_1552.py::"
+        "test_keyboard_summary_card_opens_matching_global_queue",
+        "playwright_tests/test_studio_ses_events_1552.py::"
+        "test_campaign_without_linked_events_leads_to_recipient_diagnostics",
+        "playwright_tests/test_studio_ses_events_1552.py::"
+        "test_clear_event_filters_keeps_campaign_and_recovers_linked_event",
+        "playwright_tests/test_studio_ses_events_1552.py::"
+        "test_matched_identity_links_from_campaign_event_to_member",
+    })
 
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
@@ -590,11 +600,11 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2555)
-        self.assertEqual(len(inventory.owners), 2335)
+        self.assertEqual(inventory.item_count, 2559)
+        self.assertEqual(len(inventory.owners), 2339)
         self.assertEqual(
             inventory.declared_owners,
-            {self.migrated_owner, self.campaign_owner},
+            {self.migrated_owner, self.campaign_owner} | self.ses_1552_owners,
         )
         self.assertNotIn(
             self.migrated_owner,

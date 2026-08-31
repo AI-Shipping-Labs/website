@@ -22,6 +22,7 @@ from accounts.lifecycle import lifecycle_payload
 from accounts.models import TierOverride
 from accounts.services.subscription_summary import subscription_summary
 from accounts.utils.display import display_name
+from email_app.services.ses_identity import event_identity_summary
 
 BOUNCE_STATE_NONE = "none"
 BOUNCE_STATE_SOFT = "soft"
@@ -194,6 +195,7 @@ def serialize_ses_event(event):
     the operator-readable digest; the raw SNS body lives in the Studio
     surface (#763) for the deep-dive.
     """
+    identity = event_identity_summary(event)
     return {
         "message_id": event.message_id,
         "event_type": event.event_type,
@@ -204,6 +206,8 @@ def serialize_ses_event(event):
         "diagnostic_code": event.diagnostic_code or "",
         "action_taken": event.action_taken or "",
         "email_log_id": event.email_log_id,
+        "user_id": identity.user.pk if identity.user is not None else None,
+        "match_status": identity.match_status,
     }
 
 

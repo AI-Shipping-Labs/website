@@ -17,8 +17,11 @@ import datetime
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
+from freezegun import freeze_time
 
+from accounts.models import Token
 from email_app.models import EmailCampaign, EmailLog, SesEvent
 
 User = get_user_model()
@@ -37,6 +40,7 @@ def _make_event(
     raw_payload=None,
     message_id=None,
     received_at=None,
+    match_status='',
 ):
     """Create a ``SesEvent`` and optionally pin ``received_at``.
 
@@ -59,6 +63,7 @@ def _make_event(
         action_taken=action_taken,
         raw_payload=raw_payload,
         message_id=message_id,
+        match_status=match_status,
     )
     if received_at is not None:
         SesEvent.objects.filter(pk=event.pk).update(received_at=received_at)
@@ -280,6 +285,7 @@ class SesEventListEmptyTest(TestCase):
         response = self.client.get('/studio/ses-events/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'studio-empty-state-fresh')
+        self.assertContains(response, 'Current results: 0')
         # Help copy below the empty card mentions the webhook path so
         # operators can diagnose the SNS subscription gap themselves.
         self.assertContains(response, '/api/ses-events')
@@ -499,9 +505,10 @@ class SesEventDetailRenderTest(_SesEventFixtureMixin, TestCase):
         response = self.client.get(f'/studio/ses-events/{self.row1.pk}/')
         self.assertContains(response, f'/studio/users/{self.user_a.pk}/')
 
-    def test_no_matching_user_literal_when_user_null(self):
+    def test_unmatched_user_has_explicit_identity_status(self):
         response = self.client.get(f'/studio/ses-events/{self.row2.pk}/')
-        self.assertContains(response, 'No matching user')
+        self.assertContains(response, 'No platform account')
+        self.assertContains(response, 'No account link')
 
     def test_email_log_section_when_set(self):
         response = self.client.get(f'/studio/ses-events/{self.row1.pk}/')
@@ -559,3 +566,243 @@ class SesEventSidebarLinkTest(_SesEventFixtureMixin, TestCase):
         # href attribute; the active branch carries ``bg-secondary text-foreground``.
         snippet = body[idx:idx + 400]
         self.assertIn('bg-secondary text-foreground', snippet)
+
+
+@freeze_time('2026-08-31 12:00:00')
+class SesEventSummaryWindowTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='summary-staff@example.com', password='testpass', is_staff=True,
+        )
+        cls.campaign = EmailCampaign.objects.create(
+            subject='Narrow campaign', body='Body', status='sent',
+        )
+        start = datetime.datetime(2026, 8, 2, tzinfo=datetime.UTC)
+        cls.at_boundary = _make_event(
+            event_type=SesEvent.EVENT_TYPE_BOUNCE_PERMANENT,
+            recipient_email='inside@example.com',
+            message_id='summary-inside',
+            received_at=start,
+        )
+        cls.before_boundary = _make_event(
+            event_type=SesEvent.EVENT_TYPE_BOUNCE_PERMANENT,
+            recipient_email='outside@example.com',
+            message_id='summary-outside',
+            received_at=start - datetime.timedelta(microseconds=1),
+        )
+        cls.complaint = _make_event(
+            event_type=SesEvent.EVENT_TYPE_COMPLAINT,
+            recipient_email='complaint@example.com',
+            message_id='summary-complaint',
+            received_at=start + datetime.timedelta(days=1),
+        )
+
+    def setUp(self):
+        self.client.login(email=self.staff.email, password='testpass')
+
+    def test_cards_share_utc_boundary_and_link_to_matching_totals(self):
+        response = self.client.get('/studio/ses-events/')
+
+        self.assertEqual(response.context['summary_window_start'], '2026-08-02')
+        self.assertEqual(response.context['last_30d_bounce_permanent'], 1)
+        self.assertEqual(response.context['last_30d_complaint'], 1)
+        self.assertEqual(response.context['last_30d_total'], 2)
+        self.assertContains(response, 'Permanent bounces (30d)')
+        self.assertContains(response, 'All SES activity · last 30 UTC calendar days')
+
+        bounce_response = self.client.get(response.context['summary_links']['bounce'])
+        self.assertEqual(bounce_response.context['filtered_total'], 1)
+        self.assertEqual(bounce_response.context['type_filter'], 'bounce_permanent')
+        self.assertEqual(bounce_response.context['since'], '2026-08-02')
+
+    def test_card_links_clear_narrower_context(self):
+        response = self.client.get(
+            '/studio/ses-events/',
+            {
+                'campaign': self.campaign.pk,
+                'q': 'unsafe raw text',
+                'bounce_type': 'Permanent',
+                'bounce_subtype': 'General',
+                'until': '2026-08-31',
+                'page': '2',
+            },
+        )
+
+        bounce_url = response.context['summary_links']['bounce']
+        self.assertEqual(
+            bounce_url,
+            '/studio/ses-events/?type=bounce_permanent&since=2026-08-02',
+        )
+        self.assertNotIn('campaign=', bounce_url)
+        self.assertNotIn('q=', bounce_url)
+
+
+class SesEventCampaignContextTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='campaign-staff@example.com', password='testpass', is_staff=True,
+        )
+        cls.staff_token = Token.objects.create(user=cls.staff, name='ses-parity')
+        cls.campaign = EmailCampaign.objects.create(
+            subject='Campaign with feedback', body='Body', status='sent',
+        )
+        cls.empty_campaign = EmailCampaign.objects.create(
+            subject='Campaign without feedback', body='Body', status='sent',
+        )
+        user = User.objects.create_user(email='campaign-recipient@example.com')
+        log = EmailLog.objects.create(
+            campaign=cls.campaign,
+            user=user,
+            recipient_email=user.email,
+            email_type='campaign',
+            ses_message_id='campaign-linked-send',
+        )
+        cls.linked_event = _make_event(
+            event_type=SesEvent.EVENT_TYPE_BOUNCE_PERMANENT,
+            recipient_email=user.email,
+            user=user,
+            email_log=log,
+            match_status=SesEvent.MATCH_STATUS_PRIMARY_EMAIL,
+            message_id='campaign-linked-event',
+        )
+        cls.unrelated = _make_event(
+            event_type=SesEvent.EVENT_TYPE_COMPLAINT,
+            recipient_email='private-recipient@example.net',
+            diagnostic_code='private diagnostic',
+            message_id='campaign-unrelated-event',
+        )
+
+    def setUp(self):
+        self.client.login(email=self.staff.email, password='testpass')
+
+    def test_invalid_nonempty_campaign_context_fails_closed(self):
+        cases = ['not-a-valid-id', '0', '-1', '999999']
+        for value in cases:
+            with self.subTest(campaign=value):
+                response = self.client.get(
+                    '/studio/ses-events/', {'campaign': value},
+                )
+                self.assertEqual(response.status_code, 404)
+                self.assertNotContains(
+                    response,
+                    'private-recipient@example.net',
+                    status_code=404,
+                )
+                self.assertNotContains(
+                    response, 'private diagnostic', status_code=404,
+                )
+
+    def test_empty_campaign_parameter_is_unfiltered(self):
+        response = self.client.get('/studio/ses-events/?campaign=')
+        self.assertEqual(response.context['filtered_total'], 2)
+        self.assertIsNone(response.context['campaign'])
+
+    def test_campaign_without_linked_events_explains_global_mismatch(self):
+        response = self.client.get(
+            '/studio/ses-events/', {'campaign': self.empty_campaign.pk},
+        )
+
+        self.assertEqual(response.context['filtered_total'], 0)
+        self.assertContains(
+            response,
+            'No SES events are linked to “Campaign without feedback”.',
+        )
+        self.assertContains(response, 'all campaigns and transactional email')
+        self.assertContains(response, 'View all SES events')
+        self.assertContains(
+            response,
+            reverse('studio_campaign_recipients', args=[self.empty_campaign.pk]),
+        )
+
+    def test_campaign_linked_events_hidden_by_filter_preserves_campaign(self):
+        response = self.client.get(
+            '/studio/ses-events/',
+            {'campaign': self.campaign.pk, 'type': 'complaint'},
+        )
+
+        self.assertEqual(response.context['filtered_total'], 0)
+        self.assertContains(
+            response,
+            'has SES events, but none match the remaining filters',
+        )
+        self.assertContains(response, 'Clear event filters')
+        self.assertEqual(
+            response.context['empty_recovery_url'],
+            f'/studio/ses-events/?campaign={self.campaign.pk}',
+        )
+
+    def test_campaign_total_and_scope_use_full_filtered_queryset(self):
+        response = self.client.get(
+            '/studio/ses-events/', {'campaign': self.campaign.pk},
+        )
+
+        self.assertEqual(response.context['filtered_total'], 1)
+        self.assertEqual(response.context['paginator'].count, 1)
+        self.assertContains(response, 'Current results: 1')
+        self.assertContains(response, 'campaign/active-filter scope')
+
+        api_response = self.client.get(
+            '/api/ses-events',
+            {'campaign': self.campaign.pk},
+            HTTP_AUTHORIZATION=f'Token {self.staff_token.key}',
+        )
+        api_body = api_response.json()
+        self.assertEqual(
+            api_body['count'], response.context['paginator'].count,
+        )
+
+
+class SesEventHistoricalIdentityTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='history-staff@example.com', password='testpass', is_staff=True,
+        )
+        cls.user = User.objects.create_user(email='history-user@example.com')
+        cls.event = _make_event(
+            event_type=SesEvent.EVENT_TYPE_BOUNCE_TRANSIENT,
+            recipient_email='History User <history-user@example.com>',
+            user=cls.user,
+            action_taken='History User <history-user@example.com>: no matching user',
+            message_id='historical-contradiction',
+        )
+
+    def setUp(self):
+        self.client.login(email=self.staff.email, password='testpass')
+
+    def test_contradictory_historical_row_is_flagged_without_replay(self):
+        original_count = self.user.soft_bounce_count
+        response = self.client.get(
+            reverse('studio_ses_event_detail', args=[self.event.pk]),
+        )
+
+        self.assertContains(response, 'Matched account · Needs reconciliation')
+        self.assertContains(response, 'Needs reconciliation')
+        self.assertContains(response, 'Historical webhook action:')
+        self.assertContains(response, reverse('studio_user_detail', args=[self.user.pk]))
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.soft_bounce_count, original_count)
+
+
+class SesEventAdminRemovalTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
+            email='ses-admin@example.com', password='testpass',
+        )
+
+    def test_obsolete_admin_routes_are_absent_without_redirect(self):
+        with self.assertRaises(NoReverseMatch):
+            reverse('admin:email_app_sesevent_changelist')
+
+        self.client.force_login(self.superuser)
+        for path in (
+            '/admin/email_app/sesevent/',
+            '/admin/email_app/sesevent/1/change/',
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 404)
+                self.assertNotIn('Location', response.headers)

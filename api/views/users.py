@@ -1116,6 +1116,8 @@ _SES_EVENT_EXAMPLE = {
     "diagnostic_code": "smtp; 550 user unknown",
     "action_taken": "unsubscribed and tagged bounced",
     "email_log_id": 42,
+    "user_id": 123,
+    "match_status": "primary_email",
 }
 
 
@@ -1210,7 +1212,9 @@ def user_ses_events(request, email):
             },
         )
 
-    qs = SesEvent.objects.filter(user=user)
+    qs = SesEvent.objects.select_related(
+        "user", "email_log__user",
+    ).filter(user=user)
     if since is not None:
         qs = qs.filter(received_at__gte=since)
     if type_filter:

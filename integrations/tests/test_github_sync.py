@@ -20,7 +20,7 @@ import os
 import sys
 import tempfile
 from datetime import date
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from boto3.exceptions import S3UploadFailedError
 from botocore.exceptions import ClientError, NoCredentialsError
@@ -2878,7 +2878,15 @@ class S3ImageUploadTest(TestCase):
 
         self.assertEqual(result['uploaded'], 1)
         self.assertEqual(result['skipped'], 0)
-        mock_s3.upload_fileobj.assert_called_once()
+        mock_s3.upload_fileobj.assert_called_once_with(
+            ANY,
+            'test-bucket',
+            'content/hero.png',
+            ExtraArgs={
+                'ContentType': 'image/png',
+                'CacheControl': 'public, max-age=86400',
+            },
+        )
         fileobj, bucket, key = mock_s3.upload_fileobj.call_args[0]
         self.assertEqual(fileobj.getvalue(), self.img_content)
         self.assertEqual(bucket, 'test-bucket')
@@ -2942,7 +2950,15 @@ class S3ImageUploadTest(TestCase):
 
         self.assertEqual(result['uploaded'], 1)
         self.assertEqual(result['skipped'], 0)
-        mock_s3.upload_fileobj.assert_called_once()
+        mock_s3.upload_fileobj.assert_called_once_with(
+            ANY,
+            'test-bucket',
+            'content/hero.png',
+            ExtraArgs={
+                'ContentType': 'image/png',
+                'CacheControl': 'public, max-age=86400',
+            },
+        )
         fileobj, bucket, key = mock_s3.upload_fileobj.call_args[0]
         self.assertEqual(fileobj.getvalue(), self.img_content)
         self.assertEqual(bucket, 'test-bucket')
@@ -3055,7 +3071,15 @@ class S3ImageUploadTest(TestCase):
         self.assertEqual(result['errors'][0]['step'], 's3_list')
         self.assertEqual(result['errors'][0]['file'], '')
         self.assertTrue(any('Failed to list S3 objects' in line for line in logs.output))
-        mock_s3.upload_fileobj.assert_called_once()
+        mock_s3.upload_fileobj.assert_called_once_with(
+            ANY,
+            'test-bucket',
+            'content/hero.png',
+            ExtraArgs={
+                'ContentType': 'image/png',
+                'CacheControl': 'public, max-age=86400',
+            },
+        )
 
     @override_settings(
         AWS_S3_CONTENT_BUCKET='test-bucket',

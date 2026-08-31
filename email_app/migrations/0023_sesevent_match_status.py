@@ -27,6 +27,7 @@ class Migration(migrations.Migration):
                 ],
                 db_index=True,
                 default="",
+                db_default="",
                 help_text=(
                     "How a bounce or complaint recipient was matched to a "
                     "canonical account. Blank for event types where recipient "

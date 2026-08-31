@@ -114,6 +114,7 @@ class SesEvent(models.Model):
         choices=MATCH_STATUS_CHOICES,
         blank=True,
         default="",
+        db_default="",
         db_index=True,
         help_text=(
             "How a bounce or complaint recipient was matched to a canonical "

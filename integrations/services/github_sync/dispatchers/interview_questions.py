@@ -2,6 +2,7 @@
 
 import os
 
+from integrations.services.github_sync.checkout import raise_if_checkout_error
 from integrations.services.github_sync.common import logger
 from integrations.services.github_sync.parsing import (
     _defaults_differ,
@@ -77,6 +78,7 @@ def _dispatch_interview_questions(source, repo_dir, file_list, commit_sha,
             })
 
         except Exception as e:
+            raise_if_checkout_error(e)
             stats['errors'].append({'file': rel_path, 'error': str(e)})
             logger.warning(
                 'Error syncing interview question %s: %s', rel_path, e,
@@ -111,5 +113,4 @@ def _dispatch_interview_questions(source, repo_dir, file_list, commit_sha,
 # The pipeline mirrors ``_sync_courses`` in shape (single-entry helper +
 # stale cleanup) but is flatter — there is no module layer between a
 # Workshop and its WorkshopPage rows.
-
 

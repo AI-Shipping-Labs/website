@@ -14,6 +14,7 @@ from content.models.marketing_page import (
     STATUS_PUBLISHED,
     normalize_marketing_page_public_path,
 )
+from integrations.services.github_sync.checkout import raise_if_checkout_error
 from integrations.services.github_sync.media import (
     _check_broken_image_refs,
     rewrite_cover_image_url,
@@ -254,6 +255,7 @@ def _dispatch_marketing_pages(
             stats['items_detail'].append(_marketing_page_detail(page, action))
 
         except Exception as exc:
+            raise_if_checkout_error(exc)
             if content_id:
                 failed_content_ids.add(str(content_id))
             failed_source_paths.add(rel_path)

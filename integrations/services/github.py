@@ -7,6 +7,11 @@ more focused modules.
 
 # ruff: noqa: F401
 
+from integrations.services.github_sync.checkout import (
+    ContentCheckout,
+    ContentCheckoutError,
+    checkout_session,
+)
 from integrations.services.github_sync.client import (
     GITHUB_BODY_KEY_PREFIX,
     GITHUB_DELIVERY_KEY_PREFIX,

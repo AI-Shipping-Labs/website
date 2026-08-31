@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from integrations.services.article_images import build_article_image_manifest
 from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
+from integrations.services.github_sync.checkout import raise_if_checkout_error
 from integrations.services.github_sync.common import logger
 from integrations.services.github_sync.media import (
     _check_broken_image_refs,
@@ -335,6 +336,7 @@ def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
             _enqueue_banner_if_missing('article', article.pk)
 
         except Exception as e:
+            raise_if_checkout_error(e)
             # Track the slug as failed so it's excluded from cleanup.
             # Use filename-based slug as safe fallback, plus current_slug
             # if it was derived from metadata before the error.

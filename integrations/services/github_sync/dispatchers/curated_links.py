@@ -4,6 +4,10 @@ import os
 
 import yaml
 
+from integrations.services.github_sync.checkout import (
+    checkout_read_text,
+    raise_if_checkout_error,
+)
 from integrations.services.github_sync.common import logger
 from integrations.services.github_sync.parsing import (
     _defaults_differ,
@@ -51,6 +55,7 @@ def _dispatch_curated_links(source, repo_dir, file_list, commit_sha, stats):
                 )
 
         except Exception as e:
+            raise_if_checkout_error(e)
             fallback_id = os.path.splitext(filename)[0]
             try:
                 failed_id = metadata.get('item_id', fallback_id)
@@ -109,8 +114,7 @@ def _sync_curated_link_manifest(
     seen_item_ids, failed_item_ids,
 ):
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = yaml.safe_load(f)
+        data = yaml.safe_load(checkout_read_text(filepath))
     except yaml.YAMLError as exc:
         stats['errors'].append({
             'file': rel_path,

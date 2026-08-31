@@ -391,10 +391,9 @@ class SyncLearningPathArticleTest(TestCase):
 
             sync_log = sync_content_source(self.source, repo_dir=tmp)
 
-        self.assertEqual(sync_log.status, 'partial')
-        error_text = str(sync_log.errors)
-        self.assertIn('Include file not found: partials/missing.html', error_text)
-        self.assertIn('Include path escapes content repo: ../secret.html', error_text)
+        self.assertEqual(sync_log.status, 'failed')
+        self.assertEqual(sync_log.errors[0]['step'], 'filesystem_boundary')
+        self.assertEqual(sync_log.errors[0]['kind'], 'outside_checkout')
         self.assertFalse(Article.objects.filter(slug='missing-include').exists())
         self.assertFalse(Article.objects.filter(slug='traversal-include').exists())
 

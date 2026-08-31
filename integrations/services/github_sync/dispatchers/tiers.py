@@ -5,6 +5,11 @@ import os
 import yaml
 from django.db import DatabaseError
 
+from integrations.services.github_sync.checkout import (
+    checkout_is_file,
+    checkout_read_text,
+    checkout_scope,
+)
 from integrations.services.github_sync.common import logger
 
 # Per-tier fields synced onto payments.Tier rows (matched by stripe_key == Tier.slug).
@@ -190,15 +195,20 @@ def _sync_tiers_yaml(repo_dir):
     (so the pricing page keeps rendering) but every Tier row is left
     untouched.
     """
+    with checkout_scope(repo_dir):
+        return _sync_tiers_yaml_from_checkout(repo_dir)
+
+
+def _sync_tiers_yaml_from_checkout(repo_dir):
+    """Check and read tiers from one pinned checkout session."""
     tiers_path = os.path.join(repo_dir, 'tiers.yaml')
-    if not os.path.isfile(tiers_path):
+    if not checkout_is_file(tiers_path):
         return {'synced': False, 'count': 0}
 
     from content.models import SiteConfig
 
     try:
-        with open(tiers_path, encoding='utf-8') as f:
-            tiers_data = yaml.safe_load(f) or []
+        tiers_data = yaml.safe_load(checkout_read_text(tiers_path)) or []
     except OSError as e:
         logger.warning('Failed to read tiers.yaml: %s', e)
         return {'synced': False, 'count': 0}

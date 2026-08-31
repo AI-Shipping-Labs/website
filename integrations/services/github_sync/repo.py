@@ -103,22 +103,32 @@ def _interview_question_filename(name):
     return all(c.islower() or c.isdigit() or c == '-' for c in base)
 
 
-def _resolve_local_repo_sha(repo_dir):
+def _resolve_local_repo_sha(repo_dir, checkout=None):
     """Return ``git rev-parse HEAD`` for a local checkout, or ``''``.
 
     Used by ``sync_content_source`` when ``repo_dir`` is provided
     (``--from-disk`` syncs and tests). Falls back silently when the
     directory isn't a git checkout — most test fixtures aren't.
     """
-    if not os.path.isdir(os.path.join(repo_dir, '.git')):
+    if checkout is None:
+        if not os.path.isdir(os.path.join(repo_dir, '.git')):
+            return ''
+        from integrations.services.github_sync.checkout import ContentCheckout
+
+        with ContentCheckout(repo_dir) as pinned:
+            return _resolve_local_repo_sha(repo_dir, pinned)
+
+    if checkout.kind(os.path.join(repo_dir, '.git')) != 'directory':
         return ''
+    cwd, pass_fds = checkout.subprocess_cwd()
     try:
         result = subprocess.run(
             ['git', 'rev-parse', 'HEAD'],
-            cwd=repo_dir,
+            cwd=cwd,
             capture_output=True,
             text=True,
             timeout=10,
+            pass_fds=pass_fds,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return ''
@@ -234,18 +244,17 @@ def clone_or_pull_repo(repo_name, target_dir, is_private=False):
                 f'Git operation failed: {result.stderr}'
             )
 
-        # Get the HEAD commit SHA
-        sha_result = subprocess.run(
-            ['git', 'rev-parse', 'HEAD'],
-            cwd=target_dir,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        return sha_result.stdout.strip()
+        # A freshly cloned checkout is untrusted content. Open and pin its
+        # root before asking Git to inspect ``HEAD`` so a replacement of the
+        # public checkout path cannot redirect this read. This also keeps
+        # mocked clone operations honest: a missing ``.git`` simply produces
+        # the existing empty-SHA fallback rather than an unpinned read.
+        from integrations.services.github_sync.checkout import ContentCheckout
+
+        with ContentCheckout(target_dir) as checkout:
+            return _resolve_local_repo_sha(target_dir, checkout)
 
     except subprocess.TimeoutExpired:
         raise GitHubSyncError('Git operation timed out')
     except FileNotFoundError:
         raise GitHubSyncError('git command not found')
-

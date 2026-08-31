@@ -7,6 +7,10 @@ import uuid
 import frontmatter
 import yaml
 
+from integrations.services.github_sync.checkout import (
+    checkout_is_file,
+    checkout_read_text,
+)
 from integrations.services.github_sync.common import REQUIRED_FIELDS, logger
 from integrations.services.github_sync.media import rewrite_image_urls
 
@@ -58,7 +62,7 @@ def _parse_markdown_file(filepath):
             ``YAMLError`` is preserved as ``__cause__``.
     """
     try:
-        post = frontmatter.load(filepath, encoding='utf-8')
+        post = frontmatter.loads(checkout_read_text(filepath, encoding='utf-8'))
     except yaml.YAMLError as exc:
         basename = os.path.basename(filepath)
         raise ValueError(
@@ -87,8 +91,7 @@ def _parse_yaml_file(filepath):
             triggered the ``or {}`` fallback.
     """
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = yaml.safe_load(f)
+        data = yaml.safe_load(checkout_read_text(filepath, encoding='utf-8'))
     except yaml.YAMLError as exc:
         basename = os.path.basename(filepath)
         raise ValueError(
@@ -234,11 +237,10 @@ def _render_event_recap_file(repo_dir, event_rel_path, data, source, rel_path):
 
     event_base = os.path.dirname(event_rel_path)
     recap_rel_path = os.path.normpath(os.path.join(event_base, recap_file))
-    repo_root = os.path.realpath(repo_dir)
-    recap_path = os.path.realpath(os.path.join(repo_dir, recap_rel_path))
-    if os.path.commonpath([repo_root, recap_path]) != repo_root:
+    recap_path = os.path.join(repo_dir, recap_rel_path)
+    if recap_rel_path == '..' or recap_rel_path.startswith(f'..{os.sep}'):
         raise ValueError(f'recap_file escapes content repo in {rel_path}')
-    if not os.path.isfile(recap_path):
+    if not checkout_is_file(recap_path):
         raise FileNotFoundError(f'recap_file not found in {rel_path}: {recap_file}')
 
     metadata, body = _parse_markdown_file(recap_path)

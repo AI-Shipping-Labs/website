@@ -5,6 +5,11 @@ import re
 import uuid
 
 from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
+from integrations.services.github_sync.checkout import (
+    checkout_is_file,
+    checkout_listdir,
+    raise_if_checkout_error,
+)
 from integrations.services.github_sync.common import logger
 from integrations.services.github_sync.dispatchers.courses import (
     _build_workshop_page_lookup,
@@ -549,6 +554,7 @@ def _sync_single_workshop(
         )
 
     except Exception as e:
+        raise_if_checkout_error(e)
         try:
             failed_slug = (data or {}).get(
                 'slug', os.path.basename(workshop_dir.rstrip(os.sep)),
@@ -968,7 +974,7 @@ def _sync_workshop_pages(
 
     seen_paths = set()
 
-    for filename in sorted(os.listdir(workshop_dir)):
+    for filename in checkout_listdir(workshop_dir):
         if (
             not filename.endswith('.md')
             or filename.upper() == 'README.MD'
@@ -977,7 +983,7 @@ def _sync_workshop_pages(
             continue
 
         filepath = os.path.join(workshop_dir, filename)
-        if not os.path.isfile(filepath):
+        if not checkout_is_file(filepath):
             continue
         rel_path = os.path.relpath(filepath, repo_dir)
 
@@ -1177,6 +1183,7 @@ def _sync_workshop_pages(
                 )
 
         except Exception as e:
+            raise_if_checkout_error(e)
             stats['errors'].append({'file': rel_path, 'error': str(e)})
             logger.warning('Error syncing workshop page %s: %s', rel_path, e)
 

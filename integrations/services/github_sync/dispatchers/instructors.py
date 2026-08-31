@@ -2,6 +2,7 @@
 
 import os
 
+from integrations.services.github_sync.checkout import raise_if_checkout_error
 from integrations.services.github_sync.common import INSTRUCTOR_ID_RE, logger
 from integrations.services.github_sync.parsing import (
     _defaults_differ,
@@ -161,6 +162,7 @@ def _dispatch_instructors(source, repo_dir, file_list, commit_sha, stats):
                     )
 
         except Exception as e:
+            raise_if_checkout_error(e)
             try:
                 failed_id = str(data.get('id', '')) if data else ''
             except Exception:
@@ -333,5 +335,4 @@ def _attach_instructors_to_event(event, resolved, stats):
             )
             for i, inst in enumerate(resolved)
         ])
-
 

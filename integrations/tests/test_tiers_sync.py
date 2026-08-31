@@ -96,7 +96,10 @@ tiers:
     def test_file_read_oserror_soft_fails(self):
         self._write_tiers_yaml('[]')
 
-        with patch('builtins.open', side_effect=OSError('cannot read')):
+        with patch(
+            'integrations.services.github_sync.dispatchers.tiers.checkout_read_text',
+            side_effect=OSError('cannot read'),
+        ):
             result = _sync_tiers_yaml(self.temp_dir.name)
 
         self.assertEqual(result, {'synced': False, 'count': 0})

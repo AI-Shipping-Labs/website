@@ -22,14 +22,16 @@ section "Affected-tests selection"):
  4. ``website/**`` targets ``tests`` + ``website`` + ``make test-core``.
  5. Dependency manifests get a soft ``make test-core`` fallback + a note.
  6. A small curated hub-module map handles known cross-cutting files.
- 7. Test files map to their exact dotted test module.
- 8. App source files target their app plus a one-hop reverse-import
+ 7. Python files in repository test trees add the lexical/collection policy
+    modules that scan those trees.
+ 8. Test files map to their exact dotted test module.
+ 9. App source files target their app plus a one-hop reverse-import
     expansion (``git grep``), capped at 6 extra app labels.
- 9. Templates map to their owning app (+ core Playwright) or, for shared
+10. Templates map to their owning app (+ core Playwright) or, for shared
     fragments, to ``make test-core`` + full Playwright.
-10. ``static/**`` runs core Playwright; ``tailwind.config.js`` escalates.
-11. Migrations map to their own app; 2+ apps in one diff adds core.
-12. Anything unmatched fails closed to ``make test-core`` with a
+11. ``static/**`` runs core Playwright; ``tailwind.config.js`` escalates.
+12. Migrations map to their own app; 2+ apps in one diff adds core.
+13. Anything unmatched fails closed to ``make test-core`` with a
     ``WARN unmapped:`` line -- never silently dropped.
 
 Stdlib only, and deliberately does NOT import Django: it has to run in well
@@ -248,7 +250,35 @@ SHARED_TEMPLATE_GLOBS: tuple[str, ...] = (
 #: reconstruct a full-suite-equivalent run.
 REVERSE_IMPORT_APP_CAP = 6
 
-#: Rule 8. Where the reverse-import grep looks.
+#: Rule 7. Repository-wide policy modules inspect executable Python across
+#: every test tree. A changed test must therefore run these owners in addition
+#: to its exact module from rule 8. The rules compose: Playwright files match
+#: both rows and receive the lexical owners plus collection/browser policy.
+TEST_TREE_CONTRACTS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (
+        (
+            "tests/*.py",
+            *(f"{app}/tests/*.py" for app in APP_LABELS),
+            "asl_cli/tests/*.py",
+            "playwright_tests/*.py",
+        ),
+        (
+            "tests.test_assert_called_once_ratchet",
+            "tests.test_layout_assertion_ratchet",
+            "tests.test_source_inspection_ratchet",
+            "tests.test_status_200_assertion_ratchet",
+        ),
+    ),
+    (
+        ("playwright_tests/*.py",),
+        (
+            "tests.test_playwright_owner_inventory",
+            "tests.test_browser_journey_policy",
+        ),
+    ),
+)
+
+#: Rule 9. Where the reverse-import grep looks.
 GREP_PATHSPECS: tuple[str, ...] = tuple(
     f"{directory}/*.py" for directory in (*APP_LABELS, TESTS_PACKAGE, "playwright_tests")
 )
@@ -356,8 +386,19 @@ def dotted_module(path: str) -> str:
     return without_suffix.replace("/", ".")
 
 
+def test_tree_contract_labels(path: str) -> tuple[str, ...]:
+    """Return every repository policy owner whose scanned tree contains path."""
+    if not path.endswith(".py"):
+        return ()
+    labels: set[str] = set()
+    for globs, owners in TEST_TREE_CONTRACTS:
+        if _matches(path, globs):
+            labels.update(owners)
+    return tuple(sorted(labels))
+
+
 # ---------------------------------------------------------------------------
-# Rule 8: one-hop reverse-import expansion
+# Rule 9: one-hop reverse-import expansion
 # ---------------------------------------------------------------------------
 
 
@@ -517,6 +558,11 @@ def build_plan(
     for path in relevant:
         top = _top_dir(path)
 
+        # Rule 7 -- repository-wide test-tree contracts supplement every
+        # later mapping, including focused/hub exceptions such as
+        # ``tests/fixtures.py``. They never replace the path's existing owner.
+        labels.update(test_tree_contract_labels(path))
+
         focused_contract = next(
             (labels_for_path for glob, labels_for_path in FOCUSED_CONTRACT_PATHS if fnmatch.fnmatchcase(path, glob)),
             None,
@@ -562,7 +608,7 @@ def build_plan(
                 add_extra(CORE_COMMAND)
             continue
 
-        # Rule 7 -- test files map to their exact test module.
+        # Rule 8 -- test files map to their exact test module.
         if top == "playwright_tests":
             if path.endswith(".py") and Path(path).name.startswith("test_"):
                 add_extra(f"uv run pytest {path} -v")
@@ -578,20 +624,20 @@ def build_plan(
             labels.add(dotted_module(path) if name.startswith("test_") else f"{top}.{TESTS_PACKAGE}")
             continue
 
-        # Rule 11 -- migrations map to their own app (no reverse expansion).
+        # Rule 12 -- migrations map to their own app (no reverse expansion).
         if top in APP_LABELS and "/migrations/" in path:
             labels.add(top)
             migration_apps.add(top)
             continue
 
-        # Rule 8 -- app source: the owning app plus one-hop reverse imports.
+        # Rule 9 -- app source: the owning app plus one-hop reverse imports.
         if top in APP_LABELS:
             labels.add(top)
             if path.endswith(".py"):
                 expansion_modules.append(path)
             continue
 
-        # Rule 9 -- templates.
+        # Rule 10 -- templates.
         if top == "templates":
             if _matches(path, SHARED_TEMPLATE_GLOBS):
                 labels.add("content")
@@ -606,7 +652,7 @@ def build_plan(
             add_note(f"NOTE template-fallback: {path} has no owning app -- added {CORE_COMMAND}.")
             continue
 
-        # Rule 10 -- static assets and the Tailwind purge config.
+        # Rule 11 -- static assets and the Tailwind purge config.
         if top == "static":
             # No Django target: core Playwright (the default) owns rendering.
             continue
@@ -614,18 +660,18 @@ def build_plan(
             # Escalated to full Playwright by rule 2; no Django target.
             continue
 
-        # Rule 12 -- fail closed.
+        # Rule 13 -- fail closed.
         unmapped.append(path)
         add_extra(CORE_COMMAND)
 
-    # Rule 11 -- migrations across 2+ apps in one diff.
+    # Rule 12 -- migrations across 2+ apps in one diff.
     if len(migration_apps) >= 2:
         add_extra(CORE_COMMAND)
         add_note(
             f"NOTE multi-app-migration: migrations touch {', '.join(sorted(migration_apps))} -- added {CORE_COMMAND}."
         )
 
-    # Rule 8 (continued) -- one grep for every changed app module.
+    # Rule 9 (continued) -- one grep for every changed app module.
     if expansion_modules:
         modules = [dotted_module(path) for path in expansion_modules]
         references = expand(modules)

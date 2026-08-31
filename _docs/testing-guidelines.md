@@ -945,19 +945,20 @@ rule 2 (escalation), which sets a flag and lets the file fall through.
 
 | # | Changed path | Target |
 |---|---|---|
-| 1 | `_docs/**`, `docs/**`, `specs/**`, and top-level markdown (`README.md`) -- minus anything claimed by rule 3 | nothing -- a docs-only diff short-circuits to `NO TESTS REQUIRED`. Markdown anywhere else is treated as code, because a lot of it is asserted by real tests: `email_app/email_templates/*.md` are the shipped email bodies (rule 8 -> `email_app`), and `.claude/**` has content guards in `tests/` (rule 3). |
+| 1 | `_docs/**`, `docs/**`, `specs/**`, and top-level markdown (`README.md`) -- minus anything claimed by rule 3 | nothing -- a docs-only diff short-circuits to `NO TESTS REQUIRED`. Markdown anywhere else is treated as code, because a lot of it is asserted by real tests: `email_app/email_templates/*.md` are the shipped email bodies (rule 9 -> `email_app`), and `.claude/**` has content guards in `tests/` (rule 3). |
 | 2 | escalation triggers (table below) | sets Playwright to `full`, then falls through to the remaining rules |
 | 3 | `.github/**`, `scripts/**`, `Makefile`, `Dockerfile`, `docker-compose.yml`, `entrypoint.sh`, `Procfile.dev`, `deploy/**`, `package*.json`, `.claude/**`, `manage.py` | `tests`. Focused exceptions map `scripts/affected_tests.py` and the Playwright owner inventory script/ceiling/live-manifest files to their exact policy modules. |
 | 3 | guarded doc artifacts -- see the table below | the app whose tests read them; also exempts the path from rule 1 |
 | 4 | `website/**` | `tests` + `website` + `make test-core` + full Playwright (every-request blast radius) |
 | 5 | `pyproject.toml`, `uv.lock` | `make test-core` plus a note -- soft trigger, rely on CI for the full suite |
 | 6 | curated hub modules (table below) | the mapped labels |
-| 7 | test files | the exact dotted test module (`studio/tests/test_events.py` -> `studio.tests.test_events`), not the whole app. `playwright_tests/test_X.py` also runs that file directly; `asl_cli/**` runs `uv run pytest asl_cli/tests` |
-| 8 | app source under one of the 20 project apps | that app, plus a one-hop reverse-import expansion (below) |
-| 9 | `templates/<app>/**` | that app (+ core Playwright). `templates/includes/**`, `templates/_partials/**`, `templates/base.html` -> `content` + `make test-core` + full Playwright. Any other template dir -> `make test-core` |
-| 10 | `static/**` | core Playwright only. `tailwind.config.js` escalates to full Playwright (purge config can strip classes on any page) |
-| 11 | `<app>/migrations/**` | that app only. Migrations touching 2+ apps in one diff also add `make test-core` |
-| 12 | anything unmatched | fails closed to `make test-core`, printed as `WARN unmapped: <path>` -- never silently dropped |
+| 7 | Python under `tests/**`, any app's `tests/**`, `asl_cli/tests/**`, or `playwright_tests/**` | all four repository-wide lexical ratchets that scan these trees. A Playwright-tree change also selects the Playwright owner-inventory and browser-journey policy modules. These labels supplement the next rule. |
+| 8 | test files | the exact dotted test module (`studio/tests/test_events.py` -> `studio.tests.test_events`), not the whole app. `playwright_tests/test_X.py` also runs that file directly; `asl_cli/**` runs `uv run pytest asl_cli/tests` |
+| 9 | app source under one of the 20 project apps | that app, plus a one-hop reverse-import expansion (below) |
+| 10 | `templates/<app>/**` | that app (+ core Playwright). `templates/includes/**`, `templates/_partials/**`, `templates/base.html` -> `content` + `make test-core` + full Playwright. Any other template dir -> `make test-core` |
+| 11 | `static/**` | core Playwright only. `tailwind.config.js` escalates to full Playwright (purge config can strip classes on any page) |
+| 12 | `<app>/migrations/**` | that app only. Migrations touching 2+ apps in one diff also add `make test-core` |
+| 13 | anything unmatched | fails closed to `make test-core`, printed as `WARN unmapped: <path>` -- never silently dropped |
 
 The Django targets compose into a single invocation:
 
@@ -968,7 +969,7 @@ uv run python manage.py test <sorted labels> --exclude-tag=visual_regression --e
 Playwright is always part of the plan for a non-docs diff: `make
 test-playwright-core` by default, `make test-playwright` when any escalation
 trigger fired. When the plan escalates to the full suite, the per-file
-`uv run pytest playwright_tests/test_X.py -v` commands from rule 7 are dropped
+`uv run pytest playwright_tests/test_X.py -v` commands from rule 8 are dropped
 (with a `NOTE playwright-full-supersedes:` line) -- the full run already covers
 them, and keeping them would boot another server and browser per changed file.
 
@@ -1447,6 +1448,15 @@ local-runner schedule). It has no in-process Django server, no migrations,
 and no port 8765. The runner only hits HTTP — so any test that depends on
 local DB state cannot pass against dev.
 
+The target is one low-capacity ECS task with `256` CPU units and `512` MiB of
+memory. The workflow retains four deterministic file partitions and their
+independent reports, but `strategy.max-parallel: 1` permits only one shard to
+hit that task at a time. Serialization modestly lengthens the workflow in
+exchange for avoiding self-inflicted target saturation and rotating unrelated
+navigation timeouts. This differs intentionally from
+`scheduled-playwright.yml`: each parallel local-runner shard owns its own
+in-process Django server instead of contending for the single remote dev task.
+
 If your test creates DB rows, relies on a session/DB fixture, or POSTs to
 a write endpoint, mark it `local_only` or `creates_data` so the dev
 scheduled suite does not pick it up. The dev suite's marker filter
@@ -1469,17 +1479,18 @@ sync + `tiers.yaml` seed). Do not add `django_db`, `local_only`,
 file; if you need ORM seeding, the test belongs in a regular
 `test_*.py` file marked `local_only`.
 
-Transient-500 retry wrapper (Issue #928): every `test_dev_smoke_*.py`
+Transient-navigation retry wrapper (Issues #928 and #1549): every `test_dev_smoke_*.py`
 navigates via `goto_with_retry(page, url, ...)` from
 `playwright_tests/conftest.py`, not raw `page.goto`. The dev environment
 runs on ECS and can briefly serve a 5xx (500/502/503/504) while a rolling
-deploy swaps tasks; a single transient blip used to fail the whole shard
-and fire `[CI] Scheduled Playwright (dev) full suite failing` on a false
-red. `goto_with_retry` does a bounded retry (`attempts=3`, constant
-`backoff_seconds=2.0`, so at most two retries / ~4s of added wait worst
-case) on a retryable result — `response is None` (navigation error) or
-`status >= 500`. The retry decision is the pure, unit-tested
-`_is_retryable_status(status)`. Invariants:
+deploy swaps tasks; navigation can also throw Playwright `TimeoutError` when
+the target is temporarily saturated. A single transient blip used to fail the
+whole shard and fire `[CI] Scheduled Playwright (dev) full suite failing` on a
+false red. `goto_with_retry` does a bounded retry (`attempts=3`, constant
+`backoff_seconds=2.0`, so at most two retries / ~4s of added wait beyond the
+navigation timeouts themselves) on `response is None`, `status >= 500`, or a
+thrown Playwright `TimeoutError`. Returned-status decisions remain in the pure,
+unit-tested `_is_retryable_status(status)`. Invariants:
 
 - A non-5xx status (200, 301/302, 401, 403, 404, ...) is NEVER retried —
   it returns on the first attempt so callers assert on it exactly as
@@ -1487,11 +1498,13 @@ case) on a retryable result — `response is None` (navigation error) or
   404 on the first attempt.
 - The happy path adds zero latency: a first-attempt 200 returns
   immediately with no backoff sleep.
-- A persistent 5xx STILL FAILS the test. The helper never raises and never
-  fabricates a 200; after exhausting `attempts` it returns the last (still
-  5xx / `None`) response, so the existing `assert response.status == 200`
-  produces the normal, readable failure. The retry absorbs a transient
-  blip, it never masks a sustained outage.
+- A timeout followed by a non-5xx response returns that response normally.
+- A persistent 5xx still returns the last response, preserving the caller's
+  existing status-assertion failure. Persistent timeouts re-raise the final
+  Playwright `TimeoutError` after exactly three attempts and two backoffs, so
+  its original diagnostic remains visible. Non-timeout exceptions propagate
+  immediately. The helper never fabricates a response, reports success, or
+  masks a sustained outage.
 
 The retry helper is exercised without a live dev environment by
 `tests/test_dev_smoke_goto_retry.py` (Django `SimpleTestCase` tagged

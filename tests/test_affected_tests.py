@@ -33,6 +33,7 @@ from scripts.affected_tests import (
     PLAYWRIGHT_CORE_COMMAND,
     PLAYWRIGHT_FULL_COMMAND,
     REVERSE_IMPORT_APP_CAP,
+    TEST_TREE_CONTRACTS,
     TESTS_PACKAGE,
     Plan,
     _parent_reexports,
@@ -41,6 +42,7 @@ from scripts.affected_tests import (
     is_no_test_path,
     reverse_import_patterns,
     run_commands,
+    test_tree_contract_labels,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -60,6 +62,20 @@ ZOOM_REFERENCES = [
     "playwright_tests/test_studio_series_create_zoom_859.py",
     "studio/views/events.py",
 ]
+
+LEXICAL_TEST_TREE_POLICY_LABELS = [
+    "tests.test_assert_called_once_ratchet",
+    "tests.test_layout_assertion_ratchet",
+    "tests.test_source_inspection_ratchet",
+    "tests.test_status_200_assertion_ratchet",
+]
+PLAYWRIGHT_TEST_TREE_POLICY_LABELS = sorted(
+    [
+        *LEXICAL_TEST_TREE_POLICY_LABELS,
+        "tests.test_playwright_owner_inventory",
+        "tests.test_browser_journey_policy",
+    ]
+)
 
 
 def plan_for(files, references=None):
@@ -244,7 +260,15 @@ class RuleChainTest(SimpleTestCase):
                 "tests/test_playwright_owner_inventory.py",
             ]
         )
-        self.assertEqual(plan.django_labels, ["tests.test_playwright_owner_inventory"])
+        self.assertEqual(
+            plan.django_labels,
+            sorted(
+                [
+                    *LEXICAL_TEST_TREE_POLICY_LABELS,
+                    "tests.test_playwright_owner_inventory",
+                ]
+            ),
+        )
         self.assertEqual(plan.unmapped, [])
 
     def test_affected_test_tool_and_guideline_target_their_exact_contract(self):
@@ -258,7 +282,10 @@ class RuleChainTest(SimpleTestCase):
                 "tests/test_retire_agent_branches.py",
             ]
         )
-        self.assertEqual(plan.django_labels, ["tests.test_retire_agent_branches"])
+        self.assertEqual(
+            plan.django_labels,
+            sorted([*LEXICAL_TEST_TREE_POLICY_LABELS, "tests.test_retire_agent_branches"]),
+        )
         self.assertEqual(plan.unmapped, [])
 
     def test_website_paths_add_tests_website_and_core(self):
@@ -276,19 +303,28 @@ class RuleChainTest(SimpleTestCase):
 
     def test_test_file_maps_to_its_exact_module_not_the_whole_app(self):
         plan = plan_for(["studio/tests/test_events.py"])
-        self.assertEqual(plan.django_labels, ["studio.tests.test_events"])
+        self.assertEqual(
+            plan.django_labels,
+            sorted(["studio.tests.test_events", *LEXICAL_TEST_TREE_POLICY_LABELS]),
+        )
 
     def test_test_helper_maps_to_the_app_tests_package(self):
         plan = plan_for(["studio/tests/factories.py"])
-        self.assertEqual(plan.django_labels, ["studio.tests"])
+        self.assertEqual(
+            plan.django_labels,
+            sorted(["studio.tests", *LEXICAL_TEST_TREE_POLICY_LABELS]),
+        )
 
     def test_top_level_test_module_maps_to_its_dotted_path(self):
         plan = plan_for(["tests/test_robots_txt.py"])
-        self.assertEqual(plan.django_labels, ["tests.test_robots_txt"])
+        self.assertEqual(
+            plan.django_labels,
+            sorted(["tests.test_robots_txt", *LEXICAL_TEST_TREE_POLICY_LABELS]),
+        )
 
     def test_playwright_test_file_runs_that_file_plus_core(self):
         plan = plan_for(["playwright_tests/test_dashboard.py"])
-        self.assertIsNone(plan.django_command)
+        self.assertEqual(plan.django_labels, PLAYWRIGHT_TEST_TREE_POLICY_LABELS)
         self.assertEqual(plan.extra_commands, ["uv run pytest playwright_tests/test_dashboard.py -v"])
         self.assertEqual(plan.commands()[-1], PLAYWRIGHT_CORE_COMMAND)
 
@@ -306,7 +342,11 @@ class RuleChainTest(SimpleTestCase):
             [],
             "per-file Playwright commands must not survive escalation to the full suite",
         )
-        self.assertEqual(plan.commands(), [PLAYWRIGHT_FULL_COMMAND])
+        self.assertEqual(plan.django_labels, PLAYWRIGHT_TEST_TREE_POLICY_LABELS)
+        self.assertEqual(
+            plan.commands(),
+            [plan.django_command, PLAYWRIGHT_FULL_COMMAND],
+        )
         self.assertTrue(
             any(note.startswith("NOTE playwright-full-supersedes:") for note in plan.notes),
             plan.notes,
@@ -321,6 +361,66 @@ class RuleChainTest(SimpleTestCase):
                 "uv run pytest playwright_tests/test_dashboard.py -v",
                 "uv run pytest playwright_tests/test_newsletter.py -v",
             ],
+        )
+        self.assertEqual(plan.django_labels, PLAYWRIGHT_TEST_TREE_POLICY_LABELS)
+
+    def test_repository_test_tree_contracts_are_data_driven_and_composable(self):
+        self.assertEqual(len(TEST_TREE_CONTRACTS), 2)
+        for path in (
+            "tests/test_policy.py",
+            "accounts/tests/test_auth.py",
+            "asl_cli/tests/test_cli.py",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    list(test_tree_contract_labels(path)),
+                    LEXICAL_TEST_TREE_POLICY_LABELS,
+                )
+        self.assertEqual(
+            list(test_tree_contract_labels("playwright_tests/test_dashboard.py")),
+            PLAYWRIGHT_TEST_TREE_POLICY_LABELS,
+        )
+        self.assertEqual(test_tree_contract_labels("studio/tests/fixture.json"), ())
+
+    def test_issue_1499_playwright_path_selects_collection_and_exact_owners(self):
+        path = "playwright_tests/test_studio_campaigns.py"
+        plan = plan_for([path])
+
+        self.assertEqual(plan.django_labels, PLAYWRIGHT_TEST_TREE_POLICY_LABELS)
+        self.assertIn(f"uv run pytest {path} -v", plan.extra_commands)
+
+    def test_issue_1500_app_test_paths_select_lexical_policies_and_exact_modules(self):
+        paths = [
+            "events/tests/test_recap.py",
+            "integrations/tests/test_cover_image_validation_797.py",
+        ]
+        plan = plan_for(paths)
+
+        self.assertEqual(
+            plan.django_labels,
+            sorted(
+                [
+                    *LEXICAL_TEST_TREE_POLICY_LABELS,
+                    "events.tests.test_recap",
+                    "integrations.tests.test_cover_image_validation_797",
+                ]
+            ),
+        )
+
+    def test_issue_1501_api_test_path_selects_status_policy_and_exact_module(self):
+        plan = plan_for(["api/tests/test_user_merge.py"])
+
+        self.assertEqual(
+            plan.django_labels,
+            sorted([*LEXICAL_TEST_TREE_POLICY_LABELS, "api.tests.test_user_merge"]),
+        )
+
+    def test_unrelated_app_source_does_not_add_repository_test_tree_policies(self):
+        plan = plan_for(["events/views/detail.py"])
+
+        self.assertEqual(plan.django_labels, ["events"])
+        self.assertTrue(
+            set(plan.django_labels).isdisjoint(LEXICAL_TEST_TREE_POLICY_LABELS)
         )
 
     def test_asl_cli_runs_plain_pytest(self):
@@ -383,7 +483,10 @@ class RuleChainTest(SimpleTestCase):
 
     def test_labels_are_deduplicated_and_collapsed(self):
         plan = plan_for(["studio/tests/test_events.py", "studio/views/events.py"])
-        self.assertEqual(plan.django_labels, ["studio"])
+        self.assertEqual(
+            plan.django_labels,
+            ["studio", *LEXICAL_TEST_TREE_POLICY_LABELS],
+        )
 
     def test_empty_diff_requires_no_tests(self):
         plan = plan_for([])
@@ -418,7 +521,7 @@ class HubModuleMapTest(SimpleTestCase):
 
     def test_shared_fixtures_target_core_and_full_playwright(self):
         plan = plan_for(["tests/fixtures.py"])
-        self.assertIsNone(plan.django_command)
+        self.assertEqual(plan.django_labels, LEXICAL_TEST_TREE_POLICY_LABELS)
         self.assertEqual(plan.extra_commands, [CORE_COMMAND])
         self.assertEqual(plan.playwright, "full")
 

@@ -14,6 +14,7 @@ from django.test import SimpleTestCase, tag
 from scripts.extract_playwright_shard_weights import (
     canonical_inventory_digest,
     parse_job_log,
+    prune_manifest_to_current_inventory,
     rebuild_manifest,
     validate_run,
 )
@@ -33,22 +34,22 @@ EXPECTED_SOURCES = {
         "head_sha": "89faea5780eebcd2ce5108fbdce0b706514731f3",
         "url": "https://github.com/AI-Shipping-Labs/website/actions/runs/31679060660",
         "job_ids": [94380223848, 94380224101, 94380223809, 94380223838],
-        "weights_digest": "0bc8d9cc341d76e0d0ba2358609b4a3a66bf3008eb74c5dc3d2c4add170e81f5",
+        "weights_digest": "2e71a5cb90ed60b41ccf1aa9a4ff7aa9fdce1aa91769e5ae83d8e0465dd399e5",
     },
     31690316576: {
         "head_sha": "0047ede3d6616b0fb35ce7c46474ddf6e099f000",
         "url": "https://github.com/AI-Shipping-Labs/website/actions/runs/31690316576",
         "job_ids": [94415906999, 94415906951, 94415906945, 94415907003],
-        "weights_digest": "2eab1e31cfe77a07da8c30ac5db17cb301edd24be658d70710ee5978da3a4db5",
+        "weights_digest": "4176187b74af07b04926e0e144d8d5978ce7ca7405077f1e6d8a4b8721951930",
     },
     31718675813: {
         "head_sha": "56f0a99a7708b8b0ab886bd1e7e34a3f66f7d104",
         "url": "https://github.com/AI-Shipping-Labs/website/actions/runs/31718675813",
         "job_ids": [94509841937, 94509842047, 94509841969, 94509841860],
-        "weights_digest": "99b03610f82e658c43855a4c648d0102ab0feb747e309c9b53776a74a35f933d",
+        "weights_digest": "8c1571443ac2e713dbaf354bcaf2ce4db69aad754276e3e23377654bec18477e",
     },
 }
-EXPECTED_INVENTORY_DIGEST = "aee7dfd363f6317ad03d066262591cdd6d008cf4ebaebeb3c356baf2ac0b5c39"
+EXPECTED_INVENTORY_DIGEST = "8e58bfe177f2606f0532e494d4eefc2a3fe8d7402171ac1af1bedbdf49f2a96a"
 SYNTHETIC_FILES = (
     "playwright_tests/test_measured_a.py",
     "playwright_tests/test_measured_b.py",
@@ -133,7 +134,7 @@ class ScheduledPlaywrightMeasuredBalanceTest(SimpleTestCase):
         manifest = _manifest()
         self.assertEqual(manifest["schema_version"], 1)
         self.assertEqual(manifest["inventory_sha256"], EXPECTED_INVENTORY_DIGEST)
-        self.assertEqual(len(manifest["file_weights_ms"]), 386)
+        self.assertEqual(len(manifest["file_weights_ms"]), 385)
 
         sources = manifest["source_runs"]
         self.assertEqual([source["run_id"] for source in sources], list(EXPECTED_SOURCES))
@@ -155,6 +156,30 @@ class ScheduledPlaywrightMeasuredBalanceTest(SimpleTestCase):
         measured = measured_weights_from_manifest(manifest)
         self.assertEqual(set(measured), set(manifest["file_weights_ms"]))
         self.assertTrue(all(len(samples) == 3 for samples in manifest["file_weights_ms"].values()))
+
+    def test_regeneration_prunes_deleted_files_and_reseals_digests(self):
+        manifest = _synthetic_manifest()
+        pruned, removed = prune_manifest_to_current_inventory(
+            manifest,
+            ["playwright_tests/test_measured_a.py"],
+        )
+
+        self.assertEqual(removed, ["playwright_tests/test_measured_b.py"])
+        self.assertEqual(
+            pruned["file_weights_ms"],
+            {"playwright_tests/test_measured_a.py": [4_000, 4_000, 4_000]},
+        )
+        self.assertEqual(
+            pruned["inventory_sha256"],
+            canonical_inventory_digest(["playwright_tests/test_measured_a.py"]),
+        )
+        expected_digest = canonical_weights_digest({
+            "playwright_tests/test_measured_a.py": 4_000,
+        })
+        self.assertTrue(all(
+            source["file_weights_sha256"] == expected_digest
+            for source in pruned["source_runs"]
+        ))
 
     def test_manifest_schema_and_samples_fail_closed(self):
         manifest = _manifest()
@@ -210,15 +235,15 @@ class ScheduledPlaywrightMeasuredBalanceTest(SimpleTestCase):
         first = build_shard_plan(inventory, measured, 4)
         second = build_shard_plan(list(reversed(inventory)), measured, 4)
         self.assertEqual(first, second)
-        self.assertEqual(len(inventory), 386)
+        self.assertEqual(len(inventory), 385)
         self.assertEqual(first.unknown_files, ())
 
         _assert_exact_partition(self, first, inventory)
-        self.assertEqual(first.loads_ms, (893753, 893759, 893763, 893765))
-        self.assertEqual([len(shard) for shard in first.files], [98, 96, 96, 96])
+        self.assertEqual(first.loads_ms, (891984, 891990, 891941, 891928))
+        self.assertEqual([len(shard) for shard in first.files], [94, 95, 95, 101])
 
         baseline = round_robin_loads(inventory, measured, 4, first.unknown_weight_ms)
-        self.assertEqual(baseline, (897507, 873003, 727554, 1076976))
+        self.assertEqual(baseline, (1020093, 700615, 1078825, 768310))
         self.assertLess(max(first.loads_ms), max(baseline))
         self.assertGreaterEqual(max(baseline) - max(first.loads_ms), 180_000)
 

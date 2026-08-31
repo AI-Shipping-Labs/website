@@ -565,7 +565,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         self.assertNotIn(self.recap_api_owner, manifest["LEGACY_NON_BROWSER"])
         self.assertIn(self.recap_api_owner, LEGACY_DECLARED_BROWSER_CEILING)
         self.assertNotIn(self.recap_api_owner, LEGACY_NON_BROWSER_CEILING)
-        self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2257)
+        self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2252)
         self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 81)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
@@ -590,8 +590,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2560)
-        self.assertEqual(len(inventory.owners), 2340)
+        self.assertEqual(inventory.item_count, 2555)
+        self.assertEqual(len(inventory.owners), 2335)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner},

@@ -207,7 +207,15 @@ class HostRegistrationTimezoneLineTest(TestCase):
 
         self.assertIn("Set your timezone", html)
         self.assertIn(f'href="https://env.example.com{ACCOUNT_FRAGMENT}"', html)
-        self.assertIn("Host management links", html)
+        self.assertNotIn("Host management links", html)
+        self.assertNotIn("/host/", html)
+        self.assertNotIn("/studio/", html)
+        self.assertIn(
+            "You're the designated host for this event, so this registration "
+            "can't be cancelled from here. Ask an operator if the host needs "
+            "to change.",
+            html,
+        )
 
 
 @override_settings(

@@ -12,9 +12,8 @@ from accounts.services.timezones import (
 )
 from email_app.services.email_service import EmailService
 from events.models import Event, EventRegistration, SeriesRegistration
-from events.services.calendar_invite import AUDIENCE_HOST, generate_ics
+from events.services.calendar_invite import AUDIENCE_ATTENDEE, generate_ics
 from events.services.calendar_lifecycle import user_has_permanent_bounce
-from events.services.host_registration import is_host_registration
 from events.services.registration_email import _send_raw_email
 from integrations.config import site_base_url
 
@@ -93,7 +92,7 @@ def send_cancellation_notice_one(event_id, user_id):
         }
 
     try:
-        registration = EventRegistration.objects.get(event=event, user=user)
+        EventRegistration.objects.get(event=event, user=user)
     except EventRegistration.DoesNotExist:
         return {
             "status": "skipped",
@@ -111,8 +110,6 @@ def send_cancellation_notice_one(event_id, user_id):
         }
 
     site_url = site_base_url()
-    is_host = is_host_registration(registration)
-
     from email_app.models import EmailLog
     dedupe_key = f'event-cancelled:{event.pk}:{user.pk}:{event.ics_sequence}'
     existing_log = EmailLog.objects.filter(dedupe_key=dedupe_key).first()
@@ -141,7 +138,7 @@ def send_cancellation_notice_one(event_id, user_id):
     ics_content = generate_ics(
         event,
         method='CANCEL',
-        audience=AUDIENCE_HOST if is_host else 'attendee',
+        audience=AUDIENCE_ATTENDEE,
         attendee_email=user.email,
     )
     ses_message_id = _send_raw_email(

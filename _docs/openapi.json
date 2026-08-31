@@ -4703,7 +4703,7 @@
                     "writeOnly": true
                   },
                   "host_email": {
-                    "description": "Optional. Email address of a platform user who should be auto-registered as the event host attendee. Blank or non-resolvable emails do not create a host registration.",
+                    "description": "Optional. Email address of a platform user who should receive an ordinary attendee registration for the event. This field grants no event administration capability. Blank or non-resolvable emails do not create a registration.",
                     "format": "email",
                     "type": "string"
                   },
@@ -4942,7 +4942,7 @@
     },
     "/api/events/id/{event_id}/guest-invitations": {
       "post": {
-        "description": "Creates or reuses one event-specific registration and sends the ordinary attendee invitation. It never creates a standing series registration or host access. Set dry_run=true to validate without creating a user, registration, delivery, or email log.",
+        "description": "Creates or reuses one event-specific registration and sends the ordinary attendee invitation. It never creates a standing series registration, and it refuses to invite the event's designated host as a guest. Set dry_run=true to validate without creating a user, registration, delivery, or email log.",
         "parameters": [
           {
             "in": "path",
@@ -5275,7 +5275,7 @@
                     "writeOnly": true
                   },
                   "host_email": {
-                    "description": "Optional. Email address of a platform user who should be auto-registered as the event host attendee. Adding a resolvable host to a published upcoming event sends the normal registration confirmation. Empty string clears the field.",
+                    "description": "Optional. Email address of a platform user who should receive an ordinary attendee registration for the event. This field grants no event administration capability. Adding a resolvable user to a published upcoming event sends the ordinary registration confirmation. Empty string clears the field.",
                     "format": "email",
                     "type": "string"
                   },

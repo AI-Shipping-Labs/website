@@ -35,13 +35,10 @@ from accounts.services.timezones import (
     format_user_datetime,
 )
 from events.models import Event, EventRegistration, SeriesRegistration
-from events.services.calendar_invite import AUDIENCE_HOST, generate_ics
+from events.services.calendar_invite import AUDIENCE_ATTENDEE, generate_ics
 from events.services.calendar_lifecycle import user_has_permanent_bounce
 from events.services.cancel_token import generate_cancel_token
-from events.services.host_registration import (
-    build_host_management_links,
-    is_host_registration,
-)
+from events.services.host_registration import is_host_registration
 from events.services.registration_email import _send_raw_email
 from integrations.config import site_base_url
 
@@ -184,7 +181,6 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
         f'{site_url}/events/{event.slug}/cancel-registration?token={cancel_token}'
     )
     is_host = is_host_registration(registration)
-    host_links = build_host_management_links(event) if is_host else {}
 
     if is_host:
         from events.models import HostInviteDelivery
@@ -239,7 +235,6 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
             'join_url': join_url,
             'cancel_url': cancel_url,
             'is_host_registration': is_host,
-            **host_links,
         },
     )
 
@@ -257,7 +252,7 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
     ics_content = generate_ics(
         event,
         method='REQUEST',
-        audience=AUDIENCE_HOST if is_host else 'attendee',
+        audience=AUDIENCE_ATTENDEE,
         attendee_email=user.email,
     )
 

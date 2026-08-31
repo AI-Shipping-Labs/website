@@ -48,7 +48,8 @@ requires `--title`, `--description`, and `--start-datetime`.
 - `--timezone Europe/Berlin`
 - `--required-level open|registered|basic|main|premium`
 - `--host-email host@example.com` (operational host account; auto-registers
-  that platform user as an attendee and sends host access/calendar email)
+  that platform user as an attendee and sends the ordinary attendee
+  registration/calendar email; it grants no event-administration capability)
 - `--host-ids 1,2` (visible host profile cards; this is independent of
   `host_email`)
 - `--tags sprint:may-2026,workshop` (comma-separated)

@@ -15,7 +15,6 @@ from email_app.tests.test_email_service import assert_no_internal_footer_text
 from events.models import Event, EventRegistration
 from events.services.calendar_invite import (
     AUDIENCE_ATTENDEE,
-    AUDIENCE_HOST,
     AUDIENCE_PUBLIC_FEED,
     InvalidCalendarOrganizerError,
     build_vevent,
@@ -256,7 +255,7 @@ class MembersOnlySummaryAudienceTest(TestCase):
     """Issue #1072: ``[Members only]`` is scoped to the public feed only.
 
     The prefix exists for discovery on the anonymous feed at
-    ``/events/calendar.ics``; attendee and host invites already know the
+    ``/events/calendar.ics``; attendee invites already know the
     tier, so they must not carry it. The ``[Hosted on X]`` prefix is a
     separate concern that stays on every audience.
     """
@@ -295,10 +294,6 @@ class MembersOnlySummaryAudienceTest(TestCase):
         vevent = build_vevent(self.gated, audience=AUDIENCE_ATTENDEE)
         self.assertEqual(str(vevent.get('summary')), 'Exploring Vercel')
 
-    def test_gated_host_summary_has_no_members_only_prefix(self):
-        vevent = build_vevent(self.gated, audience=AUDIENCE_HOST)
-        self.assertEqual(str(vevent.get('summary')), 'Exploring Vercel')
-
     def test_gated_public_feed_summary_keeps_members_only_prefix(self):
         vevent = build_vevent(self.gated, audience=AUDIENCE_PUBLIC_FEED)
         self.assertEqual(
@@ -321,12 +316,16 @@ class MembersOnlySummaryAudienceTest(TestCase):
         )
 
     def test_open_event_summary_is_plain_title_for_every_audience(self):
-        for audience in (
-            AUDIENCE_ATTENDEE, AUDIENCE_HOST, AUDIENCE_PUBLIC_FEED,
-        ):
+        for audience in (AUDIENCE_ATTENDEE, AUDIENCE_PUBLIC_FEED):
             with self.subTest(audience=audience):
                 vevent = build_vevent(self.open_event, audience=audience)
                 self.assertEqual(str(vevent.get('summary')), 'Open Meetup')
+
+    def test_removed_host_audience_is_rejected(self):
+        with self.assertRaisesRegex(
+            ValueError, 'Unknown calendar invite audience: host',
+        ):
+            build_vevent(self.open_event, audience='host')
 
     def test_per_event_ics_download_drops_members_only_prefix(self):
         """``generate_ics`` defaults to the attendee audience.

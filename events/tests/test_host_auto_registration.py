@@ -12,9 +12,10 @@ from icalendar import Calendar
 from accounts.models import EmailAlias, Token
 from accounts.services.email_resolution import normalize_email
 from email_app.models import EmailLog
-from events.models import Event, EventRegistration
+from events.models import Event, EventRegistration, HostInviteDelivery
 from events.services.host_registration import maybe_register_host_as_attendee
 from events.services.registration_email import send_registration_confirmation
+from integrations.config import site_base_url
 from tests.fixtures import StaffUserMixin
 
 User = get_user_model()
@@ -65,6 +66,9 @@ class HostAutoRegistrationServiceTest(TestCase):
             ).count(),
             1,
         )
+        delivery = HostInviteDelivery.objects.get(event=event, user=self.host)
+        self.assertEqual(delivery.status, HostInviteDelivery.STATUS_SENT)
+        self.assertEqual(delivery.attempt_count, 1)
 
     def test_alias_resolves_to_canonical_user(self):
         alias_user = User.objects.create_user(
@@ -185,6 +189,7 @@ class HostAutoRegistrationServiceTest(TestCase):
     def test_host_change_registers_new_host_and_keeps_old_host(self):
         event = _make_event()
         maybe_register_host_as_attendee(event)
+        old_version = event.host_access_version
         new_host = User.objects.create_user(
             email='new-host@test.com',
             password='pw',
@@ -194,6 +199,7 @@ class HostAutoRegistrationServiceTest(TestCase):
         event.save(update_fields=['host_email'])
         maybe_register_host_as_attendee(event)
 
+        self.assertNotEqual(event.host_access_version, old_version)
         self.assertEqual(
             set(
                 EventRegistration.objects.filter(event=event).values_list(
@@ -202,6 +208,22 @@ class HostAutoRegistrationServiceTest(TestCase):
                 )
             ),
             {self.host.email, new_host.email},
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(
+                event=event,
+                user=new_host,
+                email_type='event_registration',
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            HostInviteDelivery.objects.filter(
+                event=event,
+                user=new_host,
+                status=HostInviteDelivery.STATUS_SENT,
+            ).count(),
+            1,
         )
 
     def test_best_effort_exception_is_logged_and_swallowed(self):
@@ -224,7 +246,9 @@ class HostAutoRegistrationServiceTest(TestCase):
         )
 
     def test_new_host_registration_sends_normal_email_with_host_links(self):
-        event = _make_event()
+        event = _make_event(
+            zoom_join_url='https://meeting.test/join/raw-provider-value',
+        )
 
         with patch(
             'events.services.registration_email._send_raw_email',
@@ -236,23 +260,31 @@ class HostAutoRegistrationServiceTest(TestCase):
         mock_send.assert_called_once()
         self.assertEqual(mock_send.call_args.kwargs['to_email'], self.host.email)
         html = mock_send.call_args.kwargs['html_body']
-        self.assertIn(f'/events/{event.pk}/host/manage?token=', html)
-        self.assertNotIn(f'/studio/events/{event.pk}/create-zoom', html)
-        self.assertIn('Host management links', html)
+        self.assertIn(event.get_join_url(), html)
+        self.assertNotIn('/host/', html)
+        self.assertNotIn('/studio/', html)
+        self.assertNotIn(event.zoom_join_url, html)
+        self.assertIn(
+            "You're the designated host for this event, so this registration "
+            "can't be cancelled from here. Ask an operator if the host needs "
+            'to change.',
+            html,
+        )
+        self.assertNotIn('cancel-registration', html)
         ics = mock_send.call_args.kwargs['ics_content'].decode()
         self.assertIn('VCALENDAR', ics)
         self.assertIn('METHOD:REQUEST', ics)
         cal = Calendar.from_ical(ics)
         vevent = [c for c in cal.walk() if c.name == 'VEVENT'][0]
-        detail_url = f'https://aishippinglabs.com{event.get_absolute_url()}'
+        join_url = f'{site_base_url()}{event.get_join_url()}'
         self.assertEqual(
             str(vevent.get('uid')),
             'event-host-auto-registration@aishippinglabs.com',
         )
         self.assertEqual(int(vevent.get('sequence')), event.ics_sequence)
-        self.assertEqual(str(vevent.get('url')), detail_url)
-        self.assertEqual(str(vevent.get('location')), detail_url)
-        self.assertNotIn(event.get_join_url(), ics)
+        self.assertEqual(str(vevent.get('url')), join_url)
+        self.assertEqual(str(vevent.get('location')), join_url)
+        self.assertNotIn(event.zoom_join_url, ics)
         self.assertEqual(
             EmailLog.objects.filter(
                 user=self.host,
@@ -295,8 +327,10 @@ class HostAutoRegistrationServiceTest(TestCase):
 
         html = mock_send.call_args.kwargs['html_body']
         self.assertNotIn('Host management links', html)
-        self.assertNotIn(f'/studio/events/{event.pk}/edit', html)
-        self.assertNotIn(f'/studio/events/{event.pk}/create-zoom', html)
+        self.assertNotIn('/host/', html)
+        self.assertNotIn('/studio/', html)
+        self.assertIn(event.get_join_url(), html)
+        self.assertIn('cancel-registration', html)
 
 
 @tag('core')
@@ -344,6 +378,15 @@ class HostAutoRegistrationStudioTest(StaffUserMixin, TestCase):
                 email_type='event_registration',
             ).count(),
             1,
+        )
+
+    def test_studio_host_help_text_names_attendee_invitation_and_admin_boundary(self):
+        response = self.client.get('/studio/events/new')
+
+        self.assertContains(
+            response,
+            'Hosts receive the ordinary attendee invitation; event '
+            'administration happens only here in Studio.',
         )
 
     def test_studio_edit_auto_registers_host(self):

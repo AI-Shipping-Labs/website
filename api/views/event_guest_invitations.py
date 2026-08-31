@@ -79,8 +79,9 @@ def event_by_id(request, event_id):
         'description': (
             'Creates or reuses one event-specific registration and sends the '
             'ordinary attendee invitation. It never creates a standing series '
-            'registration or host access. Set dry_run=true to validate without '
-            'creating a user, registration, delivery, or email log.'
+            "registration, and it refuses to invite the event's designated "
+            'host as a guest. Set dry_run=true to validate without creating a '
+            'user, registration, delivery, or email log.'
         ),
         'request_body': {
             'required': ['email'],

@@ -20,15 +20,11 @@ from email_app.services.email_classification import (
 from email_app.services.email_service import EmailService
 from events.services.calendar_invite import (
     AUDIENCE_ATTENDEE,
-    AUDIENCE_HOST,
     generate_ics,
 )
 from events.services.calendar_links import build_calendar_links
 from events.services.cancel_token import generate_cancel_token
-from events.services.host_registration import (
-    build_host_management_links,
-    is_host_registration,
-)
+from events.services.host_registration import is_host_registration
 from integrations.config import get_config, site_base_url
 
 logger = logging.getLogger(__name__)
@@ -75,8 +71,6 @@ def send_registration_confirmation(registration):
     )
 
     calendar_links = build_calendar_links(event)
-    host_links = build_host_management_links(event) if is_host else {}
-
     # Render the email template
     email_service = EmailService()
     subject, body_html = email_service._render_template(
@@ -98,7 +92,6 @@ def send_registration_confirmation(registration):
             'outlook_calendar_url': calendar_links['outlook'],
             'office365_calendar_url': calendar_links['office365'],
             'is_host_registration': is_host,
-            **host_links,
         },
     )
 
@@ -108,12 +101,9 @@ def send_registration_confirmation(registration):
         'body_html': body_html,
     })
 
-    # Generate .ics. Host auto-registration emails are host-only surfaces
-    # with Studio management links, so they explicitly opt out of the
-    # attendee /join URL as their primary calendar location/details link.
     ics_content = generate_ics(
         event,
-        audience=AUDIENCE_HOST if is_host else AUDIENCE_ATTENDEE,
+        audience=AUDIENCE_ATTENDEE,
         attendee_email=user.email,
     )
 

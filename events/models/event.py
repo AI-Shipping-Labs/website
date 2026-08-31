@@ -462,8 +462,8 @@ class Event(
         blank=True,
         editable=False,
         help_text=(
-            'Rotated whenever host_email changes so previously issued '
-            'host-management links are revoked.'
+            'Rotated whenever host_email changes so a reassigned host '
+            'receives a fresh invitation.'
         ),
     )
     event_series = models.ForeignKey(

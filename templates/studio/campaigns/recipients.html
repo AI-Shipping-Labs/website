@@ -1,5 +1,5 @@
 {% extends "studio/base.html" %}
-{% load studio_filters %}
+{% load date_formatting studio_filters %}
 
 {% block studio_title %}Recipients: {{ campaign.subject }}{% endblock %}
 
@@ -22,9 +22,10 @@
       </p>
       {% else %}
       <p class="text-sm text-muted-foreground mt-2" data-testid="campaign-recipient-mode">
-        Actual send log recipients from EmailLog.
+        Actual send log recipients remain linked from EmailLog; durable delivery state is shown for every snapshotted recipient.
       </p>
       {% endif %}
+      {% if attention_only %}<p class="mt-2 text-sm text-red-400">Showing recipients that need attention.</p>{% endif %}
     </div>
     <a href="{{ ses_campaign_url }}"
        class="inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
@@ -48,11 +49,15 @@
       <thead>
         <tr class="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
           <th class="py-2 pr-4 font-medium">Recipient</th>
+          <th class="py-2 px-4 font-medium">State</th>
+          <th class="py-2 px-4 font-medium">Attempts</th>
+          <th class="py-2 px-4 font-medium">Updated</th>
           <th class="py-2 px-4 font-medium">Sent</th>
           <th class="py-2 px-4 font-medium">Opens</th>
           <th class="py-2 px-4 font-medium">Clicks</th>
           <th class="py-2 px-4 font-medium">Disposition</th>
           <th class="py-2 pl-4 font-medium">Diagnostic</th>
+          <th class="py-2 pl-4 font-medium">Actions</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-border">
@@ -65,8 +70,13 @@
             <span class="font-mono text-foreground break-all">{{ row.recipient_email }}</span>
             {% endif %}
           </td>
+          <td class="py-3 px-4" data-testid="campaign-delivery-state">
+            {% studio_status_badge row.delivery_state row.delivery_state_label %}
+          </td>
+          <td class="py-3 px-4 text-foreground tabular-nums" data-testid="campaign-delivery-attempts">{{ row.attempt_count }}</td>
+          <td class="py-3 px-4 text-muted-foreground whitespace-nowrap">{% if row.updated_at %}{{ row.updated_at|operator_datetime }}{% else %}&mdash;{% endif %}</td>
           <td class="py-3 px-4 text-muted-foreground whitespace-nowrap">
-            {% if row.sent_at %}{{ row.sent_at|operator_datetime }}{% else %}Preview{% endif %}
+            {% if row.sent_at %}{{ row.sent_at|operator_datetime }}{% elif row.mode == "preview" %}Preview{% else %}&mdash;{% endif %}
           </td>
           <td class="py-3 px-4 text-foreground tabular-nums">{{ row.opens }}</td>
           <td class="py-3 px-4 text-foreground tabular-nums">{{ row.clicks }}</td>
@@ -77,8 +87,10 @@
             <span class="inline-flex rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-300 border border-red-500/30" data-testid="campaign-recipient-disposition">Complained</span>
             {% elif row.disposition == "preview" %}
             <span class="inline-flex rounded-full bg-secondary px-2 py-1 text-xs text-muted-foreground" data-testid="campaign-recipient-disposition">Preview</span>
-            {% else %}
+            {% elif row.delivery_state == "sent" %}
             <span class="inline-flex rounded-full bg-green-500/10 px-2 py-1 text-xs text-green-400" data-testid="campaign-recipient-disposition">Delivered</span>
+            {% else %}
+            <span data-testid="campaign-recipient-disposition">&mdash;</span>
             {% endif %}
           </td>
           <td class="py-3 pl-4 text-muted-foreground">
@@ -86,9 +98,32 @@
             <span class="font-mono text-xs break-all" data-testid="campaign-recipient-diagnostic">{{ row.bounce_diagnostic }}</span>
             {% elif row.bounce_type or row.bounce_subtype %}
             <span class="font-mono text-xs">{{ row.bounce_type }} {{ row.bounce_subtype }}</span>
+            {% elif row.last_error %}
+            <span class="font-mono text-xs break-all" data-testid="campaign-delivery-diagnostic">{{ row.last_error }}</span>
             {% else %}
             <span>&mdash;</span>
             {% endif %}
+            {% if row.resolution %}
+            <div class="mt-1 text-xs text-muted-foreground">Resolved via {{ row.resolution }}{% if row.resolved_by_email %} by {{ row.resolved_by_email }}{% endif %}{% if row.resolved_at %} at {{ row.resolved_at|operator_datetime }}{% endif %}</div>
+            {% endif %}
+          </td>
+          <td class="py-3 pl-4">
+            {% if row.delivery_state == "failed" or row.delivery_state == "ambiguous" %}
+            <div class="flex flex-wrap gap-2">
+              <form method="post" action="{% url 'studio_campaign_delivery_resolve' campaign.pk row.delivery_id %}"{% if row.delivery_state == "ambiguous" %} onsubmit="return confirm('SES may already have accepted this email. Retrying can send a duplicate. Retry anyway?');"{% endif %}>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="retry">
+                <button type="submit" class="{% studio_action_class 'async' %}" data-testid="campaign-delivery-retry">Retry delivery</button>
+              </form>
+              {% if row.delivery_state == "ambiguous" %}
+              <form method="post" action="{% url 'studio_campaign_delivery_resolve' campaign.pk row.delivery_id %}" onsubmit="return confirm('Mark this recipient as assumed delivered without sending again?');">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="assume_sent">
+                <button type="submit" class="{% studio_action_class 'secondary' %}" data-testid="campaign-delivery-assume">Assume delivered</button>
+              </form>
+              {% endif %}
+            </div>
+            {% else %}&mdash;{% endif %}
           </td>
         </tr>
         {% endfor %}

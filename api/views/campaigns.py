@@ -575,9 +575,9 @@ def campaign_detail(request, campaign_id):
                 "Returns campaign recipient visibility for staff automation. "
                 "Draft campaigns return ``mode=preview`` from the same "
                 "``EmailCampaign.get_eligible_recipients()`` audience logic "
-                "used by Studio. Sending/sent campaigns return ``mode=sent`` "
-                "with actual ``EmailLog`` rows, including engagement and "
-                "bounce/complaint disposition."
+                "used by Studio. Sending/needs-attention/sent campaigns return "
+                "``mode=sent`` with the durable delivery ledger, linked "
+                "``EmailLog`` engagement, and bounce/complaint disposition."
             ),
             "responses": {
                 200: {
@@ -598,6 +598,18 @@ def campaign_detail(request, campaign_id):
                                 "bounce_subtype": "General",
                                 "bounce_diagnostic": "smtp; 550 no mailbox",
                                 "email_log_id": 10,
+                                "delivery_id": 12,
+                                "delivery_state": "sent",
+                                "attempt_count": 1,
+                                "updated_at": "2026-04-15T12:00:00+00:00",
+                                "claimed_at": "2026-04-15T11:59:59+00:00",
+                                "claim_expires_at": "2026-04-15T12:05:29+00:00",
+                                "completed_at": "2026-04-15T12:00:00+00:00",
+                                "resolution": "",
+                                "resolved_at": None,
+                                "resolved_by": None,
+                                "ses_message_id": "ses-message-id",
+                                "last_error": "",
                             }
                         ],
                     },

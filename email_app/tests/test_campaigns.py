@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import TierOverride
-from email_app.models import EmailCampaign, EmailLog
+from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
 from email_app.tests.test_email_service import assert_no_internal_footer_text
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
@@ -954,16 +954,28 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
     def test_last_batch_transitions_campaign_to_sent(self, mock_ses):
         """When the final batch finishes, campaign moves to 'sent'."""
         # Two batches: first one leaves user2 pending; second completes.
+        delivery_one = CampaignDelivery.objects.create(
+            campaign=self.campaign,
+            user=self.user1,
+            recipient_user_pk=self.user1.pk,
+            recipient_email=self.user1.email,
+        )
+        delivery_two = CampaignDelivery.objects.create(
+            campaign=self.campaign,
+            user=self.user2,
+            recipient_user_pk=self.user2.pk,
+            recipient_email=self.user2.email,
+        )
         from email_app.tasks.send_campaign import send_campaign_batch
         send_campaign_batch(
-            self.campaign.pk, user_ids=[self.user1.pk], send_delay=0,
+            self.campaign.pk, delivery_ids=[delivery_one.pk], send_delay=0,
         )
         self.campaign.refresh_from_db()
         # Still sending — user2 is eligible but not yet logged.
         self.assertEqual(self.campaign.status, 'sending')
 
         send_campaign_batch(
-            self.campaign.pk, user_ids=[self.user2.pk], send_delay=0,
+            self.campaign.pk, delivery_ids=[delivery_two.pk], send_delay=0,
         )
         self.campaign.refresh_from_db()
         self.assertEqual(self.campaign.status, 'sent')
@@ -1229,22 +1241,42 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         )
         self.assertEqual(self.campaign.status, 'sent')
 
-    def test_stale_batch_instances_converge_from_email_logs(self):
+    def test_stale_batch_instances_converge_from_delivery_ledger(self):
         from email_app.tasks.send_campaign import _refresh_campaign_status
 
         worker_one = EmailCampaign.objects.get(pk=self.campaign.pk)
         worker_two = EmailCampaign.objects.get(pk=self.campaign.pk)
-        EmailLog.objects.create(
+        log_one = EmailLog.objects.create(
             campaign=self.campaign,
             user=self.user1,
             email_type='campaign',
             ses_message_id='one',
         )
+        CampaignDelivery.objects.create(
+            campaign=self.campaign,
+            user=self.user1,
+            recipient_user_pk=self.user1.pk,
+            recipient_email=self.user1.email,
+            state=CampaignDelivery.State.SENT,
+            attempt_count=1,
+            email_log=log_one,
+            ses_message_id='one',
+        )
         _refresh_campaign_status(worker_one)
-        EmailLog.objects.create(
+        log_two = EmailLog.objects.create(
             campaign=self.campaign,
             user=self.user2,
             email_type='campaign',
+            ses_message_id='two',
+        )
+        CampaignDelivery.objects.create(
+            campaign=self.campaign,
+            user=self.user2,
+            recipient_user_pk=self.user2.pk,
+            recipient_email=self.user2.email,
+            state=CampaignDelivery.State.SENT,
+            attempt_count=1,
+            email_log=log_two,
             ses_message_id='two',
         )
         _refresh_campaign_status(worker_two)
@@ -1511,7 +1543,7 @@ class CampaignAdminTest(TierSetupMixin, TestCase):
             args=[self.campaign.pk],
         )
         response = self.client.post(url, content_type='application/json')
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 409)
         data = response.json()
         self.assertEqual(data['status'], 'error')
 
@@ -1526,7 +1558,7 @@ class CampaignAdminTest(TierSetupMixin, TestCase):
             args=[self.campaign.pk],
         )
         response = self.client.post(url, content_type='application/json')
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 409)
 
     def test_send_campaign_get_not_allowed(self):
         """Send campaign only accepts POST."""

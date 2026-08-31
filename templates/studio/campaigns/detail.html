@@ -63,6 +63,23 @@
         <p class="text-sm text-muted-foreground">Sent Count</p>
         <p class="text-sm text-foreground mt-1">{{ campaign.sent_count }}</p>
       </div>
+      {% if campaign.audience_snapshotted_at %}
+      <div class="col-span-2" data-testid="campaign-delivery-counts">
+        <p class="text-sm text-muted-foreground">Delivery state</p>
+        <div class="mt-2 flex flex-wrap gap-2 text-sm text-foreground">
+          <span>Pending: {{ delivery_counts.pending }}</span>
+          <span>Dispatching: {{ delivery_counts.dispatching }}</span>
+          <span>Sent: {{ delivery_counts.sent }}</span>
+          <span>Skipped: {{ delivery_counts.skipped }}</span>
+          <span>Failed: {{ delivery_counts.failed }}</span>
+          <span>Ambiguous: {{ delivery_counts.ambiguous }}</span>
+          <span>Assumed sent: {{ delivery_counts.assumed_sent }}</span>
+        </div>
+        {% if attention_count %}
+        <a href="{{ recipients_url }}?attention=1" class="mt-2 inline-block text-sm text-red-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="campaign-attention-link">Review {{ attention_count }} recipient{{ attention_count|pluralize }} needing attention</a>
+        {% endif %}
+      </div>
+      {% endif %}
       <div class="col-span-2">
         <p class="text-sm text-muted-foreground">Engagement</p>
         <p class="text-sm text-foreground mt-1" data-testid="campaign-engagement">

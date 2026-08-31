@@ -61,6 +61,7 @@ from studio.views.call_hosts import (
 from studio.views.campaigns import (
     campaign_create,
     campaign_delete,
+    campaign_delivery_resolve,
     campaign_detail,
     campaign_duplicate,
     campaign_edit,
@@ -677,6 +678,11 @@ urlpatterns = [
         'campaigns/<int:campaign_id>/recipients/',
         campaign_recipients,
         name='studio_campaign_recipients',
+    ),
+    path(
+        'campaigns/<int:campaign_id>/deliveries/<int:delivery_id>/resolve',
+        campaign_delivery_resolve,
+        name='studio_campaign_delivery_resolve',
     ),
     path(
         'campaigns/<int:campaign_id>/edit',

@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from accounts.models import EmailAlias, Token
 from community.models import CommunityAuditLog
-from email_app.models import EmailCampaign, EmailLog
+from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
 
 User = get_user_model()
 
@@ -123,6 +123,48 @@ class CampaignRecipientsApiTest(Issue1194ApiBase):
         self.assertEqual(row["clicks"], 1)
         self.assertEqual(row["disposition"], "bounced")
         self.assertEqual(row["bounce_diagnostic"], "smtp; 550 mailbox missing")
+
+    def test_durable_delivery_fields_are_read_only_recipient_visibility(self):
+        now = timezone.now()
+        campaign = EmailCampaign.objects.create(
+            subject="Attention Recipients",
+            body="Hi",
+            status="needs_attention",
+            audience_snapshotted_at=now,
+        )
+        delivery = CampaignDelivery.objects.create(
+            campaign=campaign,
+            user=self.member,
+            recipient_user_pk=self.member.pk,
+            recipient_email=self.member.email,
+            state=CampaignDelivery.State.AMBIGUOUS,
+            attempt_count=2,
+            claimed_at=now,
+            claim_expires_at=now,
+            completed_at=now,
+            last_error="Indeterminate transport outcome.",
+            resolution=CampaignDelivery.Resolution.RETRY,
+            resolved_at=now,
+            resolved_by=self.staff,
+        )
+
+        response = self.client.get(
+            f"/api/campaigns/{campaign.pk}/recipients",
+            **self._auth(),
+        )
+
+        row = response.json()["recipients"][0]
+        self.assertEqual(row["delivery_id"], delivery.pk)
+        self.assertEqual(row["delivery_state"], "ambiguous")
+        self.assertEqual(row["attempt_count"], 2)
+        self.assertEqual(row["resolution"], "retry")
+        self.assertEqual(row["resolved_by"]["id"], self.staff.pk)
+        self.assertIsNotNone(row["claimed_at"])
+        self.assertIsNotNone(row["claim_expires_at"])
+        self.assertIsNotNone(row["completed_at"])
+        self.assertIsNone(row["email_log_id"])
+        self.assertEqual(row["ses_message_id"], "")
+        self.assertEqual(row["last_error"], "Indeterminate transport outcome.")
 
 
 class ClearBounceAndAliasParityApiTest(Issue1194ApiBase):

@@ -14,8 +14,14 @@ from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
 from accounts.utils.tags import normalize_tags
-from email_app.models import EmailCampaign
+from email_app.models import CampaignDelivery, EmailCampaign
 from email_app.services.campaign_audience import campaign_recipient_count as recount
+from email_app.services.campaign_dispatch import (
+    CampaignDeliveryConflict,
+    assume_delivery_sent,
+    claim_and_enqueue_campaign,
+    retry_delivery,
+)
 from email_app.services.campaign_recipients import (
     build_campaign_recipient_rows,
     campaign_recipient_mode,
@@ -156,9 +162,21 @@ def _build_campaign_detail_context(campaign, *, test_recipients="", test_recipie
     opened_rate = (opened / sent * 100) if sent else 0
     clicked_rate = (clicked / sent * 100) if sent else 0
 
+    delivery_counts = {
+        state: campaign.deliveries.filter(state=state).count()
+        for state, _label in CampaignDelivery.State.choices
+    }
     return {
         "campaign": campaign,
-        "recipient_count": campaign.get_recipient_count(),
+        "recipient_count": (
+            campaign.get_recipient_count()
+            if campaign.status == "draft"
+            else (
+                campaign.deliveries.count()
+                if campaign.deliveries.exists()
+                else campaign.email_logs.count()
+            )
+        ),
         "engagement": {
             "sent": sent,
             "opened": opened,
@@ -166,6 +184,11 @@ def _build_campaign_detail_context(campaign, *, test_recipients="", test_recipie
             "opened_rate": opened_rate,
             "clicked_rate": clicked_rate,
         },
+        "delivery_counts": delivery_counts,
+        "attention_count": (
+            delivery_counts[CampaignDelivery.State.FAILED]
+            + delivery_counts[CampaignDelivery.State.AMBIGUOUS]
+        ),
         "test_recipients": test_recipients,
         "test_recipient_suggestions": test_recipient_suggestions or [],
         "recipients_url": reverse(
@@ -623,6 +646,15 @@ def campaign_recipients(request, campaign_id):
     campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
     mode = campaign_recipient_mode(campaign)
     rows = build_campaign_recipient_rows(campaign)
+    attention_only = request.GET.get('attention') == '1'
+    if attention_only:
+        rows = [
+            row for row in rows
+            if row['delivery_state'] in {
+                CampaignDelivery.State.FAILED,
+                CampaignDelivery.State.AMBIGUOUS,
+            }
+        ]
     for row in rows:
         row["user_url"] = (
             reverse("studio_user_detail", kwargs={"user_id": row["user_id"]})
@@ -637,11 +669,39 @@ def campaign_recipients(request, campaign_id):
             "mode": mode,
             "rows": rows,
             "recipient_count": len(rows),
+            "attention_only": attention_only,
             "ses_campaign_url": (
                 f"{reverse('studio_ses_event_list')}?campaign={campaign.pk}"
             ),
         },
     )
+
+
+@staff_required
+@require_POST
+def campaign_delivery_resolve(request, campaign_id, delivery_id):
+    """Apply one explicit, attributed recipient reconciliation decision."""
+    delivery = get_object_or_404(
+        CampaignDelivery,
+        pk=delivery_id,
+        campaign_id=campaign_id,
+    )
+    action = request.POST.get('action', '')
+    try:
+        if action == 'retry':
+            retry_delivery(delivery.pk, actor=request.user)
+            messages.success(request, f'Queued retry for {delivery.recipient_email}.')
+        elif action == 'assume_sent':
+            assume_delivery_sent(delivery.pk, actor=request.user)
+            messages.success(
+                request,
+                f'Marked {delivery.recipient_email} as assumed sent without resending.',
+            )
+        else:
+            messages.error(request, 'Choose a valid delivery resolution.')
+    except CampaignDeliveryConflict as exc:
+        messages.error(request, str(exc))
+    return redirect('studio_campaign_recipients', campaign_id=campaign_id)
 
 
 def _recipient_count_for_level(target_min_level):
@@ -809,28 +869,30 @@ def campaign_send(request, campaign_id):
     """Enqueue a campaign for background sending from Studio."""
     campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
 
-    if campaign.status != "draft":
+    try:
+        result = claim_and_enqueue_campaign(
+            campaign.pk,
+            source='Studio campaign detail',
+        )
+    except Exception:
+        logger.exception('Failed to claim and enqueue campaign %s', campaign.pk)
         messages.error(
             request,
-            f'Campaign "{campaign.subject}" is already {campaign.status}.',
+            f'Campaign "{campaign.subject}" could not be queued; it remains a draft.',
         )
         return redirect("studio_campaign_detail", campaign_id=campaign.pk)
 
-    from jobs.tasks import async_task, build_task_name
-
-    task_id = async_task(
-        "email_app.tasks.send_campaign.send_campaign",
-        campaign_id=campaign.pk,
-        task_name=build_task_name(
-            "Send campaign",
-            f"#{campaign.pk} {campaign.subject}",
-            "Studio campaign detail",
-        ),
-    )
+    if not result.claimed:
+        messages.error(
+            request,
+            f'Campaign "{campaign.subject}" is already {result.campaign.status}; '
+            'no second send was queued.',
+        )
+        return redirect("studio_campaign_detail", campaign_id=campaign.pk)
     logger.info(
         "Enqueued campaign %s for sending from Studio (task_id=%s)",
         campaign.pk,
-        task_id,
+        result.task_id,
     )
     messages.success(
         request,

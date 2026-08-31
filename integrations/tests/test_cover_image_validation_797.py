@@ -14,7 +14,7 @@ Covers:
 
 import os
 import tempfile
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from boto3.exceptions import S3UploadFailedError
 from botocore.exceptions import ClientError
@@ -196,7 +196,15 @@ class UploadImagesToS3StepTaggingTest(TestCase):
         ]
         self.assertEqual(len(list_errors), 1)
         self.assertEqual(list_errors[0]['file'], '')
-        mock_s3.upload_fileobj.assert_called_once()
+        mock_s3.upload_fileobj.assert_called_once_with(
+            ANY,
+            'test-bucket',
+            'content/hero.png',
+            ExtraArgs={
+                'ContentType': 'image/png',
+                'CacheControl': 'public, max-age=86400',
+            },
+        )
 
 
 class WorkshopSyncCoverImageValidationTest(TestCase):

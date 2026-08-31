@@ -552,6 +552,11 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "TestRecapThroughTheStaffApi::test_organiser_publishes_weekly_notes_from_a_script"
     )
     migrated_owner = "playwright_tests/test_dev_smoke_sitemap.py::test_sitemap_xml_is_served"
+    campaign_owner = (
+        "playwright_tests/test_studio_campaigns.py::"
+        "TestStaffReconcilesAmbiguousDelivery::"
+        "test_duplicate_risk_confirmations_gate_retry_and_assume_sent"
+    )
 
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
@@ -585,14 +590,22 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2559)
-        self.assertEqual(len(inventory.owners), 2339)
-        self.assertEqual(inventory.declared_owners, {self.migrated_owner})
+        self.assertEqual(inventory.item_count, 2560)
+        self.assertEqual(len(inventory.owners), 2340)
+        self.assertEqual(
+            inventory.declared_owners,
+            {self.migrated_owner, self.campaign_owner},
+        )
         self.assertNotIn(
             self.migrated_owner,
             load_live_manifest()["LEGACY_DECLARED_BROWSER"],
         )
         self.assertIn(self.migrated_owner, LEGACY_DECLARED_BROWSER_CEILING)
+        self.assertNotIn(
+            self.campaign_owner,
+            load_live_manifest()["LEGACY_DECLARED_BROWSER"],
+        )
+        self.assertNotIn(self.campaign_owner, LEGACY_DECLARED_BROWSER_CEILING)
         self.assertEqual(errors, [])
         if guard is None:
             self.assertEqual(lock.read_bytes(), lock_before)

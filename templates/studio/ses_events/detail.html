@@ -126,25 +126,35 @@
 
       <div class="p-4">
         <p class="text-xs text-muted-foreground uppercase">Action taken</p>
-        {% if event.action_taken %}
-          <p class="text-foreground" data-testid="ses-event-detail-action">{{ event.action_taken }}</p>
+        {% if identity.action_label %}
+          <p class="text-foreground" data-testid="ses-event-detail-action">{{ identity.action_label }}</p>
         {% else %}
           <p class="text-muted-foreground" data-testid="ses-event-detail-action">&mdash;</p>
+        {% endif %}
+        {% if identity.historical_action %}
+          <p class="mt-2 text-xs text-muted-foreground" data-testid="ses-event-detail-historical-action">
+            Historical webhook action: {{ identity.historical_action }}
+          </p>
+        {% elif event.action_taken and event.action_taken != identity.action_label %}
+          <p class="mt-2 text-xs text-muted-foreground" data-testid="ses-event-detail-identity-diagnostic">
+            Identity diagnostic: {{ event.action_taken }}
+          </p>
         {% endif %}
       </div>
 
       <div class="p-4">
-        <p class="text-xs text-muted-foreground uppercase mb-1">Matched user</p>
-        {% if event.user %}
-          <a href="{% url 'studio_user_detail' event.user_id %}"
-             class="inline-flex items-center gap-2 text-accent hover:underline"
+        <p class="text-xs text-muted-foreground uppercase mb-1">Recipient identity</p>
+        <p class="text-sm text-foreground" data-testid="ses-event-detail-match-status">{{ identity.match_label }}</p>
+        {% if identity.user %}
+          <a href="{% url 'studio_user_detail' identity.user.pk %}"
+             class="mt-1 inline-flex items-center gap-2 text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
              data-testid="ses-event-detail-user-link">
             <i data-lucide="user" class="w-4 h-4"></i>
-            <span>{{ event.user.get_full_name|default:event.user.email }}</span>
-            <span class="text-xs text-muted-foreground font-mono">{{ event.user.email }}</span>
+            <span>{{ identity.user.get_full_name|default:identity.user.email }}</span>
+            <span class="text-xs text-muted-foreground font-mono">{{ identity.user.email }}</span>
           </a>
         {% else %}
-          <p class="text-muted-foreground" data-testid="ses-event-detail-no-user">No matching user</p>
+          <p class="mt-1 text-muted-foreground" data-testid="ses-event-detail-no-user">No account link</p>
         {% endif %}
       </div>
 

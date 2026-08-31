@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from django.test import SimpleTestCase, tag
 
@@ -55,15 +56,48 @@ def preexisting_repository_manifest():
     # Deploy Dev pipes this shard through ``tee test-output.log``.  That live,
     # workflow-owned transcript is expected to grow while tests execute; it is
     # not repository state that the retirement helper can or should preserve.
-    # Keep every tracked and other non-ignored untracked path in the seal.
-    return tuple(
-        (relative, path_identity(PROJECT_ROOT / relative))
-        for relative in sorted(raw.decode(errors="strict") for raw in paths if raw)
-        if relative not in TEST_RUNNER_OUTPUT_PATHS
-    )
+    # Keep every existing tracked and other non-ignored untracked path in the
+    # seal. A tracked path may be intentionally deleted in the uncommitted
+    # diff, in which case there is no filesystem identity to preserve.
+    manifest = []
+    for relative in sorted(raw.decode(errors="strict") for raw in paths if raw):
+        if relative in TEST_RUNNER_OUTPUT_PATHS:
+            continue
+        try:
+            identity = path_identity(PROJECT_ROOT / relative)
+        except FileNotFoundError:
+            continue
+        manifest.append((relative, identity))
+    return tuple(manifest)
 
 
 PREEXISTING_REPOSITORY_MANIFEST = preexisting_repository_manifest()
+
+
+class RepositoryManifestTests(SimpleTestCase):
+    def test_manifest_ignores_deleted_tracked_path_and_keeps_files_and_symlinks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "kept.txt").write_text("kept\n", encoding="utf-8")
+            (root / "kept-link").symlink_to("kept.txt")
+            tracked_paths = b"deleted.txt\0kept-link\0kept.txt\0"
+
+            with (
+                mock.patch.object(sys.modules[__name__], "PROJECT_ROOT", root),
+                mock.patch.object(
+                    subprocess,
+                    "run",
+                    return_value=mock.Mock(stdout=tracked_paths),
+                ),
+            ):
+                manifest = preexisting_repository_manifest()
+
+            self.assertEqual(
+                [relative for relative, _identity in manifest],
+                ["kept-link", "kept.txt"],
+            )
+            self.assertEqual(manifest[0][1][0], "symlink")
+            self.assertEqual(manifest[1][1][0], "file")
 
 
 class StaticScanner:

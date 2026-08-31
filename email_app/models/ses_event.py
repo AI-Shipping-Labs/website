@@ -46,6 +46,26 @@ class SesEvent(models.Model):
         (EVENT_TYPE_OTHER, "Other"),
     ]
 
+    MATCH_STATUS_PRIMARY_EMAIL = "primary_email"
+    MATCH_STATUS_EMAIL_ALIAS = "email_alias"
+    MATCH_STATUS_EMAIL_LOG = "email_log"
+    MATCH_STATUS_NO_PLATFORM_ACCOUNT = "no_platform_account"
+    MATCH_STATUS_UNMATCHED_RECIPIENT = "unmatched_recipient"
+    MATCH_STATUS_IDENTITY_CONFLICT = "identity_conflict"
+    MATCH_STATUS_NEEDS_RECONCILIATION = "needs_reconciliation"
+    MATCH_STATUS_CHOICES = [
+        (MATCH_STATUS_PRIMARY_EMAIL, "Matched by primary email"),
+        (MATCH_STATUS_EMAIL_ALIAS, "Matched by email alias"),
+        (MATCH_STATUS_EMAIL_LOG, "Matched by send log"),
+        (MATCH_STATUS_NO_PLATFORM_ACCOUNT, "No platform account"),
+        (MATCH_STATUS_UNMATCHED_RECIPIENT, "Unmatched recipient"),
+        (MATCH_STATUS_IDENTITY_CONFLICT, "Identity conflict"),
+        (
+            MATCH_STATUS_NEEDS_RECONCILIATION,
+            "Matched account · Needs reconciliation",
+        ),
+    ]
+
     received_at = models.DateTimeField(
         auto_now_add=True,
         db_index=True,
@@ -87,6 +107,18 @@ class SesEvent(models.Model):
         help_text=(
             "Matched User row, if any. Null when the recipient address is "
             "not in our database (still logged for audit)."
+        ),
+    )
+    match_status = models.CharField(
+        max_length=32,
+        choices=MATCH_STATUS_CHOICES,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text=(
+            "How a bounce or complaint recipient was matched to a canonical "
+            "account. Blank for event types where recipient identity was not "
+            "evaluated and for historical rows predating this field."
         ),
     )
     # Issue #495: correlate bounce/complaint events back to the specific

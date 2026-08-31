@@ -407,6 +407,7 @@ def studio_empty_state(
     cta_label=None,
     testid_suffix='',
     empty_message='',
+    recovery_label=None,
 ):
     """Render the canonical Studio list-page empty state.
 
@@ -430,6 +431,7 @@ def studio_empty_state(
         'cta_label': cta_label,
         'testid_suffix': testid_suffix,
         'empty_message': empty_message,
+        'recovery_label': recovery_label or 'Clear filters',
     }
 
 

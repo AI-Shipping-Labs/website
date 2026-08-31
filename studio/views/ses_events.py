@@ -22,16 +22,20 @@ was needed.
 
 import datetime
 import json
+from urllib.parse import urlencode
 
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
+from django.http import Http404
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import User
 from email_app.models import EmailCampaign
 from email_app.models.ses_event import SesEvent
-from email_app.services.email_log_history import canonical_addresses
+from email_app.services.email_log_history import canonical_addresses, utc_date_bounds
+from email_app.services.ses_identity import event_identity_summary
 from studio.decorators import staff_required
 from studio.utils import coerce_page_number
 
@@ -123,11 +127,12 @@ def _apply_filters(queryset, *, search, type_filter, bounce_type,
     if bounce_subtype and bounce_subtype != TYPE_FILTER_ALL:
         queryset = queryset.filter(bounce_subtype=bounce_subtype)
 
-    if since is not None:
-        queryset = queryset.filter(received_at__date__gte=since)
+    lower, upper = utc_date_bounds(since, until)
+    if lower is not None:
+        queryset = queryset.filter(received_at__gte=lower)
 
-    if until is not None:
-        queryset = queryset.filter(received_at__date__lte=until)
+    if upper is not None:
+        queryset = queryset.filter(received_at__lt=upper)
 
     if campaign_id is not None:
         queryset = queryset.filter(email_log__campaign_id=campaign_id)
@@ -154,14 +159,20 @@ def _pager_querystring(request, page_number):
     return '?' + params.urlencode()
 
 
-def _last_30_day_counts():
+def _summary_window_start():
+    """Return the first UTC date in today plus the previous 29 dates."""
+    utc_today = timezone.now().astimezone(datetime.UTC).date()
+    return utc_today - datetime.timedelta(days=29)
+
+
+def _last_30_day_counts(window_start):
     """Compute the three small headline counters shown above the chips.
 
     These counters intentionally ignore the active filter — they exist to
     give operators a baseline ("are we getting bounces at all?") rather
     than a filtered view (which the page total already shows).
     """
-    cutoff = timezone.now() - datetime.timedelta(days=30)
+    cutoff, _ = utc_date_bounds(window_start)
     counts = SesEvent.objects.filter(received_at__gte=cutoff).aggregate(
         bounce_permanent=Count(
             'pk',
@@ -180,6 +191,51 @@ def _last_30_day_counts():
     }
 
 
+def _campaign_context(raw_campaign_id):
+    """Resolve a non-empty positive campaign id or fail closed with 404."""
+    if not raw_campaign_id:
+        return None
+    try:
+        campaign_id = int(raw_campaign_id)
+    except (TypeError, ValueError) as exc:
+        raise Http404("Invalid campaign context") from exc
+    if campaign_id <= 0:
+        raise Http404("Invalid campaign context")
+    return get_object_or_404(EmailCampaign, pk=campaign_id)
+
+
+def _current_filter_labels(
+    *, search, type_filter, bounce_type, bounce_subtype, since, until, user,
+):
+    """Build safe human-readable active-filter labels without raw search text."""
+    labels = []
+    type_labels = {
+        TYPE_FILTER_OTHER: "Other event types",
+        **dict(SesEvent.EVENT_TYPE_CHOICES),
+    }
+    if type_filter != TYPE_FILTER_ALL:
+        labels.append(type_labels.get(type_filter, "Event type"))
+    if search:
+        labels.append("Recipient search")
+    if bounce_type and bounce_type != TYPE_FILTER_ALL:
+        bounce_type_labels = {
+            "Permanent": "Permanent",
+            "Transient": "Transient",
+            "Undetermined": "Undetermined",
+        }
+        label = bounce_type_labels.get(bounce_type)
+        labels.append(f"Bounce type: {label}" if label else "Bounce type")
+    if bounce_subtype and bounce_subtype != TYPE_FILTER_ALL:
+        labels.append("Bounce subtype")
+    if since is not None:
+        labels.append(f"Since {since.isoformat()} UTC")
+    if until is not None:
+        labels.append(f"Until {until.isoformat()} UTC")
+    if user is not None:
+        labels.append("Member identity")
+    return labels
+
+
 @staff_required
 def ses_event_list(request):
     """Render the filterable SES events list at ``/studio/ses-events/``."""
@@ -191,15 +247,7 @@ def ses_event_list(request):
     raw_user_id = request.GET.get('user', '').strip()
     since = _parse_iso_date(request.GET.get('since', ''))
     until = _parse_iso_date(request.GET.get('until', ''))
-    campaign = None
-    campaign_id = None
-    if raw_campaign_id:
-        try:
-            campaign_id = int(raw_campaign_id)
-        except (TypeError, ValueError):
-            campaign_id = None
-        if campaign_id is not None:
-            campaign = EmailCampaign.objects.filter(pk=campaign_id).first()
+    campaign = _campaign_context(raw_campaign_id)
     identity_user = None
     if raw_user_id:
         try:
@@ -209,7 +257,9 @@ def ses_event_list(request):
 
     base_queryset = (
         SesEvent.objects
-        .select_related('user', 'email_log', 'email_log__campaign')
+        .select_related(
+            'user', 'email_log', 'email_log__campaign', 'email_log__user',
+        )
         .order_by('-received_at')
     )
     filtered = _apply_filters(
@@ -220,7 +270,7 @@ def ses_event_list(request):
         bounce_subtype=bounce_subtype,
         since=since,
         until=until,
-        campaign_id=campaign.pk if campaign is not None else campaign_id,
+        campaign_id=campaign.pk if campaign is not None else None,
         user=identity_user,
     )
 
@@ -237,6 +287,7 @@ def ses_event_list(request):
     for event in page.object_list:
         rows.append({
             'event': event,
+            'identity': event_identity_summary(event),
             'pill_class': EVENT_TYPE_PILL_CLASSES.get(
                 event.event_type, EVENT_TYPE_PILL_DEFAULT,
             ),
@@ -261,9 +312,51 @@ def ses_event_list(request):
     # need a separate existence check because the filtered queryset is
     # the one driving the empty path.
     has_any_event = SesEvent.objects.exists()
+    campaign_has_linked_events = bool(
+        campaign is not None
+        and SesEvent.objects.filter(email_log__campaign=campaign).exists()
+    )
+
+    event_filters_active = bool(
+        search
+        or type_filter != TYPE_FILTER_ALL
+        or bounce_type
+        or bounce_subtype
+        or since is not None
+        or until is not None
+        or identity_user is not None
+    )
+    filters_active = bool(campaign is not None or event_filters_active)
+
+    empty_message = ''
+    empty_recovery_label = 'Clear filters'
+    empty_recovery_url = reverse('studio_ses_event_list')
+    if campaign is not None and not campaign_has_linked_events:
+        empty_message = (
+            f'No SES events are linked to “{campaign.subject}”. Only events '
+            'correlated through a campaign EmailLog appear here. The summary '
+            'above covers all campaigns and transactional email.'
+        )
+        empty_recovery_label = 'View all SES events'
+    elif campaign is not None:
+        empty_message = (
+            f'“{campaign.subject}” has SES events, but none match the '
+            'remaining filters.'
+        )
+        empty_recovery_label = 'Clear event filters'
+        empty_recovery_url = (
+            f"{reverse('studio_ses_event_list')}?{urlencode({'campaign': campaign.pk})}"
+        )
 
     # Counters strip — independent of the active filter.
-    headline_counts = _last_30_day_counts()
+    summary_window_start = _summary_window_start()
+    headline_counts = _last_30_day_counts(summary_window_start)
+    summary_base_url = reverse('studio_ses_event_list')
+    summary_links = {
+        'bounce': f"{summary_base_url}?{urlencode({'type': SesEvent.EVENT_TYPE_BOUNCE_PERMANENT, 'since': summary_window_start.isoformat()})}",
+        'complaint': f"{summary_base_url}?{urlencode({'type': SesEvent.EVENT_TYPE_COMPLAINT, 'since': summary_window_start.isoformat()})}",
+        'total': f"{summary_base_url}?{urlencode({'type': TYPE_FILTER_ALL, 'since': summary_window_start.isoformat()})}",
+    }
 
     # Chip set in render order; the template iterates this so the chip
     # row is data-driven and the active state lights up on equality.
@@ -298,6 +391,15 @@ def ses_event_list(request):
         'page_start_index': page.start_index(),
         'page_end_index': page.end_index(),
         'filtered_total': paginator.count,
+        'current_filter_labels': _current_filter_labels(
+            search=search,
+            type_filter=type_filter,
+            bounce_type=bounce_type,
+            bounce_subtype=bounce_subtype,
+            since=since,
+            until=until,
+            user=identity_user,
+        ),
         'search': search,
         'type_filter': type_filter,
         'bounce_type': bounce_type,
@@ -307,13 +409,24 @@ def ses_event_list(request):
         'type_chips': type_chips,
         'bounce_type_choices': bounce_type_choices,
         'has_any_event': has_any_event,
+        'filters_active': filters_active,
+        'campaign_has_linked_events': campaign_has_linked_events,
+        'empty_message': empty_message,
+        'empty_recovery_label': empty_recovery_label,
+        'empty_recovery_url': empty_recovery_url,
         'more_filters_open': bool(
             bounce_type or bounce_subtype or since or until or raw_campaign_id,
         ),
         'campaign': campaign,
         'campaign_id': raw_campaign_id,
+        'campaign_recipients_url': (
+            reverse('studio_campaign_recipients', args=[campaign.pk])
+            if campaign is not None else ''
+        ),
         'identity_user': identity_user,
         'user_filter': raw_user_id,
+        'summary_window_start': summary_window_start.isoformat(),
+        'summary_links': summary_links,
         **headline_counts,
     })
 
@@ -343,6 +456,7 @@ def ses_event_detail(request, pk):
 
     return render(request, 'studio/ses_events/detail.html', {
         'event': event,
+        'identity': event_identity_summary(event),
         'pill_class': EVENT_TYPE_PILL_CLASSES.get(
             event.event_type, EVENT_TYPE_PILL_DEFAULT,
         ),

@@ -100,6 +100,24 @@ def _parse_email_log(raw, *, field="email_log"):
         )
 
 
+def _parse_campaign(raw, *, field="campaign"):
+    """Parse a positive campaign id for the aggregate operator filter."""
+    if raw is None or raw == "":
+        return None, None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = None
+    if value is None or value <= 0:
+        return None, error_response(
+            f"{field} must be a positive integer",
+            "validation_error",
+            status=422,
+            details={"field": field, "value": raw},
+        )
+    return value, None
+
+
 # The full OpenAPI operation for the aggregate GET list. Defined as a
 # module constant so ``ses_events_dispatch`` (the route-bound view the
 # builder actually reads) can compose it with the webhook's POST spec
@@ -112,7 +130,8 @@ _GET_LIST_OPENAPI = {
         "recipient, including events whose ``user`` FK is ``None`` "
         "(addresses with no ``User`` row). Lets an operator "
         "reconcile a campaign's bounces by window, campaign "
-        "(``email_log``), recipient substring, or event type. "
+        "(``campaign``), exact send (``email_log``), recipient "
+        "substring, or event type. "
         "``raw_payload`` is deliberately excluded. ``count`` is the "
         "total number of matching rows across all pages, distinct "
         "from the page length. Token-gated (staff tokens only)."
@@ -149,6 +168,15 @@ _GET_LIST_OPENAPI = {
             "description": (
                 "Exact ``email_log_id`` filter (correlate one "
                 "campaign's send)."
+            ),
+        },
+        "campaign": {
+            "type": "integer",
+            "required": False,
+            "description": (
+                "Positive EmailCampaign id; matches events whose correlated "
+                "EmailLog belongs to that campaign. Combines with "
+                "``email_log`` and all other filters using AND."
             ),
         },
         "recipient": {
@@ -219,6 +247,9 @@ def ses_events_list(request):
     email_log_id, err = _parse_email_log(request.GET.get("email_log"))
     if err is not None:
         return err
+    campaign_id, err = _parse_campaign(request.GET.get("campaign"))
+    if err is not None:
+        return err
 
     type_filter = request.GET.get("type") or ""
     if (
@@ -241,7 +272,7 @@ def ses_events_list(request):
 
     # Base queryset is unfiltered on ``user`` -- the whole point is to
     # include ``user=None`` rows.
-    qs = SesEvent.objects.all()
+    qs = SesEvent.objects.select_related("user", "email_log__user")
     if type_filter == _BOUNCE_ALIAS:
         qs = qs.filter(event_type__in=_BOUNCE_EVENT_TYPES)
     elif type_filter:
@@ -252,6 +283,8 @@ def ses_events_list(request):
         qs = qs.filter(received_at__lte=until)
     if email_log_id is not None:
         qs = qs.filter(email_log_id=email_log_id)
+    if campaign_id is not None:
+        qs = qs.filter(email_log__campaign_id=campaign_id)
     if recipient:
         qs = qs.filter(recipient_email__icontains=recipient)
 

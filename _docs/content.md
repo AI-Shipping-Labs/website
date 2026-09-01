@@ -292,6 +292,55 @@ If the event file is `events/example-event.yaml`, the include above is
 resolved relative to the recap file directory, for example
 `events/example-event/recording.html`.
 
+### Turning an article into an event recap
+
+An article linked to an event is not automatically a recap. The article's
+`event_slug` or `event_id` frontmatter only populates the event's
+`Articles from this event` section. The event recap is a separate field with
+its own `/events/<id>/<slug>/recap` URL.
+
+Use this sequence when converting an existing article:
+
+1. Identify the exact event from the article's `event_slug` (or `event_id`)
+   and confirm the article belongs to that session. Do not match by title or
+   date alone.
+2. Copy the article Markdown body only. Do not copy its YAML frontmatter or
+   article title; the recap page supplies the event title and `Recap` label.
+3. For a Studio-origin event, open the event in Studio and paste the body into
+   `Recap / event notes (Markdown)`, then save. This field is also writable
+   through `PATCH /api/events/<slug>` as `{"recap_notes": "..."}` for
+   authenticated automation. GitHub-origin events are read-only through that
+   API.
+4. If the event already has a synced `recap_file`, merge deliberately: saved
+   Studio notes take precedence over the synced recap, and clearing the notes
+   restores the synced version.
+5. Verify the event API reports `has_recap: true`, `recap_published: true`,
+   and a `recap_url`. Open that URL and the event detail page; the latter
+   should show the `Read the recap` card. A recap is public only after the
+   event's effective end time.
+6. After the recap is verified, choose what to do with the source article:
+   remove `event_slug`/`event_id` if the article should remain a standalone
+   blog post, or delete its file from `blog/` if it is being fully converted.
+   A deleted synced article is soft-unpublished (`published: false`,
+   `status: draft`) on the next content sync; its database row is not hard-
+   deleted.
+7. Trigger or wait for content sync, then verify the old blog URL and the
+   event's source-article section. There is no automatic blog-to-recap
+   redirect, so keep the article or add a separately reviewed redirect if the
+   old URL must remain live.
+
+For a GitHub-origin event, use the content repo as the canonical source
+instead: add `recap_file: <relative-path>` to the event YAML, create the
+referenced recap Markdown file, commit and push both files, then run the
+content sync. Do not create a second event YAML for an existing Studio event
+just to add a recap.
+
+If no matching source article exists, this is new recap authoring rather than
+an article conversion. Use the verified recording transcript as the drafting
+source, confirm the video belongs to the exact event, add the recording URL if
+the event is missing it, and then follow the same recap and live-page checks.
+Do not delete or invent a blog article in this case.
+
 ### Workshop
 
 `<date>-<slug>/workshop.yaml`. A recording-backed workshop can create or link

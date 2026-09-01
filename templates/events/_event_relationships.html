@@ -2,8 +2,8 @@
 <section class="{% include 'content/_info_card_classes.html' %} mb-12 bg-card"
          aria-labelledby="event-relationship-context-title"
          data-testid="event-relationship-context">
-  <h2 id="event-relationship-context-title" class="text-lg font-semibold text-foreground">Related community</h2>
-  <p class="mt-1 text-sm text-muted-foreground">Explore the series and community programs this event is part of.</p>
+  <h2 id="event-relationship-context-title" class="text-lg font-semibold text-foreground">Part of</h2>
+  <p class="mt-1 text-sm text-muted-foreground">Explore the series and programs connected to this session.</p>
   <nav class="mt-4 space-y-1" aria-label="Related event context">
     {% for relationship in event_relationships %}
       {% if relationship.kind == "event_series" %}

@@ -159,6 +159,17 @@ class EventDetailRelationshipTest(TestCase):
                     count=1,
                 )
 
+    def test_relationship_block_uses_clear_part_of_copy(self):
+        response = self.client.get(self.event.get_absolute_url())
+
+        self.assertContains(response, '>Part of</h2>', count=1)
+        self.assertContains(
+            response,
+            'Explore the series and programs connected to this session.',
+            count=1,
+        )
+        self.assertNotContains(response, 'Related community')
+
     def test_hidden_and_unrelated_programs_do_not_leak(self):
         hidden_names = [
             'Draft Book',

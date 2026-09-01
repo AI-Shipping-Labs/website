@@ -18,6 +18,7 @@ Usage:
 
 import datetime
 import os
+import re
 
 import pytest
 
@@ -384,6 +385,9 @@ class TestMergedWeekBlocks:
             week1.wait_for(state="visible")
             recap = week1.locator('[data-testid="book-meeting-recap"]')
             assert recap.count() == 1
+            recap_href = recap.get_attribute("href")
+            assert recap_href is not None
+            assert re.fullmatch(r"/events/\d+/ie-week-1/recap", recap_href)
 
             week2 = page.locator('[data-week-number="2"]')
             assert week2.locator(
@@ -392,12 +396,6 @@ class TestMergedWeekBlocks:
             assert "recap coming" not in week2.inner_text().lower()
 
             recap.first.click()
-            page.wait_for_url("**/events/**/ie-week-1")
-            # #1458 moved the recap BODY off the event detail page to the
-            # event's own /recap page, leaving a "Read the recap" CTA here.
-            # That commit rewrote its own five inline-body tests but landed
-            # after #1461, so this one still asserted the old inline copy.
-            page.get_by_test_id("event-recap-cta-link").click()
             page.wait_for_url("**/events/**/ie-week-1/recap")
             assert "KV cache end to end" in page.inner_text("body")
         finally:

@@ -218,8 +218,17 @@ class MeetingRecapAffordanceTest(WeekBlockFixture):
             start_datetime=past, end_datetime=past + timedelta(hours=1),
             status='completed', recap_html='<p>What we discussed.</p>',
         )
+        self.week1_meeting.refresh_from_db()
         response = self._get()
         self.assertContains(response, 'book-meeting-recap', count=1)
+        self.assertContains(
+            response, f'href="{self.week1_meeting.get_recap_url()}"', count=1,
+        )
+        # The row remains the event-detail navigation target; only the notes
+        # affordance goes directly to the occurrence recap.
+        self.assertContains(
+            response, f'href="{self.week1_meeting.get_absolute_url()}"', count=1,
+        )
 
     def test_upcoming_meeting_shows_no_recap_placeholder(self):
         response = self._get()

@@ -7,11 +7,11 @@ event's own description always renders here — including on past events that
 have a recap.
 {% endcomment %}
 {% if event.description_html %}
-<div class="prose">
+<div class="prose min-w-0 max-w-full" data-testid="event-description">
   {{ event.description_html|safe }}
 </div>
 {% elif event.description %}
-<div class="prose">
+<div class="prose min-w-0 max-w-full" data-testid="event-description">
   <p class="text-muted-foreground">{{ event.description }}</p>
 </div>
 {% endif %}

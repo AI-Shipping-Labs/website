@@ -162,6 +162,7 @@ class EmailCampaign(models.Model):
         """Query users eligible to receive this campaign.
 
         Returns a queryset of users where ALL of the following hold:
+        - is_active = True
         - effective tier level >= target_min_level
           (base tier or active override)
         - unsubscribed = False (always enforced; never relaxed)

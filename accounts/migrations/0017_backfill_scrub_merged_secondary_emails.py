@@ -19,15 +19,20 @@ from django.db import migrations
 
 
 def scrub_already_merged(apps, schema_editor):
-    # Import lazily so the migration uses the same backfill logic the service
-    # exposes (single source of truth), but with the historical model versions.
-    from accounts.services.account_merge import (
-        backfill_scrub_legacy_merged_emails,
-    )
-
     User = apps.get_model("accounts", "User")
     EmailAlias = apps.get_model("accounts", "EmailAlias")
-    backfill_scrub_legacy_merged_emails(User, EmailAlias)
+    scrubbed_email_suffix = "@merged.invalid"
+    alias_emails = set(EmailAlias.objects.values_list("email", flat=True))
+    if not alias_emails:
+        return
+
+    for user in User.objects.filter(is_active=False):
+        current = (user.email or "").strip().lower()
+        if not current or current.endswith(scrubbed_email_suffix):
+            continue
+        if current in alias_emails:
+            user.email = f"merged+{user.pk}{scrubbed_email_suffix}"
+            user.save(update_fields=["email"])
 
 
 def noop_reverse(apps, schema_editor):

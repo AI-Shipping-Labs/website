@@ -30,6 +30,7 @@ DEFAULT_BATCH_INTERVAL_SECONDS = 60
 # outlives the worker timeout but expires before the retry is fail-closed and
 # recoverable without a second automatic transport call.
 DELIVERY_CLAIM_SECONDS = 330
+INACTIVE_AT_SEND = 'inactive_at_send'
 
 
 def _get_batch_size():
@@ -439,7 +440,7 @@ def send_campaign_batch(
         }
 
     service = EmailService()
-    body_html = render_email_markdown(campaign.body)
+    body_html = None
     sent_count = 0
     skipped_count = already_sent_count
     failed_count = 0
@@ -456,7 +457,11 @@ def send_campaign_batch(
         ).first()
         if delivery is None or delivery.state != CampaignDelivery.State.PENDING:
             continue
-        user = User.objects.filter(pk=delivery.user_id).first()
+        # ``recipient_user_pk`` is the immutable snapshotted identity. Account
+        # merge may repoint ``delivery.user`` to the canonical account for
+        # history, but that must not turn the retired recipient into a send to
+        # the active canonical user.
+        user = User.objects.filter(pk=delivery.recipient_user_pk).first()
         if user is None:
             if _mark_pending_terminal(
                 delivery_id,
@@ -465,6 +470,17 @@ def send_campaign_batch(
             ):
                 skipped_count += 1
             continue
+        if not user.is_active:
+            if _mark_pending_terminal(
+                delivery_id,
+                state=CampaignDelivery.State.SKIPPED,
+                reason=INACTIVE_AT_SEND,
+            ):
+                skipped_count += 1
+            continue
+
+        if body_html is None:
+            body_html = render_email_markdown(campaign.body)
 
         try:
             prepared = service.prepare_rendered(

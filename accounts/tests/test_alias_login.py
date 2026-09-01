@@ -19,7 +19,6 @@ from accounts.adapters import SocialAccountAdapter
 from accounts.models import EmailAlias, User
 from accounts.services.account_merge import (
     SCRUBBED_EMAIL_SUFFIX,
-    backfill_scrub_legacy_merged_emails,
     merge_accounts,
 )
 from accounts.services.email_resolution import resolve_user_by_email
@@ -349,103 +348,6 @@ class AliasInvariantAfterMergeTest(TestCase):
         self.assertEqual(
             resolve_user_by_email(ALIAS_EMAIL).pk, canonical.pk
         )
-
-    def test_data_migration_backfills_legacy_unscrubbed_secondary(self):
-        # Reproduce the pre-#845 legacy state: a deactivated secondary whose
-        # User.email STILL equals an EmailAlias.email, then run the migration's
-        # backfill function and assert the invariant is restored.
-        canonical = User.objects.create_user(
-            email="legacy.canon@gmail.com", password="x"
-        )
-        secondary = User.objects.create_user(
-            email="legacy.alias@gmail.com", password="x"
-        )
-        # Hand-build the broken legacy state: alias recorded but secondary email
-        # left intact + deactivated (what the engine did before #845).
-        EmailAlias.objects.create(
-            user=canonical,
-            email="legacy.alias@gmail.com",
-            source=EmailAlias.SOURCE_MERGE,
-        )
-        secondary.is_active = False
-        secondary.save(update_fields=["is_active"])
-
-        scrubbed = backfill_scrub_legacy_merged_emails(User, EmailAlias)
-        self.assertEqual(scrubbed, 1)
-
-        secondary.refresh_from_db()
-        self.assertTrue(secondary.email.endswith(SCRUBBED_EMAIL_SUFFIX))
-        # Invariant restored, alias still routes to canonical.
-        self.assertEqual(
-            resolve_user_by_email("legacy.alias@gmail.com").pk, canonical.pk
-        )
-
-    def test_backfill_never_scrubs_an_active_user(self):
-        # Highest-risk guard: the backfill must NEVER touch an ACTIVE account,
-        # even in the pathological case where an active user's email happens to
-        # equal an EmailAlias.email. Only deactivated (merged-away) secondaries
-        # are eligible. Without the ``is_active=False`` filter this would scrub
-        # a live login -- a data-loss bug -- so assert it explicitly.
-        active = User.objects.create_user(
-            email="active.collision@gmail.com", password="x"
-        )
-        EmailAlias.objects.create(
-            user=active,
-            email="active.collision@gmail.com",
-            source=EmailAlias.SOURCE_MANUAL,
-        )
-        self.assertTrue(active.is_active)
-
-        scrubbed = backfill_scrub_legacy_merged_emails(User, EmailAlias)
-
-        self.assertEqual(scrubbed, 0)
-        active.refresh_from_db()
-        self.assertEqual(active.email, "active.collision@gmail.com")
-
-    def test_backfill_leaves_non_merged_inactive_user_untouched(self):
-        # A deactivated user whose email is NOT recorded as any EmailAlias was
-        # never merged (e.g. a banned / disabled account). The backfill must not
-        # scrub it -- only already-aliased secondaries are in scope.
-        orphan = User.objects.create_user(
-            email="disabled.user@gmail.com", password="x"
-        )
-        orphan.is_active = False
-        orphan.save(update_fields=["is_active"])
-
-        scrubbed = backfill_scrub_legacy_merged_emails(User, EmailAlias)
-
-        self.assertEqual(scrubbed, 0)
-        orphan.refresh_from_db()
-        self.assertEqual(orphan.email, "disabled.user@gmail.com")
-
-    def test_backfill_is_idempotent(self):
-        # Re-running the backfill after it has already scrubbed must be a no-op:
-        # an already-scrubbed secondary is skipped (matches the migration's
-        # safe-to-re-run contract on prod).
-        canonical = User.objects.create_user(
-            email="idem.canon@gmail.com", password="x"
-        )
-        secondary = User.objects.create_user(
-            email="idem.alias@gmail.com", password="x"
-        )
-        EmailAlias.objects.create(
-            user=canonical,
-            email="idem.alias@gmail.com",
-            source=EmailAlias.SOURCE_MERGE,
-        )
-        secondary.is_active = False
-        secondary.save(update_fields=["is_active"])
-
-        first = backfill_scrub_legacy_merged_emails(User, EmailAlias)
-        second = backfill_scrub_legacy_merged_emails(User, EmailAlias)
-
-        self.assertEqual(first, 1)
-        self.assertEqual(second, 0)
-        # The alias row still holds the ORIGINAL email after both runs.
-        self.assertTrue(
-            EmailAlias.objects.filter(email="idem.alias@gmail.com").exists()
-        )
-
 
 @tag("core")
 @override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)

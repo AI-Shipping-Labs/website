@@ -519,6 +519,10 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
             email='user3@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=True,
         )
+        self.inactive_user = User.objects.create_user(
+            email='inactive@test.com', tier=self.free_tier,
+            email_verified=True, unsubscribed=False, is_active=False,
+        )
 
         self.campaign = EmailCampaign.objects.create(
             subject='Test Campaign',
@@ -701,10 +705,12 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
         # sent_at is not set yet — only set when last batch finishes
         self.assertIsNone(self.campaign.sent_at)
 
-    def test_send_campaign_excludes_ineligible_recipients_from_chunks(self):
-        """Unsubscribed/unverified users are excluded from chunked user_ids."""
+    def test_send_campaign_excludes_ineligible_recipients_from_snapshot(self):
+        """Unsubscribed and inactive users never enter the durable snapshot."""
         from email_app.tasks.send_campaign import send_campaign
-        send_campaign(self.campaign.pk)
+
+        expected_count = self.campaign.get_recipient_count()
+        result = send_campaign(self.campaign.pk)
 
         # Collect every user_id scheduled across batches.
         chunked = []
@@ -715,6 +721,14 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
         self.assertIn(self.user2.pk, chunked)
         # Unsubscribed user MUST NOT be chunked.
         self.assertNotIn(self.user3.pk, chunked)
+        self.assertNotIn(self.inactive_user.pk, chunked)
+        self.assertEqual(result['total'], expected_count)
+        self.assertEqual(self.campaign.deliveries.count(), expected_count)
+        self.assertFalse(
+            self.campaign.deliveries.filter(
+                recipient_user_pk=self.inactive_user.pk,
+            ).exists(),
+        )
 
     def test_send_campaign_no_recipients_marks_sent(self):
         """A campaign with zero eligible recipients goes straight to sent."""
@@ -840,6 +854,61 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         self.assertEqual(logs.count(), 2)
         log_emails = set(logs.values_list('user__email', flat=True))
         self.assertEqual(log_emails, {'user1@test.com', 'user2@test.com'})
+
+    @patch(
+        'email_app.tasks.send_campaign.EmailService._send_ses',
+        return_value='active-message',
+    )
+    def test_compatibility_batch_skips_inactive_and_sends_active(self, mock_ses):
+        User.objects.filter(pk=self.user1.pk).update(is_active=False)
+
+        from email_app.tasks.send_campaign import INACTIVE_AT_SEND, send_campaign_batch
+
+        result = send_campaign_batch(
+            self.campaign.pk,
+            user_ids=[self.user1.pk, self.user2.pk],
+            send_delay=0,
+        )
+
+        self.assertEqual(result['batch_size'], 2)
+        self.assertEqual(result['sent_count'], 1)
+        self.assertEqual(result['skipped_count'], 1)
+        self.assertEqual(result['unsubscribed_at_send_count'], 0)
+        deliveries = {
+            delivery.recipient_user_pk: delivery
+            for delivery in self.campaign.deliveries.all()
+        }
+        self.assertEqual(
+            deliveries[self.user1.pk].state,
+            CampaignDelivery.State.SKIPPED,
+        )
+        self.assertEqual(
+            deliveries[self.user1.pk].skip_reason,
+            INACTIVE_AT_SEND,
+        )
+        self.assertEqual(deliveries[self.user1.pk].attempt_count, 0)
+        self.assertEqual(
+            deliveries[self.user2.pk].state,
+            CampaignDelivery.State.SENT,
+        )
+        self.assertEqual(mock_ses.call_count, 1)
+        self.assertEqual(mock_ses.call_args.args[0], self.user2.email)
+        self.assertFalse(
+            EmailLog.objects.filter(
+                campaign=self.campaign,
+                user=self.user1,
+            ).exists(),
+        )
+        self.assertTrue(
+            EmailLog.objects.filter(
+                campaign=self.campaign,
+                user=self.user2,
+                ses_message_id='active-message',
+            ).exists(),
+        )
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.status, 'sent')
+        self.assertEqual(self.campaign.sent_count, 1)
 
     @patch(
         'email_app.tasks.send_campaign.EmailService._send_ses',

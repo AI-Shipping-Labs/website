@@ -72,6 +72,13 @@ def _seed_member_ops():
         password="pw",
         email_verified=True,
     )
+    inactive = User.objects.create_user(
+        email="inactive-secondary-1555@test.com",
+        password="pw",
+        email_verified=True,
+        is_active=False,
+        unsubscribed=False,
+    )
     today = datetime.date.today()
     current = Sprint.objects.create(
         name="1194 Current Sprint",
@@ -137,7 +144,9 @@ def _seed_member_ops():
     )
     ids = {
         "member": member.pk,
+        "member_email": member.email,
         "other": other.pk,
+        "inactive_email": inactive.email,
         "plan": plan.pk,
         "future": future.pk,
         "upcoming": upcoming.pk,
@@ -213,6 +222,9 @@ class TestStudioMemberOps1194:
         expect(page.get_by_test_id("campaign-recipient-mode")).to_contain_text(
             "Draft preview"
         )
+        recipient_table = page.get_by_test_id("campaign-recipients-table")
+        expect(recipient_table).to_contain_text(ids["member_email"])
+        expect(recipient_table).not_to_contain_text(ids["inactive_email"])
 
         page.goto(f"{django_server}/studio/campaigns/{ids['sent']}/recipients/")
         expect(page.get_by_test_id("campaign-recipient-disposition")).to_contain_text(

@@ -489,10 +489,10 @@ class AtomicityTest(UserMergeTestBase):
         secondary.tags = ["x"]
         secondary.save(update_fields=["tags"])
 
-        # Inject a failure AFTER the repoint + scalar passes have already written
-        # to the real DB, so we prove those writes are rolled back too.
+        # Inject a failure after alias registration and the secondary state save,
+        # proving all merge writes share the same transaction.
         with mock.patch(
-            "accounts.services.account_merge._reconcile_tier_overrides",
+            "accounts.services.account_merge._write_audit",
             side_effect=RuntimeError("boom"),
         ):
             with self.assertRaises(RuntimeError):
@@ -509,6 +509,7 @@ class AtomicityTest(UserMergeTestBase):
         self.assertFalse(EmailAlias.objects.filter(user=canonical).exists())
         secondary.refresh_from_db()
         self.assertTrue(secondary.is_active)
+        self.assertFalse(secondary.unsubscribed)
         canonical.refresh_from_db()
         self.assertEqual(canonical.tags, [])
         self.assertFalse(
@@ -563,6 +564,21 @@ class ScalarReconcileTest(UserMergeTestBase):
         canonical.refresh_from_db()
         self.assertEqual(canonical.tier.slug, "main")
         self.assertEqual(response.json()["reconciled"]["tier"]["to"], "main")
+
+    def test_secondary_unsubscribe_still_reconciles_to_canonical(self):
+        canonical, secondary = self._make_pair()
+        secondary.unsubscribed = True
+        secondary.save(update_fields=["unsubscribed"])
+
+        response = self._post(
+            {"canonical_email": "keep@test.com", "merge_email": "dupe@test.com"}
+        )
+
+        canonical.refresh_from_db()
+        secondary.refresh_from_db()
+        self.assertTrue(canonical.unsubscribed)
+        self.assertTrue(secondary.unsubscribed)
+        self.assertEqual(response.json()["reconciled"]["unsubscribed"], {"to": True})
 
 
 class UniqueTogetherCollisionTest(UserMergeTestBase):
@@ -914,7 +930,10 @@ class DryRunTest(UserMergeTestBase):
         self.assertFalse(EmailAlias.objects.filter(user=canonical).exists())
         secondary.refresh_from_db()
         self.assertTrue(secondary.is_active)
+        self.assertFalse(secondary.unsubscribed)
         canonical.refresh_from_db()
+        self.assertTrue(canonical.is_active)
+        self.assertFalse(canonical.unsubscribed)
         self.assertEqual(canonical.tags, [])
         self.assertFalse(
             CommunityAuditLog.objects.filter(action="merge_accounts").exists()
@@ -939,8 +958,12 @@ class RealMergeAuditAliasTest(UserMergeTestBase):
         alias = EmailAlias.objects.get(user=canonical, email="dupe@test.com")
         self.assertEqual(alias.source, EmailAlias.SOURCE_MERGE)
 
+        canonical.refresh_from_db()
         secondary.refresh_from_db()
+        self.assertTrue(canonical.is_active)
+        self.assertFalse(canonical.unsubscribed)
         self.assertFalse(secondary.is_active)
+        self.assertTrue(secondary.unsubscribed)
         self.assertEqual(response.json()["alias_created"], "dupe@test.com")
 
     def test_future_payment_routes_to_canonical_via_resolver(self):
@@ -1031,6 +1054,40 @@ class StaffMergeTest(UserMergeTestBase):
 
 
 class IdempotentNoOpTest(UserMergeTestBase):
+    def test_service_rerun_uses_current_scrubbed_secondary_marker(self):
+        from accounts.services.account_merge import merge_accounts
+
+        canonical, secondary = self._make_pair()
+        self._post(
+            {"canonical_email": "keep@test.com", "merge_email": "dupe@test.com"}
+        )
+        canonical.refresh_from_db()
+        secondary.refresh_from_db()
+        scrubbed_email = secondary.email
+
+        plan = merge_accounts(
+            canonical,
+            secondary,
+            actor_label="idempotency-test",
+        )
+
+        self.assertTrue(plan.already_merged)
+        secondary.refresh_from_db()
+        self.assertEqual(secondary.email, scrubbed_email)
+        self.assertFalse(secondary.is_active)
+        self.assertTrue(secondary.unsubscribed)
+        self.assertEqual(
+            EmailAlias.objects.filter(
+                user=canonical,
+                email="dupe@test.com",
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            CommunityAuditLog.objects.filter(action="merge_accounts").count(),
+            1,
+        )
+
     def test_rerun_already_merged_pair_is_clean_no_op(self):
         canonical, secondary = self._make_pair()
         first = self._post(

@@ -27,7 +27,11 @@ def eligible_campaign_recipients(
     if audience_verification != "everyone":
         verification_filter["email_verified"] = True
     base_qs = (
-        user_qs.filter(unsubscribed=False, **verification_filter)
+        user_qs.filter(
+            is_active=True,
+            unsubscribed=False,
+            **verification_filter,
+        )
         .filter(effective_level_at_least_q(target_min_level))
     )
     if slack_filter == "yes":

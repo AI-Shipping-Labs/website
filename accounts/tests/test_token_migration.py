@@ -1,12 +1,112 @@
-"""Migration coverage for hashing legacy operator API tokens."""
+"""Behavioral coverage for account data migrations."""
 
 import io
+import sys
 from contextlib import redirect_stderr, redirect_stdout
+from unittest.mock import patch
 
 from django.contrib.auth.hashers import check_password, identify_hasher
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase, override_settings
+
+
+class MergedSecondaryEmailMigrationTest(TransactionTestCase):
+    """Migration 0017 owns its historical repair after runtime cleanup."""
+
+    migrate_from = [("accounts", "0016_emailalias")]
+    migrate_to = [("accounts", "0017_backfill_scrub_merged_secondary_emails")]
+
+    def test_forward_is_self_contained_and_reverse_keeps_scrubbed_value(self):
+        executor = MigrationExecutor(connection)
+        latest_targets = executor.loader.graph.leaf_nodes()
+
+        try:
+            executor.migrate(self.migrate_from)
+            old_apps = executor.loader.project_state(self.migrate_from).apps
+            OldUser = old_apps.get_model("accounts", "User")
+            OldEmailAlias = old_apps.get_model("accounts", "EmailAlias")
+
+            canonical = OldUser.objects.create(
+                email="migration-canonical@test.com",
+                password="!",
+            )
+            legacy_secondary = OldUser.objects.create(
+                email="migration-legacy@test.com",
+                password="!",
+                is_active=False,
+            )
+            active_collision = OldUser.objects.create(
+                email="migration-active@test.com",
+                password="!",
+                is_active=True,
+            )
+            inactive_orphan = OldUser.objects.create(
+                email="migration-orphan@test.com",
+                password="!",
+                is_active=False,
+            )
+            already_scrubbed = OldUser.objects.create(
+                email="merged+999@merged.invalid",
+                password="!",
+                is_active=False,
+            )
+            OldEmailAlias.objects.create(
+                user=canonical,
+                email=legacy_secondary.email,
+                source="merge",
+            )
+            OldEmailAlias.objects.create(
+                user=canonical,
+                email=active_collision.email,
+                source="manual",
+            )
+
+            executor = MigrationExecutor(connection)
+            with patch.dict(
+                sys.modules,
+                {"accounts.services.account_merge": None},
+            ):
+                executor.migrate(self.migrate_to)
+
+            migrated_apps = executor.loader.project_state(self.migrate_to).apps
+            MigratedUser = migrated_apps.get_model("accounts", "User")
+            MigratedEmailAlias = migrated_apps.get_model("accounts", "EmailAlias")
+            expected_scrubbed = f"merged+{legacy_secondary.pk}@merged.invalid"
+            self.assertEqual(
+                MigratedUser.objects.get(pk=legacy_secondary.pk).email,
+                expected_scrubbed,
+            )
+            self.assertEqual(
+                MigratedUser.objects.get(pk=active_collision.pk).email,
+                "migration-active@test.com",
+            )
+            self.assertEqual(
+                MigratedUser.objects.get(pk=inactive_orphan.pk).email,
+                "migration-orphan@test.com",
+            )
+            self.assertEqual(
+                MigratedUser.objects.get(pk=already_scrubbed.pk).email,
+                "merged+999@merged.invalid",
+            )
+            self.assertEqual(
+                MigratedEmailAlias.objects.get(
+                    email="migration-legacy@test.com"
+                ).user_id,
+                canonical.pk,
+            )
+
+            executor = MigrationExecutor(connection)
+            executor.migrate(self.migrate_from)
+            reversed_apps = executor.loader.project_state(self.migrate_from).apps
+            ReversedUser = reversed_apps.get_model("accounts", "User")
+            self.assertEqual(
+                ReversedUser.objects.get(pk=legacy_secondary.pk).email,
+                expected_scrubbed,
+            )
+        finally:
+            executor = MigrationExecutor(connection)
+            executor.migrate(latest_targets)
 
 
 @override_settings(

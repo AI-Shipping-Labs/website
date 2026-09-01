@@ -817,21 +817,12 @@ def merge_accounts(
         if canonical.pk == secondary.pk:
             raise SelfMergeError("Cannot merge an account into itself.")
 
-        # Idempotent no-op: secondary already a deactivated alias of canonical.
-        # After a merge the secondary's email is scrubbed (#845) to a
-        # ``merged+<pk>@merged.invalid`` placeholder, so a re-run is detected
-        # either by that scrubbed marker OR by the original (pre-#845) state
-        # where the email still equalled a canonical alias.
-        sec_email_norm = normalize_email(secondary.email)
+        # Idempotent no-op: a current merge leaves the inactive secondary with
+        # a deterministic ``merged+<pk>@merged.invalid`` placeholder.
         already_scrubbed = (secondary.email or "").strip().lower().endswith(
             SCRUBBED_EMAIL_SUFFIX
         )
-        if not secondary.is_active and (
-            already_scrubbed
-            or EmailAlias.objects.filter(
-                user=canonical, email=sec_email_norm
-            ).exists()
-        ):
+        if not secondary.is_active and already_scrubbed:
             plan.already_merged = True
             return plan
 
@@ -870,7 +861,13 @@ def merge_accounts(
             # Clear secondary's billing identifiers that moved to canonical so a
             # future webhook can't resolve the dead row ahead of canonical.
             secondary.is_active = False
-            update_fields = ["is_active", "stripe_customer_id", "subscription_id"]
+            secondary.unsubscribed = True
+            update_fields = [
+                "is_active",
+                "unsubscribed",
+                "stripe_customer_id",
+                "subscription_id",
+            ]
             # Scrub the secondary's email so the original address exists ONLY as
             # an EmailAlias of canonical (#845): restores the invariant
             # "EmailAlias.email MUST NOT equal any User.email". The scrub is
@@ -914,32 +911,6 @@ def scrub_merged_email(secondary):
     if current.endswith(SCRUBBED_EMAIL_SUFFIX):
         return None
     return f"merged+{secondary.pk}{SCRUBBED_EMAIL_SUFFIX}"
-
-
-def backfill_scrub_legacy_merged_emails(user_model, alias_model):
-    """Scrub already-merged secondaries whose email still equals an alias (#845).
-
-    Restores the "EmailAlias.email MUST NOT equal any User.email" invariant for
-    rows merged BEFORE #845 shipped. Takes the model classes as arguments so a
-    data migration can pass its historical ``apps.get_model`` versions and the
-    test suite can pass the live models -- the logic is identical either way.
-
-    Returns the number of rows scrubbed.
-    """
-    alias_emails = set(alias_model.objects.values_list("email", flat=True))
-    if not alias_emails:
-        return 0
-
-    scrubbed = 0
-    for user in user_model.objects.filter(is_active=False):
-        current = (user.email or "").strip().lower()
-        if not current or current.endswith(SCRUBBED_EMAIL_SUFFIX):
-            continue
-        if current in alias_emails:
-            user.email = f"merged+{user.pk}{SCRUBBED_EMAIL_SUFFIX}"
-            user.save(update_fields=["email"])
-            scrubbed += 1
-    return scrubbed
 
 
 def _register_alias(plan, canonical, secondary, actor):

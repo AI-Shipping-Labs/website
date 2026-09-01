@@ -1,4 +1,4 @@
-"""Authoritative delivery-state coverage for issue #1499."""
+"""Authoritative campaign delivery-state coverage."""
 
 import threading
 import uuid
@@ -21,6 +21,7 @@ from email_app.services.campaign_dispatch import (
 )
 from email_app.services.email_service import EmailServiceError
 from email_app.tasks.send_campaign import (
+    INACTIVE_AT_SEND,
     _finalize_delivery_sent,
     refresh_campaign_status,
     send_campaign,
@@ -167,6 +168,67 @@ class CampaignDeliveryFailureSemanticsTest(CampaignDeliveryBase, TestCase):
         missing_delivery.refresh_from_db()
         self.assertEqual(missing_delivery.state, CampaignDelivery.State.SKIPPED)
         self.assertEqual(missing_delivery.skip_reason, "user_missing_at_send")
+        transport.assert_not_called()
+
+    def test_merged_snapshotted_secondary_is_skipped_before_render_or_ses(self):
+        from accounts.services.account_merge import merge_accounts
+
+        campaign, secondary, delivery = self.make_campaign_delivery()
+        canonical = User.objects.create_user(
+            email="durable-canonical@test.com",
+            tier=self.free_tier,
+            email_verified=True,
+        )
+        merge_accounts(
+            canonical,
+            secondary,
+            actor_label="campaign-race-test",
+        )
+        delivery.refresh_from_db()
+        secondary.refresh_from_db()
+        self.assertEqual(delivery.user_id, canonical.pk)
+        self.assertEqual(delivery.recipient_user_pk, secondary.pk)
+        self.assertFalse(secondary.is_active)
+
+        with (
+            patch(
+                "email_app.tasks.send_campaign.render_email_markdown",
+            ) as render_body,
+            patch(
+                "email_app.tasks.send_campaign.EmailService.prepare_rendered",
+            ) as prepare,
+            patch(
+                "email_app.tasks.send_campaign.EmailService._build_unsubscribe_url",
+            ) as build_unsubscribe_url,
+            patch(
+                "email_app.tasks.send_campaign.EmailService._build_verify_email_url",
+            ) as build_verify_url,
+            patch(
+                "email_app.tasks.send_campaign.EmailService.send_prepared",
+            ) as transport,
+        ):
+            result = send_campaign_batch(
+                campaign.pk,
+                delivery_ids=[delivery.pk],
+                send_delay=0,
+            )
+
+        delivery.refresh_from_db()
+        campaign.refresh_from_db()
+        self.assertEqual(delivery.state, CampaignDelivery.State.SKIPPED)
+        self.assertEqual(delivery.skip_reason, INACTIVE_AT_SEND)
+        self.assertEqual(delivery.attempt_count, 0)
+        self.assertEqual(result["sent_count"], 0)
+        self.assertEqual(result["skipped_count"], 1)
+        self.assertEqual(result["unsubscribed_at_send_count"], 0)
+        self.assertEqual(campaign.status, "sent")
+        self.assertEqual(campaign.sent_count, 0)
+        self.assertIsNotNone(campaign.sent_at)
+        self.assertFalse(EmailLog.objects.filter(campaign=campaign).exists())
+        render_body.assert_not_called()
+        prepare.assert_not_called()
+        build_unsubscribe_url.assert_not_called()
+        build_verify_url.assert_not_called()
         transport.assert_not_called()
 
     @patch(

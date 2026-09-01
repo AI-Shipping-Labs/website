@@ -8,6 +8,7 @@ from django.utils import timezone
 from accounts.models import TierOverride
 from email_app.models import EmailCampaign
 from email_app.services.campaign_audience import campaign_recipient_count
+from email_app.services.campaign_recipients import build_campaign_recipient_rows
 from events.models import Event, EventRegistration
 from tests.fixtures import TierSetupMixin
 
@@ -32,6 +33,10 @@ class CampaignAudienceParityTest(TierSetupMixin, TestCase):
             email="unverified-1292@example.com", password="pw", email_verified=False,
             slack_member=True, tags=["wanted"]
         )
+        User.objects.create_user(
+            email="inactive-1292@example.com", password="pw", email_verified=True,
+            is_active=False, slack_member=True, tags=["wanted"]
+        )
         campaign = EmailCampaign.objects.create(
             subject="Parity", body="Hello", target_min_level=0,
             target_tags_any=["wanted"], target_tags_none=["blocked"],
@@ -49,6 +54,10 @@ class CampaignAudienceParityTest(TierSetupMixin, TestCase):
         self.assertEqual(campaign.get_recipient_count(), 1)
         self.assertEqual(
             list(campaign.get_eligible_recipients().values_list("email", flat=True)),
+            ["match-1292@example.com"],
+        )
+        self.assertEqual(
+            [row["recipient_email"] for row in build_campaign_recipient_rows(campaign)],
             ["match-1292@example.com"],
         )
 
@@ -87,7 +96,12 @@ class CampaignAudienceParityTest(TierSetupMixin, TestCase):
             email="wrong-slack-all-1292@example.com", tier=self.main_tier,
             email_verified=True, slack_member=False, tags=["include"],
         )
-        for user in (eligible, overridden, excluded, unverified):
+        inactive = User.objects.create_user(
+            email="inactive-all-1292@example.com", tier=self.main_tier,
+            email_verified=True, is_active=False, slack_member=True,
+            tags=["include"],
+        )
+        for user in (eligible, overridden, excluded, unverified, inactive):
             EventRegistration.objects.create(event=event, user=user)
 
         cases = (

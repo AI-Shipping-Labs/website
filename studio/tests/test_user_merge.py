@@ -433,24 +433,6 @@ class AlreadyMergedTest(MergeUITestBase):
             CommunityAuditLog.objects.filter(action="merge_accounts").count(), 1
         )
 
-    def test_inactive_alias_pair_renders_already_merged_state(self):
-        # Drive the engine's already_merged branch directly: secondary inactive
-        # AND an existing alias on canonical -> preview shows the friendly state.
-        self._login_staff()
-        canonical, secondary = self._make_pair()
-        secondary.is_active = False
-        secondary.save(update_fields=["is_active"])
-        EmailAlias.objects.create(
-            user=canonical,
-            email="dupe@test.com",
-            source=EmailAlias.SOURCE_MERGE,
-        )
-        response = self._preview("keep@test.com", "dupe@test.com")
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="merge-preview-already-merged"')
-        self.assertNotContains(response, 'data-testid="merge-confirm-submit"')
-
-
 class EntryPointsTest(MergeUITestBase):
     def test_people_nav_shows_merge_link(self):
         self._login_staff()

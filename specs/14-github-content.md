@@ -251,10 +251,10 @@ Project description in markdown...
 
 ### Manual Sync (fallback)
 
-Admin can trigger a sync from `/admin/sync`:
+Staff can trigger a sync from `/studio/sync/`:
 - "Sync All" button — runs sync for all content repos
 - Per-repo "Sync" button — runs sync for a specific repo
-- Shows last sync timestamp and result per repo
+- `/studio/sync/history/` shows sync history and results
 
 ### GitHub App Authentication
 
@@ -325,6 +325,6 @@ For private repos (courses):
 - R-GIT-4: For private repos, authenticate using a GitHub App installation token. Store GitHub App credentials (`app_id`, `private_key`) in environment config.
 - R-GIT-5: Add `source_repo`, `source_path`, `source_commit` fields to all content tables (articles, courses/modules/units, recordings, projects, curated_links, downloads).
 - R-GIT-6: During sync, rewrite relative image paths to absolute S3 URLs. Upload images only if they changed (compare file hash).
-- R-GIT-7: Admin page `/admin/sync` shows all content sources with last sync time, status, and "Sync Now" button. Shows sync history with item counts and errors.
+- R-GIT-7: Studio page `/studio/sync/` shows all content sources with last sync time, status, and "Sync now" button. `/studio/sync/history/` shows item counts and errors.
 - R-GIT-8: On sync, soft-delete content items whose source files no longer exist in the repo (set `status = "unpublished"`, don't hard delete).
-- R-GIT-9: Admin can still create/edit content directly in the Django admin (for quick fixes). Direct edits are flagged with `source_repo = null`. Next sync from GitHub will overwrite if the same slug exists in the repo.
+- R-GIT-9: Staff creates or edits local content through Studio. Source-managed content is edited in GitHub and re-synced; direct low-level model access is not a routine workflow.

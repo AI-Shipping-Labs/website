@@ -11,7 +11,7 @@ Tests cover all BDD scenarios from the issue:
 - Hour-long timestamps formatted correctly
 - Unauthorized member cannot view gated course unit
 - Visitor reads article where inline YouTube URL is NOT auto-embedded
-- Staff member manages timestamps through admin editor
+- Staff member manages recording chapters in Studio
 - Member completes a course unit after watching a video lesson
 
 Usage:
@@ -19,12 +19,12 @@ Usage:
 """
 
 import datetime
-import json
 import os
 
 import pytest
 from django.utils import timezone
 from playwright.sync_api import expect
+from scripts.browser_journey_policy import browser_journey
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -280,15 +280,6 @@ def _create_user(email, password="testpass123", tier_slug=None):
     user.save()
     connection.close()
     return user
-
-
-def _login_admin_via_browser(page, base_url, email, password="adminpass123"):
-    """Log in an admin user via the Django admin login page."""
-    page.goto(f"{base_url}/admin/login/", wait_until="domcontentloaded")
-    page.fill("#id_username", email)
-    page.fill("#id_password", password)
-    page.click('input[type="submit"]')
-    page.wait_for_load_state("domcontentloaded")
 
 
 # ---------------------------------------------------------------
@@ -769,21 +760,23 @@ class TestScenario9InlineYouTubeNotEmbedded:
         # the paragraph (not as an isolated embed)
         assert "Also see this other resource" in body
 # ---------------------------------------------------------------
-# Scenario 10: Staff manages timestamps through admin editor
+# Scenario 10: Staff manages recording chapters in Studio
 # ---------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
-class TestScenario10AdminTimestampEditor:
-    """Staff member manages timestamps through the admin editor."""
+class TestScenario10StudioTimestampEditor:
+    """Staff member manages recording chapters without leaving Studio."""
 
-    def test_admin_adds_timestamps_to_recording(self, django_server, page):
-        """Given a recording, an admin adds timestamps via the admin
-        editor and they appear on the public page."""
+    @browser_journey
+    def test_staff_adds_timestamps_to_recording_in_studio(
+        self, django_server, browser,
+    ):
+        """A Studio edit persists chapters that appear on the public page."""
         _clear_recordings()
         from accounts.models import User
 
-        User.objects.create_superuser(
-            email="admin-ts@test.com", password="adminpass123"
+        User.objects.create_user(
+            email="studio-ts@test.com", password="testpass123", is_staff=True,
         )
         recording = _create_recording(
             title="Workshop Demo",
@@ -794,52 +787,27 @@ class TestScenario10AdminTimestampEditor:
             required_level=0,
         )
 
-        # Log in as admin
-        _login_admin_via_browser(
-            page, django_server, "admin-ts@test.com"
-        )
-
-        # Navigate to the event change page (post-unification: Recording
-        # was merged into Event, so the admin URL is /admin/events/event/).
+        context = _auth_context(browser, "studio-ts@test.com")
+        page = context.new_page()
         page.goto(
-            f"{django_server}/admin/events/event/{recording.pk}/change/",
+            f"{django_server}/studio/recordings/{recording.pk}/edit",
             wait_until="domcontentloaded",
         )
+        assert "/studio/recordings/" in page.url
+        expect(page.get_by_test_id("recording-timestamps-editor")).to_be_visible()
+        assert page.locator('a[href^="/admin/"]').count() == 0
 
-        body = page.content()
-        # Verify the timestamp editor widget is present
-        # The TimestampEditorWidget renders an "Add Timestamp" button
-        assert "Add Timestamp" in body or "timestamp" in body.lower()
-
-        # Add timestamps by setting the JSON field value directly
-        # The admin uses a TimestampEditorWidget which stores JSON
-        # We interact with the underlying textarea/input
-        timestamps_data = json.dumps([
-            {"time_seconds": 150, "label": "Setup walkthrough"},
-            {"time_seconds": 600, "label": "Live coding"},
-        ])
-
-        # Find the timestamps field and set its value via JS
-        page.evaluate(
-            """(data) => {
-                // Find the hidden input or textarea for timestamps
-                var el = document.getElementById('id_timestamps');
-                if (!el) {
-                    // Try finding by name
-                    el = document.querySelector('[name="timestamps"]');
-                }
-                if (el) {
-                    el.value = data;
-                    // Trigger change event
-                    el.dispatchEvent(new Event('change'));
-                }
-            }""",
-            timestamps_data,
-        )
-
-        # Save the recording
-        page.click('input[name="_save"]')
-        page.wait_for_load_state("domcontentloaded")
+        add_button = page.get_by_test_id("recording-timestamp-add")
+        add_button.click()
+        add_button.click()
+        times = page.get_by_test_id("recording-timestamp-time")
+        labels = page.get_by_test_id("recording-timestamp-label")
+        times.nth(0).fill("02:30")
+        labels.nth(0).fill("Setup walkthrough")
+        times.nth(1).fill("10:00")
+        labels.nth(1).fill("Live coding")
+        page.get_by_role("button", name="Save Changes").click()
+        page.wait_for_url(f"**/studio/recordings/{recording.pk}/edit")
 
         # Navigate to the public recording page (workshop video, issue #426)
         # Issue #915: bare-slug URLs no longer redirect — use url_key.
@@ -866,6 +834,7 @@ class TestScenario10AdminTimestampEditor:
         assert "Setup walkthrough" in ts_text
         assert "[10:00]" in ts_text
         assert "Live coding" in ts_text
+        context.close()
 # ---------------------------------------------------------------
 # Scenario 11: Removed -- duplicate of unit completion toggling
 #   tests in content/tests/test_course_units.py

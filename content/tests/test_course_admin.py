@@ -2,8 +2,7 @@
 
 Covers:
 - Admin CRUD operations for courses, modules, units
-- Reorder API: PUT /api/admin/modules/reorder
-- Reorder API: PUT /api/admin/units/reorder
+- Retired reorder APIs fail closed without changing course structure
 - Status transitions (draft -> published, published -> draft)
 """
 
@@ -11,6 +10,7 @@ import json
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
+from django.urls import Resolver404, resolve
 
 from content.models import Course, Module, Unit
 
@@ -265,348 +265,54 @@ class UnitAdminCRUDTest(TestCase):
 
 
 # ============================================================
-# Reorder API Tests
+# Retired Reorder API Tests
 # ============================================================
 
 
-class ReorderModulesApiTest(TestCase):
-    """Test PUT /api/admin/modules/reorder."""
+class RetiredReorderApiTest(TestCase):
+    """Legacy browser-era reorder routes fail closed without mutation."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = Course.objects.create(
+            title='Private Reorder Course', slug='private-reorder',
+        )
+        cls.module = Module.objects.create(
+            course=cls.course,
+            title='Private Module',
+            slug='private-module',
+            sort_order=7,
+        )
+        cls.unit = Unit.objects.create(
+            module=cls.module,
+            title='Private Unit',
+            slug='private-unit',
+            sort_order=9,
+        )
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
 
     def setUp(self):
-        self.client = Client()
-        self.admin_user = User.objects.create_superuser(
-            email='admin@test.com', password='testpass',
-        )
-        self.staff_user = User.objects.create_user(
-            email='staff@test.com', password='testpass',
-            is_staff=True,
-        )
-        self.regular_user = User.objects.create_user(
-            email='user@test.com', password='testpass',
-        )
-        self.course = Course.objects.create(
-            title='Reorder Course', slug='reorder',
-        )
-        self.mod1 = Module.objects.create(
-            course=self.course, title='Module 1', slug='module-1', sort_order=0,
-        )
-        self.mod2 = Module.objects.create(
-            course=self.course, title='Module 2', slug='module-2', sort_order=1,
-        )
-        self.mod3 = Module.objects.create(
-            course=self.course, title='Module 3', slug='module-3', sort_order=2,
-        )
+        self.client.force_login(self.staff)
 
-    def test_reorder_succeeds_for_staff(self):
-        self.client.login(email='staff@test.com', password='testpass')
-        data = [
-            {'id': self.mod1.pk, 'sort_order': 2},
-            {'id': self.mod2.pk, 'sort_order': 0},
-            {'id': self.mod3.pk, 'sort_order': 1},
+    def test_retired_reorder_routes_are_unhandled_404_without_mutation_or_leakage(self):
+        cases = [
+            ('/api/admin/modules/reorder', self.module, 7),
+            ('/api/admin/units/reorder', self.unit, 9),
         ]
-        response = self.client.put(
-            '/api/admin/modules/reorder',
-            json.dumps(data),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 200)
-        result = json.loads(response.content)
-        self.assertEqual(result['status'], 'ok')
-        self.assertEqual(result['updated'], 3)
-
-        self.mod1.refresh_from_db()
-        self.mod2.refresh_from_db()
-        self.mod3.refresh_from_db()
-        self.assertEqual(self.mod1.sort_order, 2)
-        self.assertEqual(self.mod2.sort_order, 0)
-        self.assertEqual(self.mod3.sort_order, 1)
-
-    def test_reorder_succeeds_for_superuser(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        data = [
-            {'id': self.mod1.pk, 'sort_order': 1},
-            {'id': self.mod2.pk, 'sort_order': 2},
-        ]
-        response = self.client.put(
-            '/api/admin/modules/reorder',
-            json.dumps(data),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 200)
-
-    def test_reorder_requires_authentication(self):
-        data = [{'id': self.mod1.pk, 'sort_order': 1}]
-        response = self.client.put(
-            '/api/admin/modules/reorder',
-            json.dumps(data),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 401)
-
-    def test_reorder_requires_staff(self):
-        self.client.login(email='user@test.com', password='testpass')
-        data = [{'id': self.mod1.pk, 'sort_order': 1}]
-        response = self.client.put(
-            '/api/admin/modules/reorder',
-            json.dumps(data),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 403)
-
-    def test_reorder_rejects_non_put(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.post(
-            '/api/admin/modules/reorder',
-            json.dumps([]),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 405)
-
-    def test_reorder_rejects_invalid_json(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.put(
-            '/api/admin/modules/reorder',
-            'not json',
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 400)
-
-    def test_reorder_rejects_non_list(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.put(
-            '/api/admin/modules/reorder',
-            json.dumps({'id': 1, 'sort_order': 0}),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 400)
-
-    def test_reorder_rejects_missing_id(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        data = [{'sort_order': 0}]
-        response = self.client.put(
-            '/api/admin/modules/reorder',
-            json.dumps(data),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 400)
-
-    def test_reorder_rejects_missing_sort_order(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        data = [{'id': self.mod1.pk}]
-        response = self.client.put(
-            '/api/admin/modules/reorder',
-            json.dumps(data),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 400)
-
-    def test_reorder_rejects_non_integer_values(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        data = [{'id': 'abc', 'sort_order': 0}]
-        response = self.client.put(
-            '/api/admin/modules/reorder',
-            json.dumps(data),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 400)
-
-    def test_reorder_with_empty_list(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.put(
-            '/api/admin/modules/reorder',
-            json.dumps([]),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 200)
-        result = json.loads(response.content)
-        self.assertEqual(result['updated'], 0)
-
-    def test_reorder_nonexistent_module(self):
-        """Reorder with a nonexistent ID is not an error, just updates 0."""
-        self.client.login(email='admin@test.com', password='testpass')
-        data = [{'id': 99999, 'sort_order': 0}]
-        response = self.client.put(
-            '/api/admin/modules/reorder',
-            json.dumps(data),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 200)
-        result = json.loads(response.content)
-        self.assertEqual(result['updated'], 0)
-
-    def test_reorder_persists_correctly(self):
-        """Verify reordering is actually persisted in DB."""
-        self.client.login(email='admin@test.com', password='testpass')
-        # Reverse the order
-        data = [
-            {'id': self.mod1.pk, 'sort_order': 2},
-            {'id': self.mod2.pk, 'sort_order': 1},
-            {'id': self.mod3.pk, 'sort_order': 0},
-        ]
-        self.client.put(
-            '/api/admin/modules/reorder',
-            json.dumps(data),
-            content_type='application/json',
-        )
-        # Fetch modules in sort order
-        modules = list(
-            Module.objects.filter(course=self.course).order_by('sort_order')
-        )
-        self.assertEqual(modules[0].title, 'Module 3')
-        self.assertEqual(modules[1].title, 'Module 2')
-        self.assertEqual(modules[2].title, 'Module 1')
-
-
-class ReorderUnitsApiTest(TestCase):
-    """Test PUT /api/admin/units/reorder."""
-
-    def setUp(self):
-        self.client = Client()
-        self.admin_user = User.objects.create_superuser(
-            email='admin@test.com', password='testpass',
-        )
-        self.staff_user = User.objects.create_user(
-            email='staff@test.com', password='testpass',
-            is_staff=True,
-        )
-        self.regular_user = User.objects.create_user(
-            email='user@test.com', password='testpass',
-        )
-        self.course = Course.objects.create(
-            title='Unit Reorder Course', slug='unit-reorder',
-        )
-        self.module = Module.objects.create(
-            course=self.course, title='Module', slug='module', sort_order=1,
-        )
-        self.unit1 = Unit.objects.create(
-            module=self.module, title='Unit A', slug='unit-a', sort_order=0,
-        )
-        self.unit2 = Unit.objects.create(
-            module=self.module, title='Unit B', slug='unit-b', sort_order=1,
-        )
-        self.unit3 = Unit.objects.create(
-            module=self.module, title='Unit C', slug='unit-c', sort_order=2,
-        )
-
-    def test_reorder_succeeds_for_staff(self):
-        self.client.login(email='staff@test.com', password='testpass')
-        data = [
-            {'id': self.unit1.pk, 'sort_order': 2},
-            {'id': self.unit2.pk, 'sort_order': 0},
-            {'id': self.unit3.pk, 'sort_order': 1},
-        ]
-        response = self.client.put(
-            '/api/admin/units/reorder',
-            json.dumps(data),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 200)
-        result = json.loads(response.content)
-        self.assertEqual(result['status'], 'ok')
-        self.assertEqual(result['updated'], 3)
-
-        self.unit1.refresh_from_db()
-        self.unit2.refresh_from_db()
-        self.unit3.refresh_from_db()
-        self.assertEqual(self.unit1.sort_order, 2)
-        self.assertEqual(self.unit2.sort_order, 0)
-        self.assertEqual(self.unit3.sort_order, 1)
-
-    def test_reorder_succeeds_for_superuser(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        data = [
-            {'id': self.unit1.pk, 'sort_order': 1},
-        ]
-        response = self.client.put(
-            '/api/admin/units/reorder',
-            json.dumps(data),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 200)
-
-    def test_reorder_requires_authentication(self):
-        data = [{'id': self.unit1.pk, 'sort_order': 1}]
-        response = self.client.put(
-            '/api/admin/units/reorder',
-            json.dumps(data),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 401)
-
-    def test_reorder_requires_staff(self):
-        self.client.login(email='user@test.com', password='testpass')
-        data = [{'id': self.unit1.pk, 'sort_order': 1}]
-        response = self.client.put(
-            '/api/admin/units/reorder',
-            json.dumps(data),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 403)
-
-    def test_reorder_rejects_non_put(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.post(
-            '/api/admin/units/reorder',
-            json.dumps([]),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 405)
-
-    def test_reorder_rejects_invalid_json(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.put(
-            '/api/admin/units/reorder',
-            'not json',
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 400)
-
-    def test_reorder_rejects_non_list(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.put(
-            '/api/admin/units/reorder',
-            json.dumps({'id': 1, 'sort_order': 0}),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 400)
-
-    def test_reorder_rejects_missing_fields(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        data = [{'id': self.unit1.pk}]
-        response = self.client.put(
-            '/api/admin/units/reorder',
-            json.dumps(data),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 400)
-
-    def test_reorder_with_empty_list(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.put(
-            '/api/admin/units/reorder',
-            json.dumps([]),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 200)
-        result = json.loads(response.content)
-        self.assertEqual(result['updated'], 0)
-
-    def test_reorder_persists_correctly(self):
-        """Verify reordering is actually persisted in DB."""
-        self.client.login(email='admin@test.com', password='testpass')
-        data = [
-            {'id': self.unit1.pk, 'sort_order': 2},
-            {'id': self.unit2.pk, 'sort_order': 1},
-            {'id': self.unit3.pk, 'sort_order': 0},
-        ]
-        self.client.put(
-            '/api/admin/units/reorder',
-            json.dumps(data),
-            content_type='application/json',
-        )
-        units = list(
-            Unit.objects.filter(module=self.module).order_by('sort_order')
-        )
-        self.assertEqual(units[0].title, 'Unit C')
-        self.assertEqual(units[1].title, 'Unit B')
-        self.assertEqual(units[2].title, 'Unit A')
+        for path, obj, original_order in cases:
+            with self.subTest(path=path):
+                with self.assertRaises(Resolver404):
+                    resolve(path)
+                response = self.client.put(
+                    path,
+                    json.dumps([{'id': obj.pk, 'sort_order': 0}]),
+                    content_type='application/json',
+                )
+                self.assertEqual(response.status_code, 404)
+                self.assertNotContains(
+                    response, 'Private Reorder Course', status_code=404,
+                )
+                obj.refresh_from_db()
+                self.assertEqual(obj.sort_order, original_order)

@@ -3,9 +3,8 @@
 Covers the staff-facing flows the issue's product intent calls out:
 
 - Identity-area click on the user list navigates to the detail page.
-- The detail page surfaces ``Login as user`` and ``View in Django admin``
-  from a consolidated action row directly under the header (issue #586
-  removed the duplicate ``View as user`` button).
+- The detail page keeps ``Login as user`` and ``Merge accounts`` in Studio
+  from a consolidated action row directly under the header.
 - The detail page renders without horizontal overflow at desktop and
   mobile widths and the note cards do not collide with neighbors.
 - The plan-detail page (which reuses ``_member_notes.html``) still
@@ -166,13 +165,13 @@ class TestStudioUserCrmOverview:
         )
 
         impersonate = page.locator('[data-testid="user-detail-impersonate"]')
-        admin_link = page.locator('[data-testid="studio-open-in-admin"]')
+        merge_link = page.locator('[data-testid="user-detail-merge"]')
         assert impersonate.is_visible()
-        assert admin_link.is_visible()
-        assert (
-            admin_link.get_attribute("href")
-            == f"/admin/accounts/user/{member_pk}/change/"
+        assert merge_link.is_visible()
+        assert merge_link.get_attribute("href").startswith(
+            "/studio/users/merge/?canonical=",
         )
+        assert page.locator('[data-testid="studio-open-in-admin"]').count() == 0
         # Issue #586: the duplicate "View as user" button is removed.
         assert page.locator(
             '[data-testid="user-detail-view-as"]'
@@ -183,10 +182,10 @@ class TestStudioUserCrmOverview:
         assert page.evaluate(
             "document.activeElement.getAttribute('data-testid')"
         ) == "user-detail-impersonate"
-        admin_link.focus()
+        merge_link.focus()
         assert page.evaluate(
             "document.activeElement.getAttribute('data-testid')"
-        ) == "studio-open-in-admin"
+        ) == "user-detail-merge"
 
         # Account-data sections present (issue #560): profile,
         # membership, tags, and the new CRM card. Plans and notes are
@@ -253,7 +252,8 @@ class TestStudioUserCrmOverview:
         # rendered inline (issue #560).
         assert page.locator('[data-testid="user-detail-header"]').is_visible()
         assert page.locator('[data-testid="user-detail-impersonate"]').is_visible()
-        assert page.locator('[data-testid="studio-open-in-admin"]').is_visible()
+        assert page.locator('[data-testid="user-detail-merge"]').is_visible()
+        assert page.locator('[data-testid="studio-open-in-admin"]').count() == 0
         assert page.locator('[data-testid="user-tags-section"]').is_visible()
         assert page.locator('[data-testid="user-crm-section"]').is_visible()
         assert page.locator(

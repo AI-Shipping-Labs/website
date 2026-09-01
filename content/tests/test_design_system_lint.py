@@ -172,7 +172,6 @@ BASELINE: dict[str, dict[str, int]] = {
     "grid_gap5": {},
     "handrolled_empty_state_signature": {  # Initial legacy debt: #1240.
         "templates/content/peer_review/certificate.html": 2,
-        "templates/integrations/admin_sync.html": 1,
         "templates/studio/events/list.html": 2,
         "templates/studio/includes/empty_state.html": 1,
         "templates/studio/sync/_repos_section.html": 1,
@@ -188,15 +187,12 @@ BASELINE: dict[str, dict[str, int]] = {
     "public_font_bold": {  # Initial legacy debt: #1240.
         "templates/base.html": 1,
         "templates/includes/header.html": 2,
-        "templates/integrations/admin_sync.html": 1,
-        "templates/integrations/admin_sync_history.html": 1,
     },
     "public_tracking_wider": {  # Initial legacy debt: #1240.
         "templates/content/peer_review/review_form.html": 4,
         "templates/events/_event_post_resources.html": 1,
         "templates/events/_recording_materials.html": 1,
         "templates/events/events_calendar.html": 7,
-        "templates/integrations/admin_sync_history.html": 3,
     },
 }
 

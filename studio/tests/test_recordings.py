@@ -93,11 +93,37 @@ class StudioRecordingEditTest(TestCase):
             'recording_url': 'https://youtube.com/updated',
             'published': 'on',
             'required_level': '10',
+            'timestamps': (
+                '[{"time":"02:30","label":"Setup walkthrough"},'
+                '{"time":"10:00","label":"Live coding"}]'
+            ),
         })
         self.recording.refresh_from_db()
         self.assertEqual(self.recording.title, 'Updated Rec')
         self.assertEqual(self.recording.recording_url, 'https://youtube.com/updated')
         self.assertTrue(self.recording.published)
+        self.assertEqual(self.recording.timestamps, [
+            {'time_seconds': 150, 'label': 'Setup walkthrough'},
+            {'time_seconds': 600, 'label': 'Live coding'},
+        ])
+
+    def test_invalid_chapters_do_not_mutate_recording(self):
+        response = self.client.post(
+            f'/studio/recordings/{self.recording.pk}/edit',
+            {
+                'title': 'Must Not Save',
+                'slug': 'edit-rec',
+                'recording_url': 'https://youtube.com/updated',
+                'published': 'on',
+                'required_level': '10',
+                'timestamps': '[{"time":"bad","label":"Broken"}]',
+            },
+        )
+
+        self.recording.refresh_from_db()
+        self.assertContains(response, 'data-testid="recording-timestamps-error"')
+        self.assertEqual(self.recording.title, 'Edit Rec')
+        self.assertEqual(self.recording.timestamps, [])
 
     def test_edit_nonexistent_recording_returns_404(self):
         response = self.client.get('/studio/recordings/99999/edit')

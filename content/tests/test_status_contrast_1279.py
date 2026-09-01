@@ -66,11 +66,8 @@ EXCLUDED = {
     ),
     'X5': (
         'templates/includes/tag_rule_components.html',
-        'templates/integrations/admin_sync_history.html',
     ),
     'X6': (
-        'templates/integrations/admin_sync.html',
-        'templates/integrations/admin_sync_history.html',
         'email_app/ses_explain.py',
         'studio/views/ses_events.py',
         'templates/studio',
@@ -85,7 +82,6 @@ UNSAFE_ALLOWLIST = {
     'content/models/download.py',          # X1: Studio-only file-type palette
     'templates/_partials/messages.html',   # X2: flash alert
     'templates/accounts/account.html',     # X2: form-feedback panel
-    'templates/integrations/admin_sync.html',  # X6: operator surface
     'email_app/ses_explain.py',            # X6: operator SES explanation
 }
 

@@ -1,4 +1,3 @@
-from .admin_api import *
 from .api import *
 from .courses import *
 from .home import *

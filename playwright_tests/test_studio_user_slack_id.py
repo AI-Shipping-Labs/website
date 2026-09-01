@@ -254,9 +254,8 @@ class TestStudioUserSlackId:
     ):
         # Issue #586 removed the inline edit form from the user detail
         # page. When the Slack ID is missing, the row now shows
-        # "Not linked". Issue #1198 keeps the action-row admin link as
-        # the only Django admin escape hatch. The slack-id POST endpoint
-        # stays callable from Django admin / scripts.
+        # "Not linked". The page exposes no routine Django-admin path;
+        # the low-level Slack ID endpoint remains available to trusted tools.
         staff_email = "slack-manual-admin@test.com"
         _create_staff_user(staff_email)
         _reset_users_and_settings(staff_email)
@@ -277,7 +276,7 @@ class TestStudioUserSlackId:
         assert page.locator(
             '[data-testid="user-detail-slack-id-admin-link"]'
         ).count() == 0
-        assert page.locator('[data-testid="studio-open-in-admin"]').count() == 1
+        assert page.locator('[data-testid="studio-open-in-admin"]').count() == 0
 
         # The inline edit form, input, and submit must all be gone.
         assert page.locator(
@@ -292,8 +291,8 @@ class TestStudioUserSlackId:
         # Helper copy about the expected ID format also gone.
         assert "Set Slack ID" not in page.content()
 
-        # The slack-id POST endpoint contract (route stays defined +
-        # writes the new value when called from Django admin / scripts)
+        # The low-level slack-id POST endpoint contract (route stays defined +
+        # writes the new value when called from trusted scripts)
         # is covered by the Django unit test
         # ``SlackIdSetEndpointStillCallableTest.test_post_writes_value_through_endpoint``
         # in ``studio/tests/test_user_detail_layout_586.py``. Playwright

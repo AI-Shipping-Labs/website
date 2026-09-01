@@ -1,8 +1,7 @@
-"""Tests for the ``Open in Studio`` link on Django admin pages (issue #727).
+"""Tests for the one-way ``Open in Studio`` link on Django admin pages.
 
-Reverse direction of issue #702 (which added an ``Open in Django admin``
-chip to Studio surfaces). For each of the 16 admin classes listed in the
-issue inventory, assert that the change form AND the changelist render
+For each of the 16 admin classes in the inventory, assert that the change
+form and changelist render
 an ``Open in Studio`` anchor that points at the matching Studio URL,
 opens in a new tab, and carries ``rel="noopener"``.
 
@@ -17,7 +16,7 @@ Also covers:
   ``NoReverseMatch`` self-suppression on a real request path.
 """
 
-from datetime import date, datetime, time
+from datetime import date, datetime
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -676,8 +675,3 @@ class AdminLinksReverseUrlsExistTest(TestCase):
         for name, kwargs, expected in self.URL_FIXTURES:
             with self.subTest(url_name=name):
                 self.assertEqual(reverse(name, kwargs=kwargs), expected)
-
-
-# Silence unused-import warning: time is imported for parity with
-# studio.tests.test_admin_links, kept available for future fixtures.
-_ = time

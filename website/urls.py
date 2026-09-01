@@ -17,10 +17,15 @@ from notifications.urls import api_urlpatterns as notification_api_urlpatterns
 from notifications.urls import page_urlpatterns as notification_page_urlpatterns
 from website.robots import robots_txt
 
+# Resolve the lazy default site before changing this flag. Otherwise the
+# assignment lands on the lazy proxy and Django's initialized AdminSite keeps
+# its default catch-all route.
+_ = admin.site.name
+admin.site.final_catch_all_view = False
+
 urlpatterns = [
     # /ping is served by website.middleware.HealthCheckMiddleware so the
     # ALB's IP-based health checks don't trip ALLOWED_HOSTS.
-    # Integrations URLs must come before admin/ to allow /admin/sync/ to resolve
     path('', include('integrations.urls')),
     path('', include('analytics.urls')),
     path('admin/', admin.site.urls),
@@ -58,7 +63,8 @@ urlpatterns += [
     # treated as CMS slugs by the marketing-page fallback. This also keeps an
     # anonymous POST from being intercepted by CSRF before the 404 response.
     re_path(
-        r'^(?!account/api/change-email/request/?$)(?P<path>.*)$',
+        r'^(?!admin(?:/|$))(?!api/admin(?:/|$))'
+        r'(?!account/api/change-email/request/?$)(?P<path>.*)$',
         marketing_page_fallback,
         name='marketing_page_fallback',
     ),

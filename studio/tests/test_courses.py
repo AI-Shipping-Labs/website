@@ -11,7 +11,8 @@ Verifies:
 
 import uuid
 
-from django.test import TestCase
+from django.contrib.auth import get_user_model
+from django.test import Client, TestCase
 
 from content.access import (
     LEVEL_BASIC,
@@ -22,6 +23,8 @@ from content.access import (
 )
 from content.models import Course, Module, Unit
 from tests.fixtures import StaffUserMixin
+
+User = get_user_model()
 
 
 class StudioCourseListTest(StaffUserMixin, TestCase):
@@ -757,3 +760,54 @@ class StudioModuleReorderTest(StaffUserMixin, TestCase):
             f'/studio/courses/{self.course.pk}/modules/reorder',
         )
         self.assertEqual(response.status_code, 405)
+
+    def test_reorder_rejects_module_from_another_course(self):
+        import json
+        other_course = Course.objects.create(
+            title='Other', slug='other-reorder', status='draft',
+        )
+        other_module = Module.objects.create(
+            course=other_course, slug='other', title='Other', sort_order=5,
+        )
+
+        response = self.client.post(
+            f'/studio/courses/{self.course.pk}/modules/reorder',
+            json.dumps([{'id': other_module.pk, 'sort_order': 0}]),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        other_module.refresh_from_db()
+        self.assertEqual(other_module.sort_order, 5)
+
+    def test_reorder_requires_staff_without_mutation(self):
+        import json
+        member = User.objects.create_user(
+            email='member-reorder@test.com', password='testpass',
+        )
+        self.client.force_login(member)
+
+        response = self.client.post(
+            f'/studio/courses/{self.course.pk}/modules/reorder',
+            json.dumps([{'id': self.m1.pk, 'sort_order': 4}]),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.m1.refresh_from_db()
+        self.assertEqual(self.m1.sort_order, 0)
+
+    def test_reorder_requires_csrf_without_mutation(self):
+        import json
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.staff)
+
+        response = csrf_client.post(
+            f'/studio/courses/{self.course.pk}/modules/reorder',
+            json.dumps([{'id': self.m1.pk, 'sort_order': 4}]),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.m1.refresh_from_db()
+        self.assertEqual(self.m1.sort_order, 0)

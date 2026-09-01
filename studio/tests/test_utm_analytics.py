@@ -18,8 +18,9 @@ Covers acceptance criteria:
 from datetime import timedelta
 from unittest.mock import patch
 
+import pytest
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import Client, TestCase, tag
 from django.utils import timezone
 
 from analytics.models import CampaignVisit, UserAttribution
@@ -493,6 +494,34 @@ class UtmLinkDetailViewTest(TestCase):
         self.assertEqual(len(response.context['conversion_rows']), 8)
         for row in response.context['conversion_rows']:
             self.assertIn('@test.com', row['email'])
+
+    @pytest.mark.visual_regression
+    @tag("visual_regression")
+    def test_visit_identity_links_to_studio_and_anonymous_stays_plain_text(self):
+        identified = User.objects.create_user(
+            email='identified@test.com', password='x',
+        )
+        visit = CampaignVisit.objects.filter(
+            utm_campaign='launch_april',
+            utm_content='ai_hero_list',
+        ).first()
+        visit.user = identified
+        visit.save(update_fields=['user'])
+
+        response = self.client.get(
+            f'/studio/utm-analytics/campaign/launch_april/link/{self.link.pk}/'
+        )
+
+        self.assertContains(
+            response,
+            f'href="/studio/users/{identified.pk}/" '
+            'class="text-accent hover:underline focus-visible:outline-none '
+            'focus-visible:ring-2 focus-visible:ring-accent '
+            'focus-visible:ring-offset-2 focus-visible:ring-offset-background"'
+            f'>{identified.email}</a>',
+        )
+        self.assertNotContains(response, f'/admin/accounts/user/{identified.pk}/')
+        self.assertContains(response, '<span class="text-xs">anonymous</span>')
 
     def test_link_not_under_campaign_returns_404(self):
         other = UtmCampaign.objects.create(

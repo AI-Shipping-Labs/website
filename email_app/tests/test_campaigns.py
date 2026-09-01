@@ -3,7 +3,7 @@
 Covers:
 - EmailCampaign model: TARGET_LEVEL_CHOICES, get_eligible_recipients, get_recipient_count
 - Campaign send task: status transitions, EmailLog creation, rate limiting, error handling
-- Admin views: list campaigns, send test email, send campaign, recipient count
+- Django admin inspection and retired delivery-action routes
 - Campaign status transitions: draft -> sending -> sent
 """
 
@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, tag
-from django.urls import reverse
+from django.urls import Resolver404, resolve, reverse
 from django.utils import timezone
 
 from accounts.models import TierOverride
@@ -20,7 +20,6 @@ from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
 from email_app.tests.test_email_service import assert_no_internal_footer_text
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
-from jobs.tasks import build_task_name
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
@@ -1393,272 +1392,67 @@ class SendCampaignEndToEndTest(TierSetupMixin, TestCase):
 
 
 class CampaignAdminTest(TierSetupMixin, TestCase):
-    """Test admin views for email campaigns."""
+    """Django admin remains low-level and has no campaign delivery actions."""
 
     def setUp(self):
         self.admin_user = User.objects.create_superuser(
             email='admin@test.com',
             password='adminpass123',
         )
-        # Set admin as verified subscriber
         self.admin_user.email_verified = True
         self.admin_user.tier = self.free_tier
         self.admin_user.save()
-        self.client.login(email='admin@test.com', password='adminpass123')
-
+        self.client.force_login(self.admin_user)
         self.campaign = EmailCampaign.objects.create(
-            subject='Test Campaign',
-            body='# Hello\n\nTest content.',
+            subject='Private Campaign',
+            body='Private campaign body',
             target_min_level=0,
             status='draft',
         )
 
-    def test_campaign_list_shows_campaigns(self):
-        """Campaign list shows subject, status, sent_count."""
-        response = self.client.get('/admin/email_app/emailcampaign/')
-        self.assertEqual(response.status_code, 200)
-        content = response.content.decode()
-        self.assertIn('Test Campaign', content)
-        self.assertIn('Draft', content)
-
-    def test_campaign_add_creates_campaign(self):
-        """Admin can create a new campaign."""
-        response = self.client.post('/admin/email_app/emailcampaign/add/', {
-            'subject': 'New Campaign',
-            'body': '# New\n\nContent here.',
-            'target_min_level': 0,
-        })
-        # Should redirect to change list on success
-        self.assertIn(response.status_code, [200, 302])
-        self.assertTrue(
-            EmailCampaign.objects.filter(subject='New Campaign').exists()
+    def test_change_form_has_no_recipient_or_delivery_controls(self):
+        response = self.client.get(
+            f'/admin/email_app/emailcampaign/{self.campaign.pk}/change/',
         )
-
-    def test_campaign_change_form_shows_actions(self):
-        """Change form shows send test and send campaign buttons for draft."""
-        url = f'/admin/email_app/emailcampaign/{self.campaign.pk}/change/'
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-        content = response.content.decode()
-        self.assertIn('Campaign Actions', content)
-        self.assertIn('Send Test Email', content)
-        self.assertIn('Send Campaign', content)
-
-    def test_campaign_change_form_sent_no_actions(self):
-        """Change form hides action buttons for sent campaigns."""
-        self.campaign.status = 'sent'
-        self.campaign.save()
-        url = f'/admin/email_app/emailcampaign/{self.campaign.pk}/change/'
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-        content = response.content.decode()
-        self.assertIn('already been sent', content)
-
-    @patch('email_app.services.email_service.EmailService')
-    def test_send_test_email(self, MockService):
-        """Send test email endpoint sends to admin's email."""
-        mock_service = MockService.return_value
-        mock_service._send_ses.return_value = 'test-ses-id'
-        mock_service._build_unsubscribe_url.return_value = 'http://example.com/unsub'
-        self.admin_user.unsubscribed = True
-        self.admin_user.save(update_fields=['unsubscribed'])
-
-        url = reverse(
-            'admin:email_app_emailcampaign_send_test',
-            args=[self.campaign.pk],
-        )
-        response = self.client.post(url, content_type='application/json')
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data['status'], 'ok')
-        self.assertIn('admin@test.com', data['message'])
-
-        # SES should be called with [TEST] prefix
-        mock_service._send_ses.assert_called_once()
-        to_email, subject, html = mock_service._send_ses.call_args[0]
-        self.assertEqual(to_email, 'admin@test.com')
-        self.assertEqual(subject, '[TEST] Test Campaign')
-        self.assertIn('<p>Test content.</p>', html)
-        self.assertIn('http://example.com/unsub', html)
-        self.assertEqual(
-            mock_service._send_ses.call_args.kwargs['email_type'],
-            'campaign',
-        )
-        self.assertEqual(
-            mock_service._send_ses.call_args.kwargs['unsubscribe_url'],
-            'http://example.com/unsub',
-        )
-
-    def test_send_test_email_get_not_allowed(self):
-        """Send test email only accepts POST."""
-        url = reverse(
-            'admin:email_app_emailcampaign_send_test',
-            args=[self.campaign.pk],
-        )
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 405)
-
-    def test_send_test_email_campaign_not_found(self):
-        """Send test email returns 404 for non-existent campaign."""
-        url = reverse(
-            'admin:email_app_emailcampaign_send_test',
-            args=[99999],
-        )
-        response = self.client.post(url, content_type='application/json')
-        self.assertEqual(response.status_code, 404)
+        self.assertNotContains(response, 'Campaign Actions')
+        self.assertNotContains(response, 'Estimated Recipients')
+        self.assertNotContains(response, 'Send Test Email')
+        self.assertNotContains(response, 'Send Campaign')
 
     @patch('jobs.tasks.async_task')
-    def test_send_campaign_enqueues_job(self, mock_async_task):
-        """Send campaign enqueues a background job."""
-        mock_async_task.return_value = 'task-id-123'
+    @patch('email_app.services.email_service.EmailService._send_ses')
+    def test_retired_action_routes_are_unhandled_404_without_side_effects(
+        self, mock_send_ses, mock_async_task,
+    ):
+        paths = [
+            f'/admin/email_app/emailcampaign/{self.campaign.pk}/send-test/',
+            f'/admin/email_app/emailcampaign/{self.campaign.pk}/send-campaign/',
+            f'/admin/email_app/emailcampaign/{self.campaign.pk}/recipient-count/',
+        ]
+        for path in paths:
+            with self.subTest(path=path):
+                with self.assertRaises(Resolver404):
+                    resolve(path)
+                for method in ('get', 'post'):
+                    response = getattr(self.client, method)(path)
+                    self.assertEqual(response.status_code, 404)
+                    self.assertNotContains(
+                        response, self.campaign.subject, status_code=404,
+                    )
 
-        url = reverse(
-            'admin:email_app_emailcampaign_send_campaign',
-            args=[self.campaign.pk],
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.status, 'draft')
+        self.assertFalse(self.campaign.deliveries.exists())
+        mock_send_ses.assert_not_called()
+        mock_async_task.assert_not_called()
+
+    def test_registered_admin_model_routes_remain_available(self):
+        list_response = self.client.get('/admin/email_app/emailcampaign/')
+        change_response = self.client.get(
+            f'/admin/email_app/emailcampaign/{self.campaign.pk}/change/',
         )
-        response = self.client.post(url, content_type='application/json')
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data['status'], 'ok')
-        self.assertIn('queued', data['message'])
-
-        mock_async_task.assert_called_once_with(
-            'email_app.tasks.send_campaign.send_campaign',
-            campaign_id=self.campaign.pk,
-            task_name=build_task_name(
-                'Send campaign',
-                f'#{self.campaign.pk} {self.campaign.subject}',
-                'Django admin campaign action',
-            ),
-        )
-
-    @patch('jobs.tasks.async_task')
-    def test_send_campaign_already_sending(self, mock_async_task):
-        """Cannot send a campaign that is already sending."""
-        self.campaign.status = 'sending'
-        self.campaign.save()
-
-        url = reverse(
-            'admin:email_app_emailcampaign_send_campaign',
-            args=[self.campaign.pk],
-        )
-        response = self.client.post(url, content_type='application/json')
-        self.assertEqual(response.status_code, 409)
-        data = response.json()
-        self.assertEqual(data['status'], 'error')
-
-    @patch('jobs.tasks.async_task')
-    def test_send_campaign_already_sent(self, mock_async_task):
-        """Cannot send a campaign that is already sent."""
-        self.campaign.status = 'sent'
-        self.campaign.save()
-
-        url = reverse(
-            'admin:email_app_emailcampaign_send_campaign',
-            args=[self.campaign.pk],
-        )
-        response = self.client.post(url, content_type='application/json')
-        self.assertEqual(response.status_code, 409)
-
-    def test_send_campaign_get_not_allowed(self):
-        """Send campaign only accepts POST."""
-        url = reverse(
-            'admin:email_app_emailcampaign_send_campaign',
-            args=[self.campaign.pk],
-        )
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 405)
-
-    def test_recipient_count_endpoint(self):
-        """Recipient count endpoint returns correct count."""
-        # Create some eligible users
-        for i in range(3):
-            User.objects.create_user(
-                email=f'user{i}@test.com', tier=self.free_tier,
-                email_verified=True, unsubscribed=False,
-            )
-
-        url = reverse(
-            'admin:email_app_emailcampaign_recipient_count',
-            args=[self.campaign.pk],
-        )
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        # 3 test users + 1 admin user (who is also verified & subscribed)
-        self.assertEqual(data['count'], 4)
-        self.assertEqual(data['target_min_level'], 0)
-
-    def test_recipient_count_not_found(self):
-        """Recipient count returns 404 for non-existent campaign."""
-        url = reverse(
-            'admin:email_app_emailcampaign_recipient_count',
-            args=[99999],
-        )
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 404)
-
-    def test_campaign_list_displays_sent_count(self):
-        """Campaign list shows sent_count column."""
-        self.campaign.sent_count = 42
-        self.campaign.status = 'sent'
-        self.campaign.sent_at = timezone.now()
-        self.campaign.save()
-
-        response = self.client.get('/admin/email_app/emailcampaign/')
-        content = response.content.decode()
-        self.assertIn('42', content)
-
-    def test_draft_campaign_fields_editable(self):
-        """Draft campaigns have editable subject and body."""
-        url = f'/admin/email_app/emailcampaign/{self.campaign.pk}/change/'
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-        content = response.content.decode()
-        # Draft subject should be in an editable input field
-        self.assertIn('name="subject"', content)
-        self.assertIn('name="body"', content)
-
-    def test_sent_campaign_fields_readonly(self):
-        """Sent campaigns have readonly fields."""
-        self.campaign.status = 'sent'
-        self.campaign.save()
-        url = f'/admin/email_app/emailcampaign/{self.campaign.pk}/change/'
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-        content = response.content.decode()
-        # Sent campaign subject and body should NOT be editable input fields
-        self.assertNotIn('name="subject"', content)
-        self.assertNotIn('name="body"', content)
-
-
-class CampaignAdminUnauthenticatedTest(TestCase):
-    """Test admin campaign views require authentication."""
-
-    def test_campaign_list_requires_login(self):
-        """Campaign list requires admin login."""
-        response = self.client.get('/admin/email_app/emailcampaign/')
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('login', response.url)
-
-    def test_send_test_requires_login(self):
-        """Send test endpoint requires admin login."""
-        campaign = EmailCampaign.objects.create(
-            subject='Test', body='Body',
-        )
-        url = f'/admin/email_app/emailcampaign/{campaign.pk}/send-test/'
-        response = self.client.post(url)
-        self.assertEqual(response.status_code, 302)
-
-    def test_send_campaign_requires_login(self):
-        """Send campaign endpoint requires admin login."""
-        campaign = EmailCampaign.objects.create(
-            subject='Test', body='Body',
-        )
-        url = f'/admin/email_app/emailcampaign/{campaign.pk}/send-campaign/'
-        response = self.client.post(url)
-        self.assertEqual(response.status_code, 302)
-
+        self.assertContains(list_response, self.campaign.subject)
+        self.assertContains(change_response, 'name="subject"')
 
 @tag('core')
 class CampaignVerifyEmailFooterTest(TierSetupMixin, TestCase):

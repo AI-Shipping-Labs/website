@@ -3,22 +3,19 @@
 Locks the structural contract the issue spec lays out:
 
 - Header is identity-only (no buttons).
-- A single action row sits directly under the header with exactly two
-  controls: ``Login as user`` (POST -> studio_impersonate) and the
-  shared ``Open in Django admin`` chip (link). The shared chip uses
-  ``data-testid="studio-open-in-admin"`` after issue #702 generalised
-  the hand-built link into a partial.
+- A single action row sits directly under the header with Studio-owned
+  ``Login as user`` and ``Merge accounts`` controls.
 - The duplicate ``View as user`` button is removed.
 - Profile and Membership sit in their own full-width section cards
   (no ``lg:grid-cols-2`` grid wrapper between them).
 - ``Grant temporary upgrade`` is a top-level section card with its own
   ``<h2>`` between Membership and Tags.
-- Slack ID row is read-only — no input, no save button, no form posting
-  to ``studio_user_slack_id_set``. When the ID is missing the row says
-  ``Not linked``; the action-row ``Open in Django admin`` link is the only
-  Django admin escape hatch.
-- The ``studio_user_slack_id_set`` URL stays defined and reachable from
-  Django admin / scripts (template just stops surfacing it).
+- Slack ID editing is owned by Studio: the row keeps a compact edit
+  disclosure that posts to ``studio_user_slack_id_set``. When the ID is
+  missing the row says ``Not linked`` and no legacy admin escape hatch is
+  rendered.
+- The ``studio_user_slack_id_set`` URL is the Studio-owned action endpoint
+  covered below.
 """
 
 from datetime import timedelta
@@ -91,7 +88,8 @@ class HeaderAndActionRowTest(_Base586):
 
         self.assertIn('data-testid="user-detail-actions"', header_slice)
         self.assertIn('data-testid="user-detail-impersonate"', header_slice)
-        self.assertIn('data-testid="studio-open-in-admin"', header_slice)
+        self.assertIn('data-testid="user-detail-merge"', header_slice)
+        self.assertNotIn('/admin/', header_slice)
 
     def test_action_row_immediately_after_header_with_two_controls(self):
         member = self._make_member('row@test.com', tier=self.free)
@@ -107,19 +105,18 @@ class HeaderAndActionRowTest(_Base586):
         profile_open = body.index('data-testid="user-detail-profile-section"')
         self.assertLess(actions_open, profile_open)
 
-        # Action row contains Login as user (impersonate) + the shared
-        # "Open in Django admin" chip (issue #702). Exactly those two
-        # testids.
+        # The action row contains only Studio-owned operator actions.
         actions_close = body.index('</div>', actions_open)
         actions_slice = body[actions_open:actions_close]
         self.assertEqual(
             actions_slice.count('data-testid="user-detail-impersonate"'), 1,
         )
         self.assertEqual(
-            actions_slice.count('data-testid="studio-open-in-admin"'), 1,
+            actions_slice.count('data-testid="user-detail-merge"'), 1,
         )
         self.assertIn('Login as user', actions_slice)
-        self.assertIn('Open in Django admin', actions_slice)
+        self.assertIn('Merge accounts', actions_slice)
+        self.assertNotIn('/admin/', actions_slice)
 
     def test_view_as_user_button_is_removed_page_wide(self):
         member = self._make_member('noview@test.com', tier=self.free)
@@ -140,19 +137,14 @@ class HeaderAndActionRowTest(_Base586):
         self.assertContains(response, 'method="post"')
         self.assertContains(response, 'csrfmiddlewaretoken')
 
-    def test_django_admin_link_uses_secondary_label(self):
-        # Issue #586 renamed the visible label from "Django Admin" to
-        # "View in Django admin"; issue #702 generalised the chip into
-        # a shared partial and changed the label to "Open in Django
-        # admin" so every Studio detail/edit surface uses the same
-        # affordance.
+    def test_merge_accounts_uses_studio_route(self):
         member = self._make_member('djl@test.com', tier=self.free)
         response = self.client.get(f'/studio/users/{member.pk}/')
-        self.assertContains(response, 'Open in Django admin')
         self.assertContains(
             response,
-            f'href="/admin/accounts/user/{member.pk}/change/"',
+            'href="/studio/users/merge/?canonical=djl%40test.com"',
         )
+        self.assertNotContains(response, '/admin/')
 
 
 class FullWidthSectionsTest(_Base586):
@@ -304,29 +296,30 @@ class SlackIdReadOnlyTest(_Base586):
         )
         self.assertIn(f'action="{slack_id_set_url}"', body)
 
-    def test_unlinked_row_does_not_render_admin_edit_link(self):
+    def test_unlinked_row_keeps_studio_edit_disclosure(self):
         member = self._make_member('slack-empty@test.com', tier=self.free)
         response = self.client.get(f'/studio/users/{member.pk}/')
         self.assertContains(
             response, 'data-testid="user-detail-slack-id-empty"',
         )
         self.assertContains(response, 'Not linked')
+        self.assertContains(response, 'id="slack-id-edit-toggle"')
         self.assertNotContains(
             response, 'data-testid="user-detail-slack-id-admin-link"',
         )
         self.assertNotContains(response, 'Edit in Django admin')
         self.assertEqual(
             response.content.decode().count('data-testid="studio-open-in-admin"'),
-            1,
+            0,
         )
 
-    def test_linked_row_does_not_render_admin_edit_link(self):
+    def test_linked_row_shows_value_without_legacy_escape_hatch(self):
         member = self._make_member(
             'slack-set@test.com', tier=self.free,
             slack_user_id='U01ABC123',
         )
         response = self.client.get(f'/studio/users/{member.pk}/')
-        # Admin edit link only renders when the row is empty.
+        # The Studio edit disclosure remains the only supported edit path.
         self.assertNotContains(
             response, 'data-testid="user-detail-slack-id-admin-link"',
         )
@@ -334,19 +327,17 @@ class SlackIdReadOnlyTest(_Base586):
         self.assertContains(response, 'U01ABC123')
 
 
-class SlackIdSetEndpointStillCallableTest(_Base586):
-    """The studio_user_slack_id_set URL stays defined for non-template
-    surfaces (Django admin / scripts)."""
+class StudioSlackIdSetEndpointTest(_Base586):
+    """The Studio-owned Slack ID action remains registered and callable."""
 
     def test_url_resolves(self):
         member = self._make_member('still@test.com', tier=self.free)
-        # A successful reverse means the URL pattern is still registered.
+        # A successful reverse means the Studio action URL is registered.
         url = reverse('studio_user_slack_id_set', args=[member.pk])
         self.assertEqual(url, f'/studio/users/{member.pk}/slack-id/')
 
     def test_post_writes_value_through_endpoint(self):
-        # Smoke check: the endpoint still works for a staff POST. The
-        # template just stopped surfacing it.
+        # Smoke check: the Studio-owned endpoint writes a staff POST.
         member = self._make_member('stillpost@test.com', tier=self.free)
         response = self.client.post(
             f'/studio/users/{member.pk}/slack-id/',

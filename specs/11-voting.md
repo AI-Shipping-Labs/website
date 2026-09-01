@@ -51,7 +51,11 @@ PollVote:
 - If `allow_proposals`: form at bottom to propose a new option (title + optional description). New proposals appear immediately in the list with 0 votes.
 - If poll is closed: show results (sorted by votes), no voting or proposing allowed
 
-## Admin
+## Low-level administration
+
+Poll management is the explicit remaining Django-admin-only product gap. The
+unlinked model surface below remains available until the scoped Studio and
+authenticated production API follow-up lands.
 
 ### `/admin/polls`
 

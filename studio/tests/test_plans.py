@@ -691,11 +691,8 @@ class PlanDetailRenderTest(TestCase):
         )
         response = self.client.get(f'/studio/plans/{plan.pk}/')
         self.assertEqual(response.status_code, 200)
-        # Issue #702: hand-built link replaced by the shared
-        # ``Open in Django admin`` partial; the chip now carries
-        # ``data-testid="studio-open-in-admin"``.
-        self.assertContains(response, 'data-testid="studio-open-in-admin"')
-        self.assertContains(response, f'/admin/plans/plan/{plan.pk}/change/')
+        self.assertNotContains(response, 'data-testid="studio-open-in-admin"')
+        self.assertNotContains(response, '/admin/')
 
         # Every summary field is rendered into a labelled <dd>. Asserting
         # on the data-field container ensures filtering or template

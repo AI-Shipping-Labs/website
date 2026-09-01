@@ -8,7 +8,6 @@ amber/yellow so it remains distinct from the green ``success`` and red
 - The ``sync_status_label`` filter and ``sync_status_pill`` inclusion tag.
 - The Studio sync dashboard repo-level pill.
 - The Studio sync history batch-level label.
-- The legacy ``/admin/sync/`` and ``/admin/sync/<id>/history/`` surfaces.
 - That the per-type breakdown row still has an error count attached.
 """
 
@@ -253,58 +252,6 @@ class SyncHistoryLabelTest(TestCase):
         # The bare batch-status word "partial" must not surface.
         body_compact = _strip(body)
         self.assertNotIn(' partial ', body_compact)
-
-
-class AdminSyncLabelTest(TestCase):
-    """The legacy /admin/sync/ surfaces use the same label."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.staff = User.objects.create_user(
-            email='staff@admin.com', password='testpass', is_staff=True,
-        )
-
-    def setUp(self):
-        self.client = Client()
-        self.client.login(email='staff@admin.com', password='testpass')
-
-    def test_admin_dashboard_uses_completed_with_n_errors(self):
-        source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            last_sync_status='partial',
-            last_synced_at=timezone.now(),
-        )
-        SyncLog.objects.create(
-            source=source,
-            status='partial',
-            items_created=1,
-            errors=[
-                {'file': 'a.md', 'error': 'parse'},
-                {'file': 'b.md', 'error': 'parse'},
-            ],
-            finished_at=timezone.now(),
-        )
-        response = self.client.get('/admin/sync/')
-        body = response.content.decode()
-        self.assertIn('Completed with 2 errors', body)
-
-    def test_admin_history_uses_completed_with_n_errors_for_log(self):
-        source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            last_sync_status='partial',
-            last_synced_at=timezone.now(),
-        )
-        SyncLog.objects.create(
-            source=source,
-            status='partial',
-            errors=[{'file': 'a.md', 'error': 'parse'}],
-            finished_at=timezone.now(),
-        )
-        response = self.client.get(f'/admin/sync/{source.pk}/history/')
-        body = response.content.decode()
-        # Both the source's last-status header AND the per-log row should
-        # use the new label, not the bare "partial".
-        self.assertIn('Completed with 1 error', body)
 
 
 class SyncAggregatorErrorCountTest(TestCase):

@@ -42,8 +42,8 @@ itself once nothing is running anymore.
      class="bg-card border border-border rounded-lg p-12 text-center">
   <p class="text-muted-foreground">No content sources configured.</p>
   <p class="text-sm text-muted-foreground mt-1">
-    <a href="{% url 'studio_content_source_create' %}" class="text-accent hover:underline">Add a content source</a>,
-    use Django admin, or run <code class="bg-secondary px-1.5 py-0.5 rounded text-xs">manage.py seed_content_sources</code>.
+    <a href="{% url 'studio_content_source_create' %}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Add a content source</a>
+    in Studio, import a source configuration, or run <code class="bg-secondary px-1.5 py-0.5 rounded text-xs">manage.py seed_content_sources</code>.
   </p>
 </div>
 {% endif %}

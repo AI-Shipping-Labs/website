@@ -557,6 +557,22 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "TestStaffReconcilesAmbiguousDelivery::"
         "test_duplicate_risk_confirmations_gate_retry_and_assume_sent"
     )
+    issue_1551_owners = frozenset({
+        "playwright_tests/test_articles_blog.py::TestBlogBrowserSmoke::"
+        "test_staff_edits_article_from_public_page_in_studio",
+        "playwright_tests/test_studio_edit_button.py::"
+        "TestStudioEditButtonOnEventDetail::test_main_member_has_no_operator_escape_hatch",
+        "playwright_tests/test_studio_user_detail_layout_586.py::"
+        "TestUserDetailLayout586::test_merge_accounts_lands_on_studio_merge_page",
+        "playwright_tests/test_studio_user_detail_layout_586.py::"
+        "TestUserDetailLayout586::test_unlinked_slack_id_stays_in_studio",
+        "playwright_tests/test_content_comment_notifications.py::"
+        "TestOperatorLinksThenNotifies::"
+        "test_studio_linking_enables_future_notifications",
+        "playwright_tests/test_video_player.py::"
+        "TestScenario10StudioTimestampEditor::"
+        "test_staff_adds_timestamps_to_recording_in_studio",
+    })
     ses_1552_owners = frozenset({
         "playwright_tests/test_studio_ses_events_1552.py::"
         "test_keyboard_summary_card_opens_matching_global_queue",
@@ -575,7 +591,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         self.assertNotIn(self.recap_api_owner, manifest["LEGACY_NON_BROWSER"])
         self.assertIn(self.recap_api_owner, LEGACY_DECLARED_BROWSER_CEILING)
         self.assertNotIn(self.recap_api_owner, LEGACY_NON_BROWSER_CEILING)
-        self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2252)
+        self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2246)
         self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 81)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
@@ -604,7 +620,9 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         self.assertEqual(len(inventory.owners), 2339)
         self.assertEqual(
             inventory.declared_owners,
-            {self.migrated_owner, self.campaign_owner} | self.ses_1552_owners,
+            {self.migrated_owner, self.campaign_owner}
+            | self.ses_1552_owners
+            | self.issue_1551_owners,
         )
         self.assertNotIn(
             self.migrated_owner,

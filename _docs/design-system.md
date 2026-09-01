@@ -574,7 +574,7 @@ Action-row composition:
 
 #### Studio overflow menu
 
-Secondary and rare entity actions (`Open in Django admin`, exports, carry-over and duplication tools, archive/unarchive, delete) live in a kebab menu at the end of the action row. Use the shared `{% studio_overflow_menu %}` block tag backed by `templates/studio/_partials/overflow_menu.html`.
+Secondary and rare Studio-owned entity actions (exports, carry-over and duplication tools, archive/unarchive, delete) live in a kebab menu at the end of the action row. Django-admin links are not Studio actions and must not be rendered. Use the shared `{% studio_overflow_menu %}` block tag backed by `templates/studio/_partials/overflow_menu.html`.
 
 The partial renders `<details data-studio-overflow>` with an `ellipsis-vertical` Lucide summary trigger. The trigger is 38px square with secondary-button chrome and `aria-label="More actions"`. Its panel is anchored `left-0` and uses `w-64 bg-card border border-border rounded-lg shadow-lg`; items have `min-h-[44px]`.
 

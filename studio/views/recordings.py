@@ -1,11 +1,14 @@
 """Studio views for recording management (now using Event model)."""
 
+import json
+
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
 
 from events.models import Event
+from events.services.timestamps import validate_event_timestamps_for_api
 from studio.decorators import staff_required
 from studio.utils import get_github_edit_url, is_synced, studio_pagination_context
 from studio.views.notifications import notification_action_context
@@ -51,10 +54,38 @@ def recording_edit(request, recording_id):
         tags_raw = request.POST.get('tags', '')
         recording.tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
 
+        timestamps_json = request.POST.get(
+            'timestamps', json.dumps(recording.timestamps),
+        )
+        try:
+            timestamp_rows = json.loads(timestamps_json)
+        except json.JSONDecodeError:
+            timestamp_rows = None
+            timestamps_error = 'Chapters could not be read. Check each time and label.'
+        else:
+            timestamp_rows, timestamps_error = validate_event_timestamps_for_api(
+                timestamp_rows,
+            )
+
+        if timestamps_error:
+            context = _recording_edit_context(recording, synced)
+            context.update({
+                'timestamps_json': timestamps_json,
+                'timestamps_error': timestamps_error,
+            })
+            return render(request, 'studio/recordings/form.html', context)
+
+        recording.timestamps = timestamp_rows
         recording.save()
         return redirect('studio_recording_edit', recording_id=recording.pk)
 
-    context = {
+    context = _recording_edit_context(recording, synced)
+    context['timestamps_json'] = json.dumps(recording.timestamps)
+    return render(request, 'studio/recordings/form.html', context)
+
+
+def _recording_edit_context(recording, synced):
+    return {
         'recording': recording,
         'form_action': 'edit',
         'is_synced': synced,
@@ -63,4 +94,3 @@ def recording_edit(request, recording_id):
         'announce_url': reverse('studio_recording_announce_slack', kwargs={'recording_id': recording.pk}),
         **notification_action_context('recording', recording),
     }
-    return render(request, 'studio/recordings/form.html', context)

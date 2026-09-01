@@ -31,6 +31,7 @@ from playwright_tests.conftest import auth_context as _auth_context
 from playwright_tests.conftest import create_staff_user as _create_staff_user
 from playwright_tests.conftest import create_user as _create_user
 from playwright_tests.conftest import ensure_tiers as _ensure_tiers
+from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -457,7 +458,8 @@ class TestCoAuthorCommenterSkipped:
 
 @pytest.mark.django_db(transaction=True)
 class TestOperatorLinksThenNotifies:
-    def test_admin_link_enables_future_notifications(
+    @browser_journey
+    def test_studio_linking_enables_future_notifications(
         self, django_server, browser,
     ):
         _ensure_tiers()
@@ -468,17 +470,27 @@ class TestOperatorLinksThenNotifies:
         inst = _make_instructor('ada', 'Ada', user_email=None)
         _make_course_unit(instructor_ids=['ada'])
 
-        # Operator links the instructor to the account via Django admin.
+        # Operator links the instructor to the account in Studio.
         admin_ctx = _auth_context(browser, 'admin@test.com')
         admin_page = admin_ctx.new_page()
         admin_page.goto(
-            f'{django_server}/admin/content/instructor/{inst.pk}/change/',
+            f'{django_server}/studio/instructors/?filter=unlinked',
             wait_until='domcontentloaded',
         )
-        # raw_id_fields renders a plain text input for the user pk.
-        admin_page.locator('#id_user').fill(str(instructor_user.pk))
-        admin_page.locator('input[name="_save"]').click()
-        admin_page.wait_for_url('**/admin/content/instructor/**')
+        row = admin_page.locator('[data-instructor-id="ada"]')
+        picker = row.locator('[data-testid="link-ada-search"]')
+        picker.fill('instructor@test.com')
+        suggestion = row.locator('[data-testid="link-ada-suggestion"]')
+        suggestion.wait_for()
+        suggestion.click()
+        admin_page.wait_for_url('**/studio/instructors/**')
+        assert admin_page.get_by_text(
+            f'Linked Ada to {instructor_user.email}.',
+        ).is_visible()
+        assert admin_page.locator('[data-instructor-id="ada"]').count() == 0
+        inst.refresh_from_db()
+        assert inst.user_id == instructor_user.pk
+        assert '/admin/' not in admin_page.url
         admin_ctx.close()
 
         # A new comment now notifies the freshly-linked instructor.

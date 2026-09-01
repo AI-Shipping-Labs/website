@@ -83,12 +83,6 @@ still in flight.
           <span class="sync-btn-text">Force resync</span>
         </button>
       </form>
-      <a href="/admin/integrations/contentsource/{{ repo.source.pk }}/change/"
-         target="_blank" rel="noopener"
-         class="{% studio_action_class 'secondary' %}"
-         title="Edit ContentSource rows for this repo in Django admin">
-        <span>Edit in admin</span>
-      </a>
       </div>
       <p class="max-w-xl text-xs text-muted-foreground">Sync now applies changed files; Force resync re-imports everything from the repo.</p>
     </div>

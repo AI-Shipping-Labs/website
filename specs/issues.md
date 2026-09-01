@@ -54,13 +54,13 @@ Issues to create on GitHub as we progress through milestones. Issue #1 (M1: scaf
 - Add `required_level` field to all content models (Article, Recording, Project, Tutorial, CuratedLink)
 - Create access control middleware or decorator: check `user.tier.level >= content.required_level`
 - Gated content shows teaser + upgrade CTA (never 404)
-- Add visibility dropdown to Django admin for all content types
+- Add the visibility dropdown to each content type's Studio editor
 
 **Acceptance criteria:**
 - [ ] Content with `required_level > 0` shows teaser to anonymous/insufficient-tier users
 - [ ] Content with `required_level > 0` shows full content to users with sufficient tier
 - [ ] Gated pages never return 404 — always show teaser + CTA
-- [ ] Admin has visibility dropdown for all content types
+- [ ] Studio has a visibility dropdown for all content types
 - [ ] `[HUMAN]` Log in as different tier users and verify correct content gating
 - [ ] All tests pass, coverage 85%+
 

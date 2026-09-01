@@ -4,6 +4,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -308,8 +309,22 @@ def module_reorder(request, course_id):
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-    for item in data:
-        Module.objects.filter(pk=item['id']).update(sort_order=item['sort_order'])
+    course = get_object_or_404(Course, pk=course_id)
+    try:
+        requested_ids = [int(item['id']) for item in data]
+        positions = [int(item['sort_order']) for item in data]
+    except (KeyError, TypeError, ValueError):
+        return JsonResponse({'error': 'Invalid reorder payload'}, status=400)
+
+    modules = Module.objects.filter(course=course, pk__in=requested_ids)
+    if modules.count() != len(set(requested_ids)):
+        return JsonResponse({'error': 'Invalid module for this course'}, status=400)
+
+    with transaction.atomic():
+        for module_id, position in zip(requested_ids, positions, strict=True):
+            Module.objects.filter(course=course, pk=module_id).update(
+                sort_order=position,
+            )
 
     return JsonResponse({'status': 'ok'})
 

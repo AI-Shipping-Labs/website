@@ -1,9 +1,7 @@
 """Shared helper for the ``Open in Studio`` link on Django admin pages.
 
-Reverse direction of issue #702 (which added an ``Open in Django admin``
-chip to every Studio detail/edit page). For each Django admin change
-form / changelist whose model has a matching Studio detail or edit URL,
-expose a one-click jump back into the Studio surface.
+For each low-level Django admin view whose model has a matching Studio detail
+or edit URL, expose a one-way jump into the routine Studio surface.
 
 The helper is intentionally tiny: a single ``studio_link(obj, url_name,
 kwargs_func)`` function that resolves the Studio URL and wraps it in an

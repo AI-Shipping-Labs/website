@@ -1,16 +1,9 @@
-"""Admin for EmailCampaign with custom actions for test send and campaign send."""
+"""Low-level Django admin for inspecting and editing email campaigns."""
 
-import logging
-
-from django.contrib import admin, messages
-from django.http import JsonResponse
-from django.urls import path, reverse
+from django.contrib import admin
 
 from email_app.models import EmailCampaign
-from email_app.services.campaign_dispatch import claim_and_enqueue_campaign
 from studio.admin_links import studio_link
-
-logger = logging.getLogger(__name__)
 
 
 @admin.register(EmailCampaign)
@@ -29,13 +22,12 @@ class EmailCampaignAdmin(admin.ModelAdmin):
     ordering = ['-created_at']
     readonly_fields = [
         'status', 'sent_at', 'sent_count', 'created_at',
-        'recipient_count_display', 'studio_link',
+        'studio_link',
     ]
     fields = [
         'subject',
         'body',
         'target_min_level',
-        'recipient_count_display',
         'status',
         'sent_count',
         'sent_at',
@@ -57,178 +49,20 @@ class EmailCampaignAdmin(admin.ModelAdmin):
             return [
                 'subject', 'body', 'target_min_level',
                 'status', 'sent_at', 'sent_count', 'created_at',
-                'recipient_count_display', 'studio_link',
+                'studio_link',
             ]
         return self.readonly_fields
+
+    def get_urls(self):
+        """Remove Django's unnamed legacy change-URL redirect.
+
+        Without that compatibility route, removed nested campaign action URLs
+        cannot be swallowed as an object id and redirected to a change form.
+        """
+        return [pattern for pattern in super().get_urls() if pattern.name]
 
     def target_level_display(self, obj):
         """Display the target audience label."""
         level_map = dict(EmailCampaign.TARGET_LEVEL_CHOICES)
         return level_map.get(obj.target_min_level, str(obj.target_min_level))
     target_level_display.short_description = 'Target Audience'
-
-    def recipient_count_display(self, obj):
-        """Display estimated recipient count."""
-        if obj and obj.pk:
-            count = obj.get_recipient_count()
-            return f'{count} eligible recipients'
-        return 'Save the campaign first to see recipient count'
-    recipient_count_display.short_description = 'Estimated Recipients'
-
-    def get_urls(self):
-        custom_urls = [
-            path(
-                '<int:campaign_id>/send-test/',
-                self.admin_site.admin_view(self.send_test_view),
-                name='email_app_emailcampaign_send_test',
-            ),
-            path(
-                '<int:campaign_id>/send-campaign/',
-                self.admin_site.admin_view(self.send_campaign_view),
-                name='email_app_emailcampaign_send_campaign',
-            ),
-            path(
-                '<int:campaign_id>/recipient-count/',
-                self.admin_site.admin_view(self.recipient_count_view),
-                name='email_app_emailcampaign_recipient_count',
-            ),
-        ]
-        return custom_urls + super().get_urls()
-
-    def send_test_view(self, request, campaign_id):
-        """Send a test email to the logged-in admin user."""
-        if request.method != 'POST':
-            return JsonResponse({'error': 'POST required'}, status=405)
-
-        try:
-            campaign = EmailCampaign.objects.get(pk=campaign_id)
-        except EmailCampaign.DoesNotExist:
-            return JsonResponse({'error': 'Campaign not found'}, status=404)
-
-        try:
-            from django.template.loader import render_to_string
-
-            from content.utils.markdown import render_email_markdown
-            from email_app.services.email_service import EmailService, EmailServiceError
-
-            service = EmailService()
-            body_html = render_email_markdown(campaign.body)
-            unsubscribe_url = service._build_unsubscribe_url(request.user)
-
-            full_html = render_to_string('email_app/base_email.html', {
-                'subject': f'[TEST] {campaign.subject}',
-                'body_html': body_html,
-                'unsubscribe_url': unsubscribe_url,
-            })
-
-            ses_message_id = service._send_ses(
-                request.user.email,
-                f'[TEST] {campaign.subject}',
-                full_html,
-                email_type='campaign',
-                unsubscribe_url=unsubscribe_url,
-            )
-
-            return JsonResponse({
-                'status': 'ok',
-                'message': f'Test email sent to {request.user.email}',
-                'ses_message_id': ses_message_id,
-            })
-
-        except EmailServiceError as e:
-            logger.exception("Failed to send test email for campaign %s", campaign_id)
-            return JsonResponse({
-                'status': 'error',
-                'message': f'Failed to send test email: {e}',
-            }, status=500)
-
-    def send_campaign_view(self, request, campaign_id):
-        """Enqueue the campaign for background sending."""
-        if request.method != 'POST':
-            return JsonResponse({'error': 'POST required'}, status=405)
-
-        try:
-            campaign = EmailCampaign.objects.get(pk=campaign_id)
-        except EmailCampaign.DoesNotExist:
-            return JsonResponse({'error': 'Campaign not found'}, status=404)
-
-        try:
-            result = claim_and_enqueue_campaign(
-                campaign.pk,
-                source='Django admin campaign action',
-            )
-        except Exception:
-            logger.exception('Failed to claim and enqueue campaign %s', campaign.pk)
-            return JsonResponse({
-                'status': 'error',
-                'message': 'Campaign could not be queued; it remains a draft.',
-            }, status=503)
-        if not result.claimed:
-            return JsonResponse({
-                'status': 'error',
-                'message': (
-                    f'Campaign is already {result.campaign.status}; '
-                    'no second send was queued.'
-                ),
-            }, status=409)
-
-        logger.info(
-            "Enqueued campaign %s for sending (task_id=%s)",
-            campaign_id, result.task_id,
-        )
-
-        # Set a flash message so the user sees context after the redirect.
-        flash_message = (
-            f'Campaign "{campaign.subject}" queued for sending — '
-            'watching it here.'
-        )
-        messages.success(request, flash_message)
-
-        # Tell the JS handler where to navigate. Pointing the operator at the
-        # worker dashboard mirrors the studio sync/sync-all flow: enqueue then
-        # show the queue so they can see the job actually run.
-        redirect_url = reverse('studio_worker')
-
-        return JsonResponse({
-            'status': 'ok',
-            'message': flash_message,
-            'task_id': result.task_id,
-            'redirect_url': redirect_url,
-        })
-
-    def recipient_count_view(self, request, campaign_id):
-        """Return the estimated recipient count for a campaign."""
-        try:
-            campaign = EmailCampaign.objects.get(pk=campaign_id)
-        except EmailCampaign.DoesNotExist:
-            return JsonResponse({'error': 'Campaign not found'}, status=404)
-
-        count = campaign.get_recipient_count()
-        return JsonResponse({
-            'count': count,
-            'target_min_level': campaign.target_min_level,
-        })
-
-    def change_view(self, request, object_id, form_url='', extra_context=None):
-        """Add campaign action buttons to the change form."""
-        extra_context = extra_context or {}
-        try:
-            campaign = EmailCampaign.objects.get(pk=object_id)
-            extra_context['campaign'] = campaign
-            extra_context['is_draft'] = campaign.status == 'draft'
-            extra_context['recipient_count'] = campaign.get_recipient_count()
-            extra_context['send_test_url'] = reverse(
-                'admin:email_app_emailcampaign_send_test',
-                args=[object_id],
-            )
-            extra_context['send_campaign_url'] = reverse(
-                'admin:email_app_emailcampaign_send_campaign',
-                args=[object_id],
-            )
-        except EmailCampaign.DoesNotExist:
-            pass
-        return super().change_view(
-            request, object_id, form_url, extra_context,
-        )
-
-    change_form_template = 'admin/email_app/emailcampaign/change_form.html'

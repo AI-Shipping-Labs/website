@@ -1,7 +1,7 @@
 """
 Playwright E2E tests for Course Cohorts (Issue #81).
 
-Tests cover all 11 BDD scenarios from the issue:
+Tests cover all 10 BDD scenarios from the issue:
 - Main member discovers an upcoming cohort and enrolls from the course page
 - Enrolled member unenrolls from a cohort
 - Member cannot enroll when a cohort is full
@@ -12,7 +12,6 @@ Tests cover all 11 BDD scenarios from the issue:
 - Non-cohort member accesses a drip-scheduled unit without restriction
 - Main member enrolls in a free course cohort without tier issues
 - Course with no active cohorts shows the syllabus without cohort section
-- Admin creates a new cohort for a course through Django admin
 
 Usage:
     uv run pytest playwright_tests/test_course_cohorts.py -v
@@ -26,9 +25,6 @@ from django.utils import timezone
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
-)
-from playwright_tests.conftest import (
-    create_staff_user as _create_admin_user,
 )
 from playwright_tests.conftest import (
     create_user as _create_user,
@@ -893,81 +889,3 @@ class TestScenario10NoCohortsSyllabus:
         assert "/courses/llm-engineering/module-1/lesson-1" in page.url
         body = page.content()
         assert "Lesson 1" in body
-# ---------------------------------------------------------------
-# Scenario 11: Admin creates a new cohort for a course through
-#               Django admin
-# ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario11AdminCreatesCohort:
-    """Admin creates a new cohort for a course through Django admin."""
-
-    def test_admin_creates_cohort_and_it_appears_on_course_page(
-        self, django_server
-    , browser):
-        """Given a staff/superuser. Navigate to admin, create a cohort
-        for 'LLM Engineering', then verify it appears on the course
-        detail page."""
-        _clear_courses()
-        _ensure_tiers()
-        _create_admin_user("admin@test.com")
-
-        course = _create_course(
-            title="LLM Engineering",
-            slug="llm-engineering",
-            description="Learn LLM engineering.",
-            required_level=20,
-        )
-        mod = _create_module(course, "Module 1", sort_order=1)
-        _create_unit(mod, "Lesson 1", sort_order=1, body="# Lesson 1\nContent.")
-
-        context = _auth_context(browser, "admin@test.com")
-        page = context.new_page()
-        # Step 1: Navigate to /admin/content/cohort/add/
-        page.goto(
-            f"{django_server}/admin/content/cohort/add/",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-
-        # The add form should be present
-        assert "Add cohort" in body.lower() or "cohort" in body.lower()
-
-        # Step 2: Select the course
-        course_select = page.locator("#id_course")
-        course_select.select_option(str(course.pk))
-
-        start_date, end_date = _future_cohort_window(start_offset_days=60)
-        cohort_name = _cohort_name(start_date)
-
-        # Step 3: Enter cohort name
-        page.locator("#id_name").fill(cohort_name)
-
-        # Step 4: Set start_date and end_date
-        page.locator("#id_start_date").fill(start_date.isoformat())
-        page.locator("#id_end_date").fill(end_date.isoformat())
-
-        # Step 5: Set max_participants
-        page.locator("#id_max_participants").fill("25")
-
-        # Step 6: Save the cohort
-        page.locator('input[name="_save"]').click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: Lands on the cohort list page
-        assert "/admin/content/cohort/" in page.url
-        body = page.content()
-        assert cohort_name in body
-
-        # Step 7: Navigate to /courses/llm-engineering
-        page.goto(
-            f"{django_server}/courses/llm-engineering",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-
-        # Then: Course detail page shows the new cohort
-        assert "Next cohort" in body
-        assert cohort_name in body
-        assert _display_date(start_date) in body
-        assert "25 of 25 spots remaining" in body

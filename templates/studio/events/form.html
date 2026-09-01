@@ -1,5 +1,5 @@
 {% extends "studio/base.html" %}
-{% load studio_filters admin_links %}
+{% load studio_filters %}
 
 {% block studio_title %}{% if is_synced %}View Event{% elif event %}Edit Event{% elif duplicate_source %}Duplicate Event{% else %}New Event{% endif %}{% endblock %}
 
@@ -13,7 +13,6 @@
 {% studio_header_actions title='View Event' subtitle=event.title back_url='/studio/events/' back_label='Back to events' %}
   <a href="{{ event.get_absolute_url }}" target="_blank" rel="noopener noreferrer" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="view-on-site"><i data-lucide="external-link" class="h-4 w-4"></i><span>View on site</span></a>
   {% studio_overflow_menu %}
-    {% admin_change_url event as admin_url %}{% if admin_url %}<a href="{{ admin_url }}" data-testid="studio-open-in-admin" title="Open in Django admin" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="wrench" class="h-4 w-4"></i><span>Open in Django admin</span></a>{% endif %}
     <a href="{{ duplicate_url }}" data-testid="studio-event-duplicate" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"><i data-lucide="copy" class="h-4 w-4"></i><span>Duplicate event</span></a>
   {% endstudio_overflow_menu %}
 {% endstudio_header_actions %}
@@ -21,7 +20,6 @@
 {% studio_header_actions title='Edit Event' subtitle=event.title back_url='/studio/events/' back_label='Back to events' %}
   <a href="{{ event.get_absolute_url }}" target="_blank" rel="noopener noreferrer" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="view-on-site"><i data-lucide="external-link" class="h-4 w-4"></i><span>View on site</span></a>
   {% studio_overflow_menu %}
-    {% admin_change_url event as admin_url %}{% if admin_url %}<a href="{{ admin_url }}" data-testid="studio-open-in-admin" title="Open in Django admin" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="wrench" class="h-4 w-4"></i><span>Open in Django admin</span></a>{% endif %}
     <a href="{{ duplicate_url }}" data-testid="studio-event-duplicate" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"><i data-lucide="copy" class="h-4 w-4"></i><span>Duplicate event</span></a>
     {% if delete_eligible %}<div class="border-t border-border"><form method="post" action="{{ delete_url }}" class="w-full" data-testid="studio-event-delete-form" onsubmit="return confirm('{{ delete_confirmation|escapejs }}');">{% csrf_token %}<button type="submit" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent" data-testid="studio-event-delete-submit"><i data-lucide="trash-2" class="h-4 w-4"></i><span>Delete event</span></button><span class="block break-words px-4 pb-3 text-xs text-muted-foreground" data-testid="studio-event-delete-help">{{ delete_help }}</span></form></div>{% endif %}
   {% endstudio_overflow_menu %}

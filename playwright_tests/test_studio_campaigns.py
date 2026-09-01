@@ -166,6 +166,16 @@ class TestStaffConfirmsSend:
 
         page.on("dialog", lambda dialog: dialog.accept())
 
+        # The low-level model form remains reachable but has no delivery
+        # actions; sending is owned exclusively by Studio.
+        page.goto(
+            f"{django_server}/admin/email_app/emailcampaign/{campaign.pk}/change/",
+            wait_until="domcontentloaded",
+        )
+        assert page.get_by_text("Send Test Email", exact=True).count() == 0
+        assert page.get_by_text("Send Campaign", exact=True).count() == 0
+        assert page.locator('[href*="send-test"], [href*="send-campaign"]').count() == 0
+
         detail_url = f"{django_server}/studio/campaigns/{campaign.pk}/"
         page.goto(detail_url, wait_until="domcontentloaded")
 
@@ -174,12 +184,15 @@ class TestStaffConfirmsSend:
         # call to return a task id.
         with mock.patch(
             "jobs.tasks.async_task", return_value="task-e2e",
-        ):
+        ) as mock_async_task:
             page.locator('[data-testid="send-campaign-btn"]').click()
             page.wait_for_load_state("domcontentloaded")
 
         # After the send flow, the worker page is the destination.
         assert "/studio/worker/" in page.url
+        campaign.refresh_from_db()
+        assert campaign.status == "sending"
+        assert mock_async_task.call_count == 1
 
 
 # ---------------------------------------------------------------

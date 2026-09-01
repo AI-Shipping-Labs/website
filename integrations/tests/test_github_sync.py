@@ -8,7 +8,7 @@ Covers:
 - Soft-delete behavior for stale content
 - Image URL rewriting
 - GitHub App authentication
-- Admin sync pages (dashboard, history, trigger, sync all)
+- Retired admin sync routes fail closed
 - Seed content sources management command
 - Direct admin edits flagged with source_repo = null
 """
@@ -29,6 +29,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import Client, RequestFactory, TestCase, override_settings, tag
+from django.urls import Resolver404, resolve
 from django.utils import timezone
 
 from content.models import (
@@ -45,7 +46,6 @@ from events.models import Event
 from integrations.admin.content_source import ContentSourceAdmin
 from integrations.config import clear_config_cache
 from integrations.models import ContentSource, IntegrationSetting, SyncLog, WebhookLog
-from integrations.services.content_sync_queue import ContentSyncQueueResult
 from integrations.services.github import (
     GitHubSyncError,
     find_content_source,
@@ -2480,216 +2480,76 @@ class GitHubAppAuthTest(TestCase):
 
 
 # ===========================================================================
-# Admin Sync Page Tests
+# Retired Admin Sync Route Tests
 # ===========================================================================
 
 
-class AdminSyncDashboardTest(TestCase):
-    """Test admin sync dashboard view."""
+class RetiredAdminSyncRoutesTest(TestCase):
+    """Legacy sync UI routes are absent and cannot expose or mutate sync data."""
 
-    def setUp(self):
-        self.client = Client()
-        self.admin = User.objects.create_superuser(
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_superuser(
             email='admin@test.com', password='testpass',
         )
-        self.client.login(email='admin@test.com', password='testpass')
-        self.source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/blog',
+        cls.source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/retired-sync-secret',
         )
-
-    def test_dashboard_accessible_to_staff(self):
-        response = self.client.get('/admin/sync/')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'AI-Shipping-Labs/blog')
-
-    def test_dashboard_requires_staff(self):
-        self.client.logout()
-        response = self.client.get('/admin/sync/')
-        # Should redirect to login
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('login', response.url)
-
-    def test_dashboard_shows_all_sources(self):
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/courses',
+        cls.log = SyncLog.objects.create(
+            source=cls.source,
+            status='failed',
+            errors=[{'file': 'private.md', 'error': 'secret parse failure'}],
         )
-        response = self.client.get('/admin/sync/')
-        self.assertContains(response, 'AI-Shipping-Labs/blog')
-        self.assertContains(response, 'AI-Shipping-Labs/courses')
-
-    def test_dashboard_shows_sync_status(self):
-        self.source.last_sync_status = 'success'
-        self.source.last_synced_at = timezone.now()
-        self.source.save()
-        response = self.client.get('/admin/sync/')
-        self.assertContains(response, 'success')
-
-    def test_dashboard_shows_sync_now_button(self):
-        response = self.client.get('/admin/sync/')
-        self.assertContains(response, 'Sync Now')
-
-    def test_dashboard_shows_sync_all_button(self):
-        response = self.client.get('/admin/sync/')
-        self.assertContains(response, 'Sync All')
-
-
-class AdminSyncHistoryTest(TestCase):
-    """Test admin sync history view."""
 
     def setUp(self):
-        self.client = Client()
-        self.admin = User.objects.create_superuser(
-            email='admin@test.com', password='testpass',
-        )
-        self.client.login(email='admin@test.com', password='testpass')
-        self.source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/blog',
-        )
+        self.client.force_login(self.staff)
 
-    def test_history_page_accessible(self):
-        SyncLog.objects.create(
-            source=self.source, status='success',
-            items_created=5, items_updated=2,
-        )
-        response = self.client.get(f'/admin/sync/{self.source.pk}/history/')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'success')
+    def test_retired_read_routes_are_unhandled_404_without_data_leakage(self):
+        paths = [
+            '/admin/sync/',
+            f'/admin/sync/{self.source.pk}/history/',
+        ]
+        for path in paths:
+            with self.subTest(path=path):
+                with self.assertRaises(Resolver404):
+                    resolve(path)
+                for method in ('get', 'post', 'put', 'patch', 'delete'):
+                    response = getattr(self.client, method)(path)
+                    self.assertEqual(response.status_code, 404)
+                    self.assertNotContains(
+                        response, self.source.repo_name, status_code=404,
+                    )
+                    self.assertNotContains(
+                        response, 'secret parse failure', status_code=404,
+                    )
 
-    def test_history_shows_error_details(self):
-        SyncLog.objects.create(
-            source=self.source, status='partial',
-            errors=[{'file': 'bad.md', 'error': 'Parse error'}],
-        )
-        response = self.client.get(f'/admin/sync/{self.source.pk}/history/')
-        self.assertContains(response, 'bad.md')
-        self.assertContains(response, 'Parse error')
+    @patch('integrations.services.content_sync_queue.enqueue_content_syncs')
+    @patch('integrations.services.content_sync_queue.enqueue_content_sync')
+    def test_retired_mutation_routes_are_unhandled_404_without_side_effects(
+        self, mock_enqueue_one, mock_enqueue_all,
+    ):
+        initial_logs = SyncLog.objects.count()
+        paths = [
+            f'/admin/sync/{self.source.pk}/trigger/',
+            '/admin/sync/all/',
+        ]
+        for path in paths:
+            with self.subTest(path=path):
+                with self.assertRaises(Resolver404):
+                    resolve(path)
+                for method in ('get', 'post', 'put', 'patch', 'delete'):
+                    response = getattr(self.client, method)(path)
+                    self.assertEqual(response.status_code, 404)
+                    self.assertNotContains(
+                        response, self.source.repo_name, status_code=404,
+                    )
+                    self.assertNotContains(
+                        response, 'secret parse failure', status_code=404,
+                    )
 
-
-class AdminSyncTriggerTest(TestCase):
-    """Test admin sync trigger action."""
-
-    def setUp(self):
-        self.client = Client()
-        self.admin = User.objects.create_superuser(
-            email='admin@test.com', password='testpass',
-        )
-        self.client.login(email='admin@test.com', password='testpass')
-        self.source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/blog',
-        )
-
-    def test_trigger_sync_redirects(self):
-        with patch('django_q.tasks.async_task'):
-            response = self.client.post(
-                f'/admin/sync/{self.source.pk}/trigger/',
-            )
-        self.assertEqual(response.status_code, 302)
-
-    def test_trigger_sync_uses_shared_enqueue_service_for_json(self):
-        with patch(
-            'integrations.views.admin_sync.enqueue_content_sync',
-        ) as mock_enqueue:
-            mock_enqueue.return_value = ContentSyncQueueResult(
-                ok=True,
-                queued=True,
-                ran_inline=False,
-                source=self.source,
-                message='custom queued message',
-            )
-            response = self.client.post(
-                f'/admin/sync/{self.source.pk}/trigger/',
-                HTTP_ACCEPT='application/json',
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['message'], 'custom queued message')
-        mock_enqueue.assert_called_once_with(self.source)
-
-    def test_trigger_sync_json_error_when_inline_fallback_sync_raises(self):
-        with (
-            patch(
-                'integrations.services.content_sync_queue._enqueue_async_task',
-                side_effect=ImportError('django-q unavailable'),
-            ),
-            patch(
-                'integrations.services.content_sync_queue.sync_content_source',
-                side_effect=Exception('inline sync error'),
-            ),
-            self.assertLogs('integrations.views.admin_sync', level='ERROR') as logs,
-        ):
-            response = self.client.post(
-                f'/admin/sync/{self.source.pk}/trigger/',
-                HTTP_ACCEPT='application/json',
-            )
-
-        self.assertEqual(response.status_code, 500)
-        self.assertEqual(response.json()['status'], 'error')
-        self.assertEqual(
-            response.json()['message'],
-            'Sync failed for AI-Shipping-Labs/blog: inline sync error',
-        )
-        self.assertIn(
-            'Error triggering sync for AI-Shipping-Labs/blog',
-            logs.output[0],
-        )
-
-    def test_trigger_sync_requires_post(self):
-        response = self.client.get(f'/admin/sync/{self.source.pk}/trigger/')
-        self.assertEqual(response.status_code, 405)
-
-    def test_trigger_sync_requires_staff(self):
-        self.client.logout()
-        response = self.client.post(f'/admin/sync/{self.source.pk}/trigger/')
-        # Should redirect to login (302) but not to the sync dashboard
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('login', response.url)
-
-
-class AdminSyncAllTest(TestCase):
-    """Test admin sync all action."""
-
-    def setUp(self):
-        self.client = Client()
-        self.admin = User.objects.create_superuser(
-            email='admin@test.com', password='testpass',
-        )
-        self.client.login(email='admin@test.com', password='testpass')
-
-    def test_sync_all_redirects(self):
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/blog',
-        )
-        with patch('django_q.tasks.async_task'):
-            response = self.client.post('/admin/sync/all/')
-        self.assertEqual(response.status_code, 302)
-
-    def test_sync_all_uses_shared_enqueue_service(self):
-        source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/blog',
-        )
-        with patch(
-            'integrations.views.admin_sync.enqueue_content_syncs',
-        ) as mock_enqueue:
-            mock_enqueue.return_value = [
-                ContentSyncQueueResult(
-                    ok=True,
-                    queued=True,
-                    ran_inline=False,
-                    source=source,
-                ),
-            ]
-            response = self.client.post(
-                '/admin/sync/all/',
-                HTTP_ACCEPT='application/json',
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['message'], 'Sync triggered for 1 sources')
-        mock_enqueue.assert_called_once_with([source])
-
-    def test_sync_all_requires_post(self):
-        response = self.client.get('/admin/sync/all/')
-        self.assertEqual(response.status_code, 405)
+        self.assertEqual(SyncLog.objects.count(), initial_logs)
+        mock_enqueue_one.assert_not_called()
+        mock_enqueue_all.assert_not_called()
 
 
 # ===========================================================================

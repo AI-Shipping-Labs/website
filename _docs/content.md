@@ -25,7 +25,7 @@ Database-backed. One row per repo (`repo_name` is `unique=True`). The sync walke
 
 The model also carries sync-bookkeeping fields (`last_synced_at`, `last_sync_status`, `last_synced_commit`, `sync_locked_at`, etc.) used to skip no-op syncs and serialise concurrent runs.
 
-Register sources by editing `integrations/management/commands/seed_content_sources.py` and re-running it, or insert via Django admin (`/admin/integrations/contentsource/`).
+Register sources in Studio at `/studio/sync/sources/new`, import a source configuration through Studio, or edit `integrations/management/commands/seed_content_sources.py` and re-run it.
 
 ## Authentication
 
@@ -407,7 +407,7 @@ Same steps regardless of which content type the repo holds.
 
 1. Restructure the repo to match the content type's expected layout (see schemas above). Add `content_id` to every item.
 2. Confirm the GitHub App has access to the repo (org settings → installation → "All repositories", or add the specific repo). Verify with the snippet in `setup.md`.
-3. Add a `ContentSource` row — edit `seed_content_sources.py` and re-run, or insert via Django admin.
+3. Add a `ContentSource` in Studio at `/studio/sync/sources/new`, import a source configuration, or edit `seed_content_sources.py` and re-run it.
 4. Configure the GitHub webhook on the repo to point at `/api/webhooks/github`, using the `webhook_secret` from the `ContentSource` row.
 5. Trigger the first sync: `uv run python manage.py sync_content` or push a commit to the repo.
 

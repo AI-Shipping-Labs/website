@@ -143,7 +143,7 @@ slugs render nothing; shortcodes never embed an email form or leak the slug.
 - R-RES-2: `/events?filter=past` returns published past events with recording fields populated, paginated 20/page, sorted by event start time descending, and with existing gated tier cues.
 - R-RES-3: Workshop-linked event recordings hand off to `/workshops/{slug}` and `/workshops/{slug}/video`; standalone legacy event recordings keep `/events/{id}/{slug}`.
 - R-RES-4: `GET /api/projects` returns published projects, filterable by `difficulty` and `tags` query params.
-- R-RES-5: Community members can submit projects via `POST /api/projects/submit` (requires auth). Creates with `status = "pending_review"`. Admin approves via `PUT /api/admin/projects/{id}/approve`.
+- R-RES-5: Community members can submit projects via `POST /api/projects/submit` (requires auth). Creates with `status = "pending_review"`. Staff review pending projects at `/studio/projects/<id>/review`.
 - R-RES-6: `GET /api/curated-links` returns all links grouped by `category`. Gated links return `is_locked` instead of `url`.
 - R-RES-7: `GET /api/downloads/{slug}/file` re-checks access and redirects to a fresh private-S3 presigned attachment. It increments `download_count` only after successful authorization and presigning.
 - R-RES-8: For Free downloads (`required_level = 0`), anonymous visitors request a generic, enumeration-safe transactional email from the detail page. Verification leads to a durable, one-time, slug-scoped delivery grant; marketing consent is separate and optional.

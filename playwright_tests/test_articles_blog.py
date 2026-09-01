@@ -15,6 +15,7 @@ import pytest
 from playwright_tests.conftest import auth_context as _auth_context
 from playwright_tests.conftest import create_staff_user as _create_staff_user
 from playwright_tests.conftest import ensure_tiers as _ensure_tiers
+from scripts.browser_journey_policy import browser_journey
 
 # Playwright creates an async event loop internally. Django's async safety
 # check detects this and raises SynchronousOnlyOperation when we make ORM calls.
@@ -83,15 +84,6 @@ def _create_user(email, password="testpass123", tier_slug=None):
         user.save()
     connection.close()
     return user
-
-
-def _login_admin_via_browser(page, base_url, email, password="adminpass123"):
-    """Log in an admin user via the Django admin login page."""
-    page.goto(f"{base_url}/admin/login/", wait_until="domcontentloaded")
-    page.fill("#id_username", email)
-    page.fill("#id_password", password)
-    page.click('input[type="submit"]')
-    page.wait_for_load_state("domcontentloaded")
 
 
 @pytest.mark.django_db(transaction=True)
@@ -227,56 +219,46 @@ class TestBlogBrowserSmoke:
         anon_page.close()
         context.close()
 
-    def test_admin_article_form_slug_and_save(self, django_server, page):
-        """Admin form slug prepopulation and save work in a real browser."""
+    @browser_journey
+    def test_staff_edits_article_from_public_page_in_studio(
+        self, django_server, browser,
+    ):
+        """The public staff affordance stays inside the Studio workflow."""
         _clear_articles()
-        from accounts.models import User
-
-        User.objects.create_superuser(
-            email="admin@test.com", password="adminpass123"
+        _create_staff_user("article-editor@test.com")
+        article = _create_article(
+            title="Getting Started with LLMs",
+            slug="getting-started-with-llms",
+            description="A beginner guide to large language models.",
+            content_markdown="# Getting Started with LLMs\n\nOriginal copy.",
+            author="Test Author",
+            tags=["llm", "ai"],
+            date=datetime.date(2026, 2, 20),
         )
 
-        _login_admin_via_browser(page, django_server, "admin@test.com")
+        context = _auth_context(browser, "article-editor@test.com")
+        page = context.new_page()
         page.goto(
-            f"{django_server}/admin/content/article/add/",
+            f"{django_server}{article.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
-
-        page.fill("#id_title", "Getting Started with LLMs")
-        page.click("#id_slug")
-        page.wait_for_load_state("domcontentloaded")
-        assert page.input_value("#id_slug") == "getting-started-with-llms"
-
-        page.fill(
-            "#id_description",
-            "A beginner guide to large language models.",
+        edit_button = page.get_by_test_id("studio-edit-button")
+        assert edit_button.get_attribute("href") == (
+            f"/studio/articles/{article.pk}/edit"
         )
-        page.fill("#id_author", "Test Author")
-        page.fill(
-            "#id_content_markdown",
-            (
-                "# Getting Started with LLMs\n\n"
-                "This article covers the basics of LLMs.\n\n"
-                "## Installation\n\n"
-                "```python\npip install openai\n```\n\n"
-                "## Usage\n\n"
-                "Call the API to generate text."
-            ),
-        )
-        page.fill("#id_tags", '["llm", "ai"]')
-        page.fill("#id_date", "2026-02-20")
+        edit_button.click()
+        page.wait_for_url(f"**/studio/articles/{article.pk}/edit")
+        assert page.locator('[href*="/admin/"]').count() == 0
 
-        published_checkbox = page.locator("#id_published")
-        if not published_checkbox.is_checked():
-            published_checkbox.check()
-
-        page.click('input[name="_save"]')
+        page.locator('input[name="title"]').fill("LLM Shipping Guide")
+        page.get_by_role("button", name="Save Changes").first.click()
         page.wait_for_load_state("domcontentloaded")
 
-        assert "/admin/content/article/" in page.url
-        body = page.content()
-        assert "Getting Started with LLMs" in body
-        assert "published" in body.lower()
+        assert page.url.endswith(f"/studio/articles/{article.pk}/edit")
+        article.refresh_from_db()
+        assert article.title == "LLM Shipping Guide"
+        assert "/admin/" not in page.url
+        context.close()
 
 
 @pytest.mark.django_db(transaction=True)

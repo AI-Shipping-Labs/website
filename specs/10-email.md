@@ -54,15 +54,15 @@ EmailLog:
 
 ## Sending Campaigns
 
-### Admin Flow
+### Studio flow
 
-1. Admin goes to `/admin/emails/new`
+1. Staff opens `/studio/campaigns/new`
 2. Fills in: subject, body (markdown editor with preview), target audience dropdown:
    - "Everyone (including free)" → `target_min_level = 0`
    - "Basic and above" → `target_min_level = 1`
    - "Main and above" → `target_min_level = 2`
    - "Premium only" → `target_min_level = 3`
-3. Preview: admin sees estimated recipient count and can send a test email to themselves
+3. Preview: staff sees the estimated recipient count and can send a test email
 4. Send: creates `EmailCampaign` with `status = "sending"`, enqueues a background job
 
 ### Send Job
@@ -110,7 +110,7 @@ Sent immediately (not via campaigns) using SES:
 - R-EML-3: Implement `GET /api/verify-email?token={jwt}` that sets `email_verified = true`. Token is a JWT containing `user_id`, expires in 24 hours.
 - R-EML-4: Implement `GET /api/unsubscribe?token={jwt}` that sets `unsubscribed = true`. Token is a JWT containing `user_id`, does not expire.
 - R-EML-5: Implement campaign send job: query eligible users, send via SES with rate limiting, log each send, update campaign status.
-- R-EML-6: Admin endpoints: `POST /api/admin/emails` (create campaign), `POST /api/admin/emails/{id}/test` (send test to admin), `POST /api/admin/emails/{id}/send` (enqueue send job), `GET /api/admin/emails` (list campaigns with sent_count).
+- R-EML-6: Human campaign creation, test sends, recipient estimates, and final sends live under `/studio/campaigns/`. Django admin has no duplicate delivery actions; bearer-authenticated automation remains under the documented production API.
 - R-EML-7: Implement `POST /api/ses-events` to handle bounce and complaint SNS notifications. On hard bounce or complaint, set `user.unsubscribed = true`.
 - R-EML-8: Implement transactional email sending as a service: `EmailService.send(user, template_name, context)`. Templates are stored as markdown files rendered with context variables.
 - R-EML-9: Configure SES domain identity for `aishippinglabs.com` with SPF, DKIM, DMARC records.

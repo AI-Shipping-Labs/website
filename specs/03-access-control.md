@@ -38,9 +38,9 @@ Where `gated_response` returns:
 - For recordings/resources: the title and description are visible. The video/file is gated. Show "Upgrade to {required_tier} to watch/download"
 - For events: the event detail is always visible. The "Register" button is gated. Show "Upgrade to {required_tier} to join this event"
 
-## Admin UI
+## Studio UI
 
-When creating or editing any content item, the admin sees a dropdown:
+When creating or editing any content item in Studio, staff see a dropdown:
 - "Open (everyone)" — `required_level = 0`
 - "Basic and above" — `required_level = 1`
 - "Main and above" — `required_level = 2`
@@ -53,5 +53,5 @@ Default is "Open (everyone)".
 - R-ACL-1: Add `required_level` integer column (default 0) to every content table: `articles`, `courses`, `recordings`, `resources`, `curated_links`, `downloads`, `events`.
 - R-ACL-2: On every content-serving endpoint, check `user.tier.level >= content.required_level` server-side before returning full content.
 - R-ACL-3: If the check fails, return a gated response with a teaser and a CTA linking to `/pricing`. Never return a 404 for gated content.
-- R-ACL-4: The admin form for every content type includes a "Visibility" dropdown with the four options above.
+- R-ACL-4: The Studio editor for every content type includes a "Visibility" dropdown with the four options above.
 - R-ACL-5: Anonymous visitors (`user = null`) are treated as level 0. They see all Open content and CTAs for everything else.

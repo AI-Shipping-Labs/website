@@ -8,7 +8,6 @@
 {% url 'studio_persona_list' as persona_list_url %}
 {% studio_header_actions title=persona.name subtitle=persona.archetype title_meta=persona_header_meta back_url=persona_list_url back_label='Back to personas' %}
   <a href="{% url 'studio_persona_edit' persona_id=persona.pk %}" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Edit persona</a>
-  {% load admin_links %}{% admin_change_url persona as admin_url %}{% if admin_url %}{% studio_overflow_menu %}<a href="{{ admin_url }}" data-testid="studio-open-in-admin" title="Open in Django admin" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="wrench" class="h-4 w-4"></i><span>Open in Django admin</span></a>{% endstudio_overflow_menu %}{% endif %}
 {% endstudio_header_actions %}
 
 <div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-2xl">

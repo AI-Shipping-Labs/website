@@ -21,7 +21,6 @@ KNOWN_EXCEPTIONS = {
     'assistant.html': 0,
     'books/form.html': 2,
     'call_hosts/form.html': 2,
-    'campaigns/form.html': 0,
     'campaigns/recipients.html': 0,
     'content_sources/create.html': 0,
     'courses/access_list.html': 0,

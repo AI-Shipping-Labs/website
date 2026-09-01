@@ -362,25 +362,50 @@ class TestScenario1AdminTriggersSingleSync:
 
         _login_admin_via_browser(page, django_server, "admin@test.com")
 
-        # Step 1: Navigate to /admin/sync/ and verify initial state
-        page.goto(
+        # Step 1: The retired bookmark is an unhandled 404 and leaks no source.
+        old_response = page.goto(
             f"{django_server}/admin/sync/",
+            wait_until="domcontentloaded",
+        )
+        assert old_response.status == 404
+        assert "AI-Shipping-Labs/blog" not in page.content()
+
+        from integrations.models import SyncLog
+        initial_log_count = SyncLog.objects.count()
+        for retired_action in (
+            f"/admin/sync/{blog_source.pk}/trigger/",
+            "/admin/sync/all/",
+        ):
+            result = page.evaluate(
+                """async (url) => {
+                    const response = await fetch(url, {method: 'POST'});
+                    return {status: response.status, body: await response.text()};
+                }""",
+                retired_action,
+            )
+            assert result["status"] == 404
+            assert "AI-Shipping-Labs/blog" not in result["body"]
+        assert SyncLog.objects.count() == initial_log_count
+
+        # Step 2: Navigate to the canonical Studio dashboard.
+        page.goto(
+            f"{django_server}/studio/sync/",
             wait_until="domcontentloaded",
         )
         body = page.content()
 
-        # Step 2: Find the blog source row - initially "Never synced"
+        # Step 3: Find the blog source row - initially "Never synced"
         assert "AI-Shipping-Labs/blog" in body
         blog_card = page.locator(
-            '.bg-card:has-text("AI-Shipping-Labs/blog")'
-        ).first
+            '[data-repo-card][data-repo-name="AI-Shipping-Labs/blog"]'
+        )
         assert "Never synced" in blog_card.inner_text()
 
         # Verify the Sync Now button exists
         sync_button = blog_card.locator('button:has-text("Sync Now")')
         assert sync_button.count() >= 1
 
-        # Step 3: Run the sync via the ORM (equivalent to what
+        # Step 4: Run the sync via the ORM (equivalent to what
         # the Sync Now button does when the task executes)
         _sync_blog_source_with_articles(blog_source, [
             {
@@ -390,16 +415,16 @@ class TestScenario1AdminTriggersSingleSync:
             },
         ])
 
-        # Step 4: Reload the dashboard
+        # Step 5: Reload the dashboard
         page.goto(
-            f"{django_server}/admin/sync/",
+            f"{django_server}/studio/sync/",
             wait_until="domcontentloaded",
         )
 
         # Then: Blog source shows updated "Last synced" timestamp
         blog_card = page.locator(
-            '.bg-card:has-text("AI-Shipping-Labs/blog")'
-        ).first
+            '[data-repo-card][data-repo-name="AI-Shipping-Labs/blog"]'
+        )
         blog_text = blog_card.inner_text()
 
         # Should no longer say "Never synced"
@@ -436,9 +461,9 @@ class TestScenario2AdminTriggersSyncAll:
 
         _login_admin_via_browser(page, django_server, "admin@test.com")
 
-        # Step 1: Navigate to /admin/sync/
+        # Step 1: Navigate to the Studio sync dashboard.
         page.goto(
-            f"{django_server}/admin/sync/",
+            f"{django_server}/studio/sync/",
             wait_until="domcontentloaded",
         )
 
@@ -466,7 +491,7 @@ class TestScenario2AdminTriggersSyncAll:
 
         # Step 3: Reload the dashboard
         page.goto(
-            f"{django_server}/admin/sync/",
+            f"{django_server}/studio/sync/",
             wait_until="domcontentloaded",
         )
 
@@ -474,7 +499,7 @@ class TestScenario2AdminTriggersSyncAll:
         body = page.content()
         # Scope to direct source-card children so the global consent card is
         # not mistaken for a content source.
-        cards = page.locator(".space-y-4 > .bg-card").all()
+        cards = page.locator("[data-repo-card]").all()
         synced_count = 0
         for card in cards:
             card_text = card.inner_text()
@@ -528,19 +553,11 @@ class TestScenario3AdminReviewsSyncHistory:
 
         _login_admin_via_browser(page, django_server, "admin@test.com")
 
-        # Step 1: Navigate to /admin/sync/
+        # Step 1: Navigate to Studio's aggregated sync history.
         page.goto(
-            f"{django_server}/admin/sync/",
+            f"{django_server}/studio/sync/history/",
             wait_until="domcontentloaded",
         )
-
-        # Step 2: Click "History" link for the blog source
-        blog_card = page.locator(
-            '.bg-card:has-text("AI-Shipping-Labs/blog")'
-        ).first
-        history_link = blog_card.locator('a:has-text("History")')
-        history_link.click()
-        page.wait_for_load_state("domcontentloaded")
 
         # Then: History page loads
         assert "/history/" in page.url
@@ -563,7 +580,7 @@ class TestScenario3AdminReviewsSyncHistory:
         page.wait_for_load_state("domcontentloaded")
 
         # Then: Returns to the sync dashboard
-        assert page.url.rstrip("/").endswith("/admin/sync")
+        assert page.url.rstrip("/").endswith("/studio/sync")
 # ---------------------------------------------------------------------------
 # Scenario 4: Admin reviews error details for a sync that had parsing failures
 # ---------------------------------------------------------------------------
@@ -596,19 +613,11 @@ class TestScenario4AdminReviewsErrorDetails:
 
         _login_admin_via_browser(page, django_server, "admin@test.com")
 
-        # Step 1: Navigate to /admin/sync/
+        # Step 1: Navigate to Studio's aggregated sync history.
         page.goto(
-            f"{django_server}/admin/sync/",
+            f"{django_server}/studio/sync/history/",
             wait_until="domcontentloaded",
         )
-
-        # Step 2: Click "History" for blog source
-        blog_card = page.locator(
-            '.bg-card:has-text("AI-Shipping-Labs/blog")'
-        ).first
-        history_link = blog_card.locator('a:has-text("History")')
-        history_link.click()
-        page.wait_for_load_state("domcontentloaded")
 
         body = page.content()
 
@@ -768,19 +777,20 @@ class TestScenario6SoftDeleteOnFileRemoval:
         # "staying-article" still visible
         assert "Staying Article" in body
 
-        # Step 2: Verify in admin that article still exists (soft-deleted)
+        # Step 2: Verify in Studio that the source record still exists.
         _login_admin_via_browser(page, django_server, "admin@test.com")
         page.goto(
-            f"{django_server}/admin/content/article/",
+            f"{django_server}/studio/articles/",
             wait_until="domcontentloaded",
         )
-        admin_body = page.content()
+        studio_body = page.content()
 
         # Article still exists in the database
-        assert "Old Article" in admin_body or "old-article" in admin_body
+        assert "Old Article" in studio_body or "old-article" in studio_body
+        assert page.locator('[href*="/admin/"]').count() == 0
 
         # It should be marked as draft (soft-deleted)
-        assert "draft" in admin_body.lower()
+        assert "draft" in studio_body.lower()
 # ---------------------------------------------------------------------------
 # Scenario 7: Admin creates an article directly in Studio and it
 #              coexists with synced content
@@ -942,27 +952,32 @@ class TestScenario9NonStaffCannotAccessSyncDashboard:
     """Non-staff user cannot access the sync dashboard."""
 
     def test_basic_member_redirected_from_sync_dashboard(self, django_server, browser):
-        """A Basic-tier (non-staff) user is redirected to login when
-        accessing /admin/sync/."""
+        """A Basic-tier member gets no old-route data and no Studio access."""
         _clear_content_sources()
         _ensure_tiers()
         _create_user("member@test.com", tier_slug="basic")
 
         context = _auth_context(browser, "member@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /admin/sync/
-        page.goto(
+        # Step 1: The retired route is an unhandled 404 for every caller.
+        old_response = page.goto(
             f"{django_server}/admin/sync/",
             wait_until="domcontentloaded",
         )
-
-        # Then: Redirected to login page
-        assert "login" in page.url.lower()
+        assert old_response.status == 404
 
         # Then: No sync controls visible
         body = page.content()
         assert "Sync Now" not in body
         assert "Sync All" not in body
+
+        # Step 2: The canonical Studio route denies an authenticated member.
+        studio_response = page.goto(
+            f"{django_server}/studio/sync/",
+            wait_until="domcontentloaded",
+        )
+        assert studio_response.status == 403
+        assert "Sync Now" not in page.content()
 # ---------------------------------------------------------------------------
 # Scenario 10: Admin verifies that synced courses include modules and units
 # ---------------------------------------------------------------------------
@@ -1121,9 +1136,9 @@ class TestScenario12AdminViewsSeededSources:
 
         _login_admin_via_browser(page, django_server, "admin@test.com")
 
-        # Step 1: Navigate to /admin/sync/
+        # Step 1: Navigate to the Studio sync dashboard.
         page.goto(
-            f"{django_server}/admin/sync/",
+            f"{django_server}/studio/sync/",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -1136,27 +1151,27 @@ class TestScenario12AdminViewsSeededSources:
 
         # Then: Courses source marked as "Private"
         courses_card = page.locator(
-            '.bg-card:has-text("AI-Shipping-Labs/courses")'
-        ).first
+            '[data-repo-card][data-repo-name="AI-Shipping-Labs/courses"]'
+        )
         courses_text = courses_card.inner_text()
         assert "Private" in courses_text
 
         # Then: Blog, resources, projects are NOT marked private
         blog_card = page.locator(
-            '.bg-card:has-text("AI-Shipping-Labs/blog")'
-        ).first
+            '[data-repo-card][data-repo-name="AI-Shipping-Labs/blog"]'
+        )
         blog_text = blog_card.inner_text()
         assert "Private" not in blog_text
 
         resources_card = page.locator(
-            '.bg-card:has-text("AI-Shipping-Labs/resources")'
-        ).first
+            '[data-repo-card][data-repo-name="AI-Shipping-Labs/resources"]'
+        )
         resources_text = resources_card.inner_text()
         assert "Private" not in resources_text
 
         projects_card = page.locator(
-            '.bg-card:has-text("AI-Shipping-Labs/projects")'
-        ).first
+            '[data-repo-card][data-repo-name="AI-Shipping-Labs/projects"]'
+        )
         projects_text = projects_card.inner_text()
         assert "Private" not in projects_text
 

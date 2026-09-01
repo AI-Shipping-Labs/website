@@ -1,12 +1,11 @@
 {% extends "studio/base.html" %}
-{% load studio_filters admin_links %}
+{% load studio_filters %}
 
 {% block studio_title %}{% if is_synced %}View Recording{% elif recording %}Edit Recording{% else %}New Recording{% endif %}{% endblock %}
 
 {% block studio_content %}
 {% studio_header_actions title=is_synced|yesno:'View Recording,Edit Recording' subtitle=recording.title back_url='/studio/recordings/' back_label='Back to recordings' %}
   {% if recording and recording.workshop %}<a href="{{ recording.workshop.get_absolute_url }}" target="_blank" rel="noopener noreferrer" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="view-on-site"><i data-lucide="external-link" class="h-4 w-4"></i><span>View workshop</span></a>{% endif %}
-  {% if recording %}{% admin_change_url recording as admin_url %}{% if admin_url %}{% studio_overflow_menu %}<a href="{{ admin_url }}" data-testid="studio-open-in-admin" title="Open in Django admin" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="wrench" class="h-4 w-4"></i><span>Open in Django admin</span></a>{% endstudio_overflow_menu %}{% endif %}{% endif %}
 {% endstudio_header_actions %}
 {% if recording and is_synced %}
 {% studio_origin_panel recording %}
@@ -72,6 +71,65 @@
       </div>
     </div>
 
+    <div data-testid="recording-timestamps-editor" data-recording-timestamps-editor>
+      <div class="mb-2 flex items-center justify-between gap-3">
+        <div>
+          <label class="block text-sm font-medium text-foreground">Chapters</label>
+          <p class="text-xs text-muted-foreground">Add the time and label shown in the recording player.</p>
+        </div>
+        {% if not is_synced %}
+        <button type="button"
+                data-testid="recording-timestamp-add"
+                data-recording-timestamp-add
+                class="inline-flex items-center rounded-md border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+          Add chapter
+        </button>
+        {% endif %}
+      </div>
+      <input type="hidden"
+             name="timestamps"
+             value="{{ timestamps_json }}"
+             data-recording-timestamps-json
+             {% if is_synced %}disabled{% endif %}>
+      <div class="space-y-2" data-recording-timestamp-rows></div>
+      {% if timestamps_error %}
+      <p class="mt-2 text-sm text-red-400" data-testid="recording-timestamps-error">{{ timestamps_error }}</p>
+      {% endif %}
+      <template data-recording-timestamp-template>
+        <div class="grid gap-2 rounded-lg border border-border bg-secondary/40 p-3 sm:grid-cols-[9rem_1fr_auto]"
+             data-recording-timestamp-row>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-muted-foreground">Time</label>
+            <input type="text"
+                   inputmode="numeric"
+                   placeholder="MM:SS"
+                   data-testid="recording-timestamp-time"
+                   data-recording-timestamp-time
+                   {% if is_synced %}disabled{% endif %}
+                   class="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-muted-foreground">Label</label>
+            <input type="text"
+                   placeholder="Chapter label"
+                   data-testid="recording-timestamp-label"
+                   data-recording-timestamp-label
+                   {% if is_synced %}disabled{% endif %}
+                   class="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          </div>
+          {% if not is_synced %}
+          <button type="button"
+                  title="Remove chapter"
+                  aria-label="Remove chapter"
+                  data-recording-timestamp-remove
+                  class="self-end rounded-md px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            Remove
+          </button>
+          {% endif %}
+        </div>
+      </template>
+    </div>
+
     <div>
       <label class="block text-sm font-medium text-foreground mb-1">Tags (comma-separated)</label>
       <input type="text" name="tags" value="{% if recording %}{% for tag in recording.tags %}{{ tag }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}"
@@ -93,4 +151,72 @@
 {% if recording and recording.published %}
 {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url %}
 {% endif %}
+<script>
+(function () {
+  var editor = document.querySelector('[data-recording-timestamps-editor]');
+  if (!editor) return;
+
+  var hidden = editor.querySelector('[data-recording-timestamps-json]');
+  var rows = editor.querySelector('[data-recording-timestamp-rows]');
+  var rowTemplate = editor.querySelector('[data-recording-timestamp-template]');
+  var addButton = editor.querySelector('[data-recording-timestamp-add]');
+
+  function secondsToTime(totalSeconds) {
+    var value = Number.parseInt(totalSeconds, 10) || 0;
+    var hours = Math.floor(value / 3600);
+    var minutes = Math.floor((value % 3600) / 60);
+    var seconds = value % 60;
+    if (hours) {
+      return hours + ':' + String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+    }
+    return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+  }
+
+  function syncRows() {
+    var payload = Array.from(rows.querySelectorAll('[data-recording-timestamp-row]')).map(function (row) {
+      return {
+        time: row.querySelector('[data-recording-timestamp-time]').value,
+        label: row.querySelector('[data-recording-timestamp-label]').value,
+      };
+    });
+    hidden.value = JSON.stringify(payload);
+  }
+
+  function addRow(timestamp) {
+    var row = rowTemplate.content.firstElementChild.cloneNode(true);
+    var timeInput = row.querySelector('[data-recording-timestamp-time]');
+    var labelInput = row.querySelector('[data-recording-timestamp-label]');
+    var rawTime = timestamp.time_seconds;
+    timeInput.value = rawTime === undefined ? (timestamp.time || '') : secondsToTime(rawTime);
+    labelInput.value = timestamp.label || timestamp.title || '';
+    row.querySelectorAll('input').forEach(function (input) {
+      input.addEventListener('input', syncRows);
+    });
+    var removeButton = row.querySelector('[data-recording-timestamp-remove]');
+    if (removeButton) {
+      removeButton.addEventListener('click', function () {
+        row.remove();
+        syncRows();
+      });
+    }
+    rows.appendChild(row);
+    return row;
+  }
+
+  try {
+    var initialRows = JSON.parse(hidden.value || '[]');
+    if (Array.isArray(initialRows)) initialRows.forEach(addRow);
+  } catch (error) {
+    // Keep the submitted value intact so the server-side error remains actionable.
+  }
+
+  if (addButton) {
+    addButton.addEventListener('click', function () {
+      var row = addRow({time_seconds: 0, label: ''});
+      syncRows();
+      row.querySelector('[data-recording-timestamp-time]').focus();
+    });
+  }
+}());
+</script>
 {% endblock %}

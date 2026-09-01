@@ -104,7 +104,7 @@ Recommended setup: at https://github.com/organizations/AI-Shipping-Labs/settings
 To onboard a new content repo:
 
 1. Confirm the App installation has access to it (covered automatically by "All repositories"). Otherwise add it under "Only select repositories".
-2. Add a `ContentSource` row pointing at the repo (`is_private=True` for private repos). Either edit `seed_content_sources.py` and re-run `manage.py seed_content_sources`, or add via Django admin.
+2. Add a `ContentSource` row pointing at the repo (`is_private=True` for private repos). Use `/studio/sync/sources/new`, import a source configuration in Studio, or edit `seed_content_sources.py` and re-run `manage.py seed_content_sources`.
 3. Run `uv run python manage.py sync_content` (or push to the repo if the webhook is wired).
 
 To verify the App can reach a specific repo:

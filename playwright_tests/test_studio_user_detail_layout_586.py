@@ -4,7 +4,7 @@ Covers the 10 scenarios from the groomed spec:
 
 1. Operator finds the primary actions directly under the user header.
 2. Operator impersonates a user from the consolidated action row.
-3. Operator opens the canonical Django admin page from the action row.
+3. Operator opens the Studio account-merge workflow from the action row.
 4. Profile reads as a single full-width section above Membership.
 5. Operator sees Slack ID as read-only with an Open in Slack link.
 6. Operator sees a clear path to edit Slack ID when missing.
@@ -38,6 +38,7 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -175,24 +176,18 @@ class TestUserDetailLayout586:
         assert h1.count() == 1
         assert "layout1@test.com" in h1.inner_text()
 
-        # Action row sits below the header and contains exactly two
-        # controls: Login as user (primary), Open in Django admin
-        # (secondary, shared partial since issue #702). The duplicate
-        # "View as user" button is gone.
+        # Action row stays within Studio: impersonate or merge accounts.
         actions = page.locator('[data-testid="user-detail-actions"]')
         assert actions.is_visible()
         impersonate = actions.locator(
             '[data-testid="user-detail-impersonate"]'
         )
-        admin = actions.locator(
-            '[data-testid="studio-open-in-admin"]'
-        )
+        merge = actions.locator('[data-testid="user-detail-merge"]')
         assert impersonate.count() == 1
-        assert admin.count() == 1
+        assert merge.count() == 1
         assert "Login as user" in impersonate.inner_text()
-        # Issue #702: chip uses the shared partial; label changed to
-        # "Open in Django admin" for parity across all Studio surfaces.
-        assert "Open in Django admin" in admin.inner_text()
+        assert "Merge accounts" in merge.inner_text()
+        assert actions.locator('[href*="/admin/"]').count() == 0
 
         # The previously-rendered duplicate is removed page-wide.
         assert page.locator(
@@ -252,7 +247,8 @@ class TestUserDetailLayout586:
 
     # ---------------- Scenario 3 --------------------------------------------
 
-    def test_view_in_django_admin_lands_on_change_page(
+    @browser_journey
+    def test_merge_accounts_lands_on_studio_merge_page(
         self, django_server, browser,
     ):
         staff_email = "layout-3-admin@test.com"
@@ -267,18 +263,15 @@ class TestUserDetailLayout586:
             wait_until="domcontentloaded",
         )
 
-        admin_link = page.locator(
-            '[data-testid="studio-open-in-admin"]'
+        merge_link = page.locator('[data-testid="user-detail-merge"]')
+        assert merge_link.get_attribute("href").startswith(
+            "/studio/users/merge/?canonical=",
         )
-        assert (
-            admin_link.get_attribute("href")
-            == f"/admin/accounts/user/{member_pk}/change/"
-        )
-        admin_link.click()
+        assert page.locator('[href*="/admin/"]').count() == 0
+        merge_link.click()
         page.wait_for_load_state("domcontentloaded")
-        assert (
-            f"/admin/accounts/user/{member_pk}/change/" in page.url
-        )
+        assert "/studio/users/merge/" in page.url
+        assert "/admin/" not in page.url
         context.close()
 
     # ---------------- Scenario 4 --------------------------------------------
@@ -450,7 +443,8 @@ class TestUserDetailLayout586:
 
     # ---------------- Scenario 6 --------------------------------------------
 
-    def test_unlinked_slack_id_shows_admin_edit_link(
+    @browser_journey
+    def test_unlinked_slack_id_stays_in_studio(
         self, django_server, browser,
     ):
         staff_email = "layout-6-admin@test.com"
@@ -465,19 +459,20 @@ class TestUserDetailLayout586:
             wait_until="domcontentloaded",
         )
 
-        # "Not linked" pill visible.
+        # The missing-ID state and edit form both remain in Studio.
         empty_el = page.locator(
             '[data-testid="user-detail-slack-id-empty"]'
         )
         assert empty_el.is_visible()
         assert "Not linked" in empty_el.inner_text()
+        assert page.locator("#slack-id-edit-form").count() == 1
 
         assert page.locator(
             '[data-testid="user-detail-slack-id-admin-link"]'
         ).count() == 0
         assert page.locator(
             '[data-testid="studio-open-in-admin"]'
-        ).count() == 1
+        ).count() == 0
         context.close()
 
     # ---------------- Scenario 7 --------------------------------------------

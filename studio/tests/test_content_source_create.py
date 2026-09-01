@@ -7,9 +7,10 @@ are gone.
 
 from unittest.mock import patch
 
+import pytest
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import Client, TestCase
+from django.test import Client, TestCase, tag
 
 from integrations.models import ContentSource, SyncLog
 from integrations.services.github import (
@@ -350,6 +351,8 @@ class ContentSourceRefreshViewTest(TestCase):
         self.assertIn('/accounts/login/', response['Location'])
 
 
+@pytest.mark.visual_regression
+@tag("visual_regression")
 class SyncDashboardLinksToCreateTest(TestCase):
     """The sync dashboard exposes the "Add content source" entry point."""
 
@@ -365,4 +368,11 @@ class SyncDashboardLinksToCreateTest(TestCase):
 
     def test_dashboard_has_link_to_add_form(self):
         response = self.client.get('/studio/sync/')
-        self.assertContains(response, '/studio/content-sources/new/')
+        self.assertContains(
+            response,
+            'href="/studio/content-sources/new/" '
+            'class="text-accent hover:underline focus-visible:outline-none '
+            'focus-visible:ring-2 focus-visible:ring-accent '
+            'focus-visible:ring-offset-2 focus-visible:ring-offset-background"'
+            '>Add a content source</a>',
+        )

@@ -104,4 +104,4 @@ After the event ends:
 - R-EVT-5: `POST /api/events/{slug}/register` registers the authenticated user if they have access and spots are available. Returns 403 if tier too low, 409 if already registered, 410 if event is full.
 - R-EVT-6: `DELETE /api/events/{slug}/register` unregisters the user.
 - R-EVT-7: `GET /api/events/{slug}` returns event detail. If user is registered and event starts within 5 minutes, include `zoom_join_url`. Otherwise omit it.
-- R-EVT-8: Admin CRUD: `POST /api/admin/events`, `PUT /api/admin/events/{id}`, `DELETE /api/admin/events/{id}`. Status transitions: draft → upcoming → completed. Admin can also manually set to cancelled.
+- R-EVT-8: Human event administration uses `/studio/events/` and `/studio/events/{id}/edit`. Bearer-authenticated automation uses the documented production API; neither workflow redirects through Django admin.

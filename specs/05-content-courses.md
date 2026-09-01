@@ -86,14 +86,11 @@ CohortEnrollment:
 - "Mark as completed" button at the bottom of the unit. Clicking it creates a `UserCourseProgress` record with `completed_at = now()`. Button changes to "Completed ✓" (togglable).
 - "Next unit" button at the bottom navigating to the next unit in sort order
 
-## Admin
+## Staff operations
 
-### `/admin/courses` — Course list
+### `/studio/courses/` and `/studio/courses/{id}/edit`
 
-- Table of all courses, sortable by date, filterable by status
-
-### `/admin/courses/new` and `/admin/courses/{id}/edit`
-
+- Table of all courses, sortable by date and filterable by status
 - Course form: title, slug, description, cover image, instructor name/bio, tags, visibility dropdown, discussion_url, status
 - Below the course form: module editor. Add/reorder/delete modules. Within each module: add/reorder/delete units.
 - Unit form (inline or modal): title, video_url, body (markdown), homework (markdown), timestamps (list of time + label pairs), is_preview checkbox
@@ -106,7 +103,7 @@ CohortEnrollment:
 - R-CRS-4: `GET /api/courses/{slug}/units/{unit_id}` returns full unit content (video_url, body, homework, timestamps) if user has access or unit `is_preview = true`. Returns 403 with `required_tier_name` otherwise.
 - R-CRS-5: `POST /api/courses/{slug}/units/{unit_id}/complete` toggles completion. If no `UserCourseProgress` record exists, create one with `completed_at = now()`. If one exists with `completed_at` set, set it to null (uncomplete).
 - R-CRS-6: Course detail page renders server-side with `<title>`, `<meta description>`, syllabus visible in HTML (for SEO). Unit content is NOT in the initial HTML for gated units.
-- R-CRS-7: Admin CRUD endpoints for courses, modules, and units. Module and unit endpoints support reordering (`PUT /api/admin/modules/reorder` with `[{id, sort_order}]`).
+- R-CRS-7: Studio owns course, module, and unit management. Course-scoped module reordering posts to `/studio/courses/{id}/modules/reorder`; the legacy session `/api/admin/modules/reorder` and `/api/admin/units/reorder` routes do not exist.
 
 ### Cohorts
 

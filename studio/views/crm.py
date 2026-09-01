@@ -368,9 +368,6 @@ def _record_detail_context(record, request):
         # member-scoped, not plan-scoped, so we pass ``None``.
         'current_plan': None,
         'member_notes_return_url': f'/studio/crm/{record.pk}/#member-notes',
-        'django_admin_url': (
-            f'/admin/accounts/user/{record.user.pk}/change/'
-        ),
         'record_status_choices': STATUS_CHOICES,
         # Structured persona dropdown (issue #802). #801 added the FK but
         # deferred the Studio control; staff pick an active Persona here.

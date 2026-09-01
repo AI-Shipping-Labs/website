@@ -61,7 +61,7 @@ All test users have the password `testpass123`:
 | `charlie@test.com` | Basic | Regular user |
 | `diana@test.com` | Free | Regular user |
 
-Log in at http://localhost:8000/accounts/login/ with any of these emails. The admin panel is at http://localhost:8000/admin/ (use the admin account).
+Log in at http://localhost:8000/accounts/login/ with any of these emails. Routine staff work is under `/studio/`; the unlinked low-level Django admin is at `http://localhost:8000/admin/` (use the admin account).
 
 ### Creating Users Manually
 
@@ -170,7 +170,7 @@ from jobs.tasks import schedule
 schedule('myapp.tasks.cleanup', cron='0 * * * *', name='hourly-cleanup')
 ```
 
-**Monitor jobs** in Django admin at `/admin/django_q/` (queued, successful, failed tasks, and schedules).
+Monitor jobs in Studio at `/studio/worker/` (queued, successful, failed tasks, and schedules). Django admin is reserved for low-level framework diagnostics.
 
 ## Configuration (production / staging operators)
 

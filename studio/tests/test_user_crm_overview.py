@@ -6,7 +6,7 @@ need, but the layout felt fragmented. Phase 1 wires up:
 - A clickable identity area on each list row (in addition to the existing
   ``View`` action) so the email/name links to ``/studio/users/<id>/``.
 - A header on the user detail page with explicit operator actions
-  (``Login as user``, ``View as user``, ``Django Admin``).
+  (``Login as user`` and account merge in Studio).
 - A dedicated sprint/plan section on the user detail page that links to
   the existing Studio plan/sprint surfaces instead of stuffing the list
   into the profile card.
@@ -91,7 +91,7 @@ class UserListIdentityLinkTest(TestCase):
 
 
 class UserDetailHeaderActionsTest(TestCase):
-    """The detail page surfaces Login as / View as / Django Admin."""
+    """The detail page keeps account actions in Studio."""
 
     @classmethod
     def setUpTestData(cls):
@@ -129,28 +129,19 @@ class UserDetailHeaderActionsTest(TestCase):
     def test_detail_action_row_drops_duplicate_view_as_user_button(self):
         # Issue #586: the "View as user" button posted to the same
         # impersonate endpoint as "Login as user" and was a duplicate.
-        # The action row now contains exactly Login as user + View in
-        # Django admin.
+        # The action row keeps the canonical Studio actions only.
         response = self.client.get(f'/studio/users/{self.member.pk}/')
         self.assertNotContains(response, 'data-testid="user-detail-view-as"')
         self.assertNotContains(response, 'View as user')
 
-    def test_detail_header_links_to_django_admin_change_page(self):
+    def test_detail_header_has_no_django_admin_escape_hatch(self):
         response = self.client.get(f'/studio/users/{self.member.pk}/')
-        # Issue #702 generalised the per-template hand-built link into a
-        # shared partial; the chip now carries
-        # ``data-testid="studio-open-in-admin"`` and the visible label
-        # is "Open in Django admin".
-        self.assertContains(response, 'data-testid="studio-open-in-admin"')
-        self.assertContains(
-            response,
-            f'href="/admin/accounts/user/{self.member.pk}/change/"',
-        )
-        self.assertContains(response, 'Open in Django admin')
+        self.assertNotContains(response, 'data-testid="studio-open-in-admin"')
+        self.assertNotContains(response, '/admin/')
+        self.assertContains(response, 'data-testid="user-detail-merge"')
 
     def test_detail_does_not_add_destructive_studio_actions(self):
-        # Phase 1 keeps destructive actions in Django Admin only. The
-        # Studio detail page must not grow a Delete control.
+        # Account lifecycle controls are a separately audited Studio follow-up.
         response = self.client.get(f'/studio/users/{self.member.pk}/')
         body = response.content.decode()
         self.assertNotIn('Delete user', body)

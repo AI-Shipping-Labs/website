@@ -1,8 +1,7 @@
-"""Admin registrations for plan rows (issue #585).
+"""Low-level admin registrations for plan rows.
 
-Minimal registration so the staff-only "Open in Django admin" link on
-the plan views resolves to a working change page. Studio remains the
-primary surface for editing plans; this admin is a low-fi inspector.
+Studio is the routine plan-management surface; these model views remain an
+unlinked framework inspector and provide one-way links back to Studio.
 """
 
 from django.contrib import admin

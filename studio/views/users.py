@@ -1509,11 +1509,6 @@ def user_detail(request, user_id):
         'activity_limit': activity_timeline['activity_limit'],
         'activity_has_more': activity_timeline['activity_has_more'],
         'first_payment_at': activity_timeline['first_payment_at'],
-        # /admin/accounts/user/<id>/change/ is the canonical destructive
-        # surface for users (delete, password reset, full ORM edits).
-        # Linking it from the Studio overview keeps Studio focused on
-        # day-to-day CRM tasks without duplicating that surface.
-        'django_admin_url': f'/admin/accounts/user/{user.pk}/change/',
         'slack_status': _slack_status(user),
         'slack_team_id': slack_team_id,
         'slack_profile_url': slack_profile_url,

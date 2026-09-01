@@ -39,17 +39,17 @@ Article:
 - Sidebar or bottom: related articles (same tags)
 - Embedded media supported: images (markdown `![](url)`), YouTube/Loom embeds (see spec 08), code blocks with syntax highlighting
 
-## Admin
+## Staff operations
 
-### `/admin/articles` — Article list
+### `/studio/articles/` — Article list
 
-- Table of all articles (draft + published), sortable by date, filterable by status and tags
-- Actions: Edit, Delete, Publish/Unpublish
+- Table of all articles (draft + published), filterable by status and origin
+- Source-managed articles are edited in their content repository; local articles use Studio
 
-### `/admin/articles/new` and `/admin/articles/{id}/edit`
+### `/studio/articles/{id}/edit`
 
 - Form fields: title, slug (auto-generated from title, editable), body (markdown editor), excerpt (auto-generated, editable), cover image upload, tags (multi-select or free-text), visibility dropdown (spec 03), status (draft/published)
-- "Publish" button sets `status = "published"` and `published_at = now()`
+- Staff reach this editor from Studio or the server-gated `Edit in Studio` affordance; no routine Django-admin link is rendered
 
 ## Requirements
 
@@ -58,8 +58,8 @@ Article:
 - R-ART-3: `GET /api/articles/{slug}` returns full article if user has access. If not, returns `excerpt` + `is_locked: true` + `required_tier_name`.
 - R-ART-4: Markdown body supports: headings, bold/italic, links, images, code blocks with language hints, YouTube/Loom embeds via URL on its own line.
 - R-ART-5: The `/blog` page renders server-side with proper `<title>`, `<meta description>`, and OpenGraph tags for each article (see spec 13).
-- R-ART-6: Admin CRUD endpoints: `POST /api/admin/articles`, `PUT /api/admin/articles/{id}`, `DELETE /api/admin/articles/{id}`. All require admin auth.
+- R-ART-6: Routine staff article management uses `/studio/articles/`; authenticated production automation remains under the documented bearer API rather than session-authenticated `/api/admin/*` routes.
 
 ### Nice to Have
 
-- R-ART-7: Community article submission: authenticated non-admin users can `POST /api/articles/submit` with title, body, tags. Creates article with `status = "pending_review"`. Admin sees pending submissions and can approve (sets `status = "published"`) or reject.
+- R-ART-7: Community article submission: authenticated non-staff users can `POST /api/articles/submit` with title, body, tags. Creates article with `status = "pending_review"`. Staff review pending submissions in Studio and can approve (sets `status = "published"`) or reject.

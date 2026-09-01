@@ -15,7 +15,6 @@
       Login as user
     </button>
   </form>
-  {% include "studio/includes/_admin_link.html" with obj=detail_user %}
   <a href="{% url 'studio_user_merge' %}?canonical={{ detail_user.email|urlencode }}"
      data-testid="user-detail-merge"
      title="Merge another account into this one"
@@ -404,13 +403,9 @@
         </form>
       </dd>
     </div>
-    {# Slack ID row (issue #561, simplified in #586). Read-only here; #}
-    {# the inline edit form has been removed because Slack IDs are #}
-    {# rarely edited and the form added persistent visual weight to a #}
-    {# row that, in practice, is set once during Slack OAuth signup. #}
-    {# The contextual Django admin escape hatch lives in the action row. #}
-    {# The studio_user_slack_id_set route stays defined for non-template #}
-    {# surfaces (Django admin / scripts). #}
+    {# Slack ID editing is owned by this Studio detail page. Keep the compact #}
+    {# disclosure in this row so staff can manage the value without leaving #}
+    {# Studio. #}
     <div class="flex justify-between gap-4" data-testid="user-detail-slack-id-row">
       <dt class="text-muted-foreground inline-flex items-center gap-1"
           title="The user's linked Slack workspace ID. Set during Slack OAuth; &quot;Not linked&quot; means no Slack account is connected.">

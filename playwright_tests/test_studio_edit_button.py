@@ -34,6 +34,7 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -106,6 +107,8 @@ class TestStudioEditButtonOnEventDetail:
         title_input = page.locator('input[name="title"]')
         assert title_input.count() == 1
         assert title_input.input_value() == "Event With Typo"
+        assert page.locator('[href*="/admin/"]').count() == 0
+        assert "Django admin" not in page.content()
 
     @pytest.mark.core
     def test_anonymous_does_not_see_button(self, django_server, page):
@@ -152,3 +155,54 @@ class TestStudioEditButtonOnEventDetail:
         html = page.content()
         assert 'data-testid="studio-edit-button"' not in html
         assert "/studio/" not in html
+
+    @pytest.mark.core
+    @browser_journey
+    def test_main_member_has_no_operator_escape_hatch(
+        self, django_server, browser,
+    ):
+        from content.models import Article, Course
+
+        _clear_events()
+        Article.objects.all().delete()
+        Course.objects.all().delete()
+        _ensure_tiers()
+        _create_user("main-member@test.com", tier_slug="main")
+        event = _create_event(slug="member-event", title="Member Event")
+        article = Article.objects.create(
+            title="Member Article",
+            slug="member-article",
+            description="Public article.",
+            content_markdown="Member content.",
+            published=True,
+            date=timezone.now().date(),
+        )
+        course = Course.objects.create(
+            title="Member Course",
+            slug="member-course",
+            description="Public course.",
+            status="published",
+            required_level=20,
+        )
+        connection.close()
+
+        context = _auth_context(browser, "main-member@test.com")
+        page = context.new_page()
+        for path in (
+            article.get_absolute_url(),
+            event.get_absolute_url(),
+            f"/courses/{course.slug}",
+            "/account/",
+        ):
+            page.goto(f"{django_server}{path}", wait_until="domcontentloaded")
+            assert page.locator('[data-testid="studio-edit-button"]').count() == 0
+            assert page.get_by_role("link", name="Studio", exact=True).count() == 0
+            assert page.locator('a[href^="/admin/"]').count() == 0
+
+        denied = page.goto(
+            f"{django_server}/studio/articles/{article.pk}/edit",
+            wait_until="domcontentloaded",
+        )
+        assert denied.status == 403
+        assert page.locator('#article-edit-form').count() == 0
+        context.close()

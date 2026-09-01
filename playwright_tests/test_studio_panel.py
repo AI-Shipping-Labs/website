@@ -761,7 +761,7 @@ class TestScenario9StaffCreatesCampaign:
         # Then: User arrives at /studio/campaigns/new
         assert "/studio/campaigns/new" in page.url
         body = page.content()
-        assert "New Campaign" in body
+        assert "New campaign" in body
 
         # Step 3: Fill in the form
         page.fill('input[name="subject"]', "February Newsletter")

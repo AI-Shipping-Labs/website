@@ -38,7 +38,10 @@ def _clear_analytics_data():
     connection.close()
 
 
-def _seed_visit(slug, *, content="", source="newsletter", medium="email", anon="anon", days_ago=0):
+def _seed_visit(
+    slug, *, content="", source="newsletter", medium="email", anon="anon",
+    days_ago=0, user=None,
+):
     from analytics.models import CampaignVisit
 
     visit = CampaignVisit.objects.create(
@@ -47,6 +50,7 @@ def _seed_visit(slug, *, content="", source="newsletter", medium="email", anon="
         utm_source=source,
         utm_medium=medium,
         anonymous_id=anon,
+        user=user,
     )
     if days_ago:
         CampaignVisit.objects.filter(pk=visit.pk).update(
@@ -111,11 +115,19 @@ def test_staff_reviews_dashboard_drills_down_and_edits_campaign(django_server, b
 
 @pytest.mark.django_db(transaction=True)
 def test_staff_inspects_campaign_links_and_unminted_rows(django_server, browser):
+    from accounts.models import User
+
     _clear_analytics_data()
     _ensure_tiers()
     _create_staff_user("utm-links-admin@test.com")
     _campaign, link = _seed_launch_campaign()
-    _seed_visit("launch_april", content="ai_hero_list", anon="minted-1")
+    identified = User.objects.create_user(
+        email="identified-visitor@test.com", password="x",
+    )
+    _seed_visit(
+        "launch_april", content="ai_hero_list", anon="minted-1",
+        user=identified,
+    )
     _seed_visit("launch_april", content="ai_hero_list", anon="minted-2", days_ago=3)
     _seed_visit("launch_april", content="unminted_list", anon="unminted-1")
 
@@ -142,6 +154,9 @@ def test_staff_inspects_campaign_links_and_unminted_rows(django_server, browser)
     assert page.url.endswith(
         f"/studio/utm-analytics/campaign/launch_april/link/{link.pk}/?range=7d"
     )
+    page.get_by_role("link", name="identified-visitor@test.com").click()
+    page.wait_for_url(f"**/studio/users/{identified.pk}/")
+    assert "/admin/" not in page.url
     context.close()
 
 

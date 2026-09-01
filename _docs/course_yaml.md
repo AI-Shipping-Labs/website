@@ -59,7 +59,7 @@ Accepted values for `default_unit_access` and per-unit `access:` (case-insensiti
 
 ### Source-owned vs Studio-owned fields
 
-Studio writes nothing back to GitHub. Some operational fields therefore live only in the database and are edited via Studio for local-only courses, or via Django admin / management commands for source-managed courses. They do not appear in `course.yaml`.
+Studio writes nothing back to GitHub. Some operational fields therefore live only in the database. Studio owns local-course edits; source-managed operational fields that Studio does not yet expose require an explicit low-level maintenance change until the tracked Studio/API follow-up lands. They do not appear in `course.yaml`.
 
 | Field | Owned by | Notes |
 |---|---|---|
@@ -68,7 +68,7 @@ Studio writes nothing back to GitHub. Some operational fields therefore live onl
 | `instructors` | YAML | Order matters — first instructor is primary on cards. |
 | `discussion_url`, `testimonials` | YAML | Edit in GitHub, then re-sync. |
 | `status` | Always `published` (not sourced) | Source-synced courses are always written as `status='published'` on upsert; there is no `published:` source key. Admin status changes are overwritten on the next sync (a non-`published` row is marked dirty and forced back to `published`). |
-| `individual_price_eur` | DB only | Set in Django admin or via local-only migration. Not in `course.yaml`. |
+| `individual_price_eur` | DB only | Not yet editable for source-managed courses in Studio; use an explicit low-level maintenance change. Not in `course.yaml`. |
 | `stripe_product_id`, `stripe_price_id` | DB only | Created via "Create Stripe Product" button after a price is set. |
 | `peer_review_*` | DB only | Configured per-course in Studio (admin) once. |
 
@@ -110,7 +110,7 @@ If the sync log shows errors, fix them at the YAML source and re-sync. Do not wo
 ## When to edit in GitHub vs Studio
 
 - Always edit in GitHub: any field listed under "YAML" in the table above. The Studio form is read-only for these fields on source-managed courses, by design.
-- Edit in Django admin or via Studio: pricing (`individual_price_eur`), Stripe IDs, peer-review configuration, and one-off access grants. These are operational and intentionally not in source.
+- Edit in Studio: operational fields that the course form exposes, including peer-review configuration and one-off access grants. Source-managed pricing and Stripe identifiers are pending their dedicated Studio/API workflow; use an explicit low-level maintenance change until it lands.
 - Never edit a synced row in the database for content fields. Edit the YAML.
 
 ## Common mistakes

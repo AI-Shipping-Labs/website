@@ -12,7 +12,7 @@ class OverflowMenuBlockTagTest(SimpleTestCase):
             """
             {% load studio_filters %}
             {% studio_overflow_menu %}
-              <a href="/admin/example/" data-testid="rare-link">Open in Django admin</a>
+              <a href="/studio/example/" data-testid="rare-link">Download report</a>
               <form method="post" data-testid="guarded-form">
                 {% csrf_token %}<button type="submit">Archive</button>
               </form>

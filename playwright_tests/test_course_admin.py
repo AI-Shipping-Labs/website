@@ -480,9 +480,7 @@ class TestScenario5StaffReordersModules:
     def test_staff_reorders_modules_via_api(
         self, django_server
     , browser):
-        """A staff user on a course with 3 modules sends a reorder
-        request via the API, then refreshes the page to verify the
-        new order is persisted."""
+        """The retired global route fails closed and Studio saves the order."""
         _clear_courses()
         _ensure_tiers()
         _create_staff_user("staff@test.com")
@@ -511,7 +509,7 @@ class TestScenario5StaffReordersModules:
         assert "Intermediate" in body
         assert "Advanced" in body
 
-        # Step 2: Send reorder request via the API
+        # Step 2: The retired session-admin API cannot mutate the course.
         # Move "Advanced" to 0, "Basics" to 1, "Intermediate" to 2
         reorder_payload = json.dumps([
             {"id": mod_advanced.pk, "sort_order": 0},
@@ -536,15 +534,47 @@ class TestScenario5StaffReordersModules:
                         body: payload,
                     }
                 );
-                return {status: resp.status, body: await resp.json()};
+                return {status: resp.status, body: await resp.text()};
             }""",
             reorder_payload,
         )
 
+        assert result["status"] == 404
+        assert "Reorder Course" not in result["body"]
+        mod_basics.refresh_from_db()
+        mod_intermediate.refresh_from_db()
+        mod_advanced.refresh_from_db()
+        assert [
+            mod_basics.sort_order,
+            mod_intermediate.sort_order,
+            mod_advanced.sort_order,
+        ] == [0, 1, 2]
+
+        # Step 3: The course-scoped Studio action persists the same request.
+        result = page.evaluate(
+            """async ({url, payload}) => {
+                const csrfToken = document.querySelector(
+                    'input[name="csrfmiddlewaretoken"]'
+                )?.value || '';
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: payload,
+                });
+                return {status: resp.status, body: await resp.json()};
+            }""",
+            {
+                "url": f"/studio/courses/{course.pk}/modules/reorder",
+                "payload": reorder_payload,
+            },
+        )
         assert result["status"] == 200
         assert result["body"]["status"] == "ok"
 
-        # Then: Refresh the page to verify the new order
+        # Then: Refresh the page to verify the new order.
         page.goto(
             f"{django_server}/studio/courses/{course.pk}/edit",
             wait_until="domcontentloaded",

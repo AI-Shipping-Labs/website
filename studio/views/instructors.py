@@ -3,7 +3,7 @@
 Surfaces the instructors whose ``user`` FK is unlinked so an operator can link
 them to the platform account that should receive #1341 ``content_comment``
 notifications. Manual linking reuses the existing ``studio_user_search``
-people picker. Django admin remains the low-level fallback.
+people picker, so the routine workflow stays entirely in Studio.
 """
 
 from django.contrib import messages

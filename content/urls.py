@@ -1,7 +1,6 @@
 from django.urls import path, re_path
 from django.views.generic import RedirectView
 
-from content.views.admin_api import reorder_modules, reorder_units
 from content.views.api import download_file, request_download, submit_project
 from content.views.courses import (
     api_cohort_enroll,
@@ -173,7 +172,4 @@ urlpatterns = [
     path('api/courses/<slug:slug>/submit', api_submit_project, name='api_submit_project'),
     path('api/courses/<slug:slug>/reviews', api_review_dashboard, name='api_review_dashboard'),
     path('api/courses/<slug:slug>/reviews/<int:submission_id>', api_submit_review, name='api_submit_review'),
-    # Admin API endpoints
-    path('api/admin/modules/reorder', reorder_modules, name='reorder_modules'),
-    path('api/admin/units/reorder', reorder_units, name='reorder_units'),
 ]

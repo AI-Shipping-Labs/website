@@ -18,7 +18,7 @@ NOTIFICATION_TYPE_CHOICES = [
     # Issue #882: fired when a member submits the onboarding form (or
     # finishes the AI onboarding chat). Created for every active staff
     # user, mirroring the plan-request fan-out. Links to the member's CRM
-    # record when tracked, else the Django admin user-change page.
+    # record when tracked, else the Studio user detail page.
     ('onboarding_submitted', 'Onboarding Submitted'),
     ('sprint_week_start', 'Sprint Week Start'),
     ('week_note_prompt', 'Week Note Prompt'),

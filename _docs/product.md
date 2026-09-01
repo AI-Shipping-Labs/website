@@ -22,7 +22,7 @@ Pays 50 EUR/month or 500 EUR/year. Unlocks everything a Basic member has plus al
 Pays 100 EUR/month or 1000 EUR/year. Unlocks everything a Main member has plus all content at `required_level <= 30`, structured courses, resume and LinkedIn teardown, and GitHub feedback.
 
 ### Staff / Admin
-Accesses the Django admin at `/admin/` and the Studio interface at `/studio/`. Can create and edit articles, recordings, events, courses (with modules and units), downloads, projects, email campaigns, and manage subscribers. Can trigger content syncs from GitHub via the admin sync dashboard at `/admin/sync/`. Can review community-submitted projects.
+Uses Studio at `/studio/` for routine content, event, campaign, subscriber, and community operations, including content-source registration, sync history, and manual syncs. Django admin remains directly available at `/admin/` only as an unlinked low-level framework and forensic surface.
 
 ## Membership Tiers
 
@@ -211,7 +211,7 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
 | GitHub content sync | `/api/webhooks/github` | Webhook receives push events; syncs markdown/YAML content from configured GitHub repos into articles, recordings, projects, etc. | System (webhook secret) | Shipped |
-| Admin sync dashboard | `/admin/sync/` | View configured content sources, sync history, trigger manual sync | Staff only | Shipped |
+| Studio sync dashboard | `/studio/sync/` | View configured content sources and worker status, trigger manual syncs, and open sync history at `/studio/sync/history/` | Staff only | Shipped |
 | Zoom webhook | `/api/webhooks/zoom` | Receives Zoom events (for live event integration) | System | Shipped |
 | SES webhook | `/api/ses-events` | Receives Amazon SES bounce/complaint notifications | System | Shipped |
 
@@ -222,7 +222,7 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 | About page | `/about` | Community introduction, founders (Alexey Grigorev and Valeriia Kuka) with bios and LinkedIn links, "Why AI Shipping Labs?" CTA | Everyone | Shipped |
 | Community sprints index | `/sprints` | Public discovery page for current, future, and past community sprint cohorts with tier requirements and next-step CTAs | Everyone (joining requires authentication/tier access) | Shipped |
 | Sitemap | `/sitemap.xml` | XML sitemap for search engines | Everyone | Shipped |
-| Django admin | `/admin/` | Full Django admin with custom admin views for all models, including email campaign change form with timestamp editor widget | Superusers/staff | Shipped |
+| Django admin | `/admin/` | Unlinked low-level framework and forensic model surface; routine operator actions live in Studio | Superusers/staff | Shipped |
 
 ## Navigation & Information Architecture
 
@@ -290,7 +290,7 @@ Visitor opens `/workshops` from the Resources dropdown -> scans durable hands-on
 Visitor clicks "View Membership Tiers" on homepage or navigates to `/membership` -> reviews all 4 tiers in the grid -> toggles between monthly and annual pricing (annual saves approximately 17%) -> clicks "Join" on their chosen tier -> redirected to Stripe Checkout -> creates account during checkout (or logs in) -> completes payment -> gains access at the purchased tier level.
 
 ### 7. Staff Manages Content via Studio
-Staff member logs in -> navigates to `/studio/` -> sees dashboard with content counts -> clicks into Articles section -> creates a new article (title, slug, content in markdown, tags, required_level, published flag) -> article appears on the blog listing and homepage. Alternatively, staff configures a GitHub content source at `/admin/sync/` -> content auto-syncs from a GitHub repo on push (via webhook) or manual trigger -> articles, recordings, projects are created/updated from markdown + YAML frontmatter files in the repo.
+Staff member logs in -> navigates to `/studio/` -> uses the content sections for local records and reviews source-managed records in place -> opens `/studio/sync/` to register a GitHub content source or trigger a manual sync -> follows `/studio/sync/history/` and worker status for results -> articles, recordings, projects, and other source-managed content are created or updated from markdown and YAML frontmatter.
 
 ### 8. Member Votes on Topics
 Main or Premium member navigates to `/vote` -> sees active polls filtered to their tier level (topic polls for Main+, course polls for Premium) -> clicks into a poll -> reads options -> votes on up to N options (toggle on/off) -> optionally proposes a new option (if proposals are open) -> poll results influence what the community builds next.

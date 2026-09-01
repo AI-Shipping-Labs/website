@@ -184,9 +184,9 @@ class StudioUserDetailSlackIdRowTest(_SlackTeamIdSettingMixin, TestCase):
             f'action="/studio/users/{self.unlinked.pk}/slack-id/"', unlinked_html,
         )
 
-    def test_unlinked_row_does_not_offer_second_django_admin_path(self):
-        # Issue #1198: when the user has no Slack ID, the row says
-        # "Not linked"; the action-row admin link is the only escape hatch.
+    def test_unlinked_row_does_not_offer_django_admin_path(self):
+        # When the user has no Slack ID, the row says "Not linked" and
+        # stays inside Studio.
         response = self.client.get(f'/studio/users/{self.unlinked.pk}/')
         self.assertContains(response, 'data-testid="user-detail-slack-id-empty"')
         self.assertNotContains(
@@ -195,18 +195,17 @@ class StudioUserDetailSlackIdRowTest(_SlackTeamIdSettingMixin, TestCase):
         self.assertNotContains(response, 'Edit in Django admin')
         self.assertEqual(
             response.content.decode().count('data-testid="studio-open-in-admin"'),
-            1,
+            0,
         )
 
-    def test_linked_row_does_not_render_admin_edit_link(self):
-        # The "Edit in Django admin" link only appears when the row is
-        # missing a Slack ID. A linked user already shows the value (and
-        # optionally an "Open in Slack" anchor); the admin edit link
-        # would be redundant chrome there.
+    def test_linked_row_keeps_slack_id_editing_in_studio(self):
+        # A linked user shows the value and, when configured, an
+        # "Open in Slack" anchor. Editing remains on the inline Studio form.
         response = self.client.get(f'/studio/users/{self.linked.pk}/')
         self.assertNotContains(
             response, 'data-testid="user-detail-slack-id-admin-link"',
         )
+        self.assertContains(response, 'id="slack-id-edit-form"')
 
 
 class StudioUserSlackIdSetEndpointTest(TestCase):

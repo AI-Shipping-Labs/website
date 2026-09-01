@@ -21,7 +21,6 @@
       Edit
     </a>
     {% studio_overflow_menu %}
-    {% load admin_links %}{% admin_change_url campaign as admin_url %}{% if admin_url %}<a href="{{ admin_url }}" data-testid="studio-open-in-admin" title="Open in Django admin" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="wrench" class="h-4 w-4"></i><span>Open in Django admin</span></a>{% endif %}
     {% if campaign.is_archived %}
       <form method="post" action="{% url 'studio_utm_campaign_unarchive' campaign_id=campaign.pk %}" class="w-full">
         {% csrf_token %}

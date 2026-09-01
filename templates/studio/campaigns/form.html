@@ -1,27 +1,19 @@
 {% extends "studio/base.html" %}
 {% load studio_filters %}
 
-{% block studio_title %}{% if is_edit %}Edit Campaign{% else %}New Campaign{% endif %}{% endblock %}
+{% block studio_title %}{% if is_edit %}Edit campaign{% else %}New campaign{% endif %}{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8">
-  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
-    <a href="{% url 'studio_campaign_list' %}" class="hover:text-foreground">Campaigns</a>
-    <i data-lucide="chevron-right" class="w-4 h-4"></i>
-    <span class="text-foreground">{% if is_edit %}{{ campaign.subject }}{% else %}New Campaign{% endif %}</span>
-  </div>
-  <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
-    <div class="min-w-0">
-      <h1 class="text-2xl font-semibold text-foreground">{% if is_edit %}Edit Campaign{% else %}New Campaign{% endif %}</h1>
-    </div>
-    <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
-      {% if is_edit %}
-      {% include "studio/includes/_admin_link.html" with obj=campaign %}
-      {% endif %}
-    </div>
-  </header>
+{% url 'studio_campaign_list' as campaign_list_url %}
+{% studio_header_title_meta as campaign_form_header_meta %}
   {% worker_status_inline %}
-</div>
+{% endstudio_header_title_meta %}
+{% if is_edit %}
+  {% firstof "Edit campaign" as campaign_form_title %}
+{% else %}
+  {% firstof "New campaign" as campaign_form_title %}
+{% endif %}
+{% studio_header_actions title=campaign_form_title back_url=campaign_list_url back_label="Back to campaigns" title_meta=campaign_form_header_meta %}{% endstudio_header_actions %}
 
 <form method="post" class="space-y-6 max-w-3xl">
   {% csrf_token %}

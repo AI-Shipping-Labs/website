@@ -5,7 +5,7 @@ class SourceMetadataMixin(models.Model):
     """GitHub source fields for synced rows.
 
     Use this mixin when a model is synced from a content repository and
-    Studio/admin/sync code should read ``source_repo``, ``source_path``, and
+    Studio/content-sync code should read ``source_repo``, ``source_path``, and
     ``source_commit`` directly from the model. Pair it with
     ``SyncedContentIdentityMixin`` only when rows are keyed by a stable
     frontmatter UUID; models such as modules and curated links have their own

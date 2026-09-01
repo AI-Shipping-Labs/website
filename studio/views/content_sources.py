@@ -8,8 +8,9 @@ Provides a single-click form (issue #310) that:
 - Auto-fills ``is_private`` from the GitHub API response and auto-generates
   a ``webhook_secret`` when one is not supplied.
 
-The Django admin form for ``ContentSource`` is intentionally left unchanged so
-power users can still register sources with the manual fields.
+Direct Django-admin access remains available only as an unlinked low-level
+surface. Routine source registration is owned by Studio and the authenticated
+production API.
 """
 
 import logging

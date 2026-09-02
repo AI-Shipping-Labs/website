@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 
 from asl_cli.commands._shared import (
@@ -152,6 +154,7 @@ EVENT_FLAGS = [
     click.option("--tags", default=None, help="Comma-separated tags, e.g. sprint:may-2026,workshop."),
     click.option("--zoom-join-url", default=None),
     click.option("--recording-url", default=None),
+    click.option("--recap-notes", default=None, help="Recap notes in Markdown."),
     click.option("--event-series", "event_series", default=None,
                  help="Attach to a series by pk or slug. Pass an empty "
                       'string ("") to detach.'),
@@ -222,11 +225,56 @@ def events_create(fmt, **kwargs):
 
 @events.command("update")
 @click.argument("slug")
+@click.option(
+    "--recap-notes-file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="UTF-8 Markdown file to publish as the event recap.",
+)
 @apply_event_flags
 @format_option
-def events_update(slug, fmt, **kwargs):
-    """Update an event. Only flags you pass are sent."""
-    body = collect_flags(click.get_current_context())
+def events_update(slug, recap_notes_file, fmt, **kwargs):
+    """Update an event. Only flags you pass are sent.
+
+    ``--recap-notes-file`` performs GET-before, PATCH, and GET-after
+    verification, and refuses to write GitHub-origin events.
+    """
+    ctx = click.get_current_context()
+    body = collect_flags(ctx, exclude={"recap_notes_file"})
+    direct_recap = body.get("recap_notes")
+    if recap_notes_file is not None:
+        if direct_recap is not None:
+            raise click.UsageError(
+                "Use either --recap-notes or --recap-notes-file, not both."
+            )
+        recap_notes = recap_notes_file.read_text(encoding="utf-8")
+        body["recap_notes"] = recap_notes
+
+        client = get_client()
+        before = client.get(f"{API}/events/{slug}")
+        if before.get("slug") != slug:
+            raise click.ClickException(
+                "Event identity verification failed before recap write."
+            )
+        if before.get("editable") is not True:
+            raise click.ClickException(
+                "GitHub-origin events are read-only; update the content repo recap instead."
+            )
+        before_id = before.get("id")
+        client.patch(f"{API}/events/{slug}", json_body=body)
+        after = client.get(f"{API}/events/{slug}")
+        if (
+            after.get("slug") != slug
+            or (before_id is not None and after.get("id") != before_id)
+            or after.get("recap_notes") != recap_notes
+        ):
+            raise click.ClickException(
+                "Event recap read-after-write verification failed."
+            )
+        after["verified"] = True
+        emit(after, fmt)
+        return
+
     if "tags" in body and isinstance(body["tags"], str):
         body["tags"] = _split_csv(body["tags"])
     if "host_ids" in body and isinstance(body["host_ids"], str):
@@ -250,6 +298,32 @@ def events_regenerate_banner(slug, fmt):
 def events_notify_workshop_ready(slug, fmt):
     """Notify that a workshop event is ready."""
     emit(get_client().post(f"{API}/events/{slug}/notify-workshop-ready"), fmt)
+
+
+@events.command("notify-recap-ready")
+@click.argument("slug")
+@format_option
+def events_notify_recap_ready(slug, fmt):
+    """Notify exact registrants that a verified public recap is ready."""
+    client = get_client()
+    before = client.get(f"{API}/events/{slug}")
+    if before.get("slug") != slug:
+        raise click.ClickException(
+            "Event identity verification failed before recap notification."
+        )
+    result = client.post(f"{API}/events/{slug}/notify-recap-ready")
+    event = result.get("event", {}) if isinstance(result, dict) else {}
+    if (
+        event.get("slug") != slug
+        or (before.get("id") is not None and event.get("id") != before.get("id"))
+        or event.get("title") != before.get("title")
+    ):
+        raise click.ClickException(
+            "Recap notification target verification failed."
+        )
+    emit(result, fmt)
+    if result.get("failed", 0):
+        raise click.exceptions.Exit(1)
 
 
 @events.command("sync-zoom")

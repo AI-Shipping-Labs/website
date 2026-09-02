@@ -278,6 +278,14 @@ class CalendlyWebhookCaptureTest(TestCase):
         log = WebhookLog.objects.get(service='calendly')
         self.assertFalse(log.processed)
         self.assertEqual(
+            log.calendly_event_uri,
+            'https://api.calendly.com/scheduled_events/EVT123',
+        )
+        self.assertEqual(
+            log.calendly_invitee_uri,
+            'https://api.calendly.com/scheduled_events/EVT123/invitees/INV1',
+        )
+        self.assertEqual(
             log.error_message,
             'Delivery processing failed (processing_error). Retry is safe.',
         )
@@ -289,6 +297,14 @@ class CalendlyWebhookCaptureTest(TestCase):
         log.refresh_from_db()
         self.assertTrue(log.processed)
         self.assertEqual(log.attempts, 2)
+        self.assertEqual(
+            log.calendly_event_uri,
+            'https://api.calendly.com/scheduled_events/EVT123',
+        )
+        self.assertEqual(
+            log.calendly_invitee_uri,
+            'https://api.calendly.com/scheduled_events/EVT123/invitees/INV1',
+        )
 
     def test_identical_signed_replay_does_not_process_twice(self):
         body = json.dumps(_payload('invitee.created', email='alice@test.com')).encode()
@@ -301,6 +317,14 @@ class CalendlyWebhookCaptureTest(TestCase):
         self._post(_payload('invitee.created', email='alice@test.com'))
         log = WebhookLog.objects.get(service='calendly')
         self.assertEqual(log.event_type, 'invitee.created')
+        self.assertEqual(
+            log.calendly_event_uri,
+            'https://api.calendly.com/scheduled_events/EVT123',
+        )
+        self.assertEqual(
+            log.calendly_invitee_uri,
+            'https://api.calendly.com/scheduled_events/EVT123/invitees/INV1',
+        )
         self.assertTrue(log.processed)
 
     def test_unhandled_event_type_is_ignored(self):

@@ -83,6 +83,7 @@ from api.views.event_series import (
 )
 from api.views.events import (
     event_detail,
+    event_notify_recap_ready,
     event_notify_workshop_ready,
     event_promote_registrations_to_series,
     event_regenerate_banner,
@@ -397,6 +398,11 @@ urlpatterns = [
         "events/<slug:slug>/notify-workshop-ready",
         event_notify_workshop_ready,
         name="api_event_notify_workshop_ready",
+    ),
+    path(
+        "events/<slug:slug>/notify-recap-ready",
+        event_notify_recap_ready,
+        name="api_event_notify_recap_ready",
     ),
     path(
         "events/<slug:slug>/sync-zoom",

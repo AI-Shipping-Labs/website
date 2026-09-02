@@ -409,7 +409,7 @@ class RefundDisputeReviewTest(TestCase):
         persisted = " ".join(
             str(getattr(attempt, field.name, ""))
             for field in attempt._meta.fields
-            if field.name != "requested_by"
+            if field.name not in {"id", "requested_by"}
         )
         for forbidden in (
             "victim@example.com", "4242", "receipt", "secret.example",

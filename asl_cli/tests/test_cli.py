@@ -114,9 +114,19 @@ def test_sync_history_detail_constructs_history_id_path(monkeypatch):
 class RecordingEventsClient:
     def __init__(self):
         self.calls = []
+        self.get_results = []
+        self.post_results = []
+
+    def get(self, path, **kwargs):
+        self.calls.append(("GET", path, kwargs))
+        if self.get_results:
+            return self.get_results.pop(0)
+        return {"ok": True}
 
     def post(self, path, *, json_body=None):
         self.calls.append(("POST", path, json_body))
+        if self.post_results:
+            return self.post_results.pop(0)
         return {"ok": True, "received": json_body}
 
     def patch(self, path, *, json_body=None):
@@ -229,6 +239,113 @@ def test_events_update_empty_event_series_detaches_via_null(monkeypatch):
     _method, _path, body = client.calls[0]
     assert "event_series" in body
     assert body["event_series"] is None
+
+
+def test_events_update_recap_file_verifies_source_and_read_after_write(
+    monkeypatch, tmp_path,
+):
+    client = RecordingEventsClient()
+    client.get_results = [
+        {
+            "id": 7,
+            "slug": "recap-event",
+            "title": "Recap Event",
+            "editable": True,
+            "recap_notes": "",
+        },
+        {
+            "id": 7,
+            "slug": "recap-event",
+            "title": "Recap Event",
+            "editable": True,
+            "recap_notes": "## What we covered\n\nBatching.",
+            "has_recap": True,
+            "recap_published": True,
+            "recap_url": "/events/7/recap-event/recap",
+        },
+    ]
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+    recap_path = tmp_path / "recap.md"
+    recap_path.write_text("## What we covered\n\nBatching.", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "events",
+            "update",
+            "recap-event",
+            "--recap-notes-file",
+            str(recap_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert [call[0:2] for call in client.calls] == [
+        ("GET", "/api/events/recap-event"),
+        ("PATCH", "/api/events/recap-event"),
+        ("GET", "/api/events/recap-event"),
+    ]
+    assert client.calls[1][2] == {
+        "recap_notes": "## What we covered\n\nBatching.",
+        "slug": "recap-event",
+    }
+    assert '"verified": true' in result.output
+
+
+def test_events_update_recap_file_rejects_non_editable_source(monkeypatch, tmp_path):
+    client = RecordingEventsClient()
+    client.get_results = [{
+        "id": 8,
+        "slug": "synced-event",
+        "title": "Synced Event",
+        "editable": False,
+    }]
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+    recap_path = tmp_path / "recap.md"
+    recap_path.write_text("Notes.", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "events", "update", "synced-event",
+            "--recap-notes-file", str(recap_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "GitHub-origin events are read-only" in result.output
+    assert len(client.calls) == 1
+
+
+def test_events_notify_recap_ready_verifies_event_identity(monkeypatch):
+    client = RecordingEventsClient()
+    client.get_results = [{
+        "id": 9,
+        "slug": "recap-event",
+        "title": "Recap Event",
+    }]
+    client.post_results = [{
+        "event": {"id": 9, "slug": "recap-event", "title": "Recap Event"},
+        "eligible": 1,
+        "emailed": 1,
+        "notified": 1,
+        "failed": 0,
+    }]
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        cli,
+        ["events", "notify-recap-ready", "recap-event", "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert client.calls == [
+        ("GET", "/api/events/recap-event", {}),
+        ("POST", "/api/events/recap-event/notify-recap-ready", None),
+    ]
+    assert '"failed": 0' in result.output
 
 
 def test_event_series_create_accepts_cadence_none(monkeypatch):

@@ -21,7 +21,7 @@ def _json_auth_error(message, code):
     return JsonResponse({"error": message, "code": code}, status=401)
 
 
-def token_required(view_func):
+def token_required(view_func=None, *, structured_errors=False):
     """Require a valid ``Authorization: Token <key>`` header.
 
     On success: sets ``request.user`` to the token's owner and updates
@@ -32,46 +32,60 @@ def token_required(view_func):
     The token owner must still be staff. Non-staff tokens intentionally return
     the same invalid-token shape as unknown tokens so callers cannot discover
     whether a submitted credential maps to a row.
+
+    ``structured_errors`` is opt-in for new API surfaces that document the
+    canonical ``error``/``code`` envelope. The legacy default remains the
+    established ``{"error": ...}`` shape used by existing callers.
     """
 
-    @wraps(view_func)
-    def wrapper(request, *args, **kwargs):
-        header = request.headers.get("Authorization", "")
-        if not header:
-            return JsonResponse(
-                {"error": "Authentication token required"},
-                status=401,
-            )
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            def auth_error(message, code):
+                if structured_errors:
+                    return _json_auth_error(message, code)
+                return JsonResponse({"error": message}, status=401)
 
-        # Accept the literal "Token <key>" prefix. Anything else (e.g.
-        # "Bearer", or a key with no scheme) is treated as missing rather
-        # than invalid -- the client almost certainly forgot the scheme.
-        parts = header.split(" ", 1)
-        if len(parts) != 2 or parts[0] != "Token" or not parts[1]:
-            return JsonResponse(
-                {"error": "Authentication token required"},
-                status=401,
-            )
+            header = request.headers.get("Authorization", "")
+            if not header:
+                return auth_error(
+                    "Authentication token required",
+                    "authentication_required",
+                )
 
-        key = parts[1].strip()
-        token = Token.authenticate(key)
-        if token is None:
-            return JsonResponse({"error": "Invalid token"}, status=401)
-        if not is_staff_user(token.user):
-            return JsonResponse({"error": "Invalid token"}, status=401)
+            # Accept the literal "Token <key>" prefix. Anything else (e.g.
+            # "Bearer", or a key with no scheme) is treated as missing rather
+            # than invalid -- the client almost certainly forgot the scheme.
+            parts = header.split(" ", 1)
+            if len(parts) != 2 or parts[0] != "Token" or not parts[1]:
+                return auth_error(
+                    "Authentication token required",
+                    "authentication_required",
+                )
 
-        token.last_used_at = timezone.now()
-        Token.objects.filter(pk=token.pk).update(last_used_at=token.last_used_at)
+            key = parts[1].strip()
+            token = Token.authenticate(key)
+            if token is None:
+                return auth_error("Invalid token", "invalid_token")
+            if not is_staff_user(token.user):
+                return auth_error("Invalid token", "invalid_token")
 
-        request.user = token.user
-        # Issue #764: stash the token on the request so audit-logging views
-        # (e.g. User Management API writes) can attribute the action to the
-        # bearer without re-parsing the ``Authorization`` header. Existing
-        # views ignore this attribute, so this is a non-breaking addition.
-        request.auth_token = token
-        return view_func(request, *args, **kwargs)
+            token.last_used_at = timezone.now()
+            Token.objects.filter(pk=token.pk).update(last_used_at=token.last_used_at)
 
-    return wrapper
+            request.user = token.user
+            # Issue #764: stash the token on the request so audit-logging views
+            # (e.g. User Management API writes) can attribute the action to the
+            # bearer without re-parsing the ``Authorization`` header. Existing
+            # views ignore this attribute, so this is a non-breaking addition.
+            request.auth_token = token
+            return view_func(request, *args, **kwargs)
+
+        return wrapper
+
+    if view_func is None:
+        return decorator
+    return decorator(view_func)
 
 
 def token_required_any_user(view_func):

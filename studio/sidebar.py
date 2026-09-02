@@ -89,6 +89,7 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_event_banner_status',
         'studio_event_create_zoom',
         'studio_event_notify',
+        'studio_event_notify_recap_ready',
         'studio_event_notify_workshop_ready',
         'studio_event_regenerate_banner',
         'studio_event_registrations_csv',

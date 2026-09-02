@@ -1717,7 +1717,7 @@ class EventsHostAutoRegistrationTest(EventsApiTestBase):
 
 
 class EventsSkillDocSyncTest(TestCase):
-    """Keep the events skill doc in sync with the create_zoom feature."""
+    """Keep the event operation skills in sync with supported workflows."""
 
     def test_skill_documents_create_zoom_and_drops_stale_note(self):
         skill_path = (
@@ -1741,6 +1741,28 @@ class EventsSkillDocSyncTest(TestCase):
         # Host auto-registration is documented via the --host-email flag.
         self.assertIn("--host-email", text)
         self.assertIn("auto-registers", text)
+
+    def test_recap_skill_documents_the_verified_publish_and_notify_flow(self):
+        skill_path = (
+            Path(settings.BASE_DIR)
+            / ".claude"
+            / "skills"
+            / "ai-shipping-labs-event-recaps"
+            / "SKILL.md"
+        )
+        text = skill_path.read_text(encoding="utf-8")
+        for phrase in (
+            "--recap-notes-file",
+            "GET-before",
+            "GET-after",
+            "recap_url",
+            "anonymous `recap_url`",
+            "notify-recap-ready",
+            "send this message automatically",
+            "$fetch-youtube",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
 
 
 @tag("core")

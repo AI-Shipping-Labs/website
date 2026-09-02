@@ -6,6 +6,22 @@ class WebhookLog(models.Model):
     service = models.CharField(max_length=100)
     event_type = models.CharField(max_length=200, blank=True, default='')
     payload = models.JSONField(default=dict, blank=True)
+    calendly_event_uri = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        db_default='',
+        db_index=True,
+        help_text='Stable Calendly scheduled-event URI correlation.',
+    )
+    calendly_invitee_uri = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        db_default='',
+        db_index=True,
+        help_text='Stable Calendly invitee URI correlation.',
+    )
     received_at = models.DateTimeField(auto_now_add=True)
     processed = models.BooleanField(default=False)
     deduplication_key = models.CharField(

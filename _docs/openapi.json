@@ -5468,6 +5468,186 @@
         ]
       }
     },
+    "/api/events/{slug}/notify-recap-ready": {
+      "post": {
+        "description": "After an operator verifies the anonymous public recap page, send one transactional email and one in-app notification to active users registered for this exact event occurrence. The action is explicit and idempotent per channel.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "already_emailed": 0,
+                  "already_notified": 0,
+                  "already_sent": 0,
+                  "eligible": 1,
+                  "emailed": 1,
+                  "event": {
+                    "id": 42,
+                    "slug": "ai-shipping-live",
+                    "title": "AI Shipping Live"
+                  },
+                  "failed": 0,
+                  "notified": 1,
+                  "recap_url": "https://aishippinglabs.com/events/42/ai-shipping-live/recap",
+                  "results": [
+                    {
+                      "email_log_id": 101,
+                      "email_status": "sent",
+                      "in_app_status": "sent",
+                      "notification_id": 202,
+                      "user_id": 7
+                    }
+                  ],
+                  "skipped": 0,
+                  "skipped_inactive": 0
+                },
+                "schema": {
+                  "properties": {
+                    "already_emailed": {
+                      "type": "integer"
+                    },
+                    "already_notified": {
+                      "type": "integer"
+                    },
+                    "already_sent": {
+                      "type": "integer"
+                    },
+                    "eligible": {
+                      "type": "integer"
+                    },
+                    "emailed": {
+                      "type": "integer"
+                    },
+                    "event": {
+                      "type": "object"
+                    },
+                    "failed": {
+                      "type": "integer"
+                    },
+                    "notified": {
+                      "type": "integer"
+                    },
+                    "recap_url": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "results": {
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "Per-registrant channel outcomes. No email address, recap body, secret, or provider payload is returned.",
+                        "properties": {
+                          "email_log_id": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "email_status": {
+                            "type": "string"
+                          },
+                          "in_app_status": {
+                            "type": "string"
+                          },
+                          "notification_id": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "user_id": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "user_id",
+                          "email_status",
+                          "in_app_status"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "skipped": {
+                      "type": "integer"
+                    },
+                    "skipped_inactive": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Delivery attempted. Partial channel failures are reported and can be retried safely."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "authentication_required",
+                  "error": "Authentication token required"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Event not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "recap_not_ready",
+                  "details": {
+                    "reason": "missing_recap"
+                  },
+                  "error": "Add non-empty recap content first."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The public recap-ready guard failed. The stable code is recap_not_ready and details.reason identifies why."
+          }
+        },
+        "summary": "Send recap-ready notification",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
     "/api/events/{slug}/notify-workshop-ready": {
       "post": {
         "description": "Sends the event-level workshop-ready transactional email to active event registrants plus host recipients, creates in-app notifications for platform users, and skips recipients already sent via the per-recipient idempotency key. The event must have a linked published workshop.",

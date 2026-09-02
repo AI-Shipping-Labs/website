@@ -48,6 +48,9 @@ def record_processed_event(
     payload=None,
     status=WebhookEvent.STATUS_PROCESSED,
     error_message="",
+    subject_user_id=None,
+    stripe_customer_id="",
+    stripe_subscription_id="",
 ):
     """Record that a webhook event has reached a terminal state.
 
@@ -70,6 +73,9 @@ def record_processed_event(
             "payload": payload or {},
             "status": status,
             "error_message": error_message,
+            "subject_user_id": subject_user_id,
+            "stripe_customer_id": stripe_customer_id or "",
+            "stripe_subscription_id": stripe_subscription_id or "",
         },
     )
     return obj, created

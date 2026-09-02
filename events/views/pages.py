@@ -1035,8 +1035,7 @@ def event_recap(request, event_id, slug):
     Gates mirror ``event_detail``, in this order:
 
     1. Cosmetic slug mismatch -> 301 to the canonical recap URL.
-    2. Draft (and the #881 retired-duplicate signature) -> 404 for
-       non-staff.
+    2. Draft, unpublished, or cancelled events -> 404 for non-staff.
     3. No recap body at all -> 404.
     4. Recap body present but the event has not happened yet: staff get a
        preview with a "not visible to members yet" notice; everyone else
@@ -1063,11 +1062,13 @@ def event_recap(request, event_id, slug):
     if event.status == 'draft' and not request.user.is_staff:
         raise Http404
 
-    if (
-        event.status == 'cancelled'
-        and not event.published
-        and not request.user.is_staff
-    ):
+    # Recap-ready delivery links only to a recap that an anonymous visitor can
+    # actually open. Keep unpublished event rows available to staff preview,
+    # but do not let the canonical public recap route leak their contents.
+    if not event.published and not request.user.is_staff:
+        raise Http404
+
+    if event.status == 'cancelled' and not request.user.is_staff:
         raise Http404
 
     if not event.has_recap:

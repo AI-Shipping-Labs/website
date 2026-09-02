@@ -11,6 +11,7 @@ secret, member email, or full payload is ever persisted here.
 """
 
 import logging
+import re
 
 from django.core.mail import mail_admins
 from django.db.models import Max
@@ -68,6 +69,8 @@ CANCELLATION_EVENT_TYPES = frozenset({
 })
 
 Attempt = StripeWebhookDeliveryAttempt
+_DECIMAL_USER_ID_RE = re.compile(r"[0-9]+\Z")
+_MAX_BIGINT = 2**63 - 1
 
 
 def is_handled_event_type(event_type):
@@ -78,12 +81,51 @@ def _id_of(value):
     """Return a Stripe id from a value that may be a string or expanded dict."""
     if isinstance(value, dict):
         value = value.get("id", "")
-    value = str(value or "").strip()
+    if not isinstance(value, str) or not value or value != value.strip():
+        return ""
     return value if len(value) <= 255 else ""
 
 
 def _typed_id(value, prefix):
     return safe_stripe_id(value, prefix)
+
+
+def _safe_local_user_id(value):
+    """Return a positive, bounded local user ID or ``None``."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        number = value
+    elif (
+        isinstance(value, str)
+        and len(value) <= len(str(_MAX_BIGINT))
+        and _DECIMAL_USER_ID_RE.fullmatch(value)
+    ):
+        number = int(value)
+    else:
+        return None
+    return number if 0 < number <= _MAX_BIGINT else None
+
+
+def safe_subject_user_id(obj):
+    """Extract one unambiguous app-owned numeric user ID from a Stripe object."""
+    if not isinstance(obj, dict):
+        return None
+
+    candidates = []
+    metadata = obj.get("metadata")
+    if isinstance(metadata, dict) and "user_id" in metadata:
+        value = _safe_local_user_id(metadata["user_id"])
+        if value is not None:
+            candidates.append(value)
+
+    if "client_reference_id" in obj:
+        value = _safe_local_user_id(obj["client_reference_id"])
+        if value is not None:
+            candidates.append(value)
+
+    distinct = set(candidates)
+    return next(iter(distinct)) if len(distinct) == 1 else None
 
 
 def safe_object_ids(event_type, obj):
@@ -180,6 +222,14 @@ def finalize_attempt(attempt, *, outcome, http_status,
         "outcome", "http_status", "error_code", "error_message", "finished_at",
     ])
     return attempt
+
+
+def _terminal_correlations(obj, attempt):
+    return {
+        "subject_user_id": safe_subject_user_id(obj),
+        "stripe_customer_id": attempt.stripe_customer_id,
+        "stripe_subscription_id": attempt.stripe_subscription_id,
+    }
 
 
 def run_handler(event_type, obj, *, event_context=None, attempt=None):
@@ -369,6 +419,7 @@ def process_event(*, event_id, event_type, obj, livemode, event_created=None,
             event_id, event_type, {},
             status=WebhookEvent.STATUS_FAILED_PERMANENT,
             error_message=f"ambiguous_user: {exc}"[:1000],
+            **_terminal_correlations(obj, attempt),
         )
         if created and event_type in CANCELLATION_EVENT_TYPES:
             _send_failure_alert(
@@ -393,6 +444,7 @@ def process_event(*, event_id, event_type, obj, livemode, event_created=None,
             event_id, event_type, {},
             status=WebhookEvent.STATUS_FAILED_PERMANENT,
             error_message=repr(exc)[:1000],
+            **_terminal_correlations(obj, attempt),
         )
         if created and event_type in CANCELLATION_EVENT_TYPES:
             _send_failure_alert(
@@ -428,7 +480,11 @@ def process_event(*, event_id, event_type, obj, livemode, event_created=None,
             error_message=outcome.safe_summary,
         )
         _, created = record_processed_event(
-            event_id, event_type, {}, status=WebhookEvent.STATUS_PROCESSED,
+            event_id,
+            event_type,
+            {},
+            status=WebhookEvent.STATUS_PROCESSED,
+            **_terminal_correlations(obj, attempt),
         )
         if created:
             _send_review_alert(
@@ -442,6 +498,10 @@ def process_event(*, event_id, event_type, obj, livemode, event_created=None,
     # Clean terminal outcome (processed / ignored_stale).
     finalize_attempt(attempt, outcome=outcome, http_status=200)
     record_processed_event(
-        event_id, event_type, {}, status=WebhookEvent.STATUS_PROCESSED,
+        event_id,
+        event_type,
+        {},
+        status=WebhookEvent.STATUS_PROCESSED,
+        **_terminal_correlations(obj, attempt),
     )
     return outcome, 200

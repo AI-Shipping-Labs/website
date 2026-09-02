@@ -47,6 +47,10 @@ from events.services.calendar_lifecycle import (
     should_notify_cancellation,
 )
 from events.services.display_time import resolve_event_creation_timezone
+from events.services.event_recap_notification import (
+    EventRecapNotReady,
+    notify_recap_ready,
+)
 from events.services.occurrence_publication import (
     run_occurrence_publication_lifecycle,
 )
@@ -185,6 +189,24 @@ _RECAP_NOTES_REQUEST_SCHEMA = {
         "overwritten by content sync."
     ),
 }
+
+_RECAP_NOTIFICATION_OUTCOME_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "user_id": {"type": "integer"},
+        "email_status": {"type": "string"},
+        "in_app_status": {"type": "string"},
+        "email_log_id": {"type": ["integer", "null"]},
+        "notification_id": {"type": ["integer", "null"]},
+    },
+    "required": ["user_id", "email_status", "in_app_status"],
+    "additionalProperties": False,
+    "description": (
+        "Per-registrant channel outcomes. No email address, recap body, "
+        "secret, or provider payload is returned."
+    ),
+}
+_ERROR_RESPONSE_SCHEMA = {"$ref": "#/components/schemas/ErrorResponse"}
 
 _EVENT_EXAMPLE = {
     "id": 42,
@@ -1689,5 +1711,127 @@ def event_notify_workshop_ready(request, slug):
             str(exc),
             "workshop_not_ready",
             status=422,
+        )
+    return JsonResponse(result, status=200)
+
+
+@token_required(structured_errors=True)
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Events",
+    summary="Notify event registrants that its recap is ready",
+    methods={
+        "POST": {
+            "summary": "Send recap-ready notification",
+            "description": (
+                "After an operator verifies the anonymous public recap page, "
+                "send one transactional email and one in-app notification to "
+                "active users registered for this exact event occurrence. "
+                "The action is explicit and idempotent per channel."
+            ),
+            "request_body": {"body_required": False},
+            "responses": {
+                200: {
+                    "description": (
+                        "Delivery attempted. Partial channel failures are "
+                        "reported and can be retried safely."
+                    ),
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "event": {"type": "object"},
+                            "recap_url": {"type": "string", "format": "uri"},
+                            "eligible": {"type": "integer"},
+                            "emailed": {"type": "integer"},
+                            "notified": {"type": "integer"},
+                            "already_emailed": {"type": "integer"},
+                            "already_notified": {"type": "integer"},
+                            "already_sent": {"type": "integer"},
+                            "skipped_inactive": {"type": "integer"},
+                            "skipped": {"type": "integer"},
+                            "failed": {"type": "integer"},
+                            "results": {
+                                "type": "array",
+                                "items": _RECAP_NOTIFICATION_OUTCOME_SCHEMA,
+                            },
+                        },
+                    },
+                    "example": {
+                        "event": {
+                            "id": 42,
+                            "slug": "ai-shipping-live",
+                            "title": "AI Shipping Live",
+                        },
+                        "recap_url": (
+                            "https://aishippinglabs.com/events/42/"
+                            "ai-shipping-live/recap"
+                        ),
+                        "eligible": 1,
+                        "emailed": 1,
+                        "notified": 1,
+                        "already_emailed": 0,
+                        "already_notified": 0,
+                        "already_sent": 0,
+                        "skipped_inactive": 0,
+                        "skipped": 0,
+                        "failed": 0,
+                        "results": [
+                            {
+                                "user_id": 7,
+                                "email_status": "sent",
+                                "in_app_status": "sent",
+                                "email_log_id": 101,
+                                "notification_id": 202,
+                            },
+                        ],
+                    },
+                },
+                401: {
+                    "description": "Missing or invalid staff token.",
+                    "schema": _ERROR_RESPONSE_SCHEMA,
+                    "example": {
+                        "error": "Authentication token required",
+                        "code": "authentication_required",
+                    },
+                },
+                404: {
+                    "description": "Event not found.",
+                    "schema": _ERROR_RESPONSE_SCHEMA,
+                },
+                422: {
+                    "description": (
+                        "The public recap-ready guard failed. The stable code "
+                        "is recap_not_ready and details.reason identifies why."
+                    ),
+                    "schema": _ERROR_RESPONSE_SCHEMA,
+                    "example": {
+                        "error": "Add non-empty recap content first.",
+                        "code": "recap_not_ready",
+                        "details": {"reason": "missing_recap"},
+                    },
+                },
+            },
+        },
+    },
+)
+def event_notify_recap_ready(request, slug):
+    """POST ``/api/events/<slug>/notify-recap-ready``."""
+    event = Event.objects.filter(slug=slug).first()
+    if event is None:
+        return error_response(
+            "Event not found",
+            "unknown_event",
+            status=404,
+        )
+
+    try:
+        result = notify_recap_ready(event, actor=request.user)
+    except EventRecapNotReady as exc:
+        return error_response(
+            str(exc),
+            "recap_not_ready",
+            status=422,
+            details={"reason": exc.reason},
         )
     return JsonResponse(result, status=200)

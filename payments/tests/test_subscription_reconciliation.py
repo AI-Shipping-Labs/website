@@ -309,12 +309,13 @@ class ApplyTransitionTest(ReconBase):
         self.assertTrue(override.is_active)
         remove.assert_not_called()
         # Secret-free audit row written.
-        self.assertTrue(
-            WebhookEvent.objects.filter(
-                event_type="subscription_reconciliation_apply",
-                payload__user_id=user.pk,
-            ).exists()
+        audit = WebhookEvent.objects.get(
+            event_type="subscription_reconciliation_apply",
+            payload__user_id=user.pk,
         )
+        self.assertEqual(audit.subject_user_id, user.pk)
+        self.assertEqual(audit.stripe_customer_id, user.stripe_customer_id)
+        self.assertEqual(audit.stripe_subscription_id, "sub_1")
 
     def test_apply_is_idempotent(self):
         user = self._user("p@t.com", tier=self.main, subscription_id="sub_1")

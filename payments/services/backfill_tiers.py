@@ -326,6 +326,9 @@ def _write_audit_row(record):
         stripe_event_id=event_id,
         event_type="backfill_stripe_tiers",
         payload=payload,
+        subject_user_id=record.user_id,
+        stripe_customer_id=record.stripe_customer_id or "",
+        stripe_subscription_id=record.subscription_id or "",
     )
     return event_id
 

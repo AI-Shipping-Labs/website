@@ -1284,6 +1284,7 @@ class PrivacyDeletionSuccessTest(TierSetupMixin, TestCase):
         WebhookEvent.objects.create(
             stripe_event_id="evt_delete",
             event_type="checkout.session.completed",
+            stripe_customer_id="cus_delete",
             payload={
                 "data": {
                     "object": {
@@ -1360,9 +1361,18 @@ class CalendlyPrivacyLifecycleTest(TestCase):
         EmailAlias.objects.create(user=self.user, email='call-alias@test.com')
         self.log = WebhookLog.objects.create(
             service='calendly', event_type='invitee.created', processed=True,
+            calendly_event_uri='https://api.calendly.com/events/privacy-stage',
+            calendly_invitee_uri='https://api.calendly.com/invitees/privacy-stage',
             payload={
                 'event': 'invitee.created',
-                'payload': {'email': 'call-alias@test.com', 'name': 'Private Name'},
+                'payload': {
+                    'email': 'call-alias@test.com',
+                    'name': 'Private Name',
+                    'uri': 'https://api.calendly.com/invitees/privacy-stage',
+                    'scheduled_event': {
+                        'uri': 'https://api.calendly.com/events/privacy-stage',
+                    },
+                },
             },
         )
         self.staged = UnmatchedBookedCall.objects.create(

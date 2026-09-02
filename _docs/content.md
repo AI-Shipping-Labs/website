@@ -237,8 +237,9 @@ markdown body with images
 ### Event
 
 `events/<slug>.yaml`. One file per event. Optional `recap_file:` points at a
-markdown file in the same content repo and renders recap content inline on the
-event detail page. Recap markdown can include repo-local HTML snippets with
+markdown file in the same content repo and renders it on the event's dedicated
+`/events/<id>/<slug>/recap` page. The event detail page links to that canonical
+recap page. Recap markdown can include repo-local HTML snippets with
 `<!-- include:relative-file.html -->`; those snippets are rendered during sync
 and stored as HTML, so page-specific markup stays in the content repo instead
 of Django templates. Recap-specific structured data belongs directly in the
@@ -309,22 +310,32 @@ Use this sequence when converting an existing article:
 3. For a Studio-origin event, open the event in Studio and paste the body into
    `Recap / event notes (Markdown)`, then save. This field is also writable
    through `PATCH /api/events/<slug>` as `{"recap_notes": "..."}` for
-   authenticated automation. GitHub-origin events are read-only through that
-   API.
+   authenticated automation. For a reviewed file, use
+   `uv run asl events update <slug> --recap-notes-file <path>`; it performs
+   GET-before, PATCH, and GET-after verification. GitHub-origin events are
+   read-only through that API.
 4. If the event already has a synced `recap_file`, merge deliberately: saved
    Studio notes take precedence over the synced recap, and clearing the notes
    restores the synced version.
 5. Verify the event API reports `has_recap: true`, `recap_published: true`,
-   and a `recap_url`. Open that URL and the event detail page; the latter
-   should show the `Read the recap` card. A recap is public only after the
-   event's effective end time.
-6. After the recap is verified, choose what to do with the source article:
+   and a `recap_url`. Open that URL anonymously and open the event detail
+   page; the latter should show the `Read the recap` card. Notification
+   readiness additionally requires the event itself to be `published`, its
+   status to be publicly visible (`upcoming` or `completed`), and it must not
+   be `draft` or `cancelled`. A recap is public only after the event's
+   effective end time; a staff preview does not satisfy the public guard.
+6. If the recap is public and the registrants should be told now, explicitly
+   run `uv run asl events notify-recap-ready <slug>`. This sends the canonical
+   absolute `recap_url` by transactional email and in-app notification to
+   active registrants of this exact occurrence. Saving or syncing a recap
+   never sends automatically; retries are per-channel idempotent.
+7. After the recap is verified, choose what to do with the source article:
    remove `event_slug`/`event_id` if the article should remain a standalone
    blog post, or delete its file from `blog/` if it is being fully converted.
    A deleted synced article is soft-unpublished (`published: false`,
    `status: draft`) on the next content sync; its database row is not hard-
    deleted.
-7. Trigger or wait for content sync, then verify the old blog URL and the
+8. Trigger or wait for content sync, then verify the old blog URL and the
    event's source-article section. There is no automatic blog-to-recap
    redirect, so keep the article or add a separately reviewed redirect if the
    old URL must remain live.

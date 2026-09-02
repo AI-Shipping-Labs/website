@@ -32,6 +32,26 @@ from integrations.services.calendly_delivery import (
 logger = logging.getLogger(__name__)
 
 
+def _safe_calendly_uri(value):
+    if not isinstance(value, str) or not value or value != value.strip():
+        return ''
+    return value if len(value) <= 500 else ''
+
+
+def _calendly_correlations(payload):
+    if not isinstance(payload, dict):
+        return '', ''
+    inner = payload.get('payload')
+    if not isinstance(inner, dict):
+        return '', ''
+    scheduled_event = inner.get('scheduled_event')
+    event_uri = _safe_calendly_uri(
+        scheduled_event.get('uri') if isinstance(scheduled_event, dict) else None,
+    )
+    invitee_uri = _safe_calendly_uri(inner.get('uri'))
+    return event_uri, invitee_uri
+
+
 @csrf_exempt
 @require_POST
 def calendly_webhook(request):
@@ -51,12 +71,15 @@ def calendly_webhook(request):
         return JsonResponse({'error': 'Invalid JSON payload'}, status=400)
 
     event_type = payload.get('event', '')
+    event_uri, invitee_uri = _calendly_correlations(payload)
     webhook_log, created = WebhookLog.objects.get_or_create(
         deduplication_key=delivery_fingerprint(request),
         defaults={
             'service': 'calendly',
             'event_type': event_type,
             'payload': payload,
+            'calendly_event_uri': event_uri,
+            'calendly_invitee_uri': invitee_uri,
             'processed': False,
         },
     )

@@ -583,6 +583,26 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_studio_ses_events_1552.py::"
         "test_matched_identity_links_from_campaign_event_to_member",
     })
+    issue_1557_owners = frozenset({
+        "playwright_tests/test_event_recap.py::"
+        "TestRecapReadyNotificationBrowserFlow::"
+        "test_staff_publishes_verifies_and_announces_a_recap",
+        "playwright_tests/test_event_recap.py::"
+        "TestRecapReadyNotificationBrowserFlow::"
+        "test_studio_explains_every_recap_ready_blocker",
+        "playwright_tests/test_event_recap.py::"
+        "TestRecapReadyNotificationBrowserFlow::"
+        "test_registrant_follows_the_notification_to_the_recap_page",
+        "playwright_tests/test_event_recap.py::"
+        "TestRecapReadyNotificationBrowserFlow::"
+        "test_only_active_exact_registrants_receive_the_recap_notice",
+        "playwright_tests/test_event_recap.py::"
+        "TestRecapReadyNotificationBrowserFlow::"
+        "test_rerunning_the_action_reports_already_sent_without_duplicates",
+        "playwright_tests/test_event_recap.py::"
+        "TestRecapReadyNotificationBrowserFlow::"
+        "test_zero_recipient_send_is_clear_and_successful",
+    })
 
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
@@ -616,13 +636,14 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2559)
-        self.assertEqual(len(inventory.owners), 2339)
+        self.assertEqual(inventory.item_count, 2565)
+        self.assertEqual(len(inventory.owners), 2345)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
             | self.ses_1552_owners
-            | self.issue_1551_owners,
+            | self.issue_1551_owners
+            | self.issue_1557_owners,
         )
         self.assertNotIn(
             self.migrated_owner,

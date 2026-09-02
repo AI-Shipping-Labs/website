@@ -38,6 +38,12 @@ from events.services.calendar_lifecycle import (
     enqueue_schedule_update,
 )
 from events.services.display_time import resolve_event_creation_timezone
+from events.services.event_recap_notification import (
+    EventRecapNotReady,
+    absolute_recap_url,
+    notify_recap_ready,
+    recap_ready_state,
+)
 from events.services.occurrence_publication import (
     run_occurrence_publication_lifecycle,
 )
@@ -375,6 +381,27 @@ def _apply_workshop_ready_context(context, event):
     else:
         context['workshop_ready_available'] = True
         context['workshop_ready_unavailable_reason'] = ''
+    return context
+
+
+def _apply_recap_ready_context(context, event):
+    """Attach the explicit recap-ready delivery state to an edit page."""
+    context['notify_recap_ready_url'] = reverse(
+        'studio_event_notify_recap_ready',
+        kwargs={'event_id': event.pk},
+    )
+    state = recap_ready_state(event)
+    context['recap_ready_available'] = state['available']
+    context['recap_ready_unavailable_reason'] = state['reason']
+    context['recap_ready_unavailable_reason_code'] = state['reason_code']
+    context['recap_ready_url'] = state['recap_url'] or absolute_recap_url(event)
+    context['recap_ready_eligible_count'] = state['eligible_count']
+    context['recap_ready_already_emailed_count'] = state[
+        'already_emailed_count'
+    ]
+    context['recap_ready_already_notified_count'] = state[
+        'already_notified_count'
+    ]
     return context
 
 
@@ -884,6 +911,7 @@ def _event_edit_panels_context(event) -> dict:
     )
     context['delete_help'] = EVENT_DELETE_HELP
     _apply_workshop_ready_context(context, event)
+    _apply_recap_ready_context(context, event)
     # Issue #701: surface registered attendees on the edit page so
     # operators can see and export the roster without dropping into
     # Django admin. ``-registered_at`` matches the model's default
@@ -1386,6 +1414,30 @@ def event_notify_workshop_ready(request, event_id):
         ),
     )
     return redirect(f"{event.get_studio_edit_url()}#workshop-ready-panel")
+
+
+@staff_required
+@require_POST
+def event_notify_recap_ready(request, event_id):
+    """Notify exact event registrants after the public recap is verified."""
+    event = get_object_or_404(Event, pk=event_id)
+    try:
+        result = notify_recap_ready(event, actor=request.user)
+    except EventRecapNotReady as exc:
+        messages.error(request, str(exc))
+        return redirect(f"{event.get_studio_edit_url()}#recap-ready-panel")
+
+    messages.success(
+        request,
+        (
+            'Recap-ready notification complete: '
+            f"{result['emailed']} emailed, {result['notified']} in-app "
+            f"notifications, {result['already_sent']} already sent, "
+            f"{result['skipped_inactive']} inactive skipped, "
+            f"{result['failed']} failed."
+        ),
+    )
+    return redirect(f"{event.get_studio_edit_url()}#recap-ready-panel")
 
 
 @staff_required

@@ -20,6 +20,7 @@ import pytest
 from playwright.sync_api import expect
 
 from playwright_tests.conftest import auth_context, create_staff_user, create_user
+from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -512,4 +513,397 @@ class TestFollowupEmailRecapLink:
         expect(preview).to_contain_text('Read the recap')
         rendered = preview.inner_text()
         assert 'notes are still being put together' not in rendered
+        context.close()
+
+
+def _clear_recap_notification_state():
+    """Reset the rows owned by the recap-notification browser journeys."""
+    from email_app.models import EmailLog
+    from events.models import Event, EventRegistration, EventSeries, SeriesRegistration
+    from integrations.config import clear_config_cache
+    from integrations.models import IntegrationSetting
+    from notifications.models import EventReminderLog, Notification
+
+    EmailLog.objects.all().delete()
+    Notification.objects.all().delete()
+    EventReminderLog.objects.all().delete()
+    EventRegistration.objects.all().delete()
+    SeriesRegistration.objects.all().delete()
+    Event.objects.all().delete()
+    EventSeries.objects.all().delete()
+    IntegrationSetting.objects.filter(key='SITE_BASE_URL').delete()
+    clear_config_cache()
+    connection.close()
+
+
+def _point_recap_site_base_url(server_url):
+    """Keep absolute recap notifications inside the local browser server."""
+    from integrations.config import clear_config_cache
+    from integrations.models import IntegrationSetting
+
+    IntegrationSetting.objects.update_or_create(
+        key='SITE_BASE_URL', defaults={'value': server_url},
+    )
+    clear_config_cache()
+    connection.close()
+
+
+def _create_recap_notification_event(
+    slug,
+    *,
+    status='completed',
+    published=True,
+    recap_notes='## Recap\n\nThe session recap is ready.',
+    event_series=None,
+):
+    from events.models import Event
+
+    if status == 'upcoming':
+        start_dt = timezone.now() + datetime.timedelta(days=3)
+        end_dt = start_dt + datetime.timedelta(hours=1)
+    else:
+        start_dt = timezone.now() - datetime.timedelta(days=3)
+        end_dt = start_dt + datetime.timedelta(hours=1)
+    event = Event.objects.create(
+        title=f'Recap notification {slug}',
+        slug=slug,
+        description='A recap notification browser journey.',
+        start_datetime=start_dt,
+        end_datetime=end_dt,
+        status=status,
+        published=published,
+        origin='studio',
+        recap_notes=recap_notes,
+        event_series=event_series,
+    )
+    connection.close()
+    return event
+
+
+def _register_recap_user(event, email, *, active=True):
+    from events.models import EventRegistration
+
+    user = create_user(email, tier_slug='free')
+    if not active:
+        user.is_active = False
+        user.save(update_fields=['is_active'])
+    EventRegistration.objects.create(event=event, user=user)
+    connection.close()
+    return user
+
+
+def _recap_notification_count(email):
+    from accounts.models import User
+    from notifications.models import Notification
+
+    user = User.objects.get(email=email)
+    count = Notification.objects.filter(
+        user=user,
+        notification_type='event_recap',
+    ).count()
+    connection.close()
+    return count
+
+
+def _open_recap_event_in_studio(django_server, browser, staff_email, event):
+    context = auth_context(browser, staff_email)
+    page = context.new_page()
+    page.goto(
+        f'{django_server}/studio/events/{event.pk}/edit',
+        wait_until='domcontentloaded',
+    )
+    _dismiss_analytics_prompt(page)
+    return context, page
+
+
+def _send_recap_notification_from_studio(
+    django_server, browser, staff_email, event,
+):
+    context, page = _open_recap_event_in_studio(
+        django_server, browser, staff_email, event,
+    )
+    button = page.get_by_test_id('notify-recap-ready-button')
+    expect(button).to_be_visible()
+    button.click()
+    page.wait_for_url(f'**/studio/events/{event.pk}/edit*')
+    return context, page
+
+
+@pytest.mark.django_db(transaction=True)
+class TestRecapReadyNotificationBrowserFlow:
+    @browser_journey
+    def test_staff_publishes_verifies_and_announces_a_recap(
+        self, django_server, browser,
+    ):
+        _clear_recap_notification_state()
+        _point_recap_site_base_url(django_server)
+        create_staff_user('recap-1557-publish-staff@test.com')
+        event = _create_recap_notification_event(
+            'recap-1557-publish', recap_notes='',
+        )
+        member = _register_recap_user(
+            event, 'recap-1557-publish-member@test.com',
+        )
+
+        context, page = _open_recap_event_in_studio(
+            django_server, browser,
+            'recap-1557-publish-staff@test.com', event,
+        )
+        expect(
+            page.get_by_test_id('notify-recap-ready-button-disabled'),
+        ).to_be_visible()
+        page.get_by_test_id('event-recap-notes').fill(
+            '## What we covered\n\nWe shipped an eval harness.',
+        )
+        _accept_studio_confirms(page)
+        with page.expect_navigation(wait_until='domcontentloaded'):
+            page.get_by_test_id('sticky-save-action').click()
+
+        event.refresh_from_db()
+        assert event.recap_notes
+        recap_link = page.get_by_test_id('event-recap-view-link')
+        expect(recap_link).to_be_visible()
+        recap_path = event.get_recap_url()
+        recap_link.click()
+        page.wait_for_url(f'**{recap_path}')
+        expect(page.get_by_text('We shipped an eval harness.')).to_be_visible()
+        assert page.url.endswith(recap_path)
+        context.close()
+
+        assert _recap_notification_count(member.email) == 0
+
+        context, page = _send_recap_notification_from_studio(
+            django_server, browser,
+            'recap-1557-publish-staff@test.com', event,
+        )
+        body = page.locator('body').inner_text()
+        assert '1 emailed' in body
+        assert '1 in-app notifications' in body
+        assert f'{django_server}{recap_path}' in body
+        context.close()
+
+    @browser_journey
+    def test_studio_explains_every_recap_ready_blocker(
+        self, django_server, browser,
+    ):
+        _clear_recap_notification_state()
+        create_staff_user('recap-1557-guards-staff@test.com')
+        cases = (
+            (
+                _create_recap_notification_event(
+                    'recap-1557-missing', recap_notes='',
+                ),
+                'Add non-empty recap content first.',
+            ),
+            (
+                _create_recap_notification_event(
+                    'recap-1557-future', status='upcoming',
+                ),
+                'event has ended',
+            ),
+            (
+                _create_recap_notification_event(
+                    'recap-1557-draft', status='draft',
+                ),
+                'Draft events cannot announce a recap.',
+            ),
+            (
+                _create_recap_notification_event(
+                    'recap-1557-unpublished', published=False,
+                ),
+                'Publish the event before announcing its recap.',
+            ),
+            (
+                _create_recap_notification_event(
+                    'recap-1557-cancelled', status='cancelled',
+                ),
+                'Cancelled events cannot announce a recap.',
+            ),
+        )
+
+        context = auth_context(
+            browser, 'recap-1557-guards-staff@test.com',
+        )
+        page = context.new_page()
+        for event, reason in cases:
+            page.goto(
+                f'{django_server}/studio/events/{event.pk}/edit',
+                wait_until='domcontentloaded',
+            )
+            expect(
+                page.get_by_test_id('notify-recap-ready-button-disabled'),
+            ).to_be_visible()
+            expect(
+                page.get_by_test_id('recap-ready-disabled-reason'),
+            ).to_contain_text(reason)
+        context.close()
+
+    @browser_journey
+    def test_registrant_follows_the_notification_to_the_recap_page(
+        self, django_server, browser,
+    ):
+        _clear_recap_notification_state()
+        _point_recap_site_base_url(django_server)
+        create_staff_user('recap-1557-link-staff@test.com')
+        event = _create_recap_notification_event('recap-1557-link')
+        member = _register_recap_user(
+            event, 'recap-1557-link-member@test.com',
+        )
+        recap_path = event.get_recap_url()
+        recap_url = f'{django_server}{recap_path}'
+
+        staff_context, _staff_page = _send_recap_notification_from_studio(
+            django_server, browser,
+            'recap-1557-link-staff@test.com', event,
+        )
+        staff_context.close()
+
+        member_context = auth_context(browser, member.email)
+        member_page = member_context.new_page()
+        member_page.goto(
+            f'{django_server}/notifications',
+            wait_until='domcontentloaded',
+        )
+        expect(
+            member_page.get_by_text(
+                f'Recap ready: {event.title}', exact=True,
+            ),
+        ).to_be_visible()
+        link = member_page.locator(
+            f'a[href="{recap_url}"][data-notification-target]',
+        )
+        expect(link).to_be_visible()
+        link.click()
+        member_page.wait_for_url(f'**{recap_path}')
+        assert member_page.url.rstrip('/') == recap_url.rstrip('/')
+        assert not member_page.url.endswith(event.get_absolute_url())
+        expect(
+            member_page.get_by_text('The session recap is ready.'),
+        ).to_be_visible()
+        member_context.close()
+
+    @browser_journey
+    def test_only_active_exact_registrants_receive_the_recap_notice(
+        self, django_server, browser,
+    ):
+        from events.models import EventHost, EventSeries, Host, SeriesRegistration
+
+        _clear_recap_notification_state()
+        _point_recap_site_base_url(django_server)
+        create_staff_user('recap-1557-audience-staff@test.com')
+        series = EventSeries.objects.create(
+            name='Recap notification series',
+            slug='recap-1557-audience-series',
+            cadence='none',
+            day_of_week=None,
+            start_time=None,
+            timezone='UTC',
+        )
+        target = _create_recap_notification_event(
+            'recap-1557-audience-target', event_series=series,
+        )
+        sibling = _create_recap_notification_event(
+            'recap-1557-audience-sibling',
+            recap_notes='', event_series=series,
+        )
+        active = _register_recap_user(
+            target, 'recap-1557-audience-active@test.com',
+        )
+        inactive = _register_recap_user(
+            target, 'recap-1557-audience-inactive@test.com', active=False,
+        )
+        host_user = create_user(
+            'recap-1557-audience-host@test.com', tier_slug='free',
+        )
+        host = Host.objects.create(
+            name='Recap Host', slug='recap-1557-audience-host',
+            email=host_user.email,
+        )
+        EventHost.objects.create(event=target, host=host)
+        sibling_user = _register_recap_user(
+            sibling, 'recap-1557-audience-sibling@test.com',
+        )
+        series_only = create_user(
+            'recap-1557-audience-series-only@test.com', tier_slug='free',
+        )
+        SeriesRegistration.objects.create(series=series, user=series_only)
+        unrelated = create_user(
+            'recap-1557-audience-unrelated@test.com', tier_slug='free',
+        )
+        connection.close()
+
+        context, page = _send_recap_notification_from_studio(
+            django_server, browser,
+            'recap-1557-audience-staff@test.com', target,
+        )
+        expect(
+            page.get_by_test_id('recap-ready-eligible-count'),
+        ).to_have_text('1')
+        body = page.locator('body').inner_text()
+        assert '1 emailed' in body
+        context.close()
+
+        assert _recap_notification_count(active.email) == 1
+        assert _recap_notification_count(inactive.email) == 0
+        for excluded in (host_user, sibling_user, series_only, unrelated):
+            member_context = auth_context(browser, excluded.email)
+            member_page = member_context.new_page()
+            member_page.goto(
+                f'{django_server}/notifications',
+                wait_until='domcontentloaded',
+            )
+            assert f'Recap ready: {target.title}' not in (
+                member_page.locator('body').inner_text()
+            )
+            member_context.close()
+
+    @browser_journey
+    def test_rerunning_the_action_reports_already_sent_without_duplicates(
+        self, django_server, browser,
+    ):
+        _clear_recap_notification_state()
+        _point_recap_site_base_url(django_server)
+        create_staff_user('recap-1557-rerun-staff@test.com')
+        event = _create_recap_notification_event('recap-1557-rerun')
+        member = _register_recap_user(
+            event, 'recap-1557-rerun-member@test.com',
+        )
+
+        first_context, _first_page = _send_recap_notification_from_studio(
+            django_server, browser,
+            'recap-1557-rerun-staff@test.com', event,
+        )
+        first_context.close()
+        second_context, second_page = _send_recap_notification_from_studio(
+            django_server, browser,
+            'recap-1557-rerun-staff@test.com', event,
+        )
+        body = second_page.locator('body').inner_text()
+        assert '1 already sent' in body
+        assert _recap_notification_count(member.email) == 1
+        second_context.close()
+
+    @browser_journey
+    def test_zero_recipient_send_is_clear_and_successful(
+        self, django_server, browser,
+    ):
+        _clear_recap_notification_state()
+        _point_recap_site_base_url(django_server)
+        create_staff_user('recap-1557-zero-staff@test.com')
+        event = _create_recap_notification_event('recap-1557-zero')
+
+        context, page = _send_recap_notification_from_studio(
+            django_server, browser,
+            'recap-1557-zero-staff@test.com', event,
+        )
+        body = page.locator('body').inner_text()
+        assert '0 emailed' in body
+        assert '0 in-app notifications' in body
+        assert '0 already sent' in body
+        assert '0 inactive skipped' in body
+        assert '0 failed' in body
+        assert '1 emailed' not in body
+        expect(
+            page.get_by_test_id('recap-ready-eligible-count'),
+        ).to_have_text('0')
         context.close()

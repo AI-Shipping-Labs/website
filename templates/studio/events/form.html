@@ -708,6 +708,52 @@
     {% endif %}
   </div>
 
+  <div class="bg-card border border-border rounded-lg p-4" id="recap-ready-panel" data-testid="recap-ready-panel">
+    <h2 class="text-sm font-medium text-foreground mb-3">Recap-ready notification</h2>
+    {% if recap_ready_url %}
+      <p class="text-sm text-muted-foreground mb-3">
+        Public recap:
+        <a href="{{ recap_ready_url }}" target="_blank" rel="noopener noreferrer" class="text-accent hover:underline break-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="recap-ready-link">{{ recap_ready_url }}</a>
+      </p>
+    {% endif %}
+    <dl class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs mb-4" data-testid="recap-ready-counts">
+      <div>
+        <dt class="text-muted-foreground">Eligible registrants</dt>
+        <dd class="text-foreground" data-testid="recap-ready-eligible-count">{{ recap_ready_eligible_count }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Already emailed</dt>
+        <dd class="text-foreground" data-testid="recap-ready-already-emailed-count">{{ recap_ready_already_emailed_count }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Already notified in-app</dt>
+        <dd class="text-foreground" data-testid="recap-ready-already-notified-count">{{ recap_ready_already_notified_count }}</dd>
+      </div>
+    </dl>
+    {% if recap_ready_available %}
+      <form method="post" action="{{ notify_recap_ready_url }}">
+        {% csrf_token %}
+        <button type="submit"
+                data-testid="notify-recap-ready-button"
+                class="w-full bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+          Notify registrants: recap ready
+        </button>
+      </form>
+      <p class="text-xs text-muted-foreground mt-2">
+        Sends a direct link to the public recap by email and in-app notification to active registrants of this event occurrence. This is an explicit one-time action; saving the recap never sends automatically.
+      </p>
+    {% else %}
+      <button type="button" disabled
+              data-testid="notify-recap-ready-button-disabled"
+              class="w-full bg-secondary border border-border text-muted-foreground px-4 py-2 rounded-lg text-sm font-medium cursor-not-allowed opacity-60">
+        Notify registrants: recap ready
+      </button>
+      <p class="text-xs text-muted-foreground mt-2" data-testid="recap-ready-disabled-reason">
+        {{ recap_ready_unavailable_reason|default:"A published recap for an ended public event is required before notifying registrants." }}
+      </p>
+    {% endif %}
+  </div>
+
   {% comment %}
     Issue #680 / #713: manual "Send follow-up now" trigger. The button
     is the documented escape hatch when the daily cron skipped the

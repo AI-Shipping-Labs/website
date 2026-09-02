@@ -107,6 +107,9 @@ class BackfillStripeTiersCommandTest(TestCase):
             datetime.fromtimestamp(period_end, tz=datetime_timezone.utc),
         )
         audit = WebhookEvent.objects.get(event_type="backfill_stripe_tiers")
+        self.assertEqual(audit.subject_user_id, user.pk)
+        self.assertEqual(audit.stripe_customer_id, user.stripe_customer_id)
+        self.assertEqual(audit.stripe_subscription_id, user.subscription_id)
         self.assertEqual(audit.payload["old_tier_slug"], "free")
         self.assertEqual(audit.payload["new_tier_slug"], "main")
 

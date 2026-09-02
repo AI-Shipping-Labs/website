@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Shipping Labs Event Recaps"
+  short_description: "Turn YouTube recordings into verified event recaps"
+  default_prompt: "Use $ai-shipping-labs-event-recaps to publish and announce this event recap safely."

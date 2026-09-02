@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import uuid
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timezone as datetime_timezone
 from typing import Any
@@ -70,6 +71,61 @@ JWT_RE = re.compile(r"^[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,
 PRIVACY_REQUEST_EMAIL_KEY = "PRIVACY_REQUEST_EMAIL"
 DEFAULT_PRIVACY_REQUEST_EMAIL = "team@aishippinglabs.com"
 
+_STRIPE_PROVIDER_EVENT_TYPES = frozenset({
+    "checkout.session.completed",
+    "checkout.session.async_payment_succeeded",
+    "checkout.session.async_payment_failed",
+    "customer.updated",
+    "customer.subscription.updated",
+    "customer.subscription.deleted",
+    "invoice.payment_failed",
+    "invoice.paid",
+    "charge.refunded",
+    "charge.dispute.created",
+    "charge.dispute.closed",
+})
+_STRIPE_CUSTOMER_SUBSCRIPTION_EVENT_TYPES = frozenset({
+    "customer.subscription.updated",
+    "customer.subscription.deleted",
+})
+_STRIPE_CUSTOMER_EVENT_TYPES = frozenset({"customer.updated"})
+_STRIPE_INTERNAL_AUDIT_EVENT_TYPES = frozenset({
+    "backfill_stripe_tiers",
+    "subscription_reconciliation_apply",
+})
+_STRIPE_OBJECT_REDACTED_KEYS = (
+    "customer_email",
+    "receipt_email",
+    "email",
+    "name",
+    "phone",
+    "address",
+    "shipping",
+    "billing_details",
+)
+_STRIPE_CUSTOMER_DETAILS_REDACTED_KEYS = (
+    "email",
+    "name",
+    "phone",
+    "address",
+)
+_STRIPE_INTERNAL_REDACTED_KEYS = (
+    "email",
+    "stripe_customer_id",
+    "stripe_subscription_id",
+    "subscription_id",
+    "old_subscription_id",
+)
+_CALENDLY_REDACTED_KEYS = (
+    "email",
+    "name",
+    "text_reminder_number",
+    "reschedule_url",
+    "cancel_url",
+)
+_MAX_BIGINT = 2**63 - 1
+_DECIMAL_USER_ID_RE = re.compile(r"[0-9]+\Z")
+
 
 @dataclass(frozen=True)
 class PrivacyDeletionResult:
@@ -88,6 +144,15 @@ class PrivacyDeletionRequestResult:
     requested_at: Any
     email_log_id: int | None = None
     duplicate: bool = False
+
+
+@dataclass(frozen=True)
+class _PrivacyCorrelations:
+    subject_user_id: int
+    stripe_customer_ids: frozenset[str]
+    stripe_subscription_ids: frozenset[str]
+    calendly_event_uris: frozenset[str]
+    calendly_invitee_uris: frozenset[str]
 
 
 def request_context_from_request(request):
@@ -305,16 +370,16 @@ def delete_account_for_privacy(user, request_context=None):
 
     old_user_id = user.pk
     email = user.email
-    identifiers = _known_member_identifiers(user)
 
     with transaction.atomic():
         summary = _empty_summary()
+        correlations = _collect_privacy_correlations(user)
         _delete_user_sessions(user, summary)
         _erase_local_slack_threads(user, summary)
         _erase_owned_comment_threads(user, summary)
         _anonymize_member_projects(user, summary)
-        _detach_payment_diagnostics(user, summary, email)
-        _scrub_matching_webhook_payloads(identifiers, summary)
+        _detach_payment_diagnostics(user, summary)
+        _scrub_matching_webhook_payloads(correlations, summary)
 
         _, deleted_counts = user.delete()
         for key, value in sorted(deleted_counts.items()):
@@ -780,12 +845,15 @@ def _calendly_webhook_export(user):
     model = _model('integrations', 'WebhookLog')
     if model is None:
         return []
-    identifiers = {user.email, *user.email_aliases.values_list('email', flat=True)}
+    event_uris, invitee_uris = _calendly_correlations_for_user(user)
+    if not event_uris and not invitee_uris:
+        return []
+    ownership = Q(service='calendly') & (
+        Q(calendly_event_uri__in=sorted(event_uris))
+        | Q(calendly_invitee_uri__in=sorted(invitee_uris))
+    )
     rows = []
-    for row in model.objects.filter(service='calendly').order_by('-received_at'):
-        text = json.dumps(row.payload, default=str).lower()
-        if not any(value and value.lower() in text for value in identifiers):
-            continue
+    for row in model.objects.filter(ownership).order_by('-received_at'):
         rows.append({
             'id': row.pk, 'event_type': row.event_type,
             'payload': _plain(row.payload), 'received_at': _plain(row.received_at),
@@ -1508,6 +1576,94 @@ def _increment(summary, section, key, amount):
         summary[section][key] = summary[section].get(key, 0) + amount
 
 
+def _calendly_correlations_for_user(user, *, select_for_update=False):
+    event_uris = set()
+    invitee_uris = set()
+    for model_name in ("BookedCall", "UnmatchedBookedCall"):
+        model = _model("community", model_name)
+        if model is None:
+            continue
+        rows = model.objects.filter(member_id=user.pk)
+        if select_for_update:
+            rows = rows.select_for_update()
+        for event_uri, invitee_uri in rows.values_list(
+            "calendly_event_uri", "calendly_invitee_uri",
+        ).iterator(chunk_size=500):
+            if event_uri:
+                event_uris.add(event_uri)
+            if invitee_uri:
+                invitee_uris.add(invitee_uri)
+    return event_uris, invitee_uris
+
+
+def _collect_privacy_correlations(user):
+    """Collect stable subject keys before any user-owned cascade runs."""
+    customer_ids = set()
+    subscription_ids = set()
+
+    if user.stripe_customer_id:
+        customer_ids.add(user.stripe_customer_id)
+    if user.subscription_id:
+        subscription_ids.add(user.subscription_id)
+
+    def collect_payment_ids(model_name, *fields):
+        model = _model("payments", model_name)
+        if model is None:
+            return
+        rows = model.objects.select_for_update().filter(user_id=user.pk)
+        for values in rows.values_list(*fields).iterator(chunk_size=500):
+            for field, value in zip(fields, values):
+                if not value:
+                    continue
+                if field == "stripe_customer_id":
+                    customer_ids.add(value)
+                else:
+                    subscription_ids.add(value)
+
+    collect_payment_ids("ConversionAttribution", "stripe_subscription_id")
+    collect_payment_ids(
+        "CheckoutFulfillment",
+        "stripe_customer_id",
+        "stripe_subscription_id",
+    )
+    collect_payment_ids(
+        "MonthlyPaymentGrace",
+        "stripe_customer_id",
+        "stripe_subscription_id",
+    )
+    collect_payment_ids(
+        "SubscriptionReconciliationFinding",
+        "stripe_customer_id",
+        "current_subscription_id",
+        "stripe_subscription_id",
+    )
+
+    mismatch_model = _model("payments", "PaymentAccountMismatch")
+    if mismatch_model is not None:
+        for customer_id, subscription_id in (
+            mismatch_model.objects.select_for_update()
+            .filter(paid_user_id=user.pk)
+            .values_list("stripe_customer_id", "stripe_subscription_id")
+            .iterator(chunk_size=500)
+        ):
+            if customer_id:
+                customer_ids.add(customer_id)
+            if subscription_id:
+                subscription_ids.add(subscription_id)
+
+    event_uris, invitee_uris = _calendly_correlations_for_user(
+        user,
+        select_for_update=True,
+    )
+    return _PrivacyCorrelations(
+        subject_user_id=user.pk,
+        stripe_customer_ids=frozenset(customer_ids),
+        stripe_subscription_ids=frozenset(subscription_ids),
+        calendly_event_uris=frozenset(event_uris),
+        calendly_invitee_uris=frozenset(invitee_uris),
+    )
+
+
 def _delete_user_sessions(user, summary):
     deleted = 0
     for session in Session.objects.all():
@@ -1651,7 +1807,7 @@ def _anonymize_member_projects(user, summary):
     _increment(summary, "anonymized", "published_submitted_projects", published_count)
 
 
-def _detach_payment_diagnostics(user, summary, email):
+def _detach_payment_diagnostics(user, summary):
     conversion_model = _model("payments", "ConversionAttribution")
     if conversion_model is not None:
         conversion_count = conversion_model.objects.filter(user=user).update(user=None)
@@ -1674,12 +1830,16 @@ def _detach_payment_diagnostics(user, summary, email):
     mismatch_model = _model("payments", "PaymentAccountMismatch")
     if mismatch_model is None:
         return
-    mismatches = mismatch_model.objects.filter(Q(paid_user=user) | Q(candidate_user=user) | Q(resolved_by=user))
-    mismatch_count = mismatches.count()
+    mismatches = mismatch_model.objects.select_for_update().filter(
+        Q(paid_user_id=user.pk)
+        | Q(candidate_user_id=user.pk)
+        | Q(resolved_by_id=user.pk)
+    )
+    changed_count = 0
     anonymized_email = f"deleted-user-{user.pk}@privacy.invalid"
     for mismatch in mismatches:
-        identifiers = {email, mismatch.stripe_email}
         changed = []
+        subject_owned = mismatch.paid_user_id == user.pk or mismatch.candidate_user_id == user.pk
         if mismatch.paid_user_id == user.pk:
             mismatch.paid_user = None
             changed.append("paid_user")
@@ -1689,89 +1849,219 @@ def _detach_payment_diagnostics(user, summary, email):
         if mismatch.resolved_by_id == user.pk:
             mismatch.resolved_by = None
             changed.append("resolved_by")
-        # The Stripe billing address may deliberately differ from the member's
-        # canonical login. It is still personal data attached to this data
-        # subject, so redact it unconditionally for every linked diagnostic.
-        mismatch.stripe_email = anonymized_email
-        changed.append("stripe_email")
-        mismatch.details = _scrub_payload(mismatch.details, identifiers)
-        changed.append("details")
-        mismatch.save(update_fields=changed)
-    _increment(summary, "retained", "payment_account_mismatches", mismatch_count)
+        if subject_owned:
+            if mismatch.stripe_email and mismatch.stripe_email != anonymized_email:
+                mismatch.stripe_email = anonymized_email
+                changed.append("stripe_email")
+            details = _scrub_payment_mismatch_details(mismatch.details)
+            if details != mismatch.details:
+                mismatch.details = details
+                changed.append("details")
+        if changed:
+            mismatch.save(update_fields=changed)
+            changed_count += 1
+    _increment(summary, "retained", "payment_account_mismatches", changed_count)
 
 
-def _known_member_identifiers(user):
-    identifiers = {
-        value
-        for value in [
-            user.email,
-            user.stripe_customer_id,
-            user.subscription_id,
-        ]
-        if value
-    }
-    identifiers.update(user.email_aliases.values_list('email', flat=True))
-    identifiers.update(
-        value for value in user.booked_calls.values_list('invitee_name', flat=True)
-        if value
+def _redact_mapping_keys(mapping, keys):
+    changed = False
+    for key in keys:
+        if key not in mapping:
+            continue
+        value = mapping[key]
+        if value in (None, "", REDACTED):
+            continue
+        mapping[key] = REDACTED
+        changed = True
+    return changed
+
+
+def _scrub_payment_mismatch_details(details):
+    if not isinstance(details, dict):
+        return details
+    scrubbed = deepcopy(details)
+    _redact_mapping_keys(
+        scrubbed,
+        (
+            "paid_user_email",
+            "stripe_email",
+            "email",
+            "stripe_customer_id",
+            "stripe_subscription_id",
+            "customer",
+            "subscription",
+        ),
     )
-    identifiers.update(
-        value
-        for pair in user.unmatched_booked_calls.values_list(
-            'invitee_email',
-            'invitee_name',
+    return scrubbed
+
+
+def _parse_numeric_user_id(value):
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        number = value
+    elif (
+        isinstance(value, str)
+        and len(value) <= len(str(_MAX_BIGINT))
+        and _DECIMAL_USER_ID_RE.fullmatch(value)
+    ):
+        number = int(value)
+    else:
+        return None
+    if number <= 0 or number > _MAX_BIGINT:
+        return None
+    return number
+
+
+def _redact_exact_provider_id(value, identifiers):
+    if isinstance(value, str):
+        return (REDACTED, True) if value in identifiers else (value, False)
+    if not isinstance(value, dict):
+        return value, False
+    object_id = value.get("id")
+    if not isinstance(object_id, str) or object_id not in identifiers:
+        return value, False
+    redacted = value.copy()
+    redacted["id"] = REDACTED
+    return redacted, True
+
+
+def _scrub_stripe_provider_payload(row, correlations):
+    payload = row.payload
+    if not isinstance(payload, dict):
+        return payload
+    data = payload.get("data")
+    obj = data.get("object") if isinstance(data, dict) else None
+    if not isinstance(obj, dict):
+        return payload
+
+    scrubbed = deepcopy(payload)
+    data = scrubbed.get("data")
+    obj = data.get("object")
+    _redact_mapping_keys(obj, _STRIPE_OBJECT_REDACTED_KEYS)
+    customer_details = obj.get("customer_details")
+    if isinstance(customer_details, dict):
+        _redact_mapping_keys(
+            customer_details,
+            _STRIPE_CUSTOMER_DETAILS_REDACTED_KEYS,
         )
-        for value in pair
-        if value
-    )
-    return identifiers
+
+    metadata = obj.get("metadata")
+    if isinstance(metadata, dict) and "user_id" in metadata:
+        if _parse_numeric_user_id(metadata["user_id"]) is not None:
+            metadata["user_id"] = REDACTED
+    if _parse_numeric_user_id(obj.get("client_reference_id")) is not None:
+        obj["client_reference_id"] = REDACTED
+
+    customer_ids = set(correlations.stripe_customer_ids)
+    subscription_ids = set(correlations.stripe_subscription_ids)
+    if row.stripe_customer_id:
+        customer_ids.add(row.stripe_customer_id)
+    if row.stripe_subscription_id:
+        subscription_ids.add(row.stripe_subscription_id)
+    for key, identifiers in (
+        ("customer", customer_ids),
+        ("subscription", subscription_ids),
+    ):
+        if not identifiers or key not in obj:
+            continue
+        obj[key], _ = _redact_exact_provider_id(obj[key], identifiers)
+    if row.event_type in (
+        _STRIPE_CUSTOMER_EVENT_TYPES | _STRIPE_CUSTOMER_SUBSCRIPTION_EVENT_TYPES
+    ):
+        identifiers = customer_ids | subscription_ids
+        if identifiers and "id" in obj:
+            obj["id"], _ = _redact_exact_provider_id(obj["id"], identifiers)
+    return scrubbed
 
 
-def _scrub_matching_webhook_payloads(identifiers, summary):
+def _scrub_stripe_internal_payload(payload):
+    if not isinstance(payload, dict):
+        return payload
+    scrubbed = deepcopy(payload)
+    _redact_mapping_keys(scrubbed, _STRIPE_INTERNAL_REDACTED_KEYS)
+    return scrubbed
+
+
+def _scrub_stripe_payload(row, correlations):
+    if row.event_type in _STRIPE_INTERNAL_AUDIT_EVENT_TYPES:
+        return _scrub_stripe_internal_payload(row.payload)
+    if row.event_type in _STRIPE_PROVIDER_EVENT_TYPES:
+        return _scrub_stripe_provider_payload(row, correlations)
+    return row.payload
+
+
+def _scrub_calendly_payload(payload):
+    if not isinstance(payload, dict):
+        return payload
+    inner = payload.get("payload")
+    if not isinstance(inner, dict):
+        return payload
+    scrubbed = deepcopy(payload)
+    inner = scrubbed["payload"]
+    _redact_mapping_keys(inner, _CALENDLY_REDACTED_KEYS)
+    questions_and_answers = inner.get("questions_and_answers")
+    if isinstance(questions_and_answers, list):
+        for item in questions_and_answers:
+            if isinstance(item, dict):
+                _redact_mapping_keys(item, ("answer",))
+    return scrubbed
+
+
+def _scrub_matching_webhook_payloads(correlations, summary):
     webhook_model = _model("payments", "WebhookEvent")
-    if not identifiers:
-        return
     scrubbed = 0
     if webhook_model is not None:
-        for row in webhook_model.objects.exclude(payload={}):
-            payload_text = json.dumps(row.payload, default=str)
-            if not any(identifier in payload_text for identifier in identifiers):
-                continue
-            row.payload = _scrub_payload(row.payload, identifiers)
-            row.error_message = _scrub_text(row.error_message, identifiers)
-            row.save(update_fields=["payload", "error_message"])
-            scrubbed += 1
+        ownership = Q(subject_user_id=correlations.subject_user_id)
+        if correlations.stripe_customer_ids:
+            ownership |= Q(
+                stripe_customer_id__in=sorted(correlations.stripe_customer_ids),
+            )
+        if correlations.stripe_subscription_ids:
+            ownership |= Q(
+                stripe_subscription_id__in=sorted(
+                    correlations.stripe_subscription_ids,
+                ),
+            )
+        rows = webhook_model.objects.select_for_update().filter(ownership)
+        for row in rows.order_by("pk").iterator(chunk_size=500):
+            payload = _scrub_stripe_payload(row, correlations)
+            changed = payload != row.payload
+            if row.error_message and row.error_message != REDACTED:
+                row.error_message = REDACTED
+                changed = True
+            if changed:
+                row.payload = payload
+                row.save(update_fields=["payload", "error_message"])
+                scrubbed += 1
     _increment(summary, "retained", "scrubbed_webhook_events", scrubbed)
 
     inbound_model = _model('integrations', 'WebhookLog')
     inbound_scrubbed = 0
-    if inbound_model is not None:
-        for row in inbound_model.objects.filter(service='calendly').exclude(payload={}):
-            payload_text = json.dumps(row.payload, default=str)
-            if not any(identifier in payload_text for identifier in identifiers):
-                continue
-            row.payload = _scrub_payload(row.payload, identifiers)
-            row.error_message = _scrub_text(row.error_message, identifiers)
-            row.save(update_fields=['payload', 'error_message'])
-            inbound_scrubbed += 1
-    _increment(summary, 'retained', 'scrubbed_calendly_webhook_logs', inbound_scrubbed)
-
-
-def _scrub_payload(value, identifiers):
-    if isinstance(value, dict):
-        return {key: _scrub_payload(item, identifiers) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_scrub_payload(item, identifiers) for item in value]
-    if isinstance(value, str):
-        return _scrub_text(value, identifiers)
-    return value
-
-
-def _scrub_text(value, identifiers):
-    result = value
-    for identifier in identifiers:
-        result = result.replace(identifier, REDACTED)
-    return result
+    if inbound_model is not None and (
+        correlations.calendly_event_uris or correlations.calendly_invitee_uris
+    ):
+        ownership = Q(service='calendly') & (
+            Q(calendly_event_uri__in=sorted(correlations.calendly_event_uris))
+            | Q(calendly_invitee_uri__in=sorted(correlations.calendly_invitee_uris))
+        )
+        rows = inbound_model.objects.select_for_update().filter(ownership)
+        for row in rows.order_by("pk").iterator(chunk_size=500):
+            payload = _scrub_calendly_payload(row.payload)
+            changed = payload != row.payload
+            if row.error_message and row.error_message != REDACTED:
+                row.error_message = REDACTED
+                changed = True
+            if changed:
+                row.payload = payload
+                row.save(update_fields=["payload", "error_message"])
+                inbound_scrubbed += 1
+    _increment(
+        summary,
+        'retained',
+        'scrubbed_calendly_webhook_logs',
+        inbound_scrubbed,
+    )
 
 
 def _create_privacy_log(

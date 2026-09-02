@@ -217,6 +217,22 @@ class RuleChainTest(SimpleTestCase):
         self.assertEqual(plan.unmapped, [])
         self.assertFalse(any(note.startswith("WARN unmapped:") for note in plan.notes))
 
+    def test_event_recap_skill_maps_to_its_exact_api_guard(self):
+        plan = plan_for(
+            [
+                ".agents/skills/ai-shipping-labs-event-recaps/SKILL.md",
+            ]
+        )
+
+        self.assertFalse(plan.no_tests_required)
+        self.assertEqual(
+            plan.django_labels,
+            ["api.tests.test_events.EventsSkillDocSyncTest"],
+        )
+        self.assertEqual(plan.extra_commands, [])
+        self.assertEqual(plan.unmapped, [])
+        self.assertFalse(any(note.startswith("WARN unmapped:") for note in plan.notes))
+
     def test_member_api_guide_maps_to_member_api(self):
         plan = plan_for(["docs/member-api/plans.md"])
         self.assertEqual(plan.django_labels, ["member_api"])

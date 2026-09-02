@@ -31,6 +31,8 @@ NOTIFICATION_TYPE_CHOICES = [
     # full-book summary. One notification per book-access member (tier-eligible
     # audience), deep-linked to the chapter #summary or the /summary page.
     ('bookclub_summary', 'Book Club Summary'),
+    # Issue #1557: explicit staff action after an event recap is public.
+    ('event_recap', 'Event Recap'),
 ]
 
 
@@ -94,6 +96,8 @@ class EventReminderLog(models.Model):
       (event, user) — the per-user task uses ``get_or_create`` so a
       re-fired cron or a manual "Send follow-up now" press never
       double-sends.
+    - ``recap_email`` and ``recap_in_app``: per-channel success markers for
+      the explicit event recap-ready notification (issue #1557).
     - ``24h_slack``: per-event guard for the 24h channel Slack
       announcement (issue #887). ``user`` is NULL — one row per event,
       so the announcement posts at most once even though the 24h cron

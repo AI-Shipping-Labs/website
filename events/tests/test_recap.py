@@ -184,6 +184,17 @@ class EventRecapPageViewTest(TestCase):
         response = self.client.get(f'/events/{event.pk}/no-recap-at-all/recap')
         self.assertEqual(response.status_code, 404)
 
+    def test_unpublished_past_recap_404s_for_anonymous_visitor(self):
+        event = self._past_event(
+            slug='unpublished-past-recap',
+            published=False,
+            recap_notes='Private recap notes.',
+        )
+
+        response = self.client.get(event.get_recap_url())
+
+        self.assertEqual(response.status_code, 404)
+
     def test_unpublished_recap_redirects_anonymous_visitor_to_the_event(self):
         event = Event.objects.create(
             title='Upcoming Book Club',
@@ -238,6 +249,18 @@ class EventRecapPageViewTest(TestCase):
         staff_response = self.client.get(event.get_recap_url())
         self.assertEqual(staff_response.status_code, 200)
         self.assertContains(staff_response, 'Draft-only notes.')
+
+    def test_cancelled_recap_404s_for_anonymous_even_if_event_was_published(self):
+        event = self._past_event(
+            slug='cancelled-recap',
+            status='cancelled',
+            published=True,
+            recap_notes='Cancelled event notes.',
+        )
+
+        response = self.client.get(event.get_recap_url())
+
+        self.assertEqual(response.status_code, 404)
 
     def test_recap_page_canonical_link_and_no_event_json_ld(self):
         event = self._past_event(recap_notes='Notes.')

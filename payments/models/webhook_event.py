@@ -31,6 +31,32 @@ class WebhookEvent(models.Model):
         max_length=255,
         help_text="Stripe event type (e.g. checkout.session.completed).",
     )
+    subject_user_id = models.BigIntegerField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=(
+            "Stable local user identifier from an app-owned Stripe "
+            "correlation. Intentionally not a foreign key so retained "
+            "events survive account deletion."
+        ),
+    )
+    stripe_customer_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_default="",
+        db_index=True,
+        help_text="Safe Stripe customer correlation identifier.",
+    )
+    stripe_subscription_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_default="",
+        db_index=True,
+        help_text="Safe Stripe subscription correlation identifier.",
+    )
     processed_at = models.DateTimeField(auto_now_add=True)
     payload = models.JSONField(
         default=dict,

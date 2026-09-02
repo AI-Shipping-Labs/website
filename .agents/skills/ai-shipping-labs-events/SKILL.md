@@ -1,6 +1,6 @@
 ---
 name: ai-shipping-labs-events
-description: Create and manage AI Shipping Labs events and workshops in production. Use when asked to "create an event", "schedule a workshop", "set up an event series", "add a Zoom event", "make a recurring event", "publish a workshop", invite an event guest, assign an event host, cancel/reschedule an occurrence, or bulk-create Zoom meetings for a series. Events are created via the production API; workshops are git content synced from the workshops-content repo.
+description: Create and manage AI Shipping Labs events and workshops in production. Use when asked to "create an event", "schedule a workshop", "set up an event series", "add a Zoom event", "make a recurring event", "publish a workshop", invite an event guest, assign an event host, cancel/reschedule an occurrence, bulk-create Zoom meetings for a series, or announce a verified event recap. Events are created via the production API; workshops are git content synced from the workshops-content repo. For a YouTube-to-recap workflow, use $ai-shipping-labs-event-recaps.
 metadata:
   short-description: Create and manage events, event series, and workshops
 ---
@@ -28,6 +28,10 @@ uv run asl event-series --help
 - `asl events get <slug>`
 - `asl events create --title "..." --start-datetime "..." [flags]`
 - `asl events update <slug> [flags]`
+- `asl events update <slug> --recap-notes-file <path>` — GET-before, update,
+  and GET-after verification for a Markdown recap on a Studio/API event
+- `asl events notify-recap-ready <slug>` — explicitly notify active registrants
+  after the public recap has been checked
 - `asl events sync-zoom <slug>` — idempotently PATCH the existing Zoom
   meeting from the currently stored event state; it does not edit the event or
   notify attendees
@@ -79,6 +83,29 @@ requests that audience. Include the chosen `required_level` in the post-create
 GET verification; do not rely on the API's `open` default.
 
 The create call never rolls back on a Zoom problem: if Zoom fails, the event is still created with a `zoom_error` string. Retry with `asl events update <slug> --create-zoom`.
+
+## Event recaps
+
+For the complete YouTube recording → recap → public verification → notification
+workflow, invoke `$ai-shipping-labs-event-recaps`.
+
+The API field `recap_notes` stores Studio/API-authored Markdown. The dedicated
+public URL is returned as `recap_url`; it is not the event detail URL. Publish
+through the safe file workflow when possible:
+
+```bash
+uv run asl events update <slug> --recap-notes-file .tmp/event-recaps/<slug>.md
+uv run asl events get <slug>
+uv run asl events notify-recap-ready <slug>
+```
+
+The update command refuses GitHub-origin events and verifies the stored notes
+after the write. For a GitHub-origin event, edit its `recap_file` in the
+content repository and run the normal content sync instead. Adding or saving
+recap content never sends a message automatically. The notification action is
+staff-only, requires a non-empty recap on an ended, published public event,
+and sends the direct `recap_url` to exact event registrants with per-channel
+idempotency. Re-run the same action to retry failed channels safely.
 
 ### Alexey host and calendar guest
 

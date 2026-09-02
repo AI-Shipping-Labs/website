@@ -177,6 +177,16 @@ PREVIEW_CONTEXTS = {
             'https://aishippinglabs.com/events/ai-shipping-workshop/feedback'
         ),
     },
+    'event_recap_ready': {
+        'user_name': 'Ada',
+        'event_title': 'AI Shipping Workshop',
+        'recap_url': (
+            'https://aishippinglabs.com/events/42/ai-shipping-workshop/recap'
+        ),
+        'event_url': (
+            'https://aishippinglabs.com/events/42/ai-shipping-workshop'
+        ),
+    },
     'event_recording_ready': {
         'user_name': 'Ada',
         'event_title': 'AI Shipping Workshop',

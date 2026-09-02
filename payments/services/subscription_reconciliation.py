@@ -887,6 +887,9 @@ def _write_audit(result):
         stripe_event_id=event_id,
         event_type="subscription_reconciliation_apply",
         payload=payload,
+        subject_user_id=user.pk,
+        stripe_customer_id=user.stripe_customer_id or "",
+        stripe_subscription_id=result.stripe_subscription_id or "",
     )
     return event_id
 

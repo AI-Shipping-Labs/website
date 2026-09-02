@@ -73,6 +73,8 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # Issue #1118: event-specific workshop-ready broadcast. Transactional
     # because the recipient explicitly registered for this event.
     "event_workshop_ready",
+    # Issue #1557: explicit event-recap-ready notice to exact registrants.
+    "event_recap_ready",
     # Issue #732: staff explicitly shared a sprint plan with the
     # member. Transactional because the recipient is a named paid
     # sprint participant and the email is about an artefact created

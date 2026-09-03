@@ -247,6 +247,43 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
                 with self.subTest(container=name):
                     self.assertEqual(env["SERVING_BOOT_CHECK_ENABLED"], "false")
 
+    def test_serving_containers_keep_empty_argv(self):
+        # Issue #1510: entrypoint.sh execs arguments, so an ECS command
+        # would skip scripts.entrypoint_init. Serving task defs must not
+        # carry a command leftover from earlier revisions.
+        with TemporaryDirectory() as tmpdir:
+            input_path = Path(tmpdir) / "input.json"
+            output_path = Path(tmpdir) / "output.json"
+            task_definition = {
+                "taskDefinition": {
+                    "containerDefinitions": [
+                        {
+                            "name": "ai-shipping-labs",
+                            "image": "repo:old",
+                            "essential": True,
+                            "environment": [],
+                            "command": ["uv", "run", "python", "manage.py", "runserver"],
+                        },
+                    ],
+                }
+            }
+            input_path.write_text(json.dumps(task_definition))
+
+            with redirect_stdout(StringIO()):
+                update_task_def.update_task_definition(
+                    str(input_path),
+                    "20260903-1510",
+                    str(output_path),
+                    "dev",
+                )
+
+            task_def = self._read_task_definition(output_path)
+
+        names = [container["name"] for container in task_def["containerDefinitions"]]
+        self.assertEqual(names, ["ai-shipping-labs", "ai-shipping-labs-worker"])
+        for container in task_def["containerDefinitions"]:
+            self.assertNotIn("command", container)
+
     def test_web_role_strips_worker_sidecar(self):
         with TemporaryDirectory() as tmpdir:
             input_path = Path(tmpdir) / "input.json"

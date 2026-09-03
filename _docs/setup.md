@@ -192,6 +192,22 @@ make run
 make worker
 ```
 
+## Local Docker Compose
+
+`docker compose up` starts `db`, `web`, `worker`, and `watcher`. One-shot
+migrate / seed / content-source registration / `_content-repo` sync is:
+
+```bash
+docker compose --profile setup up setup
+```
+
+Each Compose app service supplies a `command:`. `entrypoint.sh` execs those
+arguments when present, so setup, web, worker, and watcher run the commands
+in `docker-compose.yml` instead of falling through to
+`scripts.entrypoint_init`. Production ECS is unchanged: serving tasks start
+with no command, and `BOOT_MODE` / `RUN_MIGRATIONS` dispatch stays in
+`scripts/entrypoint_init.py`.
+
 For ECS, the same Docker image runs both containers. A disposable Node build
 stage installs the npm lockfile and compiles minified CSS; only that bundle is
 copied into the Python image before `collectstatic` fingerprints and creates

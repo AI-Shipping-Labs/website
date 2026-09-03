@@ -267,6 +267,21 @@ class RuleChainTest(SimpleTestCase):
         plan = plan_for([".github/workflows/deploy-dev.yml", "scripts/watch-ci.py", "Makefile"])
         self.assertEqual(plan.django_labels, ["tests"])
 
+    def test_compose_dispatch_files_map_to_entrypoint_contract(self):
+        for path in ("entrypoint.sh", "docker-compose.yml"):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    plan_for([path]).django_labels,
+                    ["jobs.tests.test_entrypoint_compose_dispatch"],
+                )
+        self.assertEqual(
+            plan_for(["Dockerfile"]).django_labels,
+            [
+                "jobs.tests.test_entrypoint_compose_dispatch",
+                "tests.test_tailwind_build",
+            ],
+        )
+
     def test_playwright_owner_inventory_contracts_target_exact_policy_tests(self):
         plan = plan_for(
             [

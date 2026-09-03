@@ -16,11 +16,13 @@ WSGI module), the cold-start cost is paid exactly once per container.
 Boot mode dispatch (issue #1141 Phase 2A)
 =========================================
 
-All containers share the same Docker ENTRYPOINT (it does NOT consume
-``$@``, so an ECS ``command`` override cannot select a run mode). The
-``BOOT_MODE`` env var selects what this process does. It untangles two
-concerns the old ``RUN_MIGRATIONS`` flag conflated: web-vs-worker role
-dispatch, and whether this boot runs ``migrate``.
+All containers share the same Docker ENTRYPOINT. ``entrypoint.sh`` execs
+``$@`` when arguments are present (local Compose ``command:``), and only
+starts this module when argv is empty. ECS web/worker/predeploy must not
+rely on a command override to select a run mode; they start with no
+arguments and the ``BOOT_MODE`` env var selects what this process does.
+It untangles two concerns the old ``RUN_MIGRATIONS`` flag conflated:
+web-vs-worker role dispatch, and whether this boot runs ``migrate``.
 
 * ``BOOT_MODE=predeploy`` -> ``django.setup`` -> ``migrate`` ->
   ``check --fail-level ERROR`` -> exit 0. NO schedules, NO gunicorn, NO

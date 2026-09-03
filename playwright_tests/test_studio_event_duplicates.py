@@ -1,9 +1,11 @@
 """End-to-end coverage for the Studio duplicate-event merge UI (issue #881).
 
 Exercises the irreversible preview -> confirm flow from a real browser: the
-candidate pair listing, the preview (a guaranteed no-op), the confirm that folds
-the duplicate into the canonical event and retires the duplicate, and the
-non-staff 403 gate.
+candidate pair listing, the preview (a guaranteed no-op), and the confirm that
+folds the duplicate into the canonical event and retires the duplicate.
+
+Non-staff access denial lives in ``studio/tests/test_event_duplicates.py``
+(``TestNonStaffBlocked.test_member_gets_403``).
 
 Usage:
     uv run pytest playwright_tests/test_studio_event_duplicates.py -v
@@ -135,22 +137,4 @@ class TestPreviewThenConfirm:
         assert status == "cancelled"
         assert published is False
 
-        context.close()
-
-
-@pytest.mark.django_db(transaction=True)
-class TestNonStaffBlocked:
-    """A non-staff member cannot reach the duplicates tool."""
-
-    def test_member_gets_403(self, django_server, browser):
-        _ensure_tiers()
-        staff_email = "dup-gate-admin@test.com"
-        _create_staff_user(staff_email)
-        _create_user("plain@test.com", tier_slug="free")
-
-        context = _auth_context(browser, "plain@test.com")
-        response = context.request.get(
-            f"{django_server}/studio/events/duplicates/", max_redirects=0
-        )
-        assert response.status == 403
         context.close()

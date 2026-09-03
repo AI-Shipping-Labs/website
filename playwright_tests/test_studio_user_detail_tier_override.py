@@ -5,6 +5,10 @@ The standalone /studio/users/tier-override/ page is regression-locked
 in the last scenario: this issue ADDS an in-context surface, it must
 not change the standalone page's redirects or visible controls.
 
+Non-staff create-endpoint denial lives in
+``studio/tests/test_user_tier_override_inline.py``
+(``UserTierOverrideCreateEndpointTest.test_member_post_is_blocked``).
+
 Usage:
     uv run pytest playwright_tests/test_studio_user_detail_tier_override.py -v
 """
@@ -515,43 +519,5 @@ class TestTierSourceBadge:
         badge = page.locator('[data-testid="user-detail-tier-badge"]')
         assert badge.get_attribute('data-tier-source') == 'default'
         assert 'Default' in badge.inner_text()
-
-        context.close()
-
-
-@pytest.mark.django_db(transaction=True)
-class TestNonStaffCannotReachEndpoint:
-    """Non-staff users cannot POST to the inline override endpoint."""
-
-    def test_member_post_is_blocked(self, django_server, browser):
-        _ensure_tiers()
-        staff_email = 'gate-admin@test.com'
-        _create_staff_user(staff_email)
-        _clear_users_except_staff(staff_email)
-        _create_user('member@test.com', tier_slug='free')
-        _create_user('victim@test.com', tier_slug='free')
-        victim_pk = _user_id_for('victim@test.com')
-
-        from payments.models import Tier
-        main_id = Tier.objects.get(slug='main').pk
-        connection.close()
-
-        # Authenticate as a regular (non-staff) member.
-        context = _auth_context(browser, 'member@test.com')
-        csrf = _csrf_cookie(context)
-        response = context.request.post(
-            f'{django_server}/studio/users/{victim_pk}/tier_override/create',
-            form={
-                'csrfmiddlewaretoken': csrf,
-                'tier_id': str(main_id),
-                'duration': '1 month',
-            },
-            headers={'X-CSRFToken': csrf, 'Referer': django_server},
-            max_redirects=0,
-        )
-        # @staff_required: non-staff -> 403; anonymous -> login redirect.
-        # In either case, no TierOverride row may exist for victim.
-        assert response.status in (302, 303, 403)
-        assert _all_overrides('victim@test.com') == []
 
         context.close()

@@ -401,7 +401,8 @@ class UserTierOverrideCreateEndpointTest(_InlineOverrideTestBase):
             TierOverride.objects.filter(user=member).exists(),
         )
 
-    def test_non_staff_user_gets_403(self):
+    def test_member_post_is_blocked(self):
+        """Relocated from Playwright TestNonStaffCannotReachEndpoint.test_member_post_is_blocked (#1484)."""
         self.client.logout()
         member = self._make_member('victim@test.com', tier=self.free)
         regular = User.objects.create_user(

@@ -204,6 +204,18 @@ class UploadAccessTest(_ConfigCleanupMixin, TestCase):
             with self.subTest(url=url):
                 self.assertEqual(self.client.post(url).status_code, 403)
 
+    def test_non_staff_cannot_upload(self):
+        """Relocated from Playwright TestCustomBannerPanel.test_non_staff_cannot_upload (#1484)."""
+        article = _make_article()
+        self.client.login(email='user@test.com', password='pw')
+        response = self.client.post(
+            f'/studio/articles/{article.pk}/upload-banner',
+            {'banner_image': _png('b.png', size=512)},
+        )
+        self.assertEqual(response.status_code, 403)
+        article.refresh_from_db()
+        self.assertEqual(article.custom_banner_url, '')
+
     def test_non_staff_remove_returns_403(self):
         self.client.login(email='user@test.com', password='pw')
         for content_type, record, url_name, id_kwarg, _ in _remove_cases():

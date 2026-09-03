@@ -1,9 +1,9 @@
 """View + flow tests for the Studio duplicate-event merge tool (issue #881).
 
 Covers the confirm-token guard (a tampered/stale token is refused and no merge
-happens), the preview-is-a-no-op guarantee, the staff gate, and the
-end-to-end-on-the-server preview->confirm path including the duplicate
-disappearing from the public events surfaces.
+happens), the preview-is-a-no-op guarantee, the non-staff 403 gate with no
+merge side effect, and the end-to-end-on-the-server preview->confirm path
+including the duplicate disappearing from the public events surfaces.
 """
 
 import datetime as dt
@@ -58,13 +58,23 @@ class DuplicatesListTest(TestCase):
         self.assertContains(response, 'data-testid="event-duplicates-empty"')
 
 
-class StaffGateTest(TestCase):
-    def test_non_staff_blocked(self):
-        client = Client()
+class TestNonStaffBlocked(TestCase):
+    """Relocated from Playwright TestNonStaffBlocked.test_member_gets_403 (#1484)."""
+
+    def test_member_gets_403(self):
         User.objects.create_user(email="member@test.com", password="x")
+        canonical = _studio_event()
+        duplicate = _github_event()
+        client = Client()
         client.login(email="member@test.com", password="x")
         response = client.get("/studio/events/duplicates/")
         self.assertEqual(response.status_code, 403)
+        duplicate.refresh_from_db()
+        canonical.refresh_from_db()
+        self.assertEqual(duplicate.status, "completed")
+        self.assertTrue(duplicate.published)
+        self.assertEqual(canonical.status, "upcoming")
+        self.assertTrue(canonical.published)
 
 
 class PreviewIsNoOpTest(TestCase):

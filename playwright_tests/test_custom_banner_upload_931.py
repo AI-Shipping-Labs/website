@@ -13,8 +13,11 @@ user-visible flows that do not require AWS:
 - removing a custom banner to fall back to the generated one (best-effort
   delete swallows the absent-AWS error);
 - the disabled-when-unconfigured upload control;
-- a non-staff member being blocked from the upload endpoint;
 - regenerate + custom upload coexisting (custom wins).
+
+Non-staff upload denial lives in
+``studio/tests/test_banner_upload_views.py``
+(``UploadAccessTest.test_non_staff_cannot_upload``).
 """
 
 import datetime as dt
@@ -27,9 +30,6 @@ from playwright_tests.conftest import (
 )
 from playwright_tests.conftest import (
     create_staff_user as _create_staff_user,
-)
-from playwright_tests.conftest import (
-    create_user as _create_user,
 )
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
@@ -367,33 +367,6 @@ class TestCustomBannerPanel:
     # the disabled state is intentionally not re-tested here. This mirrors
     # the existing banner-generator Playwright suite, which also leaves the
     # disabled Regenerate state to Django tests.
-
-    @pytest.mark.core
-    def test_non_staff_cannot_upload(self, django_server, browser):
-        _reset_state()
-        _ensure_tiers()
-        _enable_uploads()
-        _create_user(email="cb-member@test.com")
-        article = _create_article("cb-member", "CB Member")
-
-        context = _auth_context(browser, "cb-member@test.com")
-        page = context.new_page()
-        response = page.request.post(
-            f"{django_server}/studio/articles/{article.pk}/upload-banner",
-            multipart={
-                "banner_image": {
-                    "name": "b.png",
-                    "mimeType": "image/png",
-                    "buffer": _png_bytes(512),
-                },
-            },
-        )
-        # staff_required blocks non-staff (403) or redirects to login.
-        assert response.status in (302, 403) or "/accounts/login" in response.url
-
-        article.refresh_from_db()
-        assert article.custom_banner_url == ""
-        connection.close()
 
     @pytest.mark.core
     def test_regenerate_and_custom_upload_coexist(

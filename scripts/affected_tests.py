@@ -172,6 +172,21 @@ FOCUSED_CONTRACT_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ("tests.test_playwright_owner_inventory",),
     ),
     ("tests/playwright_owner_inventory_live.json", ("tests.test_playwright_owner_inventory",)),
+    (
+        "entrypoint.sh",
+        ("jobs.tests.test_entrypoint_compose_dispatch",),
+    ),
+    (
+        "docker-compose.yml",
+        ("jobs.tests.test_entrypoint_compose_dispatch",),
+    ),
+    (
+        "Dockerfile",
+        (
+            "jobs.tests.test_entrypoint_compose_dispatch",
+            "tests.test_tailwind_build",
+        ),
+    ),
 )
 
 #: Rule 3. Contract surfaces: files that are not app source but that a real

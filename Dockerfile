@@ -40,9 +40,11 @@ RUN chmod +x entrypoint.sh
 
 EXPOSE 8000
 
-# entrypoint.sh delegates to scripts/entrypoint_init.py, which imports
-# Django settings ONCE, runs migrate / check, then spawns gunicorn (web)
-# or qcluster (worker) in the same Python process. The django_q_cache
-# table is created by an email_app migration during migrate, not as a
-# separate boot step. No CMD — the entrypoint does not consume "$@".
+# entrypoint.sh execs "$@" when Compose / docker run supply a command.
+# With empty argv (ECS web/worker/predeploy) it delegates to
+# scripts/entrypoint_init.py, which imports Django settings ONCE, runs
+# migrate / check, then spawns gunicorn (web) or qcluster (worker) in the
+# same Python process. The django_q_cache table is created by an
+# email_app migration during migrate, not as a separate boot step.
+# No CMD — Compose supplies command:; ECS relies on empty argv.
 ENTRYPOINT ["/app/entrypoint.sh"]

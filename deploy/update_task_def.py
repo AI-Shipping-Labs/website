@@ -129,17 +129,15 @@ def _serving_boot_check_enabled_for_env(deploy_env):
 def _ensure_worker_sidecar(containers):
     # Combined-role task: web + worker share one ECS task. Clone the web
     # container so image, secrets, and log config stay in sync — only
-    # name, command, port mappings, and essential flag differ.
+    # name, port mappings, and essential flag differ.
     #
-    # ``command`` is set here for ECS console readability only. The
-    # Dockerfile sets ENTRYPOINT to ``scripts/entrypoint_init.py`` without
-    # consuming ``$@``, so the actual web/worker/predeploy dispatch is driven
-    # by the ``BOOT_MODE`` env var (``web`` on the essential container,
-    # ``worker`` on this sidecar; ``predeploy`` is a run-task override).
-    # ``RUN_MIGRATIONS`` is kept only for the legacy BOOT_MODE-absent
-    # fallback. If you need to change worker behaviour, edit
-    # ``scripts/entrypoint_init.py`` — editing this command field has no
-    # runtime effect.
+    # Do not set ``command``. ``entrypoint.sh`` execs arguments when present
+    # (local Compose). ECS serving containers must start with empty argv so
+    # ``scripts/entrypoint_init.py`` can dispatch on ``BOOT_MODE`` (``web``
+    # on the essential container, ``worker`` on this sidecar; ``predeploy``
+    # is a run-task env override). ``RUN_MIGRATIONS`` is kept only for the
+    # legacy BOOT_MODE-absent fallback. If you need to change worker
+    # behaviour, edit ``scripts/entrypoint_init.py``.
     if any(c["name"].endswith("-worker") for c in containers):
         return
 
@@ -147,7 +145,7 @@ def _ensure_worker_sidecar(containers):
     worker = copy.deepcopy(web)
     worker["name"] = f"{web['name']}-worker"
     worker["essential"] = False
-    worker["command"] = ["uv", "run", "python", "manage.py", "qcluster"]
+    worker.pop("command", None)
     worker["portMappings"] = []
     containers.append(worker)
 
@@ -195,6 +193,11 @@ def update_task_definition(
             if "image" in container_def:
                 base_image, _ = container_def["image"].split(":")
                 container_def["image"] = f"{base_image}:{new_tag}"
+
+            # Issue #1510: entrypoint.sh honors argv. Drop leftover ECS
+            # command fields so serving tasks keep the empty-argv
+            # BOOT_MODE / RUN_MIGRATIONS path instead of exec'ing qcluster.
+            container_def.pop("command", None)
 
             environment = container_def.get("environment", [])
             _set_env_var(environment, "VERSION", new_tag)

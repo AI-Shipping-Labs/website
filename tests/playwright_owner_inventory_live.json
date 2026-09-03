@@ -2248,11 +2248,6 @@
     "playwright_tests/test_workshops_mobile_512.py::test_tablet_archive_keeps_all_recordings_reachable"
   ],
   "LEGACY_NON_BROWSER": {
-    "playwright_tests/test_book_club_summary_notifications_1374.py::TestAdminApi::test_admin_publish_observable_and_idempotent": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
-      "relocation": "bookclub/tests/"
-    },
     "playwright_tests/test_browser_lifecycle_1418.py::test_cleanup_attempts_every_context_and_aggregates_all_errors": {
       "category": "browser-lifecycle",
       "reason": "Exercises Playwright fixture cleanup policy without owning a rendered-page journey.",

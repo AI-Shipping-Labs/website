@@ -242,6 +242,50 @@ class BookPublishApiTest(SummaryNotificationsFixture):
         self.assertEqual(_count(self.member), 1)
 
 
+CHAPTER_SUMMARY_TITLE = 'New chapter summary: Inference Engineering (Ch. 0)'
+
+
+@tag("core")
+class AdminPublishApiTest(SummaryNotificationsFixture):
+    """Relocated from Playwright ``TestAdminApi`` (issue #1478).
+
+    Owns authenticated staff publication via the admin token API, member
+    observability through ``GET /api/notifications``, and re-PATCH
+    idempotency. This is the authoritative owner for that contract.
+    """
+
+    def test_admin_publish_observable_and_idempotent(self):
+        path = '/api/books/inference-engineering/chapters/0'
+        payload = {'summary': 'Chapter takeaway.', 'summary_published': True}
+
+        published = self._api_patch(path, payload).json()
+        self.assertEqual(published['summary'], 'Chapter takeaway.')
+        self.assertTrue(published['summary_published'])
+
+        member_client = self.client_class()
+        member_client.force_login(self.member)
+        listed = member_client.get('/api/notifications').json()
+        titles = [note['title'] for note in listed['notifications']]
+        self.assertIn(CHAPTER_SUMMARY_TITLE, titles)
+        urls = [
+            note['url'] for note in listed['notifications']
+            if note['title'] == CHAPTER_SUMMARY_TITLE
+        ]
+        self.assertTrue(urls)
+        self.assertTrue(all('#summary' in url for url in urls))
+
+        republished = self._api_patch(path, payload).json()
+        self.assertTrue(republished['summary_published'])
+        self.assertEqual(
+            Notification.objects.filter(
+                user=self.member,
+                notification_type='bookclub_summary',
+                title=CHAPTER_SUMMARY_TITLE,
+            ).count(),
+            1,
+        )
+
+
 @tag("core")
 class EmailAudienceTest(SummaryNotificationsFixture):
     def test_email_audience_applies_every_exclusion(self):

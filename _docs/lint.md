@@ -2,11 +2,20 @@
 
 The project runs two Ruff layers: a small mandatory blocking gate, and an
 expanded advisory report that stages candidate rules before they become
-blocking. The blocking gate is:
+blocking. Locally the blocking gate is:
 
 ```bash
 make lint
 ```
+
+That target is `uv run ruff check .` against the default `pyproject.toml`
+profile (`F`, `I`, and `PLC0415`). The shipping gate is the same command in
+Deploy Dev job `checks` (`.github/workflows/deploy-dev.yml`), which runs on
+every push to `main`. A Ruff failure fails `checks` and therefore skips the
+image build because `deploy` needs `checks`. The pull-request workflow
+(`.github/workflows/ci.yml`) still runs `Lint (ruff)` for actual PRs, but
+this repo ships by local merge plus a push to `main`, so Deploy Dev `checks`
+is the gate that can block a release.
 
 Run the staged report locally with:
 

@@ -563,6 +563,9 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_sprint_roster_activity_1202.py::"
         "test_staff_token_reads_roster_activity_api",
     })
+    slack_live_owner = (
+        "playwright_tests/test_slack_integration.py::test_post_slack_announcement_real"
+    )
     migrated_owner = "playwright_tests/test_dev_smoke_sitemap.py::test_sitemap_xml_is_served"
     campaign_owner = (
         "playwright_tests/test_studio_campaigns.py::"
@@ -630,8 +633,11 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
             self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
             self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
+        self.assertNotIn(self.slack_live_owner, manifest["LEGACY_NON_BROWSER"])
+        self.assertNotIn(self.slack_live_owner, manifest["LEGACY_DECLARED_BROWSER"])
+        self.assertIn(self.slack_live_owner, LEGACY_NON_BROWSER_CEILING)
         self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2246)
-        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 77)
+        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 76)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
 
@@ -655,8 +661,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2561)
-        self.assertEqual(len(inventory.owners), 2341)
+        self.assertEqual(inventory.item_count, 2560)
+        self.assertEqual(len(inventory.owners), 2340)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

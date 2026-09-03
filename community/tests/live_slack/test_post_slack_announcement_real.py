@@ -1,17 +1,22 @@
-"""
-Playwright/pytest integration test for real Slack posting (Issue #120).
+"""Live Slack announcement contract (relocated from Playwright, issue #1480).
 
 Posts a test message to the #integration-tests channel (C0AHN84QNP3)
-using post_slack_announcement(), verifies the chat.postMessage response
-confirms success, then deletes the message via chat.delete.
+using ``post_slack_announcement()``, verifies the ``chat.postMessage``
+response confirms success, then deletes the message via ``chat.delete``.
 
-Skipped when SLACK_BOT_TOKEN env var is not set.
+This is not a hermetic Django unit test. It is skipped unless the
+operator opts in *and* Slack credentials are present. It is not part of
+default Django, Playwright, or deploy gates.
 
-Usage:
-    uv run pytest playwright_tests/test_slack_integration.py -v
+Usage::
+
+    make test-live-slack-announcement
 """
 
+from __future__ import annotations
+
 import os
+import re
 from unittest.mock import patch
 
 import pytest
@@ -21,11 +26,20 @@ from django.conf import settings
 from notifications.services.slack_announcements import post_slack_announcement
 
 DEFAULT_SLACK_TEST_CHANNEL = "C0AHN84QNP3"
+LIVE_SLACK_ANNOUNCEMENT_OPT_IN_ENV = "RUN_LIVE_SLACK_ANNOUNCEMENT"
 
-# Skip the entire module if SLACK_BOT_TOKEN is not available in env.
-# Issue #656: this module also posts to real Slack and must not run
-# against the deployed dev environment (tagged ``local_only``).
+_TOKEN_RE = re.compile(r"xox[a-zA-Z]?-[A-Za-z0-9-]+")
+_BEARER_RE = re.compile(r"(?i)Bearer\s+\S+")
+
 pytestmark = [
+    pytest.mark.live_slack_announcement,
+    pytest.mark.skipif(
+        os.environ.get(LIVE_SLACK_ANNOUNCEMENT_OPT_IN_ENV) != "1",
+        reason=(
+            "Live Slack announcement test is opt-in; run "
+            "`make test-live-slack-announcement`"
+        ),
+    ),
     pytest.mark.skipif(
         not os.environ.get("SLACK_BOT_TOKEN")
         or not os.environ.get("SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID"),
@@ -34,8 +48,14 @@ pytestmark = [
             "set; skipping real Slack integration test"
         ),
     ),
-    pytest.mark.local_only,
 ]
+
+
+def secret_safe_text(value: object) -> str:
+    """Return ``value`` with Slack tokens and bearer credentials redacted."""
+    text = "" if value is None else str(value)
+    text = _BEARER_RE.sub("Bearer [redacted]", text)
+    return _TOKEN_RE.sub("[redacted]", text)
 
 
 class _FakeContent:
@@ -53,7 +73,6 @@ class _FakeContent:
 def test_post_slack_announcement_real():
     """Post a real message to the Slack #integration-tests channel, verify, and delete it."""
 
-    # Temporarily set real Slack credentials from env vars
     original_token = settings.SLACK_BOT_TOKEN
     original_channel = settings.SLACK_ANNOUNCEMENTS_CHANNEL_ID
     original_env = settings.SLACK_ENVIRONMENT
@@ -63,16 +82,17 @@ def test_post_slack_announcement_real():
 
     assert test_channel == DEFAULT_SLACK_TEST_CHANNEL, (
         "Real Slack integration tests must target #integration-tests "
-        f"({DEFAULT_SLACK_TEST_CHANNEL}), got {test_channel}"
+        f"({DEFAULT_SLACK_TEST_CHANNEL}), got {secret_safe_text(test_channel)}"
     )
 
-    # We need to capture the chat.postMessage response to get the message
-    # timestamp (ts) for deletion. Wrap requests.post to intercept it.
     captured_responses = []
     original_requests_post = requests.post
 
     def _capturing_post(*args, **kwargs):
-        response = original_requests_post(*args, **kwargs)
+        try:
+            response = original_requests_post(*args, **kwargs)
+        except Exception as exc:
+            raise AssertionError(secret_safe_text(exc)) from None
         url = args[0] if args else kwargs.get("url", "")
         if "chat.postMessage" in str(url):
             captured_responses.append(response.json())
@@ -84,31 +104,31 @@ def test_post_slack_announcement_real():
         settings.SLACK_BOT_TOKEN = env_token
         settings.SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID = test_channel
 
-        # Post a message using the real function, capturing the API response
         content = _FakeContent(
             title="Integration Test Message",
             description="Automated test - this message will be deleted shortly.",
         )
-        with patch("notifications.services.slack_announcements.requests.post",
-                    side_effect=_capturing_post):
+        with patch(
+            "notifications.services.slack_announcements.requests.post",
+            side_effect=_capturing_post,
+        ):
             result = post_slack_announcement("article", content)
 
-        # Verify post_slack_announcement returned success
         assert result is True, "post_slack_announcement() should return True on success"
 
-        # Verify the Slack API response confirmed the message was posted
         assert len(captured_responses) == 1, (
             f"Expected 1 captured chat.postMessage response, got {len(captured_responses)}"
         )
         post_data = captured_responses[0]
         assert post_data.get("ok") is True, (
-            f"chat.postMessage response was not ok: {post_data.get('error', 'unknown')}"
+            "chat.postMessage response was not ok: "
+            f"{secret_safe_text(post_data.get('error', 'unknown'))}"
         )
         assert post_data.get("channel") == test_channel, (
-            f"Message posted to wrong channel: {post_data.get('channel')}"
+            "Message posted to wrong channel: "
+            f"{secret_safe_text(post_data.get('channel'))}"
         )
 
-        # The response contains the message text in the fallback
         message = post_data.get("message", {})
         assert "Integration Test Message" in message.get("text", ""), (
             "Posted message text does not contain expected content"
@@ -117,26 +137,28 @@ def test_post_slack_announcement_real():
         message_ts = post_data.get("ts") or message.get("ts")
         assert message_ts, "Could not extract message timestamp from response"
 
-        # Delete the test message to keep the channel clean
-        delete_response = requests.post(
-            "https://slack.com/api/chat.delete",
-            json={
-                "channel": test_channel,
-                "ts": message_ts,
-            },
-            headers={
-                "Authorization": f"Bearer {env_token}",
-                "Content-Type": "application/json; charset=utf-8",
-            },
-            timeout=10,
-        )
+        try:
+            delete_response = requests.post(
+                "https://slack.com/api/chat.delete",
+                json={
+                    "channel": test_channel,
+                    "ts": message_ts,
+                },
+                headers={
+                    "Authorization": f"Bearer {env_token}",
+                    "Content-Type": "application/json; charset=utf-8",
+                },
+                timeout=10,
+            )
+        except Exception as exc:
+            raise AssertionError(secret_safe_text(exc)) from None
         delete_data = delete_response.json()
         assert delete_data.get("ok"), (
-            f"chat.delete failed: {delete_data.get('error', 'unknown')}"
+            "chat.delete failed: "
+            f"{secret_safe_text(delete_data.get('error', 'unknown'))}"
         )
 
     finally:
-        # Restore original settings
         settings.SLACK_ENABLED = False
         settings.SLACK_ENVIRONMENT = original_env
         settings.SLACK_BOT_TOKEN = original_token

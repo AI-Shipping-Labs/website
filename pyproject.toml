@@ -47,6 +47,7 @@ markers = [
     "local_only: requires the local Django runner (DB fixtures, session-cookie injection, in-process auth) and cannot run against a deployed environment (dev/prod). Skipped automatically when PLAYWRIGHT_BASE_URL points at a non-local host.",
     "creates_data: writes real rows on submission (newsletter signup, project submit, register form, etc.) and must not run against a shared dev DB. Skipped automatically when PLAYWRIGHT_BASE_URL points at a non-local host.",
     "live_judge: live LLM-judge scenario tests (tests/live_judge/) that hit the real configured provider; opt-in via `make test-judge`, never collected by default CI, and skipped when no LLM key is configured. See _docs/testing-guidelines.md.",
+    "live_slack_announcement: live Slack announcement integration (community/tests/live_slack/) that posts to the real #integration-tests channel; opt-in via `make test-live-slack-announcement`, never collected by default Django/Playwright/CI gates, and skipped without credentials. See _docs/testing-guidelines.md.",
 ]
 
 [tool.coverage.run]

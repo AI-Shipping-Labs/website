@@ -1918,3 +1918,34 @@ assistant's own `LLM_MODEL`.
 This set must not emit to Logfire. #813 owns the actual prod-only gating;
 the live-judge conftest inherits it and additionally asserts that no
 Logfire / OpenTelemetry span exporter is active during a run.
+
+## Live Slack announcement test (`make test-live-slack-announcement`)
+
+A SEPARATE, opt-in live-integration target for the real Slack
+announcement contract (`post_slack_announcement`). Relocated from
+Playwright `test_post_slack_announcement_real` (issue #1480). It posts a
+test message to `#integration-tests` and deletes it. It is not a hermetic
+Django unit test and is not part of the Playwright suite.
+
+### Location, marker, and CI isolation
+
+- The live contract lives in `community/tests/live_slack/` as a pytest
+  function, not a Django `TestCase`, so `manage.py test` never runs it.
+- It is outside `playwright_tests/`, so Playwright and deploy Playwright
+  legs never collect it.
+- The test carries `pytest.mark.live_slack_announcement`.
+- It skips unless `RUN_LIVE_SLACK_ANNOUNCEMENT=1` **and**
+  `SLACK_BOT_TOKEN` plus `SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID` are set.
+- Failure text redacts Slack tokens and `Bearer` credentials.
+
+### How to run
+
+```bash
+# Posts to the real #integration-tests channel, then deletes the message:
+make test-live-slack-announcement
+```
+
+The make target is referenced by no CI workflow and by no other make
+target (`test`, `test-core`, `test-all`, `test-playwright`). Without
+opt-in or credentials, the target reports a skip and makes zero Slack
+calls. Do not treat a skipped run as live delivery evidence.

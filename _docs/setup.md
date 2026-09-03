@@ -168,9 +168,11 @@ Staff can review scheduled import history in Studio at `/studio/imports/`. Super
 
 Why DatabaseCache: the application database is the only thing every web and worker process is guaranteed to share, in every deployment topology — local SQLite, multi-container ECS, future hosts. No extra infrastructure (Redis, EFS) needed. The latency cost (one query per heartbeat read) is negligible at the dashboard's request rate.
 
-We deliberately do not use Redis: avoiding the operational dependency is a product decision.
+We deliberately do not use Redis: avoiding the operational dependency is a product decision. Do not add Redis, Memcached, or another cache service for request-path helpers.
 
-If you change `CACHES`, also keep `Q_CLUSTER['cache']` pointing at the same named cache. The wiring is asserted in `studio/tests/test_worker_health_cache.py::DjangoQCacheWiringTest`.
+Request-path helpers (`get_config` / `is_enabled` / `site_base_url`, announcement banner, active redirects, public downloads nav, marketing-page nav) must not treat a `DatabaseCache` GET as free. Every GET is SQL. Those helpers read through `integrations.shared_cache`, which memoizes the shared-cache GET per request and with a bounded in-process TTL of at most 5 seconds. `DatabaseCache` remains the cross-process source of truth for django-q heartbeats and for publishing invalidation. Studio saves become visible to other processes no later than that TTL.
+
+If you change `CACHES`, also keep `Q_CLUSTER['cache']` pointing at the same named cache. The wiring is asserted in `studio/tests/test_worker_health_cache.py::DjangoQCacheWiringTest`. Query-budget tests that count SQL against the cache table must force `DatabaseCache`; LocMem hides the amplification.
 
 ## Run the app
 

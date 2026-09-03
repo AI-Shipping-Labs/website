@@ -16,10 +16,12 @@ serving stale values until they restart. To make a save visible
 everywhere we publish a short stamp into the shared ``caches['django_q']``
 DatabaseCache (already on every host that talks to the application DB —
 see ``website.settings`` CACHES). Each process records the stamp it saw
-when it last read the DB; on every ``get_config()`` call we re-read the
-shared stamp and, if it changed, repopulate the in-process cache from
-the DB. That costs one cache GET per ``get_config()`` call and zero
-extra DB queries when nothing has changed.
+when it last read the DB; ``get_config()`` re-reads the stamp (via the
+request-path memo in ``integrations.shared_cache``, TTL ≤ 5s) and, if
+it changed, repopulates the in-process cache from the DB. A warm
+request therefore pays at most one stamp GET, not one GET per
+``get_config()`` call, and zero ``IntegrationSetting`` queries when
+nothing has changed.
 
 The stamp is intentionally opaque (a random uuid hex). We never compare
 the value, only "is it the same string we recorded last time".
@@ -37,8 +39,9 @@ from django.core.validators import validate_email
 from django.db import DatabaseError
 from django.test.testcases import DatabaseOperationForbidden
 
+from integrations.shared_cache import get_shared_cache, set_shared_cache
+
 _STAMP_CACHE_KEY = 'integration_settings_stamp'
-_STAMP_CACHE_ALIAS = 'django_q'
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +78,9 @@ def get_config(key, default='', *, use_settings=True):
         # The in-process cache thinks it's fresh — but another process
         # may have written via clear_config_cache() since we last read.
         # Compare the published stamp with the one we recorded during
-        # _populate_cache() and repopulate if they differ.
+        # _populate_cache() and repopulate if they differ. The stamp
+        # read is memoized per request / local TTL so N get_config()
+        # calls do not each hit DatabaseCache.
         current_stamp = _read_stamp()
         if current_stamp is not None and current_stamp != _cache_stamp:
             _populate_cache()
@@ -283,8 +288,7 @@ def _read_stamp():
     treat it as "no change" and let the in-process cache stand.
     """
     try:
-        from django.core.cache import caches  # noqa: PLC0415
-        return caches[_STAMP_CACHE_ALIAS].get(_STAMP_CACHE_KEY)
+        return get_shared_cache(_STAMP_CACHE_KEY)
     except _CACHE_STAMP_EXCEPTIONS:
         logger.debug(
             'Unable to read integration settings cache stamp',
@@ -347,8 +351,7 @@ def clear_config_cache():
     """
     reset_local_config_cache()
     try:
-        from django.core.cache import caches  # noqa: PLC0415
-        caches[_STAMP_CACHE_ALIAS].set(_STAMP_CACHE_KEY, uuid.uuid4().hex)
+        set_shared_cache(_STAMP_CACHE_KEY, uuid.uuid4().hex)
     except _CACHE_STAMP_EXCEPTIONS:
         # If the shared cache is unreachable we still cleared in-process
         # state, so the calling process at least sees fresh values.

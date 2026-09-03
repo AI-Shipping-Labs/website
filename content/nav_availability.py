@@ -1,12 +1,15 @@
 """Cached public navigation availability flags for content surfaces."""
 
 from django.apps import apps
-from django.core.cache import caches
 from django.core.cache.backends.base import InvalidCacheBackendError
 from django.core.exceptions import ImproperlyConfigured
 from django.db import DatabaseError
 
-_CACHE_ALIAS = 'django_q'
+from integrations.shared_cache import (
+    get_shared_cache,
+    set_shared_cache,
+)
+
 _PUBLIC_DOWNLOADS_CACHE_KEY = 'content:public_downloads_available:v1'
 _MARKETING_NAV_CACHE_KEY = 'content:marketing_nav:v1'
 _MARKETING_NAV_SECTIONS = ('about', 'community', 'resources')
@@ -18,14 +21,14 @@ _marketing_nav = _UNSET
 
 def _read_shared_flag():
     try:
-        return caches[_CACHE_ALIAS].get(_PUBLIC_DOWNLOADS_CACHE_KEY, _UNSET)
+        return get_shared_cache(_PUBLIC_DOWNLOADS_CACHE_KEY, _UNSET)
     except (InvalidCacheBackendError, ImproperlyConfigured, DatabaseError):
         return _UNSET
 
 
 def _write_shared_flag(value):
     try:
-        caches[_CACHE_ALIAS].set(_PUBLIC_DOWNLOADS_CACHE_KEY, bool(value), None)
+        set_shared_cache(_PUBLIC_DOWNLOADS_CACHE_KEY, bool(value), None)
     except (InvalidCacheBackendError, ImproperlyConfigured, DatabaseError):
         pass
 
@@ -43,14 +46,14 @@ def _normalize_marketing_nav(nav):
 
 def _read_shared_marketing_nav():
     try:
-        return caches[_CACHE_ALIAS].get(_MARKETING_NAV_CACHE_KEY, _UNSET)
+        return get_shared_cache(_MARKETING_NAV_CACHE_KEY, _UNSET)
     except (InvalidCacheBackendError, ImproperlyConfigured, DatabaseError):
         return _UNSET
 
 
 def _write_shared_marketing_nav(value):
     try:
-        caches[_CACHE_ALIAS].set(
+        set_shared_cache(
             _MARKETING_NAV_CACHE_KEY,
             _normalize_marketing_nav(value),
             None,

@@ -165,16 +165,3 @@ def test_legacy_redirect_keeps_gated_workshop_destination_authoritative(
         assert raw_recording_url not in page.content()
     finally:
         context.close()
-
-
-@pytest.mark.django_db(transaction=True)
-def test_unmapped_legacy_recording_is_a_genuine_404(django_server, page):
-    _clear_recordings()
-
-    response = page.request.get(
-        f'{django_server}/event-recordings/does-not-exist',
-        max_redirects=0,
-    )
-
-    assert response.status == 404
-    assert 'location' not in response.headers

@@ -2423,20 +2423,10 @@
       "reason": "Exercises an HTTP response or calendar payload without rendering or navigating a browser page.",
       "relocation": "events/tests/"
     },
-    "playwright_tests/test_legacy_recording_redirects_1381.py::test_unmapped_legacy_recording_is_a_genuine_404": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
-      "relocation": "content/tests/"
-    },
     "playwright_tests/test_member_api_keys_1111.py::TestMemberAPIKeysAccountUI::test_skill_directory_exists_in_repo": {
       "category": "repository-static",
       "reason": "Checks repository files or pure response logic without a browser journey.",
       "relocation": "tests/"
-    },
-    "playwright_tests/test_search_indexing_policy_1379.py::test_trailing_slash_redirects_apply_noindex_only_to_private_targets": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
-      "relocation": "content/tests/"
     },
     "playwright_tests/test_studio_event_duplicates.py::TestNonStaffBlocked::test_member_gets_403": {
       "category": "api",

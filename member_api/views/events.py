@@ -21,7 +21,11 @@ from events.views.api import (
     _send_registration_emails,
     _series_response_fields,
 )
-from member_api.serializers.events import serialize_event_detail, serialize_event_summary
+from member_api.serializers.events import (
+    annotate_member_registration_state,
+    serialize_event_detail,
+    serialize_event_summary,
+)
 
 PAGE_SIZE = 20
 VALID_FILTERS = {"upcoming", "past"}
@@ -201,8 +205,12 @@ def _visible_events(user, event_filter):
     return queryset.filter(Q(external_host__gt="") | Q(required_level__lte=level))
 
 
-def _event_or_error(event_id):
-    event = _base_queryset().filter(pk=event_id).first()
+def _serialized_event_queryset(user):
+    return annotate_member_registration_state(_base_queryset(), user)
+
+
+def _event_or_error(event_id, user):
+    event = _serialized_event_queryset(user).filter(pk=event_id).first()
     if event is None or event.status == "draft":
         return None, error_response("Event not found", "event_not_found", status=404)
     if event.status == "cancelled" and not event.published:
@@ -271,7 +279,9 @@ def events_collection(request):
     queryset = _visible_events(request.user, event_filter)
     total = queryset.count()
     start = (page - 1) * PAGE_SIZE
-    events = list(queryset[start:start + PAGE_SIZE])
+    events = list(
+        annotate_member_registration_state(queryset, request.user)[start:start + PAGE_SIZE]
+    )
     return JsonResponse({
         "events": [serialize_event_summary(event, request.user) for event in events],
         "pagination": {
@@ -318,7 +328,7 @@ EVENT_DETAIL_OPENAPI = {
 @require_methods("GET")
 @openapi_spec(tag="Events", methods=EVENT_DETAIL_OPENAPI)
 def event_detail(request, event_id):
-    event, event_error = _event_or_error(event_id)
+    event, event_error = _event_or_error(event_id, request.user)
     if event_error is not None:
         return event_error
     if not _member_can_access(request.user, event):
@@ -378,7 +388,7 @@ EVENT_REGISTER_OPENAPI = {
 @require_methods("POST")
 @openapi_spec(tag="Events", methods=EVENT_REGISTER_OPENAPI)
 def event_register(request, event_id):
-    event, event_error = _event_or_error(event_id)
+    event, event_error = _event_or_error(event_id, request.user)
     if event_error is not None:
         return event_error
     if not _member_can_access(request.user, event):
@@ -439,7 +449,7 @@ def event_register(request, event_id):
     )
     mark_activated(request.user)
     _send_registration_emails(request.user, event, registration, series_summary)
-    event = _base_queryset().get(pk=event.pk)
+    event = _serialized_event_queryset(request.user).get(pk=event.pk)
     response = serialize_event_detail(event, request.user)
     response.update({
         "registration_status": "registered",

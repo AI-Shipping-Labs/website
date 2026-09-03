@@ -24,7 +24,6 @@ import os
 import pytest
 from django.utils import timezone
 from playwright.sync_api import expect
-from scripts.browser_journey_policy import browser_journey
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -32,6 +31,7 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -817,8 +817,6 @@ class TestScenario10StudioTimestampEditor:
             f"{django_server}/workshops/{url_key}/video",
             wait_until="domcontentloaded",
         )
-
-        body = page.content()
 
         # Expand the collapsed Chapters disclosure (#361)
         page.evaluate(

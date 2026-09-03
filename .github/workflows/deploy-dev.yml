@@ -72,6 +72,18 @@ jobs:
           end=$(date +%s)
           echo "CI_TIMING phase=uv_sync seconds=$((end - start))"
 
+      # Issue #1511: blocking Ruff lives in pyproject.toml and locally is
+      # `make lint` (`uv run ruff check .`). ci.yml already runs it on
+      # pull_request, but this repo ships by push to main, so the shipping
+      # gate is this one-time checks job. Advisory lint
+      # (`ruff-advisory.toml` / `--exit-zero`) stays off this path.
+      - name: Lint (ruff)
+        run: |
+          start=$(date +%s)
+          uv run ruff check .
+          end=$(date +%s)
+          echo "CI_TIMING phase=ruff_check seconds=$((end - start))"
+
       # Issues #787 and #1474: catch model/migration drift and rolling-deploy
       # unsafe NOT NULL AddField operations before deploy. Re-homed to
       # deploy-dev.yml (not ci.yml) for the same reason as the OpenAPI drift

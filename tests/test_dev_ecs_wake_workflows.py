@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import yaml
@@ -354,3 +355,60 @@ class DeployDevWakeWorkflowTest(SimpleTestCase):
         self.assertNotIn("wake-dev", prod_workflow)
         self.assertNotIn("./.github/actions/wake-dev-ecs", prod_workflow)
         self.assertNotIn("ai-shipping-labs-dev", prod_workflow)
+
+
+_BLOCKING_RUFF_RE = re.compile(r"(?:uv run ruff check \.|make lint(?:\s|$))")
+
+
+def _blocking_ruff_steps(job):
+    return [
+        step
+        for step in job.get("steps", [])
+        if _BLOCKING_RUFF_RE.search(step.get("run", ""))
+    ]
+
+
+@tag("core")
+class DeployDevRuffGateWorkflowTest(SimpleTestCase):
+    def test_deploy_dev_runs_blocking_ruff_in_checks_without_error_suppression(self):
+        workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)
+        checks_job = workflow["jobs"]["checks"]
+        ruff_steps = _blocking_ruff_steps(checks_job)
+
+        self.assertEqual(len(ruff_steps), 1)
+        step = ruff_steps[0]
+        command = step["run"]
+
+        self.assertEqual(step["name"], "Lint (ruff)")
+        self.assertIn("uv run ruff check .", command)
+        self.assertNotIn("ruff-advisory.toml", command)
+        self.assertNotIn("--exit-zero", command)
+        self.assertNotIn("--fix", command)
+        self.assertNotIn("continue-on-error", step)
+        self.assertFalse(step.get("continue-on-error", False))
+        self.assertNotIn("continue-on-error", checks_job)
+        self.assertFalse(checks_job.get("continue-on-error", False))
+        self.assertIn("checks", workflow["jobs"]["deploy"]["needs"])
+
+    def test_blocking_ruff_is_not_duplicated_onto_deploy_shards(self):
+        workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)
+
+        for job_name in ("test", "playwright-core", "postgres-verification"):
+            with self.subTest(job=job_name):
+                self.assertEqual(_blocking_ruff_steps(workflow["jobs"][job_name]), [])
+
+    def test_ci_workflow_still_runs_blocking_ruff_on_pull_requests(self):
+        workflow = _load_yaml(CI_WORKFLOW_PATH)
+        ruff_steps = _blocking_ruff_steps(workflow["jobs"]["checks"])
+
+        self.assertEqual(len(ruff_steps), 1)
+        self.assertEqual(ruff_steps[0]["name"], "Lint (ruff)")
+        self.assertIn("uv run ruff check .", ruff_steps[0]["run"])
+        self.assertNotIn("ruff-advisory.toml", ruff_steps[0]["run"])
+        self.assertNotIn("--exit-zero", ruff_steps[0]["run"])
+        self.assertNotIn("--fix", ruff_steps[0]["run"])
+
+    def test_make_lint_remains_blocking_ruff_check(self):
+        makefile = (REPO_ROOT / "Makefile").read_text()
+
+        self.assertRegex(makefile, r"(?m)^lint:\n\tuv run ruff check \.\n")

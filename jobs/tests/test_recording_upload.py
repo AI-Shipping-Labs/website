@@ -11,6 +11,8 @@ Covers:
 import hashlib
 import hmac
 import json
+import os
+import tempfile
 import time
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
@@ -56,6 +58,17 @@ class RecordingS3UrlFieldTest(TestCase):
             start_datetime=timezone.now(), status='completed',
         )
         self.assertEqual(recording.recording_s3_url, '')
+
+    def test_zoom_download_url_field_defaults_blank(self):
+        recording = Event.objects.create(
+            title='Zoom URL Test',
+            slug='zoom-url-test',
+            start_datetime=timezone.now(),
+            status='completed',
+        )
+        field = Event._meta.get_field('recording_zoom_download_url')
+        self.assertEqual(field.max_length, 1000)
+        self.assertEqual(recording.recording_zoom_download_url, '')
 
     def test_s3_url_stored(self):
         """s3_url can be set and retrieved."""
@@ -179,9 +192,11 @@ class UploadRecordingToS3Test(TestCase):
         self.assertEqual(result['status'], 'ok')
         self.assertIn('s3_url', result)
 
-        # Verify S3 upload was called
-        mock_s3.upload_fileobj.assert_called_once()
-        upload_call = mock_s3.upload_fileobj.call_args
+        # Verify S3 upload was called with a filesystem path, not BytesIO
+        self.assertEqual(mock_s3.upload_file.call_count, 1)
+        mock_s3.upload_fileobj.assert_not_called()
+        upload_call = mock_s3.upload_file.call_args
+        self.assertIsInstance(upload_call[0][0], str)
         # Check the bucket
         self.assertEqual(upload_call[0][1], 'test-recordings-bucket')
         # Check the key format: recordings/{year}/{slug}.mp4
@@ -455,7 +470,7 @@ class UploadRecordingToS3Test(TestCase):
         )
 
         # Verify key structure
-        upload_call = mock_s3.upload_fileobj.call_args
+        upload_call = mock_s3.upload_file.call_args
         key = upload_call[0][2]
         year = self.recording.start_datetime.date().year
         self.assertEqual(key, f'recordings/{year}/test-workshop.mp4')
@@ -507,6 +522,8 @@ class UploadRecordingToS3Test(TestCase):
                 self.recording.id,
                 'https://zoom.us/rec/download/fail',
             )
+        self.recording.refresh_from_db()
+        self.assertIsNotNone(self.recording.recording_upload_enqueued_at)
 
     @patch('jobs.tasks.recordings_s3.boto3.client')
     @patch('jobs.tasks.recording_upload.requests.get')
@@ -534,7 +551,7 @@ class UploadRecordingToS3Test(TestCase):
 
         # Mock S3 failure
         mock_s3 = MagicMock()
-        mock_s3.upload_fileobj.side_effect = ClientError(
+        mock_s3.upload_file.side_effect = ClientError(
             {'Error': {'Code': 'AccessDenied', 'Message': 'Forbidden'}},
             'PutObject',
         )
@@ -685,7 +702,7 @@ class UploadRecordingToS3Test(TestCase):
             aws_access_key_id='studio-access-key',
             aws_secret_access_key='studio-secret-key',
         )
-        upload_call = mock_s3.upload_fileobj.call_args
+        upload_call = mock_s3.upload_file.call_args
         self.assertEqual(upload_call[0][1], 'studio-recordings-bucket')
 
         self.recording.refresh_from_db()
@@ -772,6 +789,16 @@ class WebhookTriggersS3UploadJobTest(TestCase):
         # Third arg is the download URL
         self.assertEqual(
             call_args[0][2],
+            'https://zoom.us/rec/download/test',
+        )
+        q_options = call_args[1]['q_options']
+        self.assertEqual(q_options['timeout'], 900)
+        self.assertEqual(q_options['retry'], 960)
+        self.assertGreater(q_options['retry'], q_options['timeout'])
+        self.assertEqual(q_options['max_attempts'], 4)
+        recording.refresh_from_db()
+        self.assertEqual(
+            recording.recording_zoom_download_url,
             'https://zoom.us/rec/download/test',
         )
 
@@ -861,3 +888,351 @@ class S3RecordingsSettingsTest(TestCase):
         from django.conf import settings
         self.assertIsInstance(settings.AWS_S3_RECORDINGS_BUCKET, str)
         self.assertIsInstance(settings.AWS_S3_RECORDINGS_REGION, str)
+
+    def test_global_q_cluster_timeout_stays_300(self):
+        from django.conf import settings
+        self.assertEqual(settings.Q_CLUSTER['timeout'], 300)
+        self.assertLess(
+            settings.Q_CLUSTER['timeout'],
+            settings.Q_CLUSTER['retry'],
+        )
+
+
+class RecordingUploadStreamingTest(TestCase):
+    """Issue #1505: stream Zoom bytes to disk without buffering the MP4."""
+
+    def test_download_never_joins_chunks_and_stays_at_chunk_size(self):
+        from jobs.tasks.recording_upload import (
+            RECORDING_DOWNLOAD_CHUNK_SIZE,
+            _download_from_zoom,
+        )
+
+        chunks = [
+            b'a' * RECORDING_DOWNLOAD_CHUNK_SIZE,
+            b'b' * RECORDING_DOWNLOAD_CHUNK_SIZE,
+            b'c' * (RECORDING_DOWNLOAD_CHUNK_SIZE // 2),
+        ]
+        write_sizes = []
+        mock_response = MagicMock()
+        mock_response.iter_content.return_value = chunks
+        mock_response.raise_for_status = MagicMock()
+
+        original_open = open
+
+        def tracking_open(path, mode='r', *args, **kwargs):
+            handle = original_open(path, mode, *args, **kwargs)
+            if 'w' not in mode:
+                return handle
+            original_write = handle.write
+
+            def tracked_write(data):
+                write_sizes.append(len(data))
+                return original_write(data)
+
+            handle.write = tracked_write
+            return handle
+
+        dest = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        dest.close()
+        try:
+            with patch(
+                'jobs.tasks.recording_upload.requests.get',
+                return_value=mock_response,
+            ), patch('builtins.open', tracking_open):
+                written = _download_from_zoom(
+                    'https://zoom.us/rec/download/stream',
+                    dest.name,
+                )
+        finally:
+            os.unlink(dest.name)
+
+        self.assertEqual(written, sum(len(chunk) for chunk in chunks))
+        self.assertEqual(write_sizes, [len(chunk) for chunk in chunks])
+        self.assertLessEqual(max(write_sizes), RECORDING_DOWNLOAD_CHUNK_SIZE)
+        self.assertLess(max(write_sizes), sum(len(chunk) for chunk in chunks))
+        mock_response.iter_content.assert_called_once_with(
+            chunk_size=RECORDING_DOWNLOAD_CHUNK_SIZE,
+        )
+        self.assertEqual(mock_response.close.call_count, 1)
+
+    def test_http_response_closed_when_raise_for_status_fails(self):
+        import requests as req
+
+        from jobs.tasks.recording_upload import _download_from_zoom
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = req.HTTPError('nope')
+        dest = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        dest.close()
+        try:
+            with patch(
+                'jobs.tasks.recording_upload.requests.get',
+                return_value=mock_response,
+            ):
+                with self.assertRaises(req.HTTPError):
+                    _download_from_zoom(
+                        'https://zoom.us/rec/download/fail',
+                        dest.name,
+                    )
+        finally:
+            os.unlink(dest.name)
+        self.assertEqual(mock_response.close.call_count, 1)
+
+    def test_http_response_closed_when_chunk_iteration_fails(self):
+        from jobs.tasks.recording_upload import _download_from_zoom
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.iter_content.side_effect = RuntimeError('stream broke')
+        dest = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        dest.close()
+        try:
+            with patch(
+                'jobs.tasks.recording_upload.requests.get',
+                return_value=mock_response,
+            ):
+                with self.assertRaises(RuntimeError):
+                    _download_from_zoom(
+                        'https://zoom.us/rec/download/fail',
+                        dest.name,
+                    )
+        finally:
+            if os.path.exists(dest.name):
+                os.unlink(dest.name)
+        self.assertEqual(mock_response.close.call_count, 1)
+
+    def test_timeouts_are_aligned(self):
+        from django.conf import settings
+
+        from jobs.tasks.recording_upload import (
+            RECORDING_UPLOAD_HTTP_TIMEOUT_SECONDS,
+            RECORDING_UPLOAD_TASK_RETRY_SECONDS,
+            RECORDING_UPLOAD_TASK_TIMEOUT_SECONDS,
+        )
+
+        self.assertEqual(RECORDING_UPLOAD_TASK_TIMEOUT_SECONDS, 900)
+        self.assertEqual(RECORDING_UPLOAD_HTTP_TIMEOUT_SECONDS, 600)
+        self.assertEqual(RECORDING_UPLOAD_TASK_RETRY_SECONDS, 960)
+        self.assertLess(
+            RECORDING_UPLOAD_HTTP_TIMEOUT_SECONDS,
+            RECORDING_UPLOAD_TASK_TIMEOUT_SECONDS,
+        )
+        self.assertGreater(
+            RECORDING_UPLOAD_TASK_RETRY_SECONDS,
+            RECORDING_UPLOAD_TASK_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(settings.Q_CLUSTER['timeout'], 300)
+
+
+@override_settings(
+    AWS_S3_RECORDINGS_BUCKET='test-recordings-bucket',
+    AWS_S3_RECORDINGS_REGION='eu-central-1',
+    AWS_ACCESS_KEY_ID='test-key-id',
+    AWS_SECRET_ACCESS_KEY='test-secret-key',
+    ZOOM_CLIENT_ID=ZOOM_TEST_CLIENT_ID,
+    ZOOM_CLIENT_SECRET=ZOOM_TEST_CLIENT_SECRET,
+    ZOOM_ACCOUNT_ID=ZOOM_TEST_ACCOUNT_ID,
+)
+class RecordingUploadLeaseAndTempfileTest(TestCase):
+    def setUp(self):
+        from integrations.services import zoom
+        zoom.clear_token_cache()
+        clear_config_cache()
+        self.event = Event.objects.create(
+            title='Lease Workshop',
+            slug='lease-workshop',
+            start_datetime=timezone.now() - timedelta(hours=2),
+            end_datetime=timezone.now() - timedelta(hours=1),
+            timezone='Europe/Berlin',
+            zoom_meeting_id='22222222222',
+            status='completed',
+            recording_zoom_download_url='https://zoom.us/rec/download/lease',
+        )
+
+    def tearDown(self):
+        clear_config_cache()
+
+    def _token_response(self):
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'test-token',
+            'expires_in': 3600,
+        }
+        return token_response
+
+    def _download_response(self):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.iter_content.return_value = [b'fake-video-data']
+        mock_response.raise_for_status = MagicMock()
+        return mock_response
+
+    @patch('jobs.tasks.recordings_s3.boto3.client')
+    @patch('jobs.tasks.recording_upload.requests.get')
+    @patch('integrations.services.zoom.requests.post')
+    def test_attempt_refreshes_lease_and_deletes_tempfile(
+        self, mock_zoom_post, mock_requests_get, mock_boto_client,
+    ):
+        from jobs.tasks.recording_upload import upload_recording_to_s3
+
+        mock_zoom_post.return_value = self._token_response()
+        mock_requests_get.return_value = self._download_response()
+        mock_s3 = MagicMock()
+        captured = {}
+
+        def capture_upload(path, bucket, key, ExtraArgs=None):
+            captured['path'] = path
+            captured['existed'] = os.path.exists(path)
+            captured['payload'] = open(path, 'rb').read()
+
+        mock_s3.upload_file.side_effect = capture_upload
+        mock_boto_client.return_value = mock_s3
+        stale = timezone.now() - timedelta(minutes=30)
+        Event.objects.filter(pk=self.event.pk).update(
+            recording_upload_enqueued_at=stale,
+        )
+
+        result = upload_recording_to_s3(
+            self.event.id,
+            'https://zoom.us/rec/download/lease',
+        )
+
+        self.assertEqual(result['status'], 'ok')
+        self.event.refresh_from_db()
+        self.assertGreater(self.event.recording_upload_enqueued_at, stale)
+        self.assertTrue(self.event.recording_s3_url)
+        self.assertTrue(captured['existed'])
+        self.assertEqual(captured['payload'], b'fake-video-data')
+        self.assertFalse(os.path.exists(captured['path']))
+        self.assertNotIsInstance(captured['path'], bytes)
+
+    @patch('jobs.tasks.recordings_s3.boto3.client')
+    @patch('jobs.tasks.recording_upload.requests.get')
+    @patch('integrations.services.zoom.requests.post')
+    def test_tempfile_deleted_after_upload_failure(
+        self, mock_zoom_post, mock_requests_get, mock_boto_client,
+    ):
+        from botocore.exceptions import ClientError
+
+        from jobs.tasks.recording_upload import upload_recording_to_s3
+
+        mock_zoom_post.return_value = self._token_response()
+        mock_requests_get.return_value = self._download_response()
+        mock_s3 = MagicMock()
+        captured = {}
+
+        def fail_upload(path, bucket, key, ExtraArgs=None):
+            captured['path'] = path
+            raise ClientError(
+                {'Error': {'Code': 'AccessDenied', 'Message': 'Forbidden'}},
+                'PutObject',
+            )
+
+        mock_s3.upload_file.side_effect = fail_upload
+        mock_boto_client.return_value = mock_s3
+
+        with self.assertRaises(ClientError):
+            upload_recording_to_s3(
+                self.event.id,
+                'https://zoom.us/rec/download/lease',
+            )
+
+        self.assertFalse(os.path.exists(captured['path']))
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.recording_s3_url, '')
+
+
+class RetryStuckRecordingUploadsTest(TestCase):
+    def setUp(self):
+        now = timezone.now()
+        self.stuck = Event.objects.create(
+            title='Stuck Upload',
+            slug='stuck-upload',
+            start_datetime=now - timedelta(hours=3),
+            end_datetime=now - timedelta(hours=1),
+            recording_zoom_download_url='https://zoom.us/rec/download/stuck',
+            recording_upload_enqueued_at=now - timedelta(minutes=21),
+        )
+        self.active = Event.objects.create(
+            title='Active Upload',
+            slug='active-upload',
+            start_datetime=now - timedelta(hours=3),
+            end_datetime=now - timedelta(hours=1),
+            recording_zoom_download_url='https://zoom.us/rec/download/active',
+            recording_upload_enqueued_at=now - timedelta(minutes=5),
+        )
+        self.done = Event.objects.create(
+            title='Done Upload',
+            slug='done-upload',
+            start_datetime=now - timedelta(hours=3),
+            end_datetime=now - timedelta(hours=1),
+            recording_zoom_download_url='https://zoom.us/rec/download/done',
+            recording_s3_url='https://s3.example.test/recordings/done.mp4',
+            recording_upload_enqueued_at=now - timedelta(minutes=40),
+        )
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_reclaim_enqueues_expired_leases_only(self, mock_q_async):
+        from django.db.models.query import QuerySet
+
+        from jobs.tasks.recording_upload import retry_stuck_recording_uploads
+
+        mock_q_async.return_value = 'reclaim-task'
+        with patch.object(
+            QuerySet, 'select_for_update', autospec=True,
+            wraps=QuerySet.select_for_update,
+        ) as mock_sfu:
+            result = retry_stuck_recording_uploads()
+
+        self.assertEqual(result['queued'], 1)
+        self.assertTrue(mock_sfu.called)
+        self.assertEqual(mock_q_async.call_count, 1)
+        self.assertEqual(
+            mock_q_async.call_args[0][1],
+            self.stuck.id,
+        )
+        self.stuck.refresh_from_db()
+        self.assertGreater(
+            self.stuck.recording_upload_enqueued_at,
+            timezone.now() - timedelta(minutes=1),
+        )
+        self.active.refresh_from_db()
+        self.assertLess(
+            self.active.recording_upload_enqueued_at,
+            timezone.now() - timedelta(minutes=4),
+        )
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_reclaim_does_not_double_enqueue_after_claim(self, mock_q_async):
+        from jobs.tasks.recording_upload import retry_stuck_recording_uploads
+
+        mock_q_async.return_value = 'reclaim-task'
+        first = retry_stuck_recording_uploads()
+        second = retry_stuck_recording_uploads()
+        self.assertEqual(first['queued'], 1)
+        self.assertEqual(second['queued'], 0)
+        self.assertEqual(mock_q_async.call_count, 1)
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_reclaim_caps_one_pass(self, mock_q_async):
+        from jobs.tasks.recording_upload import retry_stuck_recording_uploads
+
+        mock_q_async.return_value = 'reclaim-task'
+        now = timezone.now()
+        for index in range(3):
+            Event.objects.create(
+                title=f'Backlog {index}',
+                slug=f'backlog-{index}',
+                start_datetime=now - timedelta(hours=3),
+                end_datetime=now - timedelta(hours=1),
+                recording_zoom_download_url=(
+                    f'https://zoom.us/rec/download/backlog-{index}'
+                ),
+                recording_upload_enqueued_at=now - timedelta(minutes=30),
+            )
+        result = retry_stuck_recording_uploads(limit=2)
+        self.assertEqual(result['queued'], 2)
+        self.assertEqual(result['examined'], 2)
+        self.assertEqual(mock_q_async.call_count, 2)
+

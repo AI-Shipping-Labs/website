@@ -2,12 +2,14 @@
 Background task for downloading Zoom recordings and uploading to S3.
 
 Flow:
-1. Download recording file from Zoom (authenticated with access token)
-2. Upload to S3 at recordings/{year}/{event-slug}.mp4
+1. Stream the Zoom MP4 to a temporary file (bounded RAM)
+2. Upload that file to S3 at recordings/{year}/{event-slug}.mp4
 3. Store S3 URL on Event record
 """
 
 import logging
+import os
+import tempfile
 
 import requests
 
@@ -19,6 +21,26 @@ from jobs.tasks.recordings_s3 import (
 )
 
 logger = logging.getLogger(__name__)
+
+RECORDING_UPLOAD_TASK_TIMEOUT_SECONDS = 900
+RECORDING_UPLOAD_HTTP_TIMEOUT_SECONDS = 600
+RECORDING_UPLOAD_TASK_RETRY_SECONDS = 960
+RECORDING_UPLOAD_MAX_RETRIES = 3
+RECORDING_DOWNLOAD_CHUNK_SIZE = 8192
+
+
+def retry_stuck_recording_uploads(limit=None):
+    """Scheduled reclaim for expired Zoom-to-S3 upload leases."""
+    from events.services.recording_upload import (
+        RECORDING_UPLOAD_RECLAIM_LIMIT,
+    )
+    from events.services.recording_upload import (
+        retry_stuck_recording_uploads as reclaim,
+    )
+
+    if limit is None:
+        limit = RECORDING_UPLOAD_RECLAIM_LIMIT
+    return reclaim(limit=limit)
 
 
 def upload_recording_to_s3(event_id, download_url):
@@ -42,6 +64,19 @@ def upload_recording_to_s3(event_id, download_url):
         logger.error('Event %s not found, skipping upload', event_id)
         return {'status': 'error', 'message': f'Event {event_id} not found'}
 
+    from django.utils import timezone
+
+    event.recording_upload_enqueued_at = timezone.now()
+    event.save(update_fields=['recording_upload_enqueued_at', 'updated_at'])
+
+    download_url = (download_url or event.recording_zoom_download_url or '').strip()
+    if download_url and download_url != event.recording_zoom_download_url:
+        event.recording_zoom_download_url = download_url
+        event.save(update_fields=['recording_zoom_download_url', 'updated_at'])
+    if not download_url:
+        logger.error('No Zoom download URL for event %s, skipping upload', event_id)
+        return {'status': 'error', 'message': 'No Zoom download URL'}
+
     s3_config = get_recordings_s3_config()
 
     if not s3_config.bucket:
@@ -58,16 +93,25 @@ def upload_recording_to_s3(event_id, download_url):
         event.title, download_url,
     )
 
-    # Download from Zoom with access token
     zoom_download_url = _build_authenticated_download_url(download_url)
-    file_data = _download_from_zoom(zoom_download_url)
+    tmp_path = None
+    try:
+        fd, tmp_path = tempfile.mkstemp(prefix='zoom-recording-', suffix='.mp4')
+        os.close(fd)
+        file_size = _download_from_zoom(zoom_download_url, tmp_path)
 
-    logger.info(
-        'Downloaded %d bytes for event "%s", uploading to S3 bucket %s at %s',
-        len(file_data), event.title, s3_config.bucket, s3_key,
-    )
+        logger.info(
+            'Downloaded %d bytes for event "%s", uploading to S3 bucket %s at %s',
+            file_size, event.title, s3_config.bucket, s3_key,
+        )
 
-    s3_url = upload_recording_mp4(file_data, s3_config, s3_key)
+        s3_url = upload_recording_mp4(tmp_path, s3_config, s3_key)
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except FileNotFoundError:
+                pass
 
     # Store S3 URL on event. Issue #1134 (Phase B): when auto-publish is
     # enabled (default on), flip the event live in the same save so entitled
@@ -144,23 +188,38 @@ def _build_authenticated_download_url(download_url):
     return f'{download_url}{separator}access_token={token}'
 
 
-def _download_from_zoom(url):
-    """Download a file from Zoom.
+def _download_from_zoom(url, dest_path):
+    """Stream a Zoom recording to ``dest_path``.
+
+    Peak RAM stays at the chunk size. The HTTP response is closed in
+    ``finally`` even when ``raise_for_status`` or a later chunk fails.
 
     Args:
         url: The authenticated download URL.
+        dest_path: Filesystem path to write the MP4.
 
     Returns:
-        bytes: The downloaded file content.
+        int: Number of bytes written.
 
     Raises:
         requests.HTTPError: If the download fails.
     """
-    response = requests.get(url, stream=True, timeout=600)
-    response.raise_for_status()
-
-    chunks = []
-    for chunk in response.iter_content(chunk_size=8192):
-        chunks.append(chunk)
-
-    return b''.join(chunks)
+    response = None
+    try:
+        response = requests.get(
+            url,
+            stream=True,
+            timeout=RECORDING_UPLOAD_HTTP_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        written = 0
+        with open(dest_path, 'wb') as dest:
+            for chunk in response.iter_content(chunk_size=RECORDING_DOWNLOAD_CHUNK_SIZE):
+                if not chunk:
+                    continue
+                dest.write(chunk)
+                written += len(chunk)
+        return written
+    finally:
+        if response is not None:
+            response.close()

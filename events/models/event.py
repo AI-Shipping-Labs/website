@@ -256,13 +256,23 @@ class Event(
         max_length=500, blank=True, default='',
         help_text='S3 raw recording file URL.',
     )
+    recording_zoom_download_url = models.URLField(
+        max_length=1000,
+        blank=True,
+        default='',
+        db_default='',
+        help_text=(
+            'Zoom MP4 download URL from recording.completed. Stored so a '
+            'stuck upload can be reclaimed without the original queue args.'
+        ),
+    )
     recording_upload_enqueued_at = models.DateTimeField(
         null=True,
         blank=True,
         editable=False,
         help_text=(
-            'When the Zoom-to-S3 upload job was durably enqueued. Used to '
-            'deduplicate webhook delivery while preserving failed-enqueue recovery.'
+            'Renewable 20-minute lease for the Zoom-to-S3 upload job. '
+            'Presence of recording_s3_url is what stops further uploads.'
         ),
     )
     recording_embed_url = models.URLField(

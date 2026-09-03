@@ -1,3 +1,5 @@
+import os
+import tempfile
 from datetime import timezone as datetime_timezone
 from unittest.mock import MagicMock, patch
 
@@ -64,16 +66,25 @@ class RecordingsS3HelperTest(TestCase):
         mock_s3 = MagicMock()
         mock_boto_client.return_value = mock_s3
 
-        url = upload_recording_mp4(b'data', config, 'recordings/2026/helper.mp4')
+        handle, path = tempfile.mkstemp(suffix='.mp4')
+        os.close(handle)
+        try:
+            with open(path, 'wb') as handle:
+                handle.write(b'data')
+            url = upload_recording_mp4(path, config, 'recordings/2026/helper.mp4')
+        finally:
+            os.unlink(path)
 
         self.assertEqual(
             url,
             'https://helper-bucket.s3.eu-central-1.amazonaws.com/recordings/2026/helper.mp4',
         )
+        self.assertEqual(mock_s3.upload_file.call_count, 1)
         self.assertEqual(
-            mock_s3.upload_fileobj.call_args.kwargs['ExtraArgs']['ContentType'],
+            mock_s3.upload_file.call_args.kwargs['ExtraArgs']['ContentType'],
             'video/mp4',
         )
+        mock_s3.upload_fileobj.assert_not_called()
 
     @patch('jobs.tasks.recordings_s3.get_recordings_s3_client')
     def test_presigned_url_targets_correct_key_and_ttl(self, mock_get_client):

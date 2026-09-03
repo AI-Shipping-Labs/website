@@ -16,6 +16,7 @@ R2_ONLY_SCHEDULE_NAMES = (
     'resume-webhook-deliveries',
     'redact-maven-enrollment-pii',
     'retry-maven-enrollment-steps',
+    'retry-stuck-recording-uploads',
     'purge-plan-sprints-raw-text',
     'onboarding-staff-notification-recovery',
 )
@@ -93,6 +94,15 @@ class Command(BaseCommand):
                 name='retry-maven-enrollment-steps',
             )
             self.stdout.write(self.style.SUCCESS('Registered: retry-maven-enrollment-steps (five-minute cadence)'))
+
+            schedule(
+                'jobs.tasks.recording_upload.retry_stuck_recording_uploads',
+                cron='*/5 * * * *',
+                name='retry-stuck-recording-uploads',
+            )
+            self.stdout.write(self.style.SUCCESS(
+                'Registered: retry-stuck-recording-uploads (every 5 min)'
+            ))
 
         # Purge old per-user CRM activity timeline rows daily at 03:30 UTC
         # (issue #853). Off-peak, after the webhook-log cleanup. The

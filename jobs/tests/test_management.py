@@ -108,6 +108,20 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(cleanup.cron, '5 3 * * *')
         self.assertIn('retry-calendly-webhooks (every 5 min)', out.getvalue())
 
+    def test_creates_stuck_recording_upload_schedule(self):
+        out = StringIO()
+        call_command('setup_schedules', stdout=out)
+        schedule = Schedule.objects.get(name='retry-stuck-recording-uploads')
+        self.assertEqual(
+            schedule.func,
+            'jobs.tasks.recording_upload.retry_stuck_recording_uploads',
+        )
+        self.assertEqual(schedule.cron, '*/5 * * * *')
+        self.assertIn(
+            'retry-stuck-recording-uploads (every 5 min)',
+            out.getvalue(),
+        )
+
     def test_creates_expire_tier_overrides_schedule(self):
         """Command creates expire-tier-overrides schedule."""
         call_command('setup_schedules', stdout=StringIO())
@@ -289,6 +303,7 @@ class SetupSchedulesCommandTest(TestCase):
             'resume-webhook-deliveries',
             'redact-maven-enrollment-pii',
             'retry-maven-enrollment-steps',
+            'retry-stuck-recording-uploads',
             'purge-user-activity',
             'purge-plan-sprints-raw-text',
             'event-reminders',

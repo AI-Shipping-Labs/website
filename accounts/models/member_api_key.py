@@ -116,10 +116,13 @@ class MemberAPIKey(models.Model):
         candidates = cls.objects.select_related("user").filter(
             lookup_prefix=lookup_prefix,
             revoked_at__isnull=True,
+            user__is_active=True,
         )
         for candidate in candidates:
             if not check_password(plaintext_key, candidate.key_hash):
                 continue
+            if not getattr(candidate.user, "is_active", False):
+                return None
             return candidate
         return None
 

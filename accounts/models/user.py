@@ -346,4 +346,29 @@ class User(AbstractUser):
                 self.tier = Tier.objects.get(slug="free")
             except Tier.DoesNotExist:
                 pass
+
+        deactivating = False
+        update_fields = kwargs.get("update_fields")
+        saving_is_active = (
+            update_fields is None or "is_active" in update_fields
+        )
+        if (
+            not self._state.adding
+            and self.pk
+            and saving_is_active
+            and not self.is_active
+        ):
+            deactivating = (
+                type(self)
+                .objects.filter(pk=self.pk, is_active=True)
+                .exists()
+            )
+
         super().save(*args, **kwargs)
+
+        if deactivating:
+            from accounts.services.credentials import (
+                revoke_api_credentials_on_deactivation,
+            )
+
+            revoke_api_credentials_on_deactivation(self)

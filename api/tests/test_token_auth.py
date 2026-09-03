@@ -10,8 +10,13 @@ from django.http import HttpResponse
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
-from accounts.auth import staff_session_or_token_required
+from accounts.auth import (
+    staff_session_or_token_required,
+    token_required,
+    token_required_any_user,
+)
 from accounts.models import Token
+from api.utils import staff_token_or_session_required, token_or_session_required
 
 User = get_user_model()
 
@@ -156,6 +161,37 @@ class TokenAuthTest(TestCase):
         self.assertEqual(fresh_token.key_hash, original_hash)
         self.assertEqual(fresh_token.lookup_prefix, original_prefix)
 
+    def test_inactive_staff_token_returns_401_and_does_not_bump_last_used_at(self):
+        staff = User.objects.create_user(
+            email="inactive-token-owner@test.com",
+            password="testpass",
+            is_staff=True,
+            is_superuser=True,
+        )
+        token = Token.objects.create(user=staff, name="before-deactivate")
+        plaintext = token.key
+        live = self.client.get(
+            "/api/contacts/export",
+            HTTP_AUTHORIZATION=f"Token {plaintext}",
+        )
+        self.assertIn("email", live.content.decode())
+        token.refresh_from_db()
+        last_used_at = token.last_used_at
+        self.assertIsNotNone(last_used_at)
+        self.assertIsNotNone(Token.authenticate(plaintext))
+
+        User.objects.filter(pk=staff.pk).update(is_active=False)
+
+        response = self.client.get(
+            "/api/contacts/export",
+            HTTP_AUTHORIZATION=f"Token {plaintext}",
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json(), {"error": "Invalid token"})
+        token.refresh_from_db()
+        self.assertEqual(token.last_used_at, last_used_at)
+        self.assertIsNone(Token.authenticate(plaintext))
+
     def test_authorization_without_token_scheme_returns_401(self):
         """A bare key with no 'Token ' scheme is treated as missing.
 
@@ -274,6 +310,24 @@ class StaffSessionOrTokenRequiredTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/accounts/login/", response["Location"])
 
+    def test_inactive_staff_token_returns_401_and_does_not_run_view(self):
+        from django.contrib.auth.models import AnonymousUser
+
+        User.objects.filter(pk=self.staff.pk).update(is_active=False)
+        request = self._request(
+            HTTP_AUTHORIZATION=f"Token {self.staff_token.key}",
+        )
+        request.user = AnonymousUser()
+        response = self.wrapped(request)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            json.loads(response.content),
+            {"error": "Invalid token"},
+        )
+        self.assertNotEqual(response.content, self.sentinel_body)
+        self.staff_token.refresh_from_db()
+        self.assertIsNone(self.staff_token.last_used_at)
+
     def test_malformed_authorization_header_returns_401(self):
         # The Authorization header is present but doesn't carry the
         # ``Token`` scheme, so the helper must NOT fall back to the
@@ -289,3 +343,97 @@ class StaffSessionOrTokenRequiredTest(TestCase):
             json.loads(response.content),
             {"error": "Authentication token required"},
         )
+
+
+class InactiveOwnerTokenHelperTest(TestCase):
+    """Inactive owners keep the existing invalid-token 401 on every token path."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email="inactive-helper-staff@test.com",
+            password="pw",
+            is_staff=True,
+        )
+        cls.staff_token = Token.objects.create(
+            user=cls.staff, name="inactive-helper"
+        )
+        cls.member = User.objects.create_user(
+            email="inactive-helper-member@test.com",
+            password="pw",
+        )
+        cls.member_token = Token(
+            key="inactive-helper-member-token-key",
+            user=cls.member,
+            name="legacy-member",
+        )
+        Token.objects.bulk_create([cls.member_token])
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.sentinel_body = b"ok-from-inactive-helper"
+
+        def stub(request):
+            return HttpResponse(self.sentinel_body, status=200)
+
+        self.stub = stub
+
+    def _token_request(self, plaintext):
+        from django.contrib.auth.models import AnonymousUser
+
+        request = self.factory.get(
+            "/some/path",
+            HTTP_AUTHORIZATION=f"Token {plaintext}",
+        )
+        request.user = AnonymousUser()
+        return request
+
+    def test_token_required_any_user_rejects_inactive_owner(self):
+        wrapped = token_required_any_user(self.stub)
+        live = wrapped(self._token_request(self.member_token.key))
+        self.assertEqual(live.content, self.sentinel_body)
+        self.member_token.refresh_from_db()
+        last_used_at = self.member_token.last_used_at
+        self.assertIsNotNone(last_used_at)
+
+        User.objects.filter(pk=self.member.pk).update(is_active=False)
+        response = wrapped(self._token_request(self.member_token.key))
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            json.loads(response.content),
+            {"error": "Invalid token"},
+        )
+        self.assertNotEqual(response.content, self.sentinel_body)
+        self.member_token.refresh_from_db()
+        self.assertEqual(self.member_token.last_used_at, last_used_at)
+
+    def test_token_or_session_required_rejects_inactive_staff_token(self):
+        wrapped = token_or_session_required(self.stub)
+        User.objects.filter(pk=self.staff.pk).update(is_active=False)
+        response = wrapped(self._token_request(self.staff_token.key))
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            json.loads(response.content),
+            {"error": "Invalid token"},
+        )
+        self.assertNotEqual(response.content, self.sentinel_body)
+        self.staff_token.refresh_from_db()
+        self.assertIsNone(self.staff_token.last_used_at)
+
+    def test_staff_token_or_session_required_rejects_inactive_staff_token(self):
+        wrapped = staff_token_or_session_required(self.stub)
+        User.objects.filter(pk=self.staff.pk).update(is_active=False)
+        response = wrapped(self._token_request(self.staff_token.key))
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            json.loads(response.content),
+            {"error": "Invalid token"},
+        )
+        self.assertNotEqual(response.content, self.sentinel_body)
+        self.staff_token.refresh_from_db()
+        self.assertIsNone(self.staff_token.last_used_at)
+
+    def test_token_required_still_accepts_active_staff_token(self):
+        wrapped = token_required(self.stub)
+        response = wrapped(self._token_request(self.staff_token.key))
+        self.assertEqual(response.content, self.sentinel_body)

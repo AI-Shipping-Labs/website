@@ -18,6 +18,13 @@ on:
         required: false
         default: false
 
+# Shared with emergency production rollback. cancel-in-progress must stay
+# false: cancelling a mid-rollout confirmed deploy can leave web and worker
+# on different tags.
+concurrency:
+  group: production-ecs-mutation
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy to Production

@@ -239,7 +239,11 @@ The response body is the deployed `VERSION` tag.
 Two GitHub Actions workflows handle deployment:
 
 - `deploy-dev.yml` — runs tests, builds Docker image, pushes to ECR, and deploys to the dev ECS service. Triggers automatically on push to `main`.
-- `deploy-prod.yml` — manual `workflow_dispatch` with a confirmation checkbox. Promotes the current dev image tag to the prod ECS service. Optionally accepts a specific tag.
+- `deploy-prod.yml` (`Manual Production Deployment`) — manual `workflow_dispatch` with a confirmation checkbox. Promotes the current dev image tag to the prod ECS service. Optionally accepts a specific tag.
+
+Manual Production Deployment and emergency production rollback (`prod-emergency-web-rollback.yml`, and a worker rollback workflow if one exists) share one non-cancelling GitHub Actions queue: `concurrency.group` `production-ecs-mutation` with `cancel-in-progress: false`. A second confirmed dispatch waits; it does not cancel an in-flight web/worker roll. Read-only diagnostics (`prod-emergency-diagnostics.yml`) stay on their own group.
+
+GitHub concurrency only serializes those workflows. It does not cover a laptop `CONFIRM_DEPLOY=true bash deploy/deploy_prod.sh` or an AWS Console / CLI click. Those still race the same ECS services and rely on the production path of `deploy/deploy_dev.sh` (and the rollback workflow) re-reading the live PRIMARY deployment and failing closed when the service already has an ACTIVE non-PRIMARY deployment.
 
 Both workflows use `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` GitHub secrets for ECR/ECS access.
 

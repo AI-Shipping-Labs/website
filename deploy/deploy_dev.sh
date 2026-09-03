@@ -512,6 +512,54 @@ run_predeploy_migrate_check() {
     echo "Pre-deploy migrate+check succeeded (exit 0). Proceeding to roll ${SERVICE}."
 }
 
+# Prod-only: re-read the live PRIMARY immediately before update-service so
+# recovery copy names the revision that is actually running, and fail closed
+# if ECS is already rolling (ACTIVE non-PRIMARY deployment).
+refresh_prod_service_state_before_roll() {
+    local SERVICE=$1
+    local ROLE=$2
+    local LIVE_STATE
+    local PRIMARY_TASK_DEF
+    local DESIRED_COUNT
+    local RUNNING_COUNT
+    local ACTIVE_NON_PRIMARY
+
+    echo "Re-reading live PRIMARY deployment for ${SERVICE} before update-service..."
+    LIVE_STATE=$(aws ecs describe-services \
+        --cluster ${CLUSTER} \
+        --services ${SERVICE} \
+        --query "services[0].deployments[?status=='PRIMARY'] | [0].[taskDefinition,desiredCount,runningCount]" \
+        --output text)
+    read -r PRIMARY_TASK_DEF DESIRED_COUNT RUNNING_COUNT <<< "${LIVE_STATE}"
+
+    if [ -z "${PRIMARY_TASK_DEF}" ] || [ "${PRIMARY_TASK_DEF}" = "None" ]; then
+        echo "ERROR: Could not read PRIMARY task definition for ${SERVICE}; not calling update-service."
+        exit 1
+    fi
+
+    echo "Live PRIMARY for ${SERVICE}: taskDefinition=${PRIMARY_TASK_DEF} desired=${DESIRED_COUNT} running=${RUNNING_COUNT}"
+
+    if [ "${ROLE}" = "web" ]; then
+        PREVIOUS_WEB_TASK_DEF_ARN="${PRIMARY_TASK_DEF}"
+    else
+        PREVIOUS_WORKER_TASK_DEF_ARN="${PRIMARY_TASK_DEF}"
+    fi
+
+    ACTIVE_NON_PRIMARY=$(aws ecs describe-services \
+        --cluster ${CLUSTER} \
+        --services ${SERVICE} \
+        --query "services[0].deployments[?status=='ACTIVE'] | length(@)" \
+        --output text)
+    if ! readiness_is_non_negative_integer "${ACTIVE_NON_PRIMARY:-}"; then
+        echo "ERROR: Could not determine ACTIVE non-PRIMARY deployments for ${SERVICE}; not calling update-service."
+        exit 1
+    fi
+    if [ "${ACTIVE_NON_PRIMARY}" -gt 0 ]; then
+        echo "ERROR: ${SERVICE} already has an ACTIVE non-PRIMARY deployment (count=${ACTIVE_NON_PRIMARY}); not calling update-service."
+        exit 1
+    fi
+}
+
 # Roll SERVICE to NEW_TASK_DEF_ARN and wait for steady state. Assumes the
 # pre-deploy migrate+check gate already passed.
 roll_service() {
@@ -521,6 +569,10 @@ roll_service() {
 
     echo ""
     echo "=== Rolling ${SERVICE} (role=${ROLE}) to ${NEW_TASK_DEF_ARN} ==="
+
+    if [ "${ENV}" = "prod" ]; then
+        refresh_prod_service_state_before_roll "${SERVICE}" "${ROLE}"
+    fi
 
     echo "Updating ECS service..."
     # Dev may be provisioned at desired_count=0 to reduce idle Fargate cost.

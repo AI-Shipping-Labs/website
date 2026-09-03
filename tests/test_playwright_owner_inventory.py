@@ -578,6 +578,23 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "TestStaffReconcilesAmbiguousDelivery::"
         "test_duplicate_risk_confirmations_gate_retry_and_assume_sent"
     )
+    issue_1506_owners = frozenset({
+        "playwright_tests/test_studio_campaigns.py::"
+        "TestStaffSeesNeedsAttentionAfterHardRejection::"
+        "test_hard_ses_rejection_leaves_needs_attention_not_sending",
+        "playwright_tests/test_studio_campaigns.py::"
+        "TestStaffRetriesFailedRecipient::"
+        "test_retry_failed_recipient_can_finish_the_campaign",
+        "playwright_tests/test_studio_campaigns.py::"
+        "TestStaffAssumesAmbiguousWithoutResend::"
+        "test_assume_delivered_does_not_create_email_log",
+        "playwright_tests/test_studio_campaigns.py::"
+        "TestStaffSeesFrozenAudience::"
+        "test_late_joiner_is_not_listed_on_recipients",
+        "playwright_tests/test_studio_campaigns.py::"
+        "TestStaffSeesSkippedSnapshotAsSent::"
+        "test_unsubscribed_snapshot_completes_as_sent",
+    })
     issue_1551_owners = frozenset({
         "playwright_tests/test_articles_blog.py::TestBlogBrowserSmoke::"
         "test_staff_edits_article_from_public_page_in_studio",
@@ -671,14 +688,15 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2558)
-        self.assertEqual(len(inventory.owners), 2338)
+        self.assertEqual(inventory.item_count, 2563)
+        self.assertEqual(len(inventory.owners), 2343)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
             | self.ses_1552_owners
             | self.issue_1551_owners
-            | self.issue_1557_owners,
+            | self.issue_1557_owners
+            | self.issue_1506_owners,
         )
         self.assertNotIn(
             self.migrated_owner,
@@ -690,6 +708,9 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             load_live_manifest()["LEGACY_DECLARED_BROWSER"],
         )
         self.assertNotIn(self.campaign_owner, LEGACY_DECLARED_BROWSER_CEILING)
+        for owner in self.issue_1506_owners:
+            self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
+            self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
         self.assertEqual(errors, [])
         if guard is None:
             self.assertEqual(lock.read_bytes(), lock_before)

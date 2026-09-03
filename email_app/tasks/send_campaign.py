@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_SEND_DELAY = 0.05
 DEFAULT_BATCH_SIZE = 200
 DEFAULT_BATCH_INTERVAL_SECONDS = 60
+DEFAULT_MAX_DELIVERY_ATTEMPTS = 3
 # Q tasks time out after 300 seconds and retry after 360 seconds. A claim that
 # outlives the worker timeout but expires before the retry is fail-closed and
 # recoverable without a second automatic transport call.
@@ -54,6 +55,23 @@ def _get_batch_interval_seconds():
     except (TypeError, ValueError):
         return DEFAULT_BATCH_INTERVAL_SECONDS
     return max(value, 0)
+
+
+def get_max_delivery_attempts():
+    raw = get_config(
+        'CAMPAIGN_DELIVERY_MAX_ATTEMPTS', DEFAULT_MAX_DELIVERY_ATTEMPTS,
+    )
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = 0
+    if value <= 0:
+        logger.warning(
+            'Invalid CAMPAIGN_DELIVERY_MAX_ATTEMPTS; using default %s',
+            DEFAULT_MAX_DELIVERY_ATTEMPTS,
+        )
+        return DEFAULT_MAX_DELIVERY_ATTEMPTS
+    return value
 
 
 def _chunk(items, size):
@@ -601,22 +619,34 @@ def refresh_campaign_status(campaign_id):
             state=CampaignDelivery.State.SENT,
             email_log__isnull=False,
         ).count()
-        has_attention = bool(
-            counts.get(CampaignDelivery.State.FAILED, 0)
-            or counts.get(CampaignDelivery.State.AMBIGUOUS, 0)
-        )
+        now = timezone.now()
         has_work = campaign.deliveries.filter(
             Q(state=CampaignDelivery.State.PENDING)
-            | Q(state=CampaignDelivery.State.DISPATCHING)
+            | Q(
+                state=CampaignDelivery.State.DISPATCHING,
+                claim_expires_at__gt=now,
+            )
+            | Q(
+                state=CampaignDelivery.State.DISPATCHING,
+                claim_expires_at__isnull=True,
+            )
+        ).exists()
+        has_attention = campaign.deliveries.filter(
+            Q(state=CampaignDelivery.State.FAILED)
+            | Q(state=CampaignDelivery.State.AMBIGUOUS)
+            | Q(
+                state=CampaignDelivery.State.DISPATCHING,
+                claim_expires_at__lte=now,
+            )
         ).exists()
         updates = []
         if campaign.sent_count != confirmed:
             campaign.sent_count = confirmed
             updates.append('sent_count')
-        if has_attention:
-            target_status = 'needs_attention'
-        elif has_work:
+        if has_work:
             target_status = 'sending'
+        elif has_attention:
+            target_status = 'needs_attention'
         else:
             target_status = 'sent'
         if campaign.status != target_status:

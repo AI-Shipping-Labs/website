@@ -150,6 +150,8 @@ class CampaignsListTest(CampaignsApiTestBase):
                 "is_archived",
                 "sent_at",
                 "sent_count",
+                "audience_snapshotted_at",
+                "delivery_counts",
                 "created_at",
             },
         )

@@ -282,6 +282,21 @@ INTEGRATION_GROUPS = [
                 'docs_url': '_docs/integrations/ses.md#email_batch_size',
             },
             {
+                'key': 'CAMPAIGN_DELIVERY_MAX_ATTEMPTS',
+                'is_secret': False,
+                'optional': True,
+                'default': '3',
+                'description': (
+                    'Maximum SES attempts for a failed campaign delivery '
+                    'before it stays failed and the campaign needs attention. '
+                    'Default 3; invalid, zero, or negative overrides fall back '
+                    'to 3. Ambiguous outcomes are never auto-retried.'
+                ),
+                'docs_url': (
+                    '_docs/integrations/ses.md#campaign_delivery_max_attempts'
+                ),
+            },
+            {
                 'key': 'CAMPAIGN_BATCH_INTERVAL_SECONDS',
                 'is_secret': False,
                 'optional': True,
@@ -1231,6 +1246,7 @@ SETTING_VALUE_TYPES = {
     # Base-10 integers
     'CHECKOUT_BINDING_TTL_MINUTES': 'integer',
     'EMAIL_BATCH_SIZE': 'integer',
+    'CAMPAIGN_DELIVERY_MAX_ATTEMPTS': 'integer',
     'CAMPAIGN_BATCH_INTERVAL_SECONDS': 'integer',
     'RECORDING_PRESIGNED_URL_TTL_SECONDS': 'integer',
     'DOWNLOAD_PRESIGNED_URL_TTL_SECONDS': 'integer',

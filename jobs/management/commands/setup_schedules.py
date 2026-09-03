@@ -33,6 +33,19 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: health-check (every 15 min)'))
 
+        # Recover snapshotted campaign deliveries whose one-off batch was
+        # lost, whose claim expired, or whose definitive SES failure is
+        # still under the attempt cap. Five minutes is frequent enough to
+        # leave `sending` without waiting for a human click.
+        schedule(
+            'email_app.tasks.campaign_delivery_recovery.recover_campaign_deliveries',
+            cron='*/5 * * * *',
+            name='campaign-delivery-recovery',
+        )
+        self.stdout.write(self.style.SUCCESS(
+            'Registered: campaign-delivery-recovery (every 5 min)'
+        ))
+
         # Cleanup old webhook logs daily at 3 AM
         schedule(
             'jobs.tasks.cleanup.cleanup_old_webhook_logs',

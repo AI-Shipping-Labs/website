@@ -363,3 +363,310 @@ class TestStaffReconcilesAmbiguousDelivery:
             exact=True,
         ).is_visible()
         connection.close()
+
+
+def _create_snapshotted_delivery(email, *, state, subject, unsubscribed=False):
+    from django.utils import timezone
+
+    from email_app.models import CampaignDelivery, EmailCampaign
+
+    recipient = _create_user(
+        email,
+        tier_slug="free",
+        email_verified=True,
+        unsubscribed=unsubscribed,
+        is_staff=False,
+    )
+    campaign = EmailCampaign.objects.create(
+        subject=subject,
+        body="Body content",
+        status="needs_attention",
+        audience_snapshotted_at=timezone.now(),
+    )
+    delivery = CampaignDelivery.objects.create(
+        campaign=campaign,
+        user=recipient,
+        recipient_user_pk=recipient.pk,
+        recipient_email=recipient.email,
+        state=state,
+        attempt_count=1,
+        last_error="Needs operator review.",
+        completed_at=timezone.now(),
+    )
+    connection.close()
+    return campaign, delivery, recipient
+
+
+@pytest.mark.django_db(transaction=True)
+class TestStaffSeesNeedsAttentionAfterHardRejection:
+    @pytest.mark.core
+    @browser_journey
+    def test_hard_ses_rejection_leaves_needs_attention_not_sending(
+        self,
+        django_server,
+        browser,
+    ):
+        from botocore.exceptions import ClientError
+
+        from email_app.models import CampaignDelivery
+        from email_app.services.email_service import EmailServiceError
+        from email_app.tasks.send_campaign import send_campaign, send_campaign_batch
+
+        _ensure_tiers()
+        _clear_campaigns()
+        staff = _create_staff_user("admin@test.com")
+        staff.unsubscribed = True
+        staff.save(update_fields=["unsubscribed"])
+        _seed_one_eligible_recipient("hard-fail@test.com")
+        campaign = _create_campaign("Hard Rejection", status="draft")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.on("dialog", lambda dialog: dialog.accept())
+
+        with mock.patch("jobs.tasks.async_task", return_value="task-e2e"):
+            page.goto(
+                f"{django_server}/studio/campaigns/{campaign.pk}/",
+                wait_until="domcontentloaded",
+            )
+            page.locator('[data-testid="send-campaign-btn"]').click()
+            page.wait_for_load_state("domcontentloaded")
+
+        def reject(_prepared):
+            try:
+                raise ClientError(
+                    {"Error": {"Code": "MessageRejected", "Message": "rejected"}},
+                    "SendEmail",
+                )
+            except ClientError as exc:
+                raise EmailServiceError("send failed") from exc
+
+        send_campaign(campaign.pk)
+        delivery_ids = list(
+            CampaignDelivery.objects.filter(campaign=campaign)
+            .values_list("pk", flat=True)
+        )
+        with mock.patch(
+            "email_app.tasks.send_campaign.EmailService.send_prepared",
+            side_effect=reject,
+        ):
+            send_campaign_batch(campaign.pk, delivery_ids, send_delay=0)
+        connection.close()
+
+        page.goto(
+            f"{django_server}/studio/campaigns/{campaign.pk}/",
+            wait_until="domcontentloaded",
+        )
+        assert page.get_by_text("Needs attention", exact=True).is_visible()
+        assert page.get_by_text("Sending", exact=True).count() == 0
+        assert page.get_by_text("Sent", exact=True).count() == 0
+        counts = page.get_by_test_id("campaign-delivery-counts")
+        assert counts.get_by_text("Failed: 1", exact=True).is_visible()
+        assert page.get_by_test_id("campaign-attention-link").get_by_text(
+            "Review 1 recipient needing attention",
+            exact=True,
+        ).is_visible()
+
+        page.get_by_test_id("campaign-attention-link").click()
+        page.wait_for_load_state("domcontentloaded")
+        assert page.get_by_text("hard-fail@test.com").is_visible()
+        assert page.get_by_test_id("campaign-delivery-state").get_by_text(
+            "Failed",
+            exact=True,
+        ).is_visible()
+        assert page.get_by_test_id("campaign-delivery-retry").is_visible()
+        connection.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestStaffRetriesFailedRecipient:
+    @pytest.mark.core
+    @browser_journey
+    def test_retry_failed_recipient_can_finish_the_campaign(
+        self,
+        django_server,
+        browser,
+    ):
+        from email_app.models import CampaignDelivery
+        from email_app.tasks.send_campaign import send_campaign_batch
+
+        _ensure_tiers()
+        _clear_campaigns()
+        _create_staff_user("admin@test.com")
+        campaign, delivery, _recipient = _create_snapshotted_delivery(
+            "retry-me@test.com",
+            state=CampaignDelivery.State.FAILED,
+            subject="Retry Failed",
+        )
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+
+        with mock.patch("jobs.tasks.async_task", return_value="retry-task"):
+            page.goto(
+                f"{django_server}/studio/campaigns/{campaign.pk}/recipients?attention=1",
+                wait_until="domcontentloaded",
+            )
+            page.locator('[data-testid="campaign-delivery-retry"]').click()
+            page.wait_for_load_state("domcontentloaded")
+
+        assert page.get_by_text(
+            "Queued retry for retry-me@test.com.",
+            exact=True,
+        ).is_visible()
+
+        with mock.patch(
+            "email_app.tasks.send_campaign.EmailService.send_prepared",
+            return_value="retried-ok",
+        ):
+            send_campaign_batch(campaign.pk, [delivery.pk], send_delay=0)
+        connection.close()
+
+        page.goto(
+            f"{django_server}/studio/campaigns/{campaign.pk}/",
+            wait_until="domcontentloaded",
+        )
+        assert page.get_by_text("Sent", exact=True).is_visible()
+        assert page.get_by_test_id("campaign-delivery-counts").get_by_text(
+            "Failed: 0",
+            exact=True,
+        ).is_visible()
+        connection.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestStaffAssumesAmbiguousWithoutResend:
+    @pytest.mark.core
+    @browser_journey
+    def test_assume_delivered_does_not_create_email_log(
+        self,
+        django_server,
+        browser,
+    ):
+        from email_app.models import CampaignDelivery, EmailLog
+
+        _ensure_tiers()
+        _clear_campaigns()
+        _create_staff_user("admin@test.com")
+        campaign, delivery, _recipient = _create_snapshotted_delivery(
+            "assume-me@test.com",
+            state=CampaignDelivery.State.AMBIGUOUS,
+            subject="Assume Ambiguous 1506",
+        )
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.on("dialog", lambda dialog: dialog.accept())
+
+        page.goto(
+            f"{django_server}/studio/campaigns/{campaign.pk}/recipients?attention=1",
+            wait_until="domcontentloaded",
+        )
+        page.locator('[data-testid="campaign-delivery-assume"]').click()
+        page.wait_for_load_state("domcontentloaded")
+
+        assert page.get_by_text(
+            "Marked assume-me@test.com as assumed sent without resending.",
+            exact=True,
+        ).is_visible()
+
+        page.goto(
+            f"{django_server}/studio/campaigns/{campaign.pk}/",
+            wait_until="domcontentloaded",
+        )
+        campaign.refresh_from_db()
+        assert campaign.status == "sent"
+        assert campaign.sent_count == 0
+        assert not EmailLog.objects.filter(
+            campaign=campaign,
+            recipient_email=delivery.recipient_email,
+        ).exists()
+        assert page.get_by_text("Sent", exact=True).is_visible()
+        connection.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestStaffSeesFrozenAudience:
+    @pytest.mark.core
+    @browser_journey
+    def test_late_joiner_is_not_listed_on_recipients(
+        self,
+        django_server,
+        browser,
+    ):
+        from email_app.models import CampaignDelivery
+
+        _ensure_tiers()
+        _clear_campaigns()
+        _create_staff_user("admin@test.com")
+        campaign, _delivery, _recipient = _create_snapshotted_delivery(
+            "first@test.com",
+            state=CampaignDelivery.State.PENDING,
+            subject="Frozen Audience",
+        )
+        _create_user(
+            "late-joiner@test.com",
+            tier_slug="free",
+            email_verified=True,
+            unsubscribed=False,
+            is_staff=False,
+        )
+        connection.close()
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/studio/campaigns/{campaign.pk}/recipients",
+            wait_until="domcontentloaded",
+        )
+        assert page.get_by_text("first@test.com").is_visible()
+        assert page.get_by_text("late-joiner@test.com").count() == 0
+        page.goto(
+            f"{django_server}/studio/campaigns/{campaign.pk}/",
+            wait_until="domcontentloaded",
+        )
+        assert page.get_by_test_id("eligible-recipients").get_by_text(
+            "1",
+            exact=True,
+        ).is_visible()
+        connection.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestStaffSeesSkippedSnapshotAsSent:
+    @pytest.mark.core
+    @browser_journey
+    def test_unsubscribed_snapshot_completes_as_sent(
+        self,
+        django_server,
+        browser,
+    ):
+        from email_app.models import CampaignDelivery
+        from email_app.tasks.send_campaign import send_campaign_batch
+
+        _ensure_tiers()
+        _clear_campaigns()
+        _create_staff_user("admin@test.com")
+        campaign, delivery, recipient = _create_snapshotted_delivery(
+            "skipped@test.com",
+            state=CampaignDelivery.State.PENDING,
+            subject="Skipped Snapshot",
+        )
+        recipient.unsubscribed = True
+        recipient.save(update_fields=["unsubscribed"])
+        EmailCampaign = campaign.__class__
+        EmailCampaign.objects.filter(pk=campaign.pk).update(status="sending")
+        send_campaign_batch(campaign.pk, [delivery.pk], send_delay=0)
+        connection.close()
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/studio/campaigns/{campaign.pk}/",
+            wait_until="domcontentloaded",
+        )
+        assert page.get_by_text("Sent", exact=True).is_visible()
+        counts = page.get_by_test_id("campaign-delivery-counts")
+        assert counts.get_by_text("Skipped: 1", exact=True).is_visible()
+        assert counts.get_by_text("Sent: 0", exact=True).is_visible()
+        assert counts.get_by_text("Pending: 0", exact=True).is_visible()
+        assert page.get_by_test_id("campaign-attention-link").count() == 0
+        connection.close()

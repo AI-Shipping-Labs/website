@@ -36,7 +36,9 @@ from api.views.call_profiles import (
 )
 from api.views.campaigns import (
     campaign_detail,
+    campaign_recipient_assume_sent,
     campaign_recipient_count,
+    campaign_recipient_retry,
     campaign_recipients,
     campaigns_collection,
 )
@@ -289,7 +291,7 @@ urlpatterns = [
         name="api_worker_task_detail",
     ),
     # ---- Email campaigns (issue #676) ---------------------------------
-    # Draft authoring only: GET/POST collection, GET/PATCH detail. No
+    # Draft authoring plus staff-token recipient reconciliation. No
     # DELETE route is registered (archive via PATCH is_archived=true).
     # No POST /send, /test-send, or /duplicate — sending stays in Studio.
     path(
@@ -332,6 +334,16 @@ urlpatterns = [
         "campaigns/<int:campaign_id>/recipients",
         campaign_recipients,
         name="api_campaign_recipients",
+    ),
+    path(
+        "campaigns/<int:campaign_id>/recipients/<int:delivery_id>/retry",
+        campaign_recipient_retry,
+        name="api_campaign_recipient_retry",
+    ),
+    path(
+        "campaigns/<int:campaign_id>/recipients/<int:delivery_id>/assume-sent",
+        campaign_recipient_assume_sent,
+        name="api_campaign_recipient_assume_sent",
     ),
     # ---- Articles ------------------------------------------------------
     path(

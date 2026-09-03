@@ -10,7 +10,6 @@ Covers the user-visible improvements:
    confirmation surface: "You're registered!", an "Add to calendar" button
    linking to the .ics download, the explicit "check email" / "join 5 min
    before" next-step list, and the cancel-registration affordance.
-4. The .ics download URL responds with a valid VCALENDAR file.
 
 Usage:
     uv run pytest playwright_tests/test_event_detail_registration.py -v
@@ -18,7 +17,6 @@ Usage:
 
 import datetime
 import os
-import urllib.request
 from datetime import timedelta
 
 import pytest
@@ -215,23 +213,6 @@ class TestPostRegistrationConfirmation:
         cancel = page.locator("#unregister-btn")
         assert cancel.count() == 1
         assert "Cancel registration" in cancel.inner_text()
-
-    def test_ics_download_returns_vcalendar(self, django_server):
-        _clear_events()
-        _create_event(slug="ics-evt", title="ICS Event")
-
-        # Public download — no auth needed for non-draft events.
-        # Issue #673: ``/events/<slug>/calendar.ics`` (slug-keyed) is the
-        # intentional ICS surface — kept on slug for email/.ics emails.
-        response = urllib.request.urlopen(
-            f"{django_server}/events/ics-evt/calendar.ics", timeout=5,
-        )
-        body = response.read().decode("utf-8")
-        assert response.status == 200
-        assert "text/calendar" in response.headers.get("Content-Type", "")
-        assert "BEGIN:VCALENDAR" in body
-        assert "END:VCALENDAR" in body
-        assert "SUMMARY:ICS Event" in body
 
 
 @pytest.mark.django_db(transaction=True)

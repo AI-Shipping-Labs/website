@@ -586,6 +586,29 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_event_zoom_lifecycle_1074.py::"
         "TestApiZoomLifecycle::test_api_series_rename_patches_auto_titled_zoom_occurrences",
     })
+    event_calendar_http_owners = frozenset({
+        "playwright_tests/test_event_detail_registration.py::"
+        "TestPostRegistrationConfirmation::test_ics_download_returns_vcalendar",
+        "playwright_tests/test_events_calendar_feed.py::"
+        "TestAnonymousHttpFetchOfFeed::test_feed_returns_200_and_includes_public_events",
+        "playwright_tests/test_events_calendar_feed.py::"
+        "TestEditsPropagateAsUpdatesNotDuplicates::"
+        "test_edited_event_appears_once_with_higher_sequence",
+        "playwright_tests/test_events_calendar_feed.py::"
+        "TestEtagShortCircuit::test_if_none_match_returns_304_then_200_after_edit",
+        "playwright_tests/test_events_calendar_feed.py::"
+        "TestExternalEventsAreMarkedInFeed::test_maven_event_summary_location_url",
+        "playwright_tests/test_events_calendar_feed.py::"
+        "TestGatedAndDraftStayOutOfPublicFeed::test_only_open_published_event_appears",
+        "playwright_tests/test_events_calendar_feed.py::"
+        "TestPerEventDownloadDropsMembersOnlyPrefix::"
+        "test_gated_event_download_has_no_members_only_prefix",
+        "playwright_tests/test_events_calendar_feed.py::"
+        "TestPerEventDownloadDropsMembersOnlyPrefix::"
+        "test_gated_external_download_keeps_hosted_drops_members_only",
+        "playwright_tests/test_events_calendar_feed.py::"
+        "TestPerEventDownloadDropsMembersOnlyPrefix::test_open_event_download_is_plain_title",
+    })
     migrated_owner = "playwright_tests/test_dev_smoke_sitemap.py::test_sitemap_xml_is_served"
     campaign_owner = (
         "playwright_tests/test_studio_campaigns.py::"
@@ -681,8 +704,12 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
             self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
             self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
+        for owner in self.event_calendar_http_owners:
+            self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
+            self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
+            self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
         self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2246)
-        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 68)
+        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 59)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
 
@@ -706,8 +733,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2557)
-        self.assertEqual(len(inventory.owners), 2337)
+        self.assertEqual(inventory.item_count, 2548)
+        self.assertEqual(len(inventory.owners), 2328)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

@@ -1,8 +1,28 @@
 """Shared campaign recipient visibility helpers."""
 
+from django.db.models import Count
+
 from email_app.models import CampaignDelivery, EmailLog
 
 SENT_RECIPIENT_STATUSES = {"sending", "needs_attention", "sent"}
+DELIVERY_COUNT_KEYS = (
+    CampaignDelivery.State.PENDING,
+    CampaignDelivery.State.DISPATCHING,
+    CampaignDelivery.State.SENT,
+    CampaignDelivery.State.SKIPPED,
+    CampaignDelivery.State.FAILED,
+    CampaignDelivery.State.AMBIGUOUS,
+    CampaignDelivery.State.ASSUMED_SENT,
+)
+
+
+def campaign_delivery_counts(campaign):
+    """Return ledger counts for every delivery state, zero-filled."""
+    counts = {key: 0 for key in DELIVERY_COUNT_KEYS}
+    for row in campaign.deliveries.values("state").annotate(count=Count("id")):
+        if row["state"] in counts:
+            counts[row["state"]] = row["count"]
+    return counts
 
 
 def campaign_recipient_mode(campaign):
@@ -219,3 +239,14 @@ def serialize_campaign_recipients(campaign):
             for row in rows
         ],
     }
+
+
+def serialize_campaign_recipient(campaign, delivery):
+    """Return the API recipient row for one durable delivery."""
+    payload = serialize_campaign_recipients(campaign)
+    for row in payload["recipients"]:
+        if row["delivery_id"] == delivery.pk:
+            return row
+    raise CampaignDelivery.DoesNotExist(
+        f"Delivery {delivery.pk} is not on campaign {campaign.pk}"
+    )

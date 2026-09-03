@@ -468,6 +468,24 @@ Test vs live: Leave the default in tests and local development. In production,
 reduce it if tasks approach their timeout; increase it only after confirming
 worker runtime and SES rate limits have enough headroom.
 
+## CAMPAIGN_DELIVERY_MAX_ATTEMPTS
+
+Purpose: Caps automatic retries of a campaign delivery that SES definitively
+rejected. Recovery re-queues `failed` rows while `attempt_count` is below this
+integer, then leaves the row failed so the campaign can leave `sending` and
+show `needs_attention`. Ambiguous outcomes are never auto-retried.
+
+Without it: Recovery uses 3. Invalid, zero, and negative overrides also use 3
+rather than retrying forever or refusing to recover.
+
+Where to find it: Studio > Settings > Email (SES), or the authenticated
+integration-settings API. This is operator tuning, not an AWS credential.
+
+Test vs live: Leave the default in tests and local development. Lower it in
+production only if a hard SES rejection should surface faster; raise it only
+when transient definitive rejections are common and duplicate-send risk is
+accepted.
+
 ## CAMPAIGN_BATCH_INTERVAL_SECONDS
 
 Purpose: Staggers campaign send batches apart so the fan-out does not

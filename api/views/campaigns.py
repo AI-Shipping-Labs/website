@@ -1,8 +1,8 @@
-"""Email campaign draft API endpoints (issue #676).
+"""Email campaign draft and recipient-reconciliation API endpoints.
 
-This operator API intentionally exposes ONLY draft authoring: API callers can
-list, create, read, and patch ``EmailCampaign`` rows, but cannot send, test-
-send, duplicate, or delete them. Sending remains a deliberate human action via
+This operator API exposes draft authoring plus staff-token retry / assume-sent
+actions that match Studio reconciliation. Callers cannot send, test-send,
+duplicate, or delete campaigns. Sending remains a deliberate human action via
 Studio. This module must NEVER import or invoke the campaign-send task; a
 sentinel test in ``api/tests/test_campaigns.py`` greps this source to enforce
 that constraint.
@@ -26,9 +26,18 @@ from api.utils import (
     require_methods,
     validation_response,
 )
-from email_app.models import EmailCampaign
+from email_app.models import CampaignDelivery, EmailCampaign
 from email_app.services.campaign_audience import campaign_recipient_count as recount
-from email_app.services.campaign_recipients import serialize_campaign_recipients
+from email_app.services.campaign_dispatch import (
+    CampaignDeliveryConflict,
+    assume_delivery_sent,
+    retry_delivery,
+)
+from email_app.services.campaign_recipients import (
+    campaign_delivery_counts,
+    serialize_campaign_recipient,
+    serialize_campaign_recipients,
+)
 from events.models import Event
 
 READ_ONLY_FIELDS = {
@@ -74,6 +83,16 @@ _CAMPAIGN_EXAMPLE = {
     "is_archived": False,
     "sent_at": None,
     "sent_count": 0,
+    "audience_snapshotted_at": None,
+    "delivery_counts": {
+        "pending": 0,
+        "dispatching": 0,
+        "sent": 0,
+        "skipped": 0,
+        "failed": 0,
+        "ambiguous": 0,
+        "assumed_sent": 0,
+    },
     "created_at": "2026-04-15T12:00:00+00:00",
 }
 
@@ -180,6 +199,8 @@ def _serialize_campaign(campaign):
         "is_archived": campaign.is_archived,
         "sent_at": _iso(campaign.sent_at),
         "sent_count": campaign.sent_count,
+        "audience_snapshotted_at": _iso(campaign.audience_snapshotted_at),
+        "delivery_counts": campaign_delivery_counts(campaign),
         "created_at": _iso(campaign.created_at),
     }
 
@@ -636,3 +657,153 @@ def campaign_recipients(request, campaign_id):
             status=404,
         )
     return JsonResponse(serialize_campaign_recipients(campaign), status=200)
+
+
+def _load_campaign_delivery(campaign_id, delivery_id):
+    campaign = EmailCampaign.objects.filter(pk=campaign_id).first()
+    if campaign is None:
+        return None, error_response(
+            "Campaign not found",
+            "unknown_campaign",
+            status=404,
+        )
+    delivery = CampaignDelivery.objects.filter(
+        pk=delivery_id,
+        campaign_id=campaign_id,
+    ).first()
+    if delivery is None:
+        return None, error_response(
+            "Delivery not found",
+            "unknown_delivery",
+            status=404,
+        )
+    return (campaign, delivery), None
+
+
+def _delivery_action_success(campaign, delivery):
+    campaign.refresh_from_db()
+    delivery.refresh_from_db()
+    payload = serialize_campaign_recipient(campaign, delivery)
+    payload["campaign_status"] = campaign.status
+    payload["sent_count"] = campaign.sent_count
+    return JsonResponse(payload, status=200)
+
+
+_RECIPIENT_ACTION_EXAMPLE = {
+    "email": "alice@example.com",
+    "delivery_id": 12,
+    "delivery_state": "pending",
+    "campaign_status": "sending",
+    "sent_count": 0,
+}
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Campaigns",
+    methods={
+        "POST": {
+            "summary": "Retry a campaign recipient",
+            "description": (
+                "Queues an operator retry for a ``failed`` or ``ambiguous`` "
+                "delivery. Matches Studio retry semantics: the row returns to "
+                "``pending`` with operator attribution, and a stale action "
+                "returns 409 ``delivery_conflict``. Never retries a campaign "
+                "send as a whole."
+            ),
+            "responses": {
+                200: {
+                    "description": "Recipient queued for retry.",
+                    "example": _RECIPIENT_ACTION_EXAMPLE,
+                },
+                401: {"description": "Missing or invalid staff token."},
+                404: {
+                    "description": "Campaign or delivery not found.",
+                    "example": {
+                        "error": "Delivery not found",
+                        "code": "unknown_delivery",
+                    },
+                },
+                409: {
+                    "description": "Delivery is no longer retryable.",
+                    "example": {
+                        "error": "Delivery is no longer retryable.",
+                        "code": "delivery_conflict",
+                    },
+                },
+            },
+        },
+    },
+)
+def campaign_recipient_retry(request, campaign_id, delivery_id):
+    """POST ``/api/campaigns/<id>/recipients/<delivery_id>/retry``."""
+    loaded, error = _load_campaign_delivery(campaign_id, delivery_id)
+    if error is not None:
+        return error
+    campaign, delivery = loaded
+    try:
+        retry_delivery(
+            delivery.pk,
+            actor=request.user,
+            source="API campaign reconciliation",
+        )
+    except CampaignDeliveryConflict as exc:
+        return error_response(str(exc), "delivery_conflict", status=409)
+    return _delivery_action_success(campaign, delivery)
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Campaigns",
+    methods={
+        "POST": {
+            "summary": "Assume a campaign recipient was sent",
+            "description": (
+                "Resolves an ``ambiguous`` delivery to ``assumed_sent`` without "
+                "calling SES or fabricating an ``EmailLog``. Matches Studio "
+                "assume-sent semantics; a stale action returns 409 "
+                "``delivery_conflict``."
+            ),
+            "responses": {
+                200: {
+                    "description": "Recipient marked assumed sent.",
+                    "example": {
+                        **_RECIPIENT_ACTION_EXAMPLE,
+                        "delivery_state": "assumed_sent",
+                        "campaign_status": "sent",
+                    },
+                },
+                401: {"description": "Missing or invalid staff token."},
+                404: {
+                    "description": "Campaign or delivery not found.",
+                    "example": {
+                        "error": "Delivery not found",
+                        "code": "unknown_delivery",
+                    },
+                },
+                409: {
+                    "description": "Delivery is no longer ambiguous.",
+                    "example": {
+                        "error": "Delivery is no longer ambiguous.",
+                        "code": "delivery_conflict",
+                    },
+                },
+            },
+        },
+    },
+)
+def campaign_recipient_assume_sent(request, campaign_id, delivery_id):
+    """POST ``/api/campaigns/<id>/recipients/<delivery_id>/assume-sent``."""
+    loaded, error = _load_campaign_delivery(campaign_id, delivery_id)
+    if error is not None:
+        return error
+    campaign, delivery = loaded
+    try:
+        assume_delivery_sent(delivery.pk, actor=request.user)
+    except CampaignDeliveryConflict as exc:
+        return error_response(str(exc), "delivery_conflict", status=409)
+    return _delivery_action_success(campaign, delivery)

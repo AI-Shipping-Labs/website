@@ -44,7 +44,7 @@ def claim_and_enqueue_campaign(campaign_id, *, source):
         return CampaignClaimResult(True, campaign, str(task_id) if task_id else None)
 
 
-def retry_delivery(delivery_id, *, actor):
+def retry_delivery(delivery_id, *, actor, source="Studio campaign reconciliation"):
     """Attribute and durably queue one explicit operator retry."""
     from jobs.tasks import async_task, build_task_name
 
@@ -86,7 +86,7 @@ def retry_delivery(delivery_id, *, actor):
             task_name=build_task_name(
                 'Retry campaign delivery',
                 f'#{campaign.pk} delivery {delivery.pk}',
-                'Studio campaign reconciliation',
+                source,
             ),
         )
         return delivery, str(task_id) if task_id else None

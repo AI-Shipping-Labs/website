@@ -53,6 +53,7 @@ class EntrypointRegistersSchedulesTest(TestCase):
         names = set(Schedule.objects.values_list('name', flat=True))
         expected = {
             'health-check',
+            'campaign-delivery-recovery',
             'cleanup-webhook-logs',
             'cleanup-webhook-deliveries',
             'purge-user-activity',

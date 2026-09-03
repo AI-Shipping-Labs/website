@@ -48,6 +48,16 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(schedule.cron, '*/15 * * * *')
         self.assertEqual(schedule.schedule_type, Schedule.CRON)
 
+    def test_creates_campaign_delivery_recovery_schedule(self):
+        call_command('setup_schedules', stdout=StringIO())
+        schedule = Schedule.objects.get(name='campaign-delivery-recovery')
+        self.assertEqual(
+            schedule.func,
+            'email_app.tasks.campaign_delivery_recovery.recover_campaign_deliveries',
+        )
+        self.assertEqual(schedule.cron, '*/5 * * * *')
+        self.assertEqual(schedule.schedule_type, Schedule.CRON)
+
     def test_creates_cleanup_schedule(self):
         """Command creates cleanup-webhook-logs schedule."""
         call_command('setup_schedules', stdout=StringIO())
@@ -296,6 +306,7 @@ class SetupSchedulesCommandTest(TestCase):
         names = set(Schedule.objects.values_list('name', flat=True))
         expected = {
             'health-check',
+            'campaign-delivery-recovery',
             'cleanup-webhook-logs',
             'cleanup-calendly-webhook-logs',
             'retry-calendly-webhooks',

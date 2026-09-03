@@ -1554,9 +1554,19 @@
                 "example": {
                   "campaigns": [
                     {
+                      "audience_snapshotted_at": null,
                       "audience_verification": "verified_only",
                       "body": "Hello {{ first_name }} \u2014 here's what's up this week...",
                       "created_at": "2026-04-15T12:00:00+00:00",
+                      "delivery_counts": {
+                        "ambiguous": 0,
+                        "assumed_sent": 0,
+                        "dispatching": 0,
+                        "failed": 0,
+                        "pending": 0,
+                        "sent": 0,
+                        "skipped": 0
+                      },
                       "id": 1,
                       "is_archived": false,
                       "sent_at": null,
@@ -1669,9 +1679,19 @@
             "content": {
               "application/json": {
                 "example": {
+                  "audience_snapshotted_at": null,
                   "audience_verification": "verified_only",
                   "body": "Hello {{ first_name }} \u2014 here's what's up this week...",
                   "created_at": "2026-04-15T12:00:00+00:00",
+                  "delivery_counts": {
+                    "ambiguous": 0,
+                    "assumed_sent": 0,
+                    "dispatching": 0,
+                    "failed": 0,
+                    "pending": 0,
+                    "sent": 0,
+                    "skipped": 0
+                  },
                   "id": 1,
                   "is_archived": false,
                   "sent_at": null,
@@ -1815,9 +1835,19 @@
             "content": {
               "application/json": {
                 "example": {
+                  "audience_snapshotted_at": null,
                   "audience_verification": "verified_only",
                   "body": "Hello {{ first_name }} \u2014 here's what's up this week...",
                   "created_at": "2026-04-15T12:00:00+00:00",
+                  "delivery_counts": {
+                    "ambiguous": 0,
+                    "assumed_sent": 0,
+                    "dispatching": 0,
+                    "failed": 0,
+                    "pending": 0,
+                    "sent": 0,
+                    "skipped": 0
+                  },
                   "id": 1,
                   "is_archived": false,
                   "sent_at": null,
@@ -1923,9 +1953,19 @@
             "content": {
               "application/json": {
                 "example": {
+                  "audience_snapshotted_at": null,
                   "audience_verification": "verified_only",
                   "body": "Hello {{ first_name }} \u2014 here's what's up this week...",
                   "created_at": "2026-04-15T12:00:00+00:00",
+                  "delivery_counts": {
+                    "ambiguous": 0,
+                    "assumed_sent": 0,
+                    "dispatching": 0,
+                    "failed": 0,
+                    "pending": 0,
+                    "sent": 0,
+                    "skipped": 0
+                  },
                   "id": 1,
                   "is_archived": false,
                   "sent_at": null,
@@ -2033,6 +2073,142 @@
           }
         },
         "summary": "List campaign recipient preview or sent logs",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
+    "/api/campaigns/{campaign_id}/recipients/{delivery_id}/assume-sent": {
+      "post": {
+        "description": "Resolves an ``ambiguous`` delivery to ``assumed_sent`` without calling SES or fabricating an ``EmailLog``. Matches Studio assume-sent semantics; a stale action returns 409 ``delivery_conflict``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "delivery_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaign_status": "sent",
+                  "delivery_id": 12,
+                  "delivery_state": "assumed_sent",
+                  "email": "alice@example.com",
+                  "sent_count": 0
+                }
+              }
+            },
+            "description": "Recipient marked assumed sent."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_delivery",
+                  "error": "Delivery not found"
+                }
+              }
+            },
+            "description": "Campaign or delivery not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "delivery_conflict",
+                  "error": "Delivery is no longer ambiguous."
+                }
+              }
+            },
+            "description": "Delivery is no longer ambiguous."
+          }
+        },
+        "summary": "Assume a campaign recipient was sent",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
+    "/api/campaigns/{campaign_id}/recipients/{delivery_id}/retry": {
+      "post": {
+        "description": "Queues an operator retry for a ``failed`` or ``ambiguous`` delivery. Matches Studio retry semantics: the row returns to ``pending`` with operator attribution, and a stale action returns 409 ``delivery_conflict``. Never retries a campaign send as a whole.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "delivery_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaign_status": "sending",
+                  "delivery_id": 12,
+                  "delivery_state": "pending",
+                  "email": "alice@example.com",
+                  "sent_count": 0
+                }
+              }
+            },
+            "description": "Recipient queued for retry."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_delivery",
+                  "error": "Delivery not found"
+                }
+              }
+            },
+            "description": "Campaign or delivery not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "delivery_conflict",
+                  "error": "Delivery is no longer retryable."
+                }
+              }
+            },
+            "description": "Delivery is no longer retryable."
+          }
+        },
+        "summary": "Retry a campaign recipient",
         "tags": [
           "Campaigns"
         ]

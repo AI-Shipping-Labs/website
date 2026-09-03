@@ -386,58 +386,6 @@ def test_duplicate_invalid_then_valid_submit_creates_one_clean_draft(
     context.close()
 
 
-def test_token_api_publish_is_scoped_and_idempotent(django_server, browser):
-    from accounts.models import Token
-    from events.models import EventSeries
-
-    staff = create_staff_user("api-browser-operator-1285@test.com")
-    token = Token.objects.create(user=staff, name="browser-publish-1285")
-    series = EventSeries.objects.create(
-        name="Browser API series",
-        slug="browser-api-series-1285",
-        start_time=timezone.localtime().time().replace(second=0, microsecond=0),
-    )
-    drafts = [
-        _event(
-            f"browser-api-draft-{index}-1285",
-            event_series=series,
-            series_position=index,
-        )
-        for index in (1, 2)
-    ]
-    unrelated = _event("browser-api-unrelated-1285")
-    series_id = series.pk
-    token_key = token.key
-    draft_ids = [event.pk for event in drafts]
-    connection.close()
-
-    context = browser.new_context()
-    headers = {"Authorization": f"Token {token_key}"}
-    first = context.request.post(
-        f"{django_server}/api/event-series/{series_id}/publish-drafts",
-        headers=headers,
-    )
-    assert first.status == 200
-    assert first.json() == {
-        "series_id": series_id,
-        "published_count": 2,
-        "occurrence_ids": draft_ids,
-    }
-    replay = context.request.post(
-        f"{django_server}/api/event-series/{series_id}/publish-drafts",
-        headers=headers,
-    )
-    assert replay.status == 200
-    assert replay.json() == {
-        "series_id": series_id,
-        "published_count": 0,
-        "occurrence_ids": [],
-    }
-    unrelated.refresh_from_db()
-    assert unrelated.status == "draft"
-    context.close()
-
-
 def test_future_and_past_event_create_feedback_is_exact(django_server, browser):
     from events.models import Event
 

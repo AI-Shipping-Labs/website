@@ -2348,39 +2348,9 @@
       "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
       "relocation": "tests/"
     },
-    "playwright_tests/test_event_calendar_lifecycle_1073.py::TestApiCalendarLifecycle::test_api_patch_cancel_enqueues_calendar_cancel": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
-      "relocation": "events/tests/"
-    },
-    "playwright_tests/test_event_calendar_lifecycle_1073.py::TestApiCalendarLifecycle::test_api_patch_reschedule_enqueues_calendar_update": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
-      "relocation": "events/tests/"
-    },
     "playwright_tests/test_event_detail_registration.py::TestPostRegistrationConfirmation::test_ics_download_returns_vcalendar": {
       "category": "http",
       "reason": "Exercises an HTTP response or calendar payload without rendering or navigating a browser page.",
-      "relocation": "events/tests/"
-    },
-    "playwright_tests/test_event_operator_workflow_1285.py::test_token_api_publish_is_scoped_and_idempotent": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
-      "relocation": "events/tests/"
-    },
-    "playwright_tests/test_event_zoom_lifecycle_1074.py::TestApiZoomLifecycle::test_api_patch_cancel_deletes_zoom_meeting_and_clears_fields": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
-      "relocation": "events/tests/"
-    },
-    "playwright_tests/test_event_zoom_lifecycle_1074.py::TestApiZoomLifecycle::test_api_patch_reschedule_patches_existing_zoom_meeting": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
-      "relocation": "events/tests/"
-    },
-    "playwright_tests/test_event_zoom_lifecycle_1074.py::TestApiZoomLifecycle::test_api_series_rename_patches_auto_titled_zoom_occurrences": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
       "relocation": "events/tests/"
     },
     "playwright_tests/test_events_calendar_feed.py::TestAnonymousHttpFetchOfFeed::test_feed_returns_200_and_includes_public_events": {

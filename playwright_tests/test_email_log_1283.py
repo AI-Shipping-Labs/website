@@ -97,8 +97,10 @@ def _dismiss_analytics(page):
     except PlaywrightTimeoutError:
         return
     else:
-        button.click()
-        expect(button).to_be_hidden()
+        # Saving consent reloads the page; wait so later assertions are not
+        # racing a destroyed document (same contract as Studio header tests).
+        with page.expect_navigation(wait_until="domcontentloaded"):
+            button.click()
 
 
 def _expect_keyboard_focus(locator):
@@ -209,6 +211,10 @@ class TestEmailLog1283:
         for value in ("q=bulk-1283", "kind=bulk_1283", "status=sent", "since=2020-01-01", "until=2030-01-01"):
             assert value in href
         next_link.click()
+        page.wait_for_url(
+            "**/studio/email-log/?q=bulk-1283&kind=bulk_1283&status=sent"
+            "&since=2020-01-01&until=2030-01-01&page=2"
+        )
         expect(page.locator('[data-testid^="email-log-row-"]')).to_have_count(2)
         SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
         _dismiss_analytics(page)

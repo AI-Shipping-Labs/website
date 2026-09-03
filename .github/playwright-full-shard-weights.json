@@ -1236,11 +1236,6 @@
       13918,
       14160
     ],
-    "playwright_tests/test_sprint_progress_evidence_api.py": [
-      2481,
-      2461,
-      2436
-    ],
     "playwright_tests/test_sprint_roster_activity_1202.py": [
       4625,
       5556,
@@ -1932,12 +1927,12 @@
       1255
     ]
   },
-  "inventory_sha256": "8e58bfe177f2606f0532e494d4eefc2a3fe8d7402171ac1af1bedbdf49f2a96a",
+  "inventory_sha256": "aa1611ffcc93bc166a4bf9ff099fb5c116dbfaf0826eb009bd4a19af1b68cabe",
   "schema_version": 1,
   "source_runs": [
     {
       "expected_selected_nodes": 2408,
-      "file_weights_sha256": "2e71a5cb90ed60b41ccf1aa9a4ff7aa9fdce1aa91769e5ae83d8e0465dd399e5",
+      "file_weights_sha256": "5c7cc8589ded808e93b378e86795b6da89b0a1ca94949972615a44d64aab3307",
       "head_sha": "89faea5780eebcd2ce5108fbdce0b706514731f3",
       "job_ids": [
         94380223848,
@@ -1951,7 +1946,7 @@
     },
     {
       "expected_selected_nodes": 2408,
-      "file_weights_sha256": "4176187b74af07b04926e0e144d8d5978ce7ca7405077f1e6d8a4b8721951930",
+      "file_weights_sha256": "931b77f3c0d10b42f9831dd6b450e1abfcbc16cb76fbaccc9d9c681bdab06cd4",
       "head_sha": "0047ede3d6616b0fb35ce7c46474ddf6e099f000",
       "job_ids": [
         94415906999,
@@ -1965,7 +1960,7 @@
     },
     {
       "expected_selected_nodes": 2408,
-      "file_weights_sha256": "8c1571443ac2e713dbaf354bcaf2ce4db69aad754276e3e23377654bec18477e",
+      "file_weights_sha256": "36b684b749fb268ee393229c8233f7a85a9536a71ae4d1ba3b31f4f7e72ba94d",
       "head_sha": "56f0a99a7708b8b0ab886bd1e7e34a3f66f7d104",
       "job_ids": [
         94509841937,

@@ -13,9 +13,14 @@ WAKE_ACTION_PATH = REPO_ROOT / ".github" / "actions" / "wake-dev-ecs" / "action.
 SCRATCH_ROOT = REPO_ROOT / ".tmp" / "test-deploy-dev-grace-poll"
 
 OLD_TASK_DEF = "arn:aws:ecs:eu-west-1:123:task-definition/ai-shipping-labs:1"
+LIVE_PRIMARY_TASK_DEF = (
+    "arn:aws:ecs:eu-west-1:123:task-definition/ai-shipping-labs:9"
+)
 NEW_TASK_DEF = "arn:aws:ecs:eu-west-1:123:task-definition/ai-shipping-labs:2"
 RUNNING_TASK = "arn:aws:ecs:eu-west-1:123:task/ready"
 WORKER_RUNNING_TASK = "arn:aws:ecs:eu-west-1:123:task/worker-ready"
+PROD_WEB_SERVICE = "ai-shipping-labs-prod"
+PROD_WORKER_SERVICE = "ai-shipping-labs-worker-prod"
 
 
 FAKE_AWS = rf'''#!__PYTHON__
@@ -35,8 +40,34 @@ def query():
     return ""
 
 
+def arg_after(flag):
+    if flag in args:
+        return args[args.index(flag) + 1]
+    return ""
+
+
+def service_name():
+    return arg_after("--services") or arg_after("--service")
+
+
 def role():
     return "WORKER" if "worker" in " ".join(args) else "WEB"
+
+
+def service_has_been_updated(name):
+    if not log or not name:
+        return False
+    try:
+        with open(log) as fh:
+            for line in fh:
+                if not line.startswith("ecs update-service"):
+                    continue
+                parts = line.split()
+                if "--service" in parts and parts[parts.index("--service") + 1] == name:
+                    return True
+    except FileNotFoundError:
+        return False
+    return False
 
 
 svc = args[0] if args else ""
@@ -51,13 +82,28 @@ if svc == "ecs" and sub == "describe-services":
         print("null")
     elif "launchType" in q:
         print("FARGATE")
-    elif "deployments" in q:
+    elif "deployments" in q and "ACTIVE" in q:
         service_role = role()
         print(
             os.environ.get(
+                f"FAKE_{{service_role}}_ACTIVE_NON_PRIMARY_COUNT",
+                os.environ.get("FAKE_ACTIVE_NON_PRIMARY_COUNT", "0"),
+            )
+        )
+    elif "deployments" in q:
+        service_role = role()
+        if service_has_been_updated(service_name()):
+            primary = os.environ.get(
                 f"FAKE_{{service_role}}_PRIMARY_TASK_DEF",
                 os.environ.get("FAKE_PRIMARY_TASK_DEF", "{NEW_TASK_DEF}"),
-            ),
+            )
+        else:
+            primary = os.environ.get(
+                f"FAKE_{{service_role}}_LIVE_PRIMARY_TASK_DEF",
+                os.environ.get("FAKE_LIVE_PRIMARY_TASK_DEF", "{OLD_TASK_DEF}"),
+            )
+        print(
+            primary,
             os.environ.get("FAKE_DESIRED_COUNT", "1"),
             os.environ.get("FAKE_RUNNING_COUNT", "1"),
             sep="\t",
@@ -249,6 +295,12 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
         worker_primary_task_def=None,
         web_running_task_def=None,
         worker_running_task_def=None,
+        live_primary_task_def=None,
+        web_live_primary_task_def=None,
+        worker_live_primary_task_def=None,
+        active_non_primary_count=None,
+        web_active_non_primary_count=None,
+        worker_active_non_primary_count=None,
         predeploy_enabled=False,
     ):
         tmpdir = Path(tmpdir)
@@ -305,6 +357,22 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
             env["FAKE_WEB_RUNNING_TASK_DEF"] = web_running_task_def
         if worker_running_task_def is not None:
             env["FAKE_WORKER_RUNNING_TASK_DEF"] = worker_running_task_def
+        if live_primary_task_def is not None:
+            env["FAKE_LIVE_PRIMARY_TASK_DEF"] = live_primary_task_def
+        if web_live_primary_task_def is not None:
+            env["FAKE_WEB_LIVE_PRIMARY_TASK_DEF"] = web_live_primary_task_def
+        if worker_live_primary_task_def is not None:
+            env["FAKE_WORKER_LIVE_PRIMARY_TASK_DEF"] = worker_live_primary_task_def
+        if active_non_primary_count is not None:
+            env["FAKE_ACTIVE_NON_PRIMARY_COUNT"] = str(active_non_primary_count)
+        if web_active_non_primary_count is not None:
+            env["FAKE_WEB_ACTIVE_NON_PRIMARY_COUNT"] = str(
+                web_active_non_primary_count
+            )
+        if worker_active_non_primary_count is not None:
+            env["FAKE_WORKER_ACTIVE_NON_PRIMARY_COUNT"] = str(
+                worker_active_non_primary_count
+            )
         for name in (
             "PREDEPLOY_MIGRATE_CHECK_ENABLED",
             "DEPLOY_GRACE_MAX_ATTEMPTS",
@@ -395,6 +463,48 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
             "sleep_calls": sleep_log.read_text().splitlines() if sleep_log.exists() else [],
         }
 
+    def _service_from_aws_line(self, line, flag):
+        parts = line.split()
+        self.assertIn(flag, parts, msg=line)
+        return parts[parts.index(flag) + 1]
+
+    def _assert_prod_update_service_rereads_live_primary(self, aws_calls):
+        lines = aws_calls.splitlines()
+        register_indexes = [
+            index
+            for index, line in enumerate(lines)
+            if line.startswith("ecs register-task-definition")
+        ]
+        self.assertTrue(register_indexes, msg=aws_calls)
+        last_register = max(register_indexes)
+        updates = [
+            (index, line)
+            for index, line in enumerate(lines)
+            if line.startswith("ecs update-service")
+        ]
+        self.assertTrue(updates, msg=aws_calls)
+        for index, line in updates:
+            service = self._service_from_aws_line(line, "--service")
+            if service not in {PROD_WEB_SERVICE, PROD_WORKER_SERVICE}:
+                continue
+            self.assertGreater(
+                index,
+                last_register,
+                msg=f"{service} update-service was not after the last register-task-definition",
+            )
+            described = any(
+                candidate.startswith("ecs describe-services")
+                and self._service_from_aws_line(candidate, "--services") == service
+                for candidate in lines[last_register + 1:index]
+            )
+            self.assertTrue(
+                described,
+                msg=(
+                    f"{service} update-service had no post-register describe-services: "
+                    f"{aws_calls}"
+                ),
+            )
+
     def test_waiter_timeout_requires_stable_tag_and_healthy_new_revision(self):
         SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
         with TemporaryDirectory(dir=SCRATCH_ROOT) as tmpdir:
@@ -442,6 +552,7 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
         self.assertIn("--service ai-shipping-labs-prod ", updates[0])
         self.assertIn("--service ai-shipping-labs-worker-prod ", updates[1])
         self.assertIn("Verifying https://aishippinglabs.com/ping", run["result"].stdout)
+        self._assert_prod_update_service_rereads_live_primary(run["aws_calls"])
 
     def test_prod_predeploy_gate_still_rolls_verified_web_before_worker(self):
         SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
@@ -468,6 +579,7 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
         self.assertIn("--service ai-shipping-labs-prod ", updates[0])
         self.assertIn("--service ai-shipping-labs-worker-prod ", updates[1])
         self.assertEqual(run["curl_attempts"], 3)
+        self._assert_prod_update_service_rereads_live_primary(run["aws_calls"])
 
     def test_prod_predeploy_stale_ping_never_updates_worker(self):
         SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
@@ -512,6 +624,85 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
         self.assertNotIn("--service ai-shipping-labs-worker-prod ", updates[0])
         self.assertIn("RECOVERY COMMAND: aws ecs update-service", run["result"].stdout)
         self.assertIn(OLD_TASK_DEF, run["result"].stdout)
+
+    def test_prod_recovery_uses_live_primary_not_register_snapshot(self):
+        SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(dir=SCRATCH_ROOT) as tmpdir:
+            run = self._run_deploy(
+                tmpdir,
+                deploy_env="prod",
+                web_services_stable_exit="1",
+                worker_services_stable_exit="0",
+                responses=["old-tag"],
+                max_attempts=1,
+                live_primary_task_def=LIVE_PRIMARY_TASK_DEF,
+            )
+
+        self.assertNotEqual(run["result"].returncode, 0)
+        updates = [
+            line for line in run["aws_calls"].splitlines()
+            if line.startswith("ecs update-service")
+        ]
+        self.assertEqual(len(updates), 1)
+        self.assertIn(f"--service {PROD_WEB_SERVICE} ", updates[0])
+        self.assertIn(
+            "RECOVERY COMMAND: aws ecs update-service --cluster ai-shipping-labs "
+            f"--service {PROD_WEB_SERVICE} --task-definition {LIVE_PRIMARY_TASK_DEF}",
+            run["result"].stdout,
+        )
+        self.assertNotIn(
+            f"--task-definition {OLD_TASK_DEF}",
+            run["result"].stdout,
+        )
+        self._assert_prod_update_service_rereads_live_primary(run["aws_calls"])
+
+    def test_prod_web_active_non_primary_fails_closed_without_update_service(self):
+        SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(dir=SCRATCH_ROOT) as tmpdir:
+            run = self._run_deploy(
+                tmpdir,
+                deploy_env="prod",
+                services_stable_exit="0",
+                web_active_non_primary_count=1,
+            )
+
+        self.assertNotEqual(run["result"].returncode, 0)
+        self.assertIn(
+            "already has an ACTIVE non-PRIMARY deployment",
+            run["result"].stdout,
+        )
+        self.assertNotIn(
+            "ecs update-service",
+            run["aws_calls"],
+        )
+        self.assertIn("ecs describe-services", run["aws_calls"])
+
+    def test_prod_worker_active_non_primary_fails_closed_after_verified_web(self):
+        SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
+        tag = "20260716-120000-r1safe"
+        with TemporaryDirectory(dir=SCRATCH_ROOT) as tmpdir:
+            run = self._run_deploy(
+                tmpdir,
+                tag=tag,
+                deploy_env="prod",
+                services_stable_exit="0",
+                responses=[tag, tag, tag],
+                worker_active_non_primary_count=1,
+            )
+
+        self.assertNotEqual(run["result"].returncode, 0)
+        updates = [
+            line for line in run["aws_calls"].splitlines()
+            if line.startswith("ecs update-service")
+        ]
+        self.assertEqual(len(updates), 1)
+        self.assertIn(f"--service {PROD_WEB_SERVICE} ", updates[0])
+        self.assertNotIn(PROD_WORKER_SERVICE, updates[0])
+        self.assertIn(
+            "already has an ACTIVE non-PRIMARY deployment",
+            run["result"].stdout,
+        )
+        self._assert_prod_update_service_rereads_live_primary(run["aws_calls"])
 
     def test_prod_stale_ping_after_web_waiter_never_updates_worker(self):
         SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)

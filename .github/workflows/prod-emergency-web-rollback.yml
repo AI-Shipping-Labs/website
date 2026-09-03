@@ -17,8 +17,10 @@ on:
         required: true
         type: string
 
+# Shared with Manual Production Deployment. cancel-in-progress must stay
+# false so a confirmed rollback waits instead of killing an in-flight deploy.
 concurrency:
-  group: emergency-production-web-rollback
+  group: production-ecs-mutation
   cancel-in-progress: false
 
 jobs:
@@ -91,6 +93,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          echo "Re-reading live PRIMARY deployment for ${ECS_WEB_SERVICE} before update-service..."
+          live_state="$(aws ecs describe-services \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER}" \
+            --services "${ECS_WEB_SERVICE}" \
+            --query "services[0].deployments[?status=='PRIMARY'] | [0].[taskDefinition,desiredCount,runningCount]" \
+            --output text)"
+          read -r live_primary live_desired live_running <<< "${live_state}"
+          if [[ -z "${live_primary}" || "${live_primary}" == "None" ]]; then
+            echo "::error ::Could not read the live PRIMARY task definition; not calling update-service."
+            exit 1
+          fi
+          echo "Live PRIMARY: taskDefinition=${live_primary} desired=${live_desired} running=${live_running}"
+
+          active_count="$(aws ecs describe-services \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER}" \
+            --services "${ECS_WEB_SERVICE}" \
+            --query "services[0].deployments[?status=='ACTIVE'] | length(@)" \
+            --output text)"
+          if [[ ! "${active_count}" =~ ^[0-9]+$ ]]; then
+            echo "::error ::Could not determine ACTIVE non-PRIMARY deployments; not calling update-service."
+            exit 1
+          fi
+          if [[ "${active_count}" -gt 0 ]]; then
+            echo "::error ::Production web service already has an ACTIVE non-PRIMARY deployment; not calling update-service."
+            exit 1
+          fi
 
           updated_arn="$(aws ecs update-service \
             --region "${AWS_REGION}" \

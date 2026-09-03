@@ -1146,11 +1146,6 @@
       4731,
       4899
     ],
-    "playwright_tests/test_slack_integration.py": [
-      1024,
-      1003,
-      1070
-    ],
     "playwright_tests/test_sprint_badge_979.py": [
       4247,
       4212,
@@ -1927,12 +1922,12 @@
       1255
     ]
   },
-  "inventory_sha256": "aa1611ffcc93bc166a4bf9ff099fb5c116dbfaf0826eb009bd4a19af1b68cabe",
+  "inventory_sha256": "2ab068e7e3a7b14dbf0a787260c99268156fb96e362e0be36c04af6a335384b4",
   "schema_version": 1,
   "source_runs": [
     {
       "expected_selected_nodes": 2408,
-      "file_weights_sha256": "5c7cc8589ded808e93b378e86795b6da89b0a1ca94949972615a44d64aab3307",
+      "file_weights_sha256": "853a2e7cac9f695ba3b174f3daf83f0f57db0c4d6870d820381bff12d6e85bf8",
       "head_sha": "89faea5780eebcd2ce5108fbdce0b706514731f3",
       "job_ids": [
         94380223848,
@@ -1946,7 +1941,7 @@
     },
     {
       "expected_selected_nodes": 2408,
-      "file_weights_sha256": "931b77f3c0d10b42f9831dd6b450e1abfcbc16cb76fbaccc9d9c681bdab06cd4",
+      "file_weights_sha256": "e9184c0ef366210a6ae5a688bf0eeb6d40e4c26a059124d4bd331f1fb5f60664",
       "head_sha": "0047ede3d6616b0fb35ce7c46474ddf6e099f000",
       "job_ids": [
         94415906999,
@@ -1960,7 +1955,7 @@
     },
     {
       "expected_selected_nodes": 2408,
-      "file_weights_sha256": "36b684b749fb268ee393229c8233f7a85a9536a71ae4d1ba3b31f4f7e72ba94d",
+      "file_weights_sha256": "32660f4050d52972407f3ed102fe21783aec6a4c9b02d9b3057f57e71c64d596",
       "head_sha": "56f0a99a7708b8b0ab886bd1e7e34a3f66f7d104",
       "job_ids": [
         94509841937,

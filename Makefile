@@ -1,4 +1,4 @@
-.PHONY: css-build css-watch check-tailwind collectstatic run run2 worker dev migrate qcache sync seed test test-core test-affected test-judge coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory check-openapi-drift boot-profile clean
+.PHONY: css-build css-watch check-tailwind collectstatic run run2 worker dev migrate qcache sync seed test test-core test-affected test-judge test-live-slack-announcement coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory check-openapi-drift boot-profile clean
 
 # Default SITE_BASE_URL for local dev so generated links (unsubscribe,
 # calendar invites, password resets, share URLs) point at the running
@@ -96,6 +96,14 @@ test-affected:
 # when no LLM key is configured. See _docs/testing-guidelines.md.
 test-judge:
 	uv run pytest -m live_judge tests/live_judge/ -n 4
+
+# Post a real Slack announcement to #integration-tests and delete it.
+# Opt-in only: NOT referenced by `test`, `test-core`, `test-all`, Playwright,
+# or any CI workflow. Skips cleanly (no Slack call) without
+# SLACK_BOT_TOKEN and SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID.
+# See community/tests/live_slack/ and _docs/testing-guidelines.md.
+test-live-slack-announcement:
+	RUN_LIVE_SLACK_ANNOUNCEMENT=1 uv run pytest -m live_slack_announcement community/tests/live_slack/ -v
 
 # Run tests with coverage
 coverage:

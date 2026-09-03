@@ -238,7 +238,12 @@ if service == "logs" and operation == "get-log-events":
                 events.append(qcluster)
     else:
         if SCENARIO != "missing_publish":
-            timestamp = 1005 if SCENARIO == "publish_after_observe" else 1000
+            if SCENARIO == "publish_after_observe":
+                timestamp = 20000
+            elif SCENARIO == "publish_within_skew":
+                timestamp = 1051
+            else:
+                timestamp = 1000
             events.append({
                 "timestamp": timestamp,
                 "message": "Published serving schema readiness marker " + key,
@@ -425,6 +430,17 @@ class CombinedTaskReadinessExecutionTest(SimpleTestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(f"invariant={invariant}", result.stderr)
                 self.assertSanitized(result)
+
+    def test_small_cross_stream_timestamp_skew_is_accepted(self):
+        result, _ = self._run_scenario("publish_within_skew")
+
+        self.assertEqual(
+            result.returncode,
+            0,
+            msg=f"stdout={result.stdout}\nstderr={result.stderr}",
+        )
+        self.assertIn("COMBINED_READINESS verified", result.stdout)
+        self.assertSanitized(result)
 
     def test_other_task_evidence_cannot_satisfy_selected_task(self):
         result, calls = self._run_scenario("selected_task_incomplete")

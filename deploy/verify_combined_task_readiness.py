@@ -25,6 +25,12 @@ MAX_TIMEOUT_SECONDS = 180
 MIN_POLL_SECONDS = 5
 DEFAULT_TIMEOUT_SECONDS = 180
 DEFAULT_POLL_SECONDS = 5
+# Cross-stream CloudWatch timestamps are not a shared clock. Successful
+# deploys have shown publish→observe gaps of ~12ms, so tens-of-ms ingestion
+# or container skew can invert them. A 5s bound still fails a stale Redis
+# observe (worker sees a previous same-tag publish, then this web publishes
+# after migrate/reconcile).
+MARKER_TIMESTAMP_SKEW_MS = 5000
 
 _TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _REPOSITORY_URI_RE = re.compile(
@@ -584,7 +590,7 @@ def _marker_evidence(
     qcluster_index = qcluster_indexes[0]
     observe_event = worker_events[observe_index]
     qcluster_event = worker_events[qcluster_index]
-    if publish_event[0] > observe_event[0]:
+    if publish_event[0] > observe_event[0] + MARKER_TIMESTAMP_SKEW_MS:
         raise VerificationError("marker-order-publish-after-observe")
     if qcluster_index <= observe_index:
         raise VerificationError("marker-order-qcluster-before-observe")

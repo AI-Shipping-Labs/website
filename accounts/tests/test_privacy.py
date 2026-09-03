@@ -13,6 +13,7 @@ from accounts.models import (
     EmailAlias,
     MemberAPIKey,
     PrivacyRequestLog,
+    Token,
     User,
 )
 from accounts.services.privacy import (
@@ -1139,7 +1140,16 @@ class PrivacyDeletionSuccessTest(TierSetupMixin, TestCase):
         EventRegistration.objects.create(event=event, user=user)
         sprint = _sprint("delete-sprint")
         plan = Plan.objects.create(member=user, sprint=sprint, goal="Erase me")
-        MemberAPIKey.create_for_user(user=user, name="delete key")
+        _, member_plaintext = MemberAPIKey.create_for_user(
+            user=user, name="delete key"
+        )
+        legacy_token = Token(
+            key="privacy-legacy-operator-token-key",
+            user=user,
+            name="legacy member token",
+        )
+        Token.objects.bulk_create([legacy_token])
+        token_plaintext = legacy_token.key
         Notification.objects.create(user=user, title="Delete", body="Soon")
         Comment.objects.create(user=user, content_id=plan.comment_content_id, body="Hi")
         CRMRecord.objects.create(user=user, summary="Private CRM")
@@ -1221,6 +1231,8 @@ class PrivacyDeletionSuccessTest(TierSetupMixin, TestCase):
         self.assertFalse(EventRegistration.objects.filter(event=event).exists())
         self.assertFalse(Plan.objects.filter(pk=plan.pk).exists())
         self.assertFalse(MemberAPIKey.objects.exists())
+        self.assertIsNone(MemberAPIKey.authenticate(member_plaintext))
+        self.assertIsNone(Token.authenticate(token_plaintext))
         self.assertFalse(Notification.objects.exists())
         self.assertFalse(Comment.objects.exists())
         self.assertFalse(CRMRecord.objects.exists())

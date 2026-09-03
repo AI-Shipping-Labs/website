@@ -146,10 +146,14 @@ class Token(models.Model):
         lookup_prefix = plaintext_key[: cls.LOOKUP_PREFIX_LENGTH]
         candidates = cls.objects.select_related("user").filter(
             lookup_prefix=lookup_prefix,
+            user__is_active=True,
         )
         for candidate in candidates:
-            if check_password(plaintext_key, candidate.key_hash):
-                return candidate
+            if not check_password(plaintext_key, candidate.key_hash):
+                continue
+            if not getattr(candidate.user, "is_active", False):
+                return None
+            return candidate
         return None
 
     @property

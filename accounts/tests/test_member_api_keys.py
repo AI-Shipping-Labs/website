@@ -298,6 +298,48 @@ class MemberAPIKeyAuthHelperTest(TestCase):
         self.factory = RequestFactory()
         self.view = member_api_key_required("plans:read")(_ok_view)
 
+    def test_inactive_owner_key_returns_json_401_and_does_not_bump_audit_fields(self):
+        user = User.objects.create_user(email="inactive-member-key@test.com")
+        member_key, plaintext = MemberAPIKey.create_for_user(
+            user=user,
+            name="still hashed",
+        )
+        request = self.factory.get(
+            "/member-api/plans",
+            HTTP_AUTHORIZATION=f"Token {plaintext}",
+            REMOTE_ADDR="203.0.113.10",
+        )
+        self.view(request)
+        member_key.refresh_from_db()
+        last_used_at = member_key.last_used_at
+        last_used_ip_hash = member_key.last_used_ip_hash
+        self.assertIsNotNone(last_used_at)
+        self.assertTrue(last_used_ip_hash)
+
+        User.objects.filter(pk=user.pk).update(is_active=False)
+        request = self.factory.get(
+            "/member-api/plans",
+            HTTP_AUTHORIZATION=f"Token {plaintext}",
+            REMOTE_ADDR="198.51.100.20",
+        )
+
+        response = self.view(request)
+
+        self.assertEqual(response.status_code, 401)
+        self.assertJSONEqual(
+            response.content,
+            {
+                "error": "Invalid member API key",
+                "code": "invalid_member_api_key",
+            },
+        )
+        self.assertFalse(hasattr(request, "member_api_key"))
+        member_key.refresh_from_db()
+        self.assertEqual(member_key.last_used_at, last_used_at)
+        self.assertEqual(member_key.last_used_ip_hash, last_used_ip_hash)
+        self.assertIsNone(member_key.revoked_at)
+        self.assertIsNone(MemberAPIKey.authenticate(plaintext))
+
     def test_valid_key_authenticates_and_updates_audit_fields(self):
         user = User.objects.create_user(email="auth-member-key@test.com")
         member_key, plaintext = MemberAPIKey.create_for_user(

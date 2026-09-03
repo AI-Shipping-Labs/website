@@ -65,9 +65,7 @@ def token_required(view_func=None, *, structured_errors=False):
 
             key = parts[1].strip()
             token = Token.authenticate(key)
-            if token is None:
-                return auth_error("Invalid token", "invalid_token")
-            if not is_staff_user(token.user):
+            if token is None or not is_staff_user(token.user):
                 return auth_error("Invalid token", "invalid_token")
 
             token.last_used_at = timezone.now()
@@ -114,7 +112,7 @@ def token_required_any_user(view_func):
 
         key = parts[1].strip()
         token = Token.authenticate(key)
-        if token is None:
+        if token is None or not is_authenticated_user(token.user):
             return JsonResponse({"error": "Invalid token"}, status=401)
 
         token.last_used_at = timezone.now()
@@ -202,7 +200,10 @@ def member_api_key_required(*required_scopes):
                 parts[1].strip(),
                 required_scopes=required_scopes,
             )
-            if member_key is None:
+            if (
+                member_key is None
+                or not is_authenticated_user(member_key.user)
+            ):
                 return _json_auth_error(
                     "Invalid member API key",
                     "invalid_member_api_key",

@@ -433,6 +433,48 @@ class CredentialLifecycleTest(UserMergeTestBase):
             CommunityAuditLog.objects.filter(action="merge_accounts").exists()
         )
 
+    def test_later_is_active_save_does_not_restore_merged_secondary_credentials(self):
+        canonical, secondary = self._make_pair()
+        member_key, member_plaintext = MemberAPIKey.create_for_user(
+            user=secondary,
+            name="secondary member key",
+        )
+        secondary.is_staff = True
+        secondary.save(update_fields=["is_staff"])
+        operator_token, operator_plaintext = Token.create_for_user(
+            user=secondary,
+            name="token created while staff",
+        )
+        secondary.is_staff = False
+        secondary.save(update_fields=["is_staff"])
+
+        response = self._post(
+            {"canonical_email": canonical.email, "merge_email": secondary.email}
+        )
+
+        expected_credentials = {
+            "member_api_keys_revoked": 1,
+            "operator_tokens_deleted": 1,
+        }
+        body = response.json()
+        self.assertEqual(body["credentials"], expected_credentials)
+        self.assertIsNone(MemberAPIKey.authenticate(member_plaintext))
+        self.assertIsNone(Token.authenticate(operator_plaintext))
+
+        secondary.refresh_from_db()
+        secondary.is_active = False
+        secondary.save(update_fields=["is_active"])
+
+        member_key.refresh_from_db()
+        self.assertIsNotNone(member_key.revoked_at)
+        self.assertFalse(Token.objects.filter(pk=operator_token.pk).exists())
+        self.assertIsNone(MemberAPIKey.authenticate(member_plaintext))
+        self.assertIsNone(Token.authenticate(operator_plaintext))
+        audit_details = json.loads(
+            CommunityAuditLog.objects.get(action="merge_accounts").details
+        )
+        self.assertEqual(audit_details["credentials"], expected_credentials)
+
     def test_later_failure_rolls_back_credential_revocation_and_deletion(self):
         from accounts.services.account_merge import merge_accounts
 

@@ -62,6 +62,32 @@ def _ensure_testimonial_course():
     connection.close()
 
 
+def _wait_for_testimonial_grid_display(page, expected_display):
+    """Wait until the testimonial grid's computed display matches the viewport.
+
+    Attachment wait is issue #1083 / #903. Waiting for computed display is
+    issue #1558: on live DEV a ``div`` stays ``display: block`` until Tailwind
+    applies. ``block`` after ``SETTLE_TIMEOUT_MS`` is still a failure, not an
+    allowed value. Desktop (1280 / ``md``) must become ``grid``; mobile
+    (``max-md:flex``) must become ``flex`` and must not be required to be
+    ``grid``.
+    """
+    grid = page.locator('[data-testid="testimonial-grid"]').first
+    grid.wait_for(state="attached", timeout=SETTLE_TIMEOUT_MS)
+    page.wait_for_function(
+        """({selector, expected}) => {
+            const el = document.querySelector(selector);
+            return el != null && getComputedStyle(el).display === expected;
+        }""",
+        arg={
+            "selector": '[data-testid="testimonial-grid"]',
+            "expected": expected_display,
+        },
+        timeout=SETTLE_TIMEOUT_MS,
+    )
+    return grid
+
+
 def _assert_no_horizontal_overflow(page, selector):
     # Wait for the target element to attach before evaluating against it.
     # Against the live dev environment (scheduled-playwright-dev.yml) the page
@@ -99,14 +125,12 @@ def _screenshot_section(page, name):
 def test_homepage_testimonials_desktop_and_mobile_screenshots(django_server, page):
     page.set_viewport_size({"width": 1280, "height": 900})
     goto_with_retry(page, f"{django_server}/", wait_until="networkidle")
-    grid = page.locator('[data-testid="testimonial-grid"]').first
     cards = page.locator('[data-testid="testimonial-card"]')
 
-    # Wait for the grid to attach before the first ``.evaluate`` against it.
-    # See ``_assert_no_horizontal_overflow`` for the SETTLE_TIMEOUT_MS rationale
-    # (Issue #1083 / #903): the live dev page can still be settling when the
-    # ``networkidle`` goto returns on a contended shard.
-    grid.wait_for(state="attached", timeout=SETTLE_TIMEOUT_MS)
+    # Wait for the grid to attach, then for Tailwind ``display: grid`` (Issue
+    # #1558 / #1083 / #903). Live DEV can return from ``networkidle`` while
+    # computed display is still the unstyled ``block`` default.
+    grid = _wait_for_testimonial_grid_display(page, "grid")
     assert grid.is_visible()
     assert cards.count() >= 4
     assert grid.evaluate("el => getComputedStyle(el).display") == "grid"
@@ -119,6 +143,8 @@ def test_homepage_testimonials_desktop_and_mobile_screenshots(django_server, pag
 
     page.set_viewport_size({"width": 390, "height": 900})
     goto_with_retry(page, f"{django_server}/", wait_until="networkidle")
+    # Mobile uses ``max-md:flex``; wait for that CSS, do not require ``grid``.
+    _wait_for_testimonial_grid_display(page, "flex")
     _assert_no_horizontal_overflow(page, '[data-testid="testimonial-card"]')
     _screenshot_section(page, "homepage-mobile")
 
@@ -132,8 +158,8 @@ def test_course_testimonials_shared_layout_and_source_link(django_server, page):
 
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(f"{django_server}/courses/testimonial-layout", wait_until="networkidle")
-    grid = page.locator('[data-testid="testimonial-grid"]').first
     cards = page.locator('[data-testid="testimonial-card"]')
+    grid = _wait_for_testimonial_grid_display(page, "grid")
 
     assert grid.is_visible()
     assert cards.count() == 2
@@ -148,5 +174,6 @@ def test_course_testimonials_shared_layout_and_source_link(django_server, page):
 
     page.set_viewport_size({"width": 390, "height": 900})
     page.goto(f"{django_server}/courses/testimonial-layout", wait_until="networkidle")
+    _wait_for_testimonial_grid_display(page, "flex")
     _assert_no_horizontal_overflow(page, '[data-testid="testimonial-card"]')
     _screenshot_section(page, "course-mobile")

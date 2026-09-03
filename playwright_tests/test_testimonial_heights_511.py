@@ -115,20 +115,46 @@ def _ensure_long_quote_course():
     connection.close()
 
 
-def _scroll_section_into_view(page):
-    """Scroll the testimonial grid into view, hiding the sticky header.
+def _wait_for_testimonial_grid_display(page, expected_display):
+    """Wait until the testimonial grid's computed display matches the viewport.
 
-    Wait for the grid to be attached before evaluating against it. Against
-    the live dev environment (scheduled-playwright.yml) the homepage can
-    still be settling when ``page.goto(..., wait_until="networkidle")``
-    returns on a cold/contended 4-shard runner, so a bare
-    ``section.evaluate`` can race the element's attachment and time out
-    (Issue #1083). Using the shared, load-tolerant ``SETTLE_TIMEOUT_MS``
-    budget (Issue #903) keeps a warm run instant while giving a loaded
-    shard headroom -- it is NOT a blind bump of the default 30s timeout.
+    Attachment wait is issue #1083 / #903. Waiting for computed display is
+    issue #1558: on live DEV a ``div`` stays ``display: block`` until Tailwind
+    applies. ``block`` after ``SETTLE_TIMEOUT_MS`` is still a failure.
+    Desktop (1280) must become ``grid``; mobile (393, ``max-md:flex``) must
+    become ``flex`` and must not be required to be ``grid``.
     """
     section = page.locator('[data-testid="testimonial-grid"]').first
     section.wait_for(state="attached", timeout=SETTLE_TIMEOUT_MS)
+    page.wait_for_function(
+        """({selector, expected}) => {
+            const el = document.querySelector(selector);
+            return el != null && getComputedStyle(el).display === expected;
+        }""",
+        arg={
+            "selector": '[data-testid="testimonial-grid"]',
+            "expected": expected_display,
+        },
+        timeout=SETTLE_TIMEOUT_MS,
+    )
+    return section
+
+
+def _scroll_section_into_view(page, expected_display):
+    """Scroll the testimonial grid into view, hiding the sticky header.
+
+    Wait for the grid to be attached and for the viewport display contract
+    before evaluating against it. Against the live dev environment
+    (scheduled-playwright.yml) the homepage can still be settling when
+    ``page.goto(..., wait_until="networkidle")`` returns on a
+    cold/contended 4-shard runner, so a bare ``section.evaluate`` can race
+    the element's attachment and time out (Issue #1083). Computed display
+    can also still be the unstyled ``block`` default until Tailwind applies
+    (Issue #1558). Using the shared, load-tolerant ``SETTLE_TIMEOUT_MS``
+    budget (Issue #903) keeps a warm run instant while giving a loaded
+    shard headroom -- it is NOT a blind bump of the default 30s timeout.
+    """
+    section = _wait_for_testimonial_grid_display(page, expected_display)
     page.add_style_tag(
         content="header, #section-nav { visibility: hidden !important; }"
     )
@@ -138,9 +164,9 @@ def _scroll_section_into_view(page):
     return section
 
 
-def _screenshot_section(page, name):
+def _screenshot_section(page, name, expected_display):
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
-    section = _scroll_section_into_view(page)
+    section = _scroll_section_into_view(page, expected_display)
     section.screenshot(path=SCREENSHOT_DIR / f"{name}.png")
 
 
@@ -210,7 +236,7 @@ def test_homepage_desktop_row_heights_equal(django_server, page):
     """Each row of the homepage 2-col testimonial grid has equal-height cards."""
     page.set_viewport_size({"width": 1280, "height": 900})
     goto_with_retry(page, f"{django_server}/", wait_until="networkidle")
-    _scroll_section_into_view(page)
+    _scroll_section_into_view(page, "grid")
 
     geometries = _card_geometry(page)
     assert len(geometries) >= 4, (
@@ -240,7 +266,7 @@ def test_homepage_desktop_row_heights_equal(django_server, page):
             f"(spread={spread}px)."
         )
 
-    _screenshot_section(page, "homepage-desktop-1280x900")
+    _screenshot_section(page, "homepage-desktop-1280x900", "grid")
 
 
 @pytest.mark.django_db
@@ -248,7 +274,7 @@ def test_homepage_desktop_no_truncation_for_current_corpus(django_server, page):
     """No current homepage testimonial is clipped at desktop 1280x900."""
     page.set_viewport_size({"width": 1280, "height": 900})
     goto_with_retry(page, f"{django_server}/", wait_until="networkidle")
-    _scroll_section_into_view(page)
+    _scroll_section_into_view(page, "grid")
 
     measurements = _quote_truncation(page)
     assert measurements, "No testimonial quotes rendered on the homepage"
@@ -261,7 +287,7 @@ def test_homepage_desktop_no_truncation_for_current_corpus(django_server, page):
             f"the current corpus on desktop."
         )
 
-    _screenshot_section(page, "homepage-desktop-no-truncation")
+    _screenshot_section(page, "homepage-desktop-no-truncation", "grid")
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +302,7 @@ def test_homepage_mobile_carousel_no_truncation_for_current_corpus(
     """No current homepage testimonial is clipped at mobile 393x851."""
     page.set_viewport_size({"width": 393, "height": 851})
     goto_with_retry(page, f"{django_server}/", wait_until="networkidle")
-    _scroll_section_into_view(page)
+    _scroll_section_into_view(page, "flex")
 
     measurements = _quote_truncation(page)
     assert measurements, "No testimonial quotes rendered on mobile"
@@ -305,7 +331,7 @@ def test_homepage_mobile_carousel_no_truncation_for_current_corpus(
         f"horizontally scrollable). Got distinct y-buckets: {ys}"
     )
 
-    _screenshot_section(page, "homepage-mobile-393x851")
+    _screenshot_section(page, "homepage-mobile-393x851", "flex")
 
 
 # ---------------------------------------------------------------------------
@@ -327,7 +353,7 @@ def test_course_detail_uses_shared_partial_with_clamp(django_server, page):
         wait_until="networkidle",
     )
 
-    grid = page.locator('[data-testid="testimonial-grid"]').first
+    grid = _wait_for_testimonial_grid_display(page, "grid")
     cards = page.locator('[data-testid="testimonial-card"]')
 
     assert grid.is_visible(), "Testimonial grid not rendered on course detail"
@@ -341,7 +367,7 @@ def test_course_detail_uses_shared_partial_with_clamp(django_server, page):
         measurements, "course detail desktop 1280x900"
     )
 
-    _screenshot_section(page, "course-detail-desktop-1280x900")
+    _screenshot_section(page, "course-detail-desktop-1280x900", "grid")
 
 
 # Issue #656: this test seeds a course via Course.objects.update_or_create
@@ -357,6 +383,7 @@ def test_long_quote_clamps_at_ten_lines_on_course_detail(django_server, page):
         f"{django_server}/courses/testimonial-clamp-511",
         wait_until="networkidle",
     )
+    _wait_for_testimonial_grid_display(page, "grid")
 
     measurements = _quote_truncation(page)
     quotes = page.locator('[data-testid="testimonial-quote"]')
@@ -413,4 +440,4 @@ def test_long_quote_clamps_at_ten_lines_on_course_detail(django_server, page):
         f"Cards should not overflow horizontally. Found {overflows} overflowing"
     )
 
-    _screenshot_section(page, "course-detail-long-quote-clamped")
+    _screenshot_section(page, "course-detail-long-quote-clamped", "grid")

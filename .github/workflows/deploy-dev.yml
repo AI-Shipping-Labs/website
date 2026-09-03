@@ -316,13 +316,17 @@ jobs:
         # matches the GitHub-hosted ubuntu-latest 4-vCPU runner — do NOT raise
         # it above the runner's vCPU count (oversubscription thrashes); the
         # sharding matrix is the lever for scaling, not intra-job parallelism.
+        # Issue #1512: wrap the same sharded invocation with Coverage.py so the
+        # dedicated `coverage` job can combine artifacts and fail-under 85.
+        # `--parallel-mode` writes per-process data files; `--concurrency=
+        # multiprocessing` measures Django's intra-job `--parallel 4` workers.
         env:
           DJANGO_TEST_DB_NAME: test_db.sqlite3
         run: |
           set -o pipefail
           start=$(date +%s)
           set +e
-          uv run python manage.py test --parallel 4 --exclude-tag=visual_regression --exclude-tag=postgres_migration --keepdb 2>&1 | tee test-output.log
+          uv run coverage run --parallel-mode --concurrency=multiprocessing manage.py test --parallel 4 --exclude-tag=visual_regression --exclude-tag=postgres_migration --keepdb 2>&1 | tee test-output.log
           status=${PIPESTATUS[0]}
           set -e
           end=$(date +%s)
@@ -335,12 +339,80 @@ jobs:
           fi
           exit "${status}"
 
+      - name: Stage coverage data
+        if: success()
+        run: |
+          mkdir -p coverage-data
+          shopt -s nullglob
+          files=(.coverage .coverage.*)
+          count=0
+          for f in "${files[@]}"; do
+            if [ -f "$f" ]; then
+              # Keep the `.coverage*` prefix: `coverage combine` ignores
+              # files that do not look like Coverage.py data files.
+              cp -v "$f" "coverage-data/$(basename "$f")"
+              count=$((count + 1))
+            fi
+          done
+          if [ "$count" -eq 0 ]; then
+            echo "No Coverage.py data files were produced for shard ${{ matrix.shard }}"
+            exit 1
+          fi
+          ls -la coverage-data
+
+      - name: Upload coverage data
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: coverage-data
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+
       - name: Report total job timing
         if: always()
         run: |
           now=$(date +%s)
           echo "CI_TIMING phase=job_total shard=${{ matrix.shard }}/${{ strategy.job-total }} seconds=$((now - CI_JOB_START)) source=runner_clock_excludes_post_job_steps"
           echo "CI_TIMING phase=post_job_overhead seconds=unavailable source=github_actions_native_step_timings note=cache_save_and_action_post_steps_run_after_final_step"
+
+  # Issue #1512: combine per-shard Coverage.py data and fail the workflow when
+  # combined first-party runtime coverage is below pyproject.toml fail_under
+  # (85). This job must not re-run the Django suite.
+  coverage:
+    name: Combined coverage (fail-under 85)
+    runs-on: ubuntu-latest
+    needs: [test]
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Download shard coverage data
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-shard-*
+          merge-multiple: true
+          path: coverage-data
+
+      - name: Combine and report coverage
+        run: |
+          ls -la coverage-data
+          uv run coverage combine coverage-data
+          uv run coverage report --fail-under=85
 
   postgres-verification:
     name: PostgreSQL 16 Verification
@@ -466,11 +538,13 @@ jobs:
   deploy:
     name: Deploy to Dev
     runs-on: ubuntu-latest
-    # #888/#1425: deploy gates on every Django and Playwright test shard plus
-    # the one-time `checks` and PostgreSQL jobs. A `needs` array entry only
-    # succeeds when ALL of a matrix job's shards succeed, so listing `test` and
-    # `playwright-core` here means deploy runs only when all 8 shards are green.
-    needs: [checks, test, playwright-core, postgres-verification]
+    # #888/#1425/#1512: deploy gates on every Django and Playwright test shard
+    # plus the one-time `checks`, PostgreSQL, and combined coverage jobs. A
+    # `needs` array entry only succeeds when ALL of a matrix job's shards
+    # succeed, so listing `test` and `playwright-core` here means deploy runs
+    # only when all 8 shards are green. `coverage` combines those Django shard
+    # artifacts and fails under 85%.
+    needs: [checks, test, playwright-core, postgres-verification, coverage]
     if: github.ref == 'refs/heads/main'
 
     permissions:

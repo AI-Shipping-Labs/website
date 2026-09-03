@@ -112,7 +112,7 @@ Exhaustive runs are CI gates, not part of the local loop:
 make test            # CI gate: full Django unit/integration suite
 make playwright      # CI gate: full Playwright E2E suite
 make test-all        # CI gate: both
-make coverage        # CI gate: full suite + coverage report
+make coverage        # optional exhaustive local coverage report (85% fail-under); not what Deploy Dev invokes
 ```
 
 `make test-core` runs only test classes decorated with `@tag('core')` -- the
@@ -120,9 +120,10 @@ auth, access-control, payments, sync, and critical model paths -- and is the
 fail-closed fallback the affected-tests plan uses.
 
 Do not run the full Django suite locally (`make test`, `make test-all`, `make coverage`).
-It is ~14,800 tests. CI runs it on every push to `main` and blocks the deploy on
-failure, and the full Playwright suite runs every 3 hours, so a local repeat only
-costs you wall time. See
+It is ~14,800 tests. Deploy Dev runs the Django suite sharded on every push to `main`
+and blocks the deploy on failure, including an 85% Coverage.py gate from those shards
+(combined; the exhaustive `make coverage` target is not what CI invokes), and the full
+Playwright suite runs every 3 hours, so a local repeat only costs you wall time. See
 [_docs/testing-guidelines.md](_docs/testing-guidelines.md) ("Affected-tests
 selection") for the rule chain and the policy on what belongs in core.
 

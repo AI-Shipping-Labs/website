@@ -56,6 +56,14 @@ def all_required_success():
     return [job(name) for name in REQUIRED]
 
 
+def replace_job(jobs, name, **kwargs):
+    for index, existing in enumerate(jobs):
+        if existing["name"] == name:
+            jobs[index] = job(name, **kwargs)
+            return
+    raise AssertionError(f"required job {name!r} is not in the job list")
+
+
 class FakeGh:
     """Injectable `gh` runner backed by scripted JSON / log responses."""
 
@@ -138,9 +146,14 @@ class WatcherExitCodeTest(SimpleTestCase):
 
     def test_failed_playwright_shard_names_job_and_captures_evidence_not_green(self):
         jobs = all_required_success()
-        jobs[7] = job(REQUIRED[7], conclusion="failure")  # Playwright shard 3/4 fails
-        jobs[8] = job(REQUIRED[8], status="completed", conclusion="cancelled")
-        jobs[9] = job(REQUIRED[9], status="completed", conclusion="skipped")
+        replace_job(jobs, "Playwright Core E2E (shard 3/4)", conclusion="failure")
+        replace_job(
+            jobs,
+            "Playwright Core E2E (shard 4/4)",
+            status="completed",
+            conclusion="cancelled",
+        )
+        replace_job(jobs, "Deploy to Dev", status="completed", conclusion="skipped")
         log = dedent(
             """
             Playwright Core E2E (shard 3/4)\tRun Playwright core shard\t2026-07-25T10:05:00Z E   AssertionError: expected page title
@@ -174,7 +187,7 @@ class WatcherExitCodeTest(SimpleTestCase):
     def test_cancelled_playwright_matrix_job_is_never_green(self):
         jobs = all_required_success()
         cancelled_name = "Playwright Core E2E (shard 3/4)"
-        jobs[7] = job(cancelled_name, status="completed", conclusion="cancelled")
+        replace_job(jobs, cancelled_name, status="completed", conclusion="cancelled")
         gh = FakeGh(
             views=[run_payload(status="completed", conclusion="cancelled", jobs=jobs)],
             run_list=[
@@ -305,10 +318,10 @@ class WatcherExitCodeTest(SimpleTestCase):
 
     def test_genuine_required_failure_wins_over_later_cancellation(self):
         jobs = all_required_success()
-        jobs[1] = job(REQUIRED[1], conclusion="failure")
-        for index in range(2, 9):
-            jobs[index] = job(REQUIRED[index], status="completed", conclusion="cancelled")
-        jobs[9] = job(REQUIRED[9], status="completed", conclusion="skipped")
+        replace_job(jobs, REQUIRED[1], conclusion="failure")
+        for name in REQUIRED[2:-1]:
+            replace_job(jobs, name, status="completed", conclusion="cancelled")
+        replace_job(jobs, REQUIRED[-1], status="completed", conclusion="skipped")
         # Run itself was cancelled, but the failed required job must win.
         gh = FakeGh(
             views=[run_payload(status="completed", conclusion="cancelled", jobs=jobs)],
@@ -392,7 +405,7 @@ class CompactOutputTest(SimpleTestCase):
         verdict.elapsed_s = 512.0
         return verdict, run
 
-    def test_summary_plus_json_stays_under_25_lines_with_all_ten(self):
+    def test_summary_plus_json_stays_under_25_lines_with_all_required(self):
         verdict, run = self._green_verdict_and_run()
         summary = watch_ci.render_summary(verdict, run)
         total_lines = len(summary) + 1  # + final JSON line
@@ -426,7 +439,7 @@ class CompactOutputTest(SimpleTestCase):
 
 @tag("core")
 class RequiredCheckDefaultsTest(SimpleTestCase):
-    def test_deploy_dev_defaults_to_the_ten_exact_website_job_names(self):
+    def test_deploy_dev_defaults_to_the_exact_website_job_names(self):
         self.assertEqual(
             list(REQUIRED),
             [
@@ -435,6 +448,7 @@ class RequiredCheckDefaultsTest(SimpleTestCase):
                 "Unit & Integration Tests (shard 2/4)",
                 "Unit & Integration Tests (shard 3/4)",
                 "Unit & Integration Tests (shard 4/4)",
+                "Combined coverage (fail-under 85)",
                 "Playwright Core E2E (shard 1/4)",
                 "Playwright Core E2E (shard 2/4)",
                 "Playwright Core E2E (shard 3/4)",

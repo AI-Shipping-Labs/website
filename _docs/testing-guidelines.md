@@ -652,27 +652,33 @@ or unclosed `{# #}`. It replaces the reactive per-page
 
 ---
 
-## Coverage gate (`make coverage`)
+## Coverage gate (Deploy Dev sharded collection)
 
-`make coverage` is the exhaustive Django coverage gate. It starts from clean
-coverage data, runs the full Django unit/integration suite with Coverage.py,
-and reports against the project coverage configuration in `pyproject.toml`.
-The command must pass with at least 85% total coverage in CI.
+Deploy Dev enforces the 85% Django coverage gate. Each `test` matrix shard
+(shards 1–4, same `--exclude-tag=visual_regression --exclude-tag=postgres_migration`
+split as the suite itself) runs under Coverage.py, including intra-job
+`--parallel 4` workers. A dedicated `coverage` job downloads those artifacts,
+runs `coverage combine`, then `coverage report --fail-under=85` (honoring
+`pyproject.toml` `[tool.coverage.report] fail_under = 85`). That job is in
+`deploy.needs` and does not use `continue-on-error`, so a miss blocks image
+build and deploy. Deploy Dev does not run unsharded `make coverage` or a second
+full `manage.py test` with no labels.
 
-For per-issue local review, do not run `make coverage` by default. It is
-CI-only unless Alexey explicitly asks for a local full-suite/coverage run. Local
-tester review should run focused Django tests for the changed modules plus the
-appropriate Playwright subset.
+`make coverage` remains the optional local/exhaustive command (`coverage erase`,
+full `coverage run manage.py test`, `coverage report --fail-under=85`). Do not
+run `make coverage` in the SWE/tester inner loop unless Alexey explicitly asks.
+Local review stays `make test-affected` / `make test-core`.
 
 The coverage scope is first-party runtime/application code: Django apps plus the
 project package. Django test modules, Playwright test modules, migrations,
 virtualenvs, cache/build output, and local generated artifacts are excluded from
 the percentage. Do not exclude runtime code solely to raise the reported total.
 
-Playwright E2E tests are a separate validation gate:
+Playwright E2E tests are a separate validation gate and are not folded into the
+85% Django percentage:
 
 ```bash
-make coverage      # CI/default exhaustive Django/runtime coverage, 85% minimum
+make coverage      # optional exhaustive local Django/runtime coverage, 85% minimum; not what CI invokes
 make playwright    # browser E2E scenarios
 ```
 

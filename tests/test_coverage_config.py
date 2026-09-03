@@ -2,7 +2,7 @@ import tomllib
 from pathlib import Path
 
 from django.apps import apps
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -23,6 +23,7 @@ def _is_first_party_app(app_config):
     return len(relative_app_path.parts) == 1 and (app_path / "tests").is_dir()
 
 
+@tag("core")
 class CoverageConfigTest(SimpleTestCase):
     def test_coverage_source_includes_tested_first_party_apps(self):
         coverage_sources = set(_coverage_config()["run"]["source"])
@@ -65,3 +66,6 @@ class CoverageConfigTest(SimpleTestCase):
 
     def test_coverage_threshold_remains_85_percent(self):
         self.assertEqual(85, _coverage_config()["report"]["fail_under"])
+
+    def test_coverage_run_uses_relative_paths_for_cross_runner_combine(self):
+        self.assertTrue(_coverage_config()["run"].get("relative_files"))

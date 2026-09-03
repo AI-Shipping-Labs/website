@@ -105,7 +105,9 @@ test-judge:
 test-live-slack-announcement:
 	RUN_LIVE_SLACK_ANNOUNCEMENT=1 uv run pytest -m live_slack_announcement community/tests/live_slack/ -v
 
-# Run tests with coverage
+# Optional local/exhaustive Django coverage (not the Deploy Dev gate, not the
+# agent inner loop). Deploy Dev collects Coverage.py on the sharded `test`
+# matrix and combines with --fail-under=85; see _docs/testing-guidelines.md.
 coverage:
 	uv run coverage erase
 	uv run coverage run manage.py test

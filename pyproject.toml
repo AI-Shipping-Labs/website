@@ -51,6 +51,9 @@ markers = [
 ]
 
 [tool.coverage.run]
+# relative_files is required so Deploy Dev can combine Coverage.py data from
+# four GitHub-hosted shards (absolute checkout paths differ per runner).
+relative_files = true
 source = [
     "accounts",
     "analytics",

@@ -212,7 +212,7 @@ class DeployDevWakeWorkflowTest(SimpleTestCase):
 
         self.assertEqual(
             deploy_job["needs"],
-            ["checks", "test", "playwright-core", "postgres-verification"],
+            ["checks", "test", "playwright-core", "postgres-verification", "coverage"],
         )
         self.assertFalse(
             workflow["jobs"]["playwright-core"].get("continue-on-error", False)
@@ -393,7 +393,7 @@ class DeployDevRuffGateWorkflowTest(SimpleTestCase):
     def test_blocking_ruff_is_not_duplicated_onto_deploy_shards(self):
         workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)
 
-        for job_name in ("test", "playwright-core", "postgres-verification"):
+        for job_name in ("test", "playwright-core", "postgres-verification", "coverage"):
             with self.subTest(job=job_name):
                 self.assertEqual(_blocking_ruff_steps(workflow["jobs"][job_name]), [])
 

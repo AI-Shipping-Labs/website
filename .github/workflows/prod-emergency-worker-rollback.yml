@@ -1,0 +1,287 @@
+name: Emergency Production Worker Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmRollback:
+        description: "Explicitly confirm the emergency production worker rollback"
+        required: true
+        type: boolean
+        default: false
+      taskDefinition:
+        description: "Exact worker task definition (ai-shipping-labs-worker-prod:<revision>)"
+        required: true
+        type: string
+      expectedTag:
+        description: "Exact immutable tag that the worker image or VERSION must equal"
+        required: true
+        type: string
+
+# Shared with Manual Production Deployment and Emergency Production Web
+# Rollback. cancel-in-progress must stay false so a confirmed worker
+# rollback waits instead of killing an in-flight deploy or web rollback.
+concurrency:
+  group: production-ecs-mutation
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Rollback Production Worker Service
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: eu-west-1
+      AWS_ACCOUNT_ID: "387546586013"
+      ECS_CLUSTER: ai-shipping-labs
+      ECS_WORKER_SERVICE: ai-shipping-labs-worker-prod
+      CONFIRM_ROLLBACK: ${{ inputs.confirmRollback }}
+      TASK_DEFINITION: ${{ inputs.taskDefinition }}
+      EXPECTED_TAG: ${{ inputs.expectedTag }}
+
+    steps:
+      - name: Validate emergency rollback inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${CONFIRM_ROLLBACK}" != "true" ]]; then
+            echo "::error ::Emergency production worker rollback was not explicitly confirmed."
+            exit 1
+          fi
+
+          if [[ ! "${TASK_DEFINITION}" =~ ^ai-shipping-labs-worker-prod:[1-9][0-9]*$ ]]; then
+            echo "::error ::taskDefinition must match ai-shipping-labs-worker-prod:<positive revision>."
+            exit 1
+          fi
+
+          if [[ ! "${EXPECTED_TAG}" =~ ^[0-9]{8}-[0-9]{6}-[0-9a-f]{7,40}$ ]]; then
+            echo "::error ::expectedTag must be an immutable timestamp-and-commit deployment tag."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::387546586013:role/website-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve exact task definition
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          expected_arn="arn:aws:ecs:${AWS_REGION}:${AWS_ACCOUNT_ID}:task-definition/${TASK_DEFINITION}"
+          resolved_arn="$(aws ecs describe-task-definition \
+            --region "${AWS_REGION}" \
+            --task-definition "${TASK_DEFINITION}" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)"
+
+          if [[ "${resolved_arn}" != "${expected_arn}" ]]; then
+            echo "::error ::Resolved task definition does not exactly match the requested production worker revision."
+            exit 1
+          fi
+
+          images="$(aws ecs describe-task-definition \
+            --region "${AWS_REGION}" \
+            --task-definition "${TASK_DEFINITION}" \
+            --query 'taskDefinition.containerDefinitions[].image' \
+            --output text)"
+          versions="$(aws ecs describe-task-definition \
+            --region "${AWS_REGION}" \
+            --task-definition "${TASK_DEFINITION}" \
+            --query "taskDefinition.containerDefinitions[].environment[?name=='VERSION'].value" \
+            --output text)"
+
+          image_tag_matches=0
+          version_matches=0
+          for image in ${images}; do
+            if [[ -z "${image}" || "${image}" == "None" ]]; then
+              continue
+            fi
+            image_tag="${image##*:}"
+            if [[ "${image_tag}" == "${EXPECTED_TAG}" ]]; then
+              image_tag_matches=1
+            fi
+          done
+          for version in ${versions}; do
+            if [[ "${version}" == "${EXPECTED_TAG}" ]]; then
+              version_matches=1
+            fi
+          done
+
+          if [[ "${image_tag_matches}" -eq 0 && "${version_matches}" -eq 0 ]]; then
+            echo "::error ::Worker task definition image tag or VERSION does not equal expectedTag; not calling update-service."
+            exit 1
+          fi
+
+          echo "RESOLVED_TASK_DEFINITION=${resolved_arn}" >> "${GITHUB_ENV}"
+
+      - name: Roll back production worker service only
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Re-reading live PRIMARY deployment for ${ECS_WORKER_SERVICE} before update-service..."
+          live_state="$(aws ecs describe-services \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER}" \
+            --services "${ECS_WORKER_SERVICE}" \
+            --query "services[0].deployments[?status=='PRIMARY'] | [0].[taskDefinition,desiredCount,runningCount]" \
+            --output text)"
+          read -r live_primary live_desired live_running <<< "${live_state}"
+          if [[ -z "${live_primary}" || "${live_primary}" == "None" ]]; then
+            echo "::error ::Could not read the live PRIMARY task definition; not calling update-service."
+            exit 1
+          fi
+          echo "Live PRIMARY: taskDefinition=${live_primary} desired=${live_desired} running=${live_running}"
+
+          active_count="$(aws ecs describe-services \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER}" \
+            --services "${ECS_WORKER_SERVICE}" \
+            --query "services[0].deployments[?status=='ACTIVE'] | length(@)" \
+            --output text)"
+          if [[ ! "${active_count}" =~ ^[0-9]+$ ]]; then
+            echo "::error ::Could not determine ACTIVE non-PRIMARY deployments; not calling update-service."
+            exit 1
+          fi
+          if [[ "${active_count}" -gt 0 ]]; then
+            echo "::error ::Production worker service already has an ACTIVE non-PRIMARY deployment; not calling update-service."
+            exit 1
+          fi
+
+          updated_arn="$(aws ecs update-service \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER}" \
+            --service "${ECS_WORKER_SERVICE}" \
+            --task-definition "${RESOLVED_TASK_DEFINITION}" \
+            --desired-count 1 \
+            --query 'service.taskDefinition' \
+            --output text)"
+
+          if [[ "${updated_arn}" != "${RESOLVED_TASK_DEFINITION}" ]]; then
+            echo "::error ::ECS did not accept the exact requested worker task definition."
+            exit 1
+          fi
+
+          aws ecs wait services-stable \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER}" \
+            --services "${ECS_WORKER_SERVICE}"
+
+          primary_state="$(aws ecs describe-services \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER}" \
+            --services "${ECS_WORKER_SERVICE}" \
+            --query "services[0].deployments[?status=='PRIMARY'] | [0].[taskDefinition,desiredCount,runningCount]" \
+            --output text)"
+          read -r current_arn desired_count running_count <<< "${primary_state}"
+
+          if [[ "${current_arn}" != "${RESOLVED_TASK_DEFINITION}" ]]; then
+            echo "::error ::ECS PRIMARY taskDefinition is not the requested worker rollback revision."
+            exit 1
+          fi
+          if [[ ! "${desired_count}" =~ ^[0-9]+$ ]] || [[ ! "${running_count}" =~ ^[0-9]+$ ]]; then
+            echo "::error ::Could not read PRIMARY desiredCount/runningCount after services-stable."
+            exit 1
+          fi
+          if [[ "${desired_count}" -lt 1 ]]; then
+            echo "::error ::Worker PRIMARY desiredCount is 0 after rollback; expected a running worker."
+            exit 1
+          fi
+          if [[ "${running_count}" -lt "${desired_count}" ]]; then
+            echo "::error ::PRIMARY runningCount is below desiredCount after worker rollback."
+            exit 1
+          fi
+
+      - name: Verify recovered worker ECS state
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Same evidence as deploy/deploy_dev.sh verify_recovery_ecs_state:
+          # PRIMARY already matched the requested ARN with runningCount >=
+          # desiredCount. Now require at least one RUNNING task on that ARN
+          # whose containers are all RUNNING. Do not use the public web ping URL.
+          expected_names="$(aws ecs describe-task-definition \
+            --region "${AWS_REGION}" \
+            --task-definition "${RESOLVED_TASK_DEFINITION}" \
+            --query 'taskDefinition.containerDefinitions[].name' \
+            --output text)"
+          if [[ -z "${expected_names}" || "${expected_names}" == "None" ]]; then
+            echo "::error ::Could not read worker container names from the requested task definition."
+            exit 1
+          fi
+
+          running_arns="$(aws ecs list-tasks \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER}" \
+            --service-name "${ECS_WORKER_SERVICE}" \
+            --desired-status RUNNING \
+            --query 'taskArns[]' \
+            --output text)"
+          if [[ -z "${running_arns}" || "${running_arns}" == "None" ]]; then
+            echo "::error ::No RUNNING worker tasks after services-stable."
+            exit 1
+          fi
+
+          matching_task=""
+          for task_arn in ${running_arns}; do
+            task_state="$(aws ecs describe-tasks \
+              --region "${AWS_REGION}" \
+              --cluster "${ECS_CLUSTER}" \
+              --tasks "${task_arn}" \
+              --query 'tasks[0].[taskDefinitionArn,lastStatus]' \
+              --output text)"
+            read -r task_def task_last_status <<< "${task_state}"
+            echo "Worker recovery candidate: task=${task_arn} task_definition=${task_def:-<missing>} last_status=${task_last_status:-<missing>}"
+            if [[ "${task_def}" != "${RESOLVED_TASK_DEFINITION}" || "${task_last_status}" != "RUNNING" ]]; then
+              continue
+            fi
+
+            container_states="$(aws ecs describe-tasks \
+              --region "${AWS_REGION}" \
+              --cluster "${ECS_CLUSTER}" \
+              --tasks "${task_arn}" \
+              --query 'tasks[0].containers[].[name,lastStatus]' \
+              --output text)"
+            if [[ -z "${container_states}" || "${container_states}" == "None" ]]; then
+              continue
+            fi
+
+            all_containers_running=1
+            while read -r container_name container_status; do
+              if [[ -z "${container_name}" ]]; then
+                continue
+              fi
+              if [[ "${container_status}" != "RUNNING" ]]; then
+                all_containers_running=0
+                break
+              fi
+            done <<< "${container_states}"
+            if [[ "${all_containers_running}" -ne 1 ]]; then
+              continue
+            fi
+
+            matching_task="${task_arn}"
+            for expected_name in ${expected_names}; do
+              if ! printf '%s\n' "${container_states}" | awk -v name="${expected_name}" \
+                  '$1 == name && $2 == "RUNNING" { found=1 } END { exit(found ? 0 : 1) }'; then
+                matching_task=""
+                break
+              fi
+            done
+            if [[ -n "${matching_task}" ]]; then
+              echo "::notice ::Worker rollback verified: PRIMARY ARN match, runningCount >= desiredCount, task=${matching_task} containers all RUNNING. Keep the expanded schema; do not reverse migrations."
+              exit 0
+            fi
+          done
+
+          echo "::error ::No RUNNING worker task matched the requested task definition with all containers RUNNING."
+          exit 1

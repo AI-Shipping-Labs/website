@@ -221,6 +221,7 @@ CONTRACT_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("README.md", (TESTS_PACKAGE,)),
     ("_docs/PROCESS.md", (TESTS_PACKAGE,)),
     ("_docs/testing-guidelines.md", (TESTS_PACKAGE,)),
+    ("_docs/setup.md", (TESTS_PACKAGE,)),
     # Shipped doc artifacts read by app tests.
     ("_docs/content.md", ("content",)),
     ("_docs/design-system.md", ("accounts", "content")),

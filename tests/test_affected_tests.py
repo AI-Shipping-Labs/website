@@ -242,7 +242,13 @@ class RuleChainTest(SimpleTestCase):
         # _docs/testing-guidelines.md all have rot guards in RotGuardTest
         # below, which lives in tests/. A diff touching only one of them must
         # therefore run `tests`, not print NO TESTS REQUIRED.
-        for path in ("CLAUDE.md", "AGENTS.md", "README.md", "_docs/PROCESS.md"):
+        for path in (
+            "CLAUDE.md",
+            "AGENTS.md",
+            "README.md",
+            "_docs/PROCESS.md",
+            "_docs/setup.md",
+        ):
             with self.subTest(path=path):
                 plan = plan_for([path])
                 self.assertFalse(plan.no_tests_required)

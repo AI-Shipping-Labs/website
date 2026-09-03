@@ -241,9 +241,9 @@ Two GitHub Actions workflows handle deployment:
 - `deploy-dev.yml` — runs tests, builds Docker image, pushes to ECR, and deploys to the dev ECS service. Triggers automatically on push to `main`.
 - `deploy-prod.yml` (`Manual Production Deployment`) — manual `workflow_dispatch` with a confirmation checkbox. Promotes the current dev image tag to the prod ECS service. Optionally accepts a specific tag.
 
-Manual Production Deployment and emergency production rollback (`prod-emergency-web-rollback.yml`, and a worker rollback workflow if one exists) share one non-cancelling GitHub Actions queue: `concurrency.group` `production-ecs-mutation` with `cancel-in-progress: false`. A second confirmed dispatch waits; it does not cancel an in-flight web/worker roll. Read-only diagnostics (`prod-emergency-diagnostics.yml`) stay on their own group.
+Manual Production Deployment (`deploy-prod.yml`), Emergency Production Web Rollback (`prod-emergency-web-rollback.yml`), and Emergency Production Worker Rollback (`prod-emergency-worker-rollback.yml`) share one non-cancelling GitHub Actions queue: `concurrency.group` `production-ecs-mutation` with `cancel-in-progress: false`. A second confirmed dispatch waits; it does not cancel an in-flight web/worker roll. Read-only diagnostics (`prod-emergency-diagnostics.yml`) stay on their own group.
 
-GitHub concurrency only serializes those workflows. It does not cover a laptop `CONFIRM_DEPLOY=true bash deploy/deploy_prod.sh` or an AWS Console / CLI click. Those still race the same ECS services and rely on the production path of `deploy/deploy_dev.sh` (and the rollback workflow) re-reading the live PRIMARY deployment and failing closed when the service already has an ACTIVE non-PRIMARY deployment.
+GitHub concurrency only serializes those workflows. It does not cover a laptop `CONFIRM_DEPLOY=true bash deploy/deploy_prod.sh` or an AWS Console / CLI click. Those still race the same ECS services and rely on the production path of `deploy/deploy_dev.sh` (and the rollback workflows) re-reading the live PRIMARY deployment and failing closed when the service already has an ACTIVE non-PRIMARY deployment.
 
 Both workflows use `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` GitHub secrets for ECR/ECS access.
 
@@ -308,7 +308,17 @@ Use `ai-shipping-labs-prod` for production.
 3. Register a corrected task definition by rerunning `bash deploy/deploy_dev.sh <tag> <env>`, or use `aws ecs update-service --force-new-deployment` if only the referenced secret value changed.
 4. Confirm `/ping` returns the expected `VERSION` tag and check `/studio/worker/` for a live django-q heartbeat.
 
-To roll back, redeploy a previously known-good tag with `deploy_dev.sh` for dev or `CONFIRM_DEPLOY=true deploy_prod.sh` for prod. Prod tags are appended to `.prod-versions`; the current dev tag can be read from `https://dev.aishippinglabs.com/ping`.
+To roll back, redeploy a previously known-good tag with `deploy_dev.sh` for dev or `CONFIRM_DEPLOY=true deploy_prod.sh` for prod. Prod tags are appended to `.prod-versions`; the current dev tag can be read from `https://dev.aishippinglabs.com/ping`. A full prod tag redeploy registers new revisions and can roll web as a side effect, so it is not an emergency rollback.
+
+### Emergency production rollback
+
+Keep the expanded schema. Do not reverse migrations. Emergency rollback does not rewrite `.prod-versions`.
+
+Web-only: dispatch `Emergency Production Web Rollback` (`.github/workflows/prod-emergency-web-rollback.yml`). Service `ai-shipping-labs-prod`, family `ai-shipping-labs-prod:<revision>`. Success is three consecutive `https://aishippinglabs.com/ping` matches of `expectedTag`.
+
+Worker-only: dispatch `Emergency Production Worker Rollback` (`.github/workflows/prod-emergency-worker-rollback.yml`). Service `ai-shipping-labs-worker-prod`, family `ai-shipping-labs-worker-prod:<revision>`. Confirm the run, pass that family/revision and the immutable `expectedTag`. `update-service` uses `--desired-count 1` because worker services are woken from a 0 baseline. Success is PRIMARY `taskDefinition` equal to the requested ARN, `runningCount >= desiredCount`, and at least one RUNNING task whose containers are all RUNNING. Do not treat `https://aishippinglabs.com/ping` as worker proof; that only observes web.
+
+If both services need restoring, dispatch two serialized runs. They share `concurrency.group` `production-ecs-mutation` with `cancel-in-progress: false`.
 
 ## Deploy scripts
 

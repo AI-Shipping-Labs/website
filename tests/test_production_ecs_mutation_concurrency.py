@@ -7,6 +7,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 DEPLOY_PROD_WORKFLOW_PATH = WORKFLOWS_DIR / "deploy-prod.yml"
 WEB_ROLLBACK_WORKFLOW_PATH = WORKFLOWS_DIR / "prod-emergency-web-rollback.yml"
+WORKER_ROLLBACK_WORKFLOW_PATH = WORKFLOWS_DIR / "prod-emergency-worker-rollback.yml"
 DIAGNOSTICS_WORKFLOW_PATH = WORKFLOWS_DIR / "prod-emergency-diagnostics.yml"
 DEPLOY_DEV_WORKFLOW_PATH = WORKFLOWS_DIR / "deploy-dev.yml"
 PRODUCTION_ECS_MUTATION_GROUP = "production-ecs-mutation"
@@ -22,7 +23,11 @@ def _load_yaml(path):
 
 
 def _production_mutation_workflow_paths():
-    names = {"deploy-prod.yml", "prod-emergency-web-rollback.yml"}
+    names = {
+        "deploy-prod.yml",
+        "prod-emergency-web-rollback.yml",
+        "prod-emergency-worker-rollback.yml",
+    }
     for path in WORKFLOWS_DIR.glob("*.yml"):
         lowered = path.name.lower()
         if "rollback" in lowered and (
@@ -38,6 +43,7 @@ class ProductionEcsMutationConcurrencyTest(SimpleTestCase):
         mutation_paths = _production_mutation_workflow_paths()
         self.assertIn(DEPLOY_PROD_WORKFLOW_PATH, mutation_paths)
         self.assertIn(WEB_ROLLBACK_WORKFLOW_PATH, mutation_paths)
+        self.assertIn(WORKER_ROLLBACK_WORKFLOW_PATH, mutation_paths)
 
         for path in mutation_paths:
             with self.subTest(path=path.name):

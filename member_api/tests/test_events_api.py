@@ -161,7 +161,13 @@ class MemberEventsApiTest(TierSetupMixin, TestCase):
         ).json()
 
         self.assertEqual([item["id"] for item in upcoming["events"]], [accessible.id, external.id])
+        self.assertEqual(upcoming["events"][0]["registration_source"], "none")
+        self.assertFalse(upcoming["events"][0]["is_registered"])
+        self.assertTrue(upcoming["events"][0]["registration_available"])
+        self.assertEqual(upcoming["events"][0]["registration_targets"], ["event"])
         self.assertEqual(upcoming["events"][1]["external_registration_url"], "https://maven.com/event")
+        self.assertFalse(upcoming["events"][1]["registration_available"])
+        self.assertEqual(upcoming["events"][1]["registration_targets"], [])
         self.assertEqual(upcoming["pagination"], {
             "page": 1,
             "page_size": 20,
@@ -169,6 +175,8 @@ class MemberEventsApiTest(TierSetupMixin, TestCase):
             "total_pages": 1,
         })
         self.assertEqual([item["id"] for item in past_data["events"]], [past.id])
+        self.assertFalse(past_data["events"][0]["registration_available"])
+        self.assertEqual(past_data["events"][0]["registration_targets"], [])
 
         invalid = self.client.get(
             "/member-api/v1/events?filter=tomorrow",
@@ -361,6 +369,12 @@ class MemberEventsApiTest(TierSetupMixin, TestCase):
         )
 
         self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload["registration_source"], "event")
+        self.assertTrue(payload["is_registered"])
+        self.assertFalse(payload["registration_available"])
+        self.assertEqual(payload["registration_targets"], [])
+        self.assertEqual(payload["registration_status"], "registered")
         registration = EventRegistration.objects.get(event=event)
         self.assertEqual(registration.user, self.member)
         self.member.refresh_from_db()
@@ -414,7 +428,10 @@ class MemberEventsApiTest(TierSetupMixin, TestCase):
             set(EventRegistration.objects.filter(user=self.member).values_list("event_id", flat=True)),
             {first.id, second.id},
         )
-        summary = response.json()["summary"]
+        payload = response.json()
+        self.assertEqual(payload["registration_source"], "event")
+        self.assertTrue(payload["is_registered"])
+        summary = payload["summary"]
         self.assertEqual(summary["registered"], 2)
         self.assertEqual(summary["skipped_no_access"], 1)
         self.assertEqual(summary["skipped_opted_out"], 1)

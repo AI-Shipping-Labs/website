@@ -2,10 +2,53 @@
 
 from datetime import UTC
 
+from django.db.models import Exists, OuterRef
+
 from content.access import get_required_tier_label
 from events.models import EventRegistration, SeriesOccurrenceOptOut, SeriesRegistration
 from events.services.display_time import should_display_event_location
 from integrations.services.banner_generator.resolve import effective_banner_url
+
+HAS_EVENT_REGISTRATION_ATTR = "_member_has_event_registration"
+HAS_SERIES_REGISTRATION_ATTR = "_member_has_series_registration"
+HAS_OCCURRENCE_OPT_OUT_ATTR = "_member_has_occurrence_opt_out"
+
+
+def annotate_member_registration_state(queryset, user):
+    """Attach request-user registration booleans with ``Exists`` subqueries.
+
+    Call this on the user-scoped queryset before slicing a list page, and on
+    the single-row queryset used by detail/register serialization, so list and
+    detail cannot drift back to per-event ``.exists()`` lookups.
+    """
+    return queryset.annotate(
+        **{
+            HAS_EVENT_REGISTRATION_ATTR: Exists(
+                EventRegistration.objects.filter(event_id=OuterRef("pk"), user=user),
+            ),
+            HAS_SERIES_REGISTRATION_ATTR: Exists(
+                SeriesRegistration.objects.filter(
+                    series_id=OuterRef("event_series_id"),
+                    user=user,
+                ),
+            ),
+            HAS_OCCURRENCE_OPT_OUT_ATTR: Exists(
+                SeriesOccurrenceOptOut.objects.filter(
+                    event_id=OuterRef("pk"),
+                    user=user,
+                ),
+            ),
+        }
+    )
+
+
+def _annotated_bool(event, attr_name):
+    if not hasattr(event, attr_name):
+        raise AttributeError(
+            f"Event is missing {attr_name}; call "
+            "annotate_member_registration_state() before serialize."
+        )
+    return bool(getattr(event, attr_name))
 
 
 def _utc_iso(value):
@@ -26,17 +69,14 @@ def _series_data(event):
     }
 
 
-def _registration_source(event, user):
-    if EventRegistration.objects.filter(event=event, user=user).exists():
+def _registration_source(event):
+    if _annotated_bool(event, HAS_EVENT_REGISTRATION_ATTR):
         return "event"
     if event.event_series_id is None:
         return "none"
-    if not SeriesRegistration.objects.filter(
-        series_id=event.event_series_id,
-        user=user,
-    ).exists():
+    if not _annotated_bool(event, HAS_SERIES_REGISTRATION_ATTR):
         return "none"
-    if SeriesOccurrenceOptOut.objects.filter(event=event, user=user).exists():
+    if _annotated_bool(event, HAS_OCCURRENCE_OPT_OUT_ATTR):
         return "none"
     return "series"
 
@@ -49,8 +89,8 @@ def _time_status(event):
     return "draft"
 
 
-def _registration_state(event, user, *, has_access):
-    source = _registration_source(event, user)
+def _registration_state(event, *, has_access):
+    source = _registration_source(event)
     available = (
         not event.is_external
         and has_access
@@ -90,7 +130,7 @@ def serialize_event_summary(event, user, *, has_access=True):
         "attendee_count": event.attendee_count,
         "external_registration_url": event.zoom_join_url if event.is_external else None,
     }
-    data.update(_registration_state(event, user, has_access=has_access))
+    data.update(_registration_state(event, has_access=has_access))
     return data
 
 

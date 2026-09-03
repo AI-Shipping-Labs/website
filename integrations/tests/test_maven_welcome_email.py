@@ -9,7 +9,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import resolve, reverse
 
-from accounts.utils.tokens import JWT_ALGORITHM
+from accounts.utils.tokens import JWT_ALGORITHM, resolve_password_reset_token
 from email_app.services.email_service import EmailService
 from integrations.services.maven import _welcome_context
 
@@ -76,6 +76,10 @@ class MavenWelcomeEmailContentTest(TestCase):
 
         self.assertEqual(payload["user_id"], user.pk)
         self.assertEqual(payload["action"], "password_reset")
+        resolved_user, _validated = resolve_password_reset_token(
+            _extract_token(context["password_reset_url"])
+        )
+        self.assertEqual(resolved_user.pk, user.pk)
         self.assertGreater(
             expires_at,
             started_at + datetime.timedelta(hours=23, minutes=59),

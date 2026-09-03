@@ -11,6 +11,7 @@ from django.conf import settings
 from django.contrib.auth import login, logout
 from django.contrib.auth.backends import ModelBackend
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -30,7 +31,14 @@ from accounts.return_context import (
 from accounts.services.email_resolution import resolve_user_by_email
 from accounts.services.free_welcome import send_free_welcome_email
 from accounts.services.verification import resolve_unverified_ttl_days
-from accounts.utils.tokens import JWT_ALGORITHM, generate_user_action_token
+from accounts.utils.tokens import (
+    JWT_ALGORITHM,
+    PasswordResetTokenError,
+    generate_password_reset_token,
+    generate_user_action_token,
+    load_password_reset_payload,
+    password_reset_proof_matches,
+)
 from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
@@ -161,20 +169,9 @@ def _generate_verification_token(user_id, expiry_hours=24, return_path=None):
 
 
 def _generate_password_reset_token(user_id, expiry_hours=1):
-    """Generate a JWT token for password reset.
-
-    Args:
-        user_id: The user's primary key.
-        expiry_hours: How many hours until the token expires (default 1).
-
-    Returns:
-        str: The encoded JWT token.
-    """
-    return generate_user_action_token(
-        user_id,
-        "password_reset",
-        expiry_hours=expiry_hours,
-    )
+    """Compatibility wrapper around the password-state-bound generator."""
+    user = User.objects.get(pk=user_id)
+    return generate_password_reset_token(user, expiry_hours=expiry_hours)
 
 
 def _send_verification_email(user, return_path=None):
@@ -327,7 +324,7 @@ def _send_password_reset_email(user):
     Args:
         user: User model instance.
     """
-    token = _generate_password_reset_token(user.pk)
+    token = generate_password_reset_token(user, expiry_hours=1)
     site_url = site_base_url()
     reset_url = f"{site_url}/api/password-reset?token={token}"
 
@@ -640,6 +637,22 @@ def password_reset_request_api(request):
     )
 
 
+def _password_reset_get_error(code):
+    if code == "expired":
+        return "This password reset link has expired. Please request a new one."
+    return "Invalid password reset link."
+
+
+def _password_reset_post_error(code):
+    if code == "expired":
+        return JsonResponse({"error": "Token has expired"}, status=400)
+    if code == "wrong_action":
+        return JsonResponse({"error": "Invalid token action"}, status=400)
+    if code == "user_not_found":
+        return JsonResponse({"error": "User not found"}, status=404)
+    return JsonResponse({"error": "Invalid token"}, status=400)
+
+
 def password_reset_api(request):
     """Handle password reset: GET renders form, POST resets password.
 
@@ -655,36 +668,26 @@ def password_reset_api(request):
         # hidden username hint so browser password managers can associate the
         # generated password with the right account.
         try:
-            payload = jwt.decode(
-                token, settings.SECRET_KEY, algorithms=[JWT_ALGORITHM]
-            )
-        except jwt.ExpiredSignatureError:
+            payload = load_password_reset_payload(token)
+            user = User.objects.get(pk=payload["user_id"])
+        except PasswordResetTokenError as exc:
             return render(
                 request,
                 "accounts/password_reset.html",
-                {"error": "This password reset link has expired. Please request a new one."},
+                {"error": _password_reset_get_error(exc.code)},
             )
-        except jwt.InvalidTokenError:
-            return render(
-                request,
-                "accounts/password_reset.html",
-                {"error": "Invalid password reset link."},
-            )
-
-        if payload.get("action") != "password_reset":
-            return render(
-                request,
-                "accounts/password_reset.html",
-                {"error": "Invalid password reset link."},
-            )
-
-        try:
-            user = User.objects.get(pk=payload.get("user_id"))
         except User.DoesNotExist:
             return render(
                 request,
                 "accounts/password_reset.html",
-                {"error": "Invalid password reset link."},
+                {"error": _password_reset_get_error("invalid")},
+            )
+
+        if not password_reset_proof_matches(user, payload):
+            return render(
+                request,
+                "accounts/password_reset.html",
+                {"error": _password_reset_get_error("invalid")},
             )
 
         return render(
@@ -715,33 +718,30 @@ def password_reset_api(request):
             )
 
         try:
-            payload = jwt.decode(
-                token, settings.SECRET_KEY, algorithms=[JWT_ALGORITHM]
-            )
-        except jwt.ExpiredSignatureError:
-            return JsonResponse({"error": "Token has expired"}, status=400)
-        except jwt.InvalidTokenError:
-            return JsonResponse({"error": "Invalid token"}, status=400)
+            payload = load_password_reset_payload(token)
+        except PasswordResetTokenError as exc:
+            return _password_reset_post_error(exc.code)
 
-        if payload.get("action") != "password_reset":
-            return JsonResponse({"error": "Invalid token action"}, status=400)
-
-        user_id = payload.get("user_id")
-        try:
-            user = User.objects.get(pk=user_id)
-        except User.DoesNotExist:
-            return JsonResponse({"error": "User not found"}, status=404)
-
-        user.set_password(new_password)
-        user.save(update_fields=["password"])
-
-        # Issue #769: completing the password-reset flow IS the
-        # activation path for newsletter-only subscribers — once they
-        # have a password they're real platform users. ``mark_activated``
-        # is idempotent so this is a no-op for users who were already
-        # activated by some other trigger (#768).
         from accounts.utils.activation import mark_activated
-        mark_activated(user)
+
+        with transaction.atomic():
+            try:
+                user = User.objects.select_for_update().get(pk=payload["user_id"])
+            except User.DoesNotExist:
+                return JsonResponse({"error": "User not found"}, status=404)
+
+            if not password_reset_proof_matches(user, payload):
+                return JsonResponse({"error": "Invalid token"}, status=400)
+
+            user.set_password(new_password)
+            user.save(update_fields=["password"])
+
+            # Issue #769: completing the password-reset flow IS the
+            # activation path for newsletter-only subscribers — once they
+            # have a password they're real platform users. ``mark_activated``
+            # is idempotent so this is a no-op for users who were already
+            # activated by some other trigger (#768).
+            mark_activated(user)
 
         return JsonResponse(
             {"status": "ok", "message": "Password has been reset successfully."}

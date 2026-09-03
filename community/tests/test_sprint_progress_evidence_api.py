@@ -1,18 +1,36 @@
-"""Playwright API coverage for sprint progress evidence (issue #1048)."""
+"""Relocated staff-token sprint progress-evidence classification owner (#1479)."""
 
 import datetime
 
-import pytest
 from django.contrib.auth import get_user_model
+from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import Token
 from crm.models import SlackMessage, SlackThread
 from plans.models import Checkpoint, Deliverable, Plan, Sprint, SprintEnrollment, Week
 
-pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.local_only]
-
 User = get_user_model()
+
+
+def _create_thread(plan, ts, text):
+    posted_at = timezone.now()
+    thread = SlackThread.objects.create(
+        channel_id="C_PLAN_SPRINTS",
+        thread_ts=ts,
+        member=plan.member,
+        plan=plan,
+        posted_at=posted_at,
+        permalink=f"https://slack.example/archives/C_PLAN_SPRINTS/p{ts}",
+    )
+    SlackMessage.objects.create(
+        thread=thread,
+        ts=ts,
+        author_display="Member",
+        text=text,
+        posted_at=posted_at,
+        is_root=True,
+    )
 
 
 def _seed_progress_evidence_fixture():
@@ -60,56 +78,35 @@ def _seed_progress_evidence_fixture():
     return token.key, source.slug
 
 
-def _create_thread(plan, ts, text):
-    posted_at = timezone.now()
-    thread = SlackThread.objects.create(
-        channel_id="C_PLAN_SPRINTS",
-        thread_ts=ts,
-        member=plan.member,
-        plan=plan,
-        posted_at=posted_at,
-        permalink=f"https://slack.example/archives/C_PLAN_SPRINTS/p{ts}",
-    )
-    SlackMessage.objects.create(
-        thread=thread,
-        ts=ts,
-        author_display="Member",
-        text=text,
-        posted_at=posted_at,
-        is_root=True,
-    )
+class SprintProgressEvidenceClassificationApiTest(TestCase):
+    """Owns next-sprint candidate include/exclude from progress-evidence.
 
+    Relocated from Playwright
+    ``test_staff_operator_classifies_next_sprint_candidates``.
+    """
 
-def test_staff_operator_classifies_next_sprint_candidates(
-    django_server,
-    django_db_blocker,
-    browser,
-):
-    with django_db_blocker.unblock():
+    def test_staff_operator_classifies_next_sprint_candidates(self):
         token_key, source_slug = _seed_progress_evidence_fixture()
 
-    context = browser.new_context()
-    response = context.request.get(
-        f"{django_server}/api/sprints/{source_slug}/progress-evidence",
-        headers={"Authorization": f"Token {token_key}"},
-    )
-    assert response.status == 200
-    body = response.json()
-    rows = {
-        row["member"]["email"]: row["evidence_status"]
-        for row in body["members"]
-    }
+        response = self.client.get(
+            f"/api/sprints/{source_slug}/progress-evidence",
+            HTTP_AUTHORIZATION=f"Token {token_key}",
+        )
+        body = response.json()
+        rows = {
+            row["member"]["email"]: row["evidence_status"]
+            for row in body["members"]
+        }
 
-    include = {
-        email for email, status in rows.items()
-        if status in {"app_progress", "crm_update_progress", "both"}
-    }
-    exclude = {email for email, status in rows.items() if status == "none"}
+        include = {
+            email for email, status in rows.items()
+            if status in {"app_progress", "crm_update_progress", "both"}
+        }
+        exclude = {email for email, status in rows.items() if status == "none"}
 
-    assert include == {
-        "pw-app@test.com",
-        "pw-crm@test.com",
-        "pw-both@test.com",
-    }
-    assert exclude == {"pw-none@test.com"}
-    context.close()
+        self.assertEqual(include, {
+            "pw-app@test.com",
+            "pw-crm@test.com",
+            "pw-both@test.com",
+        })
+        self.assertEqual(exclude, {"pw-none@test.com"})

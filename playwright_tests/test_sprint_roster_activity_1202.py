@@ -133,41 +133,6 @@ def _seed_studio_roster():
     return data
 
 
-def _seed_api_roster():
-    from accounts.models import Token, User
-    from plans.models import Checkpoint, Plan, Sprint, SprintEnrollment, Week
-
-    staff = User.objects.create_user(
-        email="pw-roster-api-staff@test.com",
-        password="pw",
-        is_staff=True,
-    )
-    token = Token.objects.create(user=staff, name="pw-roster-activity")
-    sprint = Sprint.objects.create(
-        name="Roster API Sprint",
-        slug="pw-roster-api",
-        start_date=timezone.localdate() - datetime.timedelta(days=2),
-        duration_weeks=4,
-        status="active",
-    )
-    updated = User.objects.create_user(email="pw-api-updated@test.com", password="pw")
-    no_plan = User.objects.create_user(email="pw-api-no-plan@test.com", password="pw")
-    SprintEnrollment.objects.create(sprint=sprint, user=updated)
-    SprintEnrollment.objects.create(sprint=sprint, user=no_plan)
-    plan = Plan.objects.create(sprint=sprint, member=updated)
-    week = Week.objects.create(plan=plan, week_number=1)
-    Checkpoint.objects.create(
-        week=week,
-        description="Done",
-        done_at=timezone.now() - datetime.timedelta(hours=1),
-    )
-    Checkpoint.objects.create(week=week, description="Open")
-    key = token.key
-    slug = sprint.slug
-    connection.close()
-    return key, slug
-
-
 def test_staff_scans_and_filters_sprint_roster_activity(django_server, browser):
     _ensure_tiers()
     _clear_roster_activity_data()
@@ -214,28 +179,4 @@ def test_staff_scans_and_filters_sprint_roster_activity(django_server, browser):
     page.get_by_test_id("sprint-members-clear-activity-filter").click()
     assert "activity=no_update_this_week" not in page.url
     page.locator('[data-user-email="pw-updated@test.com"]').wait_for(state="visible")
-    context.close()
-
-
-def test_staff_token_reads_roster_activity_api(django_server, browser):
-    _clear_roster_activity_data()
-    token_key, sprint_slug = _seed_api_roster()
-
-    context = browser.new_context()
-    response = context.request.get(
-        f"{django_server}/api/sprints/{sprint_slug}/roster-activity"
-        "?activity=no_update_this_week",
-        headers={"Authorization": f"Token {token_key}"},
-    )
-
-    assert response.status == 200
-    body = response.json()
-    assert body["sprint"]["slug"] == sprint_slug
-    assert body["current_week"]["active"] is True
-    assert body["totals"]["members"] == 2
-    assert body["totals"]["no_update_this_week"] == 1
-    assert [row["member"]["email"] for row in body["members"]] == [
-        "pw-api-no-plan@test.com"
-    ]
-    assert body["members"][0]["progress"]["label"] == "No plan"
     context.close()

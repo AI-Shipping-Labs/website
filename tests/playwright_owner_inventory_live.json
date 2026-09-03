@@ -2273,11 +2273,6 @@
       "reason": "Exercises Playwright fixture cleanup policy without owning a rendered-page journey.",
       "relocation": "tests/"
     },
-    "playwright_tests/test_call_profiles_1404.py::TestCallProfileApiJourney::test_api_delete_protects_history_then_allows_hiding": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
-      "relocation": "community/tests/"
-    },
     "playwright_tests/test_conftest_port_resolution.py::test_invalid_or_nonpositive_falls_back_to_free_port": {
       "category": "playwright-policy",
       "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
@@ -2446,16 +2441,6 @@
     "playwright_tests/test_slack_integration.py::test_post_slack_announcement_real": {
       "category": "external-integration",
       "reason": "Calls the external Slack integration directly without a browser journey.",
-      "relocation": "community/tests/"
-    },
-    "playwright_tests/test_sprint_progress_evidence_api.py::test_staff_operator_classifies_next_sprint_candidates": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
-      "relocation": "community/tests/"
-    },
-    "playwright_tests/test_sprint_roster_activity_1202.py::test_staff_token_reads_roster_activity_api": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
       "relocation": "community/tests/"
     },
     "playwright_tests/test_studio_event_duplicates.py::TestNonStaffBlocked::test_member_gets_403": {

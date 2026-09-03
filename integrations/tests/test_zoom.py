@@ -1431,6 +1431,51 @@ class ZoomRecordingCompletedTest(_ZoomSecretIsolationMixin, TestCase):
             ).count(),
             2,
         )
+        self.assertEqual(
+            self.event.recording_zoom_download_url,
+            'https://zoom.us/rec/download/abc123',
+        )
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_duplicate_delivery_refreshes_download_url_without_second_enqueue(
+        self, mock_q_async,
+    ):
+        mock_q_async.return_value = 'upload-task-id'
+        first_payload = make_recording_completed_payload('12345678901')
+        second_payload = make_recording_completed_payload('12345678901')
+        second_payload['payload']['object']['recording_files'][0]['download_url'] = (
+            'https://zoom.us/rec/download/updated'
+        )
+
+        first_response = self._post_webhook(first_payload)
+        second_response = self._post_webhook(second_payload)
+
+        self.assertEqual(first_response.json()['status'], 'ok')
+        self.assertEqual(second_response.json()['status'], 'ok')
+        self.assertEqual(mock_q_async.call_count, 1)
+        self.event.refresh_from_db()
+        self.assertEqual(
+            self.event.recording_zoom_download_url,
+            'https://zoom.us/rec/download/updated',
+        )
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_expired_lease_reclaims_and_enqueues_again(self, mock_q_async):
+        mock_q_async.return_value = 'upload-task-id'
+        payload = make_recording_completed_payload('12345678901')
+        first = self._post_webhook(payload)
+        self.assertEqual(first.json()['status'], 'ok')
+        Event.objects.filter(pk=self.event.pk).update(
+            recording_upload_enqueued_at=timezone.now() - timedelta(minutes=21),
+        )
+        second = self._post_webhook(payload)
+        self.assertEqual(second.json()['status'], 'ok')
+        self.assertEqual(mock_q_async.call_count, 2)
+        self.event.refresh_from_db()
+        self.assertGreater(
+            self.event.recording_upload_enqueued_at,
+            timezone.now() - timedelta(minutes=1),
+        )
 
     @patch('jobs.tasks.helpers.q_async_task')
     def test_play_only_preferred_row_does_not_hide_downloadable_video(

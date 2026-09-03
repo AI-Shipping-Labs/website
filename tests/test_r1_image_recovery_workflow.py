@@ -32,6 +32,7 @@ class R1ImageRecoveryWorkflowContractTest(SimpleTestCase):
                 "resume-webhook-deliveries",
                 "redact-maven-enrollment-pii",
                 "retry-maven-enrollment-steps",
+                "retry-stuck-recording-uploads",
                 "purge-plan-sprints-raw-text",
                 "onboarding-staff-notification-recovery",
             ),

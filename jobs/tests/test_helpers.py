@@ -39,6 +39,15 @@ class AsyncTaskTest(TestCase):
         self.assertEqual(q_options['max_attempts'], 6)
 
     @patch('jobs.tasks.helpers.q_async_task')
+    def test_async_task_with_timeout(self, mock_q_async):
+        """async_task passes per-task timeout via q_options."""
+        mock_q_async.return_value = 'task-timeout'
+        async_task('myapp.tasks.do_thing', timeout=900)
+        call_args = mock_q_async.call_args
+        q_options = call_args[1]['q_options']
+        self.assertEqual(q_options['timeout'], 900)
+
+    @patch('jobs.tasks.helpers.q_async_task')
     def test_async_task_with_retry_backoff(self, mock_q_async):
         """async_task passes retry backoff via q_options."""
         mock_q_async.return_value = 'task-789'

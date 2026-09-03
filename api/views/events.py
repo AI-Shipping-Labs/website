@@ -54,6 +54,13 @@ from events.services.event_recap_notification import (
 from events.services.occurrence_publication import (
     run_occurrence_publication_lifecycle,
 )
+from events.services.recording_upload import (
+    RECORDING_UPLOAD_STATUS_IDLE,
+    RECORDING_UPLOAD_STATUS_IN_PROGRESS,
+    RECORDING_UPLOAD_STATUS_UPLOADED,
+    claim_and_enqueue_recording_upload,
+    recording_upload_status,
+)
 from events.services.series_registration import (
     promote_event_registrations_to_series,
 )
@@ -228,6 +235,9 @@ _EVENT_EXAMPLE = {
     "published": True,
     "host_email": "host@example.com",
     "recording_url": "https://www.youtube.com/watch?v=16EUIZQTiAo",
+    "recording_s3_url": "",
+    "recording_upload_enqueued_at": None,
+    "recording_upload_status": "idle",
     "timestamps": [
         {
             "time_seconds": 960,
@@ -332,6 +342,9 @@ def serialize_event(event):
         "published": event.published,
         "host_email": event.host_email,
         "recording_url": event.recording_url or "",
+        "recording_s3_url": event.recording_s3_url or "",
+        "recording_upload_enqueued_at": _iso(event.recording_upload_enqueued_at),
+        "recording_upload_status": recording_upload_status(event),
         "timestamps": event.timestamps or [],
         "materials": event.materials or [],
         "hosts": [_serialize_host(host) for host in event.ordered_hosts],
@@ -1540,6 +1553,80 @@ def event_sync_zoom(request, slug):
             "zoom_meeting_id": event.zoom_meeting_id,
         },
         status=200,
+    )
+
+
+@csrf_exempt
+@token_required
+@require_methods("POST")
+@openapi_spec(
+    tag="Events",
+    summary="Retry a stuck Zoom recording S3 upload",
+    methods={
+        "POST": {
+            "summary": "Retry a stuck Zoom recording S3 upload",
+            "description": (
+                "Claims an expired or missing Zoom-to-S3 upload lease and "
+                "enqueues download/upload again. Allowed for GitHub-synced "
+                "events because the recording file is operational state. "
+                "Does not return the Zoom download URL."
+            ),
+            "responses": {
+                200: {
+                    "description": "Upload queued.",
+                    "example": {"recording_upload_status": "in_progress"},
+                },
+                401: {"description": "Missing, invalid, or non-staff token."},
+                404: {"description": "Event not found."},
+                409: {
+                    "description": "Already uploaded or upload already running.",
+                },
+                422: {"description": "No stored Zoom download URL."},
+            },
+        },
+    },
+)
+def event_retry_recording_upload(request, slug):
+    """POST ``/api/events/<slug>/retry-recording-upload``."""
+    event = Event.objects.filter(slug=slug).first()
+    if event is None:
+        return error_response(
+            "Event not found",
+            "unknown_event",
+            status=404,
+        )
+
+    _event, result = claim_and_enqueue_recording_upload(
+        event.pk,
+        source="API retry",
+    )
+    if result == "queued":
+        return JsonResponse(
+            {"recording_upload_status": RECORDING_UPLOAD_STATUS_IN_PROGRESS},
+            status=200,
+        )
+    if result == RECORDING_UPLOAD_STATUS_UPLOADED:
+        return error_response(
+            "Recording is already on S3.",
+            "recording_already_uploaded",
+            status=409,
+        )
+    if result == RECORDING_UPLOAD_STATUS_IN_PROGRESS:
+        return error_response(
+            "Recording upload is already in progress.",
+            "recording_upload_in_progress",
+            status=409,
+        )
+    if result == RECORDING_UPLOAD_STATUS_IDLE:
+        return error_response(
+            "No Zoom download URL yet.",
+            "recording_download_url_missing",
+            status=422,
+        )
+    return error_response(
+        "Event not found",
+        "unknown_event",
+        status=404,
     )
 
 

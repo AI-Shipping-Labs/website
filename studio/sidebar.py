@@ -94,6 +94,7 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_event_regenerate_banner',
         'studio_event_registrations_csv',
         'studio_event_remove_banner',
+        'studio_event_retry_recording_upload',
         'studio_event_send_followup',
         'studio_event_upload_banner',
     )),

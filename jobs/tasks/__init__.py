@@ -4,7 +4,7 @@ from .expire_overrides import expire_tier_overrides
 from .healthcheck import health_check
 from .helpers import async_task, schedule
 from .names import TASK_NAME_MAX_LENGTH, build_task_name, constrain_task_name, sanitize_task_name_part
-from .recording_upload import upload_recording_to_s3
+from .recording_upload import retry_stuck_recording_uploads, upload_recording_to_s3
 from .test_worker_smoke import run as test_worker_smoke
 
 __all__ = [
@@ -15,6 +15,7 @@ __all__ = [
     'cleanup_old_webhook_logs',
     'cleanup_calendly_webhook_logs',
     'retry_calendly_webhooks',
+    'retry_stuck_recording_uploads',
     'constrain_task_name',
     'expire_tier_overrides',
     'health_check',

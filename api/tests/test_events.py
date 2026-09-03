@@ -206,6 +206,9 @@ class EventsListAndDetailTest(EventsApiTestBase):
                 "published",
                 "host_email",
                 "recording_url",
+                "recording_s3_url",
+                "recording_upload_enqueued_at",
+                "recording_upload_status",
                 "timestamps",
                 "materials",
                 "hosts",
@@ -224,6 +227,13 @@ class EventsListAndDetailTest(EventsApiTestBase):
             },
         )
         self.assertEqual(by_slug["studio-event"]["recording_url"], "")
+        self.assertEqual(by_slug["studio-event"]["recording_s3_url"], "")
+        self.assertIsNone(by_slug["studio-event"]["recording_upload_enqueued_at"])
+        self.assertEqual(by_slug["studio-event"]["recording_upload_status"], "idle")
+        self.assertNotIn(
+            "recording_zoom_download_url",
+            by_slug["studio-event"],
+        )
         self.assertEqual(by_slug["studio-event"]["timestamps"], [])
         self.assertEqual(by_slug["studio-event"]["materials"], [])
         self.assertEqual(

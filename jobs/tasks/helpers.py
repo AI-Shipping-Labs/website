@@ -48,7 +48,7 @@ from django_q.tasks import async_task as q_async_task
 logger = logging.getLogger(__name__)
 
 
-def async_task(func, *args, max_retries=None, retry_backoff=None, **kwargs):
+def async_task(func, *args, max_retries=None, retry_backoff=None, timeout=None, **kwargs):
     """
     Enqueue an async job for background execution.
 
@@ -58,6 +58,7 @@ def async_task(func, *args, max_retries=None, retry_backoff=None, **kwargs):
         *args: Positional arguments passed to the function.
         max_retries: Maximum number of retry attempts on failure (default from settings).
         retry_backoff: Base backoff in seconds for exponential retry (default from settings).
+        timeout: Per-task django-q timeout in seconds. Omit to use Q_CLUSTER timeout.
         **kwargs: Keyword arguments passed to the function.
 
     Returns:
@@ -76,6 +77,9 @@ def async_task(func, *args, max_retries=None, retry_backoff=None, **kwargs):
         q_options['retry'] = retry_backoff
     elif q_config.get('retry'):
         q_options['retry'] = q_config['retry']
+
+    if timeout is not None:
+        q_options['timeout'] = timeout
 
     # Check if we are in sync mode (useful for testing)
     if q_config.get('sync', False):

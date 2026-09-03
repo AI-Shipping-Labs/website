@@ -678,6 +678,42 @@
     {% endif %}
   </div>
 
+  <div class="bg-card border border-border rounded-lg p-4" data-testid="recording-upload-panel">
+    <h2 class="text-sm font-medium text-foreground mb-3">Recording upload</h2>
+    {% if recording_upload_status == 'uploaded' %}
+      <p class="text-sm text-muted-foreground mb-3">Recording is on S3.</p>
+      <button type="button" disabled
+              data-testid="retry-recording-upload-button-disabled"
+              class="{% studio_action_class 'secondary' %} w-full cursor-not-allowed opacity-60">
+        Already uploaded to S3
+      </button>
+    {% elif recording_upload_status == 'in_progress' %}
+      <p class="text-sm text-muted-foreground mb-3">Upload in progress.</p>
+      <button type="button" disabled
+              data-testid="retry-recording-upload-button-disabled"
+              class="{% studio_action_class 'secondary' %} w-full cursor-not-allowed opacity-60">
+        Upload already running
+      </button>
+    {% elif recording_upload_status == 'stuck' %}
+      <p class="text-sm text-muted-foreground mb-3">Upload stuck — retry to download from Zoom again.</p>
+      <form method="post" action="{{ retry_recording_upload_url }}">
+        {% csrf_token %}
+        <button type="submit"
+                data-testid="retry-recording-upload-button"
+                class="{% studio_action_class 'primary' %} w-full">
+          Retry recording upload
+        </button>
+      </form>
+    {% else %}
+      <p class="text-sm text-muted-foreground mb-3">No Zoom download URL yet.</p>
+      <button type="button" disabled
+              data-testid="retry-recording-upload-button-disabled"
+              class="{% studio_action_class 'secondary' %} w-full cursor-not-allowed opacity-60">
+        No Zoom download URL yet
+      </button>
+    {% endif %}
+  </div>
+
   {% if event.status != 'draft' %}
   {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url compact=True notify_sending_label="Creating..." notify_status_mode="in_app_eligible_members" %}
   {% endif %}

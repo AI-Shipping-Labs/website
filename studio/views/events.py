@@ -47,6 +47,13 @@ from events.services.event_recap_notification import (
 from events.services.occurrence_publication import (
     run_occurrence_publication_lifecycle,
 )
+from events.services.recording_upload import (
+    RECORDING_UPLOAD_STATUS_IDLE,
+    RECORDING_UPLOAD_STATUS_IN_PROGRESS,
+    RECORDING_UPLOAD_STATUS_UPLOADED,
+    claim_and_enqueue_recording_upload,
+    recording_upload_status,
+)
 from events.services.workshop_ready_notification import (
     WorkshopReadyNotReady,
     assert_workshop_ready,
@@ -889,6 +896,10 @@ def _event_edit_panels_context(event) -> dict:
     context['send_followup_url'] = reverse(
         'studio_event_send_followup', kwargs={'event_id': event.pk},
     )
+    context['retry_recording_upload_url'] = reverse(
+        'studio_event_retry_recording_upload', kwargs={'event_id': event.pk},
+    )
+    context['recording_upload_status'] = recording_upload_status(event)
     # Issue #1076: deep-link to the pre-filled "recording available" campaign
     # draft (editable broadcast to registrants — distinct from the
     # transactional follow-up above). Opens a draft for review; never sends.
@@ -1317,6 +1328,26 @@ def event_registrations_csv(request, event_id):
         ])
 
     return response
+
+
+@staff_required
+@require_POST
+def event_retry_recording_upload(request, event_id):
+    """Reclaim a stuck Zoom-to-S3 recording upload from Studio."""
+    event = get_object_or_404(Event, pk=event_id)
+    _event, result = claim_and_enqueue_recording_upload(
+        event.pk,
+        source='Studio retry',
+    )
+    if result == 'queued':
+        messages.success(request, 'Recording upload queued.')
+    elif result == RECORDING_UPLOAD_STATUS_UPLOADED:
+        messages.info(request, 'Recording is already on S3.')
+    elif result == RECORDING_UPLOAD_STATUS_IN_PROGRESS:
+        messages.info(request, 'Recording upload is already in progress.')
+    elif result == RECORDING_UPLOAD_STATUS_IDLE:
+        messages.error(request, 'No Zoom download URL yet.')
+    return redirect('studio_event_edit', event_id=event.pk)
 
 
 @staff_required

@@ -1,6 +1,5 @@
 """Shared S3 helpers for recording upload tasks."""
 
-import io
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -50,10 +49,11 @@ def build_recording_s3_url(bucket, region, key):
     return f'https://{bucket}.s3.{region}.amazonaws.com/{key}'
 
 
-def upload_recording_mp4(file_data, config, key):
+def upload_recording_mp4(file_path, config, key):
+    """Upload an on-disk MP4. ``file_path`` must be a filesystem path."""
     s3_client = get_recordings_s3_client(config)
-    s3_client.upload_fileobj(
-        io.BytesIO(file_data),
+    s3_client.upload_file(
+        file_path,
         config.bucket,
         key,
         ExtraArgs={

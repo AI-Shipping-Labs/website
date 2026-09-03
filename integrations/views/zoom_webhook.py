@@ -159,25 +159,26 @@ def _handle_recording_completed(payload, webhook_log):
         if transcript_url and not event.transcript_url:
             event.transcript_url = transcript_url
             update_fields.append('transcript_url')
+        if download_url:
+            event.recording_zoom_download_url = download_url
+            update_fields.append('recording_zoom_download_url')
+
+        from events.services.recording_upload import (
+            enqueue_recording_upload_task,
+            recording_upload_lease_is_active,
+        )
 
         should_enqueue_upload = (
             bool(download_url)
             and not event.recording_s3_url
-            and event.recording_upload_enqueued_at is None
+            and not recording_upload_lease_is_active(event)
         )
 
         if should_enqueue_upload:
-            from jobs.tasks import async_task, build_task_name
-            async_task(
-                'jobs.tasks.recording_upload.upload_recording_to_s3',
-                event.id,
+            enqueue_recording_upload_task(
+                event,
                 download_url,
-                max_retries=3,
-                task_name=build_task_name(
-                    'Upload Zoom recording',
-                    f'event #{event.id} {event.title}',
-                    'Zoom webhook',
-                ),
+                source='Zoom webhook',
             )
             event.recording_upload_enqueued_at = timezone.now()
             update_fields.append('recording_upload_enqueued_at')

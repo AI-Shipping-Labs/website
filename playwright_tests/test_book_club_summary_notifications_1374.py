@@ -13,11 +13,10 @@ Exercises the member-facing outcomes of publishing a Book Club summary:
 6. A member who opts out of Book Club emails still sees the bell but receives
    no email (verified via the EmailLog).
 7. Publishing a summary on a draft book notifies nobody.
-8. Admin API publish is observable via GET /api/notifications and is
-   idempotent on re-PATCH.
 
-Publish-transition + audience rules are covered faster by the Django TestCase
-suite; this file asserts the rendered member surfaces.
+Publish-transition + audience rules, including the admin API publish
+observability and re-PATCH idempotency contract, are covered by the Django
+TestCase suite; this file asserts the rendered member surfaces.
 
 Usage:
     uv run pytest playwright_tests/test_book_club_summary_notifications_1374.py -v
@@ -26,7 +25,6 @@ Usage:
 import os
 
 import pytest
-import requests
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -82,16 +80,6 @@ def _book_pk():
     pk = Book.objects.get(slug=SLUG).pk
     connection.close()
     return pk
-
-
-def _admin_token(email):
-    from accounts.models import Token, User
-
-    user = User.objects.get(email=email)
-    token = Token.objects.create(user=user, name="e2e-admin")
-    key = token.key
-    connection.close()
-    return key
 
 
 def _notification_count(email, title):
@@ -373,44 +361,3 @@ class TestEmailOptOut:
         assert _bookclub_email_count("optout@test.com") == 0
         # Opted-in member: email was sent, so the path genuinely ran.
         assert _bookclub_email_count("optin@test.com") == 1
-
-
-@pytest.mark.django_db(transaction=True)
-class TestAdminApi:
-    def test_admin_publish_observable_and_idempotent(
-        self, django_server, browser,
-    ):
-        _ensure_tiers()
-        _reset_books()
-        _create_book()
-        _create_staff_user("admin@test.com")
-        _create_user("main@test.com", tier_slug="main")
-        token = _admin_token("admin@test.com")
-
-        headers = {"Authorization": f"Token {token}"}
-        patch_url = f"{django_server}/api/books/{SLUG}/chapters/0"
-        payload = {"summary": "Chapter takeaway.", "summary_published": True}
-
-        resp = requests.patch(patch_url, json=payload, headers=headers, timeout=15)
-        assert resp.status_code == 200
-
-        # Observable via the member notifications API.
-        member_ctx = _auth_context(browser, "main@test.com")
-        try:
-            page = member_ctx.new_page()
-            api = page.request.get(f"{django_server}/api/notifications")
-            body = api.json()
-            titles = [n["title"] for n in body["notifications"]]
-            assert CHAPTER_TITLE in titles
-            urls = [
-                n["url"] for n in body["notifications"]
-                if n["title"] == CHAPTER_TITLE
-            ]
-            assert all("#summary" in url for url in urls)
-        finally:
-            member_ctx.close()
-
-        # Idempotent re-PATCH: no additional notification.
-        resp = requests.patch(patch_url, json=payload, headers=headers, timeout=15)
-        assert resp.status_code == 200
-        assert _notification_count("main@test.com", CHAPTER_TITLE) == 1

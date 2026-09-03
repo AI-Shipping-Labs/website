@@ -172,12 +172,10 @@
         .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
         .then((result) => {
           if (result.ok) {
-            const url = new URL(window.location.href);
-            url.searchParams.set('registered', email);
-            if (result.data && result.data.account_created) {
-              url.searchParams.set('account_created', '1');
-            }
-            window.location.href = url.toString();
+            // Issue #1508: confirmation is bound to the session cookie
+            // set by the 201 response. Reload the canonical path with
+            // no registered / account_created query string and no email.
+            window.location.assign(window.location.pathname);
           } else {
             showError((result.data && result.data.error) || 'Registration failed.');
             restoreButton(btn);

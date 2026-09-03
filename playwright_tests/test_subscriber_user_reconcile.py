@@ -198,8 +198,8 @@ class TestAnonymousEventRegistrationE2E:
         page.fill('#event-anon-email', emails[0])
         page.click('#event-anon-submit-btn')
 
-        # The JS reloads with ?registered=<email>; wait for the
-        # confirmation block to appear.
+        # Issue #1508: confirmation is session-bound on the canonical
+        # URL. Wait for the confirmation block, not a query-string email.
         page.wait_for_selector(
             '[data-testid="event-anonymous-registered-confirmation"]',
             timeout=10000,

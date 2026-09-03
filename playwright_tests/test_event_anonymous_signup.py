@@ -15,6 +15,7 @@ Usage:
 import datetime
 import os
 import uuid
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from django.utils import timezone
@@ -29,6 +30,17 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 # session-cookie injection, etc.) and cannot run against the
 # deployed dev environment. See _docs/testing-guidelines.md.
 pytestmark = pytest.mark.local_only
+
+
+def _assert_clean_event_url(page, event_path, email):
+    """Issue #1508: confirmation lives on the canonical path, not in GET."""
+    parsed = urlparse(page.url)
+    query = parse_qs(parsed.query)
+    assert event_path in page.url
+    assert "registered" not in query
+    assert "account_created" not in query
+    assert email not in page.url
+    assert "registered=" not in page.url
 
 
 def _new_email(prefix):
@@ -159,24 +171,25 @@ class TestAnonymousEventSignup:
         page.fill('#event-anon-email', email)
         page.click('#event-anon-submit-btn')
 
-        # The JS redirects with ?registered=<email>. Wait for that.
-        page.wait_for_url(
-            lambda url: (
-                event_path in url
-                and "registered=" in url
-            ),
-            timeout=10000,
-        )
-
         confirmation = page.locator(
             '[data-testid="event-anonymous-registered-confirmation"]',
         )
-        confirmation.wait_for(state="visible", timeout=5000)
+        confirmation.wait_for(state="visible", timeout=10000)
+        _assert_clean_event_url(page, event_path, email)
         confirmation_text = confirmation.inner_text()
         assert email in confirmation_text
         # The copy mentions both the calendar invite and the verify link.
         assert "calendar invite" in confirmation_text
         assert "verification link" in confirmation_text
+        ics_link = page.locator(
+            '[data-testid="event-anonymous-add-to-calendar"]',
+        )
+        assert ics_link.get_attribute("href") == (
+            f"/events/{event.slug}/calendar.ics"
+        )
+        manage = page.locator('[data-testid="event-anonymous-manage-link"]')
+        assert "Sign in to manage your registration" in manage.inner_text()
+        assert event_path in (manage.get_attribute("href") or "")
 
         # DB-level assertions: User row exists, unverified, with a
         # non-empty preferred_timezone that matches the browser's zone.
@@ -219,20 +232,15 @@ class TestAnonymousEventSignup:
         page.fill('#event-anon-email', email)
         page.click('#event-anon-submit-btn')
 
-        page.wait_for_url(
-            lambda url: (
-                event_path in url
-                and "registered=" in url
-            ),
-            timeout=10000,
-        )
-
         # The confirmation block renders — NOT a red error message.
         confirmation = page.locator(
             '[data-testid="event-anonymous-registered-confirmation"]',
         )
-        confirmation.wait_for(state="visible", timeout=5000)
-        assert email in confirmation.inner_text()
+        confirmation.wait_for(state="visible", timeout=10000)
+        _assert_clean_event_url(page, event_path, email)
+        confirmation_text = confirmation.inner_text()
+        assert email in confirmation_text
+        assert "verification link" not in confirmation_text
 
         error_el = page.locator('[data-testid="event-anonymous-error"]')
         # The error element exists in the DOM but stays hidden on a

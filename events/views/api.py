@@ -19,6 +19,9 @@ from events.models import (
     EventSeries,
     SeriesOccurrenceOptOut,
 )
+from events.services.anon_registration_confirmation import (
+    store_anon_registration_confirmation,
+)
 from events.services.series_registration import (
     clear_series_opt_outs,
     enroll_user_in_series,
@@ -269,6 +272,24 @@ def _series_response_fields(event, series_summary):
     }
 
 
+def _anonymous_register_success(
+    request, event, user, registration, *, account_created, extra=None,
+):
+    """Return the anonymous 201 payload and bind confirmation to this session."""
+    store_anon_registration_confirmation(
+        request, event, user, account_created=account_created,
+    )
+    payload = {
+        'status': 'registered',
+        'event_slug': event.slug,
+        'registered_at': registration.registered_at.isoformat(),
+        'account_created': account_created,
+    }
+    if extra:
+        payload.update(extra)
+    return JsonResponse(payload, status=201)
+
+
 def _register_anonymous(request, event):
     """Anonymous email-only event registration path (issue #513).
 
@@ -350,15 +371,14 @@ def _register_anonymous(request, event):
             # ``already_registered: true`` so the frontend lands on the
             # same confirmation block instead of surfacing a 409. Do
             # NOT re-send any emails, do NOT create a duplicate row.
-            return JsonResponse({
-                'status': 'registered',
-                'event_slug': event.slug,
-                'registered_at': (
-                    existing_registration.registered_at.isoformat()
-                ),
-                'account_created': False,
-                'already_registered': True,
-            }, status=201)
+            return _anonymous_register_success(
+                request,
+                event,
+                existing_user,
+                existing_registration,
+                account_created=False,
+                extra={'already_registered': True},
+            )
 
         # Issue #1460: the anonymous form applies the same whole-series
         # default as the authenticated path (D7). Access is still
@@ -379,13 +399,14 @@ def _register_anonymous(request, event):
         if not existing_user.email_verified:
             _send_event_verification_email(existing_user)
 
-        return JsonResponse({
-            'status': 'registered',
-            'event_slug': event.slug,
-            'registered_at': registration.registered_at.isoformat(),
-            'account_created': False,
-            **_series_response_fields(event, series_summary),
-        }, status=201)
+        return _anonymous_register_success(
+            request,
+            event,
+            existing_user,
+            registration,
+            account_created=False,
+            extra=_series_response_fields(event, series_summary),
+        )
 
     # No existing user — create a free, unverified one.
     user = _create_unverified_subscriber(
@@ -404,13 +425,14 @@ def _register_anonymous(request, event):
 
     _send_event_verification_email(user)
 
-    return JsonResponse({
-        'status': 'registered',
-        'event_slug': event.slug,
-        'registered_at': registration.registered_at.isoformat(),
-        'account_created': True,
-        **_series_response_fields(event, series_summary),
-    }, status=201)
+    return _anonymous_register_success(
+        request,
+        event,
+        user,
+        registration,
+        account_created=True,
+        extra=_series_response_fields(event, series_summary),
+    )
 
 
 @require_POST

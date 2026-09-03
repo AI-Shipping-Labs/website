@@ -30,6 +30,7 @@ from events.models import (
     EventInstructor,
     EventRegistration,
 )
+from events.services.anon_registration_confirmation import SESSION_KEY
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
@@ -1846,6 +1847,17 @@ class AnonymousEventRegistrationAPITest(TierSetupMixin, TestCase):
         mock_verify.assert_called_once()
         self.assertEqual(mock_verify.call_args[0][0].email, 'anon@test.com')
 
+        # Issue #1508: JSON contract stays field-stable and does not
+        # return an email-bearing redirect URL for the client to apply.
+        self.assertNotIn('email', body)
+        self.assertNotIn('redirect', body)
+        self.assertNotIn('redirect_url', body)
+        flash = self.client.session[SESSION_KEY]
+        self.assertEqual(flash['event_id'], self.event.pk)
+        self.assertEqual(flash['user_id'], user.pk)
+        self.assertTrue(flash['account_created'])
+        self.assertNotIn('email', flash)
+
     @patch('events.views.api._send_event_verification_email')
     @patch('events.services.registration_email.send_registration_confirmation')
     def test_anonymous_with_existing_user_registers_without_resetting(
@@ -2217,9 +2229,8 @@ class AnonymousEventRegistrationAPITest(TierSetupMixin, TestCase):
 
 
 class EventDetailAnonymousFlowTest(TestCase):
-    """Issue #513: event detail page surfaces the email-only form for
-    free events and the post-registration confirmation block when the
-    page is loaded with ``?registered=<email>``.
+    """Issue #513 / #1508: event detail page surfaces the email-only form
+    for free events. Confirmation is session-bound, not query-param identity.
     """
 
     @classmethod
@@ -2257,33 +2268,37 @@ class EventDetailAnonymousFlowTest(TestCase):
         self.assertContains(resp, 'Main or above required')
         self.assertContains(resp, 'View membership options')
 
-    def test_confirmation_block_renders_for_registered_query_param(self):
+    def test_spoofed_registered_query_redirects_without_confirmation(self):
+        canonical = self.event.get_absolute_url()
         resp = self.client.get(
-            self.event.get_absolute_url()
-            + '?registered=anon%40test.com&account_created=1',
+            canonical + '?registered=anon%40test.com&account_created=1',
         )
-        self.assertContains(resp, 'event-anonymous-registered-confirmation')
-        # Email used is surfaced in the confirmation block.
-        self.assertContains(response=resp, text='anon@test.com')
-        # Calendar download is offered — independent of email delivery.
-        self.assertContains(resp, 'event-anonymous-add-to-calendar')
-        self.assertContains(resp, '/events/open-call-detail/calendar.ics')
-        # "Sign in to manage your registration" link is visible.
-        self.assertContains(resp, 'event-anonymous-manage-link')
-        self.assertContains(resp, 'Sign in to manage your registration')
-        # Account-created copy is shown when account_created=1.
-        self.assertContains(resp, 'verification link')
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp['Location'], canonical)
+        self.assertNotIn('registered', resp['Location'])
+        self.assertNotIn('account_created', resp['Location'])
+        self.assertNotIn('anon@test.com', resp['Location'])
 
-    def test_confirmation_block_skipped_for_junk_query_param(self):
-        resp = self.client.get(
-            self.event.get_absolute_url() + '?registered=1',
-        )
-        # ``?registered=1`` is junk (not an email); template should fall
-        # back to the regular form, not the confirmation block.
+        followed = self.client.get(canonical)
         self.assertNotContains(
-            resp, 'event-anonymous-registered-confirmation',
+            followed, 'event-anonymous-registered-confirmation',
         )
-        self.assertContains(resp, 'event-anonymous-email-form')
+        self.assertContains(followed, 'event-anonymous-email-form')
+        self.assertNotContains(followed, 'anon@test.com')
+        self.assertEqual(followed.context['anon_registered_email'], '')
+        self.assertFalse(followed.context['anon_registered_account_created'])
+
+    def test_junk_registered_query_redirects_to_form(self):
+        canonical = self.event.get_absolute_url()
+        resp = self.client.get(canonical + '?registered=1')
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp['Location'], canonical)
+
+        followed = self.client.get(canonical)
+        self.assertNotContains(
+            followed, 'event-anonymous-registered-confirmation',
+        )
+        self.assertContains(followed, 'event-anonymous-email-form')
 
 
 class EventAnonymousPaidCopyTest(TestCase):

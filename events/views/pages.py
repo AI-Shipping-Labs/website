@@ -39,6 +39,11 @@ from events.models import (
     SeriesRegistration,
 )
 from events.models.event import HIDDEN_FROM_PUBLIC_STATUSES, PUBLIC_EVENT_STATUSES
+from events.services.anon_registration_confirmation import (
+    canonical_event_url_without_confirmation_params,
+    confirmation_query_params_present,
+    resolve_anon_registration_confirmation,
+)
 from events.services.calendar_feed import (
     build_subscribe_urls,
     feed_events_queryset,
@@ -614,6 +619,18 @@ def event_detail(request, event_id, slug):
         pk=event_id,
     )
 
+    # Issue #1508: legacy/spoofed ``?registered=`` / ``?account_created=``
+    # URLs 302 (not 301) to the canonical event URL with those params
+    # stripped. Do this before the slug 301 so a leaking bookmark is
+    # not cached as a permanent redirect, and never copy the stripped
+    # values into session.
+    if confirmation_query_params_present(request):
+        return redirect(
+            canonical_event_url_without_confirmation_params(
+                event, request.GET,
+            ),
+        )
+
     # Issue #673: redirect to canonical when the cosmetic slug doesn't
     # match the stored slug. The check runs BEFORE the draft gate so a
     # stale share-on-X link with the old slug still redirects rather
@@ -778,31 +795,14 @@ def event_detail(request, event_id, slug):
     # Determine required tier name for CTA
     required_tier_name = get_required_tier_name(event.required_level)
 
-    # Issue #513: anonymous email-only registration flow. After a
-    # successful POST the JS reloads the page with ``?registered=<email>``
-    # so the template can render a confirmation block instead of the
-    # signup form. We do NOT trust this query param to mean a row was
-    # actually created — only that the JS thinks the registration
-    # succeeded. The block is confirmation copy, not access control.
-    #
-    # Issue #572: external events never offer in-app registration so the
-    # ``?registered=<email>`` confirmation block is suppressed for them
-    # — there's nothing to confirm.
-    anon_registered_email = ''
-    anon_registered_account_created = False
-    if (
-        not user.is_authenticated
-        and event.is_upcoming
-        and not is_external
-    ):
-        raw_email = (request.GET.get('registered') or '').strip()
-        # Only render the confirmation when the email looks like an
-        # email; ignores junk like ``?registered=1``.
-        if raw_email and '@' in raw_email and '.' in raw_email.split('@', 1)[-1]:
-            anon_registered_email = raw_email
-            anon_registered_account_created = (
-                request.GET.get('account_created') == '1'
-            )
+    # Issue #1508: anonymous confirmation is a session flash bound to
+    # event_id + user_id, set only on HTTP 201 from anonymous register.
+    # Display email comes from the User / EventRegistration row, never
+    # from GET. Issue #572: external events never offer in-app
+    # registration, so the confirmation block stays suppressed.
+    anon_registered_email, anon_registered_account_created = (
+        resolve_anon_registration_confirmation(request, event)
+    )
 
     # Issue #679: feedback surface — only meaningful once the event has
     # ended. The public aggregate counts only rated entries (rating IS

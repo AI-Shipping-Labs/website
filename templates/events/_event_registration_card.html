@@ -67,14 +67,14 @@
       </div>
       <div class="mt-5 flex flex-wrap items-center gap-3">
         <a href="{{ event_ics_url }}"
-           class="inline-flex items-center justify-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm font-medium text-accent transition-colors hover:bg-accent/20"
+           class="{% button_classes 'secondary' %}"
            data-testid="event-anonymous-add-to-calendar"
            download>
           <i data-lucide="calendar-plus" class="h-4 w-4"></i>
           Add to calendar
         </a>
         <a href="/accounts/login/?next={{ event.get_absolute_url|urlencode }}"
-           class="text-sm text-muted-foreground hover:text-foreground"
+           class="{% button_classes 'secondary' %}"
            data-testid="event-anonymous-manage-link">
           Sign in to manage your registration
         </a>
@@ -123,7 +123,7 @@
           <input type="hidden" name="timezone" id="event-anon-timezone" value="">
           <button type="submit"
                   id="event-anon-submit-btn"
-                  class="rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                  class="{% button_classes 'primary' extra='w-full sm:w-auto' %}">
             Register for this event
           </button>
         </form>

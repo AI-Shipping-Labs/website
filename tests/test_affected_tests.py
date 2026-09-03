@@ -344,6 +344,14 @@ class RuleChainTest(SimpleTestCase):
         self.assertEqual(plan.extra_commands, ["uv run pytest playwright_tests/test_dashboard.py -v"])
         self.assertEqual(plan.commands()[-1], PLAYWRIGHT_CORE_COMMAND)
 
+    def test_deleted_playwright_test_file_does_not_emit_a_missing_pytest_command(self):
+        missing = "playwright_tests/test_does_not_exist_1479.py"
+        self.assertFalse((REPO_ROOT / missing).exists())
+        plan = plan_for([missing])
+        self.assertEqual(plan.django_labels, PLAYWRIGHT_TEST_TREE_POLICY_LABELS)
+        self.assertEqual(plan.extra_commands, [])
+        self.assertEqual(plan.commands()[-1], PLAYWRIGHT_CORE_COMMAND)
+
     def test_full_playwright_supersedes_per_file_playwright_commands(self):
         plan = plan_for(
             [

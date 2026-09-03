@@ -614,7 +614,11 @@ def build_plan(
 
         # Rule 8 -- test files map to their exact test module.
         if top == "playwright_tests":
-            if path.endswith(".py") and Path(path).name.startswith("test_"):
+            if (
+                path.endswith(".py")
+                and Path(path).name.startswith("test_")
+                and (repo_root / path).is_file()
+            ):
                 add_extra(f"uv run pytest {path} -v")
             continue
         if top == "asl_cli":

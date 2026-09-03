@@ -555,6 +555,14 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_book_club_summary_notifications_1374.py::"
         "TestAdminApi::test_admin_publish_observable_and_idempotent"
     )
+    community_api_owners = frozenset({
+        "playwright_tests/test_call_profiles_1404.py::"
+        "TestCallProfileApiJourney::test_api_delete_protects_history_then_allows_hiding",
+        "playwright_tests/test_sprint_progress_evidence_api.py::"
+        "test_staff_operator_classifies_next_sprint_candidates",
+        "playwright_tests/test_sprint_roster_activity_1202.py::"
+        "test_staff_token_reads_roster_activity_api",
+    })
     migrated_owner = "playwright_tests/test_dev_smoke_sitemap.py::test_sitemap_xml_is_served"
     campaign_owner = (
         "playwright_tests/test_studio_campaigns.py::"
@@ -618,8 +626,12 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         self.assertNotIn(self.bookclub_api_owner, manifest["LEGACY_NON_BROWSER"])
         self.assertNotIn(self.bookclub_api_owner, manifest["LEGACY_DECLARED_BROWSER"])
         self.assertIn(self.bookclub_api_owner, LEGACY_NON_BROWSER_CEILING)
+        for owner in self.community_api_owners:
+            self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
+            self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
+            self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
         self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2246)
-        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 80)
+        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 77)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
 
@@ -643,8 +655,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2564)
-        self.assertEqual(len(inventory.owners), 2344)
+        self.assertEqual(inventory.item_count, 2561)
+        self.assertEqual(len(inventory.owners), 2341)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

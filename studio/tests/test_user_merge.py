@@ -75,10 +75,17 @@ class StaffGateTest(MergeUITestBase):
             response.url, "/accounts/login/?next=/studio/users/merge/"
         )
 
-    def test_non_staff_get_returns_403(self):
+    def test_member_gets_403(self):
+        """Relocated from Playwright TestNonStaffBlocked.test_member_gets_403 (#1484)."""
+        canonical, secondary = self._make_pair()
         self.client.force_login(self.member)
         response = self.client.get(reverse("studio_user_merge"))
         self.assertEqual(response.status_code, 403)
+        canonical.refresh_from_db()
+        secondary.refresh_from_db()
+        self.assertTrue(canonical.is_active)
+        self.assertTrue(secondary.is_active)
+        self.assertFalse(EmailAlias.objects.filter(email=secondary.email).exists())
 
     def test_staff_get_renders_pickers(self):
         self._login_staff()

@@ -2,8 +2,11 @@
 
 Exercises the irreversible preview -> confirm flow from a real browser: a clean
 merge with a moved event registration, the dry-run-is-a-no-op guarantee, the
-self-merge stop, the unknown-email message, the non-staff 403 gate, and the
-pre-fill-from-user-detail entry point.
+self-merge stop, the unknown-email message, and the pre-fill-from-user-detail
+entry point.
+
+Non-staff access denial lives in ``studio/tests/test_user_merge.py``
+(``StaffGateTest.test_member_gets_403``).
 
 Usage:
     uv run pytest playwright_tests/test_studio_user_merge.py -v
@@ -377,25 +380,6 @@ class TestUnknownEmail:
         assert "No account found for ghost@test.com" in err.inner_text()
         assert page.locator('[data-testid="merge-preview"]').count() == 0
 
-        context.close()
-
-
-@pytest.mark.django_db(transaction=True)
-class TestNonStaffBlocked:
-    """A non-staff member cannot reach the merge screen."""
-
-    def test_member_gets_403(self, django_server, browser):
-        _ensure_tiers()
-        staff_email = "gate-admin@test.com"
-        _create_staff_user(staff_email)
-        _clear_users_except_staff(staff_email)
-        _create_user("main@test.com", tier_slug="free")
-
-        context = _auth_context(browser, "main@test.com")
-        response = context.request.get(
-            f"{django_server}/studio/users/merge/", max_redirects=0
-        )
-        assert response.status == 403
         context.close()
 
 

@@ -2298,11 +2298,6 @@
       "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
       "relocation": "tests/"
     },
-    "playwright_tests/test_custom_banner_upload_931.py::TestCustomBannerPanel::test_non_staff_cannot_upload": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
-      "relocation": "studio/tests/"
-    },
     "playwright_tests/test_date_rot_guard.py::test_date_rot_guard_allows_reasoned_fixed_dates_and_frozen_exact_copy": {
       "category": "playwright-policy",
       "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
@@ -2352,21 +2347,6 @@
       "category": "repository-static",
       "reason": "Checks repository files or pure response logic without a browser journey.",
       "relocation": "tests/"
-    },
-    "playwright_tests/test_studio_event_duplicates.py::TestNonStaffBlocked::test_member_gets_403": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
-      "relocation": "studio/tests/"
-    },
-    "playwright_tests/test_studio_user_detail_tier_override.py::TestNonStaffCannotReachEndpoint::test_member_post_is_blocked": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
-      "relocation": "studio/tests/"
-    },
-    "playwright_tests/test_studio_user_merge.py::TestNonStaffBlocked::test_member_gets_403": {
-      "category": "api",
-      "reason": "Exercises an API/request-client contract without rendering or navigating a browser page.",
-      "relocation": "studio/tests/"
     },
     "playwright_tests/test_tailwind_build_1383.py::test_compiled_bundle_contains_dynamic_product_selectors": {
       "category": "repository-static",

@@ -1,9 +1,14 @@
 """Middleware for URL redirects and trailing slash removal."""
 
 from django.conf import settings
-from django.core.cache import caches
 from django.http import HttpResponsePermanentRedirect, HttpResponseRedirect
 from django.urls import is_valid_path
+
+from integrations.shared_cache import (
+    delete_shared_cache,
+    get_shared_cache,
+    set_shared_cache,
+)
 
 
 class RemoveTrailingSlashMiddleware:
@@ -72,14 +77,14 @@ def get_announcement_banner():
     The result is cached in the cross-process ``django_q`` cache. Call
     ``clear_announcement_banner_cache`` after saving the banner to invalidate.
     """
-    cached = caches['django_q'].get(_BANNER_CACHE_KEY)
+    cached = get_shared_cache(_BANNER_CACHE_KEY)
     if cached == _BANNER_CACHE_MISSING:
         return None
     if cached is not None:
         return cached
     from integrations.models import AnnouncementBanner
     banner = AnnouncementBanner.objects.filter(pk=1).first()
-    caches['django_q'].set(
+    set_shared_cache(
         _BANNER_CACHE_KEY,
         banner if banner is not None else _BANNER_CACHE_MISSING,
         _BANNER_CACHE_TTL,
@@ -89,7 +94,7 @@ def get_announcement_banner():
 
 def clear_announcement_banner_cache():
     """Clear the cross-process announcement banner cache."""
-    caches['django_q'].delete(_BANNER_CACHE_KEY)
+    delete_shared_cache(_BANNER_CACHE_KEY)
 
 
 REDIRECT_CACHE_KEY = 'active_redirects'
@@ -107,14 +112,14 @@ def get_active_redirects():
     Using a cross-process backend ensures any toggle / delete in Studio
     propagates to every worker on the next request. See issue #695.
     """
-    redirects = caches['django_q'].get(REDIRECT_CACHE_KEY)
+    redirects = get_shared_cache(REDIRECT_CACHE_KEY)
     if redirects is None:
         from integrations.models import Redirect
         redirects = {
             r.source_path: (r.target_path, r.redirect_type)
             for r in Redirect.objects.filter(is_active=True)
         }
-        caches['django_q'].set(REDIRECT_CACHE_KEY, redirects, REDIRECT_CACHE_TIMEOUT)
+        set_shared_cache(REDIRECT_CACHE_KEY, redirects, REDIRECT_CACHE_TIMEOUT)
     return redirects
 
 
@@ -124,7 +129,7 @@ def clear_redirect_cache():
     Call after any redirect model change so every worker refetches on
     the next request.
     """
-    caches['django_q'].delete(REDIRECT_CACHE_KEY)
+    delete_shared_cache(REDIRECT_CACHE_KEY)
 
 
 class RedirectMiddleware:

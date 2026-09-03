@@ -652,13 +652,24 @@ if not SES_ENABLED:
 #
 # - Tests: LocMemCache. Single-process, fast, isolated per run. The
 #   cross-process behaviour is exercised explicitly in
-#   `studio/tests/test_worker_health_cache.py`.
-# - Local dev / production: DatabaseCache. Heartbeats live in a single
-#   `django_q_cache` table in the application DB, so they are visible to
-#   every process / container that talks to the same DB — works on a
-#   single host (SQLite, `make dev`) and across containers in ECS where
-#   web and worker are separate tasks sharing only the database. No
-#   shared filesystem required, no extra infra (Redis, EFS) needed.
+#   `studio/tests/test_worker_health_cache.py`. Query-budget tests that
+#   cover the DatabaseCache SQL cost force this alias back to
+#   DatabaseCache (see integrations/tests/test_shared_cache_query_budget.py).
+# - Local dev / production: DatabaseCache. Heartbeats and cross-process
+#   invalidation stamps live in a single `django_q_cache` table in the
+#   application DB, so they are visible to every process / container that
+#   talks to the same DB — works on a single host (SQLite, `make dev`)
+#   and across containers in ECS where web and worker are separate tasks
+#   sharing only the database. No shared filesystem required, no extra
+#   infra (Redis, EFS) needed.
+#
+# Two-layer request path: DatabaseCache is the source of truth for
+# heartbeats and for publishing invalidation (integration_settings_stamp,
+# banner, redirects, nav flags). Request-path helpers must not treat a
+# DatabaseCache GET as free — integrations.shared_cache memoizes those
+# reads per request and with a ≤5s in-process TTL so a rendered page
+# does not issue one SQL GET per get_config / banner / redirect / nav
+# helper. Redis remains out of scope.
 #
 # The cache table must exist before django-q can write to it. The
 # `email_app` migration `0013_create_django_q_cache_table` runs

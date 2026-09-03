@@ -23,6 +23,12 @@ from integrations import config as config_module
 from integrations.config import clear_config_cache, get_config, site_base_url
 from integrations.models import IntegrationSetting
 from integrations.settings_registry import get_group_by_name
+from integrations.shared_cache import (
+    LOCAL_TTL_SECONDS,
+    reset_local_shared_cache_memo,
+    restore_local_shared_cache_memo,
+    snapshot_local_shared_cache_memo,
+)
 
 User = get_user_model()
 
@@ -219,6 +225,7 @@ class CrossProcessCacheInvalidationTest(TestCase):
         # Drop the stamp the previous test may have published so each
         # test starts from a clean slate.
         caches['django_q'].delete('integration_settings_stamp')
+        reset_local_shared_cache_memo()
         # Reset module globals so we don't inherit a populated cache
         # across tests within the same process.
         config_module._cache = {}
@@ -228,6 +235,7 @@ class CrossProcessCacheInvalidationTest(TestCase):
     def tearDown(self):
         clear_config_cache()
         caches['django_q'].delete('integration_settings_stamp')
+        reset_local_shared_cache_memo()
         config_module._cache = {}
         config_module._cache_populated = False
         config_module._cache_stamp = None
@@ -237,34 +245,65 @@ class CrossProcessCacheInvalidationTest(TestCase):
         config_module._cache = {}
         config_module._cache_populated = False
         config_module._cache_stamp = None
+        reset_local_shared_cache_memo()
+
+    def _simulate_other_process_clear(self):
+        """Publish a stamp the way a different worker would.
+
+        ``clear_config_cache()`` write-throughs the local TTL memo in
+        this process. Restoring the caller's memo after the publish
+        leaves this worker on the pre-save stamp until the TTL expires.
+        """
+        memo_before = snapshot_local_shared_cache_memo()
+        clear_config_cache()
+        restore_local_shared_cache_memo(memo_before)
 
     def test_save_in_one_process_visible_in_another(self):
-        # Process A populates its cache while no DB row exists.
-        first_value = get_config('SITE_BASE_URL', 'https://default.example.com')
-        self.assertNotEqual(first_value, 'https://prod.example.com')
-        self.assertTrue(config_module._cache_populated)
-        # Snapshot Process A's view of the stamp (could be None if
-        # nobody has cleared yet — that's fine).
-        stamp_in_a_before = config_module._cache_stamp
+        from integrations import shared_cache as shared_cache_module
 
-        # Process B (simulated): write a new row + clear_config_cache().
-        # In real production this happens in a different gunicorn worker.
-        IntegrationSetting.objects.create(
-            key='SITE_BASE_URL',
-            value='https://prod.example.com',
-            group='site',
-        )
-        clear_config_cache()
-        # Simulating "back in process A" — restore A's globals as they
-        # were after its first read (cache_populated=True, old stamp).
-        config_module._cache = {}
-        config_module._cache_populated = True
-        config_module._cache_stamp = stamp_in_a_before
+        clock = {'now': 1_000.0}
 
-        # Process A reads again. The stamp differs, so it must
-        # repopulate from the DB and return the new value.
-        second_value = get_config('SITE_BASE_URL', 'https://default.example.com')
-        self.assertEqual(second_value, 'https://prod.example.com')
+        def fake_now():
+            return clock['now']
+
+        with patch.object(shared_cache_module, 'monotonic_time', fake_now):
+            reset_local_shared_cache_memo()
+            # Process A populates its cache while no DB row exists.
+            first_value = get_config(
+                'SITE_BASE_URL', 'https://default.example.com',
+            )
+            self.assertNotEqual(first_value, 'https://prod.example.com')
+            self.assertTrue(config_module._cache_populated)
+            # Snapshot Process A's view of the stamp (could be None if
+            # nobody has cleared yet — that's fine).
+            stamp_in_a_before = config_module._cache_stamp
+
+            # Process B (simulated): write a new row + clear_config_cache().
+            # In real production this happens in a different gunicorn worker.
+            IntegrationSetting.objects.create(
+                key='SITE_BASE_URL',
+                value='https://prod.example.com',
+                group='site',
+            )
+            self._simulate_other_process_clear()
+            # Simulating "back in process A" — restore A's globals as they
+            # were after its first read (cache_populated=True, old stamp).
+            config_module._cache = {}
+            config_module._cache_populated = True
+            config_module._cache_stamp = stamp_in_a_before
+
+            still_stale = get_config(
+                'SITE_BASE_URL', 'https://default.example.com',
+            )
+            self.assertNotEqual(still_stale, 'https://prod.example.com')
+
+            clock['now'] += LOCAL_TTL_SECONDS + 0.01
+            # Process A reads again after the local TTL. The stamp
+            # differs, so it must repopulate from the DB.
+            second_value = get_config(
+                'SITE_BASE_URL', 'https://default.example.com',
+            )
+            self.assertEqual(second_value, 'https://prod.example.com')
 
     def test_unchanged_stamp_does_not_repopulate(self):
         # First call populates and records the current stamp.
@@ -334,28 +373,44 @@ class CrossProcessCacheInvalidationTest(TestCase):
         # Same scenario as test_save_in_one_process_visible_in_another
         # but exercised through the public site_base_url() helper, which
         # is what every URL-generating call site uses.
-        IntegrationSetting.objects.create(
-            key='SITE_BASE_URL',
-            value='https://aishippinglabs.com',
-            group='site',
-        )
-        clear_config_cache()
-        # Process A reads once.
-        first = site_base_url()
-        self.assertEqual(first, 'https://aishippinglabs.com')
+        from integrations import shared_cache as shared_cache_module
 
-        # Process B updates and clears.
-        IntegrationSetting.objects.filter(key='SITE_BASE_URL').update(
-            value='https://configured.example.com',
-        )
-        clear_config_cache()
+        clock = {'now': 1_000.0}
 
-        # Process A: keep its cache populated, reset only the stamp it
-        # locally remembers so we simulate "saw old stamp".
-        config_module._cache = {'SITE_BASE_URL': 'https://aishippinglabs.com'}
-        config_module._cache_populated = True
-        config_module._cache_stamp = 'stale-stamp'
+        def fake_now():
+            return clock['now']
 
-        # The helper picks up the new value without a process restart.
-        second = site_base_url()
-        self.assertEqual(second, 'https://configured.example.com')
+        with patch.object(shared_cache_module, 'monotonic_time', fake_now):
+            reset_local_shared_cache_memo()
+            IntegrationSetting.objects.create(
+                key='SITE_BASE_URL',
+                value='https://aishippinglabs.com',
+                group='site',
+            )
+            clear_config_cache()
+            # Process A reads once.
+            first = site_base_url()
+            self.assertEqual(first, 'https://aishippinglabs.com')
+            stamp_in_a = config_module._cache_stamp
+
+            # Process B updates and clears.
+            IntegrationSetting.objects.filter(key='SITE_BASE_URL').update(
+                value='https://configured.example.com',
+            )
+            self._simulate_other_process_clear()
+
+            # Process A: keep its populated cache and the stamp it
+            # recorded before the other worker published.
+            config_module._cache = {
+                'SITE_BASE_URL': 'https://aishippinglabs.com',
+            }
+            config_module._cache_populated = True
+            config_module._cache_stamp = stamp_in_a
+
+            still_stale = site_base_url()
+            self.assertEqual(still_stale, 'https://aishippinglabs.com')
+
+            clock['now'] += LOCAL_TTL_SECONDS + 0.01
+            # The helper picks up the new value without a process restart.
+            second = site_base_url()
+            self.assertEqual(second, 'https://configured.example.com')

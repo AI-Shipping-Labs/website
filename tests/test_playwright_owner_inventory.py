@@ -572,6 +572,20 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_search_indexing_policy_1379.py::"
         "test_trailing_slash_redirects_apply_noindex_only_to_private_targets",
     })
+    event_api_owners = frozenset({
+        "playwright_tests/test_event_calendar_lifecycle_1073.py::"
+        "TestApiCalendarLifecycle::test_api_patch_cancel_enqueues_calendar_cancel",
+        "playwright_tests/test_event_calendar_lifecycle_1073.py::"
+        "TestApiCalendarLifecycle::test_api_patch_reschedule_enqueues_calendar_update",
+        "playwright_tests/test_event_operator_workflow_1285.py::"
+        "test_token_api_publish_is_scoped_and_idempotent",
+        "playwright_tests/test_event_zoom_lifecycle_1074.py::"
+        "TestApiZoomLifecycle::test_api_patch_cancel_deletes_zoom_meeting_and_clears_fields",
+        "playwright_tests/test_event_zoom_lifecycle_1074.py::"
+        "TestApiZoomLifecycle::test_api_patch_reschedule_patches_existing_zoom_meeting",
+        "playwright_tests/test_event_zoom_lifecycle_1074.py::"
+        "TestApiZoomLifecycle::test_api_series_rename_patches_auto_titled_zoom_occurrences",
+    })
     migrated_owner = "playwright_tests/test_dev_smoke_sitemap.py::test_sitemap_xml_is_served"
     campaign_owner = (
         "playwright_tests/test_studio_campaigns.py::"
@@ -646,8 +660,12 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
             self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
             self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
+        for owner in self.event_api_owners:
+            self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
+            self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
+            self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
         self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2246)
-        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 74)
+        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 68)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
 
@@ -671,8 +689,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2558)
-        self.assertEqual(len(inventory.owners), 2338)
+        self.assertEqual(inventory.item_count, 2552)
+        self.assertEqual(len(inventory.owners), 2332)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

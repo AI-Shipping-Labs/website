@@ -10,7 +10,7 @@ from django.conf import settings
 from django.test import TestCase, override_settings
 
 from accounts.models import User
-from accounts.utils.tokens import JWT_ALGORITHM
+from accounts.utils.tokens import JWT_ALGORITHM, resolve_password_reset_token
 from email_app.services.email_service import EmailService
 from email_app.tasks.welcome_imported import (
     _build_context,
@@ -203,6 +203,8 @@ class WelcomeImportedSiteUrlOverrideTest(TestCase):
 
         self.assertEqual(payload["user_id"], self.user.pk)
         self.assertEqual(payload["action"], "password_reset")
+        resolved_user, _validated = resolve_password_reset_token(_extract_token(url))
+        self.assertEqual(resolved_user.pk, self.user.pk)
         self.assertGreater(
             expires_at,
             started_at + datetime.timedelta(minutes=59),

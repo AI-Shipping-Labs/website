@@ -23,12 +23,19 @@ from allauth.socialaccount.models import SocialApp
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.db import close_old_connections, connection
+from django.db.models.query import QuerySet
 from django.test import Client, TestCase, TransactionTestCase, override_settings, tag
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import User
+from accounts.utils.tokens import (
+    PASSWORD_RESET_PROOF_CLAIM,
+    generate_password_reset_token,
+    generate_user_action_token,
+    resolve_password_reset_token,
+)
 from email_app.models import EmailLog
 from email_app.services.email_service import EmailServiceError
 
@@ -55,7 +62,7 @@ def _make_verification_token(user_id, expired=False, return_path=None, redirect_
 
 
 def _make_password_reset_token(user_id, expired=False):
-    """Create a password reset JWT token for testing."""
+    """Create a legacy password-reset JWT without a password-state proof."""
     if expired:
         exp = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
     else:
@@ -960,6 +967,39 @@ class EmailSendHelperExceptionHandlingTest(TestCase):
         with self.assertRaisesRegex(RuntimeError, "bad reset context"):
             _send_password_reset_email(self.user)
 
+    @patch("email_app.services.email_service.EmailService")
+    def test_send_password_reset_email_issues_secure_one_hour_token(self, service_cls):
+        from accounts.views.auth import _send_password_reset_email
+
+        started_at = datetime.datetime.now(datetime.timezone.utc)
+        user = User.objects.create_user(
+            email="reset-issuer@example.com",
+            password="oldpass1234",
+        )
+        _send_password_reset_email(user)
+
+        _, _, context = service_cls.return_value.send.call_args.args
+        token = context["reset_url"].split("token=", 1)[1]
+        resolved_user, payload = resolve_password_reset_token(token)
+        expires_at = datetime.datetime.fromtimestamp(
+            payload["exp"],
+            tz=datetime.timezone.utc,
+        )
+
+        self.assertEqual(resolved_user.pk, user.pk)
+        self.assertEqual(payload["action"], "password_reset")
+        self.assertIn(PASSWORD_RESET_PROOF_CLAIM, payload)
+        self.assertNotIn(user.password, token)
+        self.assertNotIn("oldpass1234", token)
+        self.assertGreater(
+            expires_at,
+            started_at + datetime.timedelta(minutes=59),
+        )
+        self.assertLess(
+            expires_at,
+            started_at + datetime.timedelta(hours=1, minutes=1),
+        )
+
 
 # ── Password Reset API ───────────────────────────────────────────────
 
@@ -985,7 +1025,7 @@ class PasswordResetAPITest(TestCase):
 
     def test_get_renders_form_with_valid_token(self):
         """GET with valid token renders password reset template."""
-        token = _make_password_reset_token(self.user.pk)
+        token = generate_password_reset_token(self.user)
         resp = self.client.get(f"{self.url}?token={token}")
         self.assertEqual(resp.status_code, 200)
         self.assertTemplateUsed(resp, "accounts/password_reset.html")
@@ -993,7 +1033,7 @@ class PasswordResetAPITest(TestCase):
         self.assertEqual(resp.context["reset_email"], self.user.email)
 
     def test_get_form_has_password_manager_hints(self):
-        token = _make_password_reset_token(self.user.pk)
+        token = generate_password_reset_token(self.user)
         resp = self.client.get(f"{self.url}?token={token}")
 
         self.assertContains(resp, 'method="post"')
@@ -1012,6 +1052,8 @@ class PasswordResetAPITest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn("error", resp.context)
         self.assertIn("expired", resp.context["error"].lower())
+        self.assertNotIn("token", resp.context)
+        self.assertNotContains(resp, 'id="reset-form"')
 
     def test_get_shows_error_for_invalid_token(self):
         """GET with invalid token shows error message."""
@@ -1031,12 +1073,21 @@ class PasswordResetAPITest(TestCase):
         resp = self.client.get(self.url)
         self.assertEqual(resp.status_code, 400)
 
+    def test_get_nonexistent_user_shows_invalid_link(self):
+        token = _make_password_reset_token(99999)
+        resp = self.client.get(f"{self.url}?token={token}")
+        self.assertEqual(resp.context["error"], "Invalid password reset link.")
+        self.assertNotIn("token", resp.context)
+
     def test_post_resets_password(self):
         """POST with valid token and new_password resets the password."""
-        token = _make_password_reset_token(self.user.pk)
+        token = generate_password_reset_token(self.user)
         resp = self._post({"token": token, "new_password": "newpass1234"})
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json()["status"], "ok")
+        self.assertEqual(
+            resp.json(),
+            {"status": "ok", "message": "Password has been reset successfully."},
+        )
 
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password("newpass1234"))
@@ -1046,6 +1097,7 @@ class PasswordResetAPITest(TestCase):
         token = _make_password_reset_token(self.user.pk, expired=True)
         resp = self._post({"token": token, "new_password": "newpass1234"})
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Token has expired"})
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password("oldpass1234"))
 
@@ -1060,13 +1112,13 @@ class PasswordResetAPITest(TestCase):
         self.assertEqual(resp.json(), {"error": "Token is required"})
 
     def test_post_missing_password_returns_400(self):
-        token = _make_password_reset_token(self.user.pk)
+        token = generate_password_reset_token(self.user)
         resp = self._post({"token": token})
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.json(), {"error": "New password is required"})
 
     def test_post_short_password_returns_400(self):
-        token = _make_password_reset_token(self.user.pk)
+        token = generate_password_reset_token(self.user)
         resp = self._post({"token": token, "new_password": "short"})
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(
@@ -1079,11 +1131,15 @@ class PasswordResetAPITest(TestCase):
         token = _make_verification_token(self.user.pk)
         resp = self._post({"token": token, "new_password": "newpass1234"})
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Invalid token action"})
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("oldpass1234"))
 
     def test_post_nonexistent_user_returns_404(self):
         token = _make_password_reset_token(99999)
         resp = self._post({"token": token, "new_password": "newpass1234"})
         self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.json(), {"error": "User not found"})
 
     def test_post_invalid_json_returns_400(self):
         resp = self.client.post(
@@ -1091,6 +1147,145 @@ class PasswordResetAPITest(TestCase):
         )
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.json(), {"error": "Invalid JSON"})
+
+    def test_replayed_post_is_rejected_without_changing_winner_password(self):
+        token = generate_password_reset_token(self.user)
+        first = self._post({"token": token, "new_password": "winnerpass1"})
+        self.assertEqual(
+            first.json(),
+            {"status": "ok", "message": "Password has been reset successfully."},
+        )
+
+        replay = self._post({"token": token, "new_password": "attacker99"})
+        self.assertEqual(replay.status_code, 400)
+        self.assertEqual(replay.json(), {"error": "Invalid token"})
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("winnerpass1"))
+        self.assertFalse(self.user.check_password("attacker99"))
+
+    def test_consumed_link_get_shows_invalid_without_usable_form(self):
+        token = generate_password_reset_token(self.user)
+        self._post({"token": token, "new_password": "winnerpass1"})
+
+        resp = self.client.get(f"{self.url}?token={token}")
+        self.assertEqual(resp.context["error"], "Invalid password reset link.")
+        self.assertNotIn("token", resp.context)
+        self.assertNotContains(resp, 'id="reset-form"')
+        self.assertNotContains(resp, 'id="reset-token"')
+
+    def test_older_and_newer_links_remain_valid_until_one_reset_succeeds(self):
+        older = generate_password_reset_token(self.user)
+        newer = generate_password_reset_token(self.user)
+
+        older_get = self.client.get(f"{self.url}?token={older}")
+        newer_get = self.client.get(f"{self.url}?token={newer}")
+        self.assertEqual(older_get.context["token"], older)
+        self.assertEqual(newer_get.context["token"], newer)
+
+        first = self._post({"token": older, "new_password": "winnerpass1"})
+        self.assertEqual(
+            first.json(),
+            {"status": "ok", "message": "Password has been reset successfully."},
+        )
+
+        consumed_get = self.client.get(f"{self.url}?token={older}")
+        sibling_get = self.client.get(f"{self.url}?token={newer}")
+        self.assertNotIn("token", consumed_get.context)
+        self.assertNotIn("token", sibling_get.context)
+
+        sibling = self._post({"token": newer, "new_password": "sibling99"})
+        self.assertEqual(sibling.status_code, 400)
+        self.assertEqual(sibling.json(), {"error": "Invalid token"})
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("winnerpass1"))
+
+        replacement = generate_password_reset_token(self.user)
+        replacement_post = self._post(
+            {"token": replacement, "new_password": "nextpass12"}
+        )
+        self.assertEqual(
+            replacement_post.json(),
+            {"status": "ok", "message": "Password has been reset successfully."},
+        )
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("nextpass12"))
+
+        stale_older = self._post({"token": older, "new_password": "staleold12"})
+        stale_newer = self._post({"token": newer, "new_password": "stalenew12"})
+        self.assertEqual(stale_older.status_code, 400)
+        self.assertEqual(stale_newer.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("nextpass12"))
+
+    def test_change_password_invalidates_outstanding_reset_link(self):
+        token = generate_password_reset_token(self.user)
+        account_client = Client()
+        account_client.force_login(self.user)
+        changed = account_client.post(
+            "/account/api/change-password",
+            data=json.dumps(
+                {
+                    "current_password": "oldpass1234",
+                    "new_password": "changedpass1",
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(changed.json()["status"], "ok")
+
+        replay = self._post({"token": token, "new_password": "resetagain1"})
+        self.assertEqual(replay.status_code, 400)
+        self.assertEqual(replay.json(), {"error": "Invalid token"})
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("changedpass1"))
+        self.assertFalse(self.user.check_password("resetagain1"))
+
+    def test_locked_post_revalidation_rejects_stale_sibling_after_commit(self):
+        sibling = generate_password_reset_token(self.user)
+        original_select_for_update = QuerySet.select_for_update
+
+        def select_after_winner_commits(queryset, *args, **kwargs):
+            winner = User.objects.get(pk=self.user.pk)
+            winner.set_password("winnerpass1")
+            winner.save(update_fields=["password"])
+            return original_select_for_update(queryset, *args, **kwargs)
+
+        with patch.object(QuerySet, "select_for_update", select_after_winner_commits):
+            resp = self._post({"token": sibling, "new_password": "loserpass1"})
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Invalid token"})
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("winnerpass1"))
+        self.assertFalse(self.user.check_password("loserpass1"))
+
+    def test_reset_token_cannot_verify_email(self):
+        self.user.email_verified = False
+        self.user.save(update_fields=["email_verified"])
+        token = generate_password_reset_token(self.user)
+
+        resp = self.client.get(f"/api/verify-email?token={token}")
+        self.assertEqual(resp.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.email_verified)
+
+    def test_legacy_reset_jwt_is_rejected(self):
+        token = generate_user_action_token(
+            self.user.pk,
+            "password_reset",
+            expiry_hours=1,
+        )
+        get_resp = self.client.get(f"{self.url}?token={token}")
+        self.assertEqual(get_resp.context["error"], "Invalid password reset link.")
+        self.assertNotIn("token", get_resp.context)
+
+        post_resp = self._post({"token": token, "new_password": "newpass1234"})
+        self.assertEqual(post_resp.status_code, 400)
+        self.assertEqual(post_resp.json(), {"error": "Invalid token"})
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("oldpass1234"))
 
 
 

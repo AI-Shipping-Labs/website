@@ -2,7 +2,7 @@
 
 from django.contrib.auth import get_user_model
 
-from accounts.utils.tokens import generate_user_action_token
+from accounts.utils.tokens import generate_password_reset_token
 from email_app.models import EmailLog
 from email_app.services.email_service import EmailService
 from integrations.config import site_base_url
@@ -63,9 +63,5 @@ def _build_context(user):
 
 def _build_password_reset_url(user):
     site_url = site_base_url().rstrip("/")
-    token = generate_user_action_token(
-        user.pk,
-        "password_reset",
-        expiry_hours=1,
-    )
+    token = generate_password_reset_token(user, expiry_hours=1)
     return f"{site_url}/api/password-reset?token={token}"

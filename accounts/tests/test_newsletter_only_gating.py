@@ -20,8 +20,6 @@ Coverage:
 """
 
 
-import jwt
-from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory, TestCase, tag
 from django.urls import reverse
@@ -393,16 +391,9 @@ class ActivationRevealsFullUITest(TestCase):
         )
         self.assertFalse(user.account_activated)
 
-        # Generate a valid reset token.
-        import datetime as dt
-        payload = {
-            'user_id': user.pk,
-            'action': 'password_reset',
-            'exp': dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1),
-        }
-        token = jwt.encode(
-            payload, settings.SECRET_KEY, algorithm='HS256',
-        )
+        from accounts.utils.tokens import generate_password_reset_token
+
+        token = generate_password_reset_token(user)
 
         response = self.client.post(
             '/api/password-reset',

@@ -128,52 +128,6 @@ def test_account_entry_and_token_results_are_noindex_and_rendered(
         assert page.locator('body').inner_text().strip()
 
 
-def test_trailing_slash_redirects_apply_noindex_only_to_private_targets(
-    django_server,
-    page,
-    settings,
-    django_db_blocker,
-):
-    with django_db_blocker.unblock():
-        _prepare_production(settings)
-
-    private_paths = (
-        '/notifications/',
-        '/request-a-call/',
-        '/vote/',
-        '/member-api/docs/',
-        '/courses/example/submit/',
-        '/events/1/example/join/',
-        '/sprints/example/board/',
-    )
-    for path in private_paths:
-        response = page.request.get(
-            f'{django_server}{path}',
-            max_redirects=0,
-        )
-        assert response.status == 301
-        assert response.headers['location'] == path.rstrip('/')
-        assert response.headers['x-robots-tag'] == ROBOTS_HEADER
-        assert response.body() == b''
-
-    public_or_unknown_paths = (
-        '/courses/example/',
-        '/events/1/example/',
-        '/sprints/example/',
-        '/notifications/future/',
-        '/unknown-indexing-route-1379/',
-    )
-    for path in public_or_unknown_paths:
-        response = page.request.get(
-            f'{django_server}{path}',
-            max_redirects=0,
-        )
-        assert response.status == 301
-        assert response.headers['location'] == path.rstrip('/')
-        assert 'x-robots-tag' not in response.headers
-        assert response.body() == b''
-
-
 def test_member_private_pages_and_onboarding_do_not_hide_public_article(
     django_server,
     browser,

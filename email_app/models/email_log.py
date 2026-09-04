@@ -146,6 +146,16 @@ class EmailLog(models.Model):
 
     class Meta:
         ordering = ['-sent_at']
+        indexes = [
+            # SES bounce/complaint/open/click correlation. Blanks are the
+            # "no SES id" sentinel and are excluded so they do not bloat
+            # the index. Non-unique: lookup uses .first().
+            models.Index(
+                fields=['ses_message_id'],
+                name='emaillog_ses_msgid_idx',
+                condition=models.Q(ses_message_id__gt=''),
+            ),
+        ]
         constraints = [
             # Per-recipient idempotency for campaign sends:
             # one EmailLog per (campaign, user) when campaign is set.

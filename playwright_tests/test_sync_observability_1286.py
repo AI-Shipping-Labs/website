@@ -9,7 +9,11 @@ import pytest
 from django.db import connection
 from django.utils import timezone
 
-from playwright_tests.conftest import create_session_for_user, create_staff_user
+from playwright_tests.conftest import (
+    SETTLE_TIMEOUT_MS,
+    create_session_for_user,
+    create_staff_user,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -149,7 +153,13 @@ def test_dashboard_health_errors_anchor_polling_and_screenshots(django_server, b
         partial.focus()
         assert partial.evaluate("el => el.matches(':focus')")
         partial.press("Enter")
-        page.wait_for_timeout(100)
+        # The Enter key activates the row link, which navigates to the
+        # card's fragment. Wait for the fragment instead of a fixed
+        # sleep so slow hash navigation cannot flake the asserts below.
+        page.wait_for_url(
+            f"**#sync-source-{sources['partial'].pk}",
+            timeout=SETTLE_TIMEOUT_MS,
+        )
         card = page.locator(f"#sync-source-{sources['partial'].pk}")
         assert page.url.endswith(f"#sync-source-{sources['partial'].pk}")
         assert "scroll-mt-24" in (card.get_attribute("class") or "")

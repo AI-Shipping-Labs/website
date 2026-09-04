@@ -15,6 +15,7 @@ local_only (cannot run against the deployed dev environment).
 
 import os
 import re
+import time
 from datetime import date, datetime, timedelta
 
 import pytest
@@ -130,7 +131,12 @@ class TestSeriesLevelGuardrail:
         # Change the level to Free (0) — differs from the Main series.
         _add_form_select(page).select_option("0")
         page.locator('[data-testid="add-occurrence-submit"]').click()
-        page.wait_for_timeout(500)
+        # The confirm() dialog is synchronous browser-side, but delivery
+        # of the event to Python lags it. Poll the recorded list instead
+        # of a fixed sleep so slow delivery cannot flake the assertion.
+        deadline = time.monotonic() + 8
+        while not dialogs and time.monotonic() < deadline:
+            time.sleep(0.05)
 
         # The confirmation prompt fired with the differing-level wording.
         assert len(dialogs) == 1

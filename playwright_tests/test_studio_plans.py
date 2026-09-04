@@ -195,6 +195,15 @@ class TestViewAsMemberReturnToPlan:
             "#impersonation-banner"
         ).inner_text()
 
+        # Quiesce the member page before ending impersonation. The stop
+        # POST flushes the session (new key, old row deleted), so any
+        # member-page fetch still in flight with the old session key
+        # would race the transition and can come back to a dead session
+        # row; the follow-up requests then land on the login page instead
+        # of the staff session (Issue #1560: scheduled-run flake where
+        # the final staff goto 302-redirected to /accounts/login/).
+        page.wait_for_load_state("networkidle", timeout=15000)
+
         with page.expect_navigation(
             url=member_plan_url,
             wait_until="domcontentloaded",

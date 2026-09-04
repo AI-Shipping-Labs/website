@@ -33,13 +33,14 @@ from pathlib import Path
 import pytest
 
 from playwright_tests.conftest import (
+    SETTLE_TIMEOUT_MS,
+    ensure_site_config_tiers,
+)
+from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
 from playwright_tests.conftest import (
     create_user as _create_user,
-)
-from playwright_tests.conftest import (
-    ensure_site_config_tiers,
 )
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
@@ -82,6 +83,35 @@ def _summary_style(page, locator_selector):
             };
         }""",
         locator_selector,
+    )
+
+
+def _wait_for_chevron_rotation(page, testid, rotated):
+    """Wait for the accordion chevron rotate transition to reach its end state.
+
+    The chevron animates over 200ms (`transition-transform duration-200`);
+    poll the asserted end state (about 180 degrees when open, no transform
+    when closed) instead of a fixed sleep so loaded CI runners cannot catch
+    it mid-rotation. A stability poll is not enough here: both samples can
+    land before the transition starts.
+    """
+    page.wait_for_function(
+        """({testid, rotated}) => {
+            const el = document.querySelector(
+                `details[data-testid="${testid}"] .accordion-chevron`
+            );
+            if (!el) return false;
+            const m = getComputedStyle(el).transform;
+            if (rotated) {
+                const match = m.match(/matrix\\(([^)]+)\\)/);
+                if (!match) return false;
+                const parts = match[1].split(',').map(s => parseFloat(s));
+                return parts[0] < -0.95 && parts[3] < -0.95;
+            }
+            return m === 'none' || m === 'matrix(1, 0, 0, 1, 0, 0)';
+        }""",
+        arg={"testid": testid, "rotated": rotated},
+        timeout=SETTLE_TIMEOUT_MS,
     )
 
 
@@ -608,7 +638,7 @@ def test_accordions_still_open_close_with_chevron_rotation(
         # The transform animates over 200ms (`transition-transform
         # duration-200`); wait for it to finish before reading the
         # computed matrix.
-        page.wait_for_timeout(350)
+        _wait_for_chevron_rotation(page, testid, True)
         # After [open], the CSS rotates the chevron 180°. The matrix is
         # (-1, 0, 0, -1, 0, 0) for a 180° rotation; allow small float
         # drift on the off-diagonal entries.
@@ -647,7 +677,7 @@ def test_accordions_still_open_close_with_chevron_rotation(
             "el => !el.hasAttribute('open')",
             arg=details.first.element_handle(),
         )
-        page.wait_for_timeout(350)
+        _wait_for_chevron_rotation(page, testid, False)
         rotation_closed_again = chevron.first.evaluate(
             "el => getComputedStyle(el).transform"
         )

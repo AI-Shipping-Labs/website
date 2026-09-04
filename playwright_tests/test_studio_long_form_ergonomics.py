@@ -8,6 +8,9 @@ from django.db import connection
 from django.utils import timezone
 
 from playwright_tests.conftest import (
+    SETTLE_TIMEOUT_MS,
+)
+from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
 from playwright_tests.conftest import (
@@ -97,7 +100,28 @@ def _staff_page(django_server, browser):
 def _assert_sticky_not_covering(page, field_selector):
     field = page.locator(field_selector)
     field.scroll_into_view_if_needed()
-    page.wait_for_timeout(100)
+    # Wait for smooth-scroll movement to finish: poll the field's viewport
+    # y across two animation frames instead of a fixed sleep, so the box
+    # reads below cannot catch the page mid-scroll.
+    page.wait_for_function(
+        """selector => new Promise(resolve => {
+            const el = document.querySelector(selector);
+            if (!el) {
+                resolve(false);
+                return;
+            }
+            const y = el.getBoundingClientRect().y;
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                const next = document.querySelector(selector);
+                resolve(
+                    !!next &&
+                    Math.abs(next.getBoundingClientRect().y - y) < 1
+                );
+            }));
+        })""",
+        arg=field_selector,
+        timeout=SETTLE_TIMEOUT_MS,
+    )
 
     bar_box = page.locator('[data-testid="sticky-action-bar"]').bounding_box()
     field_box = field.bounding_box()

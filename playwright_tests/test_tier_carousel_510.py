@@ -217,6 +217,71 @@ def _wait_for_recommended_tier_centered(page, selector, max_delta):
     )
 
 
+def _wait_for_tier_layout(page, selector='[data-tier-card="main"]'):
+    """Wait for tier-card layout inputs (webfonts, reflow) to settle.
+
+    Replaces fixed ``wait_for_timeout`` sleeps before card-height reads:
+    blocks on ``document.fonts.ready`` (evaluate awaits the promise) and
+    then polls the Main card height across two animation frames so slow
+    font/JS timing cannot skew the height comparison.
+    """
+    page.evaluate("() => (document.fonts ? document.fonts.ready : null)")
+    page.wait_for_function(
+        """selector => new Promise(resolve => {
+            const el = document.querySelector(selector);
+            if (!el || !el.getBoundingClientRect().height) {
+                resolve(false);
+                return;
+            }
+            const h = el.getBoundingClientRect().height;
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                const next = document.querySelector(selector);
+                resolve(
+                    !!next &&
+                    Math.abs(next.getBoundingClientRect().height - h) < 1
+                );
+            }));
+        })""",
+        arg=selector,
+        timeout=SETTLE_TIMEOUT_MS,
+    )
+
+
+def _wait_for_scroll_settle(page):
+    """Wait for smooth-scroll window movement (scrollIntoView) to finish."""
+    page.wait_for_function(
+        """() => new Promise(resolve => {
+            const y = window.scrollY;
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                resolve(Math.abs(window.scrollY - y) < 1);
+            }));
+        })""",
+        timeout=SETTLE_TIMEOUT_MS,
+    )
+
+
+def _wait_for_carousel_settle(page, selector):
+    """Wait for smooth carousel scrolling (programmatic scrollLeft) to end."""
+    page.wait_for_function(
+        """selector => new Promise(resolve => {
+            const el = document.querySelector(selector);
+            if (!el) {
+                resolve(false);
+                return;
+            }
+            const x = el.scrollLeft;
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                const next = document.querySelector(selector);
+                resolve(
+                    !!next && Math.abs(next.scrollLeft - x) < 1
+                );
+            }));
+        })""",
+        arg=selector,
+        timeout=SETTLE_TIMEOUT_MS,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Scenario 1: Mobile visitor sees Main as visually dominant on the homepage
 # ---------------------------------------------------------------------------
@@ -228,8 +293,8 @@ def test_home_main_dominant_and_badge_visible_on_mobile(django_server, page):
     page.set_viewport_size(PIXEL_7)
     page.goto(f"{django_server}/", wait_until="networkidle")
 
-    # Centering JS has run.
-    page.wait_for_timeout(200)
+    # Tier-card layout (fonts, centering JS) has settled.
+    _wait_for_tier_layout(page)
 
     # Main is taller than peers on mobile (>= 1.20x).
     main_h = _get_card_height(page, "main")
@@ -286,7 +351,7 @@ def test_home_main_dominant_and_badge_visible_on_mobile(django_server, page):
     page.evaluate(
         "() => document.getElementById('tiers').scrollIntoView({block:'start'})"
     )
-    page.wait_for_timeout(200)
+    _wait_for_scroll_settle(page)
     _screenshot(page, "home_tiers_in_viewport")
 
 
@@ -300,7 +365,7 @@ def test_home_peer_tiers_reachable_via_swipe(django_server, page):
     ensure_site_config_tiers()
     page.set_viewport_size(PIXEL_7)
     page.goto(f"{django_server}/", wait_until="networkidle")
-    page.wait_for_timeout(200)
+    _wait_for_tier_layout(page)
 
     # Each peer card must contain its own CTA button with min-height 44px.
     for slug in ("basic", "premium"):
@@ -324,7 +389,7 @@ def test_home_peer_tiers_reachable_via_swipe(django_server, page):
             c.scrollLeft = c.scrollLeft + c.clientWidth;
         }"""
     )
-    page.wait_for_timeout(250)
+    _wait_for_carousel_settle(page, "[data-tier-carousel]")
 
     # Scroll back two card widths to the left to reach Basic.
     page.evaluate(
@@ -333,7 +398,7 @@ def test_home_peer_tiers_reachable_via_swipe(django_server, page):
             c.scrollLeft = Math.max(0, c.scrollLeft - 2 * c.clientWidth);
         }"""
     )
-    page.wait_for_timeout(250)
+    _wait_for_carousel_settle(page, "[data-tier-carousel]")
 
     _section_screenshot(
         page,
@@ -352,7 +417,7 @@ def test_pricing_main_dominant_and_badge_visible_on_mobile(django_server, page):
     _ensure_pricing_tiers()
     page.set_viewport_size(PIXEL_7)
     page.goto(f"{django_server}/membership", wait_until="networkidle")
-    page.wait_for_timeout(200)
+    _wait_for_tier_layout(page)
 
     main_h = _get_card_height(page, "main")
     free_h = _get_card_height(page, "free")
@@ -386,7 +451,7 @@ def test_pricing_main_dominant_and_badge_visible_on_mobile(django_server, page):
     page.evaluate(
         "() => document.getElementById('pricing-section').scrollIntoView({block:'start'})"
     )
-    page.wait_for_timeout(200)
+    _wait_for_scroll_settle(page)
     _screenshot(page, "pricing_tiers_in_viewport")
 
 
@@ -410,7 +475,7 @@ def test_pricing_logged_in_main_member_account_states(
     page.set_viewport_size(PIXEL_7)
     try:
         page.goto(f"{django_server}/membership", wait_until="networkidle")
-        page.wait_for_timeout(200)
+        _wait_for_tier_layout(page)
 
         # Account-aware state: Main shows "Current plan"; paid users with
         # a live subscription manage tier changes through the portal.
@@ -473,7 +538,7 @@ def test_home_tiers_section_height_under_threshold(django_server, page):
     ensure_site_config_tiers()
     page.set_viewport_size(PIXEL_7)
     page.goto(f"{django_server}/", wait_until="networkidle")
-    page.wait_for_timeout(200)
+    _wait_for_tier_layout(page)
 
     section_height = page.evaluate(
         """() => {

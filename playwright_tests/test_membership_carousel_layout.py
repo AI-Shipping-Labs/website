@@ -7,6 +7,7 @@ import pytest
 from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
+    SETTLE_TIMEOUT_MS,
     auth_context,
     create_user,
     ensure_site_config_tiers,
@@ -92,7 +93,23 @@ def _assert_mobile_carousel(page, selector):
 
 
 def _assert_main_centered(page, selector):
-    page.wait_for_timeout(150)
+    # The centering JS runs on window `load`, which can lag behind
+    # `networkidle` on a loaded shard. Poll the centered effect instead of
+    # sleeping a fixed beat (Issue #1560).
+    page.wait_for_function(
+        """selector => {
+          const el = document.querySelector(selector);
+          const main = el && el.querySelector('[data-tier-card="main"]');
+          if (!el || !main) return false;
+          const elRect = el.getBoundingClientRect();
+          const mainRect = main.getBoundingClientRect();
+          return Math.abs(
+            (mainRect.left + mainRect.width / 2) - (elRect.left + elRect.width / 2)
+          ) < 24;
+        }""",
+        arg=selector,
+        timeout=SETTLE_TIMEOUT_MS,
+    )
     carousel = page.locator(selector)
     delta = carousel.evaluate(
         """el => {

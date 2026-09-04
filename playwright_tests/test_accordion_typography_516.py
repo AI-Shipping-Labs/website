@@ -386,7 +386,11 @@ def test_faq_and_workshop_chapters_share_color_and_weight(
     anon_page = anon_ctx.new_page()
     anon_page.goto(f'{django_server}/', wait_until='domcontentloaded')
     anon_page.locator('#faq').scroll_into_view_if_needed()
-    anon_page.wait_for_timeout(150)
+    # Wait for the element the style read below actually queries, so a
+    # slow first paint cannot race the evaluate.
+    anon_page.locator('#faq .faq-item summary').first.wait_for(
+        state='visible', timeout=10000,
+    )
     faq_style = anon_page.evaluate(
         """() => {
             const summary = document.querySelector(
@@ -554,11 +558,15 @@ def test_reader_sidebar_mobile_module_typography(django_server, browser):
     toggle = page.locator('#sidebar-toggle-btn')
     if toggle.count() == 1 and toggle.is_visible():
         toggle.click()
-        page.wait_for_timeout(150)
 
     # Wait for the nav to be visible.
     page.locator('#sidebar-nav').wait_for(state='visible', timeout=2000)
-    page.wait_for_timeout(100)
+    # Wait for the span the style read below actually queries instead of
+    # a fixed settle: the nav can be marked visible a frame before its
+    # children finish layout on slow runners.
+    page.locator(
+        '#sidebar-nav details.sidebar-module > summary > span'
+    ).first.wait_for(state='visible', timeout=10000)
 
     sidebar_style = page.evaluate(
         """() => {
@@ -712,7 +720,11 @@ def test_tier_card_and_accordion_share_design_system(django_server, browser):
     anon_page = anon_ctx.new_page()
     anon_page.goto(f'{django_server}/', wait_until='domcontentloaded')
     anon_page.locator('#tiers').scroll_into_view_if_needed()
-    anon_page.wait_for_timeout(150)
+    # Wait for the element the style read below actually queries, so a
+    # slow first paint cannot race the evaluate.
+    anon_page.locator('#tiers h3').first.wait_for(
+        state='visible', timeout=10000,
+    )
 
     # Read the first tier-card <h3> computed style. Pricing card titles
     # render as headings in the homepage tier section.

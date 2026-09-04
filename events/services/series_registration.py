@@ -21,11 +21,17 @@ these hold):
 
 import logging
 
+from django.db import transaction
+
 from content.access import can_access
 from events.models import (
     EventRegistration,
     SeriesOccurrenceOptOut,
     SeriesRegistration,
+)
+from events.services.registration import (
+    get_or_create_event_registration,
+    get_or_create_series_registration,
 )
 
 logger = logging.getLogger(__name__)
@@ -89,31 +95,33 @@ def enroll_user_in_series(user, series):
     occurrences = _eligible_occurrences(series)
     summary['total_occurrences'] = len(occurrences)
 
-    already_registered_ids = set(
-        EventRegistration.objects.filter(
-            user=user, event__in=occurrences,
-        ).values_list('event_id', flat=True)
-    )
-    opted_out_ids = _opted_out_event_ids(user, occurrences)
+    with transaction.atomic():
+        already_registered_ids = set(
+            EventRegistration.objects.filter(
+                user=user, event__in=occurrences,
+            ).values_list('event_id', flat=True)
+        )
+        opted_out_ids = _opted_out_event_ids(user, occurrences)
 
-    new_events = []
-    for event in occurrences:
-        if event.id in already_registered_ids:
-            summary['skipped_already'] += 1
-            continue
-        # Issue #1460: a deliberately cancelled session is never silently
-        # re-registered by a later fan-out.
-        if event.id in opted_out_ids:
-            summary['skipped_opted_out'] += 1
-            continue
-        if not can_access(user, event):
-            summary['skipped_no_access'] += 1
-            continue
-        EventRegistration.objects.create(event=event, user=user)
-        from analytics.activity import record_event_register
-        record_event_register(user, event)
-        new_events.append(event)
-        summary['registered'] += 1
+        new_events = []
+        for event in occurrences:
+            if event.id in already_registered_ids:
+                summary['skipped_already'] += 1
+                continue
+            # Issue #1460: a deliberately cancelled session is never silently
+            # re-registered by a later fan-out.
+            if event.id in opted_out_ids:
+                summary['skipped_opted_out'] += 1
+                continue
+            if not can_access(user, event):
+                summary['skipped_no_access'] += 1
+                continue
+            _, created = get_or_create_event_registration(event, user)
+            if created:
+                new_events.append(event)
+                summary['registered'] += 1
+            else:
+                summary['skipped_already'] += 1
 
     # ``new_events`` is the list of ``Event`` rows that newly got an
     # ``EventRegistration`` — the summary email iterates these to build
@@ -181,9 +189,12 @@ def register_occurrence_with_series(user, event):
     if series is None:
         return None
 
-    SeriesOccurrenceOptOut.objects.filter(event=event, user=user).delete()
-    SeriesRegistration.objects.get_or_create(series=series, user=user)
-    return enroll_user_in_series(user, series)
+    with transaction.atomic():
+        SeriesOccurrenceOptOut.objects.filter(event=event, user=user).delete()
+        # A concurrent collision here means the standing flag already
+        # exists; keep going and fan out the remaining occurrences.
+        get_or_create_series_registration(series, user)
+        return enroll_user_in_series(user, series)
 
 
 def series_registration_summary(user, series):
@@ -350,19 +361,20 @@ def enroll_series_registrants_in_event(event):
         skipped_opted_out = 0
         enrolled_user_ids = []
         users = User.objects.filter(id__in=registrant_user_ids)
-        for user in users:
-            if user.id in already_registered_ids:
-                continue
-            if user.id in opted_out_user_ids:
-                skipped_opted_out += 1
-                continue
-            if not can_access(user, event):
-                continue
-            EventRegistration.objects.create(event=event, user=user)
-            from analytics.activity import record_event_register
-            record_event_register(user, event)
-            enrolled += 1
-            enrolled_user_ids.append(user.id)
+        with transaction.atomic():
+            for user in users:
+                if user.id in already_registered_ids:
+                    continue
+                if user.id in opted_out_user_ids:
+                    skipped_opted_out += 1
+                    continue
+                if not can_access(user, event):
+                    continue
+                _, created = get_or_create_event_registration(event, user)
+                if not created:
+                    continue
+                enrolled += 1
+                enrolled_user_ids.append(user.id)
 
         # Issue #869: subscribers auto-enrolled into a newly added/published
         # occurrence get an updated series invite covering the new session.

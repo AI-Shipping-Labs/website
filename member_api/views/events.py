@@ -2,6 +2,7 @@
 
 import math
 
+from django.db import IntegrityError
 from django.db.models import Count, Prefetch, Q
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -12,7 +13,11 @@ from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import body_must_be_object_response, parse_json_body, require_methods
 from content.access import get_user_level
-from events.models import Event, EventHost, EventRegistration
+from events.models import Event, EventHost
+from events.services.registration import (
+    get_event_registration,
+    has_event_registration,
+)
 from events.services.time_windows import past_public_events_queryset, upcoming_events_queryset
 from events.views.api import (
     SCOPE_EVENT,
@@ -439,14 +444,24 @@ def event_register(request, event_id):
             "event_registration_closed",
             status=409,
         )
-    if EventRegistration.objects.filter(event=event, user=request.user).exists():
+    if has_event_registration(event, request.user):
         return error_response("Already registered", "already_registered", status=409)
 
-    registration, series_summary = _create_registration_with_scope(
-        request.user,
-        event,
-        scope,
-    )
+    try:
+        registration, series_summary, created = _create_registration_with_scope(
+            request.user,
+            event,
+            scope,
+        )
+    except IntegrityError:
+        registration = get_event_registration(event, request.user)
+        if registration is None:
+            raise
+        created = False
+        series_summary = None
+    if not created:
+        return error_response("Already registered", "already_registered", status=409)
+
     mark_activated(request.user)
     _send_registration_emails(request.user, event, registration, series_summary)
     event = _serialized_event_queryset(request.user).get(pk=event.pk)

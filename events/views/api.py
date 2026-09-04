@@ -4,6 +4,7 @@ import logging
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
@@ -21,6 +22,13 @@ from events.models import (
 )
 from events.services.anon_registration_confirmation import (
     store_anon_registration_confirmation,
+)
+from events.services.registration import (
+    get_event_registration,
+    get_or_create_event_registration,
+    get_or_create_series_registration,
+    has_event_registration,
+    has_series_registration,
 )
 from events.services.series_registration import (
     clear_series_opt_outs,
@@ -192,32 +200,35 @@ def _create_registration_with_scope(user, event, scope):
     occurrence stays inside ``new_events`` and the series calendar invite
     covers it.
 
-    Returns ``(registration, series_summary)``. ``series_summary`` is
-    ``None`` whenever no fan-out ran (standalone event or
-    ``scope="event"``).
+    Returns ``(registration, series_summary, created)``. ``series_summary``
+    is ``None`` whenever no fan-out ran (standalone event or
+    ``scope="event"``). ``created`` is ``True`` only when this request
+    inserted the ``EventRegistration`` for ``event``.
     """
     series_summary = None
-    if event.event_series_id is not None:
-        # Registering for an occurrence always clears a previous opt-out
-        # for it, whatever the scope: the click is an explicit request to
-        # attend this session again.
-        SeriesOccurrenceOptOut.objects.filter(event=event, user=user).delete()
-        if scope == SCOPE_SERIES:
-            series_summary = register_occurrence_with_series(user, event)
+    created = False
+    with transaction.atomic():
+        if event.event_series_id is not None:
+            # Registering for an occurrence always clears a previous opt-out
+            # for it, whatever the scope: the click is an explicit request to
+            # attend this session again.
+            SeriesOccurrenceOptOut.objects.filter(event=event, user=user).delete()
+            if scope == SCOPE_SERIES:
+                series_summary = register_occurrence_with_series(user, event)
 
-    registration = None
-    if series_summary is not None:
-        registration = EventRegistration.objects.filter(
-            event=event, user=user,
-        ).first()
-    if registration is None:
-        # No fan-out, or (defensively) a fan-out that did not cover this
-        # occurrence. Either way the per-event row is what the caller
-        # promised the user.
-        registration = EventRegistration.objects.create(event=event, user=user)
-        from analytics.activity import record_event_register
-        record_event_register(user, event)
-    return registration, series_summary
+        registration = None
+        if series_summary is not None:
+            new_ids = {item.pk for item in series_summary.get('new_events') or []}
+            created = event.pk in new_ids
+            registration = get_event_registration(event, user)
+        if registration is None:
+            # No fan-out, or (defensively) a fan-out that did not cover this
+            # occurrence. Either way the per-event row is what the caller
+            # promised the user.
+            registration, created = get_or_create_event_registration(
+                event, user,
+            )
+    return registration, series_summary, created
 
 
 def _send_registration_emails(user, event, registration, series_summary):
@@ -363,9 +374,7 @@ def _register_anonymous(request, event):
             existing_user.preferred_timezone = submitted_timezone
             existing_user.save(update_fields=["preferred_timezone"])
 
-        existing_registration = EventRegistration.objects.filter(
-            event=event, user=existing_user,
-        ).first()
+        existing_registration = get_event_registration(event, existing_user)
         if existing_registration is not None:
             # Idempotent resubmit (issue #672, gap 4): return 201 with
             # ``already_registered: true`` so the frontend lands on the
@@ -384,9 +393,27 @@ def _register_anonymous(request, event):
         # default as the authenticated path (D7). Access is still
         # re-checked per occurrence, so a Free account only picks up the
         # level-0 sessions.
-        registration, series_summary = _create_registration_with_scope(
-            existing_user, event, SCOPE_SERIES,
-        )
+        try:
+            registration, series_summary, created = (
+                _create_registration_with_scope(
+                    existing_user, event, SCOPE_SERIES,
+                )
+            )
+        except IntegrityError:
+            registration = get_event_registration(event, existing_user)
+            if registration is None:
+                raise
+            created = False
+            series_summary = None
+        if not created:
+            return _anonymous_register_success(
+                request,
+                event,
+                existing_user,
+                registration,
+                account_created=False,
+                extra={'already_registered': True},
+            )
         _send_registration_emails(
             existing_user, event, registration, series_summary,
         )
@@ -412,7 +439,7 @@ def _register_anonymous(request, event):
     user = _create_unverified_subscriber(
         email, preferred_timezone=submitted_timezone,
     )
-    registration, series_summary = _create_registration_with_scope(
+    registration, series_summary, _created = _create_registration_with_scope(
         user, event, SCOPE_SERIES,
     )
 
@@ -502,10 +529,9 @@ def register_for_event(request, slug):
             status=403,
         )
 
-    # Check if already registered
-    if EventRegistration.objects.filter(
-        event=event, user=request.user,
-    ).exists():
+    # Check if already registered. Optimisation only — the insert helper
+    # is the uniqueness guard under concurrency.
+    if has_event_registration(event, request.user):
         return JsonResponse(
             {'error': 'Already registered'},
             status=409,
@@ -513,9 +539,22 @@ def register_for_event(request, slug):
 
     # Register the user. The activity row for the CRM timeline
     # (issue #853) is recorded inside the helper / fan-out.
-    registration, series_summary = _create_registration_with_scope(
-        request.user, event, scope,
-    )
+    try:
+        registration, series_summary, created = _create_registration_with_scope(
+            request.user, event, scope,
+        )
+    except IntegrityError:
+        registration = get_event_registration(event, request.user)
+        if registration is None:
+            raise
+        created = False
+        series_summary = None
+
+    if not created:
+        return JsonResponse(
+            {'error': 'Already registered'},
+            status=409,
+        )
 
     # Issue #768: event registration is a real platform action — flip
     # ``account_activated`` for the authenticated user. Idempotent.
@@ -524,7 +563,8 @@ def register_for_event(request, slug):
 
     # Send exactly one confirmation email (non-blocking): the series
     # invite when the fan-out covered 2+ sessions, the per-event
-    # confirmation otherwise.
+    # confirmation otherwise. Emails run after the fan-out transaction
+    # has committed, and only for a database-confirmed new row.
     _send_registration_emails(
         request.user, event, registration, series_summary,
     )
@@ -660,10 +700,7 @@ def series_registration(request, series_slug):
         })
 
     # POST — register for the series.
-    existing = SeriesRegistration.objects.filter(
-        series=series, user=request.user,
-    ).first()
-    if existing is not None:
+    if has_series_registration(series, request.user):
         # Idempotent re-register: do not create a duplicate flag or new
         # per-event rows, do not re-send the email. Return the current
         # state so the caller lands on the same "you're registered" view.
@@ -673,12 +710,32 @@ def series_registration(request, series_slug):
             'summary': series_registration_summary(request.user, series),
         }, status=200)
 
-    SeriesRegistration.objects.create(series=series, user=request.user)
-    # Issue #1460: registering for the whole series again is an explicit
-    # "give me everything" — earlier per-session opt-outs are cleared.
-    clear_series_opt_outs(request.user, series)
-    summary = enroll_user_in_series(request.user, series)
-    new_events = summary.pop('new_events', [])
+    try:
+        with transaction.atomic():
+            _flag, created = get_or_create_series_registration(
+                series, request.user,
+            )
+            if created:
+                # Issue #1460: registering for the whole series again is
+                # an explicit "give me everything" — earlier per-session
+                # opt-outs are cleared.
+                clear_series_opt_outs(request.user, series)
+                summary = enroll_user_in_series(request.user, series)
+                new_events = summary.pop('new_events', [])
+            else:
+                summary = None
+                new_events = []
+    except IntegrityError:
+        created = False
+        summary = None
+        new_events = []
+
+    if not created:
+        return JsonResponse({
+            'status': 'already_registered',
+            'series_slug': series.slug,
+            'summary': series_registration_summary(request.user, series),
+        }, status=200)
 
     # Issue #768: series registration is a real platform action.
     from accounts.utils.activation import mark_activated
@@ -686,6 +743,8 @@ def series_registration(request, series_slug):
 
     # Send ONE confirmation email with a multi-event .ics covering the
     # occurrences we just enrolled the user in (issue #869). Non-blocking.
+    # Fired only after the fan-out transaction commits, and only when at
+    # least one EventRegistration row was newly created.
     if new_events:
         try:
             from events.services.series_invite import (

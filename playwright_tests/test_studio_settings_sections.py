@@ -5,6 +5,8 @@ import re
 
 import pytest
 
+from playwright.sync_api import expect
+
 from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
@@ -109,8 +111,10 @@ class TestStudioSettingsSections:
         page.locator('[data-section-nav-item="messaging"]').click()
 
         page.wait_for_function("window.location.hash === '#messaging'")
-        assert page.locator("#integration-ses").is_visible()
-        assert page.locator("#integration-slack").is_visible()
+        # Section visibility toggles in an async hashchange handler, so retry
+        # until it applies instead of asserting one-shot (flaky under CI load).
+        expect(page.locator("#integration-ses")).to_be_visible(timeout=10000)
+        expect(page.locator("#integration-slack")).to_be_visible(timeout=10000)
         assert page.locator("#integration-stripe").is_hidden()
         assert (
             page.locator('[data-section-nav-item="messaging"]').get_attribute("aria-current")

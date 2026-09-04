@@ -619,6 +619,18 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_studio_user_merge.py::"
         "TestNonStaffBlocked::test_member_gets_403",
     })
+    browser_lifecycle_owners = frozenset({
+        "playwright_tests/test_browser_lifecycle_1418.py::"
+        "test_cleanup_attempts_every_context_and_aggregates_all_errors",
+        "playwright_tests/test_browser_lifecycle_1418.py::"
+        "test_intentional_failure_probe_still_cleans_before_following_node",
+        "playwright_tests/test_browser_lifecycle_1418.py::"
+        "test_node_after_direct_contexts_starts_with_zero_resources",
+        "playwright_tests/test_browser_lifecycle_1418.py::"
+        "test_node_after_page_fixture_starts_with_zero_resources",
+        "playwright_tests/test_browser_lifecycle_1418.py::"
+        "test_static_node_does_not_require_browser",
+    })
     migrated_owner = "playwright_tests/test_dev_smoke_sitemap.py::test_sitemap_xml_is_served"
     campaign_owner = (
         "playwright_tests/test_studio_campaigns.py::"
@@ -722,8 +734,12 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
             self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
             self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
+        for owner in self.browser_lifecycle_owners:
+            self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
+            self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
+            self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
         self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2246)
-        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 55)
+        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 50)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
 
@@ -747,8 +763,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2544)
-        self.assertEqual(len(inventory.owners), 2324)
+        self.assertEqual(inventory.item_count, 2539)
+        self.assertEqual(len(inventory.owners), 2319)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

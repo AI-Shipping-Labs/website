@@ -75,9 +75,17 @@ Example response:
       "created_at": "2026-05-01T10:00:00+00:00",
       "updated_at": "2026-05-01T10:00:00+00:00"
     }
-  ]
+  ],
+  "pagination": {
+    "page": 1,
+    "page_size": 20,
+    "total": 1,
+    "total_pages": 1
+  }
 }
 ```
+
+Pass `page` (default `1`) to move through owned plans. `page_size` is fixed at 20. Invalid `page` values return `422`.
 
 ## Get One Plan
 

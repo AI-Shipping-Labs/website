@@ -134,12 +134,130 @@ class MemberPlansApiReadTest(MemberPlansApiTestBase):
         response = self.client.get("/member-api/v1/plans", **self._auth())
 
         self.assertEqual(response.status_code, 200)
-        ids = {row["id"] for row in response.json()["plans"]}
+        payload = response.json()
+        ids = {row["id"] for row in payload["plans"]}
         self.assertIn(owned.id, ids)
         self.assertNotIn(other.id, ids)
-        body = json.dumps(response.json())
+        self.assertEqual(
+            payload["pagination"],
+            {
+                "page": 1,
+                "page_size": 20,
+                "total": 1,
+                "total_pages": 1,
+            },
+        )
+        body = json.dumps(payload)
         self.assertNotIn("member-api-other@test.com", body)
         self.assertNotIn("user_email", body)
+
+    def test_empty_owner_list_includes_zero_pagination(self):
+        response = self.client.get("/member-api/v1/plans", **self._auth())
+
+        self.assertEqual(
+            response.json(),
+            {
+                "plans": [],
+                "pagination": {
+                    "page": 1,
+                    "page_size": 20,
+                    "total": 0,
+                    "total_pages": 0,
+                },
+            },
+        )
+
+    def test_list_paginates_newest_first_and_rejects_invalid_pages(self):
+        plans = []
+        for index in range(22):
+            sprint = Sprint.objects.create(
+                name=f"Page sprint {index:02d}",
+                slug=f"member-api-page-{index:02d}",
+                start_date=datetime.date(2026, 5, 1),
+                duration_weeks=6,
+                status="active",
+            )
+            plans.append(
+                Plan.objects.create(
+                    member=self.member,
+                    sprint=sprint,
+                    title=f"Plan {index:02d}",
+                )
+            )
+        newest_first = list(reversed(plans))
+
+        first_page = self.client.get(
+            "/member-api/v1/plans?page=1",
+            **self._auth(),
+        )
+        second_page = self.client.get(
+            "/member-api/v1/plans?page=2",
+            **self._auth(),
+        )
+
+        first_body = first_page.json()
+        second_body = second_page.json()
+        self.assertEqual(
+            [row["id"] for row in first_body["plans"]],
+            [plan.id for plan in newest_first[:20]],
+        )
+        self.assertEqual(
+            [row["id"] for row in second_body["plans"]],
+            [plan.id for plan in newest_first[20:]],
+        )
+        self.assertEqual(
+            first_body["pagination"],
+            {
+                "page": 1,
+                "page_size": 20,
+                "total": 22,
+                "total_pages": 2,
+            },
+        )
+        self.assertEqual(second_body["pagination"]["page"], 2)
+        self.assertEqual(second_body["pagination"]["total"], 22)
+        self.assertEqual(second_body["pagination"]["total_pages"], 2)
+
+        for invalid_page in ("0", "-1", "abc", "1.5"):
+            with self.subTest(page=invalid_page):
+                response = self.client.get(
+                    f"/member-api/v1/plans?page={invalid_page}",
+                    **self._auth(),
+                )
+                self.assertEqual(response.status_code, 422)
+                payload = response.json()
+                self.assertEqual(payload["code"], "validation_error")
+                self.assertIn("page", payload["details"])
+                self.assertNotIn("plans", payload)
+
+    def test_detail_uses_prefetched_child_order(self):
+        plan = Plan.objects.create(
+            member=self.member,
+            sprint=self.sprint,
+            title="Ordered plan",
+        )
+        later = Week.objects.create(plan=plan, week_number=1, position=2, theme="Later")
+        earlier = Week.objects.create(plan=plan, week_number=2, position=1, theme="Earlier")
+        Checkpoint.objects.create(week=earlier, description="Second", position=2)
+        Checkpoint.objects.create(week=earlier, description="First", position=1)
+        Resource.objects.create(plan=plan, title="Second resource", position=2)
+        Resource.objects.create(plan=plan, title="First resource", position=1)
+
+        response = self.client.get(f"/member-api/v1/plans/{plan.id}", **self._auth())
+
+        body = response.json()
+        self.assertEqual(
+            [week["id"] for week in body["weeks"]],
+            [earlier.id, later.id],
+        )
+        self.assertEqual(
+            [item["description"] for item in body["weeks"][0]["checkpoints"]],
+            ["First", "Second"],
+        )
+        self.assertEqual(
+            [item["title"] for item in body["resources"]],
+            ["First resource", "Second resource"],
+        )
 
     def test_owner_reads_safe_plan_detail_without_internal_context(self):
         plan = self._create_plan(self.member)

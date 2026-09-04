@@ -4,7 +4,6 @@ import os
 import re
 
 import pytest
-
 from playwright.sync_api import expect
 
 from playwright_tests.conftest import (

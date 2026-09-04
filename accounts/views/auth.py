@@ -11,6 +11,8 @@ from django.conf import settings
 from django.contrib.auth import login, logout
 from django.contrib.auth.backends import ModelBackend
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
@@ -46,6 +48,15 @@ logger = logging.getLogger(__name__)
 EMAIL_PASSWORD_AUTH_BACKEND = "django.contrib.auth.backends.ModelBackend"
 EMAIL_PASSWORD_BACKEND = ModelBackend()
 INVALID_LOGIN_ERROR = "Invalid email or password"
+
+
+def _password_validation_error(password, user):
+    """Return a 400 JSON response if AUTH_PASSWORD_VALIDATORS reject password."""
+    try:
+        validate_password(password, user)
+    except ValidationError as exc:
+        return JsonResponse({"error": " ".join(exc.messages)}, status=400)
+    return None
 
 
 def _private_no_store(response):
@@ -369,10 +380,9 @@ def register_api(request):
         return JsonResponse({"error": "Email is required"}, status=400)
     if not password:
         return JsonResponse({"error": "Password is required"}, status=400)
-    if len(password) < 8:
-        return JsonResponse(
-            {"error": "Password must be at least 8 characters"}, status=400
-        )
+    password_error = _password_validation_error(password, User(email=email))
+    if password_error:
+        return password_error
 
     # Check if user already exists
     if User.objects.filter(email__iexact=email).exists():
@@ -711,11 +721,6 @@ def password_reset_api(request):
             return JsonResponse(
                 {"error": "New password is required"}, status=400
             )
-        if len(new_password) < 8:
-            return JsonResponse(
-                {"error": "Password must be at least 8 characters"},
-                status=400,
-            )
 
         try:
             payload = load_password_reset_payload(token)
@@ -732,6 +737,10 @@ def password_reset_api(request):
 
             if not password_reset_proof_matches(user, payload):
                 return JsonResponse({"error": "Invalid token"}, status=400)
+
+            password_error = _password_validation_error(new_password, user)
+            if password_error:
+                return password_error
 
             user.set_password(new_password)
             user.save(update_fields=["password"])
@@ -779,11 +788,6 @@ def change_password_api(request):
         return JsonResponse(
             {"error": "New password is required"}, status=400
         )
-    if len(new_password) < 8:
-        return JsonResponse(
-            {"error": "New password must be at least 8 characters"},
-            status=400,
-        )
 
     user = request.user
 
@@ -794,6 +798,10 @@ def change_password_api(request):
             return JsonResponse(
                 {"error": "Current password is incorrect"}, status=400
             )
+
+    password_error = _password_validation_error(new_password, user)
+    if password_error:
+        return password_error
 
     user.set_password(new_password)
     user.save(update_fields=["password"])

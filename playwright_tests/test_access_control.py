@@ -29,6 +29,7 @@ from django.utils import timezone
 from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
+    DEFAULT_PASSWORD,
     VIEWPORT,
 )
 from playwright_tests.conftest import (
@@ -463,7 +464,7 @@ class TestScenario449UnverifiedSignupFreeArticle:
 
         register_response = page.request.post(
             f"{django_server}/api/register",
-            data={"email": "unverified@test.com", "password": "pass1234"},
+            data={"email": "unverified@test.com", "password": DEFAULT_PASSWORD},
             headers={"X-CSRFToken": csrf_token},
         )
         assert register_response.status == 201
@@ -573,7 +574,7 @@ class TestScenario1160VerifyEmailReturnToContent:
                 f"{django_server}/api/register",
                 data={
                     "email": "return-reader@test.com",
-                    "password": "pass1234",
+                    "password": DEFAULT_PASSWORD,
                     "next": "/blog/free-return-article",
                 },
                 headers={"X-CSRFToken": csrf_token},

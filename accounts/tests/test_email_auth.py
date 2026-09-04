@@ -41,6 +41,12 @@ from email_app.services.email_service import EmailServiceError
 
 JWT_ALGORITHM = "HS256"
 FAST_PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+DJANGO_PASSWORD_TOO_SHORT = (
+    "This password is too short. It must contain at least 8 characters."
+)
+DJANGO_PASSWORD_TOO_COMMON = "This password is too common."
+DJANGO_PASSWORD_ENTIRELY_NUMERIC = "This password is entirely numeric."
+DJANGO_PASSWORD_TOO_SIMILAR = "too similar"
 
 
 def _make_verification_token(user_id, expired=False, return_path=None, redirect_to=None):
@@ -199,11 +205,63 @@ class RegisterAPITest(TestCase):
         self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_register_short_password_returns_400(self):
-        """Password must be at least 8 characters."""
+        """MinimumLengthValidator rejects passwords shorter than 8 characters."""
+        before = User.objects.count()
         resp = self._post({"email": "short@example.com", "password": "short"})
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("8 characters", resp.json()["error"])
+        self.assertIn(DJANGO_PASSWORD_TOO_SHORT, resp.json()["error"])
+        self.assertEqual(User.objects.count(), before)
+        self.assertFalse(User.objects.filter(email="short@example.com").exists())
         self.assertNotIn("_auth_user_id", self.client.session)
+
+    @patch("accounts.views.auth._send_verification_email")
+    def test_register_common_password_returns_400(self, mock_send):
+        before = User.objects.count()
+        resp = self._post(
+            {"email": "common-pw@example.com", "password": "password"}
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(DJANGO_PASSWORD_TOO_COMMON, resp.json()["error"])
+        self.assertEqual(User.objects.count(), before)
+        self.assertFalse(
+            User.objects.filter(email="common-pw@example.com").exists()
+        )
+        self.assertNotIn("_auth_user_id", self.client.session)
+        mock_send.assert_not_called()
+
+    def test_register_numeric_password_returns_400(self):
+        before = User.objects.count()
+        resp = self._post(
+            {"email": "numeric-pw@example.com", "password": "87654321"}
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(DJANGO_PASSWORD_ENTIRELY_NUMERIC, resp.json()["error"])
+        self.assertEqual(User.objects.count(), before)
+        self.assertFalse(
+            User.objects.filter(email="numeric-pw@example.com").exists()
+        )
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_register_password_similar_to_email_returns_400(self):
+        email = "alice.builder@example.com"
+        before = User.objects.count()
+        resp = self._post({"email": email, "password": email})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(DJANGO_PASSWORD_TOO_SIMILAR, resp.json()["error"].lower())
+        self.assertEqual(User.objects.count(), before)
+        self.assertFalse(User.objects.filter(email=email).exists())
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_register_validator_passing_password_creates_user(self):
+        resp = self._post(
+            {"email": "strong-pw@example.com", "password": "TestPass123!"}
+        )
+        self.assertEqual(resp.status_code, 201)
+        user = User.objects.get(email="strong-pw@example.com")
+        self.assertTrue(user.check_password("TestPass123!"))
+        self.assertFalse(user.email_verified)
+        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(int(self.client.session["_auth_user_id"]), user.pk)
 
     def test_register_empty_email_returns_400(self):
         before = User.objects.count()
@@ -1117,13 +1175,39 @@ class PasswordResetAPITest(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.json(), {"error": "New password is required"})
 
-    def test_post_short_password_returns_400(self):
+    def _assert_reset_password_rejected(self, new_password, fragment):
         token = generate_password_reset_token(self.user)
-        resp = self._post({"token": token, "new_password": "short"})
+        with patch("accounts.utils.activation.mark_activated") as mock_activated:
+            resp = self._post({"token": token, "new_password": new_password})
+            mock_activated.assert_not_called()
         self.assertEqual(resp.status_code, 400)
+        self.assertIn(fragment.lower(), resp.json()["error"].lower())
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("oldpass1234"))
+        retry = self._post({"token": token, "new_password": "TestPass123!"})
         self.assertEqual(
-            resp.json(),
-            {"error": "Password must be at least 8 characters"},
+            retry.json(),
+            {"status": "ok", "message": "Password has been reset successfully."},
+        )
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("TestPass123!"))
+
+    def test_post_short_password_returns_400(self):
+        self._assert_reset_password_rejected("short", DJANGO_PASSWORD_TOO_SHORT)
+
+    def test_post_common_password_returns_400(self):
+        self._assert_reset_password_rejected(
+            "password", DJANGO_PASSWORD_TOO_COMMON
+        )
+
+    def test_post_numeric_password_returns_400(self):
+        self._assert_reset_password_rejected(
+            "87654321", DJANGO_PASSWORD_ENTIRELY_NUMERIC
+        )
+
+    def test_post_password_similar_to_email_returns_400(self):
+        self._assert_reset_password_rejected(
+            self.user.email, DJANGO_PASSWORD_TOO_SIMILAR
         )
 
     def test_post_wrong_action_token_returns_400(self):
@@ -1328,7 +1412,14 @@ class ChangePasswordAPITest(TestCase):
             {"current_password": "wrongpass", "new_password": "newpass5678"}
         )
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("incorrect", resp.json()["error"].lower())
+        self.assertEqual(
+            resp.json(), {"error": "Current password is incorrect"}
+        )
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("oldpass1234"))
+        self.assertEqual(
+            int(self.client.session["_auth_user_id"]), self.user.pk
+        )
 
     def test_missing_current_password_returns_400(self):
         resp = self._post({"new_password": "newpass5678"})
@@ -1344,17 +1435,55 @@ class ChangePasswordAPITest(TestCase):
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password("oldpass1234"))
 
-    def test_short_new_password_returns_400(self):
+    def _assert_change_password_rejected(self, new_password, fragment):
         resp = self._post(
-            {"current_password": "oldpass1234", "new_password": "short"}
+            {
+                "current_password": "oldpass1234",
+                "new_password": new_password,
+            }
         )
         self.assertEqual(resp.status_code, 400)
-        self.assertEqual(
-            resp.json(),
-            {"error": "New password must be at least 8 characters"},
-        )
+        self.assertIn(fragment.lower(), resp.json()["error"].lower())
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password("oldpass1234"))
+        self.assertEqual(
+            int(self.client.session["_auth_user_id"]), self.user.pk
+        )
+
+    def test_short_new_password_returns_400(self):
+        self._assert_change_password_rejected("short", DJANGO_PASSWORD_TOO_SHORT)
+
+    def test_common_new_password_returns_400(self):
+        self._assert_change_password_rejected(
+            "password", DJANGO_PASSWORD_TOO_COMMON
+        )
+
+    def test_numeric_new_password_returns_400(self):
+        self._assert_change_password_rejected(
+            "87654321", DJANGO_PASSWORD_ENTIRELY_NUMERIC
+        )
+
+    def test_new_password_similar_to_email_returns_400(self):
+        self._assert_change_password_rejected(
+            self.user.email, DJANGO_PASSWORD_TOO_SIMILAR
+        )
+
+    def test_validator_passing_new_password_succeeds(self):
+        resp = self._post(
+            {
+                "current_password": "oldpass1234",
+                "new_password": "TestPass123!",
+            }
+        )
+        self.assertEqual(
+            resp.json(),
+            {"status": "ok", "message": "Password changed successfully."},
+        )
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("TestPass123!"))
+        self.assertEqual(
+            int(self.client.session["_auth_user_id"]), self.user.pk
+        )
 
     def test_session_remains_valid_after_change(self):
         """User stays logged in after password change."""

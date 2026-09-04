@@ -680,6 +680,29 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_studio_ses_events_1552.py::"
         "test_matched_identity_links_from_campaign_event_to_member",
     })
+    issue_1515_owners = frozenset({
+        "playwright_tests/test_password_validators_1515.py::"
+        "TestPasswordValidatorJourneys::"
+        "test_visitor_cannot_register_with_common_password",
+        "playwright_tests/test_password_validators_1515.py::"
+        "TestPasswordValidatorJourneys::"
+        "test_visitor_cannot_register_with_numeric_password",
+        "playwright_tests/test_password_validators_1515.py::"
+        "TestPasswordValidatorJourneys::"
+        "test_visitor_cannot_register_with_email_as_password",
+        "playwright_tests/test_password_validators_1515.py::"
+        "TestPasswordValidatorJourneys::"
+        "test_member_cannot_change_to_common_password",
+        "playwright_tests/test_password_validators_1515.py::"
+        "TestPasswordValidatorJourneys::"
+        "test_member_changes_to_strong_password_and_signs_in",
+        "playwright_tests/test_password_validators_1515.py::"
+        "TestPasswordValidatorJourneys::"
+        "test_reset_link_rejects_numeric_password",
+        "playwright_tests/test_password_validators_1515.py::"
+        "TestPasswordValidatorJourneys::"
+        "test_reset_link_sets_strong_password_and_signs_in",
+    })
     issue_1557_owners = frozenset({
         "playwright_tests/test_event_recap.py::"
         "TestRecapReadyNotificationBrowserFlow::"
@@ -763,15 +786,16 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2539)
-        self.assertEqual(len(inventory.owners), 2319)
+        self.assertEqual(inventory.item_count, 2546)
+        self.assertEqual(len(inventory.owners), 2326)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
             | self.ses_1552_owners
             | self.issue_1551_owners
             | self.issue_1557_owners
-            | self.issue_1506_owners,
+            | self.issue_1506_owners
+            | self.issue_1515_owners,
         )
         self.assertNotIn(
             self.migrated_owner,
@@ -784,6 +808,9 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         )
         self.assertNotIn(self.campaign_owner, LEGACY_DECLARED_BROWSER_CEILING)
         for owner in self.issue_1506_owners:
+            self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
+            self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
+        for owner in self.issue_1515_owners:
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
         self.assertEqual(errors, [])

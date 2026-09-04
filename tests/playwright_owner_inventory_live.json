@@ -2248,31 +2248,6 @@
     "playwright_tests/test_workshops_mobile_512.py::test_tablet_archive_keeps_all_recordings_reachable"
   ],
   "LEGACY_NON_BROWSER": {
-    "playwright_tests/test_browser_lifecycle_1418.py::test_cleanup_attempts_every_context_and_aggregates_all_errors": {
-      "category": "browser-lifecycle",
-      "reason": "Exercises Playwright fixture cleanup policy without owning a rendered-page journey.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_browser_lifecycle_1418.py::test_intentional_failure_probe_still_cleans_before_following_node": {
-      "category": "browser-lifecycle",
-      "reason": "Exercises Playwright fixture cleanup policy without owning a rendered-page journey.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_browser_lifecycle_1418.py::test_node_after_direct_contexts_starts_with_zero_resources": {
-      "category": "browser-lifecycle",
-      "reason": "Exercises Playwright fixture cleanup policy without owning a rendered-page journey.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_browser_lifecycle_1418.py::test_node_after_page_fixture_starts_with_zero_resources": {
-      "category": "browser-lifecycle",
-      "reason": "Exercises Playwright fixture cleanup policy without owning a rendered-page journey.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_browser_lifecycle_1418.py::test_static_node_does_not_require_browser": {
-      "category": "browser-lifecycle",
-      "reason": "Exercises Playwright fixture cleanup policy without owning a rendered-page journey.",
-      "relocation": "tests/"
-    },
     "playwright_tests/test_conftest_port_resolution.py::test_invalid_or_nonpositive_falls_back_to_free_port": {
       "category": "playwright-policy",
       "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",

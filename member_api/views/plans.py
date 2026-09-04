@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import math
+
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 from django.db import transaction
+from django.db.models import Count, Prefetch, Q
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -38,28 +41,148 @@ from plans.models import (
     WeekNote,
 )
 
+PAGE_SIZE = 20
+ERROR_SCHEMA = {"$ref": "#/components/schemas/ErrorResponse"}
+PLAN_SUMMARY_PROPERTIES = {
+    "id": {"type": "integer"},
+    "sprint": {
+        "type": "object",
+        "properties": {
+            "slug": {"type": "string"},
+            "name": {"type": "string"},
+        },
+        "required": ["slug", "name"],
+    },
+    "member": {
+        "type": "object",
+        "properties": {"display_name": {"type": "string"}},
+        "required": ["display_name"],
+    },
+    "title": {"type": "string"},
+    "visibility": {"type": "string"},
+    "progress": {
+        "type": "object",
+        "properties": {
+            "checkpoints_done": {"type": "integer", "minimum": 0},
+            "checkpoints_total": {"type": "integer", "minimum": 0},
+        },
+        "required": ["checkpoints_done", "checkpoints_total"],
+    },
+    "shared_at": {"type": ["string", "null"], "format": "date-time"},
+    "created_at": {"type": ["string", "null"], "format": "date-time"},
+    "updated_at": {"type": ["string", "null"], "format": "date-time"},
+}
+PLAN_SUMMARY_SCHEMA = {
+    "type": "object",
+    "properties": PLAN_SUMMARY_PROPERTIES,
+    "required": list(PLAN_SUMMARY_PROPERTIES),
+}
+PLAN_LIST_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "plans": {"type": "array", "items": PLAN_SUMMARY_SCHEMA},
+        "pagination": {
+            "type": "object",
+            "properties": {
+                "page": {"type": "integer", "minimum": 1},
+                "page_size": {"type": "integer", "const": PAGE_SIZE},
+                "total": {"type": "integer", "minimum": 0},
+                "total_pages": {"type": "integer", "minimum": 0},
+            },
+            "required": ["page", "page_size", "total", "total_pages"],
+        },
+    },
+    "required": ["plans", "pagination"],
+}
 
-def _owned_plans_for(user):
+
+def _owned_plans_queryset(user):
     return (
         Plan.objects.filter(member=user)
         .select_related("sprint", "member")
-        .prefetch_related(
-            "weeks",
-            "weeks__checkpoints",
-            "weeks__notes",
-            "resources",
-            "deliverables",
-            "next_steps",
-        )
         .order_by("-created_at", "-id")
+    )
+
+
+def _annotate_checkpoint_progress(queryset):
+    return queryset.annotate(
+        checkpoints_total=Count("weeks__checkpoints", distinct=True),
+        checkpoints_done=Count(
+            "weeks__checkpoints",
+            filter=Q(weeks__checkpoints__done_at__isnull=False),
+            distinct=True,
+        ),
+    )
+
+
+def _owned_plans_list_queryset(user):
+    return _annotate_checkpoint_progress(_owned_plans_queryset(user))
+
+
+def _owned_plan_detail_queryset(user):
+    return _annotate_checkpoint_progress(_owned_plans_queryset(user)).prefetch_related(
+        Prefetch(
+            "weeks",
+            queryset=Week.objects.order_by("position", "week_number"),
+        ),
+        Prefetch(
+            "weeks__checkpoints",
+            queryset=Checkpoint.objects.order_by("position", "id"),
+        ),
+        Prefetch(
+            "weeks__notes",
+            queryset=WeekNote.objects.order_by("-created_at"),
+        ),
+        Prefetch(
+            "resources",
+            queryset=Resource.objects.order_by("position", "id"),
+        ),
+        Prefetch(
+            "deliverables",
+            queryset=Deliverable.objects.order_by("position", "id"),
+        ),
+        Prefetch(
+            "next_steps",
+            queryset=NextStep.objects.order_by("position", "id"),
+        ),
     )
 
 
 def _owned_plan_or_404(user, plan_id):
     try:
-        return _owned_plans_for(user).get(pk=plan_id)
+        return Plan.objects.get(pk=plan_id, member=user)
     except Plan.DoesNotExist:
         return None
+
+
+def _owned_plan_detail_or_404(user, plan_id):
+    try:
+        return _owned_plan_detail_queryset(user).get(pk=plan_id)
+    except Plan.DoesNotExist:
+        return None
+
+
+def _owned_plan_summary_or_404(user, plan_id):
+    try:
+        return _owned_plans_list_queryset(user).get(pk=plan_id)
+    except Plan.DoesNotExist:
+        return None
+
+
+def _parse_page(request):
+    try:
+        page = int(request.GET.get("page", "1"))
+    except (TypeError, ValueError):
+        page = 0
+    if page < 1:
+        return None, error_response(
+            "Invalid page",
+            "validation_error",
+            status=422,
+            details={"page": "Use a positive integer."},
+        )
+    return page, None
+
 
 
 @csrf_exempt
@@ -72,11 +195,16 @@ def _owned_plan_or_404(user, plan_id):
             "summary": "List owned plans",
             "description": (
                 "Lists plans owned by the authenticated member API key owner, "
-                "newest first. Never returns other members' plans."
+                "newest first. Never returns other members' plans. Paginated "
+                "with ``page`` (default 1) and a fixed page size of 20."
             ),
+            "query": {
+                "page": {"type": "integer", "minimum": 1, "default": 1},
+            },
             "responses": {
                 200: {
-                    "description": "Owned plan list.",
+                    "description": "A page of owned plans.",
+                    "schema": PLAN_LIST_SCHEMA,
                     "example": {
                         "plans": [
                             {
@@ -93,20 +221,48 @@ def _owned_plan_or_404(user, plan_id):
                                 "created_at": "2026-05-01T10:00:00+00:00",
                                 "updated_at": "2026-05-01T10:00:00+00:00",
                             }
-                        ]
+                        ],
+                        "pagination": {
+                            "page": 1,
+                            "page_size": PAGE_SIZE,
+                            "total": 1,
+                            "total_pages": 1,
+                        },
                     },
                 },
                 401: {
                     "description": "Missing or invalid member API key.",
-                    "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+                    "schema": ERROR_SCHEMA,
+                },
+                422: {
+                    "description": "Invalid page.",
+                    "schema": ERROR_SCHEMA,
                 },
             },
         },
     },
 )
 def plans_collection(request):
-    plans = [serialize_member_plan_summary(plan) for plan in _owned_plans_for(request.user)]
-    return JsonResponse({"plans": plans})
+    page, page_error = _parse_page(request)
+    if page_error is not None:
+        return page_error
+
+    queryset = _owned_plans_list_queryset(request.user)
+    total = queryset.count()
+    start = (page - 1) * PAGE_SIZE
+    plans = [
+        serialize_member_plan_summary(plan)
+        for plan in queryset[start:start + PAGE_SIZE]
+    ]
+    return JsonResponse({
+        "plans": plans,
+        "pagination": {
+            "page": page,
+            "page_size": PAGE_SIZE,
+            "total": total,
+            "total_pages": math.ceil(total / PAGE_SIZE) if total else 0,
+        },
+    })
 
 
 @csrf_exempt
@@ -182,7 +338,7 @@ def plan_detail(request, plan_id):
         denied = _require_scope(request, "plans:read")
         if denied is not None:
             return denied
-        plan = _owned_plan_or_404(request.user, plan_id)
+        plan = _owned_plan_detail_or_404(request.user, plan_id)
         if plan is None:
             return error_response("Plan not found", "plan_not_found", status=404)
         return JsonResponse(serialize_member_plan_detail(plan))
@@ -202,7 +358,7 @@ def plan_detail(request, plan_id):
     if apply_error is not None:
         return apply_error
 
-    plan = _owned_plan_or_404(request.user, plan_id)
+    plan = _owned_plan_detail_or_404(request.user, plan_id)
     return JsonResponse(serialize_member_plan_detail(plan))
 
 
@@ -233,7 +389,7 @@ def plan_detail(request, plan_id):
     },
 )
 def plan_markdown(request, plan_id):
-    plan = _owned_plan_or_404(request.user, plan_id)
+    plan = _owned_plan_detail_or_404(request.user, plan_id)
     if plan is None:
         return error_response("Plan not found", "plan_not_found", status=404)
     response = HttpResponse(
@@ -323,7 +479,7 @@ def plan_progress(request, plan_id):
                 item.done_at = None
                 item.save(update_fields=["done_at", "updated_at"])
 
-    plan = _owned_plan_or_404(request.user, plan_id)
+    plan = _owned_plan_summary_or_404(request.user, plan_id)
     return JsonResponse(serialize_member_plan_summary(plan))
 
 

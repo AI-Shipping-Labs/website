@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from django.db.models import Count, Q
-
 from accounts.utils.display import display_name
 
 
@@ -13,18 +11,20 @@ def isoformat_or_none(value):
     return value.isoformat()
 
 
-def _progress_for_plan(plan):
-    return plan.weeks.aggregate(
-        checkpoints_total=Count("checkpoints"),
-        checkpoints_done=Count(
-            "checkpoints",
-            filter=Q(checkpoints__done_at__isnull=False),
-        ),
-    )
+def _annotated_progress(plan):
+    return {
+        "checkpoints_done": getattr(plan, "checkpoints_done", 0) or 0,
+        "checkpoints_total": getattr(plan, "checkpoints_total", 0) or 0,
+    }
+
+
+def _first_related(related_manager):
+    related = list(related_manager.all())
+    return related[0] if related else None
 
 
 def serialize_member_plan_summary(plan):
-    progress = _progress_for_plan(plan)
+    progress = _annotated_progress(plan)
     return {
         "id": plan.id,
         "sprint": {
@@ -36,10 +36,7 @@ def serialize_member_plan_summary(plan):
         },
         "title": plan.display_title,
         "visibility": plan.visibility,
-        "progress": {
-            "checkpoints_done": progress["checkpoints_done"] or 0,
-            "checkpoints_total": progress["checkpoints_total"] or 0,
-        },
+        "progress": progress,
         "shared_at": isoformat_or_none(plan.shared_at),
         "created_at": isoformat_or_none(plan.created_at),
         "updated_at": isoformat_or_none(plan.updated_at),
@@ -75,10 +72,10 @@ def serialize_member_week(week):
         "week_number": week.week_number,
         "theme": week.theme,
         "position": week.position,
-        "note": serialize_member_week_note(week.notes.first()),
+        "note": serialize_member_week_note(_first_related(week.notes)),
         "checkpoints": [
             serialize_member_checkpoint(checkpoint)
-            for checkpoint in week.checkpoints.all().order_by("position", "id")
+            for checkpoint in week.checkpoints.all()
         ],
     }
 
@@ -113,7 +110,6 @@ def serialize_member_next_step(next_step):
 
 
 def serialize_member_plan_detail(plan):
-    weeks = list(plan.weeks.all().order_by("position", "week_number"))
     data = serialize_member_plan_summary(plan)
     data.update({
         "goal": plan.goal,
@@ -129,18 +125,18 @@ def serialize_member_plan_detail(plan):
             "supporting": list(plan.focus_supporting or []),
         },
         "accountability": plan.accountability,
-        "weeks": [serialize_member_week(week) for week in weeks],
+        "weeks": [serialize_member_week(week) for week in plan.weeks.all()],
         "resources": [
             serialize_member_resource(resource)
-            for resource in plan.resources.all().order_by("position", "id")
+            for resource in plan.resources.all()
         ],
         "deliverables": [
             serialize_member_deliverable(deliverable)
-            for deliverable in plan.deliverables.all().order_by("position", "id")
+            for deliverable in plan.deliverables.all()
         ],
         "next_steps": [
             serialize_member_next_step(next_step)
-            for next_step in plan.next_steps.all().order_by("position", "id")
+            for next_step in plan.next_steps.all()
         ],
     })
     return data

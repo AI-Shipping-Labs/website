@@ -1571,12 +1571,30 @@
     },
     "/member-api/v1/plans": {
       "get": {
-        "description": "Lists plans owned by the authenticated member API key owner, newest first. Never returns other members' plans.",
+        "description": "Lists plans owned by the authenticated member API key owner, newest first. Never returns other members' plans. Paginated with ``page`` (default 1) and a fixed page size of 20.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "example": {
+                  "pagination": {
+                    "page": 1,
+                    "page_size": 20,
+                    "total": 1,
+                    "total_pages": 1
+                  },
                   "plans": [
                     {
                       "created_at": "2026-05-01T10:00:00+00:00",
@@ -1598,10 +1616,138 @@
                       "visibility": "private"
                     }
                   ]
+                },
+                "schema": {
+                  "properties": {
+                    "pagination": {
+                      "properties": {
+                        "page": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "page_size": {
+                          "const": 20,
+                          "type": "integer"
+                        },
+                        "total": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "total_pages": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "page",
+                        "page_size",
+                        "total",
+                        "total_pages"
+                      ],
+                      "type": "object"
+                    },
+                    "plans": {
+                      "items": {
+                        "properties": {
+                          "created_at": {
+                            "format": "date-time",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "id": {
+                            "type": "integer"
+                          },
+                          "member": {
+                            "properties": {
+                              "display_name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "display_name"
+                            ],
+                            "type": "object"
+                          },
+                          "progress": {
+                            "properties": {
+                              "checkpoints_done": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "checkpoints_total": {
+                                "minimum": 0,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "checkpoints_done",
+                              "checkpoints_total"
+                            ],
+                            "type": "object"
+                          },
+                          "shared_at": {
+                            "format": "date-time",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "sprint": {
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "slug": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "slug",
+                              "name"
+                            ],
+                            "type": "object"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "format": "date-time",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "visibility": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "sprint",
+                          "member",
+                          "title",
+                          "visibility",
+                          "progress",
+                          "shared_at",
+                          "created_at",
+                          "updated_at"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "plans",
+                    "pagination"
+                  ],
+                  "type": "object"
                 }
               }
             },
-            "description": "Owned plan list."
+            "description": "A page of owned plans."
           },
           "401": {
             "content": {
@@ -1612,6 +1758,16 @@
               }
             },
             "description": "Missing or invalid member API key."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid page."
           }
         },
         "summary": "List owned plans",

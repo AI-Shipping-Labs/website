@@ -59,6 +59,45 @@ class MemberOpenApiSpecTest(TestCase):
             self.assertNotIn("/api/", path)
             self.assertNotIn("/studio/", path)
 
+    def test_plans_list_documents_page_pagination_and_422(self):
+        document = self._build_member_spec()
+        list_operation = document["paths"]["/member-api/v1/plans"]["get"]
+        query = {
+            parameter["name"]: parameter
+            for parameter in list_operation["parameters"]
+        }
+        self.assertEqual(set(query), {"page"})
+        self.assertEqual(query["page"]["schema"]["minimum"], 1)
+        self.assertEqual(query["page"]["schema"]["default"], 1)
+
+        list_schema = list_operation["responses"]["200"]["content"][
+            "application/json"
+        ]["schema"]
+        self.assertEqual(set(list_schema["properties"]), {"plans", "pagination"})
+        pagination = list_schema["properties"]["pagination"]
+        self.assertEqual(
+            set(pagination["properties"]),
+            {"page", "page_size", "total", "total_pages"},
+        )
+        self.assertEqual(pagination["properties"]["page_size"]["const"], 20)
+        self.assertNotIn(
+            "weeks",
+            list_schema["properties"]["plans"]["items"]["properties"],
+        )
+
+        for status in ("401", "422"):
+            schema = list_operation["responses"][status]["content"][
+                "application/json"
+            ]["schema"]
+            self.assertEqual(
+                schema,
+                {"$ref": "#/components/schemas/ErrorResponse"},
+            )
+
+        serialized = json.dumps(list_schema)
+        for forbidden in ("user_email", "interview_notes", "crm"):
+            self.assertNotIn(f'"{forbidden}"', serialized)
+
     def test_events_operations_have_complete_member_safe_contracts(self):
         document = self._build_member_spec()
         paths = document["paths"]

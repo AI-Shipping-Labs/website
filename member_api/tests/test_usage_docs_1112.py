@@ -30,6 +30,7 @@ class MemberApiUsageDocsArtifactTest(TestCase):
             "/account/#api-keys",
             "/member-api/openapi.json",
             "/member-api/v1/plans",
+            '"page_size": 20',
             "/member-api/v1/plans/12",
             "/member-api/v1/plans/12/markdown",
             "/member-api/v1/plans/12/progress",

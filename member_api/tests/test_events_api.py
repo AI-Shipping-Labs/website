@@ -102,7 +102,18 @@ class MemberEventsApiTest(TierSetupMixin, TestCase):
                     "/member-api/v1/events",
                     **self._auth(plaintext),
                 )
-                self.assertEqual(plans.json(), {"plans": []})
+                self.assertEqual(
+                    plans.json(),
+                    {
+                        "plans": [],
+                        "pagination": {
+                            "page": 1,
+                            "page_size": 20,
+                            "total": 0,
+                            "total_pages": 0,
+                        },
+                    },
+                )
                 self.assertIn("visibility", books.json())
                 self.assertEqual(events.json()["events"], [])
 

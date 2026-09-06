@@ -152,6 +152,7 @@ class AboutViewTest(TestCase):
         self.assertContains(response, 'Alexey Grigorev')
         self.assertContains(response, 'Valeriia Kuka')
         self.assertContains(response, 'Co-founder')
+        self.assertContains(response, 'currently inactive')
 
 
 class ActivitiesViewTest(TestCase):

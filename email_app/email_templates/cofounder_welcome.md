@@ -4,7 +4,7 @@ subject: "Welcome to AI Shipping Labs"
 
 Hey {{ user_first_name|default:"there" }},
 
-We're Alexey and Valeriia, the co-founders of AI Shipping Labs — thank you so much for joining!
+I'm Alexey, the co-founder of AI Shipping Labs — thank you so much for joining!
 
 We'd love to learn more about what you're hoping to get from the community. This information will help us improve the community experience and give us the context we need to prepare a personalized plan based on your background, goals, and current situation.
 
@@ -19,5 +19,5 @@ Once you've finished onboarding, we'd love to have a short call to go over your 
 Welcome to the community!
 
 Best,
-Alexey & Valeriia
-Co-founders, AI Shipping Labs
+Alexey
+Co-founder, AI Shipping Labs

@@ -4,7 +4,7 @@ subject: "Welcome to AI Shipping Labs"
 
 Hey {{ user_first_name|default:"there" }},
 
-We're Alexey and Valeriia, the co-founders of AI Shipping Labs — thank you so much for joining on the Basic plan!
+I'm Alexey, the co-founder of AI Shipping Labs — thank you so much for joining on the Basic plan!
 
 Here's what your Basic membership gives you right now:
 
@@ -22,5 +22,5 @@ And if you'd like, we're happy to hop on a short call too.
 Welcome aboard!
 
 Best,
-Alexey & Valeriia
-Co-founders, AI Shipping Labs
+Alexey
+Co-founder, AI Shipping Labs

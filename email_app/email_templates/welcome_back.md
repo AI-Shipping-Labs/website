@@ -4,7 +4,7 @@ subject: "Welcome back to AI Shipping Labs"
 
 Hey {{ user_first_name|default:"there" }},
 
-It's Alexey and Valeriia, the co-founders of AI Shipping Labs — welcome back! It's great to see you again.
+It's Alexey, the co-founder of AI Shipping Labs — welcome back! It's great to see you again.
 
 Quite a bit has happened since you were last here, and we'd love to help you pick up where you left off. A quick refresher on what's waiting for you:
 
@@ -19,5 +19,5 @@ Thank you for re-subscribing — it genuinely means a lot. If there's anything w
 Welcome back!
 
 Best,
-Alexey & Valeriia
-Co-founders, AI Shipping Labs
+Alexey
+Co-founder, AI Shipping Labs

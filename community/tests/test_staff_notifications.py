@@ -837,26 +837,28 @@ class CofounderWelcomeTemplateContextTest(TestCase):
     def test_welcome_falls_back_to_there_when_first_name_empty(self):
         """When first_name is empty the markdown template's ``|default:"there"``
         substitutes the placeholder. We render the template to confirm
-        the placeholder lands in the output body, and both founders are
-        still named.
+        the placeholder lands in the output body, and only Alexey is
+        named (Valeria removed from emails).
         """
         user = User.objects.create_user(email="noname@test.com", first_name="")
         body = self._render_welcome(user, "")
 
         self.assertIn("Hey there,", body)
-        # Both founders named even without a first name.
+        # Only Alexey named even without a first name.
         self.assertIn("Alexey", body)
-        self.assertIn("Valeriia", body)
+        self.assertNotIn("Valeriia", body)
+        self.assertNotIn("Valeria", body)
 
-    def test_welcome_opening_and_signoff_name_both_founders(self):
-        """The opening and sign-off name both founders, spelled exactly,
-        and the solo-founder phrasing is gone.
+    def test_welcome_opening_and_signoff_name_only_alexey(self):
+        """The opening and sign-off name only Alexey, spelled exactly,
+        and Valeria mentions are gone.
         """
         user = User.objects.create_user(email="both@test.com", first_name="Sam")
         body = self._render_welcome(user, "")
 
         self.assertIn("Alexey", body)
-        self.assertIn("Valeriia", body)
+        self.assertNotIn("Valeriia", body)
+        self.assertNotIn("Valeria", body)
         # Solo opening / cc phrasing removed.
         self.assertNotIn("I'm Valeriia, one of the co-founders", body)
         self.assertNotIn("cc'd Alexey", body)

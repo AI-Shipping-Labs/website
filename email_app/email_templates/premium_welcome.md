@@ -4,7 +4,7 @@ subject: "Welcome to AI Shipping Labs"
 
 Hey {{ user_first_name|default:"there" }},
 
-We're Alexey and Valeriia, the co-founders of AI Shipping Labs — thank you so much for joining on the Premium plan, our top tier!
+I'm Alexey, the co-founder of AI Shipping Labs — thank you so much for joining on the Premium plan, our top tier!
 
 Premium gives you everything we offer: all our workshop write-ups and recordings, full community (Slack) access, and our mini-courses. You can [Join our Slack community]({{ site_url }}/community/slack) right away.
 
@@ -19,5 +19,5 @@ And we'd love to hop on a short call to go over a plan tailored to you.
 Welcome aboard!
 
 Best,
-Alexey & Valeriia
-Co-founders, AI Shipping Labs
+Alexey
+Co-founder, AI Shipping Labs

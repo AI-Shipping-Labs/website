@@ -63,7 +63,8 @@ class DashboardPlanPreparationStateTest(TierSetupMixin, TestCase):
             response, 'data-testid="dashboard-plan-preparing-card"',
         )
         self.assertContains(response, "Your plan is being prepared")
-        self.assertContains(response, "Alexey and Valeria")
+        self.assertContains(response, "Alexey is using your onboarding answers")
+        self.assertNotContains(response, "Valeria")
         self.assertContains(response, "1-2 business days")
         self.assertContains(response, "bell")
         self.assertContains(response, "email")

@@ -166,7 +166,11 @@ def test_member_finishes_onboarding_then_sees_dashboard_waiting_state(
         state="visible",
     )
     completion_text = page.locator("main").inner_text()
-    assert "Alexey and Valeria" in completion_text
+    subtitle_text = page.locator(
+        '[data-testid="onboarding-complete-subtitle"]'
+    ).inner_text()
+    assert "Alexey will use your answers" in subtitle_text
+    assert "Valeria" not in subtitle_text
     assert "1-2 business days" in completion_text
     assert "bell notification and email" in completion_text
     assert page.locator('[data-testid="onboarding-complete-row"]').count() > 0
@@ -177,7 +181,8 @@ def test_member_finishes_onboarding_then_sees_dashboard_waiting_state(
     card.wait_for(state="visible")
     card_text = card.inner_text()
     assert "Your plan is being prepared" in card_text
-    assert "Alexey and Valeria" in card_text
+    assert "Alexey is using your onboarding answers" in card_text
+    assert "Valeria" not in card_text
     assert "1-2 business days" in card_text
     assert "bell" in card_text
     assert "email" in card_text

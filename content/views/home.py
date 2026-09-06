@@ -388,7 +388,7 @@ def _dashboard(request):
     if onboarding_complete:
         quick_actions = quick_actions + [{
             'title': 'Request a call',
-            'description': 'Book a 1:1 with Alexey or Valeria',
+            'description': 'Book a 1:1 with Alexey',
             'url': '/request-a-call',
             'icon': 'phone',
         }]

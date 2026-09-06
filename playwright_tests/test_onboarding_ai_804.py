@@ -417,7 +417,7 @@ class TestPersonaSignalStaffOnly:
             # Match persona names as whole words only. A bare substring check
             # false-positives on unrelated dashboard copy that legitimately
             # contains these letters — e.g. the Request-a-call card (#870)
-            # renders "Book a 1:1 with Alexey or Valeria", where "Alexey"
+            # renders "Book a 1:1 with Alexey", where "Alexey"
             # contains the substring "Alex". The leak we guard against is the
             # inferred archetype name (e.g. "Alex") appearing as its own token.
             for name in PERSONA_NAMES:

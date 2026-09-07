@@ -581,7 +581,20 @@ def _run_step(pk, name, actions, *, force=False):
     completed_field = f"{name}_completed_at"
     error_field = f"{name}_error"
     with transaction.atomic():
-        row = MavenEnrollmentEvent.objects.select_for_update().select_related("user").get(pk=pk)
+        # ``of=("self",)`` locks the occurrence row only. ``user`` is a
+        # nullable FK, so ``select_related("user")`` compiles to a LEFT OUTER
+        # JOIN and a bare ``FOR UPDATE`` makes PostgreSQL raise
+        # NotSupportedError ("FOR UPDATE cannot be applied to the nullable
+        # side of an outer join") on every call — outside the try below, so it
+        # escaped the view as an HTML 500 instead of a recorded step failure.
+        # SQLite reports has_select_for_update=False and drops the clause, so
+        # the whole flow only ever worked there. The step lease belongs to the
+        # occurrence anyway; a webhook must not hold a lock on a User row.
+        row = (
+            MavenEnrollmentEvent.objects.select_for_update(of=("self",))
+            .select_related("user")
+            .get(pk=pk)
+        )
         status = getattr(row, status_field)
         attempts = getattr(row, attempts_field)
         if status in {row.STEP_SUCCEEDED, row.STEP_SKIPPED}:

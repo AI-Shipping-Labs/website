@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
-from django.db import IntegrityError, close_old_connections, transaction
+from django.db import IntegrityError, close_old_connections, connection, transaction
 from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -509,10 +509,22 @@ class MavenConcurrentDeliveryTest(TransactionTestCase):
             [200, 200],
             results,
         )
-        self.assertCountEqual(
-            [body.get("status") for _, body in results],
-            ["onboarded", "already_processed"],
-        )
+        # ``already_processed`` for the loser is a SQLite-only outcome:
+        # ``handle_maven_event`` serializes deliveries in-process behind
+        # ``_SQLITE_DELIVERY_LOCK`` there, so the second request always
+        # observes a finished occurrence. On PostgreSQL the two deliveries
+        # genuinely overlap and both truthfully report ``onboarded`` while the
+        # occurrence row lock still runs every side effect exactly once — the
+        # invariants asserted below. Issue #1574.
+        statuses = [body.get("status") for _, body in results]
+        if connection.vendor == "postgresql":
+            self.assertTrue(
+                set(statuses) <= {"onboarded", "already_processed"},
+                statuses,
+            )
+            self.assertIn("onboarded", statuses)
+        else:
+            self.assertCountEqual(statuses, ["onboarded", "already_processed"])
         self.assertEqual(User.objects.filter(email="concurrent@example.com").count(), 1)
         self.assertEqual(MavenEnrollmentEvent.objects.filter(lifecycle="active").count(), 1)
         self.assertEqual(TierOverride.objects.filter(source__startswith="maven:").count(), 1)

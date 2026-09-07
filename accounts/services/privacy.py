@@ -14,7 +14,6 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 from django.apps import apps
-from django.contrib.sessions.models import Session
 from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q
@@ -22,7 +21,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
 
-from accounts.models import PrivacyRequestLog
+from accounts.models import AccountSession, PrivacyRequestLog
 from email_app.services.email_service import EmailService, EmailServiceError
 from integrations.config import (
     get_config,
@@ -1665,15 +1664,7 @@ def _collect_privacy_correlations(user):
 
 
 def _delete_user_sessions(user, summary):
-    deleted = 0
-    for session in Session.objects.all():
-        try:
-            data = session.get_decoded()
-        except Exception:
-            continue
-        if data.get("_auth_user_id") == str(user.pk):
-            session.delete()
-            deleted += 1
+    deleted, _ = AccountSession.objects.filter(account_id=user.pk).delete()
     _increment(summary, "erased", "sessions", deleted)
 
 

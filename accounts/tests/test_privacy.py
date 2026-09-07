@@ -5,11 +5,14 @@ from unittest.mock import patch
 
 from allauth.socialaccount.models import SocialAccount
 from django.contrib.sessions.models import Session
-from django.test import TestCase, tag
+from django.db import connection
+from django.test import Client, TestCase, tag
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from accounts.models import (
     SIGNUP_SOURCE_NEWSLETTER,
+    AccountSession,
     EmailAlias,
     MemberAPIKey,
     PrivacyRequestLog,
@@ -21,6 +24,8 @@ from accounts.services.privacy import (
     SCHEMA_VERSION,
     _book_club_export,
     _comments_export,
+    _delete_user_sessions,
+    _empty_summary,
     build_user_data_export,
     delete_account_for_privacy,
 )
@@ -1364,6 +1369,94 @@ class PrivacyRequestLogAdminTest(TestCase):
         self.assertContains(detail, "hash-only")
         self.assertContains(detail, "ip-hash")
         self.assertNotContains(detail, "primary_email")
+
+
+def _unexpired_sessions(count, *, prefix):
+    now = timezone.now()
+    AccountSession.objects.bulk_create(
+        [
+            AccountSession(
+                session_key=f"{prefix}{i:036d}"[:40],
+                session_data=".",
+                expire_date=now + timedelta(days=7),
+            )
+            for i in range(count)
+        ]
+    )
+
+
+def _session_table_sql(captured):
+    return [
+        query["sql"]
+        for query in captured.captured_queries
+        if "django_session" in query["sql"].lower()
+    ]
+
+
+@tag("core")
+class PrivacySessionDeletionTest(TierSetupMixin, TestCase):
+    @patch("accounts.services.privacy.notify_privacy_staff")
+    def test_deletion_revokes_only_the_deleted_member_sessions(self, _notify):
+        user_a = User.objects.create_user(
+            email="session-a@test.com",
+            password="TestPass123!",
+        )
+        user_b = User.objects.create_user(
+            email="session-b@test.com",
+            password="TestPass123!",
+        )
+        client_a = Client()
+        client_b = Client()
+        client_anon = Client()
+        client_a.force_login(user_a)
+        client_b.force_login(user_b)
+        anon_session = client_anon.session
+        anon_session["keep"] = True
+        anon_session.save()
+        anon_key = anon_session.session_key
+        a_key = client_a.session.session_key
+        b_key = client_b.session.session_key
+
+        result = delete_account_for_privacy(user_a)
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.row_count_summary["erased"]["sessions"], 1)
+        self.assertFalse(AccountSession.objects.filter(session_key=a_key).exists())
+        self.assertTrue(AccountSession.objects.filter(session_key=b_key).exists())
+        self.assertEqual(
+            int(client_b.session["_auth_user_id"]),
+            user_b.pk,
+        )
+        self.assertTrue(AccountSession.objects.filter(session_key=anon_key).exists())
+        self.assertIsNone(
+            AccountSession.objects.get(session_key=anon_key).account_id,
+        )
+
+    def test_privacy_deletion_query_cost_does_not_track_session_table(self):
+        user_small = User.objects.create_user(email="session-small@test.com")
+        user_large = User.objects.create_user(email="session-large@test.com")
+        client_small = Client()
+        client_large = Client()
+        client_small.force_login(user_small)
+        client_large.force_login(user_large)
+        _unexpired_sessions(20, prefix="s20")
+        small_summary = _empty_summary()
+        with CaptureQueriesContext(connection) as small_ctx:
+            _delete_user_sessions(user_small, small_summary)
+        _unexpired_sessions(180, prefix="s200")
+        large_summary = _empty_summary()
+        with CaptureQueriesContext(connection) as large_ctx:
+            _delete_user_sessions(user_large, large_summary)
+
+        small_sql = _session_table_sql(small_ctx)
+        large_sql = _session_table_sql(large_ctx)
+        self.assertEqual(len(small_sql), len(large_sql))
+        self.assertGreater(len(large_sql), 0)
+        self.assertLessEqual(len(large_sql), 4)
+        for sql in large_sql:
+            self.assertNotIn("session_data", sql.lower())
+        self.assertEqual(small_summary["erased"]["sessions"], 1)
+        self.assertEqual(large_summary["erased"]["sessions"], 1)
 
 
 @tag('core')

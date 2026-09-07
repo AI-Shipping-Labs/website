@@ -47,6 +47,17 @@ class Command(BaseCommand):
             'Registered: campaign-delivery-recovery (every 5 min)'
         ))
 
+        # Cull expired django_session rows daily at 02:50 UTC, before the
+        # 03:00 import/cleanup cluster (issue #1521).
+        schedule(
+            'jobs.tasks.cleanup.clear_expired_sessions',
+            cron='50 2 * * *',
+            name='clear-expired-sessions',
+        )
+        self.stdout.write(self.style.SUCCESS(
+            'Registered: clear-expired-sessions (daily at 02:50 UTC)'
+        ))
+
         # Cleanup old webhook logs daily at 3 AM
         schedule(
             'jobs.tasks.cleanup.cleanup_old_webhook_logs',

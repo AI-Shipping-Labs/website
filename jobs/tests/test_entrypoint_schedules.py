@@ -54,6 +54,7 @@ class EntrypointRegistersSchedulesTest(TestCase):
         expected = {
             'health-check',
             'campaign-delivery-recovery',
+            'clear-expired-sessions',
             'cleanup-webhook-logs',
             'cleanup-webhook-deliveries',
             'purge-user-activity',

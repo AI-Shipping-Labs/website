@@ -10,6 +10,7 @@ from datetime import date, datetime, time, timedelta
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.utils import timezone
+from freezegun import freeze_time
 
 from events.models import Event, EventSeries
 
@@ -71,9 +72,10 @@ class StudioEventSeriesAccessTest(StaffMixin, TestCase):
 class StudioEventSeriesCreateTest(StaffMixin, TestCase):
     """``POST /studio/event-series/new`` creates a series + N events."""
 
-    def _post_valid(self, **overrides):
-        # Use a future date so we don't bump into past-date guards.
-        start = (date.today() + timedelta(days=14))
+    def _post_valid(self, frozen_at='2026-01-01T12:00:00Z', **overrides):
+        # Freeze at 2026-01-01, keeping this explicit winter fixture safely
+        # ahead of the view's past-date guard.
+        start = date(2026, 1, 4)
         payload = {
             'name': 'Spring Workshop Series',
             'slug': '',
@@ -88,7 +90,9 @@ class StudioEventSeriesCreateTest(StaffMixin, TestCase):
             'platform': 'zoom',
         }
         payload.update(overrides)
-        return self.client.post('/studio/event-series/new', payload)
+        with freeze_time(frozen_at):
+            self.client.login(email='staff@test.com', password='pass')
+            return self.client.post('/studio/event-series/new', payload)
 
     def test_creates_one_series_and_six_events(self):
         response = self._post_valid()
@@ -110,12 +114,136 @@ class StudioEventSeriesCreateTest(StaffMixin, TestCase):
             self.assertEqual(event.status, 'draft')
 
     def test_events_spaced_seven_days_apart(self):
-        self._post_valid()
+        response = self._post_valid()
+        self.assertEqual(response.status_code, 302)
         series = EventSeries.objects.get()
+        self.assertEqual(series.events.count(), 6)
         events = list(series.events.all().order_by('series_position'))
-        for i in range(1, len(events)):
-            delta = events[i].start_datetime - events[i - 1].start_datetime
-            self.assertEqual(delta, timedelta(days=7))
+        berlin = zoneinfo.ZoneInfo('Europe/Berlin')
+        utc = zoneinfo.ZoneInfo('UTC')
+        local_starts = [
+            event.start_datetime.astimezone(berlin) for event in events
+        ]
+        self.assertEqual(
+            [start.date() for start in local_starts],
+            [
+                date(2026, 1, 4), date(2026, 1, 11),
+                date(2026, 1, 18), date(2026, 1, 25),
+                date(2026, 2, 1), date(2026, 2, 8),
+            ],
+        )
+        self.assertEqual(
+            [
+                local_starts[i].date() - local_starts[i - 1].date()
+                for i in range(1, len(local_starts))
+            ],
+            [timedelta(days=7)] * 5,
+        )
+        self.assertEqual(
+            [start.replace(tzinfo=None).time() for start in local_starts],
+            [time(18, 0)] * 6,
+        )
+        utc_starts = [
+            event.start_datetime.astimezone(utc) for event in events
+        ]
+        self.assertEqual(
+            utc_starts,
+            [
+                datetime(2026, 1, 4, 17, 0, tzinfo=utc),
+                datetime(2026, 1, 11, 17, 0, tzinfo=utc),
+                datetime(2026, 1, 18, 17, 0, tzinfo=utc),
+                datetime(2026, 1, 25, 17, 0, tzinfo=utc),
+                datetime(2026, 2, 1, 17, 0, tzinfo=utc),
+                datetime(2026, 2, 8, 17, 0, tzinfo=utc),
+            ],
+        )
+        self.assertEqual(
+            [
+                utc_starts[i] - utc_starts[i - 1]
+                for i in range(1, len(utc_starts))
+            ],
+            [timedelta(hours=168)] * 5,
+        )
+
+    def test_events_keep_local_time_across_spring_dst_boundary(self):
+        response = self._post_valid(
+            frozen_at='2026-03-01T12:00:00Z',
+            start_date='22/03/2026', occurrences='2',
+        )
+        self.assertEqual(response.status_code, 302)
+        series = EventSeries.objects.get()
+        self.assertEqual(series.events.count(), 2)
+        events = list(series.events.all().order_by('series_position'))
+        berlin = zoneinfo.ZoneInfo('Europe/Berlin')
+        utc = zoneinfo.ZoneInfo('UTC')
+        local_starts = [
+            event.start_datetime.astimezone(berlin) for event in events
+        ]
+        self.assertEqual(
+            [start.date() for start in local_starts],
+            [date(2026, 3, 22), date(2026, 3, 29)],
+        )
+        self.assertEqual(
+            local_starts[1].date() - local_starts[0].date(),
+            timedelta(days=7),
+        )
+        self.assertEqual(
+            [start.replace(tzinfo=None).time() for start in local_starts],
+            [time(18, 0), time(18, 0)],
+        )
+        utc_starts = [
+            event.start_datetime.astimezone(utc) for event in events
+        ]
+        self.assertEqual(
+            utc_starts,
+            [
+                datetime(2026, 3, 22, 17, 0, tzinfo=utc),
+                datetime(2026, 3, 29, 16, 0, tzinfo=utc),
+            ],
+        )
+        self.assertEqual(
+            utc_starts[1] - utc_starts[0], timedelta(hours=167),
+        )
+
+    def test_events_keep_local_time_across_autumn_dst_boundary(self):
+        response = self._post_valid(
+            frozen_at='2026-10-01T12:00:00Z',
+            start_date='18/10/2026', occurrences='2',
+        )
+        self.assertEqual(response.status_code, 302)
+        series = EventSeries.objects.get()
+        self.assertEqual(series.events.count(), 2)
+        events = list(series.events.all().order_by('series_position'))
+        berlin = zoneinfo.ZoneInfo('Europe/Berlin')
+        utc = zoneinfo.ZoneInfo('UTC')
+        local_starts = [
+            event.start_datetime.astimezone(berlin) for event in events
+        ]
+        self.assertEqual(
+            [start.date() for start in local_starts],
+            [date(2026, 10, 18), date(2026, 10, 25)],
+        )
+        self.assertEqual(
+            local_starts[1].date() - local_starts[0].date(),
+            timedelta(days=7),
+        )
+        self.assertEqual(
+            [start.replace(tzinfo=None).time() for start in local_starts],
+            [time(18, 0), time(18, 0)],
+        )
+        utc_starts = [
+            event.start_datetime.astimezone(utc) for event in events
+        ]
+        self.assertEqual(
+            utc_starts,
+            [
+                datetime(2026, 10, 18, 16, 0, tzinfo=utc),
+                datetime(2026, 10, 25, 17, 0, tzinfo=utc),
+            ],
+        )
+        self.assertEqual(
+            utc_starts[1] - utc_starts[0], timedelta(hours=169),
+        )
 
     def test_end_datetime_equals_start_plus_duration(self):
         self._post_valid(duration_hours='1.5')

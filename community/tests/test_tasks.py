@@ -638,19 +638,18 @@ class HookTasksInviteEmailFallbackTest(TestCase):
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
-    @patch("community.services.slack.send_mail")
+    @patch("community.services.slack.EmailService")
     def test_invite_task_sends_email_when_slack_disabled_and_invite_url_set(
-        self, mock_send_mail, mock_post, mock_get_service
+        self, mock_email_service, mock_post, mock_get_service
     ):
         community_invite_task(self.user.pk)
 
-        mock_send_mail.assert_called_once()
-        kwargs = mock_send_mail.call_args.kwargs
-        self.assertIn(self.user.email, kwargs["recipient_list"])
-        # Issue #953: the invite email links to the gated /community/slack
-        # redirect, never the raw SLACK_INVITE_URL.
-        self.assertIn("/community/slack", kwargs["message"])
-        self.assertNotIn("https://join.slack.com/test", kwargs["message"])
+        # Issue #1565: the fallback now delivers through EmailService/SES
+        # with the existing community_invite template, instead of the
+        # unconfigured SMTP backend that silently dropped every invite.
+        mock_email_service.return_value.send.assert_called_once_with(
+            self.user, "community_invite", {},
+        )
 
         mock_post.assert_not_called()
         mock_get_service.assert_not_called()
@@ -670,14 +669,14 @@ class HookTasksInviteEmailFallbackTest(TestCase):
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
-    @patch("community.services.slack.send_mail")
+    @patch("community.services.slack.EmailService")
     def test_invite_task_skips_cleanly_when_slack_disabled_and_invite_url_empty(
-        self, mock_send_mail, mock_post, mock_get_service
+        self, mock_email_service, mock_post, mock_get_service
     ):
         with self.assertLogs("community.tasks.hooks", level="WARNING") as logs:
             community_invite_task(self.user.pk)
 
-        mock_send_mail.assert_not_called()
+        mock_email_service.return_value.send.assert_not_called()
         mock_post.assert_not_called()
         mock_get_service.assert_not_called()
         self.assertFalse(CommunityAuditLog.objects.filter(user=self.user).exists())
@@ -710,19 +709,15 @@ class HookTasksInviteEmailFallbackTest(TestCase):
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
-    @patch("community.services.slack.send_mail")
+    @patch("community.services.slack.EmailService")
     def test_reactivate_task_sends_email_when_slack_disabled_and_invite_url_set(
-        self, mock_send_mail, mock_post, mock_get_service
+        self, mock_email_service, mock_post, mock_get_service
     ):
         community_reactivate_task(self.user.pk)
 
-        mock_send_mail.assert_called_once()
-        kwargs = mock_send_mail.call_args.kwargs
-        self.assertIn(self.user.email, kwargs["recipient_list"])
-        # Issue #953: the invite email links to the gated /community/slack
-        # redirect, never the raw SLACK_INVITE_URL.
-        self.assertIn("/community/slack", kwargs["message"])
-        self.assertNotIn("https://join.slack.com/test", kwargs["message"])
+        mock_email_service.return_value.send.assert_called_once_with(
+            self.user, "community_invite", {},
+        )
 
         mock_post.assert_not_called()
         mock_get_service.assert_not_called()
@@ -742,14 +737,14 @@ class HookTasksInviteEmailFallbackTest(TestCase):
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
-    @patch("community.services.slack.send_mail")
+    @patch("community.services.slack.EmailService")
     def test_reactivate_task_skips_cleanly_when_slack_disabled_and_invite_url_empty(
-        self, mock_send_mail, mock_post, mock_get_service
+        self, mock_email_service, mock_post, mock_get_service
     ):
         with self.assertLogs("community.tasks.hooks", level="WARNING") as logs:
             community_reactivate_task(self.user.pk)
 
-        mock_send_mail.assert_not_called()
+        mock_email_service.return_value.send.assert_not_called()
         mock_post.assert_not_called()
         mock_get_service.assert_not_called()
         self.assertFalse(CommunityAuditLog.objects.filter(user=self.user).exists())
@@ -764,9 +759,9 @@ class HookTasksInviteEmailFallbackTest(TestCase):
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
-    @patch("community.services.slack.send_mail")
+    @patch("community.services.slack.EmailService")
     def test_remove_task_skip_behavior_unchanged_when_slack_disabled(
-        self, mock_send_mail, mock_post, mock_get_service
+        self, mock_email_service, mock_post, mock_get_service
     ):
         self.user.slack_user_id = "U123"
         self.user.save(update_fields=["slack_user_id"])
@@ -774,7 +769,7 @@ class HookTasksInviteEmailFallbackTest(TestCase):
         with self.assertLogs("community.tasks.hooks", level="WARNING") as logs:
             community_remove_task(self.user.pk)
 
-        mock_send_mail.assert_not_called()
+        mock_email_service.return_value.send.assert_not_called()
         mock_post.assert_not_called()
         mock_get_service.assert_not_called()
         self.assertFalse(CommunityAuditLog.objects.filter(user=self.user).exists())

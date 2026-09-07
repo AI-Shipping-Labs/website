@@ -12,7 +12,7 @@ retries, and consent-respecting (no marketing-newsletter opt-in).
 
 ## Settings
 
-All four settings live in the `Maven` group in Studio settings
+All five settings live in the `Maven` group in Studio settings
 (`/studio/settings/`). Read via `get_config` / `is_enabled`, never raw env.
 
 ### MAVEN_ENROLLMENT_ENABLED
@@ -37,6 +37,14 @@ Tier slug granted as the override (string, default `main`). Validated against
 Override lifetime in days (default `1825`, five years). An explicit valid
 Studio or environment value remains authoritative. An existing longer Maven
 or unrelated entitlement is never shortened.
+
+### MAVEN_COURSE_SLACK_CHANNEL
+
+Slack channel name shown in the `maven_welcome` email (optional, no default),
+e.g. `#ai-engineering-buildcamp`. It names where the cohort actually talks, so
+a new enrollee knows exactly where to go. When blank, the welcome sentence
+reads cleanly without it and no channel is named — that is the shipping
+default, and it is editable from Studio afterwards with no redeploy.
 
 ## Webhook setup
 
@@ -69,6 +77,74 @@ The endpoint acts only on `user_cohort.enrolled` (onboarding) and
 nothing. Keying onboarding off `user_cohort.enrolled` only is the dedupe
 against the Stripe-side `payment.success` for paid enrollments.
 
+## Accepted payload shapes
+
+Maven publishes no payload contract, so intake is deliberately tolerant. All
+of the following resolve to the same enrollee, the same `identity_hash`, and
+therefore dedupe against each other.
+
+| Field | Read from |
+|---|---|
+| Event type | `event`, then `type`, then `event_type` |
+| Email | top-level `email`, then `user.email` / `student.email` / `member.email` |
+| Course | `course` (string or `{name,title,slug,id}` object), `course_id` / `courseId` |
+| Cohort | `cohort` (string or object), `cohort_id` / `cohortId` |
+| First / last name | `first_name` / `last_name` on `user` / `student` / `member`, else top-level `first_name` / `last_name`, else a single `name` / `full_name` split on the first space |
+
+Envelopes: when the top-level object carries no resolvable email but has a
+dict under `data` or `payload` that does, that inner object is unwrapped
+(exactly one level). Outer keys win where present and non-empty; everything
+else comes from the inner object. So this:
+
+```json
+{"event": "user_cohort.enrolled",
+ "data": {"email": "sam@example.com", "course": "Buildcamp", "cohort": "Q1"}}
+```
+
+is processed identically to the flat equivalent.
+
+Names are PII. They are written only to the `User` row, and only into fields
+that are still blank — a name the member set themselves is never overwritten.
+They are never written into `MavenEnrollmentEvent.payload` and never into a
+log line.
+
+Rejected or unrecognised deliveries are logged with key NAMES only:
+
+- `400 missing_email` logs a warning naming the error code and the sorted
+  top-level key names of the payload — never any value.
+- `400 invalid_json` logs a warning with the body byte length and content type
+  only.
+- An unrecognised event type logs at INFO with the normalized event-type
+  string (not PII, and the most useful value when Maven's naming differs).
+
+## Slack step statuses
+
+The `slack` step reports what actually happened, and never claims a delivery
+it could not make:
+
+| Invite outcome | `slack_status` | Ledger note |
+|---|---|---|
+| User found in Slack and joined at least one community channel | `succeeded` | empty |
+| User found in Slack but joined no community channel | `failed` | "Enrollee is in the Slack workspace but joined no community channel: `<channel>: <slack error>`", retried within the normal bound |
+| User not in the Slack workspace | `skipped` | "Enrollee is not in the Slack workspace; the join link was delivered in the welcome email." |
+| Slack API raised out of the invite call | `failed` | safe exception class, retried within the normal bound |
+
+`succeeded` requires an actual channel join, never merely that a Slack user id
+resolved. `add_to_channels` turns every per-channel Slack error into
+`{"ok": False}`, so a bot that is not in the community channel, a wrong channel
+id, or an exhausted rate-limit retry would otherwise be recorded as a delivery
+that never happened. Those cases are `failed` with the channel errors visible on
+`/studio/maven-events/<pk>/`, which is an operator-fixable Slack configuration
+problem rather than a member problem.
+
+A cold Maven enrollee gets exactly one email: `maven_welcome`, which carries
+the Slack join link. The generic `community_invite` email is suppressed for
+Maven (`invite(user, send_invite_email=False)`) so the enrollee is not hit
+with two welcomes seconds apart.
+
+`/community/slack` is `@login_required` and Main-gated, so the welcome copy
+orders the steps set password -> sign in -> join Slack.
+
 ## Behavior
 
 `user_cohort.enrolled`:
@@ -87,7 +163,15 @@ against the Stripe-side `payment.success` for paid enrollments.
 - Sends the course-framed `maven_welcome` email (transactional; from
   `welcome@`; carries a transparent notice + a scoped Maven-email opt-out link
   + reply-to-remove line). The opt-out does not affect access or other email
-  preferences, and Account can re-enable it.
+  preferences, and Account can re-enable it. Staff receives a hidden copy of
+  the exact enrollee-facing welcome, BCC'd to `STAFF_SIGNUP_NOTIFY_EMAIL` —
+  the same mechanism and the same setting as the Stripe paid-signup welcome
+  (issue #1570). An unset value is a clean no-op, and a malformed value is
+  validated away rather than allowed to make SES reject the enrollee's
+  primary To. This is additive: the structured
+  `maven_enrollment_notification` staff heads-up is unchanged. The
+  `already_member` case skips the welcome entirely, so there is nothing to
+  copy there and the heads-up covers it.
 - After the entitlement succeeds, sends one independent internal staff
   enrollment heads-up to the configured staff mailbox and/or optional Slack
   channel. One successful destination completes the step; total delivery
@@ -151,25 +235,34 @@ and exception classes, never payloads, email addresses, tokens, or secrets.
 The `replay_maven_event` management command feeds a sample payload through the
 SAME handler the webhook uses, so it exercises the real flow.
 
+`--course` and `--cohort` are required whenever `--payload` is not supplied.
+They have no defaults: both land in the enrollee's subject line, so a
+forgotten flag raises a `CommandError` naming the missing flag rather than
+mailing a real person about a placeholder course. A real run prints the
+resolved recipient, course, and cohort before the handler runs.
+
 Dry-run first (no writes; reports intended actions):
 
 ```bash
 uv run python manage.py replay_maven_event \
-    --event user_cohort.enrolled --email me@example.com --dry-run
+    --event user_cohort.enrolled --email me@example.com \
+    --course "LLM Zoomcamp" --cohort "Spring 2026" --dry-run
 ```
 
 Then for real (idempotent — a second run reports `already_processed`):
 
 ```bash
 uv run python manage.py replay_maven_event \
-    --event user_cohort.enrolled --email me@example.com
+    --event user_cohort.enrolled --email me@example.com \
+    --course "LLM Zoomcamp" --cohort "Spring 2026"
 ```
 
 Replay a removal:
 
 ```bash
 uv run python manage.py replay_maven_event \
-    --event user_cohort.removed --email me@example.com --cohort "Spring 2026"
+    --event user_cohort.removed --email me@example.com \
+    --course "LLM Zoomcamp" --cohort "Spring 2026"
 ```
 
 Supply a full sample body (file path or inline JSON):
@@ -186,3 +279,48 @@ The owner can also test end to end by free-enrolling his own account plus a few
 test accounts into a real Maven test cohort and watching the flow run: account
 created, override granted, Slack invite, welcome email. Maven guidance: after
 adding the webhook, wait ~2 minutes, then enroll as a student would.
+
+## Backfilling already-enrolled members
+
+People who enrolled before the webhook was registered are onboarded by
+replaying their enrollment through the same authenticated production API the
+live webhook uses. No separate endpoint and no shell access are required.
+
+One request per person:
+
+```bash
+curl -sS -X POST https://aishippinglabs.com/api/webhooks/maven \
+  -H "X-Maven-Secret: $MAVEN_WEBHOOK_SHARED_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "event": "user_cohort.enrolled",
+        "email": "sam@example.com",
+        "first_name": "Sam",
+        "last_name": "Rivera",
+        "course": "AI Engineering Buildcamp: From RAG to Agents",
+        "cohort": "Cohort 1"
+      }'
+```
+
+Name mapping from a Maven roster CSV:
+
+| CSV column | Payload field |
+|---|---|
+| `preferred_name` when present, else the first token of `full_name` | `first_name` |
+| the remainder of `full_name` after the first token | `last_name` |
+
+The call is idempotent: a repeat returns `already_processed` and never
+re-onboards or re-emails. A `200` with `onboarded` means the occurrence was
+created and its steps ran.
+
+Verify each person with the existing authenticated API:
+
+| Check | Endpoint |
+|---|---|
+| Account exists, tier override applied | `GET /api/users/{email}` |
+| The `maven_welcome` email was sent | `GET /api/users/{email}/email-log` |
+| SES delivered it (or it bounced) | `GET /api/users/{email}/ses-events` |
+| Slack workspace membership | `GET /api/users/{email}/slack-membership/check` |
+
+Step-level detail (including a `skipped` slack step and its reason) is on
+`/studio/maven-events/<pk>/`.

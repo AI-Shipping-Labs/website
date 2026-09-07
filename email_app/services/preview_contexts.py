@@ -84,6 +84,25 @@ PREVIEW_CONTEXTS = {
         'access_until': 'March 15, 2026',
         'site_url': 'https://aishippinglabs.com',
     },
+    'maven_welcome': {
+        'user_name': 'Ada',
+        'course_name': 'AI Engineering Buildcamp: From RAG to Agents',
+        # Optional MAVEN_COURSE_SLACK_CHANNEL. Ships unset; the preview shows
+        # the filled-in shape so an operator can see what Studio will produce.
+        'course_channel': '#ai-engineering-buildcamp',
+        'password_reset_url': (
+            'https://aishippinglabs.com/api/password-reset?token=preview-token'
+        ),
+        'sign_in_url': 'https://aishippinglabs.com/accounts/login/',
+        'onboarding_url': 'https://aishippinglabs.com/onboarding/',
+        # Issue #1565: the gated join redirect, so the Studio preview shows
+        # the link an enrollee actually clicks after signing in.
+        'slack_join_url': 'https://aishippinglabs.com/community/slack',
+        'opt_out_url': (
+            'https://aishippinglabs.com/api/maven-email-opt-out'
+            '?token=preview-token'
+        ),
+    },
     'community_invite': {
         'user_name': 'Ada',
         # Issue #953: the invite now links to the gated /community/slack

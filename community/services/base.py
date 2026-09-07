@@ -16,7 +16,7 @@ class CommunityService(abc.ABC):
     """
 
     @abc.abstractmethod
-    def invite(self, user):
+    def invite(self, user, send_invite_email=True):
         """Invite a user to the community.
 
         If the user has a linked platform account (e.g. slack_user_id),
@@ -25,6 +25,21 @@ class CommunityService(abc.ABC):
 
         Args:
             user: User model instance.
+            send_invite_email: When False, a user who is not in the
+                community platform is NOT emailed the generic invite,
+                because the caller delivers the join link itself (the
+                Maven enrollment flow puts it in ``maven_welcome``, so a
+                cold enrollee receives exactly one email).
+
+        Returns:
+            InviteResult: ``outcome`` names what actually happened —
+            added to channels, no channel joined, invite email sent,
+            invite email failed, invite email suppressed by the caller,
+            or invite email skipped by delivery policy — with a
+            PII-free ``detail`` for the failure outcomes. Implementations
+            must never report success for a step that did not occur: a
+            resolved platform user id is not proof that the member joined
+            anything (issue #1565).
         """
 
     @abc.abstractmethod

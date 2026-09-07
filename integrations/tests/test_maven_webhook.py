@@ -119,7 +119,13 @@ class MavenWebhookAuthTest(TestCase):
         self.assertEqual(response.status_code, 405)
 
 
-@patch("integrations.services.maven._invite_to_slack", lambda user, actions: actions.append("slack"))
+@patch(
+    "integrations.services.maven._invite_to_slack",
+    lambda user, actions: (
+        actions.append("slack"),
+        (MavenEnrollmentEvent.STEP_SUCCEEDED, ""),
+    )[1],
+)
 class MavenEnrolledTest(TestCase):
     def setUp(self):
         _enable()
@@ -493,6 +499,8 @@ class MavenSettingsRegistryTest(TestCase):
                 "MAVEN_WEBHOOK_SHARED_SECRET",
                 "MAVEN_OVERRIDE_TIER_SLUG",
                 "MAVEN_OVERRIDE_DURATION_DAYS",
+                # Optional; ships unset and is filled in from Studio (#1565).
+                "MAVEN_COURSE_SLACK_CHANNEL",
             },
         )
         for key in group["keys"]:

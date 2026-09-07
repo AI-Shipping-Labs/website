@@ -18,6 +18,9 @@ from payments.models import Tier
 
 User = get_user_model()
 SECRET = "notification-test-secret"
+# ``_invite_to_slack`` returns (step_status, note); the enrollee joined the
+# community channels (issue #1565).
+SLACK_ADDED = (MavenEnrollmentEvent.STEP_SUCCEEDED, "")
 
 
 def configure(**values):
@@ -31,8 +34,11 @@ def configure(**values):
     clear_config_cache()
 
 
-@patch("integrations.services.maven._invite_to_slack", lambda user, actions: actions.append("slack"))
-@patch("integrations.services.maven._send_welcome", lambda user, course, actions: actions.append("welcome"))
+@patch(
+    "integrations.services.maven._invite_to_slack",
+    lambda user, actions: (actions.append("slack"), SLACK_ADDED)[1],
+)
+@patch("integrations.services.maven._send_welcome", lambda user, course, cohort, actions: actions.append("welcome"))
 class MavenEnrollmentNotificationTest(TestCase):
     def setUp(self):
         configure(STAFF_SIGNUP_NOTIFY_EMAIL="staff@example.com")
@@ -184,7 +190,10 @@ class MavenEnrollmentNotificationTest(TestCase):
         with patch(
             "community.services.staff_notifications._send_staff_maven_enrollment_notification",
             side_effect=[RuntimeError("mail down"), None],
-        ) as send, patch("integrations.services.maven._invite_to_slack") as invite, patch(
+        ) as send, patch(
+            "integrations.services.maven._invite_to_slack",
+            return_value=SLACK_ADDED,
+        ) as invite, patch(
             "integrations.services.maven._send_welcome"
         ) as welcome:
             self.post(email="retry@example.com")
@@ -270,7 +279,10 @@ class MavenEnrollmentNotificationTest(TestCase):
         self.assertContains(detail, "notification")
         with patch(
             "community.services.staff_notifications._send_staff_maven_enrollment_notification"
-        ) as send, patch("integrations.services.maven._invite_to_slack") as invite, patch(
+        ) as send, patch(
+            "integrations.services.maven._invite_to_slack",
+            return_value=SLACK_ADDED,
+        ) as invite, patch(
             "integrations.services.maven._send_welcome"
         ) as welcome:
             response = self.client.post(

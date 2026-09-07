@@ -717,6 +717,14 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "TestAuthThrottleJourneys::"
         "test_reset_request_spam_is_told_to_wait_without_fake_success",
     })
+    issue_1565_owners = frozenset({
+        "playwright_tests/test_maven_welcome_slack_journey_1565.py::"
+        "test_enrollee_follows_the_welcome_email_into_slack",
+        "playwright_tests/test_maven_welcome_slack_journey_1565.py::"
+        "test_staff_preview_shows_the_ordered_steps_and_the_slack_link",
+        "playwright_tests/test_maven_welcome_slack_journey_1565.py::"
+        "test_support_reads_why_an_enrollee_never_reached_slack",
+    })
     issue_1557_owners = frozenset({
         "playwright_tests/test_event_recap.py::"
         "TestRecapReadyNotificationBrowserFlow::"
@@ -800,8 +808,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2550)
-        self.assertEqual(len(inventory.owners), 2330)
+        self.assertEqual(inventory.item_count, 2553)
+        self.assertEqual(len(inventory.owners), 2333)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -810,7 +818,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1557_owners
             | self.issue_1506_owners
             | self.issue_1515_owners
-            | self.issue_1516_owners,
+            | self.issue_1516_owners
+            | self.issue_1565_owners,
         )
         self.assertNotIn(
             self.migrated_owner,
@@ -829,6 +838,9 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
         for owner in self.issue_1516_owners:
+            self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
+            self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
+        for owner in self.issue_1565_owners:
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
         self.assertEqual(errors, [])

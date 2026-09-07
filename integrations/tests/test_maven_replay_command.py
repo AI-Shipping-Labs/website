@@ -35,6 +35,8 @@ class ReplayMavenEventTest(TestCase):
             "replay_maven_event",
             "--event", "user_cohort.enrolled",
             "--email", "dryrun@test.com",
+            "--course", "LLM Zoomcamp",
+            "--cohort", "Spring 2026",
             "--dry-run",
             stdout=out,
         )
@@ -45,7 +47,10 @@ class ReplayMavenEventTest(TestCase):
         self.assertIn("DRY RUN", output)
         self.assertIn("Would", output)
 
-    @patch("integrations.services.maven._invite_to_slack", lambda u, a: None)
+    @patch(
+        "integrations.services.maven._invite_to_slack",
+        lambda u, a: (MavenEnrollmentEvent.STEP_SUCCEEDED, ""),
+    )
     @patch("integrations.services.maven.EmailService")
     def test_real_run_then_idempotent(self, email_service):
         out = StringIO()
@@ -53,6 +58,8 @@ class ReplayMavenEventTest(TestCase):
             "replay_maven_event",
             "--event", "user_cohort.enrolled",
             "--email", "real@test.com",
+            "--course", "LLM Zoomcamp",
+            "--cohort", "Spring 2026",
             stdout=out,
         )
         self.assertTrue(User.objects.filter(email="real@test.com").exists())
@@ -63,6 +70,8 @@ class ReplayMavenEventTest(TestCase):
             "replay_maven_event",
             "--event", "user_cohort.enrolled",
             "--email", "real@test.com",
+            "--course", "LLM Zoomcamp",
+            "--cohort", "Spring 2026",
             stdout=out2,
         )
         self.assertIn("already_processed", out2.getvalue())
@@ -81,6 +90,7 @@ class ReplayMavenEventTest(TestCase):
             "replay_maven_event",
             "--event", "user_cohort.removed",
             "--email", "rem@test.com",
+            "--course", "LLM Zoomcamp",
             "--cohort", "C1",
             stdout=out,
         )

@@ -26,6 +26,16 @@ def maven_shared_secret():
     return (get_config("MAVEN_WEBHOOK_SHARED_SECRET", "") or "").strip()
 
 
+def maven_course_slack_channel():
+    """Return the Slack channel name shown in the welcome email.
+
+    Empty string when unset — the ``maven_welcome`` template branches on it
+    and reads cleanly without a channel (issue #1565 / brief update). Read
+    through ``get_config`` so it is editable from Studio with no redeploy.
+    """
+    return (get_config("MAVEN_COURSE_SLACK_CHANNEL", "") or "").strip()
+
+
 def maven_override_tier_slug():
     """Return the validated override tier slug.
 

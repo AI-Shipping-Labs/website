@@ -70,30 +70,50 @@ def _send_invite_email_only(action, user):
     reuse the existing email helper. This keeps the email contract
     authoritative on the service and avoids duplicating the body.
 
-    Writes a CommunityAuditLog row with status="email_sent" and
-    reason="slack_api_disabled" to distinguish this fallback from the
-    in-service slack_user_not_found path.
+    Writes a CommunityAuditLog row with reason="slack_api_disabled" to
+    distinguish this fallback from the in-service slack_user_not_found
+    path. The status is "email_sent" only when the send actually
+    succeeded, "email_failed" when it raised, and "email_skipped" when
+    delivery policy declined it (issue #1565).
     """
     # Local import to limit blast radius if community.services.slack ever
     # grows a dependency that pulls community.tasks back in. The email
-    # helper only calls django.core.mail.send_mail, so the bot_token=""
-    # / channel_ids=[] constructor args are inert.
-    from community.services.slack import SlackCommunityService  # noqa: PLC0415
+    # helper only renders and sends the community_invite template through
+    # EmailService, so the bot_token="" / channel_ids=[] constructor args
+    # are inert.
+    from community.services.slack import (  # noqa: PLC0415
+        INVITE_EMAIL_SENT,
+        INVITE_EMAIL_SKIPPED,
+        SlackCommunityService,
+    )
 
     service = SlackCommunityService(bot_token="", channel_ids=[])
-    service._send_invite_email(user)
+    outcome, _detail = service._send_invite_email(user)
     CommunityAuditLog.objects.create(
         user=user,
         action=action,
         details=json.dumps({
-            "status": "email_sent",
+            "status": outcome,
             "reason": "slack_api_disabled",
         }),
     )
-    logger.info(
-        "Sent Slack invite email to user %s (action=%s) -- Slack API disabled",
-        user.email, action,
-    )
+    if outcome == INVITE_EMAIL_SENT:
+        logger.info(
+            "Sent Slack invite email to user %s (action=%s) -- Slack API disabled",
+            user.email, action,
+        )
+    elif outcome == INVITE_EMAIL_SKIPPED:
+        logger.info(
+            "Slack invite email to user %s (action=%s) was skipped by "
+            "delivery policy -- Slack API disabled",
+            user.email, action,
+        )
+    else:
+        logger.warning(
+            "Could not send Slack invite email to user %s (action=%s) "
+            "-- Slack API disabled",
+            user.email, action,
+        )
 
 
 def community_invite_task(user_id):

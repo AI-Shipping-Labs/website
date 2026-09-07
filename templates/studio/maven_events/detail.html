@@ -16,7 +16,7 @@
 {% for step in steps %}
 <div class="rounded-lg border border-border bg-card p-4">
   <div class="flex items-center justify-between"><h2 class="font-medium capitalize">{{ step.name }}</h2><span>{{ step.status }}</span></div>
-  <p class="mt-2 text-xs text-muted-foreground">Attempts: {{ step.attempts }}{% if step.error %} &middot; Last error: {{ step.error }}{% endif %}</p>
+  <p class="mt-2 text-xs text-muted-foreground" data-testid="maven-step-note-{{ step.name }}">Attempts: {{ step.attempts }}{% if step.error %} &middot; {% if step.status == 'skipped' %}Reason{% else %}Last error{% endif %}: {{ step.error }}{% endif %}</p>
   <p class="mt-1 text-xs text-muted-foreground">
     Last attempted: {{ step.attempted_at|default:'Never' }}
     {% if step.completed_at %}&middot; Completed: {{ step.completed_at }}{% endif %}

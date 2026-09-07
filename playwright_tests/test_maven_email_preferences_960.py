@@ -23,7 +23,10 @@ def _user(email):
     # Transactional Playwright tests flush tables between cases; restore the
     # tier fixture before exercising the real Maven import path.
     ensure_tiers()
-    with patch("integrations.services.maven._invite_to_slack"), patch(
+    with patch(
+        "integrations.services.maven._invite_to_slack",
+        return_value=("succeeded", ""),
+    ), patch(
         "integrations.services.maven._send_welcome"
     ):
         result = handle_maven_event(

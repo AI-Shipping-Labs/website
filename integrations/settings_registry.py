@@ -1284,6 +1284,19 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/maven.md#maven_override_duration_days',
             },
+            {
+                'key': 'MAVEN_COURSE_SLACK_CHANNEL',
+                'is_secret': False,
+                'optional': True,
+                'description': (
+                    'Slack channel name shown in the maven_welcome email, e.g. '
+                    '"#ai-engineering-buildcamp". Names where the cohort talks '
+                    'so a new enrollee knows exactly where to go. Optional: '
+                    'when blank the welcome copy reads cleanly without it and '
+                    'no channel is named.'
+                ),
+                'docs_url': '_docs/integrations/maven.md#maven_course_slack_channel',
+            },
         ],
     },
     {

@@ -18,9 +18,10 @@ conversations.invite and conversations.kick.
 import json
 import logging
 import time
+from typing import NamedTuple
 
 import requests
-from django.core.mail import send_mail
+from botocore.exceptions import BotoCoreError, ClientError
 
 from community.models import CommunityAuditLog
 from community.services.base import CommunityService
@@ -28,11 +29,56 @@ from community.slack_config import (
     get_slack_community_channel_ids,
     get_slack_plan_sprints_user_token,
 )
-from integrations.config import get_config, is_enabled, site_base_url
+from email_app.services import EmailService
+from email_app.services.email_service import EmailServiceError
+from integrations.config import get_config, is_enabled
 
 logger = logging.getLogger(__name__)
 
 SLACK_API_BASE = "https://slack.com/api/"
+
+# Outcomes returned by ``SlackCommunityService.invite`` so callers (and the
+# Maven enrollment ledger) can tell "we actually added them to the channels"
+# apart from every way that can fail to happen. The ledger must never record
+# a step that did not occur, so "resolved a Slack user id" is deliberately
+# NOT the success condition — at least one channel add has to have worked.
+INVITE_ADDED_TO_CHANNELS = "added_to_channels"
+INVITE_CHANNEL_JOIN_FAILED = "channel_join_failed"
+INVITE_EMAIL_SENT = "email_sent"
+INVITE_EMAIL_FAILED = "email_failed"
+# The caller asked us not to send (it delivers the join link itself).
+INVITE_EMAIL_SUPPRESSED = "email_suppressed"
+# Delivery policy declined the send before it reached SES. Not a failure:
+# nothing broke, and retrying would not change the decision.
+INVITE_EMAIL_SKIPPED = "email_skipped"
+
+
+class InviteResult(NamedTuple):
+    """Outcome of :meth:`SlackCommunityService.invite`.
+
+    ``outcome`` is one of the ``INVITE_*`` constants. ``detail`` carries a
+    short, PII-free explanation (channel ids and Slack error codes) for the
+    failure outcomes so a caller can surface it to an operator.
+    """
+
+    outcome: str
+    detail: str = ""
+
+
+def _channel_failure_detail(results):
+    """Summarize failed channel adds as ``<channel>: <error>`` pairs.
+
+    Slack error strings contain the method name and error code only, so this
+    is safe to persist in the Maven ledger and render in Studio.
+    """
+    if not results:
+        return "no community channels are configured"
+    failures = [
+        f"{item.get('channel')}: {item.get('error') or 'unknown_error'}"
+        for item in results
+        if not item.get("ok")
+    ]
+    return "; ".join(failures)
 
 # Cap on how long a single bounded ``ratelimited`` retry will wait,
 # regardless of the ``Retry-After`` Slack advertises, so one throttled
@@ -478,7 +524,7 @@ class SlackCommunityService(CommunityService):
                     })
         return results
 
-    def invite(self, user):
+    def invite(self, user, send_invite_email=True):
         """Invite a user to Slack community channels.
 
         If the user has a slack_user_id, adds them directly to channels.
@@ -487,6 +533,18 @@ class SlackCommunityService(CommunityService):
 
         Args:
             user: User model instance.
+            send_invite_email: When False, a user who is not in the Slack
+                workspace is NOT emailed the generic community invite. The
+                caller is responsible for delivering the join link itself
+                (the Maven enrollment flow puts it in ``maven_welcome``, so
+                a cold enrollee gets exactly one email).
+
+        Returns:
+            InviteResult: ``outcome`` is one of ``INVITE_ADDED_TO_CHANNELS``,
+            ``INVITE_CHANNEL_JOIN_FAILED``, ``INVITE_EMAIL_SENT``,
+            ``INVITE_EMAIL_FAILED``, ``INVITE_EMAIL_SUPPRESSED``, or
+            ``INVITE_EMAIL_SKIPPED``, with a PII-free ``detail`` for the
+            failure outcomes.
         """
         slack_user_id = user.slack_user_id
 
@@ -499,33 +557,76 @@ class SlackCommunityService(CommunityService):
 
         if slack_user_id:
             results = self.add_to_channels(slack_user_id)
+            # ``add_to_channels`` swallows every per-channel SlackAPIError
+            # into ``{"ok": False}``, so a resolved user id proves nothing.
+            # The bot may not be in the channel, a channel id may be wrong,
+            # or the bounded rate-limit retry may be exhausted. Success is
+            # "at least one channel add worked", never "we tried".
+            joined = any(item.get("ok") for item in results)
             CommunityAuditLog.objects.create(
                 user=user,
                 action="invite",
                 details=json.dumps({
                     "slack_user_id": slack_user_id,
+                    "status": "added_to_channels" if joined else "channel_join_failed",
                     "channels": results,
                 }),
             )
-            logger.info(
-                "Invited user %s (slack=%s) to community channels",
-                user.email, slack_user_id,
+            if joined:
+                logger.info(
+                    "Invited user %s (slack=%s) to community channels",
+                    user.email, slack_user_id,
+                )
+                return InviteResult(INVITE_ADDED_TO_CHANNELS)
+            detail = _channel_failure_detail(results)
+            logger.warning(
+                "User %s (slack=%s) joined no community channels: %s",
+                user.email, slack_user_id, detail,
             )
-        else:
-            # User not found in Slack - send invite email
-            self._send_invite_email(user)
+            return InviteResult(INVITE_CHANNEL_JOIN_FAILED, detail)
+
+        if not send_invite_email:
             CommunityAuditLog.objects.create(
                 user=user,
                 action="invite",
                 details=json.dumps({
-                    "status": "email_sent",
+                    "status": "email_suppressed",
                     "reason": "slack_user_not_found",
                 }),
             )
             logger.info(
+                "Skipped Slack invite email for user %s (caller delivers the "
+                "join link itself)",
+                user.email,
+            )
+            return InviteResult(INVITE_EMAIL_SUPPRESSED)
+
+        # User not found in Slack - send invite email
+        outcome, detail = self._send_invite_email(user)
+        CommunityAuditLog.objects.create(
+            user=user,
+            action="invite",
+            details=json.dumps({
+                "status": outcome,
+                "reason": "slack_user_not_found",
+            }),
+        )
+        if outcome == INVITE_EMAIL_SENT:
+            logger.info(
                 "Sent Slack invite email to user %s (not found in Slack)",
                 user.email,
             )
+        elif outcome == INVITE_EMAIL_SKIPPED:
+            logger.info(
+                "Slack invite email to user %s was skipped by delivery policy",
+                user.email,
+            )
+        else:
+            logger.warning(
+                "Could not send Slack invite email to user %s (not found in Slack)",
+                user.email,
+            )
+        return InviteResult(outcome, detail)
 
     def remove(self, user):
         """Remove a user from Slack community channels.
@@ -593,50 +694,75 @@ class SlackCommunityService(CommunityService):
                 user.email, slack_user_id,
             )
         else:
-            self._send_invite_email(user)
+            outcome, _detail = self._send_invite_email(user)
             CommunityAuditLog.objects.create(
                 user=user,
                 action="reactivate",
                 details=json.dumps({
-                    "status": "email_sent",
+                    "status": outcome,
                     "reason": "slack_user_not_found",
                 }),
             )
-            logger.info(
-                "Sent Slack invite email to user %s on reactivation",
-                user.email,
-            )
+            if outcome == INVITE_EMAIL_SENT:
+                logger.info(
+                    "Sent Slack invite email to user %s on reactivation",
+                    user.email,
+                )
+            elif outcome == INVITE_EMAIL_SKIPPED:
+                logger.info(
+                    "Slack invite email to user %s was skipped by delivery "
+                    "policy on reactivation",
+                    user.email,
+                )
+            else:
+                logger.warning(
+                    "Could not send Slack invite email to user %s on "
+                    "reactivation",
+                    user.email,
+                )
 
     def _send_invite_email(self, user):
-        """Send an email with Slack workspace invite link.
+        """Send the Slack workspace invite email through SES.
+
+        Issue #1565: this used to call ``django.core.mail.send_mail`` with
+        ``fail_silently=True``. ``EMAIL_BACKEND`` is unset, so that resolved
+        to SMTP on ``localhost:25``, which is refused in ECS — every invite
+        email the platform believed it had sent was silently discarded. It
+        now goes through :class:`EmailService` (SES) using the existing
+        ``community_invite`` template, which already carries the gated
+        ``/community/slack`` link (issue #953) and the onboarding CTA.
+
+        Never raises into ``invite()`` / ``reactivate()`` / the checkout
+        hook: a delivery failure is logged and reported as ``False`` so the
+        caller can record an honest audit status.
 
         Args:
             user: User model instance.
+
+        Returns:
+            tuple[str, str]: ``INVITE_EMAIL_SENT`` only when the email was
+            actually handed to SES, ``INVITE_EMAIL_FAILED`` with the
+            exception class when the send raised, or
+            ``INVITE_EMAIL_SKIPPED`` when delivery policy declined the send
+            before it reached SES. A policy skip is not a failure: nothing
+            broke, and recording it as one would manufacture the inverse
+            false positive to the one this method exists to prevent.
         """
-        # Issue #953: link to the gated /community/slack redirect on our own
-        # site instead of the raw SLACK_INVITE_URL, so the invite cannot be
-        # forwarded to non-members and each click is tracked.
-        slack_join_url = f"{site_base_url()}/community/slack"
         try:
-            send_mail(
-                subject="Welcome to AI Shipping Labs community!",
-                message=(
-                    f"Hi,\n\n"
-                    f"Welcome to AI Shipping Labs! Your membership includes access "
-                    f"to our Slack community.\n\n"
-                    f"Join our Slack workspace here: {slack_join_url}\n\n"
-                    f"Once you join, our system will automatically detect your email "
-                    f"and add you to the community channels.\n\n"
-                    f"- AI Shipping Labs"
-                ),
-                from_email=None,  # Uses DEFAULT_FROM_EMAIL
-                recipient_list=[user.email],
-                fail_silently=True,
-            )
-        except Exception:
+            # ``site_url`` / ``user_name`` are injected by EmailService.
+            sent = EmailService().send(user, "community_invite", {})
+        except (EmailServiceError, BotoCoreError, ClientError) as exc:
             logger.exception(
                 "Failed to send Slack invite email to %s", user.email,
             )
+            return INVITE_EMAIL_FAILED, exc.__class__.__name__
+        if sent is None:
+            logger.info(
+                "Slack invite email to %s was skipped by delivery policy",
+                user.email,
+            )
+            return INVITE_EMAIL_SKIPPED, "suppressed by delivery policy"
+        return INVITE_EMAIL_SENT, ""
 
 
 def get_community_service():

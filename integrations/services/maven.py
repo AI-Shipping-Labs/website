@@ -19,8 +19,12 @@ from accounts.utils.tokens import generate_password_reset_token, generate_user_a
 from community.models import CommunityAuditLog
 from content.access import LEVEL_MAIN, get_user_level
 from email_app.services import EmailService
-from integrations.config import site_base_url
-from integrations.maven_config import maven_override_duration_days, maven_override_tier_slug
+from integrations.config import get_config, site_base_url, validate_email_config_value
+from integrations.maven_config import (
+    maven_course_slack_channel,
+    maven_override_duration_days,
+    maven_override_tier_slug,
+)
 from integrations.models import MavenEnrollmentEvent
 from payments.models import Tier
 
@@ -49,6 +53,55 @@ class MavenResult:
     created_user: bool = False
 
 
+# Maven exposes no documented payload contract and we have never seen a real
+# delivery, so intake tolerates the obvious envelope shapes rather than
+# dropping an enrollee. ``student`` / ``member`` are accepted alongside
+# ``user`` for the nested person object, and a single ``data`` / ``payload``
+# wrapper is unwrapped (one level only) when the outer object carries no
+# resolvable email.
+PERSON_KEYS = ("user", "student", "member")
+ENVELOPE_KEYS = ("data", "payload")
+
+# ``User.first_name`` / ``User.last_name`` are CharField(max_length=150).
+# An over-long value from an unvalidated third-party payload would raise a
+# Postgres DataError, return a 500, and put Maven into a redelivery loop, so
+# names are truncated at intake rather than trusted.
+NAME_MAX_LENGTH = 150
+
+
+def _has_direct_email(payload):
+    if payload.get("email"):
+        return True
+    return any(
+        isinstance(payload.get(key), dict) and payload[key].get("email")
+        for key in PERSON_KEYS
+    )
+
+
+def normalize_payload(payload):
+    """Return a flat view of the payload, unwrapping one envelope level.
+
+    The inner object wins only where the outer object has no value for a
+    key, so a real top-level ``event`` beside a ``data`` body still
+    resolves. Only applied when the outer object carries no email at all.
+    """
+    if not isinstance(payload, dict) or _has_direct_email(payload):
+        return payload
+    for key in ENVELOPE_KEYS:
+        inner = payload.get(key)
+        if isinstance(inner, dict) and _has_direct_email(inner):
+            merged = dict(inner)
+            merged.update(
+                {
+                    k: v
+                    for k, v in payload.items()
+                    if k not in ENVELOPE_KEYS and v not in (None, "")
+                }
+            )
+            return merged
+    return payload
+
+
 def _normalize_event_type(payload):
     for key in ("event", "type", "event_type"):
         if payload.get(key):
@@ -58,9 +111,43 @@ def _normalize_event_type(payload):
 
 def _extract_email(payload):
     value = payload.get("email")
-    if not value and isinstance(payload.get("user"), dict):
-        value = payload["user"].get("email")
+    if not value:
+        for key in PERSON_KEYS:
+            nested = payload.get(key)
+            if isinstance(nested, dict) and nested.get("email"):
+                value = nested["email"]
+                break
     return str(value or "").strip()
+
+
+def _extract_name(payload):
+    """Return ``(first_name, last_name)`` from the payload.
+
+    Accepts ``first_name`` / ``last_name`` on a nested person object or at
+    the top level, or a single ``name`` / ``full_name`` split on the first
+    space. Both values are truncated to ``NAME_MAX_LENGTH``. Names are PII:
+    the caller must never persist them into ``MavenEnrollmentEvent.payload``
+    or write them to a log line.
+    """
+    sources = [payload]
+    sources.extend(
+        payload[key] for key in PERSON_KEYS if isinstance(payload.get(key), dict)
+    )
+    for source in sources:
+        first = str(source.get("first_name") or "").strip()
+        last = str(source.get("last_name") or "").strip()
+        if first or last:
+            return _clip_name(first), _clip_name(last)
+    for source in sources:
+        whole = str(source.get("name") or source.get("full_name") or "").strip()
+        if whole:
+            first, _, last = whole.partition(" ")
+            return _clip_name(first.strip()), _clip_name(last.strip())
+    return "", ""
+
+
+def _clip_name(value):
+    return value[:NAME_MAX_LENGTH]
 
 
 def _entity(payload, name):
@@ -97,7 +184,24 @@ def _new_delivery_key(identity_hash):
     return hashlib.sha256(f"{identity_hash}|{uuid.uuid4().hex}".encode()).hexdigest()
 
 
+def normalized_event_type(payload):
+    """The event-type string as intake resolves it. Never PII."""
+    return _normalize_event_type(normalize_payload(payload))
+
+
+def payload_key_names(payload):
+    """Sorted top-level key NAMES of a payload — never any value.
+
+    Used by the webhook and the missing-course warning so an operator can
+    debug an unexpected Maven envelope without any PII reaching the logs.
+    """
+    if not isinstance(payload, dict):
+        return []
+    return sorted(str(key) for key in payload)
+
+
 def handle_maven_event(payload, *, dry_run=False):
+    payload = normalize_payload(payload)
     event_type = _normalize_event_type(payload)
     email = _extract_email(payload)
     course, course_key = _entity(payload, "course")
@@ -106,6 +210,15 @@ def handle_maven_event(payload, *, dry_run=False):
         raise ValueError("missing_email")
     if event_type not in {EVENT_ENROLLED, EVENT_REMOVED}:
         return MavenResult("ignored", MavenEnrollmentEvent.OUTCOME_IGNORED, [f"Event type {event_type!r} ignored."])
+    if event_type == EVENT_ENROLLED and not (course or cohort):
+        # The enrollee-facing subject falls back to the generic welcome.
+        # Key NAMES only so the extractor can be corrected without any
+        # payload value (email, name, cohort label) reaching the logs.
+        logger.warning(
+            "Maven enrolled payload carried no course or cohort label; "
+            "top-level keys: %s",
+            ", ".join(payload_key_names(payload)) or "(none)",
+        )
     if dry_run:
         return _dry_run(event_type, email, course, cohort)
     identity_hash = _identity(email, course_key, cohort_key)
@@ -168,9 +281,10 @@ def _handle_enrolled(payload, email, course, cohort, course_key, cohort_key, ide
     ).first()
     created_occurrence = occurrence is None
     if occurrence is None:
+        first_name, last_name = _extract_name(payload)
         try:
             with transaction.atomic():
-                user = _resolve_or_create(email)
+                user = _resolve_or_create(email, first_name, last_name)
                 occurrence = MavenEnrollmentEvent.objects.create(
                     dedupe_key=_new_delivery_key(identity_hash),
                     identity_hash=identity_hash,
@@ -253,15 +367,35 @@ def _handle_removed(payload, email, course, cohort, course_key, cohort_key, iden
     )
 
 
-def _resolve_or_create(email):
+def _resolve_or_create(email, first_name="", last_name=""):
+    """Resolve or create the enrollee, filling only blank name fields.
+
+    A name the member set themselves is never overwritten. Names are PII
+    and are stored only on the ``User`` row — never in the ledger payload
+    and never in a log line.
+    """
     user = resolve_user_by_email(email)
     if user is not None:
+        _fill_blank_names(user, first_name, last_name)
         return user
     return User.objects.create_user(
         email=normalize_email(email), password=None, email_verified=False,
+        first_name=first_name, last_name=last_name,
         signup_source="imported", unsubscribed=True,
         email_preferences={"newsletter": False, "maven_emails": True},
     )
+
+
+def _fill_blank_names(user, first_name, last_name):
+    updates = []
+    if first_name and not (user.first_name or "").strip():
+        user.first_name = first_name
+        updates.append("first_name")
+    if last_name and not (user.last_name or "").strip():
+        user.last_name = last_name
+        updates.append("last_name")
+    if updates:
+        user.save(update_fields=updates)
 
 
 def _grant_or_refresh_override(user, tier, target_expiry, cohort, course, *, source=""):
@@ -312,25 +446,107 @@ def _is_active_community_member(user):
     return bool(getattr(user, "slack_member", False) and get_user_level(user) >= LEVEL_MAIN)
 
 
+# Ledger note recorded on the Maven ``slack`` step when the enrollee is not
+# in the Slack workspace. Rendered verbatim on /studio/maven-events/<pk>/ so
+# a person debugging "why did they never reach Slack?" reaches the right
+# conclusion from the page alone.
+SLACK_NOT_IN_WORKSPACE_NOTE = (
+    "Enrollee is not in the Slack workspace; the join link was delivered in "
+    "the welcome email."
+)
+
+# Ledger note when the enrollee IS in the workspace but joined no community
+# channel. Almost always an operator-fixable Slack configuration problem
+# (bot not in the channel, wrong channel id), so it is a retryable failure
+# rather than a silent success.
+SLACK_CHANNEL_JOIN_FAILED_NOTE = (
+    "Enrollee is in the Slack workspace but joined no community channel:"
+)
+
+
 def _invite_to_slack(user, actions):
-    from community.services.slack import get_community_service
-    get_community_service().invite(user)
-    actions.append("Invited to Slack community.")
+    """Add the enrollee to Slack and report what actually happened.
+
+    Maven enrollees get exactly one email (``maven_welcome``), which now
+    carries the Slack join link, so the generic ``community_invite`` is
+    suppressed here.
+
+    Returns ``(step_status, note)``. ``succeeded`` requires that the member
+    actually joined at least one community channel — never merely that a
+    Slack user id resolved. When every channel add errored (the bot is not
+    in the channel, a channel id is wrong, or the bounded rate-limit retry
+    is exhausted) the step is ``failed`` with the channel errors in the
+    note, so it is visible in Studio and retried rather than recorded as a
+    delivery that never happened.
+    """
+    from community.services.slack import (
+        INVITE_ADDED_TO_CHANNELS,
+        INVITE_CHANNEL_JOIN_FAILED,
+        get_community_service,
+    )
+
+    result = get_community_service().invite(user, send_invite_email=False)
+    if result.outcome == INVITE_ADDED_TO_CHANNELS:
+        actions.append("Added to Slack community channels.")
+        return MavenEnrollmentEvent.STEP_SUCCEEDED, ""
+    if result.outcome == INVITE_CHANNEL_JOIN_FAILED:
+        note = f"{SLACK_CHANNEL_JOIN_FAILED_NOTE} {result.detail}".strip()
+        actions.append("Slack channel join failed; persisted for retry.")
+        return MavenEnrollmentEvent.STEP_FAILED, note[:255]
+    actions.append(
+        "Not in the Slack workspace; join link delivered in the welcome email."
+    )
+    return MavenEnrollmentEvent.STEP_SKIPPED, SLACK_NOT_IN_WORKSPACE_NOTE
 
 
-def _send_welcome(user, course, actions):
-    EmailService().send(user, "maven_welcome", _welcome_context(user, course))
+def _staff_welcome_bcc():
+    """Return the staff address that gets a hidden copy of the welcome.
+
+    Issue #1570: Maven enrollees get the same treatment as Stripe paid
+    signups (``community.services.staff_notifications.notify_paid_signup``)
+    — staff receives a copy of the exact member-facing welcome, gated on the
+    same ``STAFF_SIGNUP_NOTIFY_EMAIL`` setting, so an unset value is a clean
+    no-op. Validated first: one malformed optional BCC makes SES reject the
+    enrollee's primary To as well, and a bad staff address must never cost a
+    real enrollee their welcome email.
+    """
+    return validate_email_config_value(
+        "STAFF_SIGNUP_NOTIFY_EMAIL",
+        get_config("STAFF_SIGNUP_NOTIFY_EMAIL", ""),
+    ) or None
+
+
+def _send_welcome(user, course, cohort, actions):
+    EmailService().send(
+        user,
+        "maven_welcome",
+        _welcome_context(user, course, cohort),
+        bcc=_staff_welcome_bcc(),
+    )
     actions.append("Sent maven_welcome email.")
 
 
-def _welcome_context(user, course):
+def _welcome_context(user, course, cohort=""):
     site_url = site_base_url().rstrip("/")
     reset_token = generate_password_reset_token(user, expiry_hours=24)
     opt_out_token = generate_user_action_token(user.pk, "maven_email_opt_out")
     return {
-        "user_name": display_name(user), "course_name": course or "your course",
+        "user_name": display_name(user),
+        # No placeholder ever reaches an enrollee: course, else cohort,
+        # else the template's generic, course-free copy.
+        "course_name": (course or "").strip() or (cohort or "").strip(),
+        # Optional Studio setting: names the cohort's Slack channel in the
+        # welcome copy. Blank is the shipping default and the template
+        # branches so the sentence still reads cleanly.
+        "course_channel": maven_course_slack_channel(),
         "password_reset_url": f"{site_url}/api/password-reset?token={reset_token}",
         "sign_in_url": f"{site_url}/accounts/login/",
+        # The one thing we ask them to do after joining must be a real link.
+        # Same destination and wording as community_invite.md.
+        "onboarding_url": f"{site_url}/onboarding/",
+        # /community/slack is @login_required + Main-gated, so the welcome
+        # copy orders the steps set password -> sign in -> join Slack.
+        "slack_join_url": f"{site_url}/community/slack",
         "opt_out_url": f"{site_url}/api/maven-email-opt-out?token={opt_out_token}",
     }
 
@@ -417,13 +633,20 @@ def _run_step(pk, name, actions, *, force=False):
                 return
             actions.append("Sent staff enrollment heads-up.")
         elif name == "slack":
-            _invite_to_slack(row.user, actions)
+            # ``skipped`` is "we correctly did nothing" — never ``succeeded``
+            # (nothing happened) and never ``failed`` (nothing went wrong, and
+            # a retry would only burn an attempt). ``failed`` is reserved for
+            # a real, retryable Slack problem.
+            slack_status, slack_note = _invite_to_slack(row.user, actions)
+            if slack_status != MavenEnrollmentEvent.STEP_SUCCEEDED:
+                _finish_step(pk, name, slack_status, slack_note)
+                return
         elif name == "welcome":
             if not row.user.email_preferences.get("maven_emails", True):
                 _finish_step(pk, name, MavenEnrollmentEvent.STEP_SKIPPED, "")
                 actions.append("Maven welcome suppressed by scoped preference.")
                 return
-            _send_welcome(row.user, row.course, actions)
+            _send_welcome(row.user, row.course, row.cohort, actions)
         else:
             from community.services.staff_notifications import notify_maven_cohort_removal
             notify_maven_cohort_removal(row.user, row.cohort, row.course, email=row.email)

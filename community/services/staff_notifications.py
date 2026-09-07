@@ -392,7 +392,7 @@ def _build_removal_context(user, cohort, course, email):
             "removed_user_email": user.email,
             "removed_user_name": _or_dash(display_name),
             "removed_user_id": str(user.pk),
-            "studio_user_url": f"{site_base_url()}/studio/users/{user.pk}/",
+            "studio_user_url": f"{site_base_url().rstrip('/')}/studio/users/{user.pk}/",
             "cohort": _or_dash(cohort),
             "course": _or_dash(course),
         }
@@ -583,7 +583,7 @@ def _build_slack_join_context(user):
         "user_id": user.pk,
         "tier_name": _or_dash(tier_name),
         "signup_source": signup_source,
-        "studio_user_url": f"{site_base_url()}/studio/users/{user.pk}/",
+        "studio_user_url": f"{site_base_url().rstrip('/')}/studio/users/{user.pk}/",
     }
 
 
@@ -744,7 +744,7 @@ def _build_signup_context(
         getattr(attribution, "first_touch_utm_campaign", "") if attribution else ""
     )
 
-    studio_user_url = f"{site_base_url()}/studio/users/{user.pk}/"
+    studio_user_url = f"{site_base_url().rstrip('/')}/studio/users/{user.pk}/"
 
     # Account-scoped Stripe dashboard deep-links (issue #952). The account
     # id encodes test/live mode; when blank every id renders as plain

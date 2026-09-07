@@ -21,7 +21,17 @@ from accounts.models import User
 from community.models import CommunityAuditLog
 from community.services import get_community_service
 from community.services.base import CommunityService
-from community.services.slack import SlackAPIError, SlackCommunityService
+from community.services.slack import (
+    INVITE_ADDED_TO_CHANNELS,
+    INVITE_CHANNEL_JOIN_FAILED,
+    INVITE_EMAIL_FAILED,
+    INVITE_EMAIL_SENT,
+    INVITE_EMAIL_SKIPPED,
+    INVITE_EMAIL_SUPPRESSED,
+    SlackAPIError,
+    SlackCommunityService,
+)
+from email_app.services.email_service import EmailServiceError
 from payments.models import Tier
 
 MOCK_CHANNELS = ["C001", "C002"]
@@ -242,9 +252,9 @@ class InviteServiceTest(TestCase):
         details = json.loads(log.details)
         self.assertEqual(details["slack_user_id"], "U789")
 
-    @patch("community.services.slack.send_mail")
+    @patch("community.services.slack.EmailService")
     @patch("community.services.slack.requests.post")
-    def test_invite_lookup_by_email(self, mock_post, mock_mail):
+    def test_invite_lookup_by_email(self, mock_post, mock_email_service):
         """If no slack_user_id, looks up by email and adds."""
         # First call: lookupByEmail returns user
         # Then 2 calls: conversations.invite for each channel
@@ -281,28 +291,149 @@ class InviteServiceTest(TestCase):
         self.assertEqual(log.action, "invite")
 
         # No email should be sent
-        mock_mail.assert_not_called()
+        mock_email_service.return_value.send.assert_not_called()
 
-    @patch("community.services.slack.send_mail")
+    @patch("community.services.slack.EmailService")
     @patch("community.services.slack.requests.post")
-    def test_invite_not_found_sends_email(self, mock_post, mock_mail):
-        """If user not found in Slack, sends invite email."""
+    def test_invite_not_found_sends_email(self, mock_post, mock_email_service):
+        """If user not found in Slack, sends the community_invite email.
+
+        Issue #1565: this goes through EmailService/SES, not the unbound
+        ``send_mail`` SMTP backend that silently dropped every invite.
+        """
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"ok": False, "error": "users_not_found"}
         mock_post.return_value = mock_response
 
-        self.service.invite(self.user)
+        result = self.service.invite(self.user)
 
-        # Email should be sent
-        mock_mail.assert_called_once()
-        call_kwargs = mock_mail.call_args
-        self.assertIn("Welcome to AI Shipping Labs", call_kwargs[1]["subject"])
+        mock_email_service.return_value.send.assert_called_once_with(
+            self.user, "community_invite", {},
+        )
+        self.assertEqual(result.outcome, INVITE_EMAIL_SENT)
 
         # Audit log should indicate email sent
         log = CommunityAuditLog.objects.get(user=self.user)
         details = json.loads(log.details)
         self.assertEqual(details["status"], "email_sent")
+
+    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.requests.post")
+    def test_invite_records_email_failed_when_send_raises(
+        self, mock_post, mock_email_service,
+    ):
+        """A failed invite email is never recorded as ``email_sent`` (#1565)."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"ok": False, "error": "users_not_found"}
+        mock_post.return_value = mock_response
+        mock_email_service.return_value.send.side_effect = EmailServiceError("ses down")
+
+        with self.assertLogs("community.services.slack", level="ERROR") as logs:
+            result = self.service.invite(self.user)
+
+        self.assertEqual(result.outcome, INVITE_EMAIL_FAILED)
+        self.assertTrue(any("EmailServiceError" in line for line in logs.output))
+
+        log = CommunityAuditLog.objects.get(user=self.user)
+        details = json.loads(log.details)
+        self.assertEqual(details["status"], "email_failed")
+        self.assertEqual(details["reason"], "slack_user_not_found")
+
+    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.SlackCommunityService._api_call")
+    def test_invite_reports_failure_when_no_channel_add_succeeds(
+        self, mock_api, mock_email_service,
+    ):
+        """Issue #1565: a resolved Slack user id is not proof of delivery.
+
+        ``add_to_channels`` swallows every per-channel SlackAPIError into
+        ``{"ok": False}``, so when the bot is not in the community channels
+        the member joins nothing. That must never be reported as success.
+        """
+        self.user.slack_user_id = "U789"
+        self.user.save(update_fields=["slack_user_id"])
+        mock_api.side_effect = SlackAPIError(
+            "Slack API error: not_in_channel",
+            method="conversations.invite",
+            error_code="not_in_channel",
+        )
+
+        with self.assertLogs("community.services.slack", level="WARNING"):
+            result = self.service.invite(self.user)
+
+        self.assertEqual(result.outcome, INVITE_CHANNEL_JOIN_FAILED)
+        for channel in MOCK_CHANNELS:
+            self.assertIn(channel, result.detail)
+        self.assertIn("not_in_channel", result.detail)
+        mock_email_service.return_value.send.assert_not_called()
+
+        details = json.loads(
+            CommunityAuditLog.objects.get(user=self.user, action="invite").details
+        )
+        self.assertEqual(details["status"], "channel_join_failed")
+        self.assertFalse(any(item["ok"] for item in details["channels"]))
+
+    @patch("community.services.slack.SlackCommunityService._api_call")
+    def test_invite_succeeds_when_at_least_one_channel_add_works(self, mock_api):
+        """A partial join is still a real join, and stays a success."""
+        self.user.slack_user_id = "U789"
+        self.user.save(update_fields=["slack_user_id"])
+        mock_api.side_effect = [
+            {"ok": True},
+            SlackAPIError(
+                "Slack API error: not_in_channel",
+                method="conversations.invite",
+                error_code="not_in_channel",
+            ),
+        ]
+
+        result = self.service.invite(self.user)
+
+        self.assertEqual(result.outcome, INVITE_ADDED_TO_CHANNELS)
+        details = json.loads(
+            CommunityAuditLog.objects.get(user=self.user, action="invite").details
+        )
+        self.assertEqual(details["status"], "added_to_channels")
+
+    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.requests.post")
+    def test_policy_suppressed_send_is_skipped_not_failed(
+        self, mock_post, mock_email_service,
+    ):
+        """A delivery-policy skip is not a failure (issue #1565)."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"ok": False, "error": "users_not_found"}
+        mock_post.return_value = mock_response
+        mock_email_service.return_value.send.return_value = None
+
+        result = self.service.invite(self.user)
+
+        self.assertEqual(result.outcome, INVITE_EMAIL_SKIPPED)
+        details = json.loads(
+            CommunityAuditLog.objects.get(user=self.user, action="invite").details
+        )
+        self.assertEqual(details["status"], "email_skipped")
+
+    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.requests.post")
+    def test_invite_can_suppress_the_generic_invite_email(
+        self, mock_post, mock_email_service,
+    ):
+        """Maven passes send_invite_email=False so the enrollee gets one email."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"ok": False, "error": "users_not_found"}
+        mock_post.return_value = mock_response
+
+        result = self.service.invite(self.user, send_invite_email=False)
+
+        mock_email_service.return_value.send.assert_not_called()
+        self.assertEqual(result.outcome, INVITE_EMAIL_SUPPRESSED)
+        log = CommunityAuditLog.objects.get(user=self.user)
+        self.assertEqual(json.loads(log.details)["status"], "email_suppressed")
 
 
 @override_settings(
@@ -381,9 +512,11 @@ class ReactivateServiceTest(TestCase):
         log = CommunityAuditLog.objects.get(user=self.user)
         self.assertEqual(log.action, "reactivate")
 
-    @patch("community.services.slack.send_mail")
+    @patch("community.services.slack.EmailService")
     @patch("community.services.slack.requests.post")
-    def test_reactivate_without_slack_id_sends_email(self, mock_post, mock_mail):
+    def test_reactivate_without_slack_id_sends_email(
+        self, mock_post, mock_email_service,
+    ):
         """Reactivate without slack_user_id sends invite email."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -392,11 +525,34 @@ class ReactivateServiceTest(TestCase):
 
         self.service.reactivate(self.user)
 
-        mock_mail.assert_called_once()
+        mock_email_service.return_value.send.assert_called_once_with(
+            self.user, "community_invite", {},
+        )
         log = CommunityAuditLog.objects.get(user=self.user)
         self.assertEqual(log.action, "reactivate")
         details = json.loads(log.details)
         self.assertEqual(details["status"], "email_sent")
+
+    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.requests.post")
+    def test_reactivate_records_email_failed_when_send_raises(
+        self, mock_post, mock_email_service,
+    ):
+        """Issue #1565: reactivation never claims an undelivered invite."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"ok": False, "error": "users_not_found"}
+        mock_post.return_value = mock_response
+        mock_email_service.return_value.send.side_effect = EmailServiceError("ses down")
+
+        with self.assertLogs("community.services.slack", level="ERROR"):
+            self.service.reactivate(self.user)
+
+        details = json.loads(
+            CommunityAuditLog.objects.get(user=self.user, action="reactivate").details
+        )
+        self.assertEqual(details["status"], "email_failed")
+        self.assertEqual(details["reason"], "slack_user_not_found")
 
 
 # ---------------------------------------------------------------------------
@@ -504,12 +660,14 @@ class CommunityInviteTaskTest(TestCase):
                 method="users.lookupByEmail",
                 error_code="users_not_found",
             )
-            with patch("community.services.slack.send_mail") as mock_mail:
+            with patch("community.services.slack.EmailService") as mock_email:
                 service = SlackCommunityService(
                     bot_token="xoxb-test", channel_ids=["C001"],
                 )
                 service.invite(user)
-                mock_mail.assert_called_once()
+                mock_email.return_value.send.assert_called_once_with(
+                    user, "community_invite", {},
+                )
 
         logs = CommunityAuditLog.objects.filter(user=user, action="invite")
         self.assertEqual(logs.count(), 1)

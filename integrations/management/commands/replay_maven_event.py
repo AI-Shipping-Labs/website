@@ -12,12 +12,18 @@ Usage
 Dry-run first (no writes; reports intended actions)::
 
     uv run python manage.py replay_maven_event \
-        --event user_cohort.enrolled --email me@example.com --dry-run
+        --event user_cohort.enrolled --email me@example.com \
+        --course "LLM Zoomcamp" --cohort "Spring 2026" --dry-run
 
 Then for real (idempotent — a second run reports already_processed)::
 
     uv run python manage.py replay_maven_event \
-        --event user_cohort.enrolled --email me@example.com
+        --event user_cohort.enrolled --email me@example.com \
+        --course "LLM Zoomcamp" --cohort "Spring 2026"
+
+``--course`` and ``--cohort`` have no defaults: they appear in the enrollee's
+subject line, so a forgotten flag raises a ``CommandError`` instead of mailing
+a real person about a placeholder course.
 
 Supply a full sample body instead of the built-in default::
 
@@ -48,8 +54,11 @@ class Command(BaseCommand):
             help="Event type to replay (default: user_cohort.enrolled).",
         )
         parser.add_argument("--email", default="maven-test@example.com")
-        parser.add_argument("--cohort", default="Test Cohort")
-        parser.add_argument("--course", default="Test Course")
+        # Issue #1565: no defaults. These values land in the enrollee's
+        # subject line, so a forgotten flag must fail loudly rather than
+        # mail a real person about a placeholder course.
+        parser.add_argument("--cohort", default=None)
+        parser.add_argument("--course", default=None)
         parser.add_argument(
             "--payload",
             default=None,
@@ -68,6 +77,9 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.WARNING("DRY RUN — no writes") if dry_run else "REAL RUN"
         )
+        self.stdout.write(f"Recipient: {payload.get('email') or '(none)'}")
+        self.stdout.write(f"Course: {payload.get('course') or '(none)'}")
+        self.stdout.write(f"Cohort: {payload.get('cohort') or '(none)'}")
         self.stdout.write(f"Payload: {json.dumps(payload)}")
 
         try:
@@ -89,6 +101,19 @@ class Command(BaseCommand):
     def _build_payload(self, options):
         if options["payload"]:
             return self._load_payload(options["payload"])
+        missing = [
+            flag
+            for flag in ("course", "cohort")
+            if not str(options[flag] or "").strip()
+        ]
+        if missing:
+            raise CommandError(
+                "Missing required "
+                + " and ".join(f"--{flag}" for flag in missing)
+                + ". These values are used in the enrollee's subject line, so "
+                "there is no safe default. Pass them explicitly, or supply a "
+                "full body with --payload."
+            )
         return {
             "event": options["event"],
             "email": options["email"],

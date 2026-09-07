@@ -30,6 +30,12 @@ from accounts.return_context import (
     sanitize_verification_return_path,
     should_skip_logout_redirect,
 )
+from accounts.services.auth_throttle import (
+    SCOPE_LOGIN,
+    SCOPE_REGISTER,
+    SCOPE_RESET_REQUEST,
+    consume_auth_throttle,
+)
 from accounts.services.email_resolution import resolve_user_by_email
 from accounts.services.free_welcome import send_free_welcome_email
 from accounts.services.verification import resolve_unverified_ttl_days
@@ -380,6 +386,9 @@ def register_api(request):
         return JsonResponse({"error": "Email is required"}, status=400)
     if not password:
         return JsonResponse({"error": "Password is required"}, status=400)
+    throttled = consume_auth_throttle(request, email, SCOPE_REGISTER)
+    if throttled is not None:
+        return throttled
     password_error = _password_validation_error(password, User(email=email))
     if password_error:
         return password_error
@@ -568,6 +577,11 @@ def login_api(request):
                 {"error": "Email and password are required"}, status=400
             )
 
+        throttled = consume_auth_throttle(request, email, SCOPE_LOGIN)
+        if throttled is not None:
+            outcome = "throttled"
+            return throttled
+
         # Resolve the typed email to the CANONICAL active account BEFORE
         # checking the password (#845). ``resolve_user_by_email`` is the single
         # source of truth: an active primary login wins, else the owner of a
@@ -630,6 +644,10 @@ def password_reset_request_api(request):
     email = data.get("email", "").strip().lower()
     if not email:
         return JsonResponse({"error": "Email is required"}, status=400)
+
+    throttled = consume_auth_throttle(request, email, SCOPE_RESET_REQUEST)
+    if throttled is not None:
+        return throttled
 
     # Always return success to not reveal whether user exists. Resolve the
     # typed email to the CANONICAL account (#845): an alias email resolves to

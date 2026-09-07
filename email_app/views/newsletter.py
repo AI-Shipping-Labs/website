@@ -14,6 +14,7 @@ from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from accounts.return_context import sanitize_verification_return_path
+from accounts.services.auth_throttle import SCOPE_SUBSCRIBE, consume_auth_throttle
 from accounts.services.verification import resolve_unverified_ttl_days
 from accounts.utils.tokens import JWT_ALGORITHM, generate_user_action_token
 from integrations.config import site_base_url
@@ -144,6 +145,10 @@ def subscribe_api(request):
     # Basic email format validation
     if "@" not in email or "." not in email.split("@")[-1]:
         return JsonResponse({"error": "Invalid email address"}, status=400)
+
+    throttled = consume_auth_throttle(request, email, SCOPE_SUBSCRIBE)
+    if throttled is not None:
+        return throttled
 
     # Check if user already exists
     try:

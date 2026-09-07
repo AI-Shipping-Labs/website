@@ -65,6 +65,14 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(schedule.func, 'jobs.tasks.cleanup.cleanup_old_webhook_logs')
         self.assertEqual(schedule.cron, '0 3 * * *')
 
+    def test_creates_clear_expired_sessions_schedule(self):
+        """Command registers clear-expired-sessions daily at 02:50 UTC."""
+        call_command('setup_schedules', stdout=StringIO())
+        schedule = Schedule.objects.get(name='clear-expired-sessions')
+        self.assertEqual(schedule.func, 'jobs.tasks.cleanup.clear_expired_sessions')
+        self.assertEqual(schedule.cron, '50 2 * * *')
+        self.assertEqual(schedule.schedule_type, Schedule.CRON)
+
     def test_creates_event_reminders_schedule(self):
         """Command registers event-reminders every 15 min (issue #1001).
 
@@ -307,6 +315,7 @@ class SetupSchedulesCommandTest(TestCase):
         expected = {
             'health-check',
             'campaign-delivery-recovery',
+            'clear-expired-sessions',
             'cleanup-webhook-logs',
             'cleanup-calendly-webhook-logs',
             'retry-calendly-webhooks',

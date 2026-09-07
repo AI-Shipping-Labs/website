@@ -529,6 +529,9 @@ SYNC_RUNNING_THRESHOLD_MINUTES = int(
 # Custom user model
 AUTH_USER_MODEL = 'accounts.User'
 
+# Durable database sessions with a queryable account mapping (issue #1521).
+SESSION_ENGINE = 'accounts.session_backend'
+
 # Django sites framework (required by allauth)
 SITE_ID = 1
 

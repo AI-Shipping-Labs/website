@@ -873,6 +873,95 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/auth.md#unverified_user_ttl_days',
             },
+            {
+                'key': 'AUTH_THROTTLE_LOGIN_IP_LIMIT',
+                'is_secret': False,
+                'optional': True,
+                'default': '20',
+                'description': (
+                    'Max POST /api/login attempts from one IP per login window. '
+                    'Default 20. A non-integer or non-positive override falls '
+                    'back to 20. Issue #1516.'
+                ),
+                'docs_url': (
+                    '_docs/integrations/auth.md#auth_throttle_login_ip_limit'
+                ),
+            },
+            {
+                'key': 'AUTH_THROTTLE_LOGIN_EMAIL_LIMIT',
+                'is_secret': False,
+                'optional': True,
+                'default': '10',
+                'description': (
+                    'Max POST /api/login attempts for one email per login '
+                    'window. Default 10. A non-integer or non-positive '
+                    'override falls back to 10. Issue #1516.'
+                ),
+                'docs_url': (
+                    '_docs/integrations/auth.md#auth_throttle_login_email_limit'
+                ),
+            },
+            {
+                'key': 'AUTH_THROTTLE_LOGIN_WINDOW_SECONDS',
+                'is_secret': False,
+                'optional': True,
+                'default': '900',
+                'description': (
+                    'Sliding window in seconds for login IP and email '
+                    'buckets. Default 900 (15 minutes). A non-integer or '
+                    'non-positive override falls back to 900. Issue #1516.'
+                ),
+                'docs_url': (
+                    '_docs/integrations/auth.md'
+                    '#auth_throttle_login_window_seconds'
+                ),
+            },
+            {
+                'key': 'AUTH_THROTTLE_MAIL_IP_LIMIT',
+                'is_secret': False,
+                'optional': True,
+                'default': '8',
+                'description': (
+                    'Max register, password-reset request, and subscribe '
+                    'POSTs from one IP per mail window. Default 8. A '
+                    'non-integer or non-positive override falls back to 8. '
+                    'Issue #1516.'
+                ),
+                'docs_url': (
+                    '_docs/integrations/auth.md#auth_throttle_mail_ip_limit'
+                ),
+            },
+            {
+                'key': 'AUTH_THROTTLE_MAIL_EMAIL_LIMIT',
+                'is_secret': False,
+                'optional': True,
+                'default': '3',
+                'description': (
+                    'Max register, password-reset request, and subscribe '
+                    'POSTs for one email per mail window. Default 3. A '
+                    'non-integer or non-positive override falls back to 3. '
+                    'Issue #1516.'
+                ),
+                'docs_url': (
+                    '_docs/integrations/auth.md#auth_throttle_mail_email_limit'
+                ),
+            },
+            {
+                'key': 'AUTH_THROTTLE_MAIL_WINDOW_SECONDS',
+                'is_secret': False,
+                'optional': True,
+                'default': '3600',
+                'description': (
+                    'Sliding window in seconds for register, password-reset '
+                    'request, and subscribe buckets. Default 3600 (1 hour). '
+                    'A non-integer or non-positive override falls back to '
+                    '3600. Issue #1516.'
+                ),
+                'docs_url': (
+                    '_docs/integrations/auth.md'
+                    '#auth_throttle_mail_window_seconds'
+                ),
+            },
         ],
     },
     {
@@ -1263,6 +1352,12 @@ SETTING_VALUE_TYPES = {
     'CRM_EXPORT_MAX_LIMIT': 'integer',
     'USER_ACTIVITY_RETENTION_DAYS': 'integer',
     'UNVERIFIED_USER_TTL_DAYS': 'integer',
+    'AUTH_THROTTLE_LOGIN_IP_LIMIT': 'integer',
+    'AUTH_THROTTLE_LOGIN_EMAIL_LIMIT': 'integer',
+    'AUTH_THROTTLE_LOGIN_WINDOW_SECONDS': 'integer',
+    'AUTH_THROTTLE_MAIL_IP_LIMIT': 'integer',
+    'AUTH_THROTTLE_MAIL_EMAIL_LIMIT': 'integer',
+    'AUTH_THROTTLE_MAIL_WINDOW_SECONDS': 'integer',
     'BANNER_GENERATOR_TIMEOUT_SECONDS': 'integer',
     'BANNER_UPLOAD_MAX_MB': 'integer',
     'LLM_MAX_RETRIES': 'integer',

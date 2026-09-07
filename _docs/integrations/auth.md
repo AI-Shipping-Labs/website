@@ -7,8 +7,10 @@ find it, Prereqs, Rotation, Test vs live.
 
 Unlike most integration groups, the `auth` group has no external
 service behind it. The settings here tune the platform's own
-authentication-related behaviour — currently, how long unverified
-email signups live before the daily purge job removes them.
+authentication-related behaviour — how long unverified email signups
+live before the daily purge job removes them, and the shared throttle
+on public login, register, password-reset request, and newsletter
+subscribe JSON endpoints.
 
 External OAuth providers (Google, GitHub) are configured separately
 via Django's `SocialApp` admin, not through this group. See
@@ -62,3 +64,186 @@ demands. The next purge run uses the new value.
 Test vs live: n/a. Tighten in production during spam waves, leave
 relaxed in dev. There is no test-vs-live distinction at the
 platform level.
+
+## AUTH_THROTTLE_LOGIN_IP_LIMIT
+
+Purpose: Maximum `POST /api/login` attempts from one client IP inside
+the login window. Read by `accounts/services/auth_throttle.py`. The
+IP comes from `website.request_ip.client_ip_from_request` and is
+SHA-256 hashed before it becomes a cache key.
+
+Default: 20. The default lives as `DEFAULT_LOGIN_IP_LIMIT` in
+`accounts/services/auth_throttle.py`; if this setting is missing or
+the value cannot be parsed as a positive int, the code uses 20.
+
+Without it (or unparseable): Falls back to 20. Existing counters keep
+their current window; only new increments use a newly saved limit.
+
+Where to find it: This is operator intent — a positive integer (e.g.
+`10`, `20`, `50`). There is no external dashboard.
+
+Lower the limit (e.g. `5`) during credential-stuffing waves. Raise it
+if a shared NAT is blocking legitimate retries.
+
+Prereqs:
+- None. Counters live in the shared `django_q` cache, which already
+  exists for IntegrationSetting stamps.
+
+Rotation: n/a. Adjust as the operational situation demands. The next
+login POST uses the new limit after config-cache invalidation.
+
+Test vs live: n/a. Tests lower this via IntegrationSetting rather
+than looping against the production default. There is no test-vs-live
+distinction at the platform level.
+
+## AUTH_THROTTLE_LOGIN_EMAIL_LIMIT
+
+Purpose: Maximum `POST /api/login` attempts for one normalized email
+inside the login window, even when each attempt uses a different IP.
+Read by `accounts/services/auth_throttle.py`. The email is normalized
+then SHA-256 hashed before it becomes a cache key.
+
+Default: 10. The default lives as `DEFAULT_LOGIN_EMAIL_LIMIT` in
+`accounts/services/auth_throttle.py`; if this setting is missing or
+the value cannot be parsed as a positive int, the code uses 10.
+
+Without it (or unparseable): Falls back to 10. Existing counters keep
+their current window; only new increments use a newly saved limit.
+
+Where to find it: This is operator intent — a positive integer (e.g.
+`5`, `10`, `20`). There is no external dashboard.
+
+Lower the limit to cap password guessing against a single inbox.
+Raise it if members behind flaky networks retry more often than 10
+times in 15 minutes.
+
+Prereqs:
+- None. Counters live in the shared `django_q` cache.
+
+Rotation: n/a. The next login POST uses the new limit after
+config-cache invalidation.
+
+Test vs live: n/a. Tests lower this via IntegrationSetting rather
+than looping against the production default.
+
+## AUTH_THROTTLE_LOGIN_WINDOW_SECONDS
+
+Purpose: Sliding window in seconds for the login IP and email
+buckets. Read by `accounts/services/auth_throttle.py`. Cache TTLs
+match this window.
+
+Default: 900 (15 minutes). The default lives as
+`DEFAULT_LOGIN_WINDOW_SECONDS` in
+`accounts/services/auth_throttle.py`; if this setting is missing or
+the value cannot be parsed as a positive int, the code uses 900.
+
+Without it (or unparseable): Falls back to 900. Counters already in
+cache keep the TTL they were created with.
+
+Where to find it: This is operator intent — a positive integer number
+of seconds (e.g. `300`, `900`, `1800`). There is no external
+dashboard.
+
+Shorten the window during an active stuffing attack so blocked IPs
+recover faster after the wave. Lengthen it to keep a slow brute-force
+from resetting.
+
+Prereqs:
+- None. Counters live in the shared `django_q` cache.
+
+Rotation: n/a. New buckets use the new window; in-flight buckets
+expire on their original TTL.
+
+Test vs live: n/a. Tests use a short override (for example 1 second)
+to prove expiry without waiting 15 minutes.
+
+## AUTH_THROTTLE_MAIL_IP_LIMIT
+
+Purpose: Maximum `POST /api/register`,
+`POST /api/password-reset-request`, and `POST /api/subscribe`
+attempts from one client IP inside the mail window. Each endpoint
+has its own cache prefix, so exhausting register does not lock
+subscribe. Read by `accounts/services/auth_throttle.py`.
+
+Default: 8. The default lives as `DEFAULT_MAIL_IP_LIMIT` in
+`accounts/services/auth_throttle.py`; if this setting is missing or
+the value cannot be parsed as a positive int, the code uses 8.
+
+Without it (or unparseable): Falls back to 8. Existing counters keep
+their current window; only new increments use a newly saved limit.
+
+Where to find it: This is operator intent — a positive integer (e.g.
+`3`, `8`, `20`). There is no external dashboard.
+
+Lower the limit during signup or inbox-harassment waves to cap SES
+spend and unverified user creation. Raise it if a workshop or office
+NAT is hitting false positives.
+
+Prereqs:
+- None. Counters live in the shared `django_q` cache.
+
+Rotation: n/a. The next matching POST uses the new limit after
+config-cache invalidation.
+
+Test vs live: n/a. Tests lower this via IntegrationSetting rather
+than looping against the production default.
+
+## AUTH_THROTTLE_MAIL_EMAIL_LIMIT
+
+Purpose: Maximum `POST /api/register`,
+`POST /api/password-reset-request`, and `POST /api/subscribe`
+attempts for one normalized email inside the mail window. Read by
+`accounts/services/auth_throttle.py`.
+
+Default: 3. The default lives as `DEFAULT_MAIL_EMAIL_LIMIT` in
+`accounts/services/auth_throttle.py`; if this setting is missing or
+the value cannot be parsed as a positive int, the code uses 3.
+
+Without it (or unparseable): Falls back to 3. Existing counters keep
+their current window; only new increments use a newly saved limit.
+
+Where to find it: This is operator intent — a positive integer (e.g.
+`1`, `3`, `10`). There is no external dashboard.
+
+Lower the limit to stop one address from harvesting verification or
+reset mail. A different email from the same IP can still proceed
+until the IP bucket trips.
+
+Prereqs:
+- None. Counters live in the shared `django_q` cache.
+
+Rotation: n/a. The next matching POST uses the new limit after
+config-cache invalidation.
+
+Test vs live: n/a. Tests lower this via IntegrationSetting rather
+than looping against the production default.
+
+## AUTH_THROTTLE_MAIL_WINDOW_SECONDS
+
+Purpose: Sliding window in seconds for register, password-reset
+request, and subscribe IP and email buckets. Read by
+`accounts/services/auth_throttle.py`. Cache TTLs match this window.
+
+Default: 3600 (1 hour). The default lives as
+`DEFAULT_MAIL_WINDOW_SECONDS` in
+`accounts/services/auth_throttle.py`; if this setting is missing or
+the value cannot be parsed as a positive int, the code uses 3600.
+
+Without it (or unparseable): Falls back to 3600. Counters already in
+cache keep the TTL they were created with.
+
+Where to find it: This is operator intent — a positive integer number
+of seconds (e.g. `600`, `3600`, `7200`). There is no external
+dashboard.
+
+Shorten the window so a blocked workshop NAT recovers sooner. Lengthen
+it to keep a slow SES-burning loop from resetting every few minutes.
+
+Prereqs:
+- None. Counters live in the shared `django_q` cache.
+
+Rotation: n/a. New buckets use the new window; in-flight buckets
+expire on their original TTL.
+
+Test vs live: n/a. Tests use a short override (for example 1 second)
+to prove expiry without waiting an hour.

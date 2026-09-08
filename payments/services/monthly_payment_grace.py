@@ -285,7 +285,11 @@ def start_grace_from_failure(*, invoice, subscription, event_id="",
         return None, qualification
 
     with transaction.atomic():
-        user = User.objects.select_for_update().select_related("tier").get(pk=user.pk)
+        user = (
+            User.objects.select_for_update(of=("self",))
+            .select_related("tier")
+            .get(pk=user.pk)
+        )
         recovered = Grace.objects.filter(
             stripe_invoice_id=qualification.invoice_id,
             livemode=livemode,
@@ -395,8 +399,10 @@ def recover_grace(*, subscription_id, invoice_id="", event_id="",
                     )
             return None
         grace = candidates[0]
-        user = User.objects.select_for_update().select_related("tier").get(
-            pk=grace.user_id,
+        user = (
+            User.objects.select_for_update(of=("self",))
+            .select_related("tier")
+            .get(pk=grace.user_id)
         )
         grace.user = user
         now = timezone.now()
@@ -611,8 +617,10 @@ def _expire_locked(grace):
     # Lock and reload the member before consulting local manual state.  A
     # cached ``select_related`` user from the candidate query is not authority:
     # a concurrent staff tier/subscription edit must win over this transition.
-    user = User.objects.select_for_update().select_related("tier").get(
-        pk=grace.user_id,
+    user = (
+        User.objects.select_for_update(of=("self",))
+        .select_related("tier")
+        .get(pk=grace.user_id)
     )
     grace.user = user
     subscription, invoice, code, message = _revalidate(grace)
@@ -676,7 +684,7 @@ def sweep_payment_graces(*, now=None):
     for grace_id in candidates:
         with transaction.atomic():
             grace = (
-                Grace.objects.select_for_update().select_related(
+                Grace.objects.select_for_update(of=("self",)).select_related(
                     "user__tier", "base_tier_at_start",
                 ).get(pk=grace_id)
             )
@@ -721,7 +729,7 @@ def _delivery_backoff(delivery):
 
 def _claim_delivery(delivery_id, now):
     with transaction.atomic():
-        delivery = Delivery.objects.select_for_update().select_related(
+        delivery = Delivery.objects.select_for_update(of=("self",)).select_related(
             "grace__user__tier", "grace__base_tier_at_start",
         ).get(pk=delivery_id)
         if delivery.status == Delivery.STATUS_SENT or delivery.attempt_count >= MAX_DELIVERY_ATTEMPTS:
@@ -768,7 +776,7 @@ def _claim_delivery(delivery_id, now):
 def _begin_delivery_transport(delivery_id, token, now):
     """Fence stale workers immediately before the irreversible SES call."""
     with transaction.atomic():
-        delivery = Delivery.objects.select_for_update().select_related(
+        delivery = Delivery.objects.select_for_update(of=("self",)).select_related(
             "grace__user__tier", "grace__base_tier_at_start",
         ).get(pk=delivery_id)
         if (

@@ -1113,6 +1113,7 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
     platform URLs. When either is missing, link rewriting is skipped.
     """
     from content.models import Unit, UserCourseProgress
+    from content.utils.code_annotations import parse_course_unit_body
     from content.utils.md_links import rewrite_md_links
 
     course_ignore_patterns = course_ignore_patterns or []
@@ -1124,6 +1125,7 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
         course_dir = os.path.dirname(module_dir)
 
     seen_unit_paths = set()
+    failed_unit_content_ids = set()
     # Track newly created units with their hashes for rename detection
     new_unit_hashes = {}
 
@@ -1221,6 +1223,7 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
 
         filepath = os.path.join(module_dir, filename)
         rel_path = os.path.relpath(filepath, repo_dir)
+        unit_content_id = None
 
         try:
             metadata, body = _parse_markdown_file(filepath)
@@ -1237,6 +1240,14 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 continue
 
             seen_unit_paths.add(rel_path)
+
+            # Validate structured lesson annotations before URL rewriting or
+            # any Unit mutation. Keep the path in ``seen_unit_paths`` first:
+            # an invalid replacement must preserve the previously published
+            # Unit instead of being mistaken for a deleted source file.
+            is_homework = metadata.get('is_homework', False)
+            if not is_homework:
+                parse_course_unit_body(body)
 
             # Edge Case 1: Compute content hash for rename detection
             content_hash = _compute_content_hash(body)
@@ -1262,8 +1273,6 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                     source_path=rel_path,
                     sync_errors=stats.get('errors'),
                 )
-
-            is_homework = metadata.get('is_homework', False)
 
             # Derive sort_order and slug from filename
             sort_order = metadata.get(
@@ -1391,6 +1400,8 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
 
         except Exception as e:
             raise_if_checkout_error(e)
+            if unit_content_id:
+                failed_unit_content_ids.add(unit_content_id)
             stats['errors'].append({
                 'file': rel_path,
                 'error': str(e),
@@ -1400,7 +1411,11 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
     stale_units = Unit.objects.filter(
         module=module,
         source_repo=repo_name,
-    ).exclude(source_path__in=seen_unit_paths)
+    ).exclude(
+        source_path__in=seen_unit_paths,
+    ).exclude(
+        content_id__in=failed_unit_content_ids,
+    )
 
     for stale_unit in stale_units:
         # Check if a newly created unit in the same course has the same hash

@@ -161,6 +161,82 @@ div.mermaid:not([data-processed]) { white-space: pre; }
 .codehilite .nt { color: #FF4689 }
 .codehilite .ow { color: #FF4689 }
 
+/* Course-unit structured code annotations (issue #1589).
+   The gutter is separate from <code> so copied and accessible code stays raw.
+   The whole code surface scrolls together while notes remain in the reader
+   column below it. */
+.prose .annotated-code-block { padding: 0; }
+.prose .annotated-code-block pre {
+  display: grid;
+  grid-template-columns: auto minmax(max-content, 1fr);
+  width: max-content;
+  min-width: 100%;
+}
+.prose .annotated-code-block .code-line-gutter {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 0.75rem;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted) / 0.35);
+  border-right: 1px solid hsl(var(--border));
+  text-align: right;
+  user-select: none;
+}
+.prose .annotated-code-block .code-line-number,
+.prose .annotated-code-block .code-annotation-line {
+  display: block;
+  min-height: 1.5rem;
+  line-height: 1.5rem;
+}
+.prose .annotated-code-block code {
+  display: block;
+  min-width: max-content;
+  padding: 1rem 3.75rem 1rem 1rem;
+}
+.prose .annotated-code-block .code-annotation-line {
+  padding: 0 0.5rem;
+}
+.prose .annotated-code-block .code-annotation-line.is-highlighted {
+  background: hsl(var(--accent) / 0.18);
+  box-shadow: inset 0.1875rem 0 0 hsl(var(--accent));
+}
+.prose .code-annotations {
+  margin: 0.75rem 0 1.5rem;
+  padding: 1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  background: hsl(var(--card) / 0.55);
+}
+.prose .code-annotations-heading {
+  margin: 0 0 0.75rem;
+  color: hsl(var(--foreground));
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+.prose .code-annotation-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.prose .code-annotation-note {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr);
+  gap: 0.75rem;
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+}
+.prose .code-annotation-label {
+  color: hsl(var(--foreground));
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.prose .code-annotation-text { min-width: 0; }
+
 /* Light theme overrides for syntax highlighting */
 :root:not(.dark) .codehilite .c { color: #6a737d }
 :root:not(.dark) .codehilite .err { color: #cb2431; background-color: transparent }
@@ -266,9 +342,19 @@ select.studio-select {
 }
 .code-copy-wrapper:hover .code-copy-btn,
 .code-copy-btn:focus-visible { opacity: 1; }
+.code-copy-btn:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
 .code-copy-btn:hover { color: hsl(var(--foreground)); }
 .code-copy-btn.is-copied { color: hsl(var(--accent)); opacity: 1; }
 /* Touch devices (no hover): always show the button so it's tappable. */
 @media (hover: none) {
   .code-copy-btn { opacity: 1; }
+}
+@media (max-width: 639px) {
+  .prose .code-annotation-note {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
+  }
 }

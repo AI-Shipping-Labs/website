@@ -377,6 +377,7 @@ class Unit(SyncedContentIdentityMixin, SourceMetadataMixin, models.Model):
         return f'{self.module.title} - {self.title}'
 
     def save(self, *args, **kwargs):
+        from content.utils.code_annotations import render_course_unit_body
         from content.utils.linkify import linkify_urls
         if self.body:
             # Strip the leading H1 if it duplicates the unit title — the
@@ -384,7 +385,9 @@ class Unit(SyncedContentIdentityMixin, SourceMetadataMixin, models.Model):
             # that starts with ``# Unit Title`` would show up twice
             # (issue #227).
             body_md = strip_leading_title_h1(self.body, self.title)
-            self.body_html = linkify_urls(render_markdown(body_md))
+            self.body_html = render_course_unit_body(body_md)
+        else:
+            self.body_html = ''
         if self.homework:
             self.homework_html = linkify_urls(render_markdown(self.homework))
         # When save() is called with update_fields (e.g. from update_or_create),

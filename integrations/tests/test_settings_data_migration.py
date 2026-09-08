@@ -21,6 +21,10 @@ DONOR_ROWS = (
     ('ZOOM_WAITING_ROOM', 'true', False, 'zoom'),
     ('EMAIL_BATCH_SIZE', '120', False, 'ses'),
     ('STRIPE_WEBHOOK_SECRET', 'sk_test_synthetic_123', True, 'stripe'),
+    # Not declared in the package registry: typed from the frozen donor
+    # snapshot (str for both), with the secret taken from the donor row flag.
+    ('SYNTHETIC_ADHOC_TOKEN', 'adhoc_synthetic_secret_value', True, 'misc'),
+    ('SYNTHETIC_ADHOC_NOTE', 'adhoc plain note', False, 'misc'),
 )
 
 
@@ -94,6 +98,8 @@ class SettingsDataMigrationTest(TransactionTestCase):
                         self.assertEqual(copied.value_type, 'int')
                     elif key == 'SLACK_INVITE_URL':
                         # Package registry wins over the donor 'url' type.
+                        self.assertEqual(copied.value_type, 'str')
+                    elif key.startswith('SYNTHETIC_ADHOC'):
                         self.assertEqual(copied.value_type, 'str')
 
             # Idempotency: re-running the forwards function must not duplicate

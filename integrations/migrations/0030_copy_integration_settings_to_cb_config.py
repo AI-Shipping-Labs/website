@@ -10,8 +10,11 @@ into the package storage, with these rules:
   Plaintext secrets are never logged.
 - Non-secret values are stored as raw JSON string scalars.
 - ``value_type`` comes from the package registry definition when the key is
-  declared there; otherwise the donor ``SETTING_VALUE_TYPES`` map is translated
+  declared there; otherwise from the frozen donor snapshot below, translated
   (``boolean`` -> ``bool``, ``integer`` -> ``int``, anything else -> ``str``).
+  The snapshot is inlined because migrations are replayed on every fresh
+  install long after the live ``integrations.settings_registry`` module is
+  deleted at the A0.2 cutover, and importing it here would break ``migrate``.
 - ``source`` is ``db`` and ``updated_at`` is copied from the donor row.
 - Re-running is idempotent: rows whose key already exists in ``cb_config`` are
   skipped, never overwritten.
@@ -26,30 +29,85 @@ from community_base.config.registry import definition as package_definition
 from django.core.exceptions import ImproperlyConfigured
 from django.db import migrations
 
-from integrations.settings_registry import SETTING_VALUE_TYPES
+BATCH_SIZE = 1000
 
-BATCH_SIZE = 500
+# Frozen snapshot of the donor ``integrations.settings_registry`` value types
+# as of 2026-09-08 (17 booleans, 31 integers; every other donor key is a
+# string, including the donor's ``url`` type). Only these two sets matter:
+# undeclared keys outside them copy as ``str``.
+_DONOR_BOOLEAN_KEYS = frozenset({
+    'AUTHENTICATED_CHECKOUT_BINDING_ENABLED',
+    'LEGACY_NUMERIC_CHECKOUT_REFERENCE_ENABLED',
+    'LOGFIRE_ENABLED',
+    'MAVEN_ENROLLMENT_ENABLED',
+    'NEXT_SPRINT_DRAFT_USE_PROFILE',
+    'ONBOARDING_AI_ENABLED',
+    'ONBOARDING_AI_STREAMING',
+    'ONBOARDING_REMINDER_ENABLED',
+    'RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD',
+    'S3_ENABLED',
+    'SES_WEBHOOK_VALIDATION_ENABLED',
+    'SLACK_ENABLED',
+    'SPRINT_END_AUTO_DISTRIBUTE_FEEDBACK_ENABLED',
+    'STAFF_SLACK_JOIN_NOTIFY_ENABLED',
+    'TRIGGERS_ENABLED',
+    'ZOOM_JOIN_BEFORE_HOST',
+    'ZOOM_WAITING_ROOM',
+})
+_DONOR_INTEGER_KEYS = frozenset({
+    'AUTH_THROTTLE_LOGIN_EMAIL_LIMIT',
+    'AUTH_THROTTLE_LOGIN_IP_LIMIT',
+    'AUTH_THROTTLE_LOGIN_WINDOW_SECONDS',
+    'AUTH_THROTTLE_MAIL_EMAIL_LIMIT',
+    'AUTH_THROTTLE_MAIL_IP_LIMIT',
+    'AUTH_THROTTLE_MAIL_WINDOW_SECONDS',
+    'BANNER_GENERATOR_TIMEOUT_SECONDS',
+    'BANNER_UPLOAD_MAX_MB',
+    'CALENDLY_WEBHOOK_RETENTION_DAYS',
+    'CALENDLY_WEBHOOK_TOLERANCE_SECONDS',
+    'CAMPAIGN_BATCH_INTERVAL_SECONDS',
+    'CAMPAIGN_DELIVERY_MAX_ATTEMPTS',
+    'CHECKOUT_BINDING_TTL_MINUTES',
+    'CRM_EXPORT_MAX_LIMIT',
+    'DOWNLOAD_DELIVERY_TOKEN_TTL_HOURS',
+    'DOWNLOAD_PRESIGNED_URL_TTL_SECONDS',
+    'EMAIL_BATCH_SIZE',
+    'LLM_MAX_RETRIES',
+    'MAVEN_OVERRIDE_DURATION_DAYS',
+    'ONBOARDING_AI_DEADLINE_SECONDS',
+    'ONBOARDING_AI_MAX_ATTEMPTS',
+    'ONBOARDING_REMINDER_DELAY_DAYS',
+    'PLAN_SPRINTS_FIRST_RUN_LOOKBACK_DAYS',
+    'PLAN_SPRINTS_INGEST_LEASE_MINUTES',
+    'PLAN_SPRINTS_RAW_TEXT_RETENTION_DAYS',
+    'PLAN_SPRINTS_THREAD_REFRESH_DAYS',
+    'RECORDING_PRESIGNED_URL_TTL_SECONDS',
+    'SPRINT_BADGE_WINDOW_DAYS',
+    'UNVERIFIED_USER_TTL_DAYS',
+    'USER_ACTIVITY_RETENTION_DAYS',
+    'ZOOM_WEBHOOK_TOLERANCE_SECONDS',
+})
 
-_DONOR_VALUE_TYPE_MAP = {
-    'boolean': 'bool',
-    'integer': 'int',
-}
+
+def _donor_value_type(key):
+    if key in _DONOR_BOOLEAN_KEYS:
+        return 'bool'
+    if key in _DONOR_INTEGER_KEYS:
+        return 'int'
+    return 'str'
 
 
 def _traits_for(key, donor_is_secret):
     """Return (value_type, secret) for a donor key.
 
     The package registry wins when the key is declared there; undeclared
-    (ad-hoc) rows fall back to the donor type map and the donor row's own
-    ``is_secret`` flag so a secret can never land in plaintext by accident.
+    (ad-hoc) rows fall back to the frozen donor snapshot and the donor row's
+    own ``is_secret`` flag so a secret can never land in plaintext by accident.
     """
     try:
         declared = package_definition(key)
     except ImproperlyConfigured:
-        return (
-            _DONOR_VALUE_TYPE_MAP.get(SETTING_VALUE_TYPES.get(key), 'str'),
-            donor_is_secret,
-        )
+        return _donor_value_type(key), donor_is_secret
     return declared.value_type, declared.secret
 
 

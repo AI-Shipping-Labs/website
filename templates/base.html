@@ -384,6 +384,8 @@
           'X-CSRFToken': csrfToken,
         },
         body: JSON.stringify({ timezone: detected, passive: true }),
+      }).then(function(response) {
+        return response.text();
       }).catch(function() {});
     })();
   </script>

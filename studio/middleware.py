@@ -8,8 +8,8 @@ intermediary CDN can ever serve one user's HTML to another. See issue
 HTML containing the message was cacheable.
 
 Behaviour:
-    For every response whose ``request.path`` begins with ``/studio/``
-    or ``/accounts/``, set:
+    For every response whose ``request.path`` begins with ``/studio/``,
+    ``/accounts/``, or ``/account/``, set:
 
     - ``Cache-Control: private, no-store`` — never cache, anywhere.
     - ``Vary: Cookie`` — appended to any existing ``Vary`` header so
@@ -22,11 +22,11 @@ Behaviour:
 
 from django.utils.cache import patch_vary_headers
 
-PROTECTED_PREFIXES = ('/studio/', '/accounts/')
+PROTECTED_PREFIXES = ('/studio/', '/accounts/', '/account/')
 
 
 class StudioNoStoreMiddleware:
-    """Mark ``/studio/*`` and ``/accounts/*`` responses as uncacheable.
+    """Mark Studio and account-management responses as uncacheable.
 
     Wired into ``MIDDLEWARE`` in ``website/settings.py``. Runs on every
     response: matching paths get ``Cache-Control: private, no-store``

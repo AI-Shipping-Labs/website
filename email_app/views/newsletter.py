@@ -13,8 +13,10 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
+from accounts.models.user import SIGNUP_SOURCE_NEWSLETTER
 from accounts.return_context import sanitize_verification_return_path
 from accounts.services.auth_throttle import SCOPE_SUBSCRIBE, consume_auth_throttle
+from accounts.services.user_creation import create_user_conflict_safe
 from accounts.services.verification import resolve_unverified_ttl_days
 from accounts.utils.tokens import JWT_ALGORITHM, generate_user_action_token
 from integrations.config import site_base_url
@@ -150,18 +152,11 @@ def subscribe_api(request):
     if throttled is not None:
         return throttled
 
-    # Check if user already exists
+    # Keep the existing-user lookup as a fast path. The creation helper is the
+    # authoritative collision guard when two requests miss this lookup.
     try:
-        existing_user = User.objects.get(email__iexact=email)
-        # Idempotent: if the user exists but is not verified, re-send verification.
-        # Do NOT extend ``verification_expires_at`` on every re-subscribe — that
-        # would let a typo-squatter keep an unclaimed account alive forever by
-        # re-submitting the form daily. The original purge window stands.
-        if not existing_user.email_verified:
-            _send_subscribe_verification_email(
-                existing_user, redirect_to=redirect_to or None
-            )
-        # Return same success message regardless (no information leak)
+        user = User.objects.get(email__iexact=email)
+        created = False
     except User.DoesNotExist:
         # Issue #513: parity with ``register_api``. Set
         # ``verification_expires_at`` so the daily purge job (#452)
@@ -172,11 +167,15 @@ def subscribe_api(request):
         verification_expires_at = (
             timezone.now() + datetime.timedelta(days=ttl_days)
         )
-        user = User.objects.create_user(
+        user, created = create_user_conflict_safe(
             email=email,
             verification_expires_at=verification_expires_at,
-            signup_source="newsletter",
+            signup_source=SIGNUP_SOURCE_NEWSLETTER,
         )
+
+    if created or not user.email_verified:
+        # A collision loser follows the same resend semantics as the sequential
+        # existing-user path. Never extend the winner's original purge window.
         _send_subscribe_verification_email(
             user, redirect_to=redirect_to or None
         )

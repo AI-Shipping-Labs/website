@@ -38,6 +38,7 @@ from accounts.services.auth_throttle import (
 )
 from accounts.services.email_resolution import resolve_user_by_email
 from accounts.services.free_welcome import send_free_welcome_email
+from accounts.services.user_creation import create_user_conflict_safe
 from accounts.services.verification import resolve_unverified_ttl_days
 from accounts.utils.tokens import (
     JWT_ALGORITHM,
@@ -406,12 +407,16 @@ def register_api(request):
     # for them — see ``accounts/signals.py``.
     ttl_days = resolve_unverified_ttl_days()
     verification_expires_at = timezone.now() + datetime.timedelta(days=ttl_days)
-    user = User.objects.create_user(
+    user, created = create_user_conflict_safe(
         email=email,
         password=password,
         verification_expires_at=verification_expires_at,
-        signup_source="signup",
+        signup_source=SIGNUP_SOURCE_SIGNUP,
     )
+    if not created:
+        return JsonResponse(
+            {"error": "A user with this email already exists"}, status=400
+        )
     # email_verified defaults to False, tier defaults to free (in model save)
 
     # Best-effort Slack workspace membership probe. If the email is

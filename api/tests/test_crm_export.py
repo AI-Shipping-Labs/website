@@ -11,6 +11,7 @@ demoted-to-non-staff token live in ``setUpTestData``; auth is sent via
 """
 
 import datetime
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -773,16 +774,20 @@ class CrmExportQueryBudgetTest(CrmExportTestBase):
 
     def test_bounded_query_count_with_assert_num_queries(self):
         # Fixed-budget regression guard over the 3-member / 3-plan fixture.
-        # Warm the integration-settings config cache first so its one-off
-        # stamp read does not perturb the count (it is otherwise stable).
-        self.client.get(self.URL, **self._auth())
-        # Ordered prefetch caches are consumed directly by the shared plan
-        # serializer (#1304), removing per-plan child and plan-note queries
-        # while preserving the JSON payload.
-        with self.assertNumQueries(33):
-            response = self.client.get(self.URL, **self._auth())
-            self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json()["count"], 3)
+        # Redirect middleware has its own process-local cache; isolate that
+        # unrelated lookup so parallel test ordering cannot change this API
+        # endpoint's query budget.
+        with mock.patch("integrations.middleware.get_active_redirects", return_value={}):
+            # Warm the integration-settings config cache first so its one-off
+            # stamp read does not perturb the count (it is otherwise stable).
+            self.client.get(self.URL, **self._auth())
+            # Ordered prefetch caches are consumed directly by the shared plan
+            # serializer (#1304), removing per-plan child and plan-note queries
+            # while preserving the JSON payload.
+            with self.assertNumQueries(33):
+                response = self.client.get(self.URL, **self._auth())
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["count"], 3)
 
     def test_email_lookup_query_count_does_not_grow_with_unrelated_users(self):
         from django.db import connection

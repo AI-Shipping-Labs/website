@@ -6,39 +6,32 @@ Hi {{ user_name }},
 
 {% if course_name %}Thanks for enrolling in {{ course_name }}.{% else %}Thanks for enrolling.{% endif %}
 
-As part of the course you're also invited into the AI Shipping Labs community —
-our invite-only Slack workspace. That's where the course actually happens: ask
-questions, share what you're building, and compare notes with everyone else
-taking it{% if course_channel %} in {{ course_channel }}{% endif %}.
+We created an AI Shipping Labs account for you. Sign in with Google, GitHub, or
+Slack — or set a password.
 
-There's a lot more in there than the course. Your enrollment comes with a Main
-membership, which includes:
+[Sign in]({{ sign_in_url }}) · [Set a password]({{ password_reset_url }})
 
-- Community sprints — time-boxed build cycles where you commit to shipping one project, with check-ins, deadlines, and an accountability partner
-- Live events — building sessions, office hours, mock interviews, and career conversations
-- A personalized onboarding plan built around what you want to get out of this
-- Topic voting, so you help decide what we cover next
-- All member content and downloads at Basic and Main level, including exclusive articles and workshop recordings and materials
+All the course interaction happens in Slack. That's where the cohort is — ask
+questions, share what you're building, and compare notes{% if course_channel %} in {{ course_channel }}{% endif %}.
 
-To get in:
+[Join the Slack community]({{ slack_join_url }})
 
-1. [Set your password]({{ password_reset_url }})
-2. [Sign in to AI Shipping Labs]({{ sign_in_url }})
-3. [Join the Slack community]({{ slack_join_url }})
+Your enrollment also comes with a Main membership: community sprints,
+live events, a personalized onboarding plan, topic voting, and all member
+content at Basic and Main level.
 
-The Slack link only works once you're signed in, so do steps 1 and 2 first.
-
-Once you're in, [fill in your onboarding form]({{ onboarding_url }}) — it takes
-a few minutes and tells us about your background and goals so we can prepare a
-personalized plan for you.
+To get the personalized plan, [fill in your onboarding form]({{ onboarding_url }}) —
+it takes a few minutes and tells us about your background and goals.
 
 ---
 
 Why you're getting this email: we created (or activated) your AI Shipping Labs
 account and gave you community access {% if course_name %}because you enrolled in {{ course_name }}{% else %}because of the course you just enrolled in{% endif %}.
-We did NOT add you to any marketing newsletter — you'll only hear from us about
-the course and the community.
 
-If you'd rather not receive these emails, you can
-[turn off emails here]({{ opt_out_url }}). You can also simply reply to this
-email to ask us to remove or disable your account.
+If you want to hear from us — community news, new workshops, events, what other
+members are building — [verify your email]({{ newsletter_opt_in_url }}). One
+click, and you can unsubscribe any time.
+
+If you'd rather not get the course emails either, you can
+[turn off course emails]({{ opt_out_url }}) separately. You can also simply
+reply to this email to ask us to remove or disable your account.

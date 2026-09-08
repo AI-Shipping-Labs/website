@@ -548,27 +548,32 @@ class MavenCourseChannelTest(MavenWebhookMixin):
     def test_channel_is_named_when_the_setting_is_configured(self):
         body = self._render("chan-on@example.com", "#ai-engineering-buildcamp")
 
-        self.assertIn("taking it in #ai-engineering-buildcamp.", body)
+        self.assertIn("compare notes in #ai-engineering-buildcamp.", body)
 
     def test_the_sentence_reads_cleanly_when_the_setting_is_unset(self):
         body = self._render("chan-off@example.com", "")
 
-        self.assertIn("taking it.", body)
-        self.assertNotIn("taking it in .", body)
-        self.assertNotIn("taking it  ", body)
+        self.assertIn("compare notes.", body)
+        self.assertNotIn("compare notes in .", body)
+        self.assertNotIn("compare notes  ", body)
         # No dangling preposition and no empty parentheses anywhere.
         self.assertNotIn(" in .", body)
         self.assertNotIn("()", body)
 
     def test_the_main_benefits_match_the_authoritative_tier_records(self):
-        """The listed benefits are the Main tier benefits (content tiers.yaml)."""
-        body = self._render("benefits@example.com", "")
+        """The listed benefits are the Main tier benefits (content tiers.yaml).
+
+        Issue #1593 rewrote the list from bullets into a single sentence, so
+        the assertion is case-insensitive: what matters is that every Main
+        benefit is still named, not how the sentence capitalizes it.
+        """
+        body = self._render("benefits@example.com", "").lower()
 
         for benefit in (
-            "Community sprints",
-            "Live events",
+            "community sprints",
+            "live events",
             "personalized onboarding plan",
-            "Topic voting",
+            "topic voting",
         ):
             self.assertIn(benefit, body)
 

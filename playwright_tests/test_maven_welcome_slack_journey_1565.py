@@ -155,10 +155,22 @@ def test_staff_preview_shows_the_ordered_steps_and_the_slack_link(
     assert srcdoc, "maven_welcome preview iframe is empty"
 
     assert "You're enrolled in" in srcdoc
-    assert "Set your password" in srcdoc
-    assert "Sign in to AI Shipping Labs" in srcdoc
+    assert "Set a password" in srcdoc
+    assert "Sign in" in srcdoc
     assert "/community/slack" in srcdoc
     assert "your course" not in srcdoc
+
+    # Issue #1593: staff must be able to see, before it goes out, that the
+    # newsletter is offered rather than assumed, and that the two tokened
+    # links are different things with different labels.
+    assert "did not add" not in srcdoc
+    assert "If you want to hear from us" in srcdoc
+    assert "verify your email" in srcdoc
+    assert "/api/verify-and-subscribe" in srcdoc
+    assert "turn off course emails" in srcdoc
+    assert "/api/maven-email-opt-out" in srcdoc
+    # An empty href here is the preview bug this assertion exists to catch.
+    assert 'href=""' not in srcdoc
     context.close()
 
 

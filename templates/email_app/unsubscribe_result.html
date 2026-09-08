@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Unsubscribe | {{ site_name }}{% endblock %}
+{% comment %}
+Shared result page for the no-login email-preference token endpoints:
+/api/unsubscribe, /api/maven-email-opt-out, and /api/verify-and-subscribe.
+Callers may override the heading and the follow-up line; the defaults are the
+unsubscribe wording this page shipped with. Issue #1593 added the overrides
+rather than a second copy of the card, since the chrome is identical and only
+the words differ.
+{% endcomment %}
+{% block title %}{% if success %}{% if result_heading %}{{ result_heading }}{% else %}Unsubscribe{% endif %}{% else %}{% if error_heading %}{{ error_heading }}{% else %}Unsubscribe failed{% endif %}{% endif %} | {{ site_name }}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}
@@ -19,18 +27,24 @@
         {% endif %}
 
         <h1 class="text-2xl font-semibold tracking-tight mb-4">
-          {% if success %}Unsubscribed{% else %}Unsubscribe Failed{% endif %}
+          {% if success %}{% if result_heading %}{{ result_heading }}{% else %}Unsubscribed{% endif %}{% else %}{% if error_heading %}{{ error_heading }}{% else %}Unsubscribe failed{% endif %}{% endif %}
         </h1>
         <p class="text-muted-foreground">{{ message }}</p>
 
         {% if success %}
         <p class="mt-4 text-sm text-muted-foreground">
-          Changed your mind? <a href="/account/" class="text-accent hover:text-accent/80">Log in to your account</a> to re-subscribe.
+          {% if unsubscribe_url %}Changed your mind? <a href="{{ unsubscribe_url }}" class="text-accent hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Unsubscribe</a> — it takes one click, no sign-in needed.{% else %}Changed your mind? <a href="/account/" class="text-accent hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Log in to your account</a> to re-subscribe.{% endif %}
+        </p>
+        {% endif %}
+
+        {% if not success and recovery_url %}
+        <p class="mt-4 text-sm text-muted-foreground">
+          <a href="{{ recovery_url }}" class="text-accent hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ recovery_label }}</a>
         </p>
         {% endif %}
 
         <div class="mt-8">
-          <a href="/" class="inline-flex items-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+          <a href="/" class="inline-flex items-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
             Go to Homepage
             <i data-lucide="arrow-right" class="h-4 w-4"></i>
           </a>

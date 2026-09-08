@@ -104,6 +104,14 @@ PREVIEW_CONTEXTS = {
             'https://aishippinglabs.com/api/maven-email-opt-out'
             '?token=preview-token'
         ),
+        # Issue #1593: the one-click verify-and-subscribe opt-in, distinct
+        # from the Maven-scoped course-email opt-out above. Both are supplied
+        # so the Studio preview renders two real hrefs rather than an empty
+        # one an operator cannot eyeball.
+        'newsletter_opt_in_url': (
+            'https://aishippinglabs.com/api/verify-and-subscribe'
+            '?token=preview-token'
+        ),
     },
     'community_invite': {
         'user_name': 'Ada',

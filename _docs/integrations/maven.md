@@ -8,7 +8,10 @@ email. A cohort removal sends a staff heads-up but never auto-revokes access.
 
 The whole feature is off by default (`MAVEN_ENROLLMENT_ENABLED`). It is
 payment-independent (instructors free-enroll people), idempotent under Maven
-retries, and consent-respecting (no marketing-newsletter opt-in).
+retries, and consent-respecting: enrolling never subscribes anyone to the
+marketing newsletter. Account creation leaves the enrollee marketing-excluded,
+and the welcome email offers a one-click verify-and-subscribe opt-in they have
+to choose (issue #1593).
 
 ## Settings
 
@@ -142,18 +145,48 @@ the Slack join link. The generic `community_invite` email is suppressed for
 Maven (`invite(user, send_invite_email=False)`) so the enrollee is not hit
 with two welcomes seconds apart.
 
-`/community/slack` is `@login_required` and Main-gated, so the welcome copy
-orders the steps set password -> sign in -> join Slack.
+`/community/slack` is `@login_required` and Main-gated. The welcome email no
+longer walks the enrollee through a numbered 1/2/3 sequence (issue #1593): it
+offers sign-in and set-a-password together, then the Slack join link. A signed-
+out click on that link redirects through login with `next=/community/slack`
+preserved, so it is one extra hop rather than a dead end.
 
 ## Behavior
 
 `user_cohort.enrolled`:
 
 - Resolves the account (primary login, then email alias) or creates a Free
-  imported account (`signup_source=imported`, `email_verified=False`). A new
-  account is durably marketing-excluded (`unsubscribed=True` and newsletter
-  preference off), including after verification or OAuth. Existing accounts'
-  choices are never changed.
+  imported account (`signup_source=imported`, `email_verified=False`). A newly
+  created account is marketing-excluded — `unsubscribed=True` and
+  `email_preferences={"newsletter": False, "maven_emails": True}` — and stays
+  that way until the enrollee opts in themselves. Existing accounts are
+  resolved and returned untouched; no branch writes `unsubscribed` or the
+  newsletter preference on an account this flow did not create.
+- The newsletter is genuine opt-in (issue #1593). The welcome email's footer
+  says "if you want to hear from us … verify your email", and the link behind
+  that sentence is `newsletter_opt_in_url` →
+  `/api/verify-and-subscribe?token=`, token action `verify_and_subscribe`. One
+  click sets `email_verified=True`, `unsubscribed=False`, and
+  `email_preferences["newsletter"] = True`, clears `verification_expires_at`,
+  and lands on a page that states plainly what just happened and offers a
+  no-login unsubscribe link next to it.
+  - It is a SIBLING endpoint of `/api/verify-email`, not an intent flag on it.
+    The token's action name is the consent record, so an ordinary
+    `verify_email` token can never subscribe anyone however the endpoints are
+    later refactored, and a forwarded or tampered query string cannot turn
+    verification into consent.
+  - The converse is deliberate too: signing in with OAuth verifies the address
+    (`accounts/signals.py` trusts the provider) and does NOT subscribe them.
+    Proving you control a mailbox is not asking to be marketed to, so
+    verification and subscription are never coupled in that direction.
+  - Maven-asserted addresses are never auto-verified on enrollment.
+    Verification is an ownership signal proven by the member acting on a link
+    we sent; Maven telling us an address exists is not us confirming it.
+  - Because an enrollee who ignores the email is neither verified nor
+    subscribed, they appear in no campaign audience at all — neither the
+    default `verified_only` nor `everyone`, since `unsubscribed=True` excludes
+    them unconditionally at `eligible_campaign_recipients`. That is the
+    intended outcome, not a gap.
 - Grants or extends a source-specific `main` entitlement. It never lowers,
   replaces, or shortens a stronger base/staff/billing grant; Maven access keeps
   its own expiry and becomes effective if a temporary stronger grant expires.
@@ -161,17 +194,27 @@ orders the steps set password -> sign in -> join Slack.
   `CommunityAuditLog` (`action="maven_enrollment_override"`).
 - Invites them to Slack (idempotent — no-op if already in the workspace).
 - Sends the course-framed `maven_welcome` email (transactional; from
-  `welcome@`; carries a transparent notice + a scoped Maven-email opt-out link
-  + reply-to-remove line). The opt-out does not affect access or other email
-  preferences, and Account can re-enable it. Staff receives a hidden copy of
-  the exact enrollee-facing welcome, BCC'd to `STAFF_SIGNUP_NOTIFY_EMAIL` —
-  the same mechanism and the same setting as the Stripe paid-signup welcome
-  (issue #1570). An unset value is a clean no-op, and a malformed value is
-  validated away rather than allowed to make SES reject the enrollee's
-  primary To. This is additive: the structured
-  `maven_enrollment_notification` staff heads-up is unchanged. The
-  `already_member` case skips the welcome entirely, so there is nothing to
-  copy there and the heads-up covers it.
+  `welcome@`; carries a transparent notice + the newsletter opt-in + a scoped
+  course-email opt-out + a reply-to-remove line). The two tokened links are
+  different things and are labelled as such: `newsletter_opt_in_url` is the
+  verify-and-subscribe opt-in described above, and `opt_out_url` is the
+  Maven-scoped course-email opt-out (`/api/maven-email-opt-out?token=`, action
+  `maven_email_opt_out`, sets `email_preferences["maven_emails"] = False`
+  only, and touches neither `unsubscribed` nor the newsletter preference).
+  Neither affects access, and Account can change either afterwards.
+  - The email offers OAuth ("sign in with Google, GitHub, or Slack") alongside
+    "set a password". That is safe on an imported account because
+    `SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True`
+    (`website/settings.py`), so a first OAuth login on a matching email links
+    to the existing account instead of creating a duplicate.
+  - Staff receives a hidden copy of the exact enrollee-facing welcome, BCC'd
+    to `STAFF_SIGNUP_NOTIFY_EMAIL` — the same mechanism and the same setting
+    as the Stripe paid-signup welcome (issue #1570). An unset value is a clean
+    no-op, and a malformed value is validated away rather than allowed to make
+    SES reject the enrollee's primary To. This is additive: the structured
+    `maven_enrollment_notification` staff heads-up is unchanged. The
+    `already_member` case skips the welcome entirely, so there is nothing to
+    copy there and the heads-up covers it.
 - After the entitlement succeeds, sends one independent internal staff
   enrollment heads-up to the configured staff mailbox and/or optional Slack
   channel. One successful destination completes the step; total delivery

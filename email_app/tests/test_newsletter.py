@@ -387,17 +387,67 @@ class UnsubscribeAPITest(TestCase):
         user.refresh_from_db()
         self.assertTrue(user.unsubscribed)
 
+    def test_unsubscribe_mirrors_the_newsletter_preference(self):
+        """Issue #1593: ``unsubscribed`` is enforced, but the preference dict
+        is what the users API and the CRM export publish. Now that Maven
+        writes ``newsletter: True`` at creation, a stale mirror would publish
+        a flat contradiction of the member's own choice.
+        """
+        user = User.objects.create_user(
+            email="mirror@example.com",
+            email_preferences={"newsletter": True, "maven_emails": True},
+        )
+        token = self._make_unsubscribe_token(user.pk)
+        self.client.get(f"/api/unsubscribe?token={token}")
+
+        user.refresh_from_db()
+        self.assertTrue(user.unsubscribed)
+        self.assertFalse(user.email_preferences["newsletter"])
+        # Scoped course emails are a separate decision and are untouched.
+        self.assertTrue(user.email_preferences["maven_emails"])
+
+    def test_unsubscribe_message_does_not_claim_all_emails(self):
+        """The flag gates promotional sends only, so the old copy was untrue —
+        and it contradicted the same Maven welcome that offers a separate
+        course-email opt-out.
+        """
+        user = User.objects.create_user(email="copy@example.com")
+        token = self._make_unsubscribe_token(user.pk)
+        response = self.client.get(f"/api/unsubscribe?token={token}")
+
+        self.assertNotContains(response, "unsubscribed from all emails")
+        self.assertContains(response, "newsletter")
+        self.assertContains(response, "marketing emails")
+
+    def test_unsubscribe_leaves_access_and_membership_alone(self):
+        """Leaving the newsletter costs the member nothing they were given."""
+        user = User.objects.create_user(
+            email="keeps-access@example.com",
+            slack_member=True,
+            email_preferences={"newsletter": True, "maven_emails": True},
+        )
+        token = self._make_unsubscribe_token(user.pk)
+        self.client.get(f"/api/unsubscribe?token={token}")
+
+        user.refresh_from_db()
+        self.assertTrue(user.slack_member)
+        self.assertTrue(user.email_preferences["maven_emails"])
+
     def test_unsubscribe_already_unsubscribed(self):
         user = User.objects.create_user(
             email="already-unsub@example.com",
             unsubscribed=True,
+            email_preferences={"newsletter": False},
         )
         token = self._make_unsubscribe_token(user.pk)
         response = self.client.get(f"/api/unsubscribe?token={token}")
         self.assertEqual(response.status_code, 200)
+        # A second click still shows the confirmation, never an error page.
+        self.assertContains(response, "newsletter")
 
         user.refresh_from_db()
         self.assertTrue(user.unsubscribed)
+        self.assertFalse(user.email_preferences["newsletter"])
 
     def test_unsubscribe_invalid_token(self):
         response = self.client.get("/api/unsubscribe?token=garbage")

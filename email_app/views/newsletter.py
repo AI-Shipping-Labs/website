@@ -198,7 +198,7 @@ def subscribe_api(request):
 
 @csrf_exempt
 def unsubscribe_api(request):
-    """Unsubscribe a user from all emails via JWT token.
+    """Unsubscribe a user from the newsletter and marketing email via JWT token.
 
     GET /api/unsubscribe?token={jwt} renders the confirmation page.
     POST /api/unsubscribe?token={jwt} supports mailbox-provider one-click
@@ -267,9 +267,19 @@ def unsubscribe_api(request):
             },
         )
 
-    if not user.unsubscribed:
+    # Issue #1593: mirror the preference the same way ``email_preferences_view``
+    # does. ``unsubscribed`` is the enforced flag, but ``email_preferences
+    # ["newsletter"]`` is what the users API and the CRM export publish; now
+    # that Maven writes ``newsletter: True`` at creation, leaving the mirror
+    # stale would publish a contradiction. Only the newsletter key is touched —
+    # scoped preferences such as ``maven_emails`` are the member's separate
+    # choice and are left exactly as they are.
+    preferences = dict(user.email_preferences or {})
+    if not user.unsubscribed or preferences.get("newsletter") is not False:
+        preferences["newsletter"] = False
         user.unsubscribed = True
-        user.save(update_fields=["unsubscribed"])
+        user.email_preferences = preferences
+        user.save(update_fields=["unsubscribed", "email_preferences"])
 
     if request.method == "POST":
         return HttpResponse("Unsubscribed", content_type="text/plain")
@@ -279,8 +289,135 @@ def unsubscribe_api(request):
         "email_app/unsubscribe_result.html",
         {
             "success": True,
-            "message": "You have been unsubscribed from all emails.",
+            # Issue #1593: the old copy claimed "all emails", which was never
+            # true — the flag gates promotional sends only, and essential
+            # account and course email keeps flowing. In a Maven welcome that
+            # separately offers a course-email opt-out, the old claim actively
+            # contradicted the email it came from.
+            "message": (
+                "You have been unsubscribed from our newsletter and other "
+                "marketing emails. Essential account and course emails still "
+                "reach you."
+            ),
         },
+    )
+
+
+@csrf_exempt
+def verify_and_subscribe_api(request):
+    """Verify the address AND subscribe to the newsletter, in one click.
+
+    Issue #1593: the Maven welcome email says "if you want to hear from us,
+    verify your email". Verification and subscription are separate fields, so
+    honouring that sentence means one action has to do both — otherwise the
+    email promises something the system does not deliver, which is worse than
+    saying nothing.
+
+    This is a SIBLING of ``/api/verify-email``, not an intent flag on it. The
+    token's action name is the consent record: a ``verify_email`` token can
+    never subscribe anyone, no matter how the endpoint is later refactored or
+    how the query string is tampered with. The inverse also holds by design —
+    signing in with OAuth or setting a password verifies the address and
+    deliberately does NOT subscribe, because proving you own a mailbox is not
+    the same as asking to be marketed to.
+    """
+    token = request.GET.get("token", "")
+    if not token:
+        return _opt_in_failure(request, "This link is incomplete.")
+
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[JWT_ALGORITHM],
+        )
+    except jwt.ExpiredSignatureError:
+        return _opt_in_failure(
+            request,
+            "This subscribe link has expired.",
+        )
+    except jwt.InvalidTokenError:
+        return _opt_in_failure(request, "This subscribe link is invalid.")
+
+    if payload.get("action") != "verify_and_subscribe":
+        return _opt_in_failure(request, "This subscribe link is invalid.")
+
+    try:
+        user = User.objects.get(pk=payload.get("user_id"))
+    except User.DoesNotExist:
+        return _opt_in_failure(request, "User not found.")
+
+    preferences = dict(user.email_preferences or {})
+    preferences["newsletter"] = True
+    user.email_preferences = preferences
+    user.unsubscribed = False
+    user.email_verified = True
+    # A verified address is never auto-purged: issue #452's window only
+    # applies to accounts that never confirmed. Clearing it here matches
+    # ``verify_email_api``.
+    user.verification_expires_at = None
+    user.save(
+        update_fields=[
+            "email_preferences",
+            "unsubscribed",
+            "email_verified",
+            "verification_expires_at",
+        ]
+    )
+
+    message = (
+        "Your email is verified and you're subscribed to the AI Shipping Labs "
+        "newsletter — community news, new workshops, and events. You can "
+        "unsubscribe at any time."
+    )
+    if request.method == "POST":
+        return HttpResponse(message, content_type="text/plain")
+    return render(
+        request,
+        "email_app/unsubscribe_result.html",
+        {
+            "success": True,
+            "message": message,
+            "result_heading": "You're subscribed",
+            # The exit is on the same page as the opt-in. Consent that is
+            # hard to withdraw is not really consent, and this reader has no
+            # password yet, so it must be the no-login token link.
+            "unsubscribe_url": (
+                "/api/unsubscribe?token="
+                f'{generate_user_action_token(user.pk, "unsubscribe")}'
+            ),
+        },
+    )
+
+
+def _opt_in_failure(request, message):
+    """Render the shared token-result page in its failure state.
+
+    Issue #1593: someone who clicked "verify your email" asked for something,
+    and a dead end is the wrong answer to a deliberate act. An expired or
+    malformed link therefore names the same outcome they wanted and points at
+    the signed-in route to it, mirroring how ``verify_email_api`` sends an
+    unusable link back to a usable path. No new email send exists here — the
+    account email preferences already own this setting, so recovery costs the
+    member one sign-in and nothing else.
+    """
+    recovery = (
+        " You can still turn the newsletter on yourself from your account"
+        " email preferences."
+    )
+    if request.method == "POST":
+        return HttpResponse(message, status=400, content_type="text/plain")
+    return render(
+        request,
+        "email_app/unsubscribe_result.html",
+        {
+            "success": False,
+            "message": message + recovery,
+            "error_heading": "Subscribe failed",
+            "recovery_url": "/account/",
+            "recovery_label": "Go to email preferences",
+        },
+        status=400,
     )
 
 

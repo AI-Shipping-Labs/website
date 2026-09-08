@@ -798,6 +798,17 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_relative_thresholds_and_long_mobile_metadata_remain_readable",
     })
 
+    issue_1593_owners = frozenset({
+        "playwright_tests/test_maven_newsletter_opt_in_1593.py::"
+        "test_enrollee_clicks_verify_and_is_both_verified_and_subscribed",
+        "playwright_tests/test_maven_newsletter_opt_in_1593.py::"
+        "test_enrollee_who_never_clicks_stays_off_the_newsletter",
+        "playwright_tests/test_maven_newsletter_opt_in_1593.py::"
+        "test_opting_in_then_leaving_takes_one_click_each_way",
+        "playwright_tests/test_maven_newsletter_opt_in_1593.py::"
+        "test_a_tampered_opt_in_link_fails_safely",
+    })
+
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
 
@@ -860,8 +871,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2572)
-        self.assertEqual(len(inventory.owners), 2352)
+        self.assertEqual(inventory.item_count, 2576)
+        self.assertEqual(len(inventory.owners), 2356)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -875,7 +886,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1540_owners
             | self.issue_1589_owners
             | self.issue_1591_owners
-            | self.issue_1590_owners,
+            | self.issue_1590_owners
+            | self.issue_1593_owners,
         )
         self.assertNotIn(
             self.migrated_owner,

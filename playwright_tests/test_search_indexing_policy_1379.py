@@ -122,6 +122,7 @@ def test_account_entry_and_token_results_are_noindex_and_rendered(
         '/api/verify-email?token=invalid',
         '/api/unsubscribe?token=invalid',
         '/api/maven-email-opt-out?token=invalid',
+        '/api/verify-and-subscribe?token=invalid',
     ):
         response = page.goto(f'{django_server}{path}', wait_until='domcontentloaded')
         _assert_noindex(page, response)

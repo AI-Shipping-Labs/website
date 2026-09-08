@@ -149,6 +149,7 @@ class ProductionResponsePolicyTest(TestCase):
             '/api/verify-email?token=invalid',
             '/api/unsubscribe?token=invalid',
             '/api/maven-email-opt-out?token=invalid',
+            '/api/verify-and-subscribe?token=invalid',
         )
         for path in html_paths:
             with self.subTest(path=path):

@@ -16,6 +16,18 @@
 
   {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
 
+  {% if schedule_reconciliation.status == "degraded" %}
+    <div class="bg-red-50 border border-red-200 dark:bg-red-500/10 dark:border-red-500/40 rounded-lg p-4" role="alert" data-testid="schedule-reconciliation-degraded">
+      <p class="text-sm font-medium text-red-900 dark:text-red-300">Recurring schedules are degraded</p>
+      <p class="text-xs text-red-800/80 dark:text-red-200/80 mt-1">
+        The last schedule reconciliation failed. Existing crons were left unchanged. Event reminders, imports, and other recurring jobs may be stale until this succeeds.
+      </p>
+      <p class="text-xs text-red-800/80 dark:text-red-200/80 mt-2">
+        Run <code class="font-mono">uv run python manage.py setup_schedules</code>, or wait for the next container start or <code class="font-mono">reconcile-schedules</code> tick.
+      </p>
+    </div>
+  {% endif %}
+
   <!-- Worker liveness banner -->
   {% if worker_info.alive %}
     <div class="bg-card border border-green-500/30 rounded-lg p-4">

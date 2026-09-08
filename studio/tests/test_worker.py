@@ -17,9 +17,12 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import caches
 from django.test import TestCase
 from django.utils import timezone
 from django_q.models import OrmQ, Task
+
+from jobs.schedule_reconciliation import SCHEDULE_RECONCILIATION_CACHE_KEY
 
 User = get_user_model()
 
@@ -91,6 +94,57 @@ class WorkerStatusAccessTest(TestCase):
         with patch('studio.worker_health.Stat.get_all', return_value=[]):
             response = self.client.get('/studio/worker/')
         self.assertEqual(response.status_code, 200)
+
+
+class WorkerScheduleReconciliationBannerTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff_user = User.objects.create_user(
+            email="schedule-staff@test.com", password="testpass", is_staff=True,
+        )
+
+    def setUp(self):
+        self.client.login(email="schedule-staff@test.com", password="testpass")
+        caches["django_q"].clear()
+
+    def _get(self):
+        with patch("studio.worker_health.Stat.get_all", return_value=[]):
+            return self.client.get("/studio/worker/")
+
+    def test_degraded_state_shows_required_recovery_banner(self):
+        caches["django_q"].set(
+            SCHEDULE_RECONCILIATION_CACHE_KEY,
+            {
+                "status": "degraded",
+                "error": "RuntimeError: apply failed",
+                "expected_names": ["health-check"],
+                "missing_names": [],
+            },
+            timeout=None,
+        )
+
+        response = self._get()
+
+        self.assertContains(response, "Recurring schedules are degraded")
+        self.assertContains(response, "Existing crons were left unchanged")
+        self.assertContains(response, "python manage.py setup_schedules")
+        self.assertContains(response, "reconcile-schedules")
+        self.assertContains(response, "Worker NOT running")
+
+    def test_ok_state_does_not_show_banner(self):
+        caches["django_q"].set(
+            SCHEDULE_RECONCILIATION_CACHE_KEY,
+            {"status": "ok"},
+            timeout=None,
+        )
+        self.assertNotContains(
+            self._get(), "Recurring schedules are degraded",
+        )
+
+    def test_missing_state_does_not_show_banner(self):
+        self.assertNotContains(
+            self._get(), "Recurring schedules are degraded",
+        )
 
 
 class WorkerLivenessTest(TestCase):

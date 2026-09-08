@@ -38,6 +38,7 @@ import pprint
 from urllib.parse import urlencode
 
 from django.contrib import messages
+from django.core.cache import caches
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -47,6 +48,10 @@ from django_q.models import OrmQ, Task
 from django_q.tasks import async_task
 
 from api.serializers.worker import extract_error_summary
+from jobs.schedule_reconciliation import (
+    SCHEDULE_RECONCILIATION_CACHE_ALIAS,
+    SCHEDULE_RECONCILIATION_CACHE_KEY,
+)
 from jobs.task_entities import (
     resolve_task_affected_entity,
     resolve_tasks_affected_entities,
@@ -173,6 +178,9 @@ def worker_status(request):
         return render(request, "studio/_worker_pending_tasks.html", pending)
 
     worker_info = get_worker_status()
+    schedule_reconciliation = caches[SCHEDULE_RECONCILIATION_CACHE_ALIAS].get(
+        SCHEDULE_RECONCILIATION_CACHE_KEY,
+    )
 
     q = (request.GET.get("q") or "").strip()
     status_filter = request.GET.get("status", "all")
@@ -270,6 +278,7 @@ def worker_status(request):
         "studio/worker.html",
         {
             "worker_info": worker_info,
+            "schedule_reconciliation": schedule_reconciliation,
             # Backwards-compatible aliases used by older template fragments / tests.
             "worker_alive": worker_info["alive"],
             "worker_idle": worker_info["idle"],

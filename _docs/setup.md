@@ -179,7 +179,18 @@ Register or refresh recurring django-q schedules after setup and deploys:
 uv run python manage.py setup_schedules
 ```
 
-This command is idempotent. It updates existing `Schedule` rows by name instead of creating duplicates.
+The command builds and validates the complete declarative set before writing,
+then updates every managed `Schedule` row in one atomic transaction. It is
+idempotent, preserves operator-unknown schedules, and never leaves a partially
+updated set when validation or a database write fails.
+
+Web and worker boot run this reconciliation but remain fail-open for site
+availability: a failure is logged, existing crons remain unchanged, and the
+container continues starting. The durable degraded result is visible on
+`/studio/worker/` and from staff-token `GET /api/diagnostics/schedules`.
+Recovery runs again on the next container boot and every 15 minutes through
+`reconcile-schedules`; an operator can also run `setup_schedules` manually and
+receive the original validation or apply error directly.
 
 The external user import schedules are:
 
@@ -245,11 +256,17 @@ container. The web container is essential; the worker container is
 non-essential but should be alive for background jobs and Studio worker
 health.
 
-After a fresh setup or deploy, register recurring jobs:
+After a fresh setup or deploy, manually reconcile recurring jobs when needed:
 
 ```bash
 uv run python manage.py setup_schedules
 ```
+
+Normal web and worker boot already perform the same validate-then-atomic
+reconciliation. Boot logs and records failures without crashing the container;
+operators can inspect `/studio/worker/` or staff-token
+`GET /api/diagnostics/schedules`. Recovery is the next container boot, the
+15-minute `reconcile-schedules` tick, or the manual command above.
 
 Verify a running environment:
 

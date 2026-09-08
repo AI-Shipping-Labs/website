@@ -186,12 +186,34 @@ def _register_schedules():
     print("Register recurring job schedules", flush=True)
     try:
         call_command("setup_schedules", verbosity=0)
-    except Exception:
+    except Exception as exc:
         # Log the traceback but keep booting. A bad schedule entry cannot
         # be allowed to take the web tier down; the worst-case fallout is
         # that one cron does not fire until the next deploy, which is
         # still better than a crash loop.
         logger.exception("setup_schedules failed during entrypoint boot")
+        try:
+            from jobs.schedule_reconciliation import (
+                build_schedule_definitions,
+                expected_schedule_names,
+                publish_schedule_reconciliation_state,
+            )
+            from website.release_phase import background_work_enabled
+
+            definitions = build_schedule_definitions(
+                background_enabled=background_work_enabled(),
+            )
+            publish_schedule_reconciliation_state(
+                status="degraded",
+                expected_names=expected_schedule_names(definitions),
+                error=exc,
+            )
+        except Exception:
+            # Diagnostics are valuable but remain subordinate to the explicit
+            # fail-open boot contract.
+            logger.exception(
+                "schedule reconciliation degraded state publication failed"
+            )
 
 
 def _suppress_r1_incompatible_schedules():

@@ -46,6 +46,37 @@ uv run asl events list --format raw      # compact JSON (for piping)
 uv run asl events list                   # pretty JSON (default)
 ```
 
+### Shared comments
+
+List discussions with generic filters or concise owner shortcuts:
+
+```bash
+uv run asl comments list --course aihero --module day-1 --unit frontmatter
+uv run asl comments list --content-type course_unit --unanswered --limit 100 --format raw
+```
+
+JSON and raw formats preserve the complete API response. Table output uses the
+stable `id`, `kind`, `content_type`, `author_email`, `created_at`,
+`reply_count`, `context`, and `body` columns and may truncate long display
+cells.
+
+Post one direct plain-text reply from an inline body or a UTF-8 file:
+
+```bash
+uv run asl comments reply 412 \
+  --body "Here is the answer." \
+  --idempotency-key agent-run-20260908-412
+uv run asl comments reply 412 \
+  --body-file answer.txt \
+  --idempotency-key agent-run-20260908-412
+```
+
+Supply exactly one body source. The CLI sends one POST and never retries an
+ambiguous network failure. Rerun explicitly with the same key to recover: the
+server returns the original reply without repeating notifications. The command
+uses the standard `ASL_API_TOKEN` / `.env` / hidden-prompt credential resolution
+and `ASL_BASE_URL`; it has no token or actor override flag.
+
 Invite one ordinary attendee to one event by numeric ID. The command performs
 the required event read, invitation write, and invitation read-back itself:
 
@@ -192,4 +223,4 @@ uv run asl raw POST /api/integrations/settings --data '{"updates":[...]}'
 
 ## Command groups
 
-`events`, `event-series`, `users`, `sprints`, `plans`, `contacts`, `tier-overrides`, `campaigns`, `integrations`, `sync`, `worker`, `triggers`, `onboarding`, `redirects`, `utm-campaigns`, `hosts`, `articles`, `tier-reconcile`, `ses-events`, `crm-export`, `cleanup-gates`, `openapi`, `raw`
+`events`, `event-series`, `users`, `sprints`, `plans`, `comments`, `contacts`, `tier-overrides`, `campaigns`, `integrations`, `sync`, `worker`, `triggers`, `onboarding`, `redirects`, `utm-campaigns`, `hosts`, `articles`, `tier-reconcile`, `ses-events`, `crm-export`, `cleanup-gates`, `openapi`, `raw`

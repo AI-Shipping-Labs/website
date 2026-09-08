@@ -2,6 +2,7 @@
 
 from asl_cli.commands import (
     campaigns,
+    comments,
     contacts,
     event_series,
     events,
@@ -23,6 +24,7 @@ from asl_cli.commands import (
 
 _all_modules = [
     campaigns,
+    comments,
     contacts,
     event_series,
     events,

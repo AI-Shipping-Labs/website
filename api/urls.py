@@ -48,6 +48,7 @@ from api.views.checkpoints import (
     week_checkpoints_create,
 )
 from api.views.cleanup_gates import cleanup_gates_diagnostics
+from api.views.comments import comment_reply, comments_collection
 from api.views.contacts import (
     contacts_export,
     contacts_import,
@@ -260,6 +261,17 @@ urlpatterns = [
         "docs",
         docs_page,
         name="api_docs",
+    ),
+    # ---- Shared comments (issue #1592) -------------------------------
+    path(
+        "comments",
+        comments_collection,
+        name="api_comments_collection",
+    ),
+    path(
+        "comments/<int:comment_id>/replies",
+        comment_reply,
+        name="api_comment_reply",
     ),
     # ---- Call profiles (internal CallHost model; issue #1404) ---------
     path(

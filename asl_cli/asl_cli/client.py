@@ -51,6 +51,7 @@ class Client:
         *,
         params: dict[str, Any] | None = None,
         json_body: Any | None = None,
+        headers: dict[str, str] | None = None,
         raw: bool = False,
     ) -> Any:
         """Send a request and return decoded JSON (or raw text if ``raw``)."""
@@ -58,7 +59,9 @@ class Client:
         if path != "/" and path.endswith("/"):
             path = path.rstrip("/")
 
-        response = self._http.request(method, path, params=params, json=json_body)
+        response = self._http.request(
+            method, path, params=params, json=json_body, headers=headers,
+        )
 
         if response.status_code >= 400:
             try:

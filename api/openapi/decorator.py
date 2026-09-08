@@ -21,7 +21,7 @@ Shape -- the decorator takes only keyword arguments:
   layer and there is no bearer token).
 - ``methods`` (required): dict mapping HTTP-method strings (``"GET"``,
   ``"POST"``, ...) to per-operation metadata. Each per-method dict can
-  carry ``summary``, ``description``, ``query``, ``path_params``,
+  carry ``summary``, ``description``, ``query``, ``headers``, ``path_params``,
   ``request_body``, and ``responses``. A request-body spec may set
   ``body_required`` to false when an endpoint accepts no body. See
   ``api/views/sprints.py``

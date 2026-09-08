@@ -754,19 +754,28 @@ class CrmExportQueryBudgetTest(CrmExportTestBase):
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
-        with CaptureQueriesContext(connection) as base_ctx:
-            self.client.get(self.URL, {"scope": "all"}, **self._auth())
-        base_count = len(base_ctx.captured_queries)
+        # Pin the process-global redirect / config caches for the measured
+        # region so a TTL lapse cannot spend this test's slack -- see #1103.
+        with (
+            mock.patch(
+                "integrations.middleware.get_active_redirects", return_value={},
+            ),
+            mock.patch("integrations.config._read_stamp", return_value=None),
+        ):
+            with CaptureQueriesContext(connection) as base_ctx:
+                self.client.get(self.URL, {"scope": "all"}, **self._auth())
+            base_count = len(base_ctx.captured_queries)
 
-        # Add three record-only members (no plans/notes/responses): the only
-        # extra cost is the per-user TierOverride lookup inherited from
-        # serialize_user_state (the same query GET /api/users pays per row).
-        for i in range(3):
-            self._give_crm_record(self._make_member(f"extra-{i}@test.com"))
+            # Add three record-only members (no plans/notes/responses): the
+            # only extra cost is the per-user TierOverride lookup inherited
+            # from serialize_user_state (the same query GET /api/users pays
+            # per row).
+            for i in range(3):
+                self._give_crm_record(self._make_member(f"extra-{i}@test.com"))
 
-        with CaptureQueriesContext(connection) as grown_ctx:
-            self.client.get(self.URL, {"scope": "all"}, **self._auth())
-        grown_count = len(grown_ctx.captured_queries)
+            with CaptureQueriesContext(connection) as grown_ctx:
+                self.client.get(self.URL, {"scope": "all"}, **self._auth())
+            grown_count = len(grown_ctx.captured_queries)
 
         # Three record-only members add at most ~1 query each (the override
         # lookup). A per-member aggregate fan-out would add many more.
@@ -793,38 +802,61 @@ class CrmExportQueryBudgetTest(CrmExportTestBase):
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
-        target = self._make_member("targeted-budget@example.com")
-        self._give_crm_record(target)
-        self.client.get(
-            self.URL,
-            {"scope": "all", "email": target.email},
-            **self._auth(),
-        )
-
-        with CaptureQueriesContext(connection) as base_ctx:
-            response = self.client.get(
+        # This test measures per-user query fan-out, so it must not also
+        # measure ambient cache warmth. Two process-global caches sit on this
+        # endpoint's request path and are not reset between TestCases:
+        #
+        #   * the redirect middleware cache (``get_active_redirects``), whose
+        #     ``CACHES['django_q']`` entry has a 300s TTL, and
+        #   * the integration-settings config cache, which repopulates from
+        #     ``integrations_integrationsetting`` whenever the published stamp
+        #     changes.
+        #
+        # Either one lapsing between the two captures adds exactly one query
+        # to the second request and fails the equality assertion with
+        # "17 != 16" -- see #1103. A shard that runs longer than the 300s
+        # redirect TTL hits this in CI while passing locally. Pin both for the
+        # measured region; the sibling ``test_bounded_query_count_with_
+        # assert_num_queries`` pins the redirect cache the same way.
+        with (
+            mock.patch(
+                "integrations.middleware.get_active_redirects", return_value={},
+            ),
+            mock.patch("integrations.config._read_stamp", return_value=None),
+        ):
+            target = self._make_member("targeted-budget@example.com")
+            self._give_crm_record(target)
+            self.client.get(
                 self.URL,
                 {"scope": "all", "email": target.email},
                 **self._auth(),
             )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["count"], 1)
 
-        for i in range(20):
-            unrelated = self._make_member(f"unrelated-{i}@test.com")
-            self._give_crm_record(unrelated)
-            self._give_plan(unrelated)
-            self._give_note(unrelated, body=f"unrelated note {i}")
-            self._give_onboarding_response(unrelated)
+            with CaptureQueriesContext(connection) as base_ctx:
+                response = self.client.get(
+                    self.URL,
+                    {"scope": "all", "email": target.email},
+                    **self._auth(),
+                )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["count"], 1)
 
-        with CaptureQueriesContext(connection) as grown_ctx:
-            response = self.client.get(
-                self.URL,
-                {"scope": "all", "email": target.email},
-                **self._auth(),
-            )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["count"], 1)
+            for i in range(20):
+                unrelated = self._make_member(f"unrelated-{i}@test.com")
+                self._give_crm_record(unrelated)
+                self._give_plan(unrelated)
+                self._give_note(unrelated, body=f"unrelated note {i}")
+                self._give_onboarding_response(unrelated)
+
+            with CaptureQueriesContext(connection) as grown_ctx:
+                response = self.client.get(
+                    self.URL,
+                    {"scope": "all", "email": target.email},
+                    **self._auth(),
+                )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["count"], 1)
+
         self.assertEqual(len(grown_ctx.captured_queries), len(base_ctx.captured_queries))
 
         user_selects = [

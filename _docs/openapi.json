@@ -2871,7 +2871,8 @@
                     "created_at",
                     "updated_at",
                     "reply_count",
-                    "context"
+                    "context",
+                    "idempotent_replay"
                   ],
                   "type": "object"
                 }
@@ -2977,7 +2978,8 @@
                     "created_at",
                     "updated_at",
                     "reply_count",
-                    "context"
+                    "context",
+                    "idempotent_replay"
                   ],
                   "type": "object"
                 }

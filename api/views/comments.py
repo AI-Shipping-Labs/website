@@ -664,6 +664,9 @@ def _can_write_thread(thread, actor):
                 'description': 'Reply created; idempotent_replay is false.',
                 'schema': {
                     **COMMENT_ROW_SCHEMA,
+                    'required': [
+                        *COMMENT_ROW_SCHEMA['required'], 'idempotent_replay',
+                    ],
                     'properties': {
                         **COMMENT_ROW_SCHEMA['properties'],
                         'idempotent_replay': {'type': 'boolean', 'const': False},
@@ -674,6 +677,9 @@ def _can_write_thread(thread, actor):
                 'description': 'Original reply replayed; idempotent_replay is true.',
                 'schema': {
                     **COMMENT_ROW_SCHEMA,
+                    'required': [
+                        *COMMENT_ROW_SCHEMA['required'], 'idempotent_replay',
+                    ],
                     'properties': {
                         **COMMENT_ROW_SCHEMA['properties'],
                         'idempotent_replay': {'type': 'boolean', 'const': True},

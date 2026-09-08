@@ -1,16 +1,19 @@
 """Operator comments API contracts for issue #1592."""
 
 import json
+import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from http import HTTPStatus
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.db import connection
-from django.test import TestCase
+from django.db import close_old_connections, connection
+from django.test import Client, TestCase, TransactionTestCase, tag
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
 from accounts.models import MemberAPIKey, Token
 from api.views.comments import COMMENTS_LIST_SCHEMA
@@ -162,6 +165,43 @@ class OperatorCommentsApiTest(TestCase):
         self.assertEqual(first.json()['limit'], 1)
         self.assertEqual(many.json()['limit'], 50)
         self.assertEqual(len(first_queries), len(many_queries))
+
+    def test_tied_timestamps_keep_offset_pages_deterministic(self):
+        content_id = uuid.uuid4()
+        comments = [
+            Comment.objects.create(
+                content_id=content_id,
+                user=self.member,
+                body=f'Tied comment {index}',
+            )
+            for index in range(3)
+        ]
+        tied_at = timezone.now()
+        Comment.objects.filter(pk__in=[comment.pk for comment in comments]).update(
+            created_at=tied_at,
+        )
+
+        first_page = self.client.get(
+            f'/api/comments?content_id={content_id}&limit=2&offset=0',
+            **self.auth(),
+        ).json()
+        second_page = self.client.get(
+            f'/api/comments?content_id={content_id}&limit=2&offset=2',
+            **self.auth(),
+        ).json()
+
+        expected_ids = [comment.pk for comment in reversed(comments)]
+        self.assertEqual(first_page['count'], 3)
+        self.assertEqual(first_page['offset'], 0)
+        self.assertEqual(second_page['offset'], 2)
+        self.assertEqual(
+            [row['id'] for row in first_page['comments']],
+            expected_ids[:2],
+        )
+        self.assertEqual(
+            [row['id'] for row in second_page['comments']],
+            expected_ids[2:],
+        )
 
     def test_course_and_unanswered_filters_combine_with_and(self):
         Comment.objects.create(
@@ -351,3 +391,88 @@ class OperatorCommentsApiTest(TestCase):
         self.assertEqual(key['in'], 'header')
         self.assertTrue(key['required'])
         self.assertIn('body', reply['requestBody']['content']['application/json']['schema']['required'])
+        for status in ('200', '201'):
+            schema = reply['responses'][status]['content']['application/json']['schema']
+            self.assertIn('idempotent_replay', schema['required'])
+
+
+@tag('core', 'postgresql')
+class OperatorCommentReplyConcurrencyTest(TransactionTestCase):
+    """Production row locks converge identical operator reply requests."""
+
+    def test_concurrent_identical_requests_create_side_effects_once(self):
+        if connection.vendor != 'postgresql':
+            self.skipTest('operator reply concurrency requires PostgreSQL row locking')
+
+        staff = User.objects.create_user(
+            email='concurrent-comments-staff@test.com',
+            is_staff=True,
+        )
+        member = User.objects.create_user(email='concurrent-comments-member@test.com')
+        token, plaintext = Token.create_for_user(
+            user=staff,
+            name='concurrent comments',
+        )
+        course = Course.objects.create(
+            content_id=uuid.uuid4(),
+            title='Concurrent Course',
+            slug='concurrent-course',
+            status='published',
+            required_level=0,
+        )
+        module = Module.objects.create(
+            course=course,
+            title='Concurrency',
+            slug='concurrency',
+            sort_order=1,
+        )
+        unit = Unit.objects.create(
+            content_id=uuid.uuid4(),
+            module=module,
+            title='Locks',
+            slug='locks',
+            sort_order=1,
+        )
+        parent = Comment.objects.create(
+            content_id=unit.content_id,
+            user=member,
+            body='Can two operators race?',
+        )
+        barrier = threading.Barrier(2)
+
+        def reply():
+            close_old_connections()
+            try:
+                barrier.wait(timeout=5)
+                response = Client().post(
+                    f'/api/comments/{parent.pk}/replies',
+                    data=json.dumps({'body': 'One durable answer'}),
+                    content_type='application/json',
+                    HTTP_AUTHORIZATION=f'Token {plaintext}',
+                    HTTP_IDEMPOTENCY_KEY='concurrent-run',
+                )
+                return response.status_code, response.json()
+            finally:
+                connection.close()
+
+        with (
+            patch('comments.services.mark_activated') as mark_activated,
+            patch('comments.services._notify_comment_recipients') as notify,
+            ThreadPoolExecutor(max_workers=2) as pool,
+        ):
+            results = list(pool.map(lambda _: reply(), range(2)))
+
+        self.assertEqual(sorted(status for status, _ in results), [200, 201])
+        self.assertEqual(
+            sorted(body['idempotent_replay'] for _, body in results),
+            [False, True],
+        )
+        self.assertEqual(len({body['id'] for _, body in results}), 1)
+        self.assertEqual(
+            Comment.objects.filter(parent=parent, body='One durable answer').count(),
+            1,
+        )
+        self.assertEqual(ApiReplyOperation.objects.count(), 1)
+        self.assertEqual(mark_activated.call_count, 1)
+        self.assertEqual(notify.call_count, 1)
+        self.assertEqual(ApiReplyOperation.objects.get().token_identity, token.pk)

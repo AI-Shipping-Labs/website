@@ -3489,6 +3489,36 @@
         ]
       }
     },
+    "/api/diagnostics/schedules": {
+      "get": {
+        "description": "Returns the latest validated schedule-set reconciliation result. Staff-token only and read-only.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": null,
+                  "expected_names": [
+                    "health-check",
+                    "reconcile-schedules"
+                  ],
+                  "generated_at": "2026-09-03T10:05:00+00:00",
+                  "last_success_at": "2026-09-03T10:00:00+00:00",
+                  "missing_names": [],
+                  "recorded_at": "2026-09-03T10:00:00+00:00",
+                  "status": "ok"
+                }
+              }
+            },
+            "description": "Latest recurring schedule health."
+          }
+        },
+        "summary": "Read recurring schedule reconciliation health",
+        "tags": [
+          "Diagnostics"
+        ]
+      }
+    },
     "/api/email-log": {
       "get": {
         "description": "Newest-first SES-accepted sends. Disposition is the exclusive strongest of sent, delivered, opened, clicked, bounced, and complained. Email bodies and raw provider payloads are omitted.",

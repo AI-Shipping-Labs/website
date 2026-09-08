@@ -344,6 +344,7 @@ class SetupSchedulesCommandTest(TestCase):
             'onboarding-staff-notification-recovery',
             'cb-jobs-run-due',
             'cb-jobs-sweep',
+            'reconcile-schedules',
         }
         self.assertEqual(names, expected)
 

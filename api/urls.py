@@ -156,6 +156,7 @@ from api.views.redirects import (
     redirects_bulk_upsert,
     redirects_collection,
 )
+from api.views.schedule_diagnostics import schedule_diagnostics
 from api.views.ses_events_list import ses_events_dispatch
 from api.views.signup_analytics import signup_analytics_report
 from api.views.sprints import (
@@ -1054,6 +1055,11 @@ urlpatterns = [
         "diagnostics/boot-timing",
         boot_timing_diagnostics,
         name="api_boot_timing_diagnostics",
+    ),
+    path(
+        "diagnostics/schedules",
+        schedule_diagnostics,
+        name="api_schedule_diagnostics",
     ),
     # ---- Onboarding read API (issue #837) -----------------------------
     # Staff-token read-only feed over the questionnaires app: survey shape

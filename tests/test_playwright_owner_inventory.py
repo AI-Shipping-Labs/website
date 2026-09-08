@@ -745,6 +745,17 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "TestRecapReadyNotificationBrowserFlow::"
         "test_zero_recipient_send_is_clear_and_successful",
     })
+    issue_1540_owners = frozenset({
+        "playwright_tests/test_schedule_reconciliation_1540.py::"
+        "TestScheduleReconciliationWorkerBanner::"
+        "test_staff_sees_degraded_banner_and_worker_content",
+        "playwright_tests/test_schedule_reconciliation_1540.py::"
+        "TestScheduleReconciliationWorkerBanner::test_ok_state_has_no_degraded_banner",
+        "playwright_tests/test_schedule_reconciliation_1540.py::"
+        "TestScheduleReconciliationWorkerBanner::test_successful_apply_clears_existing_banner",
+        "playwright_tests/test_schedule_reconciliation_1540.py::"
+        "TestScheduleReconciliationWorkerBanner::test_non_staff_cannot_open_worker_diagnostics",
+    })
 
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
@@ -808,8 +819,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2553)
-        self.assertEqual(len(inventory.owners), 2333)
+        self.assertEqual(inventory.item_count, 2557)
+        self.assertEqual(len(inventory.owners), 2337)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -819,7 +830,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1506_owners
             | self.issue_1515_owners
             | self.issue_1516_owners
-            | self.issue_1565_owners,
+            | self.issue_1565_owners
+            | self.issue_1540_owners,
         )
         self.assertNotIn(
             self.migrated_owner,

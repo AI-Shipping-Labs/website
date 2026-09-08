@@ -16,11 +16,14 @@ import logging
 import os
 from unittest import mock
 
+from django.core.cache import caches
 from django.test import TestCase
 from django.utils import timezone
 from django_q.models import Schedule
 
 from jobs.management.commands.setup_schedules import R2_ONLY_SCHEDULE_NAMES
+from jobs.schedule_reconciliation import SCHEDULE_RECONCILIATION_CACHE_KEY
+from jobs.tasks.helpers import schedule as write_schedule
 from scripts.entrypoint_init import (
     _register_schedules,
     _suppress_r1_incompatible_schedules,
@@ -75,6 +78,7 @@ class EntrypointRegistersSchedulesTest(TestCase):
             'onboarding-reminders',
             'cb-jobs-run-due',
             'cb-jobs-sweep',
+            'reconcile-schedules',
         }
         self.assertEqual(names, expected)
 
@@ -168,6 +172,7 @@ class EntrypointScheduleFailureIsSwallowedTest(TestCase):
     """
 
     def test_exception_is_logged_and_swallowed(self):
+        caches["django_q"].clear()
         with mock.patch(
             'django.core.management.call_command',
             side_effect=RuntimeError('simulated bad schedule entry'),
@@ -179,6 +184,40 @@ class EntrypointScheduleFailureIsSwallowedTest(TestCase):
             any('setup_schedules failed' in msg for msg in cm.output),
             f'expected failure log line, got {cm.output}',
         )
+        state = caches["django_q"].get(SCHEDULE_RECONCILIATION_CACHE_KEY)
+        self.assertEqual(state["status"], "degraded")
+        self.assertIn("simulated bad schedule entry", state["error"])
+        self.assertIn("health-check", state["expected_names"])
+
+    def test_mid_apply_failure_keeps_previous_consistent_schedule_rows(self):
+        caches["django_q"].clear()
+        Schedule.objects.create(
+            name="health-check",
+            func="jobs.tasks.healthcheck.health_check",
+            schedule_type=Schedule.CRON,
+            cron="0 0 * * *",
+        )
+        calls = 0
+
+        def fail_second(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError("simulated second write failure")
+            return write_schedule(*args, **kwargs)
+
+        with mock.patch(
+            "jobs.schedule_reconciliation.schedule", side_effect=fail_second,
+        ), self.assertLogs("scripts.entrypoint_init", level="ERROR"):
+            _register_schedules()
+
+        self.assertEqual(
+            Schedule.objects.get(name="health-check").cron, "0 0 * * *"
+        )
+        self.assertEqual(Schedule.objects.count(), 1)
+        state = caches["django_q"].get(SCHEDULE_RECONCILIATION_CACHE_KEY)
+        self.assertEqual(state["status"], "degraded")
+        self.assertIn("campaign-delivery-recovery", state["missing_names"])
 
     def test_exception_does_not_propagate(self):
         with mock.patch(
@@ -193,6 +232,21 @@ class EntrypointScheduleFailureIsSwallowedTest(TestCase):
                 self.fail(
                     f'_register_schedules must swallow exceptions, raised {exc!r}',
                 )
+
+    def test_degraded_state_publication_failure_does_not_propagate(self):
+        with mock.patch(
+            'django.core.management.call_command',
+            side_effect=RuntimeError('setup failed'),
+        ), mock.patch(
+            'jobs.schedule_reconciliation.publish_schedule_reconciliation_state',
+            side_effect=RuntimeError('cache unavailable'),
+        ), self.assertLogs('scripts.entrypoint_init', level='ERROR') as logs:
+            _register_schedules()
+
+        self.assertTrue(any(
+            'schedule reconciliation degraded state publication failed' in line
+            for line in logs.output
+        ))
 
     def test_logger_uses_module_name(self):
         """Failures log under the entrypoint module so ops can grep for them."""

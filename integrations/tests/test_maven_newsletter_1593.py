@@ -23,6 +23,10 @@ from accounts.utils.tokens import (
     generate_user_action_token,
 )
 from email_app.services.campaign_audience import eligible_campaign_recipients
+from email_app.services.email_service import (
+    EMAIL_TYPES_WITHOUT_VERIFY_FOOTER,
+    EmailService,
+)
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
 from integrations.services.maven import _welcome_context
 from payments.models import Tier
@@ -246,12 +250,12 @@ class VerifyAndSubscribeTokenScopeTest(TestCase):
         self.assertFalse(user.email_verified)
 
     def test_a_link_inside_its_window_still_works(self):
-        """The 24-hour window is real, not a token that quietly never expires."""
+        """The 30-day window is real, not a token that quietly never expires."""
         user = User.objects.create_user(
             email="within-window-1593@example.com", unsubscribed=True,
         )
         token = generate_user_action_token(
-            user.pk, "verify_and_subscribe", expiry_hours=23,
+            user.pk, "verify_and_subscribe", expiry_hours=24 * 29,
         )
 
         response = self.client.get(f"/api/verify-and-subscribe?token={token}")
@@ -352,3 +356,75 @@ class MavenCampaignAudienceTest(MavenWebhookMixin):
         self.assertIn(
             user, eligible_campaign_recipients(audience_verification="everyone"),
         )
+
+
+class MavenWelcomeSentMessageTest(TestCase):
+    """Assert on what SES actually receives, not on the template body.
+
+    Issue #1593 shipped a trap that every template-level test missed, because
+    the thing that caused it does not exist in the template. ``EmailService``
+    appends a generic "your email is not verified — to verify it, click here"
+    footer to unverified recipients, pointing at ``/api/verify-email``. The
+    Maven welcome asks the reader to verify their email as the way to opt IN,
+    via ``/api/verify-and-subscribe``. Two links, one verb, and the more
+    directive of the two silently did not subscribe them.
+
+    So these tests render through ``EmailService.send`` and inspect the exact
+    HTML handed to ``_send_ses``. A test that renders the template can never
+    catch a regression that lives in the wrapper.
+    """
+
+    def _sent_html(self, user):
+        with patch.object(
+            EmailService, "_send_ses", return_value="ses-message-id",
+        ) as send_ses:
+            EmailService().send(
+                user, "maven_welcome", _welcome_context(user, "Course"),
+            )
+        self.assertTrue(send_ses.called, "maven_welcome was not sent")
+        return send_ses.call_args[0][2]
+
+    def test_the_sent_email_offers_exactly_one_verify_link(self):
+        user = User.objects.create_user(
+            email="one-link-1593@example.com", email_verified=False,
+        )
+
+        html = self._sent_html(user)
+
+        # The consent-bearing link is present...
+        self.assertIn("/api/verify-and-subscribe?token=", html)
+        # ...and it is the ONLY thing in the message asking them to verify.
+        # ``/api/verify-and-subscribe`` contains the substring
+        # ``/api/verify-`` too, so count the bare endpoint explicitly.
+        self.assertNotIn("/api/verify-email", html)
+        self.assertEqual(html.count("/api/verify-and-subscribe?token="), 1)
+
+    def test_the_sent_email_carries_no_generic_verify_footer(self):
+        """The footer CTA verifies without subscribing and must not appear."""
+        user = User.objects.create_user(
+            email="no-footer-1593@example.com", email_verified=False,
+        )
+
+        html = self._sent_html(user)
+
+        # ``.verify-email-cta`` is always in the <style> block of the shared
+        # base template, so assert on the rendered element and its copy, not
+        # on the class name alone.
+        self.assertNotIn('class="verify-email-cta"', html)
+        self.assertNotIn("Your email is not verified on our platform", html)
+        self.assertNotIn("To verify it", html)
+
+    def test_maven_welcome_is_registered_as_footer_exempt(self):
+        """Pin the exemption itself, so removing it fails loudly here too."""
+        self.assertIn("maven_welcome", EMAIL_TYPES_WITHOUT_VERIFY_FOOTER)
+
+    def test_a_verified_recipient_sees_the_same_single_link(self):
+        """The exemption must not depend on verification state."""
+        user = User.objects.create_user(
+            email="verified-1593@example.com", email_verified=True,
+        )
+
+        html = self._sent_html(user)
+
+        self.assertNotIn("/api/verify-email", html)
+        self.assertIn("/api/verify-and-subscribe?token=", html)

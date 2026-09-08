@@ -10,8 +10,14 @@ from django.test import TestCase
 from django.urls import resolve, reverse
 
 from accounts.utils.tokens import JWT_ALGORITHM, resolve_password_reset_token
-from email_app.services.email_service import EmailService
-from integrations.services.maven import _welcome_context
+from email_app.services.email_service import (
+    VERIFY_FOOTER_TOKEN_EXPIRY_HOURS,
+    EmailService,
+)
+from integrations.services.maven import (
+    NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS,
+    _welcome_context,
+)
 
 User = get_user_model()
 
@@ -100,16 +106,23 @@ class MavenWelcomeEmailContentTest(TestCase):
             payload["exp"],
             tz=datetime.timezone.utc,
         )
-        # One day, matching the ordinary email-verification contract. The
-        # opt-in action is distinct from ordinary verification, but it must
-        # not outlive the mailbox-ownership proof (issue #1593).
+        # Thirty days. An unsolicited welcome is opened on the reader's
+        # schedule, not ours, and this token has no resend path (issue #1593).
         self.assertGreater(
             expires_at,
-            started_at + datetime.timedelta(hours=23, minutes=59),
+            started_at + datetime.timedelta(days=29, hours=23),
         )
         self.assertLess(
             expires_at,
-            started_at + datetime.timedelta(hours=24, minutes=1),
+            started_at + datetime.timedelta(days=30, minutes=1),
+        )
+        # The consent-bearing link must not be the first one in the email to
+        # die. Before #1593 it expired in 24h while the incidental footer
+        # verify link lived 7 days, so from day two the only working "verify"
+        # link in the message was the one that does not subscribe.
+        self.assertGreater(
+            NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS,
+            VERIFY_FOOTER_TOKEN_EXPIRY_HOURS,
         )
 
     def test_welcome_offers_oauth_and_password_as_the_two_ways_in(self):

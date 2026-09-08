@@ -3,7 +3,6 @@
 import os
 import re
 import subprocess
-import uuid
 from pathlib import PurePath
 
 from django.conf import settings
@@ -52,38 +51,6 @@ def _matches_ignore_patterns(rel_path, patterns):
             # Malformed glob – treat as non-matching rather than blowing up sync.
             continue
     return False
-
-
-def _extract_readme_title(body, fallback):
-    """Return the first Markdown H1 heading in ``body`` or ``fallback``."""
-    for line in body.splitlines():
-        stripped = line.strip()
-        if stripped.startswith('# ') and not stripped.startswith('## '):
-            return stripped[2:].strip() or fallback
-    return fallback
-
-
-def _derive_readme_content_id(repo_name, module_source_path):
-    """Derive a stable UUIDv5 content_id for a module's README-as-unit.
-
-    Used when the README has no explicit ``content_id`` in frontmatter. The
-    namespace key combines the repo name and module source path so the UUID is
-    stable across syncs and unique across modules/repos.
-    """
-    key = f'{repo_name}:{module_source_path}:readme'
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
-
-
-def _derive_workshop_page_content_id(repo_name, page_source_path):
-    """Derive a stable UUIDv5 content_id for a workshop page.
-
-    Workshop pages are markdown files under ``YYYY/<date-slug>/*.md``. Authors
-    rarely want to hand-write a UUID for every page, so the sync derives a
-    stable one from ``(repo_name, source_path)``. Mirror
-    :func:`_derive_readme_content_id` but namespaced for workshop pages.
-    """
-    key = f'{repo_name}:{page_source_path}:workshop_page'
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
 
 
 def _interview_question_filename(name):

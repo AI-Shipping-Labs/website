@@ -1,0 +1,1907 @@
+{
+  "commit": "1343497b0003093d4a1430e9784118210e36acfa",
+  "method": "Tracked current files; physical lines including blanks/comments; tests/migrations/tooling/CLI separate. Exact AST-body duplicate candidates are functions at least 10 physical lines: ignore the outer name/signature/docstring and locations, preserve names and literals in the body; decorators and caller context need manual review. Import edges include lazy absolute imports, not relative/dynamic imports. Existing dirty CLI lines included. Function spans include nested bodies. Ruff is a separate scan.",
+  "buckets": {
+    "markdown": {
+      "files": 172,
+      "lines": 27204
+    },
+    "config_other": {
+      "files": 78,
+      "lines": 34201
+    },
+    "application_python": {
+      "files": 811,
+      "lines": 172467
+    },
+    "migrations": {
+      "files": 323,
+      "lines": 14070
+    },
+    "other_test_python": {
+      "files": 1000,
+      "lines": 341617
+    },
+    "cli_python": {
+      "files": 26,
+      "lines": 3052
+    },
+    "css": {
+      "files": 2,
+      "lines": 340
+    },
+    "tooling_python": {
+      "files": 27,
+      "lines": 15456
+    },
+    "playwright_python": {
+      "files": 389,
+      "lines": 140912
+    },
+    "javascript": {
+      "files": 59,
+      "lines": 120305
+    },
+    "html": {
+      "files": 392,
+      "lines": 42163
+    }
+  },
+  "app_lines": {
+    ".agents": {
+      "markdown": 1313,
+      "config_other": 15
+    },
+    ".claude": {
+      "markdown": 1483
+    },
+    ".github": {
+      "config_other": 4680
+    },
+    "AGENTS.md": {
+      "markdown": 165
+    },
+    "CLAUDE.md": {
+      "markdown": 3
+    },
+    "README.md": {
+      "markdown": 204
+    },
+    "_docs": {
+      "markdown": 19764,
+      "config_other": 21384
+    },
+    "accounts": {
+      "application_python": 12092,
+      "migrations": 872,
+      "other_test_python": 23204
+    },
+    "analytics": {
+      "application_python": 3597,
+      "migrations": 191,
+      "other_test_python": 2533
+    },
+    "api": {
+      "application_python": 31088,
+      "other_test_python": 36219
+    },
+    "asl_cli": {
+      "markdown": 195,
+      "cli_python": 3052,
+      "config_other": 25,
+      "other_test_python": 1643
+    },
+    "assets": {
+      "css": 274
+    },
+    "bookclub": {
+      "application_python": 2352,
+      "migrations": 382,
+      "other_test_python": 4240
+    },
+    "comments": {
+      "application_python": 668,
+      "migrations": 44,
+      "other_test_python": 1637
+    },
+    "community": {
+      "application_python": 4078,
+      "migrations": 497,
+      "other_test_python": 7697
+    },
+    "content": {
+      "application_python": 18112,
+      "migrations": 2993,
+      "other_test_python": 51466,
+      "config_other": 123
+    },
+    "crm": {
+      "application_python": 3382,
+      "migrations": 530,
+      "other_test_python": 4718
+    },
+    "deploy": {
+      "config_other": 1180,
+      "tooling_python": 1356
+    },
+    "docker-compose.yml": {
+      "config_other": 78
+    },
+    "docs": {
+      "markdown": 408
+    },
+    "email_app": {
+      "application_python": 5174,
+      "markdown": 934,
+      "migrations": 1030,
+      "other_test_python": 8491
+    },
+    "entrypoint.sh": {
+      "config_other": 22
+    },
+    "events": {
+      "application_python": 11087,
+      "migrations": 1701,
+      "other_test_python": 25288
+    },
+    "integrations": {
+      "application_python": 20178,
+      "migrations": 1447,
+      "markdown": 285,
+      "config_other": 2637,
+      "other_test_python": 32996
+    },
+    "jobs": {
+      "application_python": 1533,
+      "other_test_python": 4093
+    },
+    "manage.py": {
+      "application_python": 22
+    },
+    "member_api": {
+      "application_python": 3652,
+      "other_test_python": 3319
+    },
+    "notifications": {
+      "application_python": 1899,
+      "migrations": 272,
+      "other_test_python": 4737
+    },
+    "package-lock.json": {
+      "config_other": 1035
+    },
+    "package.json": {
+      "config_other": 11
+    },
+    "payments": {
+      "application_python": 9296,
+      "migrations": 987,
+      "other_test_python": 12747
+    },
+    "plans": {
+      "application_python": 9017,
+      "migrations": 1264,
+      "other_test_python": 13967
+    },
+    "playwright_tests": {
+      "playwright_python": 140912
+    },
+    "pyproject.toml": {
+      "config_other": 195
+    },
+    "questionnaires": {
+      "application_python": 3536,
+      "migrations": 1284,
+      "other_test_python": 4158
+    },
+    "ruff-advisory.toml": {
+      "config_other": 33
+    },
+    "scripts": {
+      "tooling_python": 14100,
+      "config_other": 277
+    },
+    "skills": {
+      "markdown": 464
+    },
+    "specs": {
+      "markdown": 1986
+    },
+    "static": {
+      "css": 66,
+      "javascript": 120254
+    },
+    "studio": {
+      "application_python": 27215,
+      "migrations": 35,
+      "other_test_python": 64543
+    },
+    "tailwind.config.js": {
+      "javascript": 51
+    },
+    "templates": {
+      "html": 42163
+    },
+    "tests": {
+      "other_test_python": 31292,
+      "config_other": 2506
+    },
+    "triggers": {
+      "application_python": 1987,
+      "migrations": 476,
+      "other_test_python": 1440
+    },
+    "voting": {
+      "application_python": 500,
+      "migrations": 65,
+      "other_test_python": 1189
+    },
+    "website": {
+      "application_python": 2002
+    }
+  },
+  "test_definitions": {
+    "other_test_python": 15847,
+    "playwright_python": 2334,
+    "tooling_python": 1
+  },
+  "largest_files": [
+    {
+      "path": "static/vendor/mermaid/10/flowchart-elk-definition-943e3409.js",
+      "lines": 48407,
+      "bucket": "javascript"
+    },
+    {
+      "path": "static/vendor/mermaid/10/mindmap-definition-ddd6f0cd.js",
+      "lines": 18760,
+      "bucket": "javascript"
+    },
+    {
+      "path": "_docs/openapi.json",
+      "lines": 17912,
+      "bucket": "config_other"
+    },
+    {
+      "path": "static/vendor/mermaid/10/katex-7aea786e.js",
+      "lines": 11625,
+      "bucket": "javascript"
+    },
+    {
+      "path": "static/vendor/mermaid/10/mermaid-500b880f.js",
+      "lines": 8267,
+      "bucket": "javascript"
+    },
+    {
+      "path": "integrations/tests/test_github_sync.py",
+      "lines": 3423,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "_docs/member-openapi.json",
+      "lines": 3412,
+      "bucket": "config_other"
+    },
+    {
+      "path": "tests/test_cleanup_agent_worktrees.py",
+      "lines": 3379,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "integrations/tests/test_workshop_sync.py",
+      "lines": 3229,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "static/vendor/mermaid/10/createText-2e0595ac.js",
+      "lines": 2969,
+      "bucket": "javascript"
+    },
+    {
+      "path": "scripts/cleanup-agent-worktrees.py",
+      "lines": 2960,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "integrations/tests/test_zoom.py",
+      "lines": 2629,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "api/views/plans.py",
+      "lines": 2539,
+      "bucket": "application_python"
+    },
+    {
+      "path": "static/vendor/mermaid/10/ganttDiagram-fede5d06.js",
+      "lines": 2507,
+      "bucket": "javascript"
+    },
+    {
+      "path": "tests/playwright_owner_inventory_live.json",
+      "lines": 2506,
+      "bucket": "config_other"
+    },
+    {
+      "path": "events/tests/test_events.py",
+      "lines": 2469,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "tests/status_200_assertion_ceilings.py",
+      "lines": 2454,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "tests/status_200_assertion_live.py",
+      "lines": 2401,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "community/tests/test_staff_notifications.py",
+      "lines": 2390,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "payments/tests/test_webhooks.py",
+      "lines": 2386,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "scripts/playwright_owner_inventory_ceilings.py",
+      "lines": 2354,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "accounts/tests/test_email_auth.py",
+      "lines": 2276,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "static/vendor/mermaid/10/sequenceDiagram-76a50a21.js",
+      "lines": 2234,
+      "bucket": "javascript"
+    },
+    {
+      "path": "scripts/retire-agent-branches.py",
+      "lines": 2193,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "payments/services/webhook_handlers.py",
+      "lines": 2173,
+      "bucket": "application_python"
+    },
+    {
+      "path": "studio/tests/test_sync_dashboard.py",
+      "lines": 2171,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "playwright_tests/test_dashboard.py",
+      "lines": 2114,
+      "bucket": "playwright_python"
+    },
+    {
+      "path": "accounts/services/privacy.py",
+      "lines": 2092,
+      "bucket": "application_python"
+    },
+    {
+      "path": "content/tests/test_seo.py",
+      "lines": 2057,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "content/tests/test_workshops_public.py",
+      "lines": 2046,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "playwright_tests/test_event_series.py",
+      "lines": 2032,
+      "bucket": "playwright_python"
+    },
+    {
+      "path": "studio/views/users.py",
+      "lines": 1976,
+      "bucket": "application_python"
+    },
+    {
+      "path": ".github/playwright-full-shard-weights.json",
+      "lines": 1966,
+      "bucket": "config_other"
+    },
+    {
+      "path": "_docs/testing-guidelines.md",
+      "lines": 1957,
+      "bucket": "markdown"
+    },
+    {
+      "path": "member_api/views/plans.py",
+      "lines": 1945,
+      "bucket": "application_python"
+    },
+    {
+      "path": "api/views/users.py",
+      "lines": 1935,
+      "bucket": "application_python"
+    },
+    {
+      "path": "api/views/events.py",
+      "lines": 1924,
+      "bucket": "application_python"
+    },
+    {
+      "path": "api/views/event_series.py",
+      "lines": 1907,
+      "bucket": "application_python"
+    },
+    {
+      "path": "content/tests/test_dashboard.py",
+      "lines": 1869,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "api/tests/test_events.py",
+      "lines": 1856,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "tests/test_browser_journey_policy.py",
+      "lines": 1839,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "playwright_tests/test_access_control.py",
+      "lines": 1813,
+      "bucket": "playwright_python"
+    },
+    {
+      "path": "email_app/tests/test_campaigns.py",
+      "lines": 1738,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "content/tests/test_courses.py",
+      "lines": 1727,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "tests/test_retire_agent_branches.py",
+      "lines": 1700,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "content/views/home.py",
+      "lines": 1630,
+      "bucket": "application_python"
+    },
+    {
+      "path": "studio/views/sprints.py",
+      "lines": 1612,
+      "bucket": "application_python"
+    },
+    {
+      "path": "accounts/tests/test_account.py",
+      "lines": 1591,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "api/views/sprints.py",
+      "lines": 1588,
+      "bucket": "application_python"
+    },
+    {
+      "path": "static/vendor/mermaid/10/c4Diagram-2531b94e.js",
+      "lines": 1579,
+      "bucket": "javascript"
+    },
+    {
+      "path": "plans/models.py",
+      "lines": 1567,
+      "bucket": "application_python"
+    },
+    {
+      "path": "playwright_tests/test_workshops.py",
+      "lines": 1567,
+      "bucket": "playwright_python"
+    },
+    {
+      "path": "studio/urls.py",
+      "lines": 1560,
+      "bucket": "application_python"
+    },
+    {
+      "path": "playwright_tests/test_github_content_sync.py",
+      "lines": 1540,
+      "bucket": "playwright_python"
+    },
+    {
+      "path": "events/views/pages.py",
+      "lines": 1539,
+      "bucket": "application_python"
+    },
+    {
+      "path": "studio/tests/test_signup_analytics.py",
+      "lines": 1528,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "accounts/tests/test_privacy.py",
+      "lines": 1513,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "static/vendor/mermaid/10/layout-1b996aa5.js",
+      "lines": 1494,
+      "bucket": "javascript"
+    },
+    {
+      "path": "studio/views/events.py",
+      "lines": 1494,
+      "bucket": "application_python"
+    },
+    {
+      "path": "accounts/tests/test_tier_override.py",
+      "lines": 1452,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "integrations/services/github_sync/dispatchers/courses.py",
+      "lines": 1423,
+      "bucket": "application_python"
+    },
+    {
+      "path": "integrations/settings_registry.py",
+      "lines": 1411,
+      "bucket": "application_python"
+    },
+    {
+      "path": "studio/tests/test_events.py",
+      "lines": 1333,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "email_app/tests/test_email_service.py",
+      "lines": 1325,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "content/tests/test_downloads.py",
+      "lines": 1306,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "api/tests/test_tier_reconcile.py",
+      "lines": 1292,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "api/tests/test_event_series.py",
+      "lines": 1289,
+      "bucket": "other_test_python"
+    },
+    {
+      "path": "templates/studio/base.html",
+      "lines": 1288,
+      "bucket": "html"
+    },
+    {
+      "path": "static/vendor/mermaid/10/xychartDiagram-e4ec1c6f.js",
+      "lines": 1284,
+      "bucket": "javascript"
+    },
+    {
+      "path": "static/vendor/mermaid/10/gitGraphDiagram-958b5573.js",
+      "lines": 1264,
+      "bucket": "javascript"
+    }
+  ],
+  "largest_application_functions": [
+    {
+      "path": "integrations/services/github_sync/dispatchers/events.py",
+      "name": "_dispatch_events",
+      "line": 377,
+      "lines": 373,
+      "bucket": "application_python"
+    },
+    {
+      "path": "events/views/pages.py",
+      "name": "event_detail",
+      "line": 570,
+      "lines": 369,
+      "bucket": "application_python"
+    },
+    {
+      "path": "payments/services/webhook_handlers.py",
+      "name": "handle_checkout_completed",
+      "line": 581,
+      "lines": 346,
+      "bucket": "application_python"
+    },
+    {
+      "path": "integrations/services/github_sync/dispatchers/workshops.py",
+      "name": "_sync_single_workshop",
+      "line": 237,
+      "lines": 336,
+      "bucket": "application_python"
+    },
+    {
+      "path": "api/views/tier_reconcile.py",
+      "name": "tier_reconcile_apply",
+      "line": 362,
+      "lines": 335,
+      "bucket": "application_python"
+    },
+    {
+      "path": "integrations/services/github_sync/dispatchers/courses.py",
+      "name": "_sync_module_units",
+      "line": 1094,
+      "lines": 330,
+      "bucket": "application_python"
+    },
+    {
+      "path": "jobs/management/commands/setup_schedules.py",
+      "name": "handle",
+      "line": 28,
+      "lines": 297,
+      "bucket": "application_python"
+    },
+    {
+      "path": "integrations/services/github_sync/dispatchers/workshops.py",
+      "name": "_sync_workshop_pages",
+      "line": 928,
+      "lines": 279,
+      "bucket": "application_python"
+    },
+    {
+      "path": "studio/views/events.py",
+      "name": "event_edit",
+      "line": 1001,
+      "lines": 275,
+      "bucket": "application_python"
+    },
+    {
+      "path": "integrations/services/github_sync/dispatchers/articles.py",
+      "name": "_dispatch_articles",
+      "line": 98,
+      "lines": 270,
+      "bucket": "application_python"
+    },
+    {
+      "path": "content/views/api.py",
+      "name": "download_file",
+      "line": 175,
+      "lines": 261,
+      "bucket": "application_python"
+    },
+    {
+      "path": "email_app/tasks/send_campaign.py",
+      "name": "send_campaign_batch",
+      "line": 371,
+      "lines": 231,
+      "bucket": "application_python"
+    },
+    {
+      "path": "content/views/home.py",
+      "name": "_dashboard",
+      "line": 282,
+      "lines": 227,
+      "bucket": "application_python"
+    },
+    {
+      "path": "studio/views/dashboard.py",
+      "name": "dashboard",
+      "line": 69,
+      "lines": 225,
+      "bucket": "application_python"
+    },
+    {
+      "path": "studio/views/sync.py",
+      "name": "_build_course_tree",
+      "line": 230,
+      "lines": 215,
+      "bucket": "application_python"
+    },
+    {
+      "path": "accounts/views/account.py",
+      "name": "_render_account_page",
+      "line": 232,
+      "lines": 213,
+      "bucket": "application_python"
+    },
+    {
+      "path": "api/views/plans.py",
+      "name": "_create_plan_from_payload",
+      "line": 434,
+      "lines": 204,
+      "bucket": "application_python"
+    },
+    {
+      "path": "studio/views/event_series.py",
+      "name": "event_series_create",
+      "line": 149,
+      "lines": 201,
+      "bucket": "application_python"
+    },
+    {
+      "path": "content/views/home.py",
+      "name": "_get_dashboard_feed",
+      "line": 1022,
+      "lines": 199,
+      "bucket": "application_python"
+    },
+    {
+      "path": "studio/views/ses_events.py",
+      "name": "ses_event_list",
+      "line": 240,
+      "lines": 192,
+      "bucket": "application_python"
+    },
+    {
+      "path": "integrations/services/github_sync/dispatchers/projects.py",
+      "name": "_dispatch_projects",
+      "line": 23,
+      "lines": 191,
+      "bucket": "application_python"
+    },
+    {
+      "path": "studio/views/sync.py",
+      "name": "_aggregate_batch",
+      "line": 468,
+      "lines": 189,
+      "bucket": "application_python"
+    },
+    {
+      "path": "payments/services/webhook_handlers.py",
+      "name": "handle_subscription_updated",
+      "line": 1617,
+      "lines": 179,
+      "bucket": "application_python"
+    },
+    {
+      "path": "integrations/services/github_sync/dispatchers/instructors.py",
+      "name": "_dispatch_instructors",
+      "line": 14,
+      "lines": 177,
+      "bucket": "application_python"
+    },
+    {
+      "path": "payments/services/backfill_tiers.py",
+      "name": "backfill_user_from_stripe",
+      "line": 57,
+      "lines": 176,
+      "bucket": "application_python"
+    },
+    {
+      "path": "payments/services/webhook_handlers.py",
+      "name": "_resolve_checkout_user",
+      "line": 105,
+      "lines": 175,
+      "bucket": "application_python"
+    },
+    {
+      "path": "api/views/checkpoints.py",
+      "name": "checkpoint_move",
+      "line": 430,
+      "lines": 173,
+      "bucket": "application_python"
+    },
+    {
+      "path": "content/utils/md_links.py",
+      "name": "rewrite_cross_workshop_md_links",
+      "line": 410,
+      "lines": 173,
+      "bucket": "application_python"
+    },
+    {
+      "path": "integrations/services/github_sync/dispatchers/workshops.py",
+      "name": "_link_or_create_workshop_event",
+      "line": 670,
+      "lines": 172,
+      "bucket": "application_python"
+    },
+    {
+      "path": "integrations/views/github_webhook.py",
+      "name": "github_webhook",
+      "line": 34,
+      "lines": 172,
+      "bucket": "application_python"
+    },
+    {
+      "path": "api/views/events.py",
+      "name": "_collect_event_values",
+      "line": 473,
+      "lines": 171,
+      "bucket": "application_python"
+    },
+    {
+      "path": "content/utils/md_links.py",
+      "name": "rewrite_md_links",
+      "line": 72,
+      "lines": 167,
+      "bucket": "application_python"
+    },
+    {
+      "path": "events/tasks/notify_reschedule.py",
+      "name": "send_reschedule_notice_one",
+      "line": 117,
+      "lines": 166,
+      "bucket": "application_python"
+    },
+    {
+      "path": "plans/services/plan_lifecycle.py",
+      "name": "move_unfinished_items_to_sprint",
+      "line": 306,
+      "lines": 166,
+      "bucket": "application_python"
+    },
+    {
+      "path": "accounts/views/onboarding_ai.py",
+      "name": "onboarding_chat_stream",
+      "line": 115,
+      "lines": 164,
+      "bucket": "application_python"
+    },
+    {
+      "path": "integrations/services/github_sync/dispatchers/downloads.py",
+      "name": "_dispatch_downloads",
+      "line": 17,
+      "lines": 164,
+      "bucket": "application_python"
+    },
+    {
+      "path": "payments/services/webhook_handlers.py",
+      "name": "_handle_course_purchase",
+      "line": 1439,
+      "lines": 163,
+      "bucket": "application_python"
+    },
+    {
+      "path": "events/services/calendar_invite.py",
+      "name": "build_vevent",
+      "line": 129,
+      "lines": 161,
+      "bucket": "application_python"
+    },
+    {
+      "path": "integrations/services/github_sync/dispatchers/marketing_pages.py",
+      "name": "_dispatch_marketing_pages",
+      "line": 120,
+      "lines": 160,
+      "bucket": "application_python"
+    },
+    {
+      "path": "events/views/api.py",
+      "name": "_register_anonymous",
+      "line": 304,
+      "lines": 159,
+      "bucket": "application_python"
+    },
+    {
+      "path": "api/views/integration_settings.py",
+      "name": "_integration_settings_set",
+      "line": 262,
+      "lines": 157,
+      "bucket": "application_python"
+    },
+    {
+      "path": "studio/services/contacts_import.py",
+      "name": "import_contact_rows",
+      "line": 358,
+      "lines": 157,
+      "bucket": "application_python"
+    },
+    {
+      "path": "accounts/services/privacy.py",
+      "name": "_communications_activity",
+      "line": 966,
+      "lines": 156,
+      "bucket": "application_python"
+    },
+    {
+      "path": "payments/services/refund_dispute_review.py",
+      "name": "classify_refund_or_dispute",
+      "line": 174,
+      "lines": 155,
+      "bucket": "application_python"
+    },
+    {
+      "path": "api/views/event_series.py",
+      "name": "event_series_occurrences_bulk",
+      "line": 1054,
+      "lines": 153,
+      "bucket": "application_python"
+    },
+    {
+      "path": "integrations/services/github_sync/dispatchers/courses.py",
+      "name": "_sync_course_modules",
+      "line": 939,
+      "lines": 153,
+      "bucket": "application_python"
+    },
+    {
+      "path": "payments/services/webhook_dispatch.py",
+      "name": "process_event",
+      "line": 355,
+      "lines": 153,
+      "bucket": "application_python"
+    },
+    {
+      "path": "api/views/ses_events.py",
+      "name": "_handle_bounce",
+      "line": 358,
+      "lines": 150,
+      "bucket": "application_python"
+    },
+    {
+      "path": "api/views/users.py",
+      "name": "user_mark_bounced",
+      "line": 1603,
+      "lines": 150,
+      "bucket": "application_python"
+    },
+    {
+      "path": "integrations/services/github_sync/dispatchers/courses.py",
+      "name": "_build_course_unit_lookup",
+      "line": 516,
+      "lines": 149,
+      "bucket": "application_python"
+    }
+  ],
+  "largest_tooling_functions": [
+    {
+      "path": "scripts/cleanup-agent-worktrees.py",
+      "name": "reconcile_lease_plan",
+      "line": 1432,
+      "lines": 388,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/cleanup-agent-worktrees.py",
+      "name": "_migrate_lease_v7",
+      "line": 1828,
+      "lines": 320,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/browser_journey_policy.py",
+      "name": "register_browser_journey_policy",
+      "line": 432,
+      "lines": 291,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/affected_tests.py",
+      "name": "build_plan",
+      "line": 524,
+      "lines": 231,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/retire-agent-branches.py",
+      "name": "plan",
+      "line": 1363,
+      "lines": 224,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/cleanup-agent-worktrees.py",
+      "name": "_lookup_lease",
+      "line": 551,
+      "lines": 200,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/retire-agent-branches.py",
+      "name": "archive_retire",
+      "line": 1723,
+      "lines": 181,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/retire-agent-branches.py",
+      "name": "_lease_evidence",
+      "line": 576,
+      "lines": 155,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/cleanup-agent-worktrees.py",
+      "name": "_candidate_plan",
+      "line": 2162,
+      "lines": 146,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/import_sprint_plan_markdown.py",
+      "name": "main",
+      "line": 320,
+      "lines": 146,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/cleanup-agent-worktrees.py",
+      "name": "classify_stale",
+      "line": 2511,
+      "lines": 135,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/retire-agent-branches.py",
+      "name": "_recovery_paths",
+      "line": 732,
+      "lines": 114,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "deploy/update_task_def.py",
+      "name": "update_task_definition",
+      "line": 172,
+      "lines": 109,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/retire-agent-branches.py",
+      "name": "restore",
+      "line": 2026,
+      "lines": 101,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/retire-agent-branches.py",
+      "name": "_authoritative_restore_evidence",
+      "line": 1192,
+      "lines": 96,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/playwright_owner_inventory.py",
+      "name": "validate_inventory",
+      "line": 313,
+      "lines": 88,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/watch-ci.py",
+      "name": "classify",
+      "line": 396,
+      "lines": 88,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/cleanup-agent-worktrees.py",
+      "name": "_validate_run",
+      "line": 858,
+      "lines": 87,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/playwright_owner_inventory.py",
+      "name": "collect_inventory",
+      "line": 217,
+      "lines": 87,
+      "bucket": "tooling_python"
+    },
+    {
+      "path": "scripts/cleanup-agent-worktrees.py",
+      "name": "main",
+      "line": 2885,
+      "lines": 72,
+      "bucket": "tooling_python"
+    }
+  ],
+  "function_counts": {
+    "application_python": 4631,
+    "migrations": 149,
+    "other_test_python": 21178,
+    "cli_python": 202,
+    "tooling_python": 472,
+    "playwright_python": 4067
+  },
+  "application_functions_over_100": 142,
+  "broad_except_non_test_non_migration": {
+    "application_python": 221,
+    "cli_python": 1,
+    "tooling_python": 13
+  },
+  "exact_body_duplicate_groups": [
+    [
+      {
+        "path": "accounts/signals.py",
+        "name": "set_slack_user_id_on_social_login",
+        "line": 157,
+        "lines": 13
+      },
+      {
+        "path": "accounts/signals.py",
+        "name": "set_slack_user_id_on_social_signup",
+        "line": 172,
+        "lines": 11
+      }
+    ],
+    [
+      {
+        "path": "accounts/utils/tags.py",
+        "name": "normalize_tags",
+        "line": 33,
+        "lines": 12
+      },
+      {
+        "path": "content/utils/tags.py",
+        "name": "normalize_tags",
+        "line": 61,
+        "lines": 16
+      }
+    ],
+    [
+      {
+        "path": "api/serializers/worker.py",
+        "name": "_format_task_value",
+        "line": 40,
+        "lines": 21
+      },
+      {
+        "path": "studio/views/worker.py",
+        "name": "_format_task_value",
+        "line": 389,
+        "lines": 15
+      }
+    ],
+    [
+      {
+        "path": "api/serializers/worker.py",
+        "name": "_looks_like_traceback",
+        "line": 63,
+        "lines": 12
+      },
+      {
+        "path": "studio/views/worker.py",
+        "name": "_looks_like_traceback",
+        "line": 406,
+        "lines": 10
+      }
+    ],
+    [
+      {
+        "path": "api/views/aliases.py",
+        "name": "_is_valid_email",
+        "line": 61,
+        "lines": 12
+      },
+      {
+        "path": "api/views/tier_overrides.py",
+        "name": "_is_valid_email",
+        "line": 77,
+        "lines": 12
+      }
+    ],
+    [
+      {
+        "path": "api/views/books.py",
+        "name": "_resolve_event_series_body",
+        "line": 208,
+        "lines": 21
+      },
+      {
+        "path": "api/views/sprints.py",
+        "name": "_resolve_event_series",
+        "line": 271,
+        "lines": 29
+      }
+    ],
+    [
+      {
+        "path": "api/views/course_enrollments.py",
+        "name": "_normalize_emails",
+        "line": 64,
+        "lines": 13
+      },
+      {
+        "path": "api/views/enrollments.py",
+        "name": "_normalize_emails",
+        "line": 70,
+        "lines": 13
+      }
+    ],
+    [
+      {
+        "path": "api/views/onboarding.py",
+        "name": "_parse_offset",
+        "line": 81,
+        "lines": 25
+      },
+      {
+        "path": "api/views/ses_events_list.py",
+        "name": "_parse_offset",
+        "line": 57,
+        "lines": 25
+      }
+    ],
+    [
+      {
+        "path": "api/views/plan_items.py",
+        "name": "_load_plan_for_write",
+        "line": 120,
+        "lines": 10
+      },
+      {
+        "path": "api/views/weeks.py",
+        "name": "_load_plan_for_write",
+        "line": 46,
+        "lines": 10
+      }
+    ],
+    [
+      {
+        "path": "api/views/tier_overrides.py",
+        "name": "_actor_label",
+        "line": 61,
+        "lines": 14
+      },
+      {
+        "path": "api/views/users.py",
+        "name": "_actor_label",
+        "line": 322,
+        "lines": 15
+      }
+    ],
+    [
+      {
+        "path": "content/views/pages.py",
+        "name": "_filter_by_tags",
+        "line": 78,
+        "lines": 14
+      },
+      {
+        "path": "events/views/pages.py",
+        "name": "_filter_by_tags",
+        "line": 97,
+        "lines": 13
+      }
+    ],
+    [
+      {
+        "path": "member_api/views/books.py",
+        "name": "_require_scope",
+        "line": 67,
+        "lines": 10
+      },
+      {
+        "path": "member_api/views/plans.py",
+        "name": "_require_scope",
+        "line": 598,
+        "lines": 10
+      }
+    ],
+    [
+      {
+        "path": "plans/views/sprints.py",
+        "name": "_onboarding_request_state",
+        "line": 443,
+        "lines": 22
+      },
+      {
+        "path": "studio/views/sprints.py",
+        "name": "_onboarding_state_for_member",
+        "line": 263,
+        "lines": 22
+      }
+    ],
+    [
+      {
+        "path": "studio/views/books.py",
+        "name": "_parse_event_series",
+        "line": 81,
+        "lines": 22
+      },
+      {
+        "path": "studio/views/sprints.py",
+        "name": "_parse_event_series",
+        "line": 113,
+        "lines": 31
+      }
+    ],
+    [
+      {
+        "path": "studio/views/campaigns.py",
+        "name": "_all_known_contact_tags",
+        "line": 267,
+        "lines": 15
+      },
+      {
+        "path": "studio/views/users.py",
+        "name": "_all_known_contact_tags",
+        "line": 983,
+        "lines": 15
+      }
+    ],
+    [
+      {
+        "path": "studio/views/ses_events.py",
+        "name": "_pager_querystring",
+        "line": 149,
+        "lines": 11
+      },
+      {
+        "path": "studio/views/signup_analytics.py",
+        "name": "_pager_querystring",
+        "line": 24,
+        "lines": 11
+      },
+      {
+        "path": "studio/views/users.py",
+        "name": "_pager_querystring",
+        "line": 629,
+        "lines": 11
+      }
+    ]
+  ],
+  "import_edges": {
+    "accounts": {
+      "studio": 2,
+      "email_app": 12,
+      "payments": 4,
+      "community": 5,
+      "integrations": 10,
+      "website": 1,
+      "comments": 1,
+      "crm": 3,
+      "questionnaires": 7,
+      "content": 2,
+      "plans": 1
+    },
+    "analytics": {
+      "accounts": 2,
+      "content": 2,
+      "events": 3,
+      "integrations": 4,
+      "payments": 1,
+      "email_app": 1,
+      "jobs": 1
+    },
+    "api": {
+      "crm": 8,
+      "questionnaires": 7,
+      "plans": 14,
+      "accounts": 73,
+      "email_app": 11,
+      "community": 8,
+      "content": 18,
+      "integrations": 22,
+      "bookclub": 3,
+      "events": 23,
+      "studio": 7,
+      "comments": 1,
+      "payments": 19,
+      "jobs": 4,
+      "notifications": 1,
+      "analytics": 3,
+      "triggers": 1
+    },
+    "bookclub": {
+      "comments": 2,
+      "content": 7,
+      "integrations": 2,
+      "events": 3,
+      "accounts": 3,
+      "email_app": 1,
+      "notifications": 3
+    },
+    "comments": {
+      "notifications": 3,
+      "accounts": 2,
+      "plans": 1,
+      "bookclub": 1
+    },
+    "community": {
+      "integrations": 7,
+      "accounts": 10,
+      "email_app": 7,
+      "content": 4,
+      "payments": 1,
+      "analytics": 3,
+      "jobs": 1
+    },
+    "content": {
+      "accounts": 15,
+      "notifications": 7,
+      "studio": 5,
+      "comments": 2,
+      "events": 11,
+      "payments": 4,
+      "voting": 2,
+      "integrations": 13,
+      "email_app": 1,
+      "website": 1,
+      "analytics": 6,
+      "bookclub": 1,
+      "community": 2,
+      "plans": 5,
+      "questionnaires": 2
+    },
+    "crm": {
+      "studio": 1,
+      "analytics": 2,
+      "plans": 7,
+      "questionnaires": 1,
+      "content": 1,
+      "integrations": 7,
+      "notifications": 1,
+      "community": 3,
+      "accounts": 2
+    },
+    "email_app": {
+      "studio": 1,
+      "accounts": 15,
+      "jobs": 5,
+      "integrations": 6,
+      "content": 2
+    },
+    "events": {
+      "content": 19,
+      "notifications": 5,
+      "studio": 1,
+      "integrations": 17,
+      "email_app": 21,
+      "accounts": 23,
+      "community": 1,
+      "jobs": 12,
+      "analytics": 3,
+      "bookclub": 1,
+      "plans": 1
+    },
+    "integrations": {
+      "studio": 2,
+      "content": 53,
+      "jobs": 6,
+      "payments": 3,
+      "questionnaires": 1,
+      "events": 17,
+      "community": 7,
+      "accounts": 4,
+      "email_app": 1
+    },
+    "jobs": {
+      "website": 2,
+      "content": 1,
+      "email_app": 1,
+      "events": 5,
+      "integrations": 11,
+      "community": 1,
+      "triggers": 1,
+      "accounts": 4
+    },
+    "member_api": {
+      "api": 10,
+      "bookclub": 3,
+      "content": 3,
+      "events": 6,
+      "integrations": 1,
+      "accounts": 7,
+      "plans": 2
+    },
+    "notifications": {
+      "accounts": 4,
+      "events": 2,
+      "email_app": 3,
+      "content": 2,
+      "bookclub": 5,
+      "plans": 6,
+      "integrations": 3,
+      "community": 1
+    },
+    "payments": {
+      "accounts": 15,
+      "community": 4,
+      "integrations": 15,
+      "jobs": 4,
+      "analytics": 4,
+      "content": 7,
+      "email_app": 2
+    },
+    "plans": {
+      "studio": 1,
+      "comments": 1,
+      "accounts": 11,
+      "content": 7,
+      "integrations": 15,
+      "crm": 8,
+      "questionnaires": 7,
+      "community": 2,
+      "email_app": 3,
+      "notifications": 4,
+      "events": 2
+    },
+    "questionnaires": {
+      "content": 2,
+      "integrations": 6,
+      "community": 1,
+      "website": 1,
+      "crm": 2,
+      "jobs": 1
+    },
+    "studio": {
+      "community": 9,
+      "integrations": 52,
+      "accounts": 34,
+      "payments": 15,
+      "plans": 16,
+      "content": 37,
+      "email_app": 21,
+      "crm": 12,
+      "events": 32,
+      "bookclub": 3,
+      "jobs": 7,
+      "questionnaires": 8,
+      "api": 2,
+      "notifications": 10,
+      "analytics": 5
+    },
+    "triggers": {
+      "integrations": 4,
+      "jobs": 4,
+      "website": 1,
+      "content": 3,
+      "email_app": 1,
+      "events": 1,
+      "studio": 6
+    },
+    "voting": {
+      "notifications": 1,
+      "content": 3
+    },
+    "website": {
+      "analytics": 1,
+      "content": 4,
+      "integrations": 3,
+      "accounts": 2,
+      "email_app": 1,
+      "notifications": 2
+    }
+  },
+  "syntax_errors": [],
+  "import_scc": [
+    [
+      "accounts",
+      "analytics",
+      "api",
+      "bookclub",
+      "comments",
+      "community",
+      "content",
+      "crm",
+      "email_app",
+      "events",
+      "integrations",
+      "jobs",
+      "notifications",
+      "payments",
+      "plans",
+      "questionnaires",
+      "studio",
+      "triggers",
+      "voting",
+      "website"
+    ],
+    [
+      "member_api"
+    ]
+  ],
+  "supplemental_counts": {
+    "vendorjs": {
+      "files": 44,
+      "lines": 115949
+    },
+    "firstpartyjs": {
+      "files": 15,
+      "lines": 4356
+    },
+    "ratchet_policy": {
+      "files": 24,
+      "lines": 20288
+    },
+    "workflow": {
+      "files": 8,
+      "lines": 2488
+    },
+    "agent_cleanup": {
+      "files": 4,
+      "lines": 10232
+    }
+  },
+  "audit_date": "2026-09-07",
+  "existing_dirty_files": [
+    "asl_cli/asl_cli/commands/events.py",
+    "asl_cli/tests/test_cli.py"
+  ],
+  "ruff_advisory": {
+    "total": 1063,
+    "complex_functions_total": 227,
+    "complex_application_functions": 193,
+    "command": "uv run --no-sync ruff check --config ruff-advisory.toml --output-format json --exit-zero ."
+  },
+  "prior_audit_issue_states": [
+    {
+      "number": 1499,
+      "title": "[C-01] Make campaign dispatch fail closed under concurrency and worker crashes",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1500,
+      "title": "[H-01] Content-repository symlinks can expose worker files through the CDN",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1501,
+      "title": "[H-02] Account merge transfers live API credentials to the canonical user",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1502,
+      "title": "[H-03] Password-reset links remain reusable after a successful reset",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1503,
+      "title": "[H-04] Deactivated users retain API access",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1504,
+      "title": "[H-05] Database-backed cache hits add many SQL queries to rendered requests",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1505,
+      "title": "[H-06] Zoom recordings can exhaust workers and become permanently stuck",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1506,
+      "title": "[H-07] Campaign failures and audience drift can leave campaigns in `sending`",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1507,
+      "title": "[H-08] Member event serialization performs registration-state N+1 queries",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1508,
+      "title": "[H-09] Event registration leaks email addresses in URLs and trusts spoofable state",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1509,
+      "title": "Prevent privacy deletion from redacting unrelated webhook data",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1510,
+      "title": "[H-11] `docker-compose.yml` service commands are ignored",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1511,
+      "title": "[H-12] Main-push deployment does not run the blocking Ruff gate",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1512,
+      "title": "[H-13] The documented 85% coverage gate runs in no CI workflow",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1513,
+      "title": "[H-14] Concurrent manual production deploys are not serialized",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1514,
+      "title": "[H-15] Emergency production rollback omits the worker service",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1515,
+      "title": "[M-01] Custom password flows bypass configured Django validators",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1516,
+      "title": "[M-02] Public authentication and mail endpoints lack shared throttling",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1517,
+      "title": "[M-03] Sensitive account responses are missing `private, no-store`",
+      "state": "OPEN"
+    },
+    {
+      "number": 1518,
+      "title": "[M-04] Event registration is check-then-create under concurrency",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1519,
+      "title": "[M-05] Concurrent signup and newsletter subscription can return 500",
+      "state": "OPEN"
+    },
+    {
+      "number": 1520,
+      "title": "[M-06] Member plan APIs are unbounded and bypass their own prefetches",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1521,
+      "title": "[M-07] Database sessions grow indefinitely and deletion scans all sessions",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1522,
+      "title": "[M-08] Unverified-user purge is an unbounded relation-query storm",
+      "state": "OPEN"
+    },
+    {
+      "number": 1523,
+      "title": "[M-09] `EmailLog.ses_message_id` is not indexed",
+      "state": "CLOSED"
+    },
+    {
+      "number": 1524,
+      "title": "[M-10] Tag operations full-scan users and duplicate helper ownership",
+      "state": "OPEN"
+    },
+    {
+      "number": 1525,
+      "title": "[M-11] Stripe webhook attempt allocation is concurrency-unsafe",
+      "state": "OPEN"
+    },
+    {
+      "number": 1526,
+      "title": "[M-12] Homepage event cards issue one attendee-count query each",
+      "state": "OPEN"
+    },
+    {
+      "number": 1527,
+      "title": "[M-13] Observability configuration reads the database during app startup",
+      "state": "OPEN"
+    },
+    {
+      "number": 1528,
+      "title": "[M-14] Retrying an ambiguous task `DELETE` can restore a ghost card",
+      "state": "OPEN"
+    },
+    {
+      "number": 1529,
+      "title": "[M-15] Inline confirmation JavaScript breaks on ordinary apostrophes",
+      "state": "OPEN"
+    },
+    {
+      "number": 1530,
+      "title": "[M-16] Four account preference toggles hide state from assistive technology",
+      "state": "OPEN"
+    },
+    {
+      "number": 1531,
+      "title": "[M-17] Questionnaire groups and conditional fields are not labelled",
+      "state": "OPEN"
+    },
+    {
+      "number": 1532,
+      "title": "[M-18] Several typeaheads are mouse-only duplicates",
+      "state": "OPEN"
+    },
+    {
+      "number": 1533,
+      "title": "[M-20] Three runtime settings bypass `IntegrationSetting`",
+      "state": "OPEN"
+    },
+    {
+      "number": 1534,
+      "title": "[M-21] API views import duplicated private Studio helpers",
+      "state": "OPEN"
+    },
+    {
+      "number": 1535,
+      "title": "[M-22] CRM aggregation depends on private endpoint helpers",
+      "state": "OPEN"
+    },
+    {
+      "number": 1536,
+      "title": "[M-23] Three duplicate GitHub-sync helpers are dead implementations",
+      "state": "OPEN"
+    },
+    {
+      "number": 1537,
+      "title": "[M-24] Worker task formatting has two active authorities",
+      "state": "OPEN"
+    },
+    {
+      "number": 1538,
+      "title": "[M-25] Nullable datetime serialization is implemented at least 18 times",
+      "state": "OPEN"
+    },
+    {
+      "number": 1539,
+      "title": "[M-26] Studio Logfire edits do not apply as documented",
+      "state": "OPEN"
+    },
+    {
+      "number": 1540,
+      "title": "[M-27] Recurring schedule reconciliation is partial and silently fail-open",
+      "state": "OPEN"
+    },
+    {
+      "number": 1541,
+      "title": "[L-01] Search filters hand-build query strings without URL encoding",
+      "state": "OPEN"
+    },
+    {
+      "number": 1542,
+      "title": "[L-02] Course list pages render every record twice",
+      "state": "OPEN"
+    },
+    {
+      "number": 1543,
+      "title": "[L-03] Several templates are unreachable legacy UI",
+      "state": "OPEN"
+    },
+    {
+      "number": 1544,
+      "title": "[L-04] Plan pages ship two handwritten Markdown renderers",
+      "state": "OPEN"
+    },
+    {
+      "number": 1545,
+      "title": "[L-05] Several iframes have no accessible name",
+      "state": "OPEN"
+    },
+    {
+      "number": 1546,
+      "title": "Track and remediate the 2026-08-30 adversarial code audit",
+      "state": "OPEN"
+    }
+  ],
+  "completion_source_fingerprint": {
+    "method": "Sort tracked .py/.html/.js/.css/.sh/.yml/.yaml/.toml paths; for each, hash UTF-8 path + NUL + raw SHA256(file bytes) into one SHA256. Includes tracked tests, migrations and vendor source; excludes audit docs and JSON.",
+    "file_count": 3062,
+    "sha256": "a86a93fdef4ae4da19649e90131918f3045c3aa771398b88a06f760f5a8ac7d3"
+  },
+  "proposed_test_module_existence_check": {
+    "labels": [
+      "integrations.tests.test_maven_corrections",
+      "integrations.tests.test_zoom",
+      "integrations.tests.test_github_sync",
+      "plans.tests.test_plan_ready_action",
+      "plans.tests.test_partner_intro_emails",
+      "plans.tests.test_sprint_end_recaps",
+      "plans.tests.test_sprint_cadence",
+      "api.tests.test_events",
+      "api.tests.test_plans",
+      "api.tests.test_weeks",
+      "member_api.tests.test_plans_write_api"
+    ],
+    "passed": true,
+    "execution": "Not run; these are proposed implementation checks."
+  },
+  "completion_validation": {
+    "finding_count": 57,
+    "finding_counts_by_review": {
+      "WEB": 16,
+      "IAM": 15,
+      "OPS": 15,
+      "SYS": 11
+    },
+    "all_findings_have_evidence_remediation_checks_rollout_effort": true,
+    "all_findings_mapped_to_work_packets": true,
+    "first_party_installed_apps_covered": 20,
+    "first_party_static_js_modules_covered": 14,
+    "python_files_parsed": 2576,
+    "source_path_start_line_references_verified": 287,
+    "relative_links_and_anchors_valid": true,
+    "audit_paths_require_no_application_tests": true,
+    "source_fingerprint_unchanged": true,
+    "review_limits": "Static and focused offline audit; no full suites or production operations; reported bugs are not implemented fixes."
+  }
+}

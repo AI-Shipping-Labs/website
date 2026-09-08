@@ -530,15 +530,12 @@ def _send_welcome(user, course, cohort, actions):
     actions.append("Sent maven_welcome email.")
 
 
-# Issue #1593: the newsletter opt-in link lives in a welcome email people act
-# on late — a fortnight after enrolling is ordinary, not an edge case — so a
-# password-reset-length window would dead-end the normal reader. It is not
-# non-expiring like the ``unsubscribe`` and ``maven_email_opt_out`` footer
-# tokens either, because this one also flips ``email_verified``: a link that
-# works forever keeps asserting mailbox ownership long after the mailbox may
-# have changed hands. Thirty days bounds that without punishing a late click,
-# and an expired link now offers a route back rather than a dead end.
-NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS = 24 * 30
+# Issue #1593: the opt-in link has the same 24-hour verification contract as
+# the ordinary email-verification link. It is not non-expiring like the
+# ``unsubscribe`` and ``maven_email_opt_out`` footer tokens because this one
+# also verifies mailbox ownership. An expired click renders a route back to
+# account email preferences rather than a dead end.
+NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS = 24
 
 
 def _welcome_context(user, course, cohort=""):

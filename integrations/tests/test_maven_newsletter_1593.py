@@ -246,12 +246,12 @@ class VerifyAndSubscribeTokenScopeTest(TestCase):
         self.assertFalse(user.email_verified)
 
     def test_a_link_inside_its_window_still_works(self):
-        """The 30-day window is real, not a token that quietly never expires."""
+        """The 24-hour window is real, not a token that quietly never expires."""
         user = User.objects.create_user(
             email="within-window-1593@example.com", unsubscribed=True,
         )
         token = generate_user_action_token(
-            user.pk, "verify_and_subscribe", expiry_hours=24 * 29,
+            user.pk, "verify_and_subscribe", expiry_hours=23,
         )
 
         response = self.client.get(f"/api/verify-and-subscribe?token={token}")

@@ -100,16 +100,16 @@ class MavenWelcomeEmailContentTest(TestCase):
             payload["exp"],
             tz=datetime.timezone.utc,
         )
-        # Thirty days, not a password-reset day. People act on a welcome email
-        # late, and for an opt-in invitation the late click is the normal case
-        # rather than an edge case (issue #1593).
+        # One day, matching the ordinary email-verification contract. The
+        # opt-in action is distinct from ordinary verification, but it must
+        # not outlive the mailbox-ownership proof (issue #1593).
         self.assertGreater(
             expires_at,
-            started_at + datetime.timedelta(days=29, hours=23),
+            started_at + datetime.timedelta(hours=23, minutes=59),
         )
         self.assertLess(
             expires_at,
-            started_at + datetime.timedelta(days=30, minutes=1),
+            started_at + datetime.timedelta(hours=24, minutes=1),
         )
 
     def test_welcome_offers_oauth_and_password_as_the_two_ways_in(self):

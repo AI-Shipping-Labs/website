@@ -948,8 +948,10 @@ class TestScenario9UnsubscribeViaEmailLink:
         # Then: Shows "Unsubscribed" heading
         assert "Unsubscribed" in body
 
-        # Then: Shows the unsubscribed message
-        assert "You have been unsubscribed from all emails" in body
+        # Then: Shows the unsubscribed message, naming what actually stopped
+        # (issue #1593 — the old "all emails" claim was untrue).
+        assert "unsubscribed from our newsletter" in body
+        assert "all emails" not in body
 
         # Then: Link to /account/ for re-subscribing
         account_link = page.locator('a[href="/account/"]')

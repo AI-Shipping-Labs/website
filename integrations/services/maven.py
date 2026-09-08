@@ -380,6 +380,11 @@ def _resolve_or_create(email, first_name="", last_name=""):
     return User.objects.create_user(
         email=normalize_email(email), password=None, email_verified=False,
         first_name=first_name, last_name=last_name,
+        # Enrolling in a course is not newsletter consent, so a new account
+        # starts marketing-excluded and stays that way until the enrollee
+        # affirmatively opts in from the welcome email (issue #1593). No
+        # branch here ever writes these fields on an account we resolved
+        # rather than created.
         signup_source="imported", unsubscribed=True,
         email_preferences={"newsletter": False, "maven_emails": True},
     )
@@ -525,10 +530,26 @@ def _send_welcome(user, course, cohort, actions):
     actions.append("Sent maven_welcome email.")
 
 
+# Issue #1593: the newsletter opt-in link lives in a welcome email people act
+# on late — a fortnight after enrolling is ordinary, not an edge case — so a
+# password-reset-length window would dead-end the normal reader. It is not
+# non-expiring like the ``unsubscribe`` and ``maven_email_opt_out`` footer
+# tokens either, because this one also flips ``email_verified``: a link that
+# works forever keeps asserting mailbox ownership long after the mailbox may
+# have changed hands. Thirty days bounds that without punishing a late click,
+# and an expired link now offers a route back rather than a dead end.
+NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS = 24 * 30
+
+
 def _welcome_context(user, course, cohort=""):
     site_url = site_base_url().rstrip("/")
     reset_token = generate_password_reset_token(user, expiry_hours=24)
     opt_out_token = generate_user_action_token(user.pk, "maven_email_opt_out")
+    opt_in_token = generate_user_action_token(
+        user.pk,
+        "verify_and_subscribe",
+        expiry_hours=NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS,
+    )
     return {
         # No "user_name" key here on purpose (issue #1591): caller context
         # wins over EmailService's injected default, and Maven enrollees
@@ -547,10 +568,20 @@ def _welcome_context(user, course, cohort=""):
         # The one thing we ask them to do after joining must be a real link.
         # Same destination and wording as community_invite.md.
         "onboarding_url": f"{site_url}/onboarding/",
-        # /community/slack is @login_required + Main-gated, so the welcome
-        # copy orders the steps set password -> sign in -> join Slack.
+        # /community/slack is @login_required + Main-gated. A signed-out
+        # click redirects through login with next= preserved, so the copy no
+        # longer needs a numbered set-password -> sign-in -> join sequence
+        # (issue #1593).
         "slack_join_url": f"{site_url}/community/slack",
         "opt_out_url": f"{site_url}/api/maven-email-opt-out?token={opt_out_token}",
+        # Issue #1593: the newsletter is opt-IN. This is the one click that
+        # both verifies the address and subscribes them; nothing else in the
+        # enrollment flow subscribes anybody. It is a distinct token action
+        # from ``verify_email`` precisely so that ordinary verification can
+        # never be mistaken for newsletter consent.
+        "newsletter_opt_in_url": (
+            f"{site_url}/api/verify-and-subscribe?token={opt_in_token}"
+        ),
     }
 
 

@@ -47,10 +47,87 @@ class MavenWelcomeEmailContentTest(TestCase):
         self.assertIn(context["password_reset_url"], body_html)
         # Transparent notice that they were added for course communication.
         self.assertIn("community access", body_html.lower())
-        self.assertIn("did not add you to any marketing", body_html.lower())
-        # Opt-out link + reply-to-remove line.
+        # Issue #1593: the newsletter is offered, not asserted. The old copy
+        # claimed the opposite ("we did NOT add you") and must not come back
+        # in any form.
+        self.assertNotIn("did not add", body_html.lower())
+        self.assertIn("if you want to hear from us", body_html.lower())
+        # Both tokened links + reply-to-remove line.
+        self.assertIn(context["newsletter_opt_in_url"], body_html)
         self.assertIn(context["opt_out_url"], body_html)
         self.assertIn("reply", body_html.lower())
+
+    def test_the_two_tokened_links_carry_distinct_and_accurate_labels(self):
+        """Crossing these two links would put a false statement in the email.
+
+        Issue #1593: "verify your email" must reach the opt-in that actually
+        subscribes them, and "turn off course emails" must reach the scoped
+        Maven opt-out. Each label has to describe what its own link does.
+        """
+        user = User.objects.create_user(email="news@test.com", password="x")
+        context = _welcome_context(user, "Course")
+        _subject, body_html = EmailService()._render_template(
+            "maven_welcome", user, context,
+        )
+
+        opt_in_anchor = (
+            f'<a href="{context["newsletter_opt_in_url"]}">verify your email</a>'
+        )
+        opt_out_anchor = (
+            f'<a href="{context["opt_out_url"]}">turn off course emails</a>'
+        )
+        self.assertIn(opt_in_anchor, body_html)
+        self.assertIn(opt_out_anchor, body_html)
+        self.assertNotEqual(
+            context["newsletter_opt_in_url"], context["opt_out_url"],
+        )
+
+    def test_newsletter_opt_in_url_uses_its_own_token_action(self):
+        """A ``verify_email`` token must never be able to subscribe anyone."""
+        started_at = datetime.datetime.now(datetime.timezone.utc)
+        user = User.objects.create_user(email="nu@test.com", password="x")
+        context = _welcome_context(user, "Course")
+        self.assertIn(
+            "/api/verify-and-subscribe?token=", context["newsletter_opt_in_url"],
+        )
+
+        payload = _decode_user_action_token(
+            _extract_token(context["newsletter_opt_in_url"])
+        )
+        self.assertEqual(payload["user_id"], user.pk)
+        self.assertEqual(payload["action"], "verify_and_subscribe")
+        expires_at = datetime.datetime.fromtimestamp(
+            payload["exp"],
+            tz=datetime.timezone.utc,
+        )
+        # Thirty days, not a password-reset day. People act on a welcome email
+        # late, and for an opt-in invitation the late click is the normal case
+        # rather than an edge case (issue #1593).
+        self.assertGreater(
+            expires_at,
+            started_at + datetime.timedelta(days=29, hours=23),
+        )
+        self.assertLess(
+            expires_at,
+            started_at + datetime.timedelta(days=30, minutes=1),
+        )
+
+    def test_welcome_offers_oauth_and_password_as_the_two_ways_in(self):
+        """The copy promises social sign-in, so both routes must be linked."""
+        user = User.objects.create_user(email="ways-in@test.com", password="x")
+        context = _welcome_context(user, "Course")
+        _subject, body_html = EmailService()._render_template(
+            "maven_welcome", user, context,
+        )
+
+        self.assertIn("Google", body_html)
+        self.assertIn("GitHub", body_html)
+        self.assertIn("Slack", body_html)
+        self.assertIn(f'<a href="{context["sign_in_url"]}">Sign in</a>', body_html)
+        self.assertIn(
+            f'<a href="{context["password_reset_url"]}">Set a password</a>',
+            body_html,
+        )
 
     def test_opt_out_url_uses_scoped_maven_token_endpoint(self):
         user = User.objects.create_user(email="o@test.com", password="x")

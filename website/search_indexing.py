@@ -70,6 +70,11 @@ _PRIVATE_API_RESULT_PATHS = frozenset({
     '/api/verify-email',
     '/api/unsubscribe',
     '/api/maven-email-opt-out',
+    # Issue #1593: the Maven newsletter verify-and-subscribe result page. It
+    # renders the same token-result card as its siblings above, so it needs
+    # the same noindex treatment; this list is an allow-list, not a prefix
+    # rule, so a new /api/ HTML page is indexable until it is named here.
+    '/api/verify-and-subscribe',
 })
 
 # Keep in sync with the recognized recovery messages in

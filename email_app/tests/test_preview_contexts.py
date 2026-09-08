@@ -171,3 +171,45 @@ class RecordingReadyPreviewContextTest(TestCase):
         self.assertIn('available to watch', body_html.lower())
         # No raw markdown link syntax may leak into the delivered HTML.
         self.assertNotIn('](', body_html)
+
+
+class MavenWelcomePreviewContextTest(TestCase):
+    """Issue #1593: the operator previewing the welcome must see real hrefs.
+
+    An empty ``href=""`` is exactly the failure this file exists to catch, and
+    the newsletter opt-in is the one link in the email whose destination
+    determines whether the copy is true.
+    """
+
+    def test_preview_supplies_both_tokened_links(self):
+        ctx = PREVIEW_CONTEXTS['maven_welcome']
+        self.assertIn('/api/verify-and-subscribe', ctx['newsletter_opt_in_url'])
+        self.assertIn('/api/maven-email-opt-out', ctx['opt_out_url'])
+
+    def test_preview_renders_two_distinct_exits_and_no_old_claim(self):
+        from types import SimpleNamespace
+
+        from email_app.services.email_service import EmailService
+
+        user = SimpleNamespace(
+            email='ada@example.com',
+            first_name='Ada',
+            last_name='',
+            email_verified=True,
+        )
+        ctx = PREVIEW_CONTEXTS['maven_welcome']
+        _subject, body_html = EmailService()._render_template(
+            'maven_welcome', user, ctx,
+        )
+
+        self.assertIn(
+            f'<a href="{ctx["newsletter_opt_in_url"]}">verify your email</a>',
+            body_html,
+        )
+        self.assertIn(
+            f'<a href="{ctx["opt_out_url"]}">turn off course emails</a>',
+            body_html,
+        )
+        self.assertNotIn('did not add', body_html.lower())
+        self.assertNotIn('href=""', body_html)
+        self.assertNotIn('](', body_html)

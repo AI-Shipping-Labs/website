@@ -61,6 +61,11 @@ class MavenCorrectionsTest(TestCase):
         )
 
     def test_new_user_is_durably_marketing_excluded_existing_choice_preserved(self, email_service):
+        """Enrolling subscribes nobody — the newsletter is opt-in (#1593).
+
+        A created account starts marketing-excluded and only leaves that state
+        by the enrollee's own click on the welcome email's opt-in link.
+        """
         existing = User.objects.create_user(email="existing@example.com", unsubscribed=False, email_verified=True)
         self.post("user_cohort.enrolled", email="new@example.com")
         self.post("user_cohort.enrolled", email=existing.email)
@@ -73,6 +78,35 @@ class MavenCorrectionsTest(TestCase):
         self.assertTrue(User.objects.get(pk=new.pk).unsubscribed)
         existing.refresh_from_db()
         self.assertFalse(existing.unsubscribed)
+
+    def test_enrolling_never_changes_an_existing_members_own_choice(self, email_service):
+        """Whatever a member already decided survives any number of enrollments.
+
+        This is the guarantee that protects the enrollees onboarded before
+        #1593, who hold a written statement saying we did not add them.
+        """
+        opted_out = User.objects.create_user(
+            email="opted-out@example.com",
+            unsubscribed=True,
+            email_verified=True,
+            email_preferences={"newsletter": False, "maven_emails": True},
+        )
+        subscribed = User.objects.create_user(
+            email="subscribed@example.com",
+            unsubscribed=False,
+            email_verified=True,
+            email_preferences={"newsletter": True, "maven_emails": True},
+        )
+        for user in (opted_out, subscribed):
+            self.post("user_cohort.enrolled", email=user.email, course={"id": "c1", "name": "One"})
+            self.post("user_cohort.enrolled", email=user.email, course={"id": "c2", "name": "Two"})
+
+        opted_out.refresh_from_db()
+        self.assertTrue(opted_out.unsubscribed)
+        self.assertFalse(opted_out.email_preferences["newsletter"])
+        subscribed.refresh_from_db()
+        self.assertFalse(subscribed.unsubscribed)
+        self.assertTrue(subscribed.email_preferences["newsletter"])
 
     def test_provider_ids_dedupe_label_changes_but_courses_do_not_collide(self, email_service):
         self.post("user_cohort.enrolled", course={"id": "course-a", "name": "Old"}, cohort={"id": "spring", "name": "Spring"})

@@ -114,4 +114,3 @@ def test_unsafe_or_ambiguous_input_makes_no_request(monkeypatch, arguments):
     result = CliRunner().invoke(cli, arguments)
     assert result.exit_code == 2, result.output
     assert client.calls == []
-

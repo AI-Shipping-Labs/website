@@ -29,7 +29,7 @@ from accounts.models import (
     ImportBatch,
     TierOverride,
 )
-from accounts.utils.tags import normalize_tags
+from accounts.utils.tags import normalize_tags, set_tags
 from payments.models import Tier
 
 User = get_user_model()
@@ -250,8 +250,14 @@ def reconcile_user(
             email=email,
             dry_run=False,
         )
+        replacement_tags = None
+        if "tags" in update_fields:
+            replacement_tags = list(user.tags or [])
+            update_fields.remove("tags")
         if update_fields:
             user.save(update_fields=sorted(update_fields))
+        if replacement_tags is not None:
+            set_tags(user, replacement_tags)
 
         if tier and tier.level > 0:
             if source == IMPORT_SOURCE_STRIPE:

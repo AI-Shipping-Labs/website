@@ -3009,6 +3009,94 @@
         ]
       }
     },
+    "/api/contact-tags": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "tags": [
+                    {
+                      "name": "paid",
+                      "user_count": 2
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Sorted in-use contact tags and carrier counts."
+          },
+          "401": {
+            "description": "Missing, invalid, or non-staff token."
+          }
+        },
+        "summary": "List contact tags with user counts",
+        "tags": [
+          "Contact tags"
+        ]
+      }
+    },
+    "/api/contact-tags/{name}/rename": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "new": "paid"
+              },
+              "schema": {
+                "properties": {
+                  "new": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "new"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "affected": 2,
+                  "new": "paid",
+                  "old": "paid-user"
+                }
+              }
+            },
+            "description": "Normalized names and affected-user count."
+          },
+          "401": {
+            "description": "Missing, invalid, or non-staff token."
+          },
+          "422": {
+            "description": "The new name normalizes to empty."
+          }
+        },
+        "summary": "Rename one contact tag",
+        "tags": [
+          "Contact tags"
+        ]
+      }
+    },
     "/api/contacts/export": {
       "get": {
         "description": "Default response is JSON. ``?format=csv`` switches to ``text/csv`` with an ``aishippinglabs-contacts-<utc-timestamp>.csv`` attachment header. Output is ordered by ``id`` so repeat calls are deterministic.",

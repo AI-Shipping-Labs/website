@@ -27,7 +27,7 @@ from django.db.models.functions import Lower
 from django.utils import timezone
 
 from accounts.models import TierOverride
-from accounts.utils.tags import normalize_tag
+from accounts.utils.tags import normalize_tag, set_tags
 from payments.models import Tier
 from payments.services.backfill_tiers import backfill_user_from_stripe
 
@@ -649,8 +649,7 @@ def _apply_tag(user, normalized_tag):
     if normalized_tag in current:
         return
     current.append(normalized_tag)
-    user.tags = current
-    user.save(update_fields=['tags'])
+    set_tags(user, current)
 
 
 def _apply_tier_override(user, override_tier, granted_by, *, expires_at=None):

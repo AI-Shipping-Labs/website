@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
-from accounts.utils.tags import normalize_tags
+from accounts.utils.tags import list_all_tags, normalize_tags
 from email_app.models import CampaignDelivery, EmailCampaign
 from email_app.services.campaign_audience import campaign_recipient_count as recount
 from email_app.services.campaign_dispatch import (
@@ -264,23 +264,6 @@ def _parse_campaign_tags(request, field_name):
     return ordered
 
 
-def _all_known_contact_tags():
-    """Sorted union of every existing contact tag across users.
-
-    Powers the typeahead ``<datalist>`` on the campaign form so operators
-    pick from tags already in use. Mirrors the helper in
-    ``studio/views/users.py`` (issue #354) -- if you change one, change
-    both.
-    """
-    seen = set()
-    for tag_list in User.objects.values_list('tags', flat=True):
-        if not tag_list:
-            continue
-        for tag in normalize_tags(tag_list):
-            seen.add(tag)
-    return sorted(seen)
-
-
 @staff_required
 def campaign_list(request):
     """List all email campaigns with stats."""
@@ -491,7 +474,7 @@ def campaign_create(request):
             "is_edit": False,
             "form_action": "create",
             "recipient_count": recipient_count,
-            "known_tags": _all_known_contact_tags(),
+            "known_tags": list_all_tags(),
             "event_options": _event_picker_options(),
             "selected_event_id": (
                 draft.target_event_id if draft is not None else None
@@ -586,7 +569,7 @@ def campaign_edit(request, campaign_id):
             "is_edit": True,
             "form_action": "edit",
             "recipient_count": recipient_count,
-            "known_tags": _all_known_contact_tags(),
+            "known_tags": list_all_tags(),
             "event_options": _event_picker_options(),
             "selected_event_id": campaign.target_event_id,
         },

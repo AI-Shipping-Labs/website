@@ -1,5 +1,5 @@
 from django.contrib.auth.models import AbstractUser, BaseUserManager
-from django.db import models
+from django.db import models, transaction
 
 IMPORT_SOURCE_MANUAL = "manual"
 IMPORT_SOURCE_SLACK = "slack"
@@ -84,6 +84,18 @@ class UserManager(BaseUserManager):
         if extra_fields.get("is_superuser") is not True:
             raise ValueError("Superuser must have is_superuser=True.")
         return self.create_user(email, password, **extra_fields)
+
+
+class ContactTag(models.Model):
+    """Indexed contact-tag namespace used for membership queries."""
+
+    slug = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        ordering = ["slug"]
+
+    def __str__(self):
+        return self.slug
 
 
 class User(AbstractUser):
@@ -287,6 +299,12 @@ class User(AbstractUser):
         blank=True,
         help_text="Operator-managed contact tags (Studio-only; staff-only data).",
     )
+    contact_tags = models.ManyToManyField(
+        ContactTag,
+        related_name="users",
+        blank=True,
+        help_text="Indexed membership relation mirroring the tags JSON payload.",
+    )
 
     # Import provenance for bulk-created or bulk-reconciled users.
     import_source = models.CharField(
@@ -338,7 +356,7 @@ class User(AbstractUser):
         return self.email
 
     def save(self, *args, **kwargs):
-        """Assign default 'free' tier on creation if no tier is set."""
+        """Assign defaults and keep tag JSON synchronized with its relation."""
         if self.pk is None and self.tier_id is None:
             from payments.models import Tier
 
@@ -364,7 +382,34 @@ class User(AbstractUser):
                 .exists()
             )
 
-        super().save(*args, **kwargs)
+        tags_requested = update_fields is None or "tags" in update_fields
+        tags_changed = False
+        if tags_requested:
+            from accounts.utils.tags import normalize_tags
+
+            normalized_tags = normalize_tags(self.tags)
+            self.tags = normalized_tags
+            if self._state.adding:
+                tags_changed = bool(normalized_tags)
+            elif update_fields is not None:
+                tags_changed = True
+            else:
+                stored_tags = (
+                    type(self)
+                    ._base_manager.filter(pk=self.pk)
+                    .values_list("tags", flat=True)
+                    .first()
+                )
+                tags_changed = normalize_tags(stored_tags) != normalized_tags
+
+        if tags_changed:
+            from accounts.utils.tags import sync_contact_tags
+
+            with transaction.atomic():
+                super().save(*args, **kwargs)
+                sync_contact_tags(self)
+        else:
+            super().save(*args, **kwargs)
 
         if deactivating:
             from accounts.services.credentials import (

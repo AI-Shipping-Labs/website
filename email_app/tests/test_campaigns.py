@@ -11,7 +11,9 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase, override_settings, tag
+from django.test.utils import CaptureQueriesContext
 from django.urls import Resolver404, resolve, reverse
 from django.utils import timezone
 
@@ -296,6 +298,24 @@ class EmailCampaignTagTargetingTest(TierSetupMixin, TestCase):
         # Alice: early-adopter, no bounced => in. Bob: early-adopter AND
         # bounced => out. Carol: no tags => out (fails include).
         self.assertEqual(emails, {'alice@test.com'})
+
+    def test_include_and_exclude_are_relation_backed_sql(self):
+        campaign = EmailCampaign.objects.create(
+            subject='Indexed audience',
+            body='Hi',
+            target_tags_any=['early-adopter'],
+            target_tags_none=['bounced'],
+        )
+
+        with CaptureQueriesContext(connection) as queries:
+            emails = set(
+                campaign.get_eligible_recipients().values_list('email', flat=True),
+            )
+
+        self.assertEqual(emails, {'alice@test.com'})
+        sql = ' '.join(query['sql'] for query in queries).lower()
+        self.assertIn('accounts_user_contact_tags', sql)
+        self.assertNotIn('"accounts_user"."tags"', sql)
 
     def test_tag_filter_ands_with_target_min_level(self):
         """Tag filter ANDs with the existing tier-level filter."""

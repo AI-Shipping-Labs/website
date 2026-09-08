@@ -64,7 +64,8 @@ from accounts.utils.tags import (
     count_users_with_tag,
     list_all_tags,
     normalize_tag,
-    normalize_tags,
+    user_ids_matching_tag_search,
+    user_ids_with_exact_tag,
 )
 from accounts.utils.tags import (
     remove_tag as _remove_tag_from_user,
@@ -320,39 +321,6 @@ def _annotated_user_queryset():
     )
 
 
-def _user_ids_matching_tag_search(normalized_search):
-    """Return user IDs whose normalized contact tags contain the search text.
-
-    ``User.tags`` is a JSON list and the search contract is substring
-    matching inside each normalized tag. Keep that awkward piece in Python,
-    but only read ``id`` and ``tags`` instead of materializing full users.
-    """
-    if not normalized_search:
-        return []
-
-    user_ids = []
-    for user_id, tags in User.objects.values_list('pk', 'tags').iterator():
-        if not isinstance(tags, list):
-            continue
-        for tag in tags:
-            if normalized_search in tag.lower():
-                user_ids.append(user_id)
-                break
-    return user_ids
-
-
-def _user_ids_matching_exact_tag(normalized_tag):
-    """Return user IDs whose contact tags include ``normalized_tag`` exactly."""
-    if not normalized_tag:
-        return []
-
-    user_ids = []
-    for user_id, tags in User.objects.values_list('pk', 'tags').iterator():
-        if isinstance(tags, list) and normalized_tag in tags:
-            user_ids.append(user_id)
-    return user_ids
-
-
 def _apply_user_listing_filters(
     qs, active_filter, search, tag_filter, slack_filter,
     bounce_filter=DEFAULT_BOUNCE_FILTER,
@@ -368,7 +336,7 @@ def _apply_user_listing_filters(
             | Q(stripe_customer_id__icontains=search)
             | Q(slack_user_id__icontains=search)
         )
-        tag_user_ids = _user_ids_matching_tag_search(normalized_search)
+        tag_user_ids = user_ids_matching_tag_search(normalized_search)
         qs = qs.filter(scalar_search | Q(pk__in=tag_user_ids))
 
     if active_filter == FILTER_SUBSCRIBERS:
@@ -382,7 +350,7 @@ def _apply_user_listing_filters(
 
     normalized_tag = normalize_tag(tag_filter) if tag_filter else ''
     if normalized_tag:
-        qs = qs.filter(pk__in=_user_ids_matching_exact_tag(normalized_tag))
+        qs = qs.filter(pk__in=user_ids_with_exact_tag(normalized_tag))
 
     if slack_filter == SLACK_FILTER_YES:
         qs = qs.filter(slack_member=True)
@@ -980,23 +948,6 @@ def user_create_done(request):
 # ---------------------------------------------------------------------------
 
 
-def _all_known_contact_tags():
-    """Return the sorted, deduped union of every contact tag across users.
-
-    Powers the ``<datalist>`` typeahead on the detail page so operators see
-    suggestions for tags already in use without having to remember the exact
-    spelling. Stays staff-only (callers all gate on ``staff_required``).
-    """
-    seen = set()
-    for tag_list in User.objects.values_list('tags', flat=True):
-        if not tag_list:
-            continue
-        # Normalize defensively in case any rows pre-date the helper.
-        for tag in normalize_tags(tag_list):
-            seen.add(tag)
-    return sorted(seen)
-
-
 def _active_override_for_user(user):
     """Return the canonical strongest active non-expired override."""
     return get_active_override(user)
@@ -1479,7 +1430,7 @@ def user_detail(request, user_id):
         'is_subscribed': not user.unsubscribed,
         'tags': user_tags,
         'tag_chips': tag_chips,
-        'known_tags': _all_known_contact_tags(),
+        'known_tags': list_all_tags(),
         'bounce_state': bounce_state,
         'bounce_state_label': bounce_state_label,
         'account_lifecycle': account_lifecycle,

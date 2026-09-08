@@ -1,32 +1,23 @@
-"""Contact-tag normalization and mutation helpers (issue #354).
-
-Contact tags live on ``User.tags`` as a list of normalized strings. They are
-SEPARATE from the content-tag namespace (articles, downloads, etc.). They use
-the same slug rules plus a private source namespace such as ``stripe:active``
-or ``course:data-engineering-zoomcamp``.
-
-The ``add_tag`` / ``remove_tag`` helpers wrap normalization plus persistence so
-view code never has to touch the JSON list directly. The ``rename_tag`` /
-``delete_tag`` helpers (issue #694) operate across every user that carries the
-tag in a single transaction so operators can clean up the global tag namespace
-without iterating one user at a time.
-"""
+"""Canonical contact-tag normalization, indexed reads, and mutations."""
 
 import re
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import Count
+
+TAG_MUTATION_CHUNK_SIZE = 500
 
 
 def normalize_tag(tag):
     """Normalize a single operator contact tag."""
     if not tag or not isinstance(tag, str):
-        return ''
+        return ""
     tag = tag.strip().lower()
-    tag = tag.replace(' ', '-').replace('_', '-')
-    tag = re.sub(r'[^a-z0-9:-]', '', tag)
-    tag = re.sub(r'-{2,}', '-', tag)
-    tag = tag.strip('-')
+    tag = tag.replace(" ", "-").replace("_", "-")
+    tag = re.sub(r"[^a-z0-9:-]", "", tag)
+    tag = re.sub(r"-{2,}", "-", tag)
+    tag = tag.strip("-")
     return tag
 
 
@@ -43,194 +34,274 @@ def normalize_tags(tags):
             result.append(normalized)
     return result
 
-__all__ = [
-    'normalize_tag',
-    'normalize_tags',
-    'add_tag',
-    'remove_tag',
-    'rename_tag',
-    'delete_tag',
-    'list_all_tags',
-    'count_users_with_tag',
-    'user_ids_with_exact_tag',
-]
+
+def _tag_models():
+    User = get_user_model()
+    ContactTag = User._meta.get_field("contact_tags").remote_field.model
+    return User, ContactTag
+
+
+def _delete_unused_contact_tags():
+    _, ContactTag = _tag_models()
+    ContactTag.objects.filter(users__isnull=True).delete()
+
+
+def sync_contact_tags(user):
+    """Make ``user.contact_tags`` set-equal to normalized ``user.tags``."""
+    _, ContactTag = _tag_models()
+    slugs = normalize_tags(user.tags)
+    ContactTag.objects.bulk_create(
+        [ContactTag(slug=slug) for slug in slugs],
+        ignore_conflicts=True,
+    )
+    tag_rows = list(ContactTag.objects.filter(slug__in=slugs))
+    user.contact_tags.set(tag_rows)
+    _delete_unused_contact_tags()
+
+
+def set_tags(user, tags):
+    """Replace a user's tags while preserving normalized input order."""
+    user.tags = normalize_tags(tags)
+    user.save(update_fields=["tags"])
+    return list(user.tags)
 
 
 def add_tag(user, raw):
-    """Add a tag to ``user.tags``, normalizing the input.
-
-    Idempotent: adding an existing tag is a no-op. Returns the normalized tag
-    string (or empty string if the input normalized to nothing -- the caller
-    can treat that as "rejected, please show a flash"). Persists with
-    ``update_fields=['tags']`` to avoid touching unrelated columns.
-    """
+    """Append a normalized tag, idempotently, to JSON and the relation."""
     normalized = normalize_tag(raw)
     if not normalized:
-        return ''
+        return ""
     current = list(user.tags or [])
     if normalized in current:
         return normalized
     current.append(normalized)
-    user.tags = current
-    user.save(update_fields=['tags'])
+    set_tags(user, current)
     return normalized
 
 
 def remove_tag(user, raw):
-    """Remove a tag from ``user.tags``.
-
-    Idempotent: removing a tag the user does not have is a no-op. Returns the
-    normalized tag string regardless of whether it was actually removed.
-    """
+    """Remove a normalized tag, idempotently, from JSON and the relation."""
     normalized = normalize_tag(raw)
     if not normalized:
-        return ''
+        return ""
     current = list(user.tags or [])
     if normalized not in current:
         return normalized
     current.remove(normalized)
-    user.tags = current
-    user.save(update_fields=['tags'])
+    set_tags(user, current)
     return normalized
 
 
 def list_all_tags():
-    """Return the sorted, deduped union of every contact tag across users.
-
-    Powers the user-list tag picker (issue #694) and the user-detail
-    ``<datalist>``. Reads only the ``tags`` column to avoid materializing
-    full User rows and normalizes defensively in case any rows pre-date the
-    normalization helper.
-    """
-    User = get_user_model()
-    seen = set()
-    for tag_list in User.objects.values_list('tags', flat=True):
-        if not tag_list:
-            continue
-        for tag in normalize_tags(tag_list):
-            seen.add(tag)
-    return sorted(seen)
+    """Return sorted slugs that have at least one user relation."""
+    _, ContactTag = _tag_models()
+    return list(
+        ContactTag.objects.filter(users__isnull=False)
+        .order_by("slug")
+        .values_list("slug", flat=True)
+        .distinct()
+    )
 
 
-def count_users_with_tag(name):
-    """Return the number of users currently carrying ``name``.
-
-    Used by the user-detail delete-tag-everywhere confirm copy
-    ("This removes it from {N} users."). Normalizes the input so callers
-    can pass the raw chip text.
-    """
-    normalized = normalize_tag(name)
-    if not normalized:
-        return 0
-    User = get_user_model()
-    count = 0
-    for tag_list in User.objects.values_list('tags', flat=True):
-        if isinstance(tag_list, list) and normalized in tag_list:
-            count += 1
-    return count
-
-
-def user_ids_with_exact_tag(name):
-    """Return user IDs carrying the normalized tag as an exact list item."""
-    normalized = normalize_tag(name)
-    if not normalized:
-        return []
-    User = get_user_model()
+def tags_with_user_counts():
+    """Return all in-use tag names and carrier counts in one query."""
+    _, ContactTag = _tag_models()
+    rows = (
+        ContactTag.objects.annotate(user_count=Count("users", distinct=True))
+        .filter(user_count__gt=0)
+        .order_by("slug")
+        .values("slug", "user_count")
+    )
     return [
-        user_id
-        for user_id, tags in User.objects.values_list('id', 'tags').iterator()
-        if isinstance(tags, list) and normalized in tags
+        {"name": row["slug"], "user_count": row["user_count"]}
+        for row in rows
     ]
 
 
+def count_users_with_tag(name):
+    """Return the number of users carrying the normalized slug."""
+    normalized = normalize_tag(name)
+    if not normalized:
+        return 0
+    _, ContactTag = _tag_models()
+    return (
+        ContactTag.objects.filter(slug=normalized)
+        .annotate(user_count=Count("users", distinct=True))
+        .values_list("user_count", flat=True)
+        .first()
+        or 0
+    )
+
+
+def user_ids_with_exact_tag(name):
+    """Return an indexed queryset of user ids carrying one exact slug."""
+    normalized = normalize_tag(name)
+    User, _ = _tag_models()
+    if not normalized:
+        return User.objects.none().values_list("pk", flat=True)
+    return User.objects.filter(
+        contact_tags__slug=normalized,
+    ).values_list("pk", flat=True)
+
+
+def user_ids_matching_tag_search(search):
+    """Return user ids whose relation-backed slugs contain ``search``."""
+    normalized = normalize_tag(search)
+    User, _ = _tag_models()
+    if not normalized:
+        return User.objects.none().values_list("pk", flat=True)
+    return (
+        User.objects.filter(contact_tags__slug__icontains=normalized)
+        .order_by()
+        .values_list("pk", flat=True)
+        .distinct()
+    )
+
+
+def _replace_slug(tags, old, new=None):
+    replaced = []
+    seen = set()
+    for slug in tags:
+        candidate = new if slug == old else slug
+        if candidate is None or candidate in seen:
+            continue
+        seen.add(candidate)
+        replaced.append(candidate)
+    return replaced
+
+
+def _matched_user_batch(User, tag, last_pk):
+    return list(
+        User.objects.select_for_update()
+        .filter(contact_tags=tag, pk__gt=last_pk)
+        .only("pk", "tags")
+        .order_by("pk")[:TAG_MUTATION_CHUNK_SIZE]
+    )
+
+
 def rename_tag(old, new):
-    """Rename a tag across every user that carries it (issue #694).
-
-    Behaviour:
-
-    - Both arguments are normalized via ``normalize_tag``.
-    - If ``new`` normalizes to the empty string, raises ``ValueError``.
-    - If ``old`` normalizes to the empty string, returns
-      ``{"affected": 0, "old": "", "new": <normalized>}`` (nothing to rename).
-    - If ``old == new`` after normalization, no-op:
-      ``{"affected": 0, "old": <normalized>, "new": <normalized>}``.
-    - Otherwise, every user that has ``old`` in ``tags`` is updated:
-      ``old`` is replaced with ``new``, deduping so a user that already
-      carried ``new`` does not end up with the same slug twice. Each row
-      is persisted with ``update_fields=['tags']``.
-
-    The whole set of writes is wrapped in a single ``transaction.atomic()``
-    so the global namespace stays consistent on failure.
-    """
+    """Rename one slug across matching users in atomic 500-row chunks."""
     new_normalized = normalize_tag(new)
     if not new_normalized:
-        raise ValueError('New tag name cannot be empty.')
+        raise ValueError("New tag name cannot be empty.")
 
     old_normalized = normalize_tag(old)
     if not old_normalized:
-        return {'affected': 0, 'old': '', 'new': new_normalized}
-
+        return {"affected": 0, "old": "", "new": new_normalized}
     if old_normalized == new_normalized:
         return {
-            'affected': 0,
-            'old': old_normalized,
-            'new': new_normalized,
+            "affected": 0,
+            "old": old_normalized,
+            "new": new_normalized,
         }
 
-    User = get_user_model()
+    User, ContactTag = _tag_models()
     affected = 0
     with transaction.atomic():
-        # Only iterate users that actually carry the old tag. ``tags`` is a
-        # JSONField list, so we filter in Python to stay portable across
-        # sqlite / postgres without leaning on ``contains`` lookups that
-        # don't work the same way everywhere.
-        for user in User.objects.exclude(tags=[]).only('id', 'tags'):
-            current = list(user.tags or [])
-            if old_normalized not in current:
-                continue
-            new_list = []
-            seen = set()
-            for tag in current:
-                if tag == old_normalized:
-                    candidate = new_normalized
-                else:
-                    candidate = tag
-                if candidate in seen:
-                    continue
-                seen.add(candidate)
-                new_list.append(candidate)
-            user.tags = new_list
-            user.save(update_fields=['tags'])
-            affected += 1
+        old_tag = ContactTag.objects.select_for_update().filter(
+            slug=old_normalized,
+        ).first()
+        if old_tag is None:
+            return {
+                "affected": 0,
+                "old": old_normalized,
+                "new": new_normalized,
+            }
+        new_tag, _ = ContactTag.objects.get_or_create(slug=new_normalized)
+        through = User.contact_tags.through
+        last_pk = 0
+        while True:
+            batch = _matched_user_batch(User, old_tag, last_pk)
+            if not batch:
+                break
+            last_pk = batch[-1].pk
+            batch_ids = [user.pk for user in batch]
+            for user in batch:
+                user.tags = _replace_slug(
+                    list(user.tags or []),
+                    old_normalized,
+                    new_normalized,
+                )
+            User.objects.bulk_update(
+                batch,
+                ["tags"],
+                batch_size=TAG_MUTATION_CHUNK_SIZE,
+            )
+            through.objects.filter(
+                user_id__in=batch_ids,
+                contacttag_id=old_tag.pk,
+            ).delete()
+            through.objects.bulk_create(
+                [
+                    through(user_id=user_id, contacttag_id=new_tag.pk)
+                    for user_id in batch_ids
+                ],
+                ignore_conflicts=True,
+                batch_size=TAG_MUTATION_CHUNK_SIZE,
+            )
+            affected += len(batch)
+        _delete_unused_contact_tags()
 
     return {
-        'affected': affected,
-        'old': old_normalized,
-        'new': new_normalized,
+        "affected": affected,
+        "old": old_normalized,
+        "new": new_normalized,
     }
 
 
 def delete_tag(name):
-    """Delete a tag from every user that carries it (issue #694).
-
-    Returns ``{"affected": <int>, "name": <normalized>}``. Wrapped in a
-    single ``transaction.atomic()`` so the global namespace stays
-    consistent on failure. An empty / unknown ``name`` is a no-op.
-    """
+    """Delete one slug from matching users in atomic 500-row chunks."""
     normalized = normalize_tag(name)
     if not normalized:
-        return {'affected': 0, 'name': ''}
+        return {"affected": 0, "name": ""}
 
-    User = get_user_model()
+    User, ContactTag = _tag_models()
     affected = 0
     with transaction.atomic():
-        for user in User.objects.exclude(tags=[]).only('id', 'tags'):
-            current = list(user.tags or [])
-            if normalized not in current:
-                continue
-            current.remove(normalized)
-            user.tags = current
-            user.save(update_fields=['tags'])
-            affected += 1
+        tag = ContactTag.objects.select_for_update().filter(slug=normalized).first()
+        if tag is None:
+            return {"affected": 0, "name": normalized}
+        through = User.contact_tags.through
+        last_pk = 0
+        while True:
+            batch = _matched_user_batch(User, tag, last_pk)
+            if not batch:
+                break
+            last_pk = batch[-1].pk
+            batch_ids = [user.pk for user in batch]
+            for user in batch:
+                user.tags = _replace_slug(
+                    list(user.tags or []),
+                    normalized,
+                )
+            User.objects.bulk_update(
+                batch,
+                ["tags"],
+                batch_size=TAG_MUTATION_CHUNK_SIZE,
+            )
+            through.objects.filter(
+                user_id__in=batch_ids,
+                contacttag_id=tag.pk,
+            ).delete()
+            affected += len(batch)
+        _delete_unused_contact_tags()
 
-    return {'affected': affected, 'name': normalized}
+    return {"affected": affected, "name": normalized}
+
+
+__all__ = [
+    "TAG_MUTATION_CHUNK_SIZE",
+    "add_tag",
+    "count_users_with_tag",
+    "delete_tag",
+    "list_all_tags",
+    "normalize_tag",
+    "normalize_tags",
+    "remove_tag",
+    "rename_tag",
+    "set_tags",
+    "sync_contact_tags",
+    "tags_with_user_counts",
+    "user_ids_matching_tag_search",
+    "user_ids_with_exact_tag",
+]

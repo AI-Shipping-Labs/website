@@ -873,6 +873,10 @@ class UserTagsTest(_UserApiBase):
         self.assertIn("early-adopter", body["tags"])
         user.refresh_from_db()
         self.assertIn("early-adopter", user.tags)
+        self.assertEqual(
+            set(user.contact_tags.values_list("slug", flat=True)),
+            set(user.tags),
+        )
 
         # Re-adding is a no-op (still 200).
         response = self._post_tag("alice@test.com", {"tag": "early-adopter"})
@@ -907,6 +911,11 @@ class UserTagsTest(_UserApiBase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["tags"], ["sprint:may-2026"])
+        user.refresh_from_db()
+        self.assertEqual(
+            set(user.contact_tags.values_list("slug", flat=True)),
+            {"sprint:may-2026"},
+        )
 
         # Second DELETE is still 200, no error.
         response = self._delete_tag("alice@test.com", "wave-2")

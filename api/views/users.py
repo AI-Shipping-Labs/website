@@ -58,7 +58,12 @@ from accounts.services.slack_identity import (
     normalize_slack_user_id,
 )
 from accounts.utils.bounce import mark_permanent_bounce, record_soft_bounce
-from accounts.utils.tags import add_tag, normalize_tag, remove_tag
+from accounts.utils.tags import (
+    add_tag,
+    normalize_tag,
+    remove_tag,
+    user_ids_matching_tag_search,
+)
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.users import (
@@ -529,19 +534,8 @@ def users_collection(request):
             | Q(stripe_customer_id__icontains=q)
             | Q(slack_user_id__icontains=q)
         )
-        # Tag-substring match: ``User.tags`` is a JSONField list so we
-        # filter in Python to stay portable across SQLite (tests) and
-        # Postgres (prod). Mirrors the Studio listing's behaviour.
         normalized = normalize_tag(q)
-        tag_user_ids = []
-        if normalized:
-            for user_id, tags in User.objects.values_list("pk", "tags").iterator():
-                if not isinstance(tags, list):
-                    continue
-                for tag in tags:
-                    if isinstance(tag, str) and normalized in tag.lower():
-                        tag_user_ids.append(user_id)
-                        break
+        tag_user_ids = user_ids_matching_tag_search(normalized)
         qs = qs.filter(scalar | Q(pk__in=tag_user_ids))
 
     qs = qs.order_by(*_user_sort_expressions(sort_value))[:limit]

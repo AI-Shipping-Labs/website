@@ -1,4 +1,4 @@
-.PHONY: css-build css-watch check-tailwind collectstatic run run2 worker dev migrate qcache sync seed test test-core test-affected test-judge test-live-slack-announcement coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory check-openapi-drift boot-profile clean
+.PHONY: css-build css-watch check-tailwind collectstatic run run2 worker dev migrate qcache sync seed core-link core-unlink test test-core test-affected test-judge test-live-slack-announcement coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory check-openapi-drift boot-profile clean
 
 # Default SITE_BASE_URL for local dev so generated links (unsubscribe,
 # calendar invites, password resets, share URLs) point at the running
@@ -63,6 +63,19 @@ sync:
 # Seed dev-only data (fake users, events, polls, notifications)
 seed:
 	uv run python manage.py seed_data
+
+# Point the pinned community-base dependency at a local sibling checkout for
+# development (community-base playbook P1). Requires clean pyproject.toml and
+# uv.lock; the pinned bytes are snapshotted under .tmp/core-link/. Package
+# edits become visible without reinstall. Never commit a linked tree.
+core-link:
+	uv run python scripts/community_base_link.py link
+
+# Restore the pinned community-base dependency captured by core-link. Refuses
+# on conflicting pyproject.toml edits or missing recovery state, never on a
+# blanket git restore.
+core-unlink:
+	uv run python scripts/community_base_link.py unlink
 
 # Run all Django tests
 test:

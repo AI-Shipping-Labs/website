@@ -670,6 +670,14 @@ double-rendering. See issue #347.
               </a>
             </li>
             <li>
+              <a href="{% url 'community_base_jobs' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'jobs' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                 {% if state.active_destination == 'jobs' %}aria-current="page"{% endif %}>
+                <i data-lucide="database" class="w-4 h-4"></i>
+                <span>Job intents</span>
+              </a>
+            </li>
+            <li>
               <a href="{% url 'studio_ses_event_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'ses_events' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                  {% if state.active_destination == 'ses_events' %}aria-current="page"{% endif %}>

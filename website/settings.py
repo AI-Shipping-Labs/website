@@ -176,6 +176,8 @@ INSTALLED_APPS = [
     'email_app',
     'voting',
     'jobs',
+    'community_base.studio',
+    'community_base.jobs',
     'community',
     'notifications',
     'plans.apps.PlansConfig',
@@ -189,6 +191,14 @@ INSTALLED_APPS = [
     'member_api',
     'triggers.apps.TriggersConfig',
 ]
+
+# Community-base package (DataTalksClub/community-base) settings, read through
+# community_base.kernel.conf. The durable jobs app (plan issue A1.1) runs its
+# intents on this site's django-q cluster; mail stays on the site SES stack
+# until the mail adoption issue lands.
+COMMUNITY_BASE = {
+    'JOBS_BACKEND': 'django_q',
+}
 
 MIDDLEWARE = [
     # Outermost so every dev response and every production-private response,

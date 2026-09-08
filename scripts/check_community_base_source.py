@@ -25,7 +25,7 @@ from pathlib import Path
 PACKAGE_NAME = "community-base"
 GITHUB_SLUG = "datatalksclub/community-base"
 TAGGED_DIRECT_REF_RE = re.compile(
-    rf"^{PACKAGE_NAME}\s*@\s*git\+https://github\.com/{GITHUB_SLUG}@v\d+[0-9A-Za-z.\-]*$",
+    rf"^{PACKAGE_NAME}(?:\[[a-z0-9_, -]+\])?\s*@\s*git\+https://github\.com/{GITHUB_SLUG}@v\d+[0-9A-Za-z.\-]*$",
     re.IGNORECASE,
 )
 

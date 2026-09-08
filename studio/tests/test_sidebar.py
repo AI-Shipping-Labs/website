@@ -249,7 +249,7 @@ class StudioSidebarStructureTest(TestCase):
                 )
 
     def test_every_rendered_nav_anchor_has_canonical_focus_classes(self):
-        for superuser, expected_count in ((False, 47), (True, 49)):
+        for superuser, expected_count in ((False, 48), (True, 50)):
             with self.subTest(superuser=superuser):
                 response = self._get_studio_dashboard(superuser=superuser)
                 anchors = self._sidebar_anchors(response)

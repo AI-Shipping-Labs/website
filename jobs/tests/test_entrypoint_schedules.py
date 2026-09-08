@@ -73,6 +73,8 @@ class EntrypointRegistersSchedulesTest(TestCase):
             'sprint-cadence-notifications',
             'sprint-end-recaps',
             'onboarding-reminders',
+            'cb-jobs-run-due',
+            'cb-jobs-sweep',
         }
         self.assertEqual(names, expected)
 

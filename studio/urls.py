@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 
 from studio.views.announcement import announcement_banner_edit
 from studio.views.api_tokens import (
@@ -1557,4 +1557,8 @@ urlpatterns = [
         content_source_refresh,
         name='studio_content_source_refresh',
     ),
+    # Durable job intents from the community-base package (plan issue A1.1).
+    # The local django-q worker page stays the operator's first stop; this page
+    # lists durable intents with retry/discard and registered schedules.
+    path('', include('community_base.jobs.studio_urls')),
 ]

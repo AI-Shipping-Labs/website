@@ -99,6 +99,8 @@ Studio path: `Studio > Settings > Auth`.
 | Key | Source | Notes |
 |-----|--------|-------|
 | `UNVERIFIED_USER_TTL_DAYS` | non-secret | Days an email-signup account survives without verifying. Default 7. The daily `purge-unverified-users` job hard-deletes expired rows that have no related activity (no `last_login`, no Stripe customer, no `EmailLog` / project / submission rows). The companion `remind-unverified-users` job sends a one-shot reminder ~24 hours before the window closes. Social-login signups are auto-verified by the OAuth provider and never enter this lifecycle. Issue #452. |
+| `PURGE_UNVERIFIED_BATCH_SIZE` | non-secret | Candidate ids inspected per primary-key window by each unverified-user purge pass. Default 500. Non-integer or non-positive overrides fall back to 500. Issue #1522. |
+| `PURGE_UNVERIFIED_MAX_BATCHES` | non-secret | Maximum primary-key windows inspected per pass in one daily purge run. Default 50, allowing up to 25,000 candidates per pass at default settings. Non-integer or non-positive overrides fall back to 50. Issue #1522. |
 | `AUTH_THROTTLE_LOGIN_IP_LIMIT` | non-secret | Max `POST /api/login` attempts from one IP per login window. Default 20. Non-integer or non-positive overrides fall back to 20. Issue #1516. |
 | `AUTH_THROTTLE_LOGIN_EMAIL_LIMIT` | non-secret | Max `POST /api/login` attempts for one email per login window. Default 10. Non-integer or non-positive overrides fall back to 10. Issue #1516. |
 | `AUTH_THROTTLE_LOGIN_WINDOW_SECONDS` | non-secret | Login IP and email window in seconds. Default 900 (15 minutes). Non-integer or non-positive overrides fall back to 900. Issue #1516. |
@@ -106,7 +108,7 @@ Studio path: `Studio > Settings > Auth`.
 | `AUTH_THROTTLE_MAIL_EMAIL_LIMIT` | non-secret | Max register / reset-request / subscribe attempts for one email per mail window. Default 3. Non-integer or non-positive overrides fall back to 3. Issue #1516. |
 | `AUTH_THROTTLE_MAIL_WINDOW_SECONDS` | non-secret | Mail IP and email window in seconds. Default 3600 (1 hour). Non-integer or non-positive overrides fall back to 3600. Issue #1516. |
 
-Foot-gun: lowering `UNVERIFIED_USER_TTL_DAYS` retroactively shortens the window for users already in the queue. Existing rows from before the issue #452 migration have `verification_expires_at` set to NULL and are NOT subject to purge — only signups created after the migration are. Throttle counters are hashed IP/email keys in the shared `django_q` cache; HTML login/register/reset/subscribe pages are not limited, only the JSON POSTs.
+Foot-gun: lowering `UNVERIFIED_USER_TTL_DAYS` retroactively shortens the window for users already in the queue. Existing rows from before the issue #452 migration have `verification_expires_at` set to NULL and are NOT subject to purge — only signups created after the migration are. A purge run also stops after 240 seconds, below the worker's 300-second timeout; candidates left by either safety limit wait for the next daily run. Throttle counters are hashed IP/email keys in the shared `django_q` cache; HTML login/register/reset/subscribe pages are not limited, only the JSON POSTs.
 
 Test: register a new email-only account, confirm `verification_expires_at` is populated on the User row in Studio. After `UNVERIFIED_USER_TTL_DAYS` days without verification, the daily purge cleans the row. For throttling, save a low login IP limit in Studio > Settings > Auth, submit `/api/login` past that limit, and confirm HTTP 429 with `Retry-After` and no session.
 

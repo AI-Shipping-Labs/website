@@ -1,314 +1,360 @@
-"""Daily purge of expired unverified email-signup accounts (issue #452).
+"""Daily purge of expired unverified email-signup accounts.
 
-An email-only signup is considered abandoned if the user never clicked
-the verification link before ``verification_expires_at``. We hard-delete
-such rows so they stop polluting campaign targeting and free up the
-unique-email slot if the user wants to retry with a corrected typo.
-
-Hard-delete is permanent, so the safety gate is paranoid:
-
-- ``email_verified`` MUST be False.
-- ``verification_expires_at`` MUST be a real timestamp in the past.
-  Legacy rows where it is NULL are out of scope on purpose — the
-  migration leaves existing users untouched so we only enforce the
-  policy from #452 onward.
-- ``last_login`` MUST be NULL — if a user ever logged in, even once,
-  they're a real user and we don't touch them.
-- ``stripe_customer_id`` and ``subscription_id`` MUST be empty —
-  payments imply a real account.
-- No reverse FK on ``User`` may point at the user. We enumerate via
-  ``_meta.get_fields()`` so future apps that add a ``ForeignKey(User)``
-  automatically gate the purge without code changes here.
-
-When safety blocks deletion the user row stays put with
-``verification_expires_at`` still set, and the next daily run will
-retry the gate (in case e.g. an EmailLog row was the only blocker and
-was archived in the meantime).
-
-Two-pass model (issue #766):
-
-- Pass A — Standard bucket: 7-day TTL with the strict gate. EmailLog
-  and SesEvent rows block deletion here so we don't blindly erase
-  audit data for rows that might still come back.
-- Pass B — Eager-bounce bucket: an unverified user whose verification
-  email permanently bounced more than ``BOUNCE_PURGE_DELAY_HOURS`` ago
-  is provably dead. We extend the ignore-set to skip EmailLog and
-  SesEvent (the verification send is what bounced, so of course it's
-  on the user) but keep every other blocker. The pass logs at INFO so
-  an audit can reconstruct each deletion.
+The safety policy comes from issues #452 and #766. Issue #1522 changes only
+the query plan: candidate fields are filtered in SQL, candidates are processed
+in bounded primary-key windows, and every reverse relation is queried once per
+batch instead of once per user.
 """
 
 import logging
+import time
+from collections import Counter
+from dataclasses import dataclass, field
 from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Q
 from django.utils import timezone
+
+from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
 
-# Relations auto-populated for every user during signup (admin
-# bookkeeping, allauth scaffolding, attribution snapshots). They do
-# not indicate "real activity" so they must not block the purge.
-# Anything not in this set blocks purge if it has rows.
+DEFAULT_PURGE_UNVERIFIED_BATCH_SIZE = 500
+DEFAULT_PURGE_UNVERIFIED_MAX_BATCHES = 50
+PURGE_UNVERIFIED_RUN_BUDGET_SECONDS = 240
+
+# Relations auto-populated for every user during signup. They are bookkeeping,
+# not evidence of member activity. Any future reverse FK/O2O absent from this
+# set automatically blocks deletion.
 _PURGE_IGNORED_RELATIONS = frozenset({
-    # Django admin audit log — only populated for staff actions, but
-    # keep it ignored so a stray staff-impersonation entry isn't a
-    # reason to keep an unverified email signup forever.
     "logentry",
-    # allauth EmailAddress / SocialAccount rows — present for any
-    # user that ever interacted with allauth, including bookkeeping.
     "emailaddress",
     "socialaccount",
-    # analytics.UserAttribution is a OneToOne created by a
-    # ``post_save`` signal on User, so every user has exactly one of
-    # these. It carries UTM data, not user-driven activity.
     "attribution",
-    # analytics.UserActivity (issue #853): every user gets a ``signup``
-    # row written by the same ``post_save`` chokepoint as ``attribution``.
-    # For an unverified, never-logged-in email signup that is the ONLY
-    # possible row (enroll / lesson / payment / event all require a
-    # verified, authenticated session), so this relation is signup
-    # bookkeeping — not user-driven activity — and must not block the
-    # purge of an abandoned account.
     "activities",
 })
 
-# Extra reverse relations ignored only by the eager-bounce bucket
-# (issue #766). The verification email is the bounce source, so the
-# matching ``EmailLog`` / ``SesEvent`` rows are not "activity" -- they
-# are the very evidence that the address is dead.
+# Verification mail and its SES event are evidence of a dead address in the
+# eager-bounce pass, so only that pass ignores them.
 _EAGER_PURGE_IGNORED_RELATIONS = _PURGE_IGNORED_RELATIONS | {
     "email_logs",
     "ses_events",
 }
 
 
-def _reverse_relation_has_rows(user, accessor_name, *, one_to_one):
-    """Return True iff the user has at least one row on ``accessor_name``."""
-    if one_to_one:
-        try:
-            getattr(user, accessor_name)
-        except ObjectDoesNotExist:
-            return False
-        return True
-    manager = getattr(user, accessor_name)
-    return manager.exists()
+@dataclass
+class _PassResult:
+    deleted: int = 0
+    skipped: int = 0
+    batches: int = 0
+    blocker_counts: Counter = field(default_factory=Counter)
 
 
-def _first_blocking_relation(user, ignored):
-    """Walk reverse relations on ``user``; return the first that has rows."""
-    for field in user._meta.get_fields():
-        if not field.auto_created:
+def _positive_int_config(key, default):
+    """Resolve a positive integer IntegrationSetting with a safe fallback."""
+    raw = get_config(key, default)
+    try:
+        value = int(str(raw).strip(), 10)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _candidate_queryset(base_queryset):
+    """Push every cheap, fail-closed field gate into the database query."""
+    return base_queryset.filter(
+        last_login__isnull=True,
+        stripe_customer_id="",
+        subscription_id="",
+    )
+
+
+def _blocking_relations(User, ignored):
+    """Yield reverse FK/O2O fields discovered from current User metadata."""
+    for relation in User._meta.get_fields():
+        if not relation.auto_created:
             continue
-        if not (field.one_to_many or field.one_to_one):
+        if not (relation.one_to_many or relation.one_to_one):
             continue
-        accessor_name = field.get_accessor_name()
-        if not accessor_name:
+        accessor_name = relation.get_accessor_name()
+        if (
+            not accessor_name
+            or relation.name in ignored
+            or accessor_name in ignored
+        ):
             continue
-        if accessor_name in ignored:
-            continue
+        yield accessor_name, relation
+
+
+def _related_user_ids(relation, batch_ids):
+    """Return user ids referenced by one reverse relation in this batch."""
+    foreign_key = relation.field
+    return set(
+        relation.related_model._base_manager.filter(
+            **{f"{foreign_key.name}__in": batch_ids},
+        ).values_list(foreign_key.attname, flat=True)
+    )
+
+
+def _batch_blockers(User, batch_ids, ignored):
+    """Return each blocked id's first accessor, or a failed accessor name.
+
+    A raised relation query means the batch was not fully inspected. The caller
+    must therefore delete nobody from it.
+    """
+    blockers = {}
+    for accessor_name, relation in _blocking_relations(User, ignored):
         try:
-            has_rows = _reverse_relation_has_rows(
-                user, accessor_name, one_to_one=field.one_to_one,
-            )
+            related_ids = _related_user_ids(relation, batch_ids)
         except Exception:
             logger.exception(
-                "Failed to check reverse relation %s on user %s; "
-                "treating as blocked to be safe.",
+                "Failed to query reverse relation %s for unverified-user "
+                "purge batch; treating the whole batch as blocked.",
                 accessor_name,
-                user.pk,
             )
-            return accessor_name
-        if has_rows:
-            return accessor_name
+            return None, accessor_name
+        for user_id in related_ids:
+            blockers.setdefault(user_id, accessor_name)
+    return blockers, None
+
+
+def _warn_skipped(user, reason, *, eager):
+    if eager:
+        logger.warning(
+            "Skipping eager-bounce purge of user %s (id=%s): blocked by %s",
+            user.email,
+            user.pk,
+            reason,
+        )
+    else:
+        logger.warning(
+            "Skipping purge of unverified user %s (id=%s): blocked by %s",
+            user.email,
+            user.pk,
+            reason,
+        )
+
+
+def _field_blocker(user):
+    if user.last_login is not None:
+        return "last_login"
+    if user.stripe_customer_id:
+        return "stripe_customer_id"
+    if user.subscription_id:
+        return "subscription_id"
     return None
 
 
-def _user_has_related_activity(user):
-    """Return the name of the first reverse relation with rows, or None.
+def _record_field_blockers(
+    base_queryset,
+    result,
+    *,
+    eager,
+    warning_limit,
+    deadline,
+):
+    """Preserve bounded warning/counter behavior for SQL-excluded blockers.
 
-    Standard-bucket gate: every reverse relation outside
-    ``_PURGE_IGNORED_RELATIONS`` blocks deletion. Used by the strict
-    7-day TTL bucket so an EmailLog / SesEvent row keeps the user.
+    Field-blocked rows are not relation-scan candidates. We still report a
+    bounded window so existing operational greps for these safety gates remain
+    useful, without walking or warning for an unprocessed backlog.
     """
-    return _first_blocking_relation(user, _PURGE_IGNORED_RELATIONS)
+    if time.monotonic() >= deadline:
+        return
+    blocker_filter = (
+        Q(last_login__isnull=False)
+        | ~Q(stripe_customer_id="")
+        | ~Q(subscription_id="")
+    )
+    blocked_users = list(
+        base_queryset.filter(blocker_filter)
+        .order_by("pk")[:warning_limit]
+    )
+    for user in blocked_users:
+        reason = _field_blocker(user)
+        result.skipped += 1
+        result.blocker_counts[reason] += 1
+        _warn_skipped(user, reason, eager=eager)
 
 
-def _user_has_eager_blocking_activity(user):
-    """Return the first blocking reverse relation for the eager bucket.
+def _delete_batch(User, batch, blocked_by, result, *, eager):
+    delete_ids = []
+    for user in batch:
+        reason = blocked_by.get(user.pk)
+        if reason:
+            result.skipped += 1
+            result.blocker_counts[reason] += 1
+            _warn_skipped(user, reason, eager=eager)
+        else:
+            delete_ids.append(user.pk)
 
-    Eager-bucket gate: extends ``_PURGE_IGNORED_RELATIONS`` with
-    ``email_logs`` and ``ses_events`` (issue #766). Stripe / login /
-    everything else still blocks.
-    """
-    return _first_blocking_relation(user, _EAGER_PURGE_IGNORED_RELATIONS)
+    if not delete_ids:
+        return
+
+    # QuerySet.delete() uses Django's Collector, including cascades and delete
+    # signals, while avoiding one collector traversal per user.
+    User._base_manager.filter(pk__in=delete_ids).delete()
+    result.deleted += len(delete_ids)
+
+    for user in batch:
+        if user.pk not in delete_ids:
+            continue
+        if eager:
+            recorded_at_iso = (
+                user.bounce_recorded_at.isoformat()
+                if user.bounce_recorded_at is not None
+                else ""
+            )
+            logger.info(
+                "Eager-purged unverified bounced user email=%s (id=%s) "
+                "bounce_recorded_at=%s last_bounce_diagnostic=%r",
+                user.email,
+                user.pk,
+                recorded_at_iso,
+                user.last_bounce_diagnostic or "",
+            )
+        else:
+            logger.info(
+                "Purged unverified user %s (id=%s) past verification_expires_at",
+                user.email,
+                user.pk,
+            )
 
 
-def _is_safe_to_purge(user):
-    """Confirm the candidate user has done nothing worth preserving."""
-    if user.last_login is not None:
-        return False, "last_login"
-    if user.stripe_customer_id:
-        return False, "stripe_customer_id"
-    if user.subscription_id:
-        return False, "subscription_id"
-    blocker = _user_has_related_activity(user)
-    if blocker:
-        return False, blocker
-    return True, None
-
-
-def _is_safe_to_eager_purge(user):
-    """Same as :func:`_is_safe_to_purge` but ignores EmailLog / SesEvent.
-
-    Used by the eager-bounce bucket where the EmailLog / SesEvent rows
-    ARE the evidence that the user is dead, not a signal of real
-    activity (issue #766).
-    """
-    if user.last_login is not None:
-        return False, "last_login"
-    if user.stripe_customer_id:
-        return False, "stripe_customer_id"
-    if user.subscription_id:
-        return False, "subscription_id"
-    blocker = _user_has_eager_blocking_activity(user)
-    if blocker:
-        return False, blocker
-    return True, None
-
-
-def _run_standard_pass(now):
-    """Pass A: standard 7-day TTL bucket (existing behavior)."""
+def _run_pass(
+    base_queryset,
+    ignored,
+    *,
+    eager,
+    batch_size,
+    max_batches,
+    deadline,
+):
     User = get_user_model()
-    candidates = User.objects.filter(
+    result = _PassResult()
+
+    _record_field_blockers(
+        base_queryset,
+        result,
+        eager=eager,
+        warning_limit=batch_size,
+        deadline=deadline,
+    )
+
+    candidates = _candidate_queryset(base_queryset)
+    last_pk = 0
+    while result.batches < max_batches and time.monotonic() < deadline:
+        batch = list(
+            candidates.filter(pk__gt=last_pk)
+            .order_by("pk")[:batch_size]
+        )
+        if not batch:
+            break
+        result.batches += 1
+        last_pk = batch[-1].pk
+        batch_ids = [user.pk for user in batch]
+
+        blocked_by, failed_accessor = _batch_blockers(User, batch_ids, ignored)
+        if failed_accessor:
+            result.skipped += len(batch)
+            result.blocker_counts[failed_accessor] += len(batch)
+            for user in batch:
+                _warn_skipped(user, failed_accessor, eager=eager)
+            continue
+
+        # Relation inspection may itself consume the remaining time. Leave the
+        # fully inspected batch for the next run instead of starting deletion
+        # after the worker's safety budget.
+        if time.monotonic() >= deadline:
+            break
+        _delete_batch(User, batch, blocked_by, result, eager=eager)
+
+    return result
+
+
+def _standard_base_queryset(now):
+    User = get_user_model()
+    return User._base_manager.filter(
         email_verified=False,
         verification_expires_at__isnull=False,
         verification_expires_at__lt=now,
     )
 
-    deleted = 0
-    skipped = 0
-    for user in candidates:
-        safe, reason = _is_safe_to_purge(user)
-        if not safe:
-            skipped += 1
-            logger.warning(
-                "Skipping purge of unverified user %s (id=%s): blocked by %s",
-                user.email,
-                user.pk,
-                reason,
-            )
-            continue
-        user_pk = user.pk
-        user_email = user.email
-        user.delete()
-        deleted += 1
-        logger.info(
-            "Purged unverified user %s (id=%s) past verification_expires_at",
-            user_email,
-            user_pk,
-        )
-    return deleted, skipped
 
-
-def _run_eager_bounce_pass(now):
-    """Pass B: NEW eager-bounce bucket (issue #766).
-
-    Drops unverified users whose verification email bounced permanently
-    more than ``BOUNCE_PURGE_DELAY_HOURS`` ago. Reads the override
-    inside the function so tests can patch ``settings`` per-test.
-    """
+def _eager_base_queryset(now):
     User = get_user_model()
     delay_hours = getattr(settings, "BOUNCE_PURGE_DELAY_HOURS", 24)
     cutoff = now - timedelta(hours=delay_hours)
-
-    candidates = User.objects.filter(
+    return User._base_manager.filter(
         email_verified=False,
         bounce_state=User.BounceState.PERMANENT,
         bounce_recorded_at__lt=cutoff,
     )
 
-    deleted = 0
-    skipped = 0
-    for user in candidates:
-        safe, reason = _is_safe_to_eager_purge(user)
-        if not safe:
-            skipped += 1
-            logger.warning(
-                "Skipping eager-bounce purge of user %s (id=%s): blocked by %s",
-                user.email,
-                user.pk,
-                reason,
-            )
-            continue
-        user_pk = user.pk
-        user_email = user.email
-        recorded_at_iso = (
-            user.bounce_recorded_at.isoformat()
-            if user.bounce_recorded_at is not None
-            else ""
-        )
-        diagnostic = user.last_bounce_diagnostic or ""
-        user.delete()
-        deleted += 1
-        logger.info(
-            "Eager-purged unverified bounced user email=%s (id=%s) "
-            "bounce_recorded_at=%s last_bounce_diagnostic=%r",
-            user_email,
-            user_pk,
-            recorded_at_iso,
-            diagnostic,
-        )
-    return deleted, skipped
-
 
 def purge_unverified_users():
-    """Hard-delete expired unverified email-signup accounts.
-
-    Runs the standard 7-day TTL bucket first (Pass A), then the
-    eager-bounce bucket (Pass B). Each pass is independent: a failure
-    in one bucket does not abort the other.
-
-    Returns:
-        dict: ``{
-            "deleted": <total>,
-            "deleted_standard": <int>,
-            "deleted_eager": <int>,
-            "skipped": <total>,
-            "skipped_standard": <int>,
-            "skipped_eager": <int>,
-        }``.
-
-        The legacy ``deleted`` / ``skipped`` keys equal the sum of the
-        per-bucket counters so existing monitors keep working (issue
-        #766).
-    """
+    """Hard-delete safe unverified accounts within bounded work limits."""
     now = timezone.now()
+    batch_size = _positive_int_config(
+        "PURGE_UNVERIFIED_BATCH_SIZE",
+        DEFAULT_PURGE_UNVERIFIED_BATCH_SIZE,
+    )
+    max_batches = _positive_int_config(
+        "PURGE_UNVERIFIED_MAX_BATCHES",
+        DEFAULT_PURGE_UNVERIFIED_MAX_BATCHES,
+    )
+    deadline = time.monotonic() + PURGE_UNVERIFIED_RUN_BUDGET_SECONDS
 
-    deleted_standard, skipped_standard = _run_standard_pass(now)
-    deleted_eager, skipped_eager = _run_eager_bounce_pass(now)
+    standard = _run_pass(
+        _standard_base_queryset(now),
+        _PURGE_IGNORED_RELATIONS,
+        eager=False,
+        batch_size=batch_size,
+        max_batches=max_batches,
+        deadline=deadline,
+    )
+    eager = _run_pass(
+        _eager_base_queryset(now),
+        _EAGER_PURGE_IGNORED_RELATIONS,
+        eager=True,
+        batch_size=batch_size,
+        max_batches=max_batches,
+        deadline=deadline,
+    )
 
-    deleted = deleted_standard + deleted_eager
-    skipped = skipped_standard + skipped_eager
+    remaining_standard = _candidate_queryset(_standard_base_queryset(now)).count()
+    remaining_eager = _candidate_queryset(_eager_base_queryset(now)).count()
+    deleted = standard.deleted + eager.deleted
+    skipped = standard.skipped + eager.skipped
+    blocker_counts = standard.blocker_counts + eager.blocker_counts
+    blocker_summary = ",".join(
+        f"{name}:{count}" for name, count in sorted(blocker_counts.items())
+    ) or "none"
 
-    if deleted or skipped:
-        logger.info(
-            "purge_unverified_users completed: deleted=%d "
-            "(standard=%d eager=%d) skipped=%d (standard=%d eager=%d)",
-            deleted,
-            deleted_standard,
-            deleted_eager,
-            skipped,
-            skipped_standard,
-            skipped_eager,
-        )
+    logger.info(
+        "purge_unverified_users completed: deleted=%d "
+        "(standard=%d eager=%d) skipped=%d (standard=%d eager=%d) "
+        "remaining=%d (standard=%d eager=%d) blockers=%s",
+        deleted,
+        standard.deleted,
+        eager.deleted,
+        skipped,
+        standard.skipped,
+        eager.skipped,
+        remaining_standard + remaining_eager,
+        remaining_standard,
+        remaining_eager,
+        blocker_summary,
+    )
     return {
         "deleted": deleted,
-        "deleted_standard": deleted_standard,
-        "deleted_eager": deleted_eager,
+        "deleted_standard": standard.deleted,
+        "deleted_eager": eager.deleted,
         "skipped": skipped,
-        "skipped_standard": skipped_standard,
-        "skipped_eager": skipped_eager,
+        "skipped_standard": standard.skipped,
+        "skipped_eager": eager.skipped,
+        "remaining_standard": remaining_standard,
+        "remaining_eager": remaining_eager,
     }

@@ -14,7 +14,6 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from accounts.services.email_resolution import normalize_email, resolve_user_by_email
-from accounts.utils.display import display_name
 from accounts.utils.tokens import generate_password_reset_token, generate_user_action_token
 from community.models import CommunityAuditLog
 from content.access import LEVEL_MAIN, get_user_level
@@ -531,7 +530,11 @@ def _welcome_context(user, course, cohort=""):
     reset_token = generate_password_reset_token(user, expiry_hours=24)
     opt_out_token = generate_user_action_token(user.pk, "maven_email_opt_out")
     return {
-        "user_name": display_name(user),
+        # No "user_name" key here on purpose (issue #1591): caller context
+        # wins over EmailService's injected default, and Maven enrollees
+        # regularly arrive with no name at all. Let EmailService resolve
+        # the greeting so a nameless enrollee gets "Hi there," and not
+        # their email handle.
         # No placeholder ever reaches an enrollee: course, else cohort,
         # else the template's generic, course-free copy.
         "course_name": (course or "").strip() or (cohort or "").strip(),

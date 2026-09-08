@@ -757,6 +757,27 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "TestScheduleReconciliationWorkerBanner::test_non_staff_cannot_open_worker_diagnostics",
     })
 
+    issue_1591_owners = frozenset({
+        "playwright_tests/test_email_greeting_no_name_1591.py::"
+        "test_copy_reviewer_sees_the_nameless_greeting",
+        "playwright_tests/test_email_greeting_no_name_1591.py::"
+        "test_copy_reviewer_switches_back_to_the_named_recipient",
+        "playwright_tests/test_email_greeting_no_name_1591.py::"
+        "test_operator_override_still_degrades_for_nameless_members",
+        "playwright_tests/test_email_greeting_no_name_1591.py::"
+        "test_security_notice_greets_nameless_members_neutrally",
+        "playwright_tests/test_email_greeting_no_name_1591.py::"
+        "test_maven_welcome_greets_nameless_enrollees_neutrally",
+        "playwright_tests/test_email_greeting_no_name_1591.py::"
+        "test_sprint_partner_intro_keeps_partner_labels",
+        "playwright_tests/test_email_greeting_no_name_1591.py::"
+        "test_nameless_member_password_reset_is_greeted_as_a_person",
+        "playwright_tests/test_email_greeting_no_name_1591.py::"
+        "test_named_member_registration_email_keeps_their_name",
+        "playwright_tests/test_email_greeting_no_name_1591.py::"
+        "test_send_test_addresses_the_operator_by_their_own_name",
+    })
+
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
 
@@ -819,8 +840,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2557)
-        self.assertEqual(len(inventory.owners), 2337)
+        self.assertEqual(inventory.item_count, 2566)
+        self.assertEqual(len(inventory.owners), 2346)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -831,7 +852,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1515_owners
             | self.issue_1516_owners
             | self.issue_1565_owners
-            | self.issue_1540_owners,
+            | self.issue_1540_owners
+            | self.issue_1591_owners,
         )
         self.assertNotIn(
             self.migrated_owner,
@@ -853,6 +875,9 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
         for owner in self.issue_1565_owners:
+            self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
+            self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
+        for owner in self.issue_1591_owners:
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
         self.assertEqual(errors, [])

@@ -74,6 +74,17 @@
       <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Preview</p>
       <p class="text-xs text-muted-foreground" data-testid="preview-status" aria-live="polite">Idle</p>
     </div>
+    <div>
+      <label for="tpl-recipient" class="block text-sm font-medium text-foreground mb-1">Preview recipient</label>
+      <select id="tpl-recipient"
+              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+              data-preview-field="recipient"
+              data-testid="preview-recipient">
+        <option value="named" selected>Named recipient (Ada)</option>
+        <option value="no_name">No name on file</option>
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">Affects the preview only. Roughly 7 in 10 accounts have no name on file.</p>
+    </div>
     <iframe id="tpl-preview"
             data-testid="email-template-preview"
             data-preview-url="{% url 'studio_email_template_preview' template_name %}"
@@ -99,7 +110,7 @@
 
   function gather() {
     var data = new FormData();
-    form.querySelectorAll('[data-preview-field]').forEach(function(el) {
+    document.querySelectorAll('[data-preview-field]').forEach(function(el) {
       data.append(el.dataset.previewField, el.value);
     });
     return data;
@@ -135,8 +146,9 @@
     timer = setTimeout(refresh, debounceMs);
   }
 
-  form.querySelectorAll('[data-preview-field]').forEach(function(el) {
+  document.querySelectorAll('[data-preview-field]').forEach(function(el) {
     el.addEventListener('input', schedule);
+    el.addEventListener('change', schedule);
   });
 
   // Initial render so the iframe shows the saved template.

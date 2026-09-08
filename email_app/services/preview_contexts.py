@@ -10,6 +10,8 @@ dict, which is also fine -- previews simply leave the variables as the
 literal placeholder strings.
 """
 
+from accounts.utils.display import GREETING_FALLBACK
+
 PREVIEW_CONTEXTS = {
     'account_deletion_request': {
         'login_email': 'ada@example.com',
@@ -418,9 +420,58 @@ PREVIEW_CONTEXTS = {
         'partial_note': '',
         'timezone_help': '',
     },
+    # Greets on ``member_name`` rather than ``user_name`` (issue #1591). The
+    # partner rows keep identifying labels because those are card-style labels,
+    # not a greeting.
+    'sprint_partner_intro': {
+        'sprint_name': 'Ship It Sprint',
+        'sprint_slug': 'ship-it-sprint',
+        'member_name': 'Ada',
+        'partner_count': 2,
+        'partners': [
+            {
+                'name': 'Grace Hopper',
+                'email': 'grace@example.com',
+                'slack_identity': 'grace',
+                'slack_profile_url': (
+                    'https://aishippinglabs.slack.com/team/U0PREVIEW1'
+                ),
+            },
+            {
+                'name': 'alan.turing',
+                'email': 'alan.turing@example.com',
+                'slack_identity': '',
+                'slack_profile_url': '',
+            },
+        ],
+        'board_url': 'https://aishippinglabs.com/plans/sprints/ship-it-sprint/board/',
+    },
 }
 
 
-def get_preview_context(template_name):
-    """Return the placeholder context dict for a template, or {} if unknown."""
-    return dict(PREVIEW_CONTEXTS.get(template_name, {}))
+RECIPIENT_NAMED = 'named'
+RECIPIENT_NO_NAME = 'no_name'
+RECIPIENT_CHOICES = (
+    (RECIPIENT_NAMED, 'Named recipient (Ada)'),
+    (RECIPIENT_NO_NAME, 'No name on file'),
+)
+
+
+def get_preview_context(template_name, *, recipient=RECIPIENT_NAMED):
+    """Return the placeholder context dict for a template, or {} if unknown.
+
+    ``recipient='no_name'`` degrades the greeting variables to what a member
+    with no first or last name actually receives (issue #1591). Roughly 7 in
+    10 accounts are in that state, and hardcoding ``Ada`` everywhere made the
+    degraded copy invisible to whoever reviews it in Studio. Any unrecognised
+    value falls back to the named context.
+    """
+    context = dict(PREVIEW_CONTEXTS.get(template_name, {}))
+    if recipient != RECIPIENT_NO_NAME:
+        return context
+    context['user_name'] = GREETING_FALLBACK
+    context['member_name'] = GREETING_FALLBACK
+    context['user_first_name'] = ''
+    # Never a real member's address, even in a nameless preview.
+    context['user_email'] = 'no-name@example.com'
+    return context

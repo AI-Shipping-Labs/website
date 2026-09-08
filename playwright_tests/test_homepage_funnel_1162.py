@@ -233,7 +233,9 @@ def test_homepage_upcoming_event_card_navigates_to_event_detail(
     django_server, page, django_db_blocker
 ):
     with django_db_blocker.unblock():
-        from events.models import Event
+        from django.contrib.auth import get_user_model
+
+        from events.models import Event, EventRegistration
 
         ensure_site_config_tiers()
         Event.objects.all().delete()
@@ -247,12 +249,56 @@ def test_homepage_upcoming_event_card_navigates_to_event_detail(
             published=True,
             required_level=20,
         )
+        quiet_event = Event.objects.create(
+            title="Quiet Build Session",
+            slug="quiet-build-session-1162",
+            description="A small build session for guests.",
+            start_datetime=timezone.now() + timedelta(days=3),
+            end_datetime=timezone.now() + timedelta(days=3, hours=1),
+            status="upcoming",
+            published=True,
+        )
+        Event.objects.create(
+            title="New Community Session",
+            slug="new-community-session-1162",
+            description="A newly scheduled session for guests.",
+            start_datetime=timezone.now() + timedelta(days=4),
+            end_datetime=timezone.now() + timedelta(days=4, hours=1),
+            status="upcoming",
+            published=True,
+        )
+        user_model = get_user_model()
+        for index in range(5):
+            attendee = user_model.objects.create(
+                email=f"homepage-popular-{index}@example.com",
+            )
+            EventRegistration.objects.create(event=event, user=attendee)
+        for index in range(4):
+            attendee = user_model.objects.create(
+                email=f"homepage-quiet-{index}@example.com",
+            )
+            EventRegistration.objects.create(event=quiet_event, user=attendee)
 
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
     section = page.locator('[data-testid="home-upcoming-events-section"]')
     section.scroll_into_view_if_needed()
-    card = section.locator('[data-testid="home-upcoming-event-card"]').first
+    cards = section.locator('[data-testid="home-upcoming-event-card"]')
+    expect(cards).to_have_count(3)
+    card = cards.filter(has_text="Open Office Hours")
     expect(card).to_contain_text("Open Office Hours")
+    expect(card.get_by_test_id("event-attendee-count")).to_have_text(
+        "5 people are going"
+    )
+    expect(
+        cards.filter(has_text="Quiet Build Session").get_by_test_id(
+            "event-attendee-count"
+        )
+    ).to_have_count(0)
+    expect(
+        cards.filter(has_text="New Community Session").get_by_test_id(
+            "event-attendee-count"
+        )
+    ).to_have_count(0)
     access = card.locator(
         '[data-testid="event-tier-badge"][data-required-level="20"]'
     )
@@ -260,6 +306,12 @@ def test_homepage_upcoming_event_card_navigates_to_event_detail(
     expect(access.locator('svg.lucide-lock, i[data-lucide="lock"]')).to_have_count(1)
     cta = section.get_by_test_id("home-upcoming-events-link")
     expect(cta).to_have_attribute("href", "/events?filter=upcoming")
+    cta.click()
+    page.wait_for_url(f"{django_server}/events?filter=upcoming", timeout=10000)
+    page.go_back(wait_until="domcontentloaded")
+    card = page.locator('[data-testid="home-upcoming-event-card"]').filter(
+        has_text="Open Office Hours"
+    )
     card.locator('[data-testid="event-card-link"]').click()
     page.wait_for_url(f"{django_server}{event.get_absolute_url()}", timeout=10000)
     expect(page.locator("main")).to_contain_text("Open Office Hours")

@@ -232,12 +232,15 @@ class TestStaffLandsInStudio:
 
         focus_page = _new_fully_expanded_sidebar_page(context, django_server)
         assert focus_page.locator(
+            '#studio-sidebar-nav a[href="/studio/jobs/"]'
+        ).count() == 1
+        assert focus_page.locator(
             '#studio-sidebar-nav a[href="/studio/users/new/"]'
         ).count() == 1
         assert focus_page.locator(
             '#studio-sidebar-nav a[href="/studio/api-tokens/"]'
         ).count() == 1
-        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 49)
+        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 50)
         focus_page.close()
 
 
@@ -447,12 +450,15 @@ class TestNonSuperuserGating:
 
         focus_page = _new_fully_expanded_sidebar_page(context, django_server)
         assert focus_page.locator(
+            '#studio-sidebar-nav a[href="/studio/jobs/"]'
+        ).count() == 1
+        assert focus_page.locator(
             '#studio-sidebar-nav a[href="/studio/users/new/"]'
         ).count() == 0
         assert focus_page.locator(
             '#studio-sidebar-nav a[href="/studio/api-tokens/"]'
         ).count() == 0
-        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 47)
+        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 48)
         focus_page.close()
 
 

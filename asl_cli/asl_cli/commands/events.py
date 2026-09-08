@@ -204,6 +204,11 @@ def _normalize_event_series(body):
         body["event_series"] = None
 
 
+def _recap_matches_after_terminal_newline(sent, returned):
+    """Accept the API's optional-text strip of one final newline only."""
+    return returned == sent or returned == sent.removesuffix("\n")
+
+
 @events.command("create")
 @apply_event_flags
 @format_option
@@ -266,7 +271,9 @@ def events_update(slug, recap_notes_file, fmt, **kwargs):
         if (
             after.get("slug") != slug
             or (before_id is not None and after.get("id") != before_id)
-            or after.get("recap_notes") != recap_notes
+            or not _recap_matches_after_terminal_newline(
+                recap_notes, after.get("recap_notes")
+            )
         ):
             raise click.ClickException(
                 "Event recap read-after-write verification failed."

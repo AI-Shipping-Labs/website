@@ -294,6 +294,190 @@ def test_events_update_recap_file_verifies_source_and_read_after_write(
     assert '"verified": true' in result.output
 
 
+@pytest.mark.parametrize(
+    "read_back",
+    [
+        "## What we covered\n\nBatching.\n",
+        "## What we covered\n\nBatching.",
+    ],
+)
+def test_events_update_recap_file_sends_final_newline_and_accepts_valid_read_back(
+    monkeypatch, tmp_path, read_back,
+):
+    recap_notes = "## What we covered\n\nBatching.\n"
+    client = RecordingEventsClient()
+    client.get_results = [
+        {"id": 7, "slug": "recap-event", "editable": True},
+        {
+            "id": 7,
+            "slug": "recap-event",
+            "editable": True,
+            "recap_notes": read_back,
+        },
+    ]
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+    recap_path = tmp_path / "recap.md"
+    recap_path.write_text(recap_notes, encoding="utf-8")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "events", "update", "recap-event",
+            "--recap-notes-file", str(recap_path),
+            "--format", "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert client.calls[1][2]["recap_notes"] == recap_notes
+    assert json.loads(result.output)["verified"] is True
+
+
+@pytest.mark.parametrize(
+    ("read_back", "expected_excerpt"),
+    [
+        ("## Changed\n\nBatching.", "read-after-write"),
+        ("## What we covered", "read-after-write"),
+        ("## What we covered\n\n  Batching.  ", "read-after-write"),
+        ("## What we covered\n\nBatching. ", "read-after-write"),
+    ],
+)
+def test_events_update_recap_file_rejects_meaningful_drift(
+    monkeypatch, tmp_path, read_back, expected_excerpt,
+):
+    recap_notes = "## What we covered\n\nBatching.\n"
+    client = RecordingEventsClient()
+    client.get_results = [
+        {"id": 7, "slug": "recap-event", "editable": True},
+        {"id": 7, "slug": "recap-event", "editable": True, "recap_notes": read_back},
+    ]
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+    recap_path = tmp_path / "recap.md"
+    recap_path.write_text(recap_notes, encoding="utf-8")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "events", "update", "recap-event",
+            "--recap-notes-file", str(recap_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert expected_excerpt in result.output
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "expected_calls", "expected_message"),
+    [
+        (
+            {"id": 7, "slug": "other-event", "editable": True},
+            {
+                "id": 7,
+                "slug": "other-event",
+                "editable": True,
+                "recap_notes": "Notes.",
+            },
+            1,
+            "identity verification failed before recap write",
+        ),
+        (
+            {"id": 7, "slug": "recap-event", "editable": True},
+            {
+                "id": 8,
+                "slug": "recap-event",
+                "editable": True,
+                "recap_notes": "Notes.",
+            },
+            3,
+            "read-after-write verification failed",
+        ),
+        (
+            {"id": 7, "slug": "recap-event", "editable": True},
+            {
+                "id": 7,
+                "slug": "other-event",
+                "editable": True,
+                "recap_notes": "Notes.",
+            },
+            3,
+            "read-after-write verification failed",
+        ),
+    ],
+)
+def test_events_update_recap_file_rejects_identity_mismatch(
+    monkeypatch, tmp_path, before, after, expected_calls, expected_message,
+):
+    client = RecordingEventsClient()
+    client.get_results = [before, after]
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+    recap_path = tmp_path / "recap.md"
+    recap_path.write_text("Notes.\n", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "events", "update", "recap-event",
+            "--recap-notes-file", str(recap_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert expected_message in result.output.lower()
+    assert len(client.calls) == expected_calls
+
+
+def test_events_update_recap_file_allows_after_id_when_before_id_is_absent(
+    monkeypatch, tmp_path,
+):
+    client = RecordingEventsClient()
+    client.get_results = [
+        {"slug": "recap-event", "editable": True},
+        {
+            "id": 8,
+            "slug": "recap-event",
+            "editable": True,
+            "recap_notes": "Notes.",
+        },
+    ]
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+    recap_path = tmp_path / "recap.md"
+    recap_path.write_text("Notes.\n", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "events", "update", "recap-event",
+            "--recap-notes-file", str(recap_path),
+            "--format", "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["verified"] is True
+    assert len(client.calls) == 3
+
+
+def test_events_update_rejects_both_recap_options(monkeypatch, tmp_path):
+    client = RecordingEventsClient()
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+    recap_path = tmp_path / "recap.md"
+    recap_path.write_text("Notes.\n", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "events", "update", "recap-event",
+            "--recap-notes", "Direct notes.",
+            "--recap-notes-file", str(recap_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Use either --recap-notes or --recap-notes-file" in result.output
+    assert client.calls == []
+
+
 def test_events_update_recap_file_rejects_non_editable_source(monkeypatch, tmp_path):
     client = RecordingEventsClient()
     client.get_results = [{

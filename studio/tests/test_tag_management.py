@@ -6,7 +6,9 @@ page, and the staff-only gate on every new endpoint.
 """
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 User = get_user_model()
 
@@ -126,6 +128,22 @@ class StudioTagListViewTest(TestCase):
             response,
             'Removes this tag from 2 users. Cannot be undone.',
         )
+
+    def test_tag_names_and_counts_use_one_annotated_query(self):
+        User.objects.create_user(
+            email='count-query@test.com',
+            tags=['alpha', 'beta', 'gamma'],
+        )
+
+        with CaptureQueriesContext(connection) as queries:
+            self.client.get('/studio/tags/')
+
+        tag_queries = [
+            query['sql']
+            for query in queries
+            if 'accounts_contacttag' in query['sql'].lower()
+        ]
+        self.assertEqual(len(tag_queries), 1)
 
     def test_empty_state_points_back_to_users(self):
         response = self.client.get('/studio/tags/')

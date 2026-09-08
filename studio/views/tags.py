@@ -17,7 +17,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from accounts.utils.tags import count_users_with_tag, delete_tag, list_all_tags, rename_tag
+from accounts.utils.tags import delete_tag, rename_tag, tags_with_user_counts
 from studio.decorators import staff_required
 
 
@@ -57,17 +57,10 @@ def _safe_redirect_url(request):
 @staff_required
 def tag_list(request):
     """List the normalized contact-tag namespace for staff operators."""
-    tags = [
-        {
-            'name': name,
-            'user_count': count_users_with_tag(name),
-        }
-        for name in list_all_tags()
-    ]
     return render(
         request,
         'studio/tags/list.html',
-        {'tags': tags},
+        {'tags': tags_with_user_counts()},
     )
 
 

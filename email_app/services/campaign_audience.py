@@ -45,15 +45,11 @@ def eligible_campaign_recipients(
     if not include_set and not exclude_set:
         return base_qs
 
-    eligible_ids = []
-    for pk, tags in base_qs.values_list("pk", "tags"):
-        user_tags = set(tags or [])
-        if include_set and not (user_tags & include_set):
-            continue
-        if exclude_set and user_tags & exclude_set:
-            continue
-        eligible_ids.append(pk)
-    return User.objects.filter(pk__in=eligible_ids)
+    if include_set:
+        base_qs = base_qs.filter(contact_tags__slug__in=include_set)
+    if exclude_set:
+        base_qs = base_qs.exclude(contact_tags__slug__in=exclude_set)
+    return base_qs.distinct()
 
 
 def campaign_recipient_count(**audience):

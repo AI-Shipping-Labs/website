@@ -59,6 +59,10 @@ class ImportUsersServiceTest(TestCase):
         self.assertIsNotNone(user.imported_at)
         self.assertEqual(user.import_metadata, {"slack": {"slack_user_id": "U123"}})
         self.assertEqual(user.tags, ["imported", "ai-alumni"])
+        self.assertEqual(
+            set(user.contact_tags.values_list("slug", flat=True)),
+            set(user.tags),
+        )
         self.assertEqual(user.first_name, "Ada")
         self.assertEqual(user.last_name, "Lovelace")
         self.assertEqual(user.slack_user_id, "U123")

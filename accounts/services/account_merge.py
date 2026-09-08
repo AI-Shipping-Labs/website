@@ -42,7 +42,7 @@ from django.utils import timezone
 
 from accounts.models import EmailAlias, TierOverride
 from accounts.services.email_resolution import normalize_email
-from accounts.utils.tags import normalize_tags
+from accounts.utils.tags import normalize_tags, set_tags
 from community.models import CommunityAuditLog
 
 logger = logging.getLogger(__name__)
@@ -690,8 +690,8 @@ def _reconcile_scalars(plan, canonical, secondary):
     before = list(canonical.tags or [])
     unioned = normalize_tags(before + list(secondary.tags or []))
     added = [t for t in unioned if t not in before]
+    merged_tags = unioned if added else None
     if added:
-        canonical.tags = unioned
         rec["tags"] = {"added": added}
 
     # Slack: keep canonical unless empty/falsey, then take secondary's (id +
@@ -735,6 +735,8 @@ def _reconcile_scalars(plan, canonical, secondary):
         rec["unsubscribed"] = {"to": True}
 
     canonical.save()
+    if merged_tags is not None:
+        set_tags(canonical, merged_tags)
 
 
 # --------------------------------------------------------------------------- #

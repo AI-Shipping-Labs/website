@@ -45,6 +45,10 @@ class ContactsSetTagsTest(TestCase):
         user.refresh_from_db()
         # REPLACE, not merge: old tags are gone.
         self.assertEqual(user.tags, ["new-1", "new-2"])
+        self.assertEqual(
+            set(user.contact_tags.values_list("slug", flat=True)),
+            {"new-1", "new-2"},
+        )
 
     def test_set_tags_normalizes_input(self):
         User.objects.create_user(email="norm@test.com", password=None)

@@ -25,7 +25,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
-from accounts.utils.tags import normalize_tags
+from accounts.utils.tags import set_tags
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
@@ -411,9 +411,7 @@ def contacts_set_tags(request, email):
             status=404,
         )
 
-    normalized = normalize_tags(raw_tags)
-    user.tags = normalized
-    user.save(update_fields=["tags"])
+    normalized = set_tags(user, raw_tags)
 
     return JsonResponse(
         {"email": user.email, "tags": normalized},

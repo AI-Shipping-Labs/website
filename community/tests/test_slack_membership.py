@@ -370,7 +370,14 @@ class TagMirrorTest(TestCase):
         user = User.objects.create_user(email='tagsmirror@test.com')
         # Should not raise on either direction:
         task_module._set_slack_member_tag(user, True)
+        user.refresh_from_db()
+        self.assertEqual(
+            set(user.contact_tags.values_list("slug", flat=True)),
+            {"slack-member"},
+        )
         task_module._set_slack_member_tag(user, False)
+        user.refresh_from_db()
+        self.assertEqual(user.contact_tags.count(), 0)
 
     def test_has_tags_field_returns_true_after_354(self):
         # #354 added User.tags; the detector must report True so the

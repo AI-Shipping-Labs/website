@@ -134,6 +134,35 @@ curl -sL -X DELETE \
 
 Tags are normalised via `accounts.utils.tags.normalize_tag`; empty input after normalisation returns 422 `invalid_tag`.
 
+### Read and rename the contact-tag namespace
+
+List every in-use contact tag with its user count, sorted by name:
+
+```bash
+curl -sL -H "Authorization: Token $API_TOKEN" \
+  https://aishippinglabs.com/api/contact-tags
+```
+
+The response shape is `{"tags": [{"name": "paid", "user_count": 2}],
+"count": 1}`. Unused tag rows are removed, so the list only contains tags
+currently assigned to users.
+
+Rename one tag across all users with the same normalization and merge behavior
+as Studio:
+
+```bash
+curl -sL -X POST \
+  -H "Authorization: Token $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"new": "paid"}' \
+  https://aishippinglabs.com/api/contact-tags/paid-user/rename
+```
+
+The response is `{"old": "paid-user", "new": "paid", "affected": 2}`.
+A new name that normalizes to empty returns 422. Both endpoints require a
+staff token and return 401 otherwise. Global tag deletion remains available
+only through `/studio/tags/`; there is no contact-tag delete API.
+
 ### Write: grant a tier override (bulk)
 
 ```bash

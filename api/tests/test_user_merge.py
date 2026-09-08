@@ -574,6 +574,10 @@ class ScalarReconcileTest(UserMergeTestBase):
 
         canonical.refresh_from_db()
         self.assertEqual(canonical.tags, ["a", "b", "c"])
+        self.assertEqual(
+            set(canonical.contact_tags.values_list("slug", flat=True)),
+            {"a", "b", "c"},
+        )
         self.assertEqual(response.json()["reconciled"]["tags"]["added"], ["c"])
 
     def test_email_verified_is_ord(self):

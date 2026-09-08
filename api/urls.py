@@ -49,6 +49,7 @@ from api.views.checkpoints import (
 )
 from api.views.cleanup_gates import cleanup_gates_diagnostics
 from api.views.comments import comment_reply, comments_collection
+from api.views.contact_tags import contact_tag_rename, contact_tags_collection
 from api.views.contacts import (
     contacts_export,
     contacts_import,
@@ -272,6 +273,18 @@ urlpatterns = [
         "comments/<int:comment_id>/replies",
         comment_reply,
         name="api_comment_reply",
+    ),
+    # ---- Contact-tag namespace (issue #1524) -------------------------
+    # Global deletion remains a Studio-only destructive operation.
+    path(
+        "contact-tags",
+        contact_tags_collection,
+        name="api_contact_tags_collection",
+    ),
+    path(
+        "contact-tags/<str:name>/rename",
+        contact_tag_rename,
+        name="api_contact_tag_rename",
     ),
     # ---- Call profiles (internal CallHost model; issue #1404) ---------
     path(

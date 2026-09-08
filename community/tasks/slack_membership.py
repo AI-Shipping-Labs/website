@@ -125,15 +125,15 @@ def _set_slack_member_tag(user, present):
     if not _has_tags_field():
         return
     try:
+        from accounts.utils.tags import set_tags
+
         tags = list(getattr(user, 'tags', []) or [])
         if present and SLACK_MEMBER_TAG not in tags:
             tags.append(SLACK_MEMBER_TAG)
-            user.tags = tags
-            user.save(update_fields=['tags'])
+            set_tags(user, tags)
         elif not present and SLACK_MEMBER_TAG in tags:
             tags = [t for t in tags if t != SLACK_MEMBER_TAG]
-            user.tags = tags
-            user.save(update_fields=['tags'])
+            set_tags(user, tags)
     except Exception:
         logger.warning(
             "Failed to mirror slack_member to tag for %s",

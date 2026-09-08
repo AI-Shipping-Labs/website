@@ -22,7 +22,7 @@ name = "ai-shipping-labs"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "community-base @ git+https://github.com/DataTalksClub/community-base@v0.3.0",
+    "community-base[django_q] @ git+https://github.com/DataTalksClub/community-base@v0.3.0",
 ]
 
 [tool.ruff]
@@ -234,7 +234,7 @@ class SourceGuardTests(SimpleTestCase):
         write(
             self.repo / "pyproject.toml",
             PYPROJECT.replace(
-                '    "community-base @ git+https://github.com/DataTalksClub/community-base@v0.3.0",\n',
+                '    "community-base[django_q] @ git+https://github.com/DataTalksClub/community-base@v0.3.0",\n',
                 "",
             ),
         )

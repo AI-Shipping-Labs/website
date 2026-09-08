@@ -7,7 +7,7 @@ dependencies = [
     "anthropic>=0.105.2",         # Claude API client — onboarding AI, Studio assistant, AI eval suite
     "apispec>=6.6.0",             # builds the OpenAPI schema in api/openapi/builder.py
     "boto3>=1.42.52",             # AWS SDK — S3 image uploads (content sync) + SES email sending
-    "community-base @ git+https://github.com/DataTalksClub/community-base@v0.3.0",
+    "community-base[django_q] @ git+https://github.com/DataTalksClub/community-base@v0.3.0",
                           # shared DataTalks.Club package (jobs/mail/accounts); pinned release, see make core-link
     "croniter>=6.0.0",            # django-q2 parses the cron= schedules in jobs/.../setup_schedules.py
     "cryptography>=46.0.5",       # encrypts outbound trigger signing secrets at rest

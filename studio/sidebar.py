@@ -447,6 +447,11 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_worker_drain_queue',
         'studio_worker_test_smoke',
     )),
+    ('operations', 'jobs', (
+        'community_base_jobs',
+        'community_base_job_retry',
+        'community_base_job_discard',
+    )),
     ('operations', 'ses_events', (
         'studio_ses_event_list',
         'studio_ses_event_detail',

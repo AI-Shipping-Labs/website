@@ -13,7 +13,7 @@ dependencies = [
     { name = "anthropic" },
     { name = "apispec" },
     { name = "boto3" },
-    { name = "community-base" },
+    { name = "community-base", extra = ["django-q"] },
     { name = "croniter" },
     { name = "cryptography" },
     { name = "dj-database-url" },
@@ -55,7 +55,7 @@ requires-dist = [
     { name = "anthropic", specifier = ">=0.105.2" },
     { name = "apispec", specifier = ">=6.6.0" },
     { name = "boto3", specifier = ">=1.42.52" },
-    { name = "community-base", git = "https://github.com/DataTalksClub/community-base?rev=v0.3.0" },
+    { name = "community-base", extras = ["django-q"], git = "https://github.com/DataTalksClub/community-base?rev=v0.3.0" },
     { name = "croniter", specifier = ">=6.0.0" },
     { name = "cryptography", specifier = ">=46.0.5" },
     { name = "dj-database-url", specifier = ">=3.1.2" },
@@ -355,6 +355,12 @@ dependencies = [
     { name = "python-frontmatter" },
     { name = "pyyaml" },
     { name = "requests" },
+]
+
+[package.optional-dependencies]
+django-q = [
+    { name = "croniter" },
+    { name = "django-q2" },
 ]
 
 [[package]]

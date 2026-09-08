@@ -321,4 +321,21 @@ class Command(BaseCommand):
                 '(five-minute cadence)'
             ))
 
+        # Community-base durable jobs housekeeping (plan issue A1.1):
+        # jobs_run_due submits due package intents to the django-q cluster;
+        # jobs_sweep recovers expired leases or marks exhausted jobs dead.
+        schedule(
+            'jobs.tasks.community_base_jobs.run_due_jobs',
+            cron='* * * * *',
+            name='cb-jobs-run-due',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: cb-jobs-run-due (every minute)'))
+
+        schedule(
+            'jobs.tasks.community_base_jobs.sweep_jobs',
+            cron='*/5 * * * *',
+            name='cb-jobs-sweep',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: cb-jobs-sweep (five-minute cadence)'))
+
         self.stdout.write(self.style.SUCCESS('All default schedules registered.'))

@@ -530,12 +530,20 @@ def _send_welcome(user, course, cohort, actions):
     actions.append("Sent maven_welcome email.")
 
 
-# Issue #1593: the opt-in link has the same 24-hour verification contract as
-# the ordinary email-verification link. It is not non-expiring like the
-# ``unsubscribe`` and ``maven_email_opt_out`` footer tokens because this one
-# also verifies mailbox ownership. An expired click renders a route back to
-# account email preferences rather than a dead end.
-NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS = 24
+# Issue #1593: this link lives in an unsolicited welcome email that people act
+# on days or weeks later, so it is not held to the 24-hour registration
+# contract. That is this codebase's own distinction, not a new one:
+# ``EmailService.VERIFY_FOOTER_TOKEN_EXPIRY_HOURS`` already gives the footer
+# verify link 7 days "because email recipients open messages on their own
+# schedule", and that token writes the same ``email_verified`` field through
+# the same endpoint family. Thirty rather than seven because every dimension
+# that comment cites is stronger here: the reader has no pending intent, the
+# course may not have started, and there is no resend path for this token.
+# Bounded rather than non-expiring, unlike the ``unsubscribe`` and
+# ``maven_email_opt_out`` footer tokens, because this one also asserts mailbox
+# ownership. An expired click still lands on a page that routes to account
+# email preferences rather than dead-ending.
+NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS = 24 * 30
 
 
 def _welcome_context(user, course, cohort=""):

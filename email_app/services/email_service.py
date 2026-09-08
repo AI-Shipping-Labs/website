@@ -54,6 +54,14 @@ TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "email_templates"
 #     footer is absurd.
 #   - "password_reset": the recipient is here to reset a password; nudging
 #     them to click "verify your email" first would derail that flow.
+#   - "maven_welcome" (issue #1593): its body asks the enrollee to verify
+#     their email as the way to OPT IN to the newsletter, via
+#     ``/api/verify-and-subscribe``. The generic footer offers the same verb
+#     pointing at ``/api/verify-email``, which verifies WITHOUT subscribing
+#     and says nothing about the newsletter. A reader who takes the more
+#     directive footer CTA gets "your email address is verified", is not
+#     subscribed, and is never told. Two links for one verb, where only one
+#     carries the consent, is a trap rather than a redundancy.
 EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = {
     "email_verification_signup",
     "email_verification_subscribe",
@@ -69,6 +77,7 @@ EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = {
     "payment_grace_reminder_member",
     "payment_grace_expired_member",
     "checkout_payment_failed",
+    "maven_welcome",
 }
 
 # Token lifetime for the footer verify link. 7 days is long enough that an

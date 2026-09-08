@@ -115,6 +115,12 @@ class StripeWebhookDeliveryAttempt(models.Model):
 
     class Meta:
         ordering = ["-received_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["stripe_event_id", "attempt_number"],
+                name="uniq_stripe_event_attempt",
+            ),
+        ]
         indexes = [
             models.Index(fields=["event_type", "received_at"]),
             models.Index(fields=["outcome", "received_at"]),

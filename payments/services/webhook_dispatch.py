@@ -14,6 +14,7 @@ import logging
 import re
 
 from django.core.mail import mail_admins
+from django.db import IntegrityError, transaction
 from django.db.models import Max
 from django.utils import timezone
 
@@ -71,6 +72,7 @@ CANCELLATION_EVENT_TYPES = frozenset({
 Attempt = StripeWebhookDeliveryAttempt
 _DECIMAL_USER_ID_RE = re.compile(r"[0-9]+\Z")
 _MAX_BIGINT = 2**63 - 1
+_ATTEMPT_ALLOCATION_RETRIES = 8
 
 
 def is_handled_event_type(event_type):
@@ -183,32 +185,57 @@ def safe_object_ids(event_type, obj):
 
 
 def _next_attempt_number(event_id):
-    """Monotonic per-event attempt number, safe under duplicate deliveries."""
+    """Return the next number while the event's allocation lock is held."""
     current = Attempt.objects.filter(stripe_event_id=event_id).aggregate(
         m=Max("attempt_number"),
     )["m"]
     return (current or 0) + 1
 
 
+def _lock_event_attempts(event_id):
+    """Lock the stable first attempt row used to serialize one event id.
+
+    A brand-new event has no row to lock. The database uniqueness constraint
+    resolves that initial race; the losing allocator retries and then locks
+    the winner's row before choosing its next number.
+    """
+    return (
+        Attempt.objects.select_for_update()
+        .filter(stripe_event_id=event_id)
+        .order_by("received_at", "pk")
+        .values_list("pk", flat=True)
+        .first()
+    )
+
+
 def record_attempt(*, event_id, event_type, obj, livemode,
                    source=Attempt.SOURCE_STRIPE_DELIVERY, requested_by=None):
-    """Persist a fresh ``received`` delivery attempt before dispatch."""
+    """Atomically allocate and persist a fresh ``received`` attempt."""
     ids = safe_object_ids(event_type, obj)
-    return Attempt.objects.create(
-        source=source,
-        requested_by=requested_by,
-        stripe_event_id=event_id,
-        event_type=event_type,
-        stripe_object_id=ids["object_id"],
-        stripe_customer_id=ids["customer_id"],
-        stripe_subscription_id=ids["subscription_id"],
-        stripe_charge_id=ids["charge_id"],
-        stripe_invoice_id=ids["invoice_id"],
-        stripe_dispute_id=ids["dispute_id"],
-        livemode=livemode,
-        attempt_number=_next_attempt_number(event_id),
-        outcome=Attempt.OUTCOME_RECEIVED,
-    )
+    for allocation_try in range(_ATTEMPT_ALLOCATION_RETRIES):
+        try:
+            with transaction.atomic():
+                _lock_event_attempts(event_id)
+                return Attempt.objects.create(
+                    source=source,
+                    requested_by=requested_by,
+                    stripe_event_id=event_id,
+                    event_type=event_type,
+                    stripe_object_id=ids["object_id"],
+                    stripe_customer_id=ids["customer_id"],
+                    stripe_subscription_id=ids["subscription_id"],
+                    stripe_charge_id=ids["charge_id"],
+                    stripe_invoice_id=ids["invoice_id"],
+                    stripe_dispute_id=ids["dispute_id"],
+                    livemode=livemode,
+                    attempt_number=_next_attempt_number(event_id),
+                    outcome=Attempt.OUTCOME_RECEIVED,
+                )
+        except IntegrityError:
+            if allocation_try + 1 == _ATTEMPT_ALLOCATION_RETRIES:
+                raise
+
+    raise AssertionError("attempt allocation retry loop did not return")
 
 
 def finalize_attempt(attempt, *, outcome, http_status,
@@ -352,32 +379,9 @@ def _send_review_alert(*, event_id, livemode, attempt, review):
         logger.exception("Failed to send payment review alert for %s", event_id)
 
 
-def process_event(*, event_id, event_type, obj, livemode, event_created=None,
-                  source=Attempt.SOURCE_STRIPE_DELIVERY, requested_by=None):
-    """Full lifecycle for a handled, signature-verified Stripe event.
-
-    Persists a delivery attempt, checks terminal idempotency, dispatches to the
-    handler, and records the terminal ``WebhookEvent`` + one-shot alert for
-    terminal failures. Returns ``(outcome, http_status)``.
-
-    Contract:
-
-    - ``already_processed`` -> 200, no re-run.
-    - ``processed`` / ``ignored_stale`` -> 200, terminal ``WebhookEvent``.
-    - ``unmatched_user`` -> 500, NO terminal row (Stripe retries).
-    - ``ambiguous_user`` -> 200, terminal row + alert (mutates nobody).
-    - ``failed_permanent`` -> 200, terminal row + alert.
-    - ``failed_transient`` -> 500, NO terminal row (Stripe retries).
-    """
-    attempt = record_attempt(
-        event_id=event_id,
-        event_type=event_type,
-        obj=obj,
-        livemode=livemode,
-        source=source,
-        requested_by=requested_by,
-    )
-
+def _process_claimed_event(*, attempt, event_id, event_type, obj, livemode,
+                           event_created=None):
+    """Dispatch one attempt while the event's stable row lock is held."""
     if is_event_already_processed(event_id):
         finalize_attempt(
             attempt, outcome=Attempt.OUTCOME_ALREADY_PROCESSED, http_status=200,
@@ -505,3 +509,36 @@ def process_event(*, event_id, event_type, obj, livemode, event_created=None,
         **_terminal_correlations(obj, attempt),
     )
     return outcome, 200
+
+
+def process_event(*, event_id, event_type, obj, livemode, event_created=None,
+                  source=Attempt.SOURCE_STRIPE_DELIVERY, requested_by=None):
+    """Persist and exclusively process a verified, handled Stripe event.
+
+    The attempt is committed before the processing claim. Every processor then
+    locks the event's stable first attempt row and re-reads terminal state
+    before it can call the handler. A successful or permanent winner therefore
+    makes waiters return ``already_processed`` without a second handler run;
+    retryable outcomes release the claim without a terminal row.
+
+    Returns ``(outcome, http_status)`` with the existing outcome contract.
+    """
+    attempt = record_attempt(
+        event_id=event_id,
+        event_type=event_type,
+        obj=obj,
+        livemode=livemode,
+        source=source,
+        requested_by=requested_by,
+    )
+
+    with transaction.atomic():
+        _lock_event_attempts(event_id)
+        return _process_claimed_event(
+            attempt=attempt,
+            event_id=event_id,
+            event_type=event_type,
+            obj=obj,
+            livemode=livemode,
+            event_created=event_created,
+        )

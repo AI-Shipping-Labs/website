@@ -167,9 +167,13 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.github',
     'allauth.socialaccount.providers.slack',
     'django_q',
-    # Community-base kernel (plan issue A0.3). Declarations only: the
-    # kernel app has no models and activates no jobs or mail backend.
+    # Community-base package (plan issues A0.3 and A0.2). Declarations
+    # only: the kernel app has no models, and neither the config app nor
+    # the api app contacts Relay; no jobs or mail backend is activated
+    # and no credentials are required.
     'community_base.kernel',
+    'community_base.config',
+    'community_base.api',
     # Project apps
     'accounts',
     'payments',
@@ -745,9 +749,10 @@ Q_CLUSTER = {
 
 IMPORT_WELCOME_EMAILS_PER_HOUR = int(os.environ.get('IMPORT_WELCOME_EMAILS_PER_HOUR', '50'))
 
-# Community-base package configuration (plan issue A0.3). The access
-# policy wires the site's tier semantics into the kernel protocol; the
-# backend keys name the sites' existing owners and activate nothing.
+# Community-base package configuration (plan issues A0.3 and A0.2). The
+# access policy wires the site's tier semantics into the kernel protocol;
+# the backend keys name the sites' existing owners and activate nothing.
+# Only keys with site-side implementations are configured.
 COMMUNITY_BASE = {
     'SITE_KEY': 'aisl',
     'ACCESS_POLICY': 'content.access_policy.TierAccessPolicy',

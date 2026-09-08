@@ -167,6 +167,12 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.github',
     'allauth.socialaccount.providers.slack',
     'django_q',
+    # Shared DataTalks.Club package (A0.2): the settings framework stack.
+    # community_base.api ships the operator API registry; neither app
+    # contacts Relay and no credentials are required.
+    'community_base.kernel',
+    'community_base.config',
+    'community_base.api',
     # Project apps
     'accounts',
     'payments',
@@ -731,3 +737,11 @@ Q_CLUSTER = {
 }
 
 IMPORT_WELCOME_EMAILS_PER_HOUR = int(os.environ.get('IMPORT_WELCOME_EMAILS_PER_HOUR', '50'))
+
+# A0.2: package kernel declarations. Only keys with site-side implementations
+# are configured; JOBS_BACKEND/MAIL_BACKEND adoption and the access-policy
+# hook belong to later issues and stay on their current runtime owners.
+COMMUNITY_BASE = {
+    "SITE_KEY": "aisl",
+    "STUDIO_TITLE": "AI Shipping Labs Studio",
+}

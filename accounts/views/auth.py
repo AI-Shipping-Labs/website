@@ -692,6 +692,11 @@ def password_reset_api(request):
     GET /api/password-reset?token={jwt} - renders password reset form
     POST /api/password-reset with JSON {token, new_password} - resets password
     """
+    return _private_no_store(_password_reset_api_response(request))
+
+
+def _password_reset_api_response(request):
+    """Build a password-reset response before cache hardening is applied."""
     if request.method == "GET":
         token = request.GET.get("token", "")
         if not token:

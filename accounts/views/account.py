@@ -492,6 +492,8 @@ def request_deletion_view(request):
 
 def change_email_confirm_view(request):
     """Public confirmation link for pending login email changes."""
+    from accounts.views.auth import _private_no_store
+
     result = confirm_email_change(request.GET.get("token", ""))
     if result.success:
         cta_url = "/account/" if request.user.is_authenticated else "/accounts/login/"
@@ -509,7 +511,7 @@ def change_email_confirm_view(request):
         cta_label = "Contact support"
         status_code = 400
 
-    return render(
+    return _private_no_store(render(
         request,
         "accounts/change_email_result.html",
         {
@@ -520,7 +522,7 @@ def change_email_confirm_view(request):
             "cta_label": cta_label,
         },
         status=status_code,
-    )
+    ))
 
 
 @login_required

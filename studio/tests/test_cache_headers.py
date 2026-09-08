@@ -1,8 +1,8 @@
-"""Tests for the StudioNoStoreMiddleware (issue #347).
+"""Tests for the StudioNoStoreMiddleware (issues #347 and #1517).
 
 The middleware sets ``Cache-Control: private, no-store`` and
-``Vary: Cookie`` on every response under ``/studio/*`` and
-``/accounts/*`` so authenticated HTML can never be cached by a
+``Vary: Cookie`` on every response under ``/studio/*``, ``/accounts/*``,
+and ``/account/*`` so authenticated HTML can never be cached by a
 browser back-forward cache, service worker, or future intermediary
 CDN. Public pages must NOT inherit this header.
 
@@ -11,10 +11,44 @@ It also exercises the messages-drain behaviour (acceptance criterion
 guarantee on Studio sub-pages.
 """
 
+import json
+from types import SimpleNamespace
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
+
+from accounts.models import MemberAPIKey
+from accounts.services.email_change import request_email_change
+from accounts.utils.tokens import generate_password_reset_token
 
 User = get_user_model()
+
+
+class PrivateNoStoreAssertions:
+    def assert_private_no_store(self, response, *, vary=True):
+        cache_control = response.get("Cache-Control", "").lower()
+        self.assertIn(
+            "no-store",
+            cache_control,
+            f"missing no-store in Cache-Control: {cache_control!r}",
+        )
+        self.assertIn(
+            "private",
+            cache_control,
+            f"missing private in Cache-Control: {cache_control!r}",
+        )
+        if vary:
+            self.assertIn(
+                "cookie",
+                response.get("Vary", "").lower(),
+                f"missing Cookie in Vary: {response.get('Vary', '')!r}",
+            )
+
+    def assert_token_response_is_private(self, response, *, vary):
+        self.assert_private_no_store(response, vary=vary)
+        self.assertEqual(response.get("Pragma"), "no-cache")
+        self.assertEqual(response.get("Referrer-Policy"), "no-referrer")
 
 
 class StudioCacheHeadersTest(TestCase):
@@ -67,7 +101,7 @@ class StudioCacheHeadersTest(TestCase):
         self._assert_no_store(response)
 
 
-class AccountsCacheHeadersTest(TestCase):
+class AccountsCacheHeadersTest(PrivateNoStoreAssertions, TestCase):
     """``/accounts/*`` (allauth) responses must also be uncacheable."""
 
     def test_login_page_has_no_store(self):
@@ -85,6 +119,245 @@ class AccountsCacheHeadersTest(TestCase):
         cache_control = response.get('Cache-Control', '').lower()
         self.assertIn('no-store', cache_control)
         self.assertIn('private', cache_control)
+
+    def test_password_reset_request_page_has_no_store(self):
+        response = self.client.get("/accounts/password-reset-request")
+        self.assertTemplateUsed(response, "accounts/password_reset_request.html")
+        self.assert_token_response_is_private(response, vary=True)
+
+
+@override_settings(SES_ENABLED=False)
+class MemberAccountCacheHeadersTest(PrivateNoStoreAssertions, TestCase):
+    """Every sensitive member-account response is private and uncacheable."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="cache-member@test.com",
+            password="OldPass123!",
+            account_activated=True,
+            email_verified=True,
+        )
+        self.client.force_login(self.user)
+
+    def test_account_page_has_no_store(self):
+        response = self.client.get("/account/")
+
+        self.assertContains(response, self.user.email)
+        self.assert_private_no_store(response)
+
+    def test_anonymous_account_redirect_has_no_store(self):
+        response = Client().get("/account/")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/accounts/login/", response["Location"])
+        self.assert_private_no_store(response)
+
+    def test_account_404_has_no_store(self):
+        response = self.client.get("/account/not-a-real-route")
+
+        self.assertEqual(response.status_code, 404)
+        self.assert_private_no_store(response)
+
+    def test_profile_redirect_has_no_store(self):
+        response = self.client.post(
+            "/account/profile",
+            {"first_name": "Cache", "last_name": "Member"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "/account/#profile")
+        self.assert_private_no_store(response)
+
+    def test_data_export_attachment_has_no_store(self):
+        response = self.client.get("/account/api/data-export")
+
+        self.assertEqual(response["Content-Type"], "application/json")
+        self.assertIn("attachment;", response["Content-Disposition"])
+        self.assertEqual(response.json()["manifest"]["primary_email"], self.user.email)
+        self.assert_private_no_store(response)
+
+    @patch.object(
+        MemberAPIKey,
+        "generate_plaintext_key",
+        return_value="asl_member_cache_header_plaintext_key",
+    )
+    def test_created_api_key_plaintext_response_has_no_store(self, _generate):
+        response = self.client.post(
+            "/account/api/member-api-keys",
+            {"name": "local agent"},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertContains(
+            response,
+            "asl_member_cache_header_plaintext_key",
+            status_code=201,
+        )
+        self.assert_private_no_store(response)
+
+    def test_api_key_revoke_redirect_has_no_store(self):
+        member_key, _plaintext = MemberAPIKey.create_for_user(
+            user=self.user,
+            name="revoke me",
+        )
+
+        response = self.client.post(
+            f"/account/api/member-api-keys/{member_key.pk}/revoke",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assert_private_no_store(response)
+
+    def test_api_key_delete_redirect_has_no_store(self):
+        member_key, _plaintext = MemberAPIKey.create_for_user(
+            user=self.user,
+            name="delete me",
+        )
+        member_key.revoke()
+
+        response = self.client.post(
+            f"/account/api/member-api-keys/{member_key.pk}/delete",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assert_private_no_store(response)
+
+    @patch("accounts.views.account.request_account_deletion")
+    def test_deletion_request_redirect_and_error_have_no_store(self, request_deletion):
+        request_deletion.return_value = SimpleNamespace(success=True)
+        redirect_response = self.client.post("/account/api/request-deletion")
+
+        self.assertEqual(redirect_response.status_code, 302)
+        self.assert_private_no_store(redirect_response)
+
+        request_deletion.return_value = SimpleNamespace(success=False)
+        error_response = self.client.post("/account/api/request-deletion")
+
+        self.assertEqual(error_response.status_code, 503)
+        self.assertContains(
+            error_response,
+            "We could not deliver your deletion request.",
+            status_code=503,
+        )
+        self.assert_private_no_store(error_response)
+
+    def test_email_change_valid_and_invalid_results_have_token_headers(self):
+        _request, token = request_email_change(
+            self.user,
+            "cache-member-new@test.com",
+            current_password="OldPass123!",
+            send=False,
+        )
+
+        valid_response = Client().get(
+            "/account/change-email/confirm",
+            {"token": token},
+        )
+        invalid_response = Client().get(
+            "/account/change-email/confirm",
+            {"token": "not-a-token"},
+        )
+
+        self.assertContains(valid_response, "Email changed")
+        self.assertEqual(invalid_response.status_code, 400)
+        self.assert_token_response_is_private(valid_response, vary=True)
+        self.assert_token_response_is_private(invalid_response, vary=True)
+
+    def test_account_json_preferences_have_no_store(self):
+        cases = [
+            (
+                "/account/api/email-preferences",
+                {"newsletter": True},
+            ),
+            (
+                "/account/api/timezone-preference",
+                {"timezone": "Europe/Berlin"},
+            ),
+            (
+                "/account/api/dismiss-card",
+                {"card": "slack_join"},
+            ),
+        ]
+
+        for path, payload in cases:
+            with self.subTest(path=path):
+                response = self.client.post(
+                    path,
+                    data=json.dumps(payload),
+                    content_type="application/json",
+                )
+
+                self.assertEqual(response.json()["status"], "ok")
+                self.assert_private_no_store(response)
+
+    def test_change_password_json_has_no_store(self):
+        response = self.client.post(
+            "/account/api/change-password",
+            data=json.dumps(
+                {
+                    "current_password": "OldPass123!",
+                    "new_password": "NewPass456!",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.json()["status"], "ok")
+        self.assert_private_no_store(response)
+
+    def test_resend_verification_redirect_has_no_store(self):
+        response = self.client.post("/account/api/resend-verification")
+
+        self.assertEqual(response.status_code, 302)
+        self.assert_private_no_store(response)
+
+
+class PasswordResetCacheHeadersTest(PrivateNoStoreAssertions, TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="cache-reset@test.com",
+            password="OldPass123!",
+        )
+
+    def test_valid_and_invalid_get_responses_have_token_headers(self):
+        token = generate_password_reset_token(self.user)
+
+        valid_response = self.client.get(
+            "/api/password-reset",
+            {"token": token},
+        )
+        invalid_response = self.client.get(
+            "/api/password-reset",
+            {"token": "not-a-token"},
+        )
+
+        self.assertContains(valid_response, 'id="reset-form"')
+        self.assertContains(invalid_response, "Invalid password reset link.")
+        self.assert_token_response_is_private(valid_response, vary=False)
+        self.assert_token_response_is_private(invalid_response, vary=False)
+
+    def test_success_and_validation_error_posts_have_token_headers(self):
+        validation_error = self.client.post(
+            "/api/password-reset",
+            data="not json",
+            content_type="application/json",
+        )
+        token = generate_password_reset_token(self.user)
+        success = self.client.post(
+            "/api/password-reset",
+            data=json.dumps(
+                {
+                    "token": token,
+                    "new_password": "NewPass456!",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(validation_error.status_code, 400)
+        self.assertEqual(success.json()["status"], "ok")
+        self.assert_token_response_is_private(validation_error, vary=False)
+        self.assert_token_response_is_private(success, vary=False)
 
 
 class PublicPagesNotAffectedTest(TestCase):
@@ -104,6 +377,12 @@ class PublicPagesNotAffectedTest(TestCase):
         # exact "private, no-store" combo that our middleware imposes —
         # because if it were, public-page caching would be broken.
         self.assertNotEqual(cache_control.strip(), 'private, no-store')
+
+    def test_blog_does_not_have_private_no_store_from_middleware(self):
+        response = self.client.get("/blog")
+        self.assertTemplateUsed(response, "content/blog_list.html")
+        cache_control = response.get("Cache-Control", "").lower()
+        self.assertNotEqual(cache_control.strip(), "private, no-store")
 
 
 class StudioMessagesRenderedOnceTest(TestCase):

@@ -18,6 +18,44 @@ export API_TOKEN="<your-staff-token>"
 
 Programmatic access to the operator-only questions that today need a Studio session or `manage.py shell`. Read endpoints surface user state, SES history, and email-log; writes are narrow and audited.
 
+## Shared comments API
+
+Staff operators can discover shared first-party discussions across course
+units, workshop tutorial pages, sprint plans, and Book Club notes. The list is
+flat, newest first, and includes replies as separate rows. Unknown owner UUIDs
+remain visible with `content_type=unknown` and `context=null` for audit, but
+cannot receive API replies.
+
+```bash
+curl -sL -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/comments?course_slug=aihero&module_slug=day-1&unit_slug=frontmatter&unanswered=true&limit=100"
+```
+
+Generic filters include `content_type`, `content_id`, `kind`, `parent_id`,
+`author_email`, `since`, `until`, `unanswered`, `limit`, and `offset`.
+Owner-specific filters for different thread types cannot be mixed. Timestamp
+filters require RFC 3339 offsets; invalid and contradictory filters return
+`422 validation_error` rather than an unfiltered result.
+
+Post one direct reply with a staff token and a caller-chosen idempotency key:
+
+```bash
+curl -sL -X POST \
+  -H "Authorization: Token $API_TOKEN" \
+  -H "Idempotency-Key: agent-run-20260908-412" \
+  -H "Content-Type: application/json" \
+  -d '{"body":"Here is the answer."}' \
+  https://aishippinglabs.com/api/comments/412/replies
+```
+
+The token owner is always the author. Bodies are plain text: HTML and Markdown
+are stored and returned verbatim and remain escaped on browser comment
+surfaces. A new reply returns `201` with `idempotent_replay=false`; repeating
+the same parent and normalized body with the same token and key returns the
+original reply with `200` and `idempotent_replay=true`. Reusing the key for a
+different request returns `409 idempotency_key_reused`. After an uncertain
+network result, retry explicitly with the same key.
+
 ### Read: single-user state
 
 ```bash

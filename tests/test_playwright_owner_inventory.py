@@ -809,6 +809,11 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_a_tampered_opt_in_link_fails_safely",
     })
 
+    issue_1592_owners = frozenset({
+        "playwright_tests/test_operator_comments_1592.py::"
+        "test_operator_reply_is_escaped_and_idempotent_in_course_discussion",
+    })
+
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
 
@@ -871,8 +876,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2576)
-        self.assertEqual(len(inventory.owners), 2356)
+        self.assertEqual(inventory.item_count, 2577)
+        self.assertEqual(len(inventory.owners), 2357)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -887,7 +892,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1589_owners
             | self.issue_1591_owners
             | self.issue_1590_owners
-            | self.issue_1593_owners,
+            | self.issue_1593_owners
+            | self.issue_1592_owners,
         )
         self.assertNotIn(
             self.migrated_owner,
@@ -911,7 +917,13 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         for owner in self.issue_1565_owners:
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
-        for owner in self.issue_1589_owners | self.issue_1591_owners | self.issue_1590_owners:
+        for owner in (
+            self.issue_1589_owners
+            | self.issue_1591_owners
+            | self.issue_1590_owners
+            | self.issue_1593_owners
+            | self.issue_1592_owners
+        ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
         self.assertEqual(errors, [])

@@ -2412,6 +2412,601 @@
         ]
       }
     },
+    "/api/comments": {
+      "get": {
+        "description": "Returns top-level comments and replies as a flat newest-first collection. All filters combine with AND. Bodies are unrendered plain text. Unknown owner UUIDs remain visible with null context.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "content_type",
+            "required": false,
+            "schema": {
+              "enum": [
+                "course_unit",
+                "workshop_page",
+                "sprint_plan",
+                "book_club_note",
+                "unknown"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "content_id",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "enum": [
+                "top_level",
+                "reply"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "parent_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "author_email",
+            "required": false,
+            "schema": {
+              "format": "email",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unanswered",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "course_slug",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "module_slug",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unit_slug",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workshop_key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_slug",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "book_slug",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "chapter_number",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plan_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "comments": [],
+                  "count": 0,
+                  "limit": 50,
+                  "offset": 0
+                },
+                "schema": {
+                  "properties": {
+                    "comments": {
+                      "items": {
+                        "properties": {
+                          "author": {
+                            "properties": {
+                              "display_name": {
+                                "type": "string"
+                              },
+                              "email": {
+                                "format": "email",
+                                "type": "string"
+                              },
+                              "id": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "email",
+                              "display_name"
+                            ],
+                            "type": "object"
+                          },
+                          "body": {
+                            "description": "Verbatim, unrendered plain text.",
+                            "type": "string"
+                          },
+                          "content_id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "content_type": {
+                            "enum": [
+                              "course_unit",
+                              "workshop_page",
+                              "sprint_plan",
+                              "book_club_note",
+                              "unknown"
+                            ],
+                            "type": "string"
+                          },
+                          "context": {
+                            "additionalProperties": true,
+                            "description": "Owner-specific safe context; null for unknown UUIDs.",
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "created_at": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "integer"
+                          },
+                          "kind": {
+                            "enum": [
+                              "top_level",
+                              "reply"
+                            ],
+                            "type": "string"
+                          },
+                          "parent_id": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "reply_count": {
+                            "type": "integer"
+                          },
+                          "thread_root_id": {
+                            "type": "integer"
+                          },
+                          "updated_at": {
+                            "format": "date-time",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "content_id",
+                          "content_type",
+                          "kind",
+                          "parent_id",
+                          "thread_root_id",
+                          "body",
+                          "author",
+                          "created_at",
+                          "updated_at",
+                          "reply_count",
+                          "context"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "comments",
+                    "count",
+                    "limit",
+                    "offset"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Filtered comments with deterministic pagination."
+          },
+          "401": {
+            "description": "Missing or invalid staff-owned operator token."
+          },
+          "422": {
+            "description": "Invalid or contradictory filter."
+          }
+        },
+        "summary": "List shared first-party comments",
+        "tags": [
+          "Comments"
+        ]
+      }
+    },
+    "/api/comments/{comment_id}/replies": {
+      "post": {
+        "description": "Creates one direct plain-text reply as the staff token owner through the shared comment service. Idempotency-Key is required; an identical replay returns the original reply with 200 and never repeats notifications or activation.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "comment_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Visible-ASCII key scoped to this operator token.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "Here is the answer."
+              },
+              "schema": {
+                "properties": {
+                  "body": {
+                    "description": "Plain text; HTML and Markdown are not rendered.",
+                    "maxLength": 10000,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "body"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "author": {
+                      "properties": {
+                        "display_name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "format": "email",
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "email",
+                        "display_name"
+                      ],
+                      "type": "object"
+                    },
+                    "body": {
+                      "description": "Verbatim, unrendered plain text.",
+                      "type": "string"
+                    },
+                    "content_id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "content_type": {
+                      "enum": [
+                        "course_unit",
+                        "workshop_page",
+                        "sprint_plan",
+                        "book_club_note",
+                        "unknown"
+                      ],
+                      "type": "string"
+                    },
+                    "context": {
+                      "additionalProperties": true,
+                      "description": "Owner-specific safe context; null for unknown UUIDs.",
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "created_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "idempotent_replay": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "kind": {
+                      "enum": [
+                        "top_level",
+                        "reply"
+                      ],
+                      "type": "string"
+                    },
+                    "parent_id": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "reply_count": {
+                      "type": "integer"
+                    },
+                    "thread_root_id": {
+                      "type": "integer"
+                    },
+                    "updated_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "content_id",
+                    "content_type",
+                    "kind",
+                    "parent_id",
+                    "thread_root_id",
+                    "body",
+                    "author",
+                    "created_at",
+                    "updated_at",
+                    "reply_count",
+                    "context"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Original reply replayed; idempotent_replay is true."
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "author": {
+                      "properties": {
+                        "display_name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "format": "email",
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "email",
+                        "display_name"
+                      ],
+                      "type": "object"
+                    },
+                    "body": {
+                      "description": "Verbatim, unrendered plain text.",
+                      "type": "string"
+                    },
+                    "content_id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "content_type": {
+                      "enum": [
+                        "course_unit",
+                        "workshop_page",
+                        "sprint_plan",
+                        "book_club_note",
+                        "unknown"
+                      ],
+                      "type": "string"
+                    },
+                    "context": {
+                      "additionalProperties": true,
+                      "description": "Owner-specific safe context; null for unknown UUIDs.",
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "created_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "idempotent_replay": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "kind": {
+                      "enum": [
+                        "top_level",
+                        "reply"
+                      ],
+                      "type": "string"
+                    },
+                    "parent_id": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "reply_count": {
+                      "type": "integer"
+                    },
+                    "thread_root_id": {
+                      "type": "integer"
+                    },
+                    "updated_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "content_id",
+                    "content_type",
+                    "kind",
+                    "parent_id",
+                    "thread_root_id",
+                    "body",
+                    "author",
+                    "created_at",
+                    "updated_at",
+                    "reply_count",
+                    "context"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Reply created; idempotent_replay is false."
+          },
+          "401": {
+            "description": "Missing or invalid staff-owned operator token."
+          },
+          "403": {
+            "description": "Actor cannot write this resolved thread."
+          },
+          "404": {
+            "description": "Comment or registered thread owner not found."
+          },
+          "409": {
+            "description": "Key reused for a different request."
+          },
+          "422": {
+            "description": "Invalid parent, body, JSON fields, or idempotency key."
+          }
+        },
+        "summary": "Reply to a shared first-party comment",
+        "tags": [
+          "Comments"
+        ]
+      }
+    },
     "/api/contacts/export": {
       "get": {
         "description": "Default response is JSON. ``?format=csv`` switches to ``text/csv`` with an ``aishippinglabs-contacts-<utc-timestamp>.csv`` attachment header. Output is ordered by ``id`` so repeat calls are deterministic.",

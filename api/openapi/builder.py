@@ -115,6 +115,25 @@ def _query_parameters(query_spec):
     return parameters
 
 
+def _header_parameters(header_spec):
+    """Translate decorator header metadata into OpenAPI parameters."""
+    parameters = []
+    for name, schema_meta in header_spec.items():
+        meta = dict(schema_meta)
+        required = meta.pop("required", False)
+        description = meta.pop("description", None)
+        parameter = {
+            "name": name,
+            "in": "header",
+            "required": required,
+            "schema": meta,
+        }
+        if description:
+            parameter["description"] = description
+        parameters.append(parameter)
+    return parameters
+
+
 def _build_request_body(body_spec):
     """Translate a ``request_body`` decorator dict to OpenAPI requestBody.
 
@@ -178,6 +197,8 @@ def _operation_from_method_spec(method_meta, default_summary, tag):
     parameters = []
     if "query" in method_meta:
         parameters.extend(_query_parameters(method_meta["query"]))
+    if "headers" in method_meta:
+        parameters.extend(_header_parameters(method_meta["headers"]))
     # Path parameters are added later by the caller (which knows the
     # full path string).
     if parameters:

@@ -20,6 +20,7 @@ from click.testing import CliRunner
 EXPECTED_GROUPS = {
     "articles",
     "campaigns",
+    "comments",
     "cleanup-gates",
     "contacts",
     "crm-export",

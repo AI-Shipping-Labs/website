@@ -25,7 +25,7 @@ from django.template import Context, Template
 from django.template.loader import render_to_string
 
 from accounts.services.timezones import format_user_datetime
-from accounts.utils.display import display_name
+from accounts.utils.display import GREETING_FALLBACK, greeting_name
 from accounts.utils.tokens import generate_user_action_token
 from content.utils.markdown import render_email_markdown
 from email_app.services.email_classification import (
@@ -443,7 +443,12 @@ class EmailService:
 
         # Build full context with defaults
         full_context = {
-            "user_name": display_name(user),
+            # Issue #1591: the greeting must never be an email handle.
+            # Resolved here rather than as ``|default:"there"`` in the
+            # template files so operator overrides stored in the DB get
+            # the fix too, and so an empty value can never ship "Hi ,".
+            # Caller context still wins via ``full_context.update``.
+            "user_name": greeting_name(user) or GREETING_FALLBACK,
             "user_email": user.email,
             "site_url": site_base_url(),
             "site_name": getattr(settings, "SITE_NAME", "AI Shipping Labs"),

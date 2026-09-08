@@ -89,7 +89,7 @@ class MavenWelcomeEmailContentTest(TestCase):
             started_at + datetime.timedelta(hours=24, minutes=1),
         )
 
-    def test_welcome_context_uses_canonical_display_name(self):
+    def test_named_enrollee_is_greeted_by_their_full_name(self):
         user = User.objects.create_user(
             email="ada@example.com",
             password="x",
@@ -98,8 +98,38 @@ class MavenWelcomeEmailContentTest(TestCase):
         )
 
         context = _welcome_context(user, "Course")
+        _subject, body_html = EmailService()._render_template(
+            "maven_welcome", user, context,
+        )
 
-        self.assertEqual(context["user_name"], "Ada Lovelace")
+        self.assertIn("Hi Ada Lovelace,", body_html)
+
+    def test_welcome_context_sets_no_user_name_key(self):
+        """Issue #1591: caller context wins over the value EmailService
+        injects, so an explicit ``user_name`` here would reinstate the
+        email-handle greeting for nameless Maven enrollees."""
+        user = User.objects.create_user(
+            email="ada@example.com", password="x", first_name="Ada",
+        )
+
+        context = _welcome_context(user, "Course")
+
+        self.assertNotIn("user_name", context)
+
+    def test_nameless_enrollee_is_greeted_hi_there(self):
+        """Maven regularly supplies no name at all. This is the exact email
+        that opened issue #1591."""
+        user = User.objects.create_user(
+            email="x.arrieta@ibernova.com", password="x",
+        )
+
+        context = _welcome_context(user, "AI Engineering Buildcamp")
+        _subject, body_html = EmailService()._render_template(
+            "maven_welcome", user, context,
+        )
+
+        self.assertIn("Hi there,", body_html)
+        self.assertNotIn("x.arrieta", body_html)
 
     def test_sign_in_url_points_to_resolvable_login_route(self):
         """Regression for #960: the sign-in link must be /accounts/login/,

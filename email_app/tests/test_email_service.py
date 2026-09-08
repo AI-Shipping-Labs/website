@@ -118,16 +118,19 @@ class EmailServiceSendTest(TestCase):
         self.assertIn('Ada Lovelace', html_body)
 
     @patch.object(EmailService, '_send_ses', return_value='ses-msg-005')
-    def test_send_renders_user_email_fallback_name(self, mock_ses):
+    def test_send_greets_nameless_user_without_their_email_handle(self, mock_ses):
+        """Issue #1591: a member with no name gets ``Hi there,``, never
+        ``Hi bob,``."""
         user = User.objects.create_user(email='bob@example.com')
         self.service.send(user, 'welcome', {'tier_name': 'Free'})
 
         call_args = mock_ses.call_args
         html_body = call_args[0][2]
-        self.assertIn('bob', html_body)
+        self.assertIn('Hi there,', html_body)
+        self.assertNotIn('Hi bob,', html_body)
 
     @patch.object(EmailService, '_send_ses', return_value='ses-msg-005b')
-    def test_send_renders_user_name_fallback_for_whitespace_name(self, mock_ses):
+    def test_send_treats_whitespace_only_names_as_nameless(self, mock_ses):
         user = User.objects.create_user(
             email='builder@example.com',
             first_name='  ',
@@ -137,7 +140,9 @@ class EmailServiceSendTest(TestCase):
         self.service.send(user, 'welcome', {'tier_name': 'Free'})
 
         html_body = mock_ses.call_args[0][2]
-        self.assertIn('builder', html_body)
+        self.assertIn('Hi there,', html_body)
+        self.assertNotIn('Hi builder,', html_body)
+        self.assertNotIn('Hi ,', html_body)
 
     def test_send_unknown_template_kind_raises_error(self):
         with self.assertRaises(EmailServiceError) as ctx:

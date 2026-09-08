@@ -20,13 +20,19 @@ from django.shortcuts import redirect, render
 from django.utils.html import escape
 from django.views.decorators.http import require_POST
 
+from accounts.utils.display import GREETING_FALLBACK
 from email_app.models import EmailTemplateOverride
 from email_app.services.email_service import (
     TEMPLATES_DIR,
     EmailService,
     EmailServiceError,
 )
-from email_app.services.preview_contexts import get_preview_context
+from email_app.services.preview_contexts import (
+    RECIPIENT_CHOICES,
+    RECIPIENT_NAMED,
+    RECIPIENT_NO_NAME,
+    get_preview_context,
+)
 from studio.decorators import staff_required
 
 logger = logging.getLogger(__name__)
@@ -179,22 +185,36 @@ def _resolve_initial(template_name):
     }
 
 
-def _render_preview_html(template_name, subject, body_markdown, footer_note):
+def _render_preview_html(
+    template_name,
+    subject,
+    body_markdown,
+    footer_note,
+    recipient=RECIPIENT_NAMED,
+):
     """Render the preview through the same chrome the real send uses.
 
     Variables in the body are filled with placeholder values from
     ``preview_contexts.PREVIEW_CONTEXTS`` so no real user data leaks.
+
+    ``recipient='no_name'`` shows the copy as a member with no name on file
+    receives it (issue #1591).
     """
     from django.template import Context, Template
     from django.template.loader import render_to_string
 
     from content.utils.markdown import render_email_markdown
 
-    placeholder = get_preview_context(template_name)
+    placeholder = get_preview_context(template_name, recipient=recipient)
     # ``user_name`` and ``user_email`` are also auto-injected by EmailService
     # for real sends; mirror that here so previews look the same.
-    placeholder.setdefault('user_name', 'Ada')
-    placeholder.setdefault('user_email', 'ada@example.com')
+    if recipient == RECIPIENT_NO_NAME:
+        placeholder.setdefault('user_name', GREETING_FALLBACK)
+        placeholder.setdefault('member_name', GREETING_FALLBACK)
+        placeholder.setdefault('user_email', 'no-name@example.com')
+    else:
+        placeholder.setdefault('user_name', 'Ada')
+        placeholder.setdefault('user_email', 'ada@example.com')
     placeholder.setdefault('site_url', 'https://aishippinglabs.com')
     placeholder.setdefault('site_name', 'AI Shipping Labs')
 
@@ -353,6 +373,11 @@ def email_template_preview(request, template_name):
     subject = request.POST.get('subject', '')
     body_markdown = request.POST.get('body_markdown', '')
     footer_note = request.POST.get('footer_note', '')
+    # Unknown values fall back to the named recipient rather than erroring:
+    # a stale tab or a hand-rolled POST must not break the editor.
+    recipient = request.POST.get('recipient') or RECIPIENT_NAMED
+    if recipient not in dict(RECIPIENT_CHOICES):
+        recipient = RECIPIENT_NAMED
 
     try:
         html = _render_preview_html(
@@ -360,6 +385,7 @@ def email_template_preview(request, template_name):
             subject,
             body_markdown,
             footer_note,
+            recipient=recipient,
         )
     except Exception as exc:
         # Don't leak the operator's typo as a 500. Render a minimal

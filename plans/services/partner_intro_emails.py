@@ -6,7 +6,7 @@ from django.db import IntegrityError, transaction
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.utils.display import display_name
+from accounts.utils.display import GREETING_FALLBACK, display_name, greeting_name
 from community.services.slack_links import build_slack_profile_url
 from email_app.services.email_service import EmailService
 from integrations.config import get_config, site_base_url
@@ -333,7 +333,12 @@ def _email_context(*, sprint, member, row):
     return {
         'sprint_name': sprint.name,
         'sprint_slug': sprint.slug,
-        'member_name': display_name(member),
+        # Issue #1591: this renders the ``Hi {{ member_name }},`` greeting in
+        # sprint_partner_intro.md, so it must never be an email handle.
+        # ``_row_identity`` and ``_partner_identity`` keep ``display_name`` --
+        # those are operator summary rows and in-body partner labels, where the
+        # handle fallback is the right behaviour.
+        'member_name': greeting_name(member) or GREETING_FALLBACK,
         'partner_count': len(row['partners']),
         'partners': row['partners'],
         'board_url': f'{site_base_url()}{board_path}',

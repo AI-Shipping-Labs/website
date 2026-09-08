@@ -914,6 +914,7 @@ def _get_homepage_public_upcoming_events(now=None, limit=3):
     queryset = (
         upcoming_events_queryset(now=now)
         .filter(published=True)
+        .annotate(_attendee_count=Count('registrations'))
         .select_related('event_series')
         .order_by('start_datetime')
     )

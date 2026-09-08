@@ -167,6 +167,122 @@ class EventListAttendeeChipTest(TestCase):
         self.assertIn('4 attended', body)
 
 
+class HomepageEventAttendeeChipTest(TestCase):
+    """Homepage cards use annotated counts without per-card queries."""
+
+    def _add_event(self, slug, position, count=0, *, published=True):
+        event = Event.objects.create(
+            title=f'Homepage session {slug}',
+            slug=slug,
+            start_datetime=timezone.now() + timedelta(days=position),
+            end_datetime=timezone.now() + timedelta(days=position, hours=1),
+            status='upcoming',
+            published=published,
+        )
+        if count:
+            _register_users(event, count)
+        return event
+
+    def test_homepage_has_no_followup_registration_counts_for_0_1_3_events(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        registration_table = connection.ops.quote_name(
+            EventRegistration._meta.db_table,
+        )
+        count_query_needle = f'FROM {registration_table}'.upper()
+
+        for event_count in (0, 1, 3):
+            with self.subTest(event_count=event_count):
+                Event.objects.all().delete()
+                for index in range(event_count):
+                    self._add_event(
+                        f'budget-{event_count}-{index}',
+                        index + 1,
+                        count=1,
+                    )
+
+                with CaptureQueriesContext(connection) as captured:
+                    response = self.client.get('/')
+                    upcoming_events = response.context['upcoming_events']
+                    attendee_counts = [
+                        event.attendee_count for event in upcoming_events
+                    ]
+
+                self.assertEqual(attendee_counts, [1] * event_count)
+                self.assertTrue(
+                    all(
+                        hasattr(event, '_attendee_count')
+                        for event in upcoming_events
+                    ),
+                )
+                followup_counts = [
+                    query['sql']
+                    for query in captured.captured_queries
+                    if 'COUNT(' in query['sql'].upper()
+                    and count_query_needle in query['sql'].upper()
+                ]
+                self.assertEqual(
+                    followup_counts,
+                    [],
+                    'Homepage event cards issued registration COUNT queries',
+                )
+
+                if event_count:
+                    self.assertContains(
+                        response,
+                        'data-testid="home-upcoming-events-section"',
+                    )
+                else:
+                    self.assertNotContains(
+                        response,
+                        'data-testid="home-upcoming-events-section"',
+                    )
+
+    def test_homepage_preserves_order_limit_visibility_and_chip_threshold(self):
+        unpublished = self._add_event(
+            'unpublished', 0, count=6, published=False,
+        )
+        popular = self._add_event('popular', 1, count=5)
+        quiet = self._add_event('quiet', 2, count=4)
+        empty = self._add_event('empty', 3)
+        overflow = self._add_event('overflow', 4, count=7)
+
+        response = self.client.get('/')
+
+        upcoming_events = response.context['upcoming_events']
+        self.assertEqual(upcoming_events, [popular, quiet, empty])
+        self.assertEqual(
+            [event._attendee_count for event in upcoming_events],
+            [5, 4, 0],
+        )
+        self.assertNotIn(unpublished, upcoming_events)
+        self.assertNotIn(overflow, upcoming_events)
+        self.assertContains(
+            response,
+            'data-testid="home-upcoming-event-card"',
+            count=3,
+        )
+        self.assertContains(
+            response,
+            'data-testid="upcoming-event-card"',
+            count=3,
+        )
+        self.assertContains(
+            response,
+            'data-testid="event-attendee-count"',
+            count=1,
+        )
+        self.assertContains(response, '5 people are going')
+        self.assertNotContains(response, '4 people are going')
+        self.assertNotContains(response, '0 people are going')
+        self.assertContains(
+            response,
+            'data-testid="home-upcoming-events-link"',
+            count=1,
+        )
+
+
 class EventSeriesAttendeeChipTest(TestCase):
     """Series page renders per-card chips with annotated counts."""
 

@@ -29,6 +29,7 @@ from integrations.services.github import (
     _matches_ignore_patterns,
     sync_content_source,
 )
+from integrations.services.github_sync import repo as github_repo
 
 
 class MatchesIgnorePatternsTest(SimpleTestCase):
@@ -128,6 +129,19 @@ class DeriveReadmeContentIdTest(SimpleTestCase):
         a = _derive_readme_content_id('org/repo', '01-intro')
         b = _derive_readme_content_id('other/repo', '01-intro')
         self.assertNotEqual(a, b)
+
+
+class GitHubSyncHelperOwnershipTest(SimpleTestCase):
+    def test_parsing_helpers_are_not_exposed_by_repo_module(self):
+        helper_names = (
+            '_extract_readme_title',
+            '_derive_readme_content_id',
+            '_derive_workshop_page_content_id',
+        )
+
+        for helper_name in helper_names:
+            with self.subTest(helper_name=helper_name):
+                self.assertNotIn(helper_name, vars(github_repo))
 
 
 class _CourseSyncFixtureBase(TestCase):

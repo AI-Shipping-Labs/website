@@ -874,6 +874,34 @@ INTEGRATION_GROUPS = [
                 'docs_url': '_docs/integrations/auth.md#unverified_user_ttl_days',
             },
             {
+                'key': 'PURGE_UNVERIFIED_BATCH_SIZE',
+                'is_secret': False,
+                'optional': True,
+                'default': '500',
+                'description': (
+                    'Candidate ids inspected per primary-key window by the '
+                    'unverified-user purge. Default 500. A non-integer or '
+                    'non-positive override falls back to 500. Issue #1522.'
+                ),
+                'docs_url': (
+                    '_docs/integrations/auth.md#purge_unverified_batch_size'
+                ),
+            },
+            {
+                'key': 'PURGE_UNVERIFIED_MAX_BATCHES',
+                'is_secret': False,
+                'optional': True,
+                'default': '50',
+                'description': (
+                    'Maximum candidate batches inspected per purge pass and '
+                    'daily run. Default 50. A non-integer or non-positive '
+                    'override falls back to 50. Issue #1522.'
+                ),
+                'docs_url': (
+                    '_docs/integrations/auth.md#purge_unverified_max_batches'
+                ),
+            },
+            {
                 'key': 'AUTH_THROTTLE_LOGIN_IP_LIMIT',
                 'is_secret': False,
                 'optional': True,
@@ -1365,6 +1393,8 @@ SETTING_VALUE_TYPES = {
     'CRM_EXPORT_MAX_LIMIT': 'integer',
     'USER_ACTIVITY_RETENTION_DAYS': 'integer',
     'UNVERIFIED_USER_TTL_DAYS': 'integer',
+    'PURGE_UNVERIFIED_BATCH_SIZE': 'integer',
+    'PURGE_UNVERIFIED_MAX_BATCHES': 'integer',
     'AUTH_THROTTLE_LOGIN_IP_LIMIT': 'integer',
     'AUTH_THROTTLE_LOGIN_EMAIL_LIMIT': 'integer',
     'AUTH_THROTTLE_LOGIN_WINDOW_SECONDS': 'integer',

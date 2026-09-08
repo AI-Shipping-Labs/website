@@ -6,13 +6,29 @@ regression in any of them surfaces a clear failure.
 """
 
 import datetime
+from unittest.mock import patch
 
+from allauth.account.models import EmailAddress
+from allauth.socialaccount.models import SocialAccount
+from django.contrib.admin.models import ADDITION, LogEntry
+from django.contrib.contenttypes.models import ContentType
+from django.db import connection
+from django.db.utils import DatabaseError
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from accounts.models import User
 from accounts.tasks import purge_unverified_users
-from email_app.models import EmailLog
+from accounts.tasks.purge_unverified_users import (
+    DEFAULT_PURGE_UNVERIFIED_BATCH_SIZE,
+    DEFAULT_PURGE_UNVERIFIED_MAX_BATCHES,
+    _candidate_queryset,
+    _positive_int_config,
+    _related_user_ids,
+    _standard_base_queryset,
+)
+from email_app.models import EmailLog, SesEvent
 
 
 def _make_unverified(email, *, expires_offset_hours, **extra):
@@ -146,6 +162,36 @@ class PurgeUnverifiedUsersTest(TestCase):
         self.assertEqual(result["deleted"], 0)
         self.assertTrue(User.objects.filter(pk=user.pk).exists())
 
+    def test_purge_ignores_signup_bookkeeping_relations(self):
+        user = _make_unverified(
+            "bookkeeping@example.com",
+            expires_offset_hours=-24,
+        )
+        EmailAddress.objects.create(
+            user=user,
+            email=user.email,
+            verified=False,
+            primary=True,
+        )
+        SocialAccount.objects.create(
+            user=user,
+            provider="test-provider",
+            uid="bookkeeping-user",
+        )
+        LogEntry.objects.create(
+            user_id=user.pk,
+            content_type=ContentType.objects.get_for_model(User),
+            object_id=str(user.pk),
+            object_repr=user.email,
+            action_flag=ADDITION,
+            change_message="",
+        )
+
+        result = purge_unverified_users()
+
+        self.assertEqual(result["deleted_standard"], 1)
+        self.assertFalse(User.objects.filter(pk=user.pk).exists())
+
     def test_purge_processes_multiple_candidates_in_one_pass(self):
         """Purge does not stop at the first candidate."""
         a = _make_unverified("a@example.com", expires_offset_hours=-48)
@@ -196,6 +242,12 @@ class EagerBounceBucketTest(TestCase):
             user=user,
             email_type="email_verification",
             ses_message_id="ses-eager-1",
+        )
+        SesEvent.objects.create(
+            user=user,
+            event_type=SesEvent.EVENT_TYPE_BOUNCE_PERMANENT,
+            message_id="sns-eager-1",
+            raw_payload={},
         )
 
         result = purge_unverified_users()
@@ -263,7 +315,7 @@ class EagerBounceBucketTest(TestCase):
         self.assertEqual(result["deleted"], 0)
         self.assertTrue(User.objects.filter(pk=user.pk).exists())
 
-    def test_purge_return_dict_has_all_six_counters(self):
+    def test_purge_return_dict_preserves_six_counters_and_adds_remaining(self):
         """Both buckets contribute to a shape that monitors can consume."""
         # One eager-bucket candidate, one standard-bucket candidate.
         eager_user = _make_eager_candidate(
@@ -288,7 +340,9 @@ class EagerBounceBucketTest(TestCase):
             "skipped_standard",
             "skipped_eager",
         }
-        self.assertEqual(set(result.keys()), expected_keys)
+        self.assertTrue(expected_keys.issubset(result))
+        self.assertIn("remaining_standard", result)
+        self.assertIn("remaining_eager", result)
 
         self.assertEqual(result["deleted_standard"], 1)
         self.assertEqual(result["deleted_eager"], 1)
@@ -338,3 +392,202 @@ class EagerBounceBucketTest(TestCase):
 
         self.assertEqual(result["deleted_eager"], 1)
         self.assertFalse(User.objects.filter(pk=user.pk).exists())
+
+
+class BoundedPurgeQueryPlanTest(TestCase):
+    def test_candidate_queryset_contains_all_field_gates(self):
+        queryset = _candidate_queryset(_standard_base_queryset(timezone.now()))
+        sql = str(queryset.query)
+
+        self.assertIn('"last_login" IS NULL', sql)
+        self.assertIn('"stripe_customer_id" =', sql)
+        self.assertIn('"subscription_id" =', sql)
+        self.assertIn('"email_verified"', sql)
+        self.assertIn('"verification_expires_at" IS NOT NULL', sql)
+
+    def test_relation_queries_do_not_scale_with_candidate_count(self):
+        def run(candidate_count):
+            users = [
+                _make_unverified(
+                    f"query-{candidate_count}-{index}@example.com",
+                    expires_offset_hours=-48,
+                )
+                for index in range(candidate_count)
+            ]
+            for user in users[: candidate_count // 2]:
+                EmailLog.objects.create(
+                    user=user,
+                    email_type="welcome",
+                    ses_message_id=f"query-{user.pk}",
+                )
+            with patch(
+                "accounts.tasks.purge_unverified_users.get_config",
+                side_effect=lambda key, default: default,
+            ):
+                with CaptureQueriesContext(connection) as queries:
+                    purge_unverified_users()
+            sql = [query["sql"] for query in queries.captured_queries]
+            User.objects.all().delete()
+            return len(sql), sql
+
+        small_count, small_sql = run(8)
+        large_count, large_sql = run(32)
+
+        self.assertLessEqual(abs(large_count - small_count), 5)
+        self.assertFalse(
+            any('SELECT 1 AS "a"' in sql for sql in small_sql + large_sql),
+            "relation gates must not issue per-user exists queries",
+        )
+
+    def test_relation_query_failure_preserves_whole_batch_and_returns(self):
+        users = [
+            _make_unverified(
+                f"failure-{index}@example.com",
+                expires_offset_hours=-48,
+            )
+            for index in range(3)
+        ]
+
+        with patch(
+            "accounts.tasks.purge_unverified_users._related_user_ids",
+            side_effect=DatabaseError("relation unavailable"),
+        ):
+            with self.assertLogs(
+                "accounts.tasks.purge_unverified_users",
+                level="WARNING",
+            ) as logs:
+                result = purge_unverified_users()
+
+        self.assertEqual(result["deleted"], 0)
+        self.assertEqual(result["skipped_standard"], 3)
+        self.assertEqual(
+            User.objects.filter(pk__in=[user.pk for user in users]).count(),
+            3,
+        )
+        error_line = next(
+            message
+            for message in logs.output
+            if "Failed to query reverse relation" in message
+        )
+        failed_accessor = error_line.split("reverse relation ", 1)[1].split()[0]
+        self.assertTrue(
+            any(
+                f"blocked by {failed_accessor}" in message
+                for message in logs.output
+            ),
+            f"expected failed accessor in warning, got {logs.output}",
+        )
+
+    def test_relation_failure_skips_failed_batch_and_continues(self):
+        users = [
+            _make_unverified(
+                f"continue-{index}@example.com",
+                expires_offset_hours=-48,
+            )
+            for index in range(3)
+        ]
+        failed_batch_ids = {users[0].pk, users[1].pk}
+
+        def fail_first_batch(relation, batch_ids):
+            if set(batch_ids) == failed_batch_ids:
+                raise DatabaseError("first batch unavailable")
+            return _related_user_ids(relation, batch_ids)
+
+        def config(key, default):
+            return {
+                "PURGE_UNVERIFIED_BATCH_SIZE": 2,
+                "PURGE_UNVERIFIED_MAX_BATCHES": 2,
+            }.get(key, default)
+
+        with patch(
+            "accounts.tasks.purge_unverified_users.get_config",
+            side_effect=config,
+        ), patch(
+            "accounts.tasks.purge_unverified_users._related_user_ids",
+            side_effect=fail_first_batch,
+        ):
+            result = purge_unverified_users()
+
+        self.assertEqual(result["deleted_standard"], 1)
+        self.assertEqual(result["skipped_standard"], 2)
+        self.assertTrue(User.objects.filter(pk__in=failed_batch_ids).exists())
+        self.assertFalse(User.objects.filter(pk=users[2].pk).exists())
+
+    def test_max_batches_leaves_backlog_and_next_run_continues(self):
+        users = [
+            _make_unverified(
+                f"backlog-{index}@example.com",
+                expires_offset_hours=-48,
+            )
+            for index in range(5)
+        ]
+
+        def config(key, default):
+            return {
+                "PURGE_UNVERIFIED_BATCH_SIZE": 2,
+                "PURGE_UNVERIFIED_MAX_BATCHES": 1,
+            }.get(key, default)
+
+        with patch(
+            "accounts.tasks.purge_unverified_users.get_config",
+            side_effect=config,
+        ):
+            first = purge_unverified_users()
+            second = purge_unverified_users()
+
+        self.assertEqual(first["deleted_standard"], 2)
+        self.assertEqual(first["remaining_standard"], 3)
+        self.assertEqual(second["deleted_standard"], 2)
+        self.assertEqual(second["remaining_standard"], 1)
+        self.assertFalse(
+            User.objects.filter(pk__in=[u.pk for u in users[:4]]).exists()
+        )
+        self.assertTrue(User.objects.filter(pk=users[4].pk).exists())
+
+    def test_wall_clock_budget_returns_normally_without_deleting_batch(self):
+        users = [
+            _make_unverified(
+                f"budget-{index}@example.com",
+                expires_offset_hours=-48,
+            )
+            for index in range(2)
+        ]
+        ticks = iter([0, 0, 0, 241])
+
+        with patch(
+            "accounts.tasks.purge_unverified_users.time.monotonic",
+            side_effect=lambda: next(ticks, 241),
+        ):
+            result = purge_unverified_users()
+
+        self.assertEqual(result["deleted"], 0)
+        self.assertEqual(result["remaining_standard"], 2)
+        self.assertEqual(
+            User.objects.filter(pk__in=[user.pk for user in users]).count(),
+            2,
+        )
+
+
+class PurgeConfigTest(TestCase):
+    def test_invalid_batch_overrides_fall_back_to_safe_defaults(self):
+        invalid_values = ("", "not-an-int", "0", "-3", None)
+        for invalid in invalid_values:
+            with self.subTest(value=invalid):
+                with patch(
+                    "accounts.tasks.purge_unverified_users.get_config",
+                    return_value=invalid,
+                ):
+                    self.assertEqual(
+                        _positive_int_config(
+                            "PURGE_UNVERIFIED_BATCH_SIZE",
+                            DEFAULT_PURGE_UNVERIFIED_BATCH_SIZE,
+                        ),
+                        DEFAULT_PURGE_UNVERIFIED_BATCH_SIZE,
+                    )
+                    self.assertEqual(
+                        _positive_int_config(
+                            "PURGE_UNVERIFIED_MAX_BATCHES",
+                            DEFAULT_PURGE_UNVERIFIED_MAX_BATCHES,
+                        ),
+                        DEFAULT_PURGE_UNVERIFIED_MAX_BATCHES,
+                    )

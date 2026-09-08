@@ -65,6 +65,52 @@ Test vs live: n/a. Tighten in production during spam waves, leave
 relaxed in dev. There is no test-vs-live distinction at the
 platform level.
 
+## PURGE_UNVERIFIED_BATCH_SIZE
+
+Purpose: Number of field-safe candidate ids each pass inspects in one
+primary-key window. The purge checks every non-ignored reverse relation once
+for the whole window, then hard-deletes only ids with no blocking rows.
+
+Default: 500. A missing, non-integer, or non-positive value falls back to 500.
+
+Without it (or unparseable): Each pass uses 500 candidates per batch. The query
+uses `pk__gt` and never uses `OFFSET`, so the worker does not materialize the
+whole backlog.
+
+Where to find it: This is an operator-controlled positive integer. Raise it
+during a spam wave when the database has enough headroom; lower it when smaller
+transactions are preferable.
+
+Prereqs: The `purge-unverified-users` daily schedule must be running.
+
+Rotation: n/a. The next run reads the current Studio value.
+
+Test vs live: n/a. Tests use small overrides to exercise batch continuation.
+
+## PURGE_UNVERIFIED_MAX_BATCHES
+
+Purpose: Maximum number of primary-key windows processed by each purge pass in
+one daily run.
+
+Default: 50, or at most 25,000 candidates per pass with the default batch size.
+A missing, non-integer, or non-positive value falls back to 50.
+
+Without it (or unparseable): Each pass stops after 50 batches. The whole task
+also stops after a fixed 240-second wall-clock budget, leaving 60 seconds below
+the django-q worker timeout. Remaining candidates wait for the next daily
+08:00 UTC run; the task returns normally and does not enqueue itself.
+
+Where to find it: This is an operator-controlled positive integer. Raise it
+temporarily during a spam wave only when normal run duration stays below the
+wall-clock budget.
+
+Prereqs: The `purge-unverified-users` daily schedule must be running.
+
+Rotation: n/a. The next run reads the current Studio value.
+
+Test vs live: n/a. Tests use small overrides rather than creating a production
+sized backlog.
+
 ## AUTH_THROTTLE_LOGIN_IP_LIMIT
 
 Purpose: Maximum `POST /api/login` attempts from one client IP inside

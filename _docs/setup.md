@@ -17,6 +17,32 @@ Local development additionally requires Node.js 24 and npm. Tailwind CSS
 watcher. `make css-build` and `make css-watch` are the canonical explicit
 commands. The output at `static/css/tailwind.css` is generated and gitignored.
 
+## The community-base package dependency
+
+`community-base` (DataTalksClub/community-base) is pinned as a git dependency
+at a released `vX.Y.Z` tag in `pyproject.toml`, resolved by `uv.lock`. Both
+`ci.yml` and `deploy-dev.yml` run `scripts/check_community_base_source.py`
+before installing dependencies; the guard fails the build if the dependency
+is ever a local path, editable install, branch ref, or registry copy instead
+of the pinned tag, so unreviewed package code cannot reach the site runtime.
+
+To work on the package together with this site, use the reversible local link
+(the package repo lives as a sibling checkout, `../community-base`):
+
+- `make core-link` — requires clean `pyproject.toml`/`uv.lock`, snapshots
+  their exact bytes under `.tmp/core-link/`, and points the dependency at the
+  sibling checkout (editable; package edits are visible without reinstall).
+  Refuses when a link is already active or the checkout is missing or is not
+  a community-base repo.
+- `make core-unlink` — restores the snapshotted pinned dependency and syncs
+  it back. Refuses when `pyproject.toml` has changes beyond the link edit or
+  when recovery state is missing; it never runs a blanket `git checkout --`.
+
+Never commit a linked tree: `uv run python -c "import community_base,
+pathlib; print(pathlib.Path(community_base.__file__).resolve())"` must print
+a `site-packages` path before you commit, and `grep -n 'path = ' pyproject.toml`
+must print nothing.
+
 ## Infrastructure
 
 The app runs on AWS ECS Fargate behind an ALB, with Docker images stored in ECR.

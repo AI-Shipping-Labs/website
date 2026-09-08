@@ -5,18 +5,20 @@ Provides the core access check pattern: user.tier.level >= content.required_leve
 Anonymous users are treated as level 0 (free tier).
 """
 
-# Visibility level constants matching tier levels in payments.Tier
-LEVEL_OPEN = 0
-# LEVEL_REGISTERED is a content-side sentinel (issue #465). It does NOT
-# correspond to a real Tier row — Tier rows stay at 0/10/20/30. It means
-# "any authenticated user, regardless of tier" and is used on per-unit
-# course gating to draw a sign-in wall (anonymous denied, free verified
-# allowed). The constant sits between LEVEL_OPEN and LEVEL_BASIC so
+# Visibility level constants have one source since plan issue A0.3: the
+# community-base kernel. The values match the tier levels on payments.Tier.
+# LEVEL_REGISTERED stays a content-side sentinel (issue #465): no Tier row
+# carries it — it means "any authenticated user, regardless of tier" and is
+# used on per-unit course gating to draw a sign-in wall (anonymous denied,
+# free verified allowed). It sits between LEVEL_OPEN and LEVEL_BASIC so
 # numeric ``>=`` comparisons keep working for paid tiers.
-LEVEL_REGISTERED = 5
-LEVEL_BASIC = 10
-LEVEL_MAIN = 20
-LEVEL_PREMIUM = 30
+from community_base.kernel.access import (  # noqa: F401 -- re-exported for the site
+    LEVEL_BASIC,
+    LEVEL_MAIN,
+    LEVEL_OPEN,
+    LEVEL_PREMIUM,
+    LEVEL_REGISTERED,
+)
 
 # Choices for the required_level field on content models
 VISIBILITY_CHOICES = [

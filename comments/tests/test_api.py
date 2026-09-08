@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
@@ -58,6 +58,50 @@ class ListCommentsAPITest(TestCase):
         self.assertEqual(len(data['comments']), 1)  # only top-level
         self.assertEqual(len(data['comments'][0]['replies']), 1)
         self.assertEqual(data['comments'][0]['replies'][0]['id'], reply.id)
+
+    def test_list_preserves_iso_instants_and_existing_comment_shape(self):
+        top = Comment.objects.create(
+            content_id=self.content_id, user=self.user1, body='Question body',
+        )
+        reply = Comment.objects.create(
+            content_id=self.content_id,
+            user=self.user2,
+            parent=top,
+            body='Reply body',
+        )
+        CommentVote.objects.create(comment=top, user=self.user2)
+        top_created_at = datetime(2026, 7, 16, 22, 45, tzinfo=UTC)
+        reply_created_at = datetime(2026, 7, 17, 1, 15, tzinfo=UTC)
+        Comment.objects.filter(pk=top.pk).update(created_at=top_created_at)
+        Comment.objects.filter(pk=reply.pk).update(created_at=reply_created_at)
+
+        response = self.client.get(f'/api/comments/{self.content_id}')
+
+        data = response.json()['comments'][0]
+        self.assertEqual(
+            set(data),
+            {
+                'id', 'body', 'user_name', 'created_at', 'vote_count',
+                'user_voted', 'replies',
+            },
+        )
+        self.assertEqual(data['body'], 'Question body')
+        self.assertEqual(data['user_name'], 'u1')
+        self.assertEqual(data['vote_count'], 1)
+        self.assertFalse(data['user_voted'])
+        self.assertEqual(datetime.fromisoformat(data['created_at']), top_created_at)
+
+        reply_data = data['replies'][0]
+        self.assertEqual(
+            set(reply_data),
+            {'id', 'body', 'user_name', 'created_at'},
+        )
+        self.assertEqual(reply_data['body'], 'Reply body')
+        self.assertEqual(reply_data['user_name'], 'u2')
+        self.assertEqual(
+            datetime.fromisoformat(reply_data['created_at']),
+            reply_created_at,
+        )
 
     def test_list_uses_canonical_display_name_for_comments_and_replies(self):
         named = User.objects.create_user(

@@ -789,6 +789,15 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_send_test_addresses_the_operator_by_their_own_name",
     })
 
+    issue_1590_owners = frozenset({
+        "playwright_tests/test_comment_dates_1590.py::"
+        "test_us_locale_course_question_and_reply_use_day_first_semantic_dates",
+        "playwright_tests/test_comment_dates_1590.py::"
+        "test_timezone_boundary_changes_local_day_without_changing_format",
+        "playwright_tests/test_comment_dates_1590.py::"
+        "test_relative_thresholds_and_long_mobile_metadata_remain_readable",
+    })
+
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
 
@@ -851,8 +860,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2569)
-        self.assertEqual(len(inventory.owners), 2349)
+        self.assertEqual(inventory.item_count, 2572)
+        self.assertEqual(len(inventory.owners), 2352)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -865,7 +874,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1565_owners
             | self.issue_1540_owners
             | self.issue_1589_owners
-            | self.issue_1591_owners,
+            | self.issue_1591_owners
+            | self.issue_1590_owners,
         )
         self.assertNotIn(
             self.migrated_owner,
@@ -889,7 +899,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         for owner in self.issue_1565_owners:
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
-        for owner in self.issue_1589_owners | self.issue_1591_owners:
+        for owner in self.issue_1589_owners | self.issue_1591_owners | self.issue_1590_owners:
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
         self.assertEqual(errors, [])

@@ -19,21 +19,45 @@
       return '';
     }
 
-    function relativeTime(isoStr) {
+    function padTwo(value) {
+      return String(value).padStart(2, '0');
+    }
+
+    function commentTime(isoStr) {
       var date = new Date(isoStr);
       var now = new Date();
       var diff = Math.floor((now - date) / 1000);
-      if (diff < 60) return 'just now';
-      if (diff < 3600) return Math.floor(diff / 60) + ' minutes ago';
-      if (diff < 86400) return Math.floor(diff / 3600) + ' hours ago';
-      if (diff < 2592000) return Math.floor(diff / 86400) + ' days ago';
-      return date.toLocaleDateString();
+      if (diff < 60) return { text: 'just now' };
+      if (diff < 3600) return { text: Math.floor(diff / 60) + ' minutes ago' };
+      if (diff < 86400) return { text: Math.floor(diff / 3600) + ' hours ago' };
+      if (diff < 2592000) return { text: Math.floor(diff / 86400) + ' days ago' };
+      return {
+        text: padTwo(date.getDate()) + '/' + padTwo(date.getMonth() + 1) + '/' + date.getFullYear(),
+        accessibleLabel: date.toLocaleString(undefined, {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          timeZoneName: 'long',
+        }),
+      };
     }
 
     function escapeHtml(text) {
       var div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    function renderTimestamp(isoStr, testId) {
+      var display = commentTime(isoStr);
+      var accessible = display.accessibleLabel
+        ? ' aria-label="' + escapeHtml(display.accessibleLabel) + '"'
+        : '';
+      return '<time class="shrink-0" data-testid="' + testId + '" datetime="' + escapeHtml(isoStr) + '"' + accessible + '>' + display.text + '</time>';
     }
 
     function renderComment(comment) {
@@ -48,11 +72,11 @@
         for (var i = 0; i < comment.replies.length; i++) {
           var r = comment.replies[i];
           repliesHtml += '<div class="rounded-lg border border-border bg-muted/30 p-3">' +
-            '<div class="mb-1 flex items-center gap-2 text-xs text-muted-foreground">' +
-              '<span class="font-medium text-foreground">' + escapeHtml(r.user_name) + '</span>' +
-              '<span>' + relativeTime(r.created_at) + '</span>' +
+            '<div class="mb-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">' +
+              '<span class="min-w-0 break-words font-medium text-foreground">' + escapeHtml(r.user_name) + '</span>' +
+              renderTimestamp(r.created_at, 'reply-timestamp') +
             '</div>' +
-            '<p class="text-sm text-foreground">' + escapeHtml(r.body) + '</p>' +
+            '<p class="break-words text-sm text-foreground">' + escapeHtml(r.body) + '</p>' +
           '</div>';
         }
         repliesHtml += '</div>';
@@ -67,11 +91,11 @@
             '<span class="qa-vote-count text-sm font-medium">' + comment.vote_count + '</span>' +
           '</div>' +
           '<div class="flex-1 min-w-0">' +
-            '<div class="mb-1 flex items-center gap-2 text-xs text-muted-foreground">' +
-              '<span class="font-medium text-foreground">' + escapeHtml(comment.user_name) + '</span>' +
-              '<span>' + relativeTime(comment.created_at) + '</span>' +
+            '<div class="mb-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">' +
+              '<span class="min-w-0 break-words font-medium text-foreground">' + escapeHtml(comment.user_name) + '</span>' +
+              renderTimestamp(comment.created_at, 'comment-timestamp') +
             '</div>' +
-            '<p class="text-sm text-foreground mb-2">' + escapeHtml(comment.body) + '</p>' +
+            '<p class="mb-2 break-words text-sm text-foreground">' + escapeHtml(comment.body) + '</p>' +
             '<button class="qa-reply-toggle text-xs text-accent hover:underline" data-comment-id="' + comment.id + '">Reply</button>' +
             '<div class="qa-reply-form hidden mt-2" data-comment-id="' + comment.id + '">' +
               '<textarea rows="2" placeholder="Write a reply..." class="w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"></textarea>' +

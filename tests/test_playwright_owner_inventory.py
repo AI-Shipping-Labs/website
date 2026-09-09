@@ -683,6 +683,26 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_account_email_preference_switches_1530.py::"
         "test_failed_and_network_saves_leave_accessible_and_visual_state_unchanged",
     })
+    issue_1531_owners = frozenset({
+        "playwright_tests/test_questionnaire_accessibility_1531.py::"
+        "test_member_submits_a_single_choice_through_its_named_group",
+        "playwright_tests/test_questionnaire_accessibility_1531.py::"
+        "test_member_saves_labelled_other_details",
+        "playwright_tests/test_questionnaire_accessibility_1531.py::"
+        "test_required_question_error_names_the_blocked_control",
+        "playwright_tests/test_questionnaire_accessibility_1531.py::"
+        "test_onboarding_text_help_describes_its_labelled_control",
+        "playwright_tests/test_questionnaire_accessibility_1531.py::"
+        "test_member_saves_multiple_choices_from_one_named_group",
+        "playwright_tests/test_questionnaire_accessibility_1531.py::"
+        "test_staff_creates_questionnaire_with_labelled_fields_and_title_error",
+        "playwright_tests/test_questionnaire_accessibility_1531.py::"
+        "test_staff_authors_scale_question_with_named_min_and_max",
+        "playwright_tests/test_questionnaire_accessibility_1531.py::"
+        "test_staff_adds_labelled_custom_question_to_only_one_member",
+        "playwright_tests/test_questionnaire_accessibility_1531.py::"
+        "test_keyboard_user_selects_choice_and_submits",
+    })
     issue_1506_owners = frozenset({
         "playwright_tests/test_studio_campaigns.py::"
         "TestStaffSeesNeedsAttentionAfterHardRejection::"
@@ -922,14 +942,15 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2596)
-        self.assertEqual(len(inventory.owners), 2371)
+        self.assertEqual(inventory.item_count, 2605)
+        self.assertEqual(len(inventory.owners), 2380)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
             | self.issue_1528_owners
             | self.issue_1529_owners
             | self.issue_1530_owners
+            | self.issue_1531_owners
             | self.ses_1552_owners
             | self.issue_1551_owners
             | self.issue_1557_owners
@@ -970,6 +991,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.issue_1528_owners
             | self.issue_1529_owners
             | self.issue_1530_owners
+            | self.issue_1531_owners
             | self.issue_1589_owners
             | self.issue_1591_owners
             | self.issue_1590_owners

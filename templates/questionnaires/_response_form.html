@@ -22,42 +22,59 @@ sprint-specific copy lives here.
   <div class="space-y-6">
     {% for row in form_rows %}
     <div class="rounded-2xl border border-border bg-card p-5" data-testid="questionnaire-question-row">
+      {% if row.question.question_type == 'single_choice' or row.question.question_type == 'multiple_choice' %}
+      <fieldset{% if row.question.help_text or row.error %} aria-describedby="{% if row.question.help_text %}{{ row.field_name }}-help{% endif %}{% if row.question.help_text and row.error %} {% endif %}{% if row.error %}{{ row.field_name }}-error{% endif %}"{% endif %}{% if row.error %} aria-invalid="true"{% endif %}>
+      <legend class="block text-sm font-medium text-foreground">
+        {{ row.question.prompt }}
+        {% if row.question.is_required %}<span class="text-red-400" data-testid="questionnaire-required-marker">*</span>{% endif %}
+      </legend>
+      {% else %}
       <label class="block text-sm font-medium text-foreground" for="{{ row.field_name }}">
         {{ row.question.prompt }}
         {% if row.question.is_required %}<span class="text-red-400" data-testid="questionnaire-required-marker">*</span>{% endif %}
       </label>
+      {% endif %}
       {% if row.question.help_text %}
-      <p class="mt-1 text-xs text-muted-foreground">{{ row.question.help_text }}</p>
+      <p id="{{ row.field_name }}-help" class="mt-1 text-xs text-muted-foreground">{{ row.question.help_text }}</p>
       {% endif %}
       {% if row.error %}
-      <p class="mt-2 text-xs text-red-400" data-testid="questionnaire-field-error">{{ row.error }}</p>
+      <p id="{{ row.field_name }}-error" class="mt-2 text-xs text-red-400" data-testid="questionnaire-field-error">{{ row.error }}</p>
       {% endif %}
 
       <div class="mt-3">
         {% if row.question.question_type == 'text' %}
           <input type="text" name="{{ row.field_name }}" id="{{ row.field_name }}"
                  value="{{ row.text_value }}"
+                 {% if row.question.help_text or row.error %}aria-describedby="{% if row.question.help_text %}{{ row.field_name }}-help{% endif %}{% if row.question.help_text and row.error %} {% endif %}{% if row.error %}{{ row.field_name }}-error{% endif %}"{% endif %}
+                 {% if row.error %}aria-invalid="true"{% endif %}
                  class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
                  data-testid="questionnaire-input-text">
         {% elif row.question.question_type == 'long_text' %}
           <textarea name="{{ row.field_name }}" id="{{ row.field_name }}" rows="4"
+                    {% if row.question.help_text or row.error %}aria-describedby="{% if row.question.help_text %}{{ row.field_name }}-help{% endif %}{% if row.question.help_text and row.error %} {% endif %}{% if row.error %}{{ row.field_name }}-error{% endif %}"{% endif %}
+                    {% if row.error %}aria-invalid="true"{% endif %}
                     class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
                     data-testid="questionnaire-input-long-text">{{ row.text_value }}</textarea>
         {% elif row.question.question_type == 'single_choice' %}
           <div class="space-y-2" data-testid="questionnaire-input-single-choice">
             {% for opt in row.options %}
             <div class="space-y-1">
-              <label class="flex items-center gap-2 text-sm text-foreground">
-                <input type="radio" name="{{ row.field_name }}" value="{{ opt.option.pk }}"
+              <div class="flex items-center gap-2 text-sm text-foreground">
+                <input type="radio" name="{{ row.field_name }}" id="{{ row.field_name }}-option-{{ opt.option.pk }}" value="{{ opt.option.pk }}"
                        {% if opt.selected %}checked{% endif %}>
+                <label for="{{ row.field_name }}-option-{{ opt.option.pk }}">
                 {{ opt.option.label }}
-              </label>
+                </label>
+              </div>
               {% if opt.option.allows_free_text %}
-              <input type="text" name="{{ opt.free_text_name }}"
-                     value="{{ opt.free_text_value }}"
-                     placeholder="Please describe"
-                     class="ml-6 w-full max-w-md rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
-                     data-testid="questionnaire-option-free-text">
+              <div class="ml-6">
+                <label for="{{ opt.free_text_name }}" class="block text-sm font-medium text-foreground">{{ opt.option.label }} details</label>
+                <input type="text" name="{{ opt.free_text_name }}" id="{{ opt.free_text_name }}"
+                       value="{{ opt.free_text_value }}"
+                       placeholder="Please describe"
+                       class="w-full max-w-md rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                       data-testid="questionnaire-option-free-text">
+              </div>
               {% endif %}
             </div>
             {% endfor %}
@@ -66,17 +83,22 @@ sprint-specific copy lives here.
           <div class="space-y-2" data-testid="questionnaire-input-multiple-choice">
             {% for opt in row.options %}
             <div class="space-y-1">
-              <label class="flex items-center gap-2 text-sm text-foreground">
-                <input type="checkbox" name="{{ row.field_name }}" value="{{ opt.option.pk }}"
+              <div class="flex items-center gap-2 text-sm text-foreground">
+                <input type="checkbox" name="{{ row.field_name }}" id="{{ row.field_name }}-option-{{ opt.option.pk }}" value="{{ opt.option.pk }}"
                        {% if opt.selected %}checked{% endif %}>
+                <label for="{{ row.field_name }}-option-{{ opt.option.pk }}">
                 {{ opt.option.label }}
-              </label>
+                </label>
+              </div>
               {% if opt.option.allows_free_text %}
-              <input type="text" name="{{ opt.free_text_name }}"
-                     value="{{ opt.free_text_value }}"
-                     placeholder="Please describe"
-                     class="ml-6 w-full max-w-md rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
-                     data-testid="questionnaire-option-free-text">
+              <div class="ml-6">
+                <label for="{{ opt.free_text_name }}" class="block text-sm font-medium text-foreground">{{ opt.option.label }} details</label>
+                <input type="text" name="{{ opt.free_text_name }}" id="{{ opt.free_text_name }}"
+                       value="{{ opt.free_text_value }}"
+                       placeholder="Please describe"
+                       class="w-full max-w-md rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                       data-testid="questionnaire-option-free-text">
+              </div>
               {% endif %}
             </div>
             {% endfor %}
@@ -85,12 +107,17 @@ sprint-specific copy lives here.
           {# scale / number #}
           <input type="number" name="{{ row.field_name }}" id="{{ row.field_name }}"
                  value="{{ row.number_value }}"
+                 {% if row.question.help_text or row.error %}aria-describedby="{% if row.question.help_text %}{{ row.field_name }}-help{% endif %}{% if row.question.help_text and row.error %} {% endif %}{% if row.error %}{{ row.field_name }}-error{% endif %}"{% endif %}
+                 {% if row.error %}aria-invalid="true"{% endif %}
                  {% if row.question.scale_min is not None %}min="{{ row.question.scale_min }}"{% endif %}
                  {% if row.question.scale_max is not None %}max="{{ row.question.scale_max }}"{% endif %}
                  class="w-40 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
                  data-testid="questionnaire-input-number">
         {% endif %}
       </div>
+      {% if row.question.question_type == 'single_choice' or row.question.question_type == 'multiple_choice' %}
+      </fieldset>
+      {% endif %}
     </div>
     {% endfor %}
   </div>

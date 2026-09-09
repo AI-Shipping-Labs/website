@@ -313,6 +313,9 @@ class TestAnonOnPaidRecording:
         # Locked thumbnail shows; iframe does NOT load.
         assert 'data-testid="teaser-video-thumbnail"' in body
         assert 'data-testid="video-player"' not in body
+        assert page.locator("main iframe").count() == 0
+        assert page.get_by_title("Loom video player", exact=True).count() == 0
+        assert page.get_by_title("YouTube video player", exact=True).count() == 0
         # Description teaser with early marker, late marker hidden.
         assert 'WORKSHOPVIDEODESCMARKER' in body
         assert 'WORKSHOPVIDEODESCHIDDEN' not in body

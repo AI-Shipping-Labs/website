@@ -812,6 +812,7 @@ class StudioCampaignDetailPreviewTest(TestCase):
         response = self.client.get(f"/studio/campaigns/{campaign.pk}/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="campaign-preview-iframe"')
+        self.assertContains(response, 'title="Campaign email preview"')
         self.assertContains(response, "srcdoc=")
 
     def test_preview_srcdoc_attribute_contains_full_email_document(self):

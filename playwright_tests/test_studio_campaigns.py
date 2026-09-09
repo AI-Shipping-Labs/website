@@ -131,6 +131,13 @@ class TestStaffAbortsSend:
         detail_url = f"{django_server}/studio/campaigns/{campaign.pk}/"
         page.goto(detail_url, wait_until="domcontentloaded")
 
+        preview = page.get_by_title("Campaign email preview", exact=True)
+        assert preview.count() == 1
+        assert preview.is_visible()
+        assert preview.get_attribute("data-testid") == "campaign-preview-iframe"
+        assert page.get_by_role("heading", name="Test Send", exact=True).is_visible()
+        assert page.get_by_text("Status", exact=True).is_visible()
+
         # Click the Send button. Because the dialog is dismissed, the
         # onsubmit handler returns false and the POST never fires.
         page.locator('[data-testid="send-campaign-btn"]').click()

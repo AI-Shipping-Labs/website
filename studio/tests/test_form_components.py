@@ -204,3 +204,34 @@ class GlobalSelectStyleTest(SimpleTestCase):
                 '_docs/design-system.md Form Controls.'
             )
             self.fail('\n'.join(lines))
+
+
+class GlobalIframeTitleTest(SimpleTestCase):
+    """Every first-party template iframe has a non-empty accessible name."""
+
+    def test_every_iframe_in_templates_has_non_empty_title(self):
+        templates_root = Path(settings.BASE_DIR, 'templates')
+        iframe_re = re.compile(r'<iframe\b[^>]*?>', re.DOTALL | re.IGNORECASE)
+        title_re = re.compile(
+            r'\btitle\s*=\s*(["\'])(.*?)\1',
+            re.DOTALL | re.IGNORECASE,
+        )
+        violations = []
+
+        for path in sorted(templates_root.rglob('*.html')):
+            source = path.read_text(encoding='utf-8')
+            for iframe_match in iframe_re.finditer(source):
+                iframe = iframe_match.group(0)
+                title_match = title_re.search(iframe)
+                if title_match and title_match.group(2).strip():
+                    continue
+                line_no = source.count('\n', 0, iframe_match.start()) + 1
+                relative_path = path.relative_to(settings.BASE_DIR)
+                violations.append(f'{relative_path}:{line_no}')
+
+        self.assertEqual(
+            violations,
+            [],
+            'Found first-party template iframes without a non-empty title: '
+            + ', '.join(violations),
+        )

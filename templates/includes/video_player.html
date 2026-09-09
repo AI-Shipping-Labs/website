@@ -11,6 +11,7 @@
       id="loom-player-{{ video_id }}"
       src="{{ embed_url }}"
       class="w-full h-full"
+      title="Loom video player"
       allowfullscreen
     ></iframe>
   </div>
@@ -65,6 +66,14 @@
         modestbranding: 1,
         rel: 0{% if start_seconds %},
         start: {{ start_seconds|stringformat:"d" }}{% endif %}
+      },
+      events: {
+        onReady: function(event) {
+          var iframe = event.target.getIframe();
+          if (iframe) {
+            iframe.setAttribute('title', 'YouTube video player');
+          }
+        }
       }
     });
   }

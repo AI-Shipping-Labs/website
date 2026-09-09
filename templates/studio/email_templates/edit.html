@@ -58,7 +58,7 @@
         <button type="submit"
                 formaction="{% url 'studio_email_template_reset' template_name %}"
                 formmethod="post"
-                onclick="return confirm('Reset {{ template_name }} to the filesystem default? This deletes the override.');"
+                data-confirm="Reset {{ template_name }} to the filesystem default? This deletes the override."
                 class="text-sm text-destructive hover:underline">Reset to default</button>
         {% endif %}
         <button type="submit"

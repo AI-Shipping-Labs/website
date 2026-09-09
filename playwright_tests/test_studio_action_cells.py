@@ -286,8 +286,8 @@ class TestStudioActionCells:
         assert send_form.get_attribute("method").lower() == "post"
         assert "bg-secondary" in send_form.locator("button").get_attribute("class")
         assert "border-red-500/40" in reset.get_attribute("class")
-        assert "Reset welcome to the filesystem default?" in (
-            reset.locator("xpath=ancestor::form").get_attribute("onsubmit")
+        assert reset.locator("xpath=ancestor::form").get_attribute("data-confirm") == (
+            "Reset welcome to the filesystem default? This deletes the override."
         )
 
         _capture(page, "email-templates-secondary-edit")

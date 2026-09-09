@@ -62,7 +62,7 @@
             <form method="post"
                   action="{% url 'studio_email_template_reset' row.template_name %}"
                   class="{% studio_list_class 'action_form' %}"
-                  onsubmit="return confirm('Reset {{ row.template_name }} to the filesystem default? This deletes the override.');">
+                  data-confirm="Reset {{ row.template_name }} to the filesystem default? This deletes the override.">
               {% csrf_token %}
               <button type="submit" class="{% studio_action_class 'destructive' %}">Reset to default</button>
             </form>

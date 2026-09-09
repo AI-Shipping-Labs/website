@@ -185,7 +185,7 @@
           </td>
           {% if not is_synced %}
           <td class="px-4 py-3 text-right">
-            <form method="post" action="{% url 'studio_course_instructor_remove' course_id=course.pk association_id=association.pk %}" onsubmit="return confirm('Remove {{ association.instructor.name }} from this course?');">
+            <form method="post" action="{% url 'studio_course_instructor_remove' course_id=course.pk association_id=association.pk %}" data-confirm="Remove {{ association.instructor.name }} from this course?">
               {% csrf_token %}
               <button type="submit" class="inline-flex min-h-[44px] items-center rounded-md border border-red-500/30 bg-transparent px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:text-red-400">Remove</button>
             </form>

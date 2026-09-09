@@ -663,6 +663,20 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "TestStaffSeesRevertOnApiFailure::"
         "test_checkpoint_edit_deterministic_error_does_not_retry",
     })
+    issue_1529_owners = frozenset({
+        "playwright_tests/test_studio_confirm_guard_1529.py::"
+        "TestStudioConfirmGuard::"
+        "test_apostrophe_course_unenroll_cancel_then_accepts_without_script_injection",
+        "playwright_tests/test_studio_confirm_guard_1529.py::"
+        "TestStudioConfirmGuard::"
+        "test_apostrophe_instructor_remove_cancel_then_accepts",
+        "playwright_tests/test_studio_confirm_guard_1529.py::"
+        "TestStudioConfirmGuard::"
+        "test_revoke_access_keeps_dynamic_email_and_existing_post",
+        "playwright_tests/test_studio_confirm_guard_1529.py::"
+        "TestStudioConfirmGuard::"
+        "test_email_reset_cancels_from_list_and_keyboard_then_accepts_from_edit",
+    })
     issue_1506_owners = frozenset({
         "playwright_tests/test_studio_campaigns.py::"
         "TestStaffSeesNeedsAttentionAfterHardRejection::"
@@ -902,12 +916,13 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2590)
-        self.assertEqual(len(inventory.owners), 2365)
+        self.assertEqual(inventory.item_count, 2594)
+        self.assertEqual(len(inventory.owners), 2369)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
             | self.issue_1528_owners
+            | self.issue_1529_owners
             | self.ses_1552_owners
             | self.issue_1551_owners
             | self.issue_1557_owners
@@ -946,6 +961,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
         for owner in (
             self.issue_1528_owners
+            | self.issue_1529_owners
             | self.issue_1589_owners
             | self.issue_1591_owners
             | self.issue_1590_owners

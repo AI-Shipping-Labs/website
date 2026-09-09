@@ -108,13 +108,27 @@ class BooksCollectionTest(BookApiTestBase):
         self.assertEqual(by_slug.status_code, 201)
         self.assertEqual(by_slug.json()['event_series']['id'], series.pk)
 
-    def test_create_rejects_unknown_event_series(self):
+    def test_create_rejects_unknown_event_series_id_and_slug(self):
+        before = Book.objects.count()
+        for index, raw in enumerate((999999, 'does-not-exist')):
+            with self.subTest(raw=raw):
+                response = self._post('/api/books', {
+                    'title': 'Bad', 'author': 'A', 'slug': f'bad-series-{index}',
+                    'event_series': raw,
+                })
+                self.assertEqual(response.status_code, 422)
+                self.assertEqual(response.json()['code'], 'unknown_series')
+                self.assertEqual(Book.objects.count(), before)
+
+    def test_create_rejects_invalid_event_series_type(self):
+        before = Book.objects.count()
         response = self._post('/api/books', {
-            'title': 'Bad', 'author': 'A', 'slug': 'bad-series',
-            'event_series': 'does-not-exist',
+            'title': 'Bad', 'author': 'A', 'slug': 'bad-series-type',
+            'event_series': [],
         })
         self.assertEqual(response.status_code, 422)
-        self.assertEqual(response.json()['code'], 'unknown_series')
+        self.assertEqual(response.json()['code'], 'validation_error')
+        self.assertEqual(Book.objects.count(), before)
 
 
 class BookDetailTest(BookApiTestBase):
@@ -134,6 +148,52 @@ class BookDetailTest(BookApiTestBase):
         self.assertEqual(response.status_code, 200)
         self.book.refresh_from_db()
         self.assertEqual(self.book.status, 'finished')
+
+    def test_patch_attaches_by_slug_and_unlinks_on_null_or_empty(self):
+        series = EventSeries.objects.create(
+            slug='patch-book-club', name='Patch Book Club', cadence='weekly',
+            day_of_week=0, start_time=time(17, 0), timezone='Europe/Berlin',
+            required_level=0, is_active=True,
+        )
+        response = self._patch(
+            '/api/books/inference-engineering',
+            {'event_series': series.slug},
+        )
+        self.assertEqual(
+            response.json()['event_series']['slug'], series.slug,
+        )
+        self.book.refresh_from_db()
+        self.assertEqual(self.book.event_series_id, series.pk)
+
+        for raw in (None, ''):
+            with self.subTest(raw=raw):
+                self.book.event_series = series
+                self.book.save(update_fields=['event_series'])
+                response = self._patch(
+                    '/api/books/inference-engineering',
+                    {'event_series': raw},
+                )
+                self.assertIsNone(response.json()['event_series'])
+                self.book.refresh_from_db()
+                self.assertIsNone(self.book.event_series_id)
+
+    def test_patch_event_series_errors_leave_existing_link(self):
+        series = EventSeries.objects.create(
+            slug='existing-book-club', name='Existing Book Club',
+        )
+        self.book.event_series = series
+        self.book.save(update_fields=['event_series'])
+
+        for raw, code in ((999999, 'unknown_series'), ({}, 'validation_error')):
+            with self.subTest(raw=raw):
+                response = self._patch(
+                    '/api/books/inference-engineering',
+                    {'event_series': raw},
+                )
+                self.assertEqual(response.status_code, 422)
+                self.assertEqual(response.json()['code'], code)
+                self.book.refresh_from_db()
+                self.assertEqual(self.book.event_series_id, series.pk)
 
     def test_patch_book_required_level_registered(self):
         # "Free with sign-in" (LEVEL_REGISTERED=5) is now a valid book level.

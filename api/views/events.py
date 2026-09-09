@@ -33,7 +33,7 @@ from api.utils import (
     validation_response,
 )
 from content.access import VISIBILITY_CHOICES
-from events.models import Event, EventHost, EventSeries, Host
+from events.models import Event, EventHost, Host
 from events.models.event import (
     EVENT_KIND_CHOICES,
     EVENT_ORIGIN_CHOICES,
@@ -50,6 +50,10 @@ from events.services.display_time import resolve_event_creation_timezone
 from events.services.event_recap_notification import (
     EventRecapNotReady,
     notify_recap_ready,
+)
+from events.services.event_series_lookup import (
+    EventSeriesLookupStatus,
+    resolve_event_series,
 )
 from events.services.occurrence_publication import (
     run_occurrence_publication_lifecycle,
@@ -441,35 +445,6 @@ def _validate_materials(value):
     return materials, None
 
 
-def _resolve_event_series(raw):
-    """Resolve an ``event_series`` payload value to an ``EventSeries`` or None.
-
-    Issue #1358. ``None`` (JSON null) detaches. A JSON integer is a pk; a JSON
-    string is a slug (a digit-only string is tried as a pk first, then as a
-    slug). Returns ``(series_or_none, resolved_bool)`` — ``resolved`` is False
-    when a non-null value could not be matched so the caller can raise a 422
-    ``event_series`` field error rather than 404 the event.
-    """
-    if raw is None:
-        return None, True
-    if isinstance(raw, bool):
-        return None, False
-    if isinstance(raw, int):
-        series = EventSeries.objects.filter(pk=raw).first()
-        return series, series is not None
-    if isinstance(raw, str):
-        value = raw.strip()
-        if not value:
-            return None, False
-        if value.isdigit():
-            series = EventSeries.objects.filter(pk=int(value)).first()
-            if series is not None:
-                return series, True
-        series = EventSeries.objects.filter(slug=value).first()
-        return series, series is not None
-    return None, False
-
-
 def _collect_event_values(data, *, existing=None, require_description=True):
     """Validate API payload and return model field values or error details.
 
@@ -587,11 +562,24 @@ def _collect_event_values(data, *, existing=None, require_description=True):
     # ``title_is_auto`` / the title untouched — an ad-hoc attach never
     # renumbers or renames.
     if "event_series" in data:
-        series, resolved = _resolve_event_series(data["event_series"])
+        raw_event_series = data["event_series"]
+        lookup_value = (
+            raw_event_series.strip()
+            if isinstance(raw_event_series, str)
+            else raw_event_series
+        )
+        series_result = resolve_event_series(lookup_value)
+        resolved = (
+            series_result.status is EventSeriesLookupStatus.FOUND
+            or (
+                series_result.status is EventSeriesLookupStatus.BLANK
+                and raw_event_series is None
+            )
+        )
         if not resolved:
             errors["event_series"] = "Unknown event series."
         else:
-            values["event_series"] = series
+            values["event_series"] = series_result.event_series
 
     start_supplied = "start_datetime" in data
     end_supplied = "end_datetime" in data

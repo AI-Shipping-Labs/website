@@ -130,7 +130,7 @@ class EventSeriesAttachApiTest(TestCase):
     def test_attach_by_slug_string(self):
         resp = self._patch(
             "book-club-kickoff",
-            {"event_series": "inference-engineering-book-club"},
+            {"event_series": "  inference-engineering-book-club  "},
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(
@@ -180,6 +180,21 @@ class EventSeriesAttachApiTest(TestCase):
         resp = self._patch("book-club-kickoff", {"event_series": "no-such-slug"})
         self.assertEqual(resp.status_code, 422)
         self.assertIn("event_series", resp.json()["details"])
+
+    def test_invalid_or_empty_series_returns_422_without_change(self):
+        for raw in (True, [], ""):
+            with self.subTest(raw=raw):
+                resp = self._patch(
+                    "book-club-kickoff", {"event_series": raw},
+                )
+                self.assertEqual(resp.status_code, 422)
+                self.assertEqual(resp.json()["code"], "validation_error")
+                self.assertEqual(
+                    resp.json()["details"]["event_series"],
+                    "Unknown event series.",
+                )
+                self.studio_event.refresh_from_db()
+                self.assertIsNone(self.studio_event.event_series_id)
 
     def test_attach_does_not_renumber_or_rewrite_title(self):
         original_title = self.studio_event.title

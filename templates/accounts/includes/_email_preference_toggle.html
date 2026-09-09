@@ -15,8 +15,7 @@
             data-error-message="{{ error_message|default:'' }}"
             class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors {% if enabled %}bg-accent{% else %}bg-secondary{% endif %}"
             aria-label="{{ aria_label }}"
-            aria-checked="{% if enabled %}true{% else %}false{% endif %}"
-            role="switch">
+            role="switch" aria-checked="{% if enabled %}true{% else %}false{% endif %}">
       <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full shadow ring-0 transition-transform {% if enabled %}translate-x-5 bg-accent-foreground{% else %}translate-x-0 bg-foreground{% endif %}"
             id="{{ toggle_id }}-dot"></span>
     </button>

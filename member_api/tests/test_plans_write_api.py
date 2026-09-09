@@ -16,6 +16,7 @@ from django.test import TestCase, tag
 from accounts.models import MemberAPIKey
 from plans.models import (
     Checkpoint,
+    CheckpointDeletionReceipt,
     Deliverable,
     NextStep,
     Plan,
@@ -294,6 +295,49 @@ class WeekWriteTest(MemberPlansWriteApiTestBase):
 
 
 class CheckpointWriteTest(MemberPlansWriteApiTestBase):
+    def test_delete_retry_returns_same_success_for_original_plan(self):
+        plan = self._make_plan(self.member, weeks=1)
+        other_plan = self._make_plan(
+            self.member,
+            title="Other owned plan",
+            weeks=1,
+            sprint=self.sprint2,
+        )
+        checkpoint = Checkpoint.objects.create(
+            week=plan.weeks.get(),
+            description="delete idempotently",
+        )
+        url = f"/member-api/v1/plans/{plan.id}/checkpoints/{checkpoint.id}"
+
+        first = self._delete(url)
+        repeated = self._delete(url)
+
+        expected = {"deleted": True, "id": checkpoint.id}
+        self.assertEqual(first.json(), expected)
+        self.assertEqual(repeated.json(), expected)
+        self.assertFalse(Checkpoint.objects.filter(pk=checkpoint.pk).exists())
+        self.assertEqual(
+            CheckpointDeletionReceipt.objects.filter(
+                plan=plan,
+                checkpoint_id=checkpoint.id,
+            ).count(),
+            1,
+        )
+
+        wrong_plan = self._delete(
+            f"/member-api/v1/plans/{other_plan.id}/checkpoints/{checkpoint.id}",
+        )
+        self.assertEqual(wrong_plan.status_code, 422)
+        self.assertEqual(wrong_plan.json()["code"], "checkpoint_not_found")
+
+    def test_delete_from_unknown_plan_remains_not_found(self):
+        response = self._delete(
+            "/member-api/v1/plans/999999/checkpoints/999999",
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["code"], "plan_not_found")
+
     def test_create_with_initial_done_records_timestamp(self):
         plan = self._make_plan(self.member, weeks=1)
         week = plan.weeks.get()

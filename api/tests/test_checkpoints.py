@@ -192,3 +192,34 @@ class CheckpointDeleteTest(CheckpointsApiTestBase):
         self.assertEqual(cps[0].position, 0)
         self.assertEqual(cps[2].position, 1)
         self.assertEqual(cps[3].position, 2)
+
+    def test_repeat_delete_keeps_enumeration_safe_not_found_contract(self):
+        checkpoint = Checkpoint.objects.create(
+            week=self.week,
+            description="delete once",
+            position=0,
+        )
+        url = f"/api/checkpoints/{checkpoint.id}"
+
+        first = self.client.delete(url, **self._auth())
+        repeated = self.client.delete(url, **self._auth())
+
+        self.assertEqual(first.status_code, 204)
+        self.assertEqual(repeated.status_code, 404)
+        self.assertEqual(repeated.json()["code"], "unknown_checkpoint")
+
+    def test_delete_of_non_visible_checkpoint_is_not_found(self):
+        other = User.objects.create_user(email="other@test.com")
+        other_plan = Plan.objects.create(member=other, sprint=self.sprint)
+        other_week = Week.objects.create(plan=other_plan, week_number=1)
+        checkpoint = Checkpoint.objects.create(
+            week=other_week,
+            description="not visible",
+        )
+        self.client.force_login(self.member)
+
+        response = self.client.delete(f"/api/checkpoints/{checkpoint.id}")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["code"], "unknown_checkpoint")
+        self.assertTrue(Checkpoint.objects.filter(pk=checkpoint.pk).exists())

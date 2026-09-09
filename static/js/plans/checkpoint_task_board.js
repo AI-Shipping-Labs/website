@@ -189,22 +189,41 @@
     }
 
     function writeWithRetry(method, path, body, rollback, failureMessage) {
+      function acceptIdempotentDelete(result) {
+        if (!result.ok && method === 'DELETE' && result.status === 404) {
+          result.ok = true;
+          onSaved();
+        }
+        return result;
+      }
+
+      function fail(result) {
+        if (rollback) { rollback(result); }
+        onFailed(result.message);
+        showToast(
+          failureMessage
+            || "Couldn't save task change. Your edit was reverted."
+        );
+        return result;
+      }
+
       return request(method, path, body).then(function (result) {
+        result = acceptIdempotentDelete(result);
         if (result.ok) { return result; }
+        const retryable = result.status === 0
+          || (result.status >= 500 && result.status < 600);
+        if (!retryable) {
+          return fail(result);
+        }
         return new Promise(function (resolve) {
           setTimeout(function () {
             request(method, path, body).then(function (retry) {
+              retry = acceptIdempotentDelete(retry);
               if (retry.ok) {
                 resolve(retry);
                 return;
               }
-              if (rollback) { rollback(retry); }
-              onFailed(retry.message);
-              showToast(
-                failureMessage
-                || "Couldn't save task change. Your edit was reverted."
-              );
-              resolve(retry);
+              resolve(fail(retry));
             });
           }, retryDelayMs);
         });

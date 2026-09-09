@@ -59,7 +59,12 @@
   }
 
   function apiPatchWithRetry(path, body) {
-    return apiPatch(path, body).catch(function () {
+    return apiPatch(path, body).catch(function (error) {
+      const status = error.status || 0;
+      const retryable = status === 0 || (status >= 500 && status < 600);
+      if (!retryable) {
+        throw error;
+      }
       return new Promise(function (resolve, reject) {
         setTimeout(function () {
           apiPatch(path, body).then(resolve).catch(reject);

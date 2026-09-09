@@ -880,6 +880,18 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_operator_reply_is_escaped_and_idempotent_in_course_discussion",
     })
 
+    issue_1539_owners = frozenset({
+        "playwright_tests/test_studio_settings_observability.py::"
+        "TestStudioSettingsObservability::"
+        "test_staff_disables_logfire_and_is_still_told_to_restart",
+        "playwright_tests/test_studio_settings_observability.py::"
+        "TestStudioSettingsObservability::"
+        "test_saving_site_settings_does_not_show_logfire_restart_message",
+        "playwright_tests/test_studio_settings_observability.py::"
+        "TestStudioSettingsObservability::"
+        "test_non_staff_member_cannot_open_observability_settings",
+    })
+
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
 
@@ -942,8 +954,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2605)
-        self.assertEqual(len(inventory.owners), 2380)
+        self.assertEqual(inventory.item_count, 2608)
+        self.assertEqual(len(inventory.owners), 2383)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -963,7 +975,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1591_owners
             | self.issue_1590_owners
             | self.issue_1593_owners
-            | self.issue_1592_owners,
+            | self.issue_1592_owners
+            | self.issue_1539_owners,
         )
         self.assertNotIn(
             self.migrated_owner,

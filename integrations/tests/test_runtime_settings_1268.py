@@ -192,7 +192,10 @@ class RuntimeSettingsApiTest(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {'status': 'ok', 'updated': 3})
+        self.assertEqual(
+            response.json(),
+            {'status': 'ok', 'updated': 3, 'restart_required': False},
+        )
         self.assertNotIn('runtime.test', response.content.decode())
         self.assertEqual(get_stripe_payment_links(), LINKS)
         self.assertEqual(_get_batch_size(), 19)

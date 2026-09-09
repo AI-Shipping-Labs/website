@@ -16,7 +16,7 @@ from django.conf import settings
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from integrations.apps import IntegrationsConfig
-from integrations.config import reset_local_config_cache
+from integrations.config import clear_config_cache, reset_local_config_cache
 from integrations.models import IntegrationSetting
 from integrations.services import observability
 from integrations.services.observability import (
@@ -274,6 +274,25 @@ class LogfireAppStartupTest(ResetsObservabilityState, SimpleTestCase):
 
 class LogfireRuntimeConfigTest(ResetsObservabilityState, TestCase):
 
+    def _set_runtime_config(self, *, enabled='true', token=FAKE_TOKEN):
+        IntegrationSetting.objects.update_or_create(
+            key='LOGFIRE_ENABLED',
+            defaults={'value': enabled, 'group': 'observability'},
+        )
+        IntegrationSetting.objects.update_or_create(
+            key='LOGFIRE_TOKEN',
+            defaults={
+                'value': token,
+                'is_secret': True,
+                'group': 'observability',
+            },
+        )
+        IntegrationSetting.objects.update_or_create(
+            key='LOGFIRE_ENVIRONMENT',
+            defaults={'value': 'production', 'group': 'observability'},
+        )
+        clear_config_cache()
+
     @override_settings(
         TESTING=False,
         LOGFIRE_TOKEN='',
@@ -313,4 +332,54 @@ class LogfireRuntimeConfigTest(ResetsObservabilityState, TestCase):
         configure.assert_called_once_with(
             token=FAKE_TOKEN,
             environment='studio-stage',
+        )
+
+    @override_settings(
+        TESTING=False,
+        LOGFIRE_TOKEN='',
+        LOGFIRE_ENABLED='',
+        LOGFIRE_ENVIRONMENT='production',
+    )
+    def test_disabling_after_initialization_does_not_change_running_process(self):
+        self._set_runtime_config()
+        import logfire
+
+        with patch('logfire.configure') as configure, \
+                patch.object(logfire, 'instrument_django') as django_instrument, \
+                patch.object(logfire, 'instrument_httpx'), \
+                patch.object(logfire, 'instrument_requests'), \
+                patch.object(logfire, 'instrument_anthropic'):
+            self.assertTrue(init_logfire(use_runtime_config=True))
+            self._set_runtime_config(enabled='false')
+            self.assertFalse(init_logfire(use_runtime_config=True))
+
+        configure.assert_called_once_with(
+            token=FAKE_TOKEN,
+            environment='production',
+        )
+        django_instrument.assert_called_once_with()
+        self.assertTrue(observability._logfire_initialized)
+
+    @override_settings(
+        TESTING=False,
+        LOGFIRE_TOKEN='',
+        LOGFIRE_ENABLED='',
+        LOGFIRE_ENVIRONMENT='production',
+    )
+    def test_token_rotation_after_initialization_waits_for_restart(self):
+        self._set_runtime_config()
+        import logfire
+
+        with patch('logfire.configure') as configure, \
+                patch.object(logfire, 'instrument_django'), \
+                patch.object(logfire, 'instrument_httpx'), \
+                patch.object(logfire, 'instrument_requests'), \
+                patch.object(logfire, 'instrument_anthropic'):
+            self.assertTrue(init_logfire(use_runtime_config=True))
+            self._set_runtime_config(token='pylf_rotated_token')
+            self.assertFalse(init_logfire(use_runtime_config=True))
+
+        configure.assert_called_once_with(
+            token=FAKE_TOKEN,
+            environment='production',
         )

@@ -4,7 +4,7 @@ Single endpoint, ``/api/integrations/settings``, that surfaces the
 ``integrations.settings_registry.INTEGRATION_GROUPS`` allowlist:
 
 - ``GET`` (issue #640) lists every registered key with its group, label,
-  description, ``is_secret``/``is_boolean`` flags, a ``configured``
+  description, ``is_secret``/``is_boolean``/``requires_restart`` flags, a ``configured``
   boolean, and a ``source`` enum (``db`` / ``env`` / ``django_settings``
   / ``default`` / ``null``). The response NEVER contains the actual
   value of any setting — operators learn which keys are set and where
@@ -112,7 +112,8 @@ def _coerce_boolean_value(raw_value):
             "description": (
                 "Returns one entry per registered key with its "
                 "``group``, ``label``, ``description``, "
-                "``is_secret``, ``is_boolean``, ``configured`` flag, "
+                "``is_secret``, ``is_boolean``, ``requires_restart``, "
+                "``configured`` flag, "
                 "``source`` (``db`` / ``env`` / ``django_settings`` / "
                 "``default`` / ``null``), and a ``docs_url`` path. "
                 "The actual stored or env value is NEVER included."
@@ -129,6 +130,7 @@ def _coerce_boolean_value(raw_value):
                                 "description": "Stripe API secret key.",
                                 "is_secret": True,
                                 "is_boolean": False,
+                                "requires_restart": False,
                                 "configured": True,
                                 "source": "db",
                                 "docs_url": "_docs/integrations/stripe.md#stripe_secret_key",
@@ -179,7 +181,11 @@ def _coerce_boolean_value(raw_value):
             "responses": {
                 200: {
                     "description": "Batch applied.",
-                    "example": {"status": "ok", "updated": 1},
+                    "example": {
+                        "status": "ok",
+                        "updated": 1,
+                        "restart_required": False,
+                    },
                 },
                 400: {
                     "description": (
@@ -220,6 +226,7 @@ def _integration_settings_list(request):
               "description": "...",
               "is_secret": true,
               "is_boolean": false,
+              "requires_restart": false,
               "configured": true,
               "source": "db",  # or env / django_settings / default / null
               "docs_url": "_docs/integrations/stripe.md#stripe_secret_key"
@@ -252,6 +259,7 @@ def _integration_settings_list(request):
                 'description': key_def.get('description', ''),
                 'is_secret': key_def.get('is_secret', False),
                 'is_boolean': key_def.get('is_boolean', False),
+                'requires_restart': key_def.get('requires_restart', False),
                 'configured': source is not None,
                 'source': source,
                 'docs_url': key_def.get('docs_url', ''),
@@ -282,11 +290,13 @@ def _integration_settings_set(request):
 
     Response on success::
 
-        {"status": "ok", "updated": N}
+        {"status": "ok", "updated": N, "restart_required": false}
 
     Where ``N`` is the integer count of keys touched (created, updated,
-    or cleared). The response NEVER echoes key names, values, the
-    previous value, or the literal substring ``"value"``.
+    or cleared). ``restart_required`` is true when the batch touches a
+    registry key whose process-level integration only applies on restart.
+    The response NEVER echoes key names, values, the previous value, or the
+    literal substring ``"value"``.
     """
     try:
         data = json.loads(request.body)
@@ -393,6 +403,11 @@ def _integration_settings_set(request):
             details={"invalid_keys": invalid_keys},
         )
 
+    restart_required = any(
+        item['key_def'].get('requires_restart', False)
+        for item in normalised
+    )
+
     # Phase 2: apply all writes inside a transaction. Studio uses the
     # same update_or_create / delete-on-empty-string pattern; we mirror
     # it here so the two surfaces stay consistent.
@@ -424,4 +439,8 @@ def _integration_settings_set(request):
 
     clear_config_cache()
 
-    return JsonResponse({"status": "ok", "updated": updated})
+    return JsonResponse({
+        "status": "ok",
+        "updated": updated,
+        "restart_required": restart_required,
+    })

@@ -240,6 +240,7 @@ def _build_group_context(group_def, db_settings):
             'is_email': key_def.get('is_email', False),
             'value_type': key_def.get('value_type', 'string'),
             'optional': key_def.get('optional', False),
+            'requires_restart': key_def.get('requires_restart', False),
             'current_value': current_value,
             'source': source,
             'env_value': env_value,
@@ -504,6 +505,11 @@ def settings_save_group(request, group_name):
         request,
         f'Saved {saved_count} settings in {group_def["label"]}.',
     )
+    if any(key_def.get('requires_restart', False) for key_def in group_def['keys']):
+        messages.success(
+            request,
+            'Observability changes apply after you restart the web and worker processes.',
+        )
     for key in cleared_keys:
         messages.success(
             request,
@@ -618,6 +624,12 @@ def settings_import(request):
         )
     else:
         messages.info(request, 'Settings file contained no recognised entries.')
+
+    if result.restart_required:
+        messages.success(
+            request,
+            'Observability changes apply after you restart the web and worker processes.',
+        )
 
     if result.skipped_integration_keys:
         messages.warning(

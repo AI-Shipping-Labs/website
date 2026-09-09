@@ -368,7 +368,10 @@ class RuntimeSettingsApiTest(TestCase):
             content_type='application/json',
             **self.auth,
         )
-        self.assertEqual(response.json(), {'status': 'ok', 'updated': 3})
+        self.assertEqual(
+            response.json(),
+            {'status': 'ok', 'updated': 3, 'restart_required': False},
+        )
         self.assertEqual(sync_queued_threshold_minutes(), 6)
         self.assertEqual(sync_running_threshold_minutes(), 9)
         self.assertFalse(expect_worker())
@@ -381,7 +384,10 @@ class RuntimeSettingsApiTest(TestCase):
             content_type='application/json',
             **self.auth,
         )
-        self.assertEqual(response.json(), {'status': 'ok', 'updated': 3})
+        self.assertEqual(
+            response.json(),
+            {'status': 'ok', 'updated': 3, 'restart_required': False},
+        )
         self.assertFalse(
             IntegrationSetting.objects.filter(key__in=RUNTIME_KEYS).exists(),
         )

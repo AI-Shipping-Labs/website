@@ -19,6 +19,13 @@ User = get_user_model()
 
 FAKE_TOKEN_ENV = 'pylf_fake_env_token'
 FAKE_TOKEN_DB = 'pylf_fake_db_token'
+RESTART_HINT = (
+    'Takes effect on the next web and worker process start. '
+    'Saving does not reconfigure this process.'
+)
+RESTART_MESSAGE = (
+    'Observability changes apply after you restart the web and worker processes.'
+)
 
 
 class SettingsDashboardObservabilityTest(TestCase):
@@ -48,6 +55,29 @@ class SettingsDashboardObservabilityTest(TestCase):
             'type="password" id="field-LOGFIRE_TOKEN"',
         )
 
+    def test_restart_badges_and_hints_render_only_for_observability_fields(self):
+        response = self.client.get('/studio/settings/')
+
+        for key in (
+            'LOGFIRE_ENABLED',
+            'LOGFIRE_TOKEN',
+            'LOGFIRE_ENVIRONMENT',
+        ):
+            with self.subTest(key=key):
+                self.assertContains(
+                    response,
+                    f'data-requires-restart-badge="{key}"',
+                )
+                self.assertContains(
+                    response,
+                    f'data-requires-restart-hint="{key}"',
+                )
+        self.assertContains(response, RESTART_HINT, count=3)
+        self.assertNotContains(
+            response,
+            'data-requires-restart-badge="CONTENT_CDN_BASE"',
+        )
+
     def test_save_upserts_token_and_clears_cache(self):
         response = self.client.post(
             '/studio/settings/observability/save/',
@@ -66,6 +96,61 @@ class SettingsDashboardObservabilityTest(TestCase):
         self.assertTrue(IntegrationSetting.objects.get(key='LOGFIRE_TOKEN').is_secret)
         # Cache cleared on save -> get_config reflects the new value.
         self.assertEqual(get_config('LOGFIRE_TOKEN'), FAKE_TOKEN_DB)
+
+    def test_save_flashes_persistence_and_restart_contract(self):
+        response = self.client.post(
+            '/studio/settings/observability/save/',
+            {
+                'LOGFIRE_TOKEN': FAKE_TOKEN_DB,
+                'LOGFIRE_ENABLED': 'true',
+                'LOGFIRE_ENVIRONMENT': 'production',
+            },
+            follow=True,
+        )
+
+        self.assertContains(response, 'Saved 3 settings in Observability.')
+        self.assertContains(response, RESTART_MESSAGE)
+
+    def test_disabling_logfire_still_requires_a_restart(self):
+        IntegrationSetting.objects.bulk_create([
+            IntegrationSetting(
+                key='LOGFIRE_ENABLED', value='true', group='observability',
+            ),
+            IntegrationSetting(
+                key='LOGFIRE_TOKEN', value=FAKE_TOKEN_DB,
+                is_secret=True, group='observability',
+            ),
+            IntegrationSetting(
+                key='LOGFIRE_ENVIRONMENT', value='production',
+                group='observability',
+            ),
+        ])
+
+        response = self.client.post(
+            '/studio/settings/observability/save/',
+            {
+                'LOGFIRE_TOKEN': FAKE_TOKEN_DB,
+                'LOGFIRE_ENVIRONMENT': 'production',
+            },
+            follow=True,
+        )
+
+        self.assertEqual(
+            IntegrationSetting.objects.get(key='LOGFIRE_ENABLED').value,
+            'false',
+        )
+        self.assertContains(response, RESTART_MESSAGE)
+        self.assertNotContains(response, 'Tracing has stopped')
+
+    def test_saving_site_group_does_not_flash_observability_restart(self):
+        response = self.client.post(
+            '/studio/settings/site/save/',
+            {'SITE_BASE_URL': 'https://example.test'},
+            follow=True,
+        )
+
+        self.assertContains(response, 'settings in Site.')
+        self.assertNotContains(response, RESTART_MESSAGE)
 
     @override_settings(LOGFIRE_TOKEN=FAKE_TOKEN_ENV)
     def test_empty_token_deletes_row_and_falls_back_to_env(self):

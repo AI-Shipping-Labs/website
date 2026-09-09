@@ -99,6 +99,7 @@ class ImportResult:
     integration_updated: int = 0
     auth_created: int = 0
     auth_updated: int = 0
+    restart_required: bool = False
     skipped_integration_keys: list[str] = field(default_factory=list)
     skipped_auth_providers: list[str] = field(default_factory=list)
 
@@ -151,6 +152,8 @@ def apply_import(payload: dict) -> ImportResult:
             result.skipped_integration_keys.append(key)
             continue
         meta = known_keys[key]
+        if meta.get('requires_restart', False):
+            result.restart_required = True
         _, created = IntegrationSetting.objects.update_or_create(
             key=key,
             defaults={

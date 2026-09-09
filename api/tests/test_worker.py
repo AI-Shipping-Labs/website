@@ -18,8 +18,10 @@ Plus the cross-cutting requirements:
 
 from __future__ import annotations
 
+import ast
 import uuid
 from datetime import timedelta
+from pathlib import Path
 from urllib.parse import quote
 
 from django.contrib.auth import get_user_model
@@ -667,64 +669,67 @@ class WorkerApiReadOnlyTest(TestCase):
         self.assertEqual(Task.objects.count(), before)
 
 
-class WorkerSerializerSharedHelperTest(TestCase):
-    """The ``extract_error_summary`` helper is the single source of truth.
+class WorkerTaskFormatOwnershipTest(TestCase):
+    """Task formatting has one neutral owner outside API and Studio."""
 
-    The Studio view (``studio/views/worker.py``) and the API serializer
-    must both call the helper defined in ``api/serializers/worker.py`` so
-    the collapsed-row summary stays in lock-step between the HTML page
-    and the JSON API.
-    """
+    @staticmethod
+    def _parse(relative_path):
+        project_root = Path(__file__).resolve().parents[2]
+        source_path = project_root / relative_path
+        return ast.parse(source_path.read_text(), filename=str(source_path))
 
-    def test_studio_imports_helper_from_api_serializer(self):
-        # If a future refactor inlines the heuristic back into the Studio
-        # view, this import check fails -- forcing the author to pick a
-        # side instead of letting the two definitions drift.
-        from api.serializers.worker import extract_error_summary
+    def test_callers_import_the_canonical_jobs_module(self):
+        from api.serializers import worker as api_worker
+        from jobs import task_format
         from studio.views import worker as studio_worker
 
-        self.assertIs(studio_worker.extract_error_summary, extract_error_summary)
+        self.assertIs(api_worker.task_format, task_format)
+        self.assertIs(studio_worker.task_format, task_format)
+        for helper_name in (
+            "_format_task_value",
+            "_looks_like_traceback",
+            "extract_error_summary",
+        ):
+            self.assertFalse(hasattr(api_worker, helper_name))
+            self.assertFalse(hasattr(studio_worker, helper_name))
 
-    def test_helper_returns_last_line_for_traceback(self):
-        from api.serializers.worker import extract_error_summary
+    def test_callers_do_not_define_moved_helpers_or_cross_import(self):
+        forbidden_helpers = {
+            "_format_task_value",
+            "_looks_like_traceback",
+            "extract_error_summary",
+        }
+        for relative_path in (
+            "api/serializers/worker.py",
+            "studio/views/worker.py",
+        ):
+            tree = self._parse(relative_path)
+            definitions = {
+                node.name
+                for node in tree.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            }
+            self.assertEqual(definitions & forbidden_helpers, set())
 
-        text = (
-            "Traceback (most recent call last):\n"
-            '  File "x.py", line 1, in <module>\n'
-            "RuntimeError: nope"
-        )
-        self.assertEqual(extract_error_summary(text), "RuntimeError: nope")
+        studio_tree = self._parse("studio/views/worker.py")
+        imported_modules = {
+            node.module
+            for node in ast.walk(studio_tree)
+            if isinstance(node, ast.ImportFrom)
+        }
+        self.assertNotIn("api.serializers.worker", imported_modules)
 
-    def test_helper_returns_first_line_for_non_traceback(self):
-        from api.serializers.worker import extract_error_summary
-
-        self.assertEqual(
-            extract_error_summary("first line\nsecond line"),
-            "first line",
-        )
-
-    def test_helper_truncates_long_lines_to_160_chars(self):
-        from api.serializers.worker import extract_error_summary
-
-        summary = extract_error_summary("X" * 500)
-        self.assertLessEqual(len(summary), 160)
-        self.assertTrue(summary.endswith("..."))
-
-    def test_helper_handles_blank_input(self):
-        from api.serializers.worker import (
-            NO_ERROR_DETAILS_PLACEHOLDER,
-            extract_error_summary,
-        )
-
-        self.assertEqual(
-            extract_error_summary("   \n  \n"),
-            NO_ERROR_DETAILS_PLACEHOLDER,
-        )
-        self.assertEqual(
-            extract_error_summary(""),
-            NO_ERROR_DETAILS_PLACEHOLDER,
-        )
-        self.assertEqual(
-            extract_error_summary(None),
-            NO_ERROR_DETAILS_PLACEHOLDER,
+    def test_jobs_module_defines_the_public_helpers(self):
+        tree = self._parse("jobs/task_format.py")
+        definitions = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        self.assertTrue(
+            {
+                "format_task_value",
+                "looks_like_traceback",
+                "extract_error_summary",
+            }.issubset(definitions)
         )

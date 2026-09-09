@@ -36,6 +36,10 @@ from content.access import LEVEL_MAIN
 from content.access import UNIT_VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
 from events.models import Event, EventSeries
 from events.models.event import PUBLIC_EVENT_STATUSES
+from events.services.event_series_lookup import (
+    EventSeriesLookupStatus,
+    resolve_event_series,
+)
 from studio.decorators import staff_required
 from studio.utils import studio_pagination_context
 
@@ -76,30 +80,6 @@ def _parse_required_level(raw):
     if value not in _VALID_TIER_LEVELS:
         return None, 'Required tier level must be one of 0, 10, 20, 30.'
     return value, ''
-
-
-def _parse_event_series(raw):
-    """Parse the ``event_series`` field. Returns ``(EventSeries|None, error)``.
-
-    Empty -> unlinked. A numeric value resolves by pk; a non-numeric string by
-    slug (the API shares this behaviour). Unknown id/slug is an error so the
-    caller re-renders with 400 and no write happens.
-    """
-    if raw in (None, ''):
-        return None, ''
-    if isinstance(raw, bool):
-        return None, 'Selected event series does not exist.'
-    if isinstance(raw, int):
-        series = EventSeries.objects.filter(pk=raw).first()
-    elif isinstance(raw, str) and raw.lstrip('-').isdigit():
-        series = EventSeries.objects.filter(pk=int(raw)).first()
-    elif isinstance(raw, str):
-        series = EventSeries.objects.filter(slug=raw).first()
-    else:
-        return None, 'Selected event series does not exist.'
-    if series is None:
-        return None, 'Selected event series does not exist.'
-    return series, ''
 
 
 def _parse_chapter_event(raw):
@@ -298,7 +278,16 @@ def book_create(request):
     start_date, date_error = _parse_optional_date(
         form_data['start_date'], field_label='Kickoff date',
     )
-    event_series, series_error = _parse_event_series(form_data['event_series'])
+    event_series_result = resolve_event_series(form_data['event_series'])
+    event_series = event_series_result.event_series
+    series_error = (
+        'Selected event series does not exist.'
+        if event_series_result.status in {
+            EventSeriesLookupStatus.INVALID,
+            EventSeriesLookupStatus.NOT_FOUND,
+        }
+        else ''
+    )
 
     def _reject(error):
         return _render_form(
@@ -359,7 +348,16 @@ def book_edit(request, book_id):
     start_date, date_error = _parse_optional_date(
         form_data['start_date'], field_label='Kickoff date',
     )
-    event_series, series_error = _parse_event_series(form_data['event_series'])
+    event_series_result = resolve_event_series(form_data['event_series'])
+    event_series = event_series_result.event_series
+    series_error = (
+        'Selected event series does not exist.'
+        if event_series_result.status in {
+            EventSeriesLookupStatus.INVALID,
+            EventSeriesLookupStatus.NOT_FOUND,
+        }
+        else ''
+    )
 
     def _reject(error):
         return _render_form(

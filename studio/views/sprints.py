@@ -35,6 +35,10 @@ from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
 from crm.models import CRMRecord
 from crm.services.member_profile import build_member_profile_context
 from events.models import EventSeries
+from events.services.event_series_lookup import (
+    EventSeriesLookupStatus,
+    resolve_event_series,
+)
 from integrations.config import get_config
 from integrations.services import llm
 from integrations.services.feedback_synthesis import (
@@ -108,39 +112,6 @@ def _parse_min_tier_level(raw):
     if value not in _VALID_TIER_LEVELS:
         return None, 'Min tier level must be one of 0, 10, 20, 30.'
     return value, ''
-
-
-def _parse_event_series(raw):
-    """Parse the ``event_series`` value. ``(EventSeries|None, error)``.
-
-    Empty string / missing / ``None`` -> ``(None, '')`` (sprint becomes
-    unlinked). Resolution accepts either form:
-
-    - an integer or numeric string -> resolve by ``EventSeries.pk``
-    - a non-numeric string -> resolve by ``EventSeries.slug``
-
-    An unknown id/slug -> ``(None, error_message)`` so the caller
-    re-renders the Studio form with HTTP 400 (or, in the API, returns a
-    422 ``unknown_series``) and the sprint is NOT written. The Studio
-    form only ever submits ids; the slug branch is used by the sprint
-    API, which shares this helper.
-    """
-    if raw in (None, ''):
-        return None, ''
-    if isinstance(raw, bool):
-        return None, 'Selected event series does not exist.'
-    # Numeric (int or numeric string) -> resolve by pk; otherwise by slug.
-    if isinstance(raw, int):
-        series = EventSeries.objects.filter(pk=raw).first()
-    elif isinstance(raw, str) and raw.lstrip('-').isdigit():
-        series = EventSeries.objects.filter(pk=int(raw)).first()
-    elif isinstance(raw, str):
-        series = EventSeries.objects.filter(slug=raw).first()
-    else:
-        return None, 'Selected event series does not exist.'
-    if series is None:
-        return None, 'Selected event series does not exist.'
-    return series, ''
 
 
 def _parse_duration_weeks(raw):
@@ -374,7 +345,16 @@ def sprint_create(request):
     duration, duration_error = _parse_duration_weeks(form_data['duration_weeks'])
     status_value = _normalize_status(form_data['status'])
     min_tier_level, tier_error = _parse_min_tier_level(form_data['min_tier_level'])
-    event_series, event_series_error = _parse_event_series(form_data['event_series'])
+    event_series_result = resolve_event_series(form_data['event_series'])
+    event_series = event_series_result.event_series
+    event_series_error = (
+        'Selected event series does not exist.'
+        if event_series_result.status in {
+            EventSeriesLookupStatus.INVALID,
+            EventSeriesLookupStatus.NOT_FOUND,
+        }
+        else ''
+    )
 
     if not name:
         return _render_form(
@@ -1169,7 +1149,16 @@ def sprint_edit(request, sprint_id):
     duration, duration_error = _parse_duration_weeks(form_data['duration_weeks'])
     status_value = _normalize_status(form_data['status'])
     min_tier_level, tier_error = _parse_min_tier_level(form_data['min_tier_level'])
-    event_series, event_series_error = _parse_event_series(form_data['event_series'])
+    event_series_result = resolve_event_series(form_data['event_series'])
+    event_series = event_series_result.event_series
+    event_series_error = (
+        'Selected event series does not exist.'
+        if event_series_result.status in {
+            EventSeriesLookupStatus.INVALID,
+            EventSeriesLookupStatus.NOT_FOUND,
+        }
+        else ''
+    )
 
     if not name:
         return _render_form(

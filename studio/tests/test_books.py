@@ -8,6 +8,7 @@ from django.test import TestCase
 
 from bookclub.models import Book, Chapter
 from content.access import LEVEL_MAIN
+from events.models import EventSeries
 
 User = get_user_model()
 
@@ -50,6 +51,9 @@ class BookStudioCrudTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='pw', is_staff=True,
         )
+        cls.series = EventSeries.objects.create(
+            name='Book Club series', slug='book-club-series',
+        )
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='pw')
@@ -61,13 +65,45 @@ class BookStudioCrudTest(TestCase):
             'required_level': str(LEVEL_MAIN),
             'status': 'current',
             'start_date': '2026-08-10',
+            'event_series': '',
         })
         book = Book.objects.get(title='Inference Engineering')
         self.assertEqual(book.slug, 'inference-engineering')
         self.assertEqual(book.required_level, LEVEL_MAIN)
         self.assertEqual(book.status, 'current')
         self.assertEqual(book.start_date, date(2026, 8, 10))
+        self.assertIsNone(book.event_series_id)
         self.assertRedirects(response, f'/studio/books/{book.pk}/')
+
+    def test_create_book_links_selected_event_series(self):
+        response = self.client.post('/studio/books/new', {
+            'title': 'Linked Book',
+            'author': 'Author',
+            'required_level': str(LEVEL_MAIN),
+            'status': 'draft',
+            'event_series': str(self.series.pk),
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            Book.objects.get(slug='linked-book').event_series_id,
+            self.series.pk,
+        )
+
+    def test_create_rejects_unknown_event_series_without_writing(self):
+        before = Book.objects.count()
+        response = self.client.post('/studio/books/new', {
+            'title': 'Missing Series',
+            'author': 'Author',
+            'required_level': str(LEVEL_MAIN),
+            'status': 'draft',
+            'event_series': 'missing-series',
+        })
+        self.assertContains(
+            response,
+            'Selected event series does not exist.',
+            status_code=400,
+        )
+        self.assertEqual(Book.objects.count(), before)
 
     def test_create_rejects_duplicate_slug_with_friendly_error(self):
         Book.objects.create(
@@ -101,6 +137,45 @@ class BookStudioCrudTest(TestCase):
         book.refresh_from_db()
         self.assertEqual(book.title, 'New Title')
         self.assertEqual(book.status, 'current')
+
+    def test_edit_blank_event_series_unlinks(self):
+        book = Book.objects.create(
+            title='Linked', slug='linked', author='A',
+            required_level=LEVEL_MAIN, event_series=self.series,
+        )
+        response = self.client.post(f'/studio/books/{book.pk}/edit', {
+            'title': book.title,
+            'slug': book.slug,
+            'author': book.author,
+            'required_level': str(book.required_level),
+            'status': book.status,
+            'event_series': '',
+        })
+        self.assertEqual(response.status_code, 302)
+        book.refresh_from_db()
+        self.assertIsNone(book.event_series_id)
+
+    def test_edit_rejects_unknown_event_series_without_writing(self):
+        book = Book.objects.create(
+            title='Linked', slug='linked', author='A',
+            required_level=LEVEL_MAIN, event_series=self.series,
+        )
+        response = self.client.post(f'/studio/books/{book.pk}/edit', {
+            'title': 'Should not persist',
+            'slug': book.slug,
+            'author': book.author,
+            'required_level': str(book.required_level),
+            'status': book.status,
+            'event_series': 'missing-series',
+        })
+        self.assertContains(
+            response,
+            'Selected event series does not exist.',
+            status_code=400,
+        )
+        book.refresh_from_db()
+        self.assertEqual(book.title, 'Linked')
+        self.assertEqual(book.event_series_id, self.series.pk)
 
     def test_delete_book_removes_book_and_chapters(self):
         book = Book.objects.create(

@@ -31,6 +31,10 @@ from api.utils import (
 )
 from api.views._permissions import bearer_is_admin, visible_plans_for
 from crm.models import SlackMessage, SlackThread
+from events.services.event_series_lookup import (
+    EventSeriesLookupStatus,
+    resolve_event_series,
+)
 from plans.models import (
     ACCOUNTABILITY_SOURCE_MANUAL,
     ACCOUNTABILITY_SOURCE_RANDOM,
@@ -54,7 +58,6 @@ from plans.services.roster_activity import (
     build_sprint_roster_activity,
     serialize_roster_activity,
 )
-from studio.views.sprints import _parse_event_series
 
 User = get_user_model()
 
@@ -273,30 +276,29 @@ def _resolve_event_series(raw):
 
     Returns ``(series, error)`` where ``error`` is an ``error_response`` (or
     ``None`` on success). ``series`` is ``None`` for an explicit unlink
-    (``None`` / ``""``). Resolution by id-or-slug is shared with Studio via
-    ``_parse_event_series``.
+    (``None`` / ``""``). The domain service owns id-or-slug resolution.
 
     Wrong JSON types (list, dict, bool) are a 422 ``validation_error``;
     unknown id/slug is a 422 ``unknown_series``.
     """
-    if raw in (None, ""):
+    result = resolve_event_series(raw)
+    if result.status is EventSeriesLookupStatus.BLANK:
         return None, None
-    if not isinstance(raw, (int, str)) or isinstance(raw, bool):
+    if result.status is EventSeriesLookupStatus.INVALID:
         return None, error_response(
             "Invalid event_series",
             "validation_error",
             status=422,
             details={"event_series": "Must be an event series id or slug"},
         )
-    series, parse_error = _parse_event_series(raw)
-    if parse_error:
+    if result.status is EventSeriesLookupStatus.NOT_FOUND:
         return None, error_response(
             "Unknown event series",
             "unknown_series",
             status=422,
             details={"event_series": "Unknown event series"},
         )
-    return series, None
+    return result.event_series, None
 
 
 def _parse_iso_date(value):

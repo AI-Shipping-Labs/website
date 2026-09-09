@@ -529,11 +529,20 @@ class IntegrationConfigCacheIsolationTests(TestCase):
             super().tearDown()
 
     def test_config_cache_poison_does_not_survive_into_the_next_test(self):
-        integration_config._cache[_CACHE_POISON_KEY] = "poison"
-        integration_config._cache_populated = True
-        self.assertEqual(
-            integration_config.get_config(_CACHE_POISON_KEY, "clean"), "poison"
-        )
+        # Warm the cache through the real read path so its local stamp matches
+        # any shared stamp published by an earlier test in this worker.  A
+        # manually populated cache with a missing stamp is correctly treated
+        # as stale by get_config(), which made this node depend on suite order.
+        with mock.patch.object(
+            integration_config, "_read_stamp", return_value="published-stamp"
+        ):
+            self.assertEqual(
+                integration_config.get_config(_CACHE_POISON_KEY, "clean"), "clean"
+            )
+            integration_config._cache[_CACHE_POISON_KEY] = "poison"
+            self.assertEqual(
+                integration_config.get_config(_CACHE_POISON_KEY, "clean"), "poison"
+            )
 
     def test_next_test_sees_a_clean_config_cache(self):
         self.assertNotIn(_CACHE_POISON_KEY, integration_config._cache)

@@ -281,6 +281,7 @@ class ReplaceVideoURLsInHTMLTest(TestCase):
         self.assertIn('data-source="youtube"', result)
         self.assertIn('data-video-id="dQw4w9WgXcQ"', result)
         self.assertIn('youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1', result)
+        self.assertIn('title="YouTube video player"', result)
         self.assertNotIn('<p>https://www.youtube.com/watch?v=dQw4w9WgXcQ</p>', result)
 
     def test_youtu_be_url_replaced(self):
@@ -295,6 +296,7 @@ class ReplaceVideoURLsInHTMLTest(TestCase):
         self.assertIn('data-source="loom"', result)
         self.assertIn('data-video-id="abc123def"', result)
         self.assertIn('loom.com/embed/abc123def', result)
+        self.assertIn('title="Loom video player"', result)
 
     def test_non_video_url_not_replaced(self):
         html = '<p>https://example.com/page</p>'
@@ -345,6 +347,11 @@ class VideoPlayerTemplateTagTest(TestCase):
         self.assertIn('data-source="youtube"', html)
         self.assertIn('data-video-id="test123"', html)
         self.assertIn('yt-player-test123', html)
+        self.assertIn("event.target.getIframe()", html)
+        self.assertIn(
+            "iframe.setAttribute('title', 'YouTube video player')",
+            html,
+        )
 
     def test_loom_video_renders(self):
         html = self._render(
@@ -353,6 +360,7 @@ class VideoPlayerTemplateTagTest(TestCase):
         self.assertIn('data-source="loom"', html)
         self.assertIn('loom-player-loom456', html)
         self.assertIn('loom.com/embed/loom456', html)
+        self.assertIn('title="Loom video player"', html)
 
     def test_self_hosted_video_renders(self):
         html = self._render(

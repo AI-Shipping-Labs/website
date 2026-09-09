@@ -15,8 +15,10 @@ Scenarios mirror the issue body:
 """
 
 import os
+from pathlib import Path
 
 import pytest
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import auth_context as _auth_context
 from playwright_tests.conftest import create_staff_user as _create_staff_user
@@ -28,6 +30,8 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 # session-cookie injection, etc.) and cannot run against the
 # deployed dev environment. See _docs/testing-guidelines.md.
 pytestmark = pytest.mark.local_only
+
+ISSUE_1545_SCREENSHOT_DIR = Path(__file__).parent.parent / ".tmp" / "issue-1545"
 
 
 # Shipped transactional templates that have a markdown file on disk. Kept
@@ -77,7 +81,9 @@ def _open_preview(page, django_server, template_name):
         timeout=10000,
     )
 
-    iframe = page.locator('[data-testid="email-template-preview"]')
+    iframe = page.get_by_title("Email preview", exact=True)
+    expect(iframe).to_be_visible()
+    assert iframe.get_attribute("data-testid") == "email-template-preview"
     srcdoc = iframe.get_attribute("srcdoc")
     assert srcdoc, f"Preview iframe srcdoc empty for {template_name!r}"
     return srcdoc
@@ -102,6 +108,17 @@ class TestEventRegistrationPreviewHasNoDoubleDash:
         context = _auth_context(browser, "admin@test.com")
         page = context.new_page()
         srcdoc = _open_preview(page, django_server, "event_registration")
+        expect(page.locator('input[name="subject"]')).to_be_editable()
+        expect(page.locator('textarea[name="body_markdown"]')).to_be_editable()
+
+        analytics_panel = page.locator("#analytics-consent-panel")
+        if analytics_panel.is_visible():
+            analytics_panel.evaluate("element => element.remove()")
+        ISSUE_1545_SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+        page.screenshot(
+            path=ISSUE_1545_SCREENSHOT_DIR / "email-preview-1280px.png",
+            full_page=True,
+        )
 
         # The double-dash ASCII fallback must not appear anywhere in the
         # rendered preview body.

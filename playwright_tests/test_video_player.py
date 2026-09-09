@@ -20,6 +20,7 @@ Usage:
 
 import datetime
 import os
+from pathlib import Path
 
 import pytest
 from django.utils import timezone
@@ -40,6 +41,32 @@ from django.db import connection
 # session-cookie injection, etc.) and cannot run against the
 # deployed dev environment. See _docs/testing-guidelines.md.
 pytestmark = pytest.mark.local_only
+
+ISSUE_1545_SCREENSHOT_DIR = Path(__file__).parent.parent / ".tmp" / "issue-1545"
+
+YOUTUBE_IFRAME_API_STUB = """
+window.YT = {
+  Player: function(hostId, config) {
+    var host = document.getElementById(hostId);
+    var iframe = document.createElement('iframe');
+    iframe.src = 'about:blank';
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    host.replaceWith(iframe);
+    var player = {
+      getIframe: function() { return iframe; },
+      seekTo: function() {}
+    };
+    if (config.events && config.events.onReady) {
+      config.events.onReady({target: player});
+    }
+    return player;
+  }
+};
+if (window.onYouTubeIframeAPIReady) {
+  window.onYouTubeIframeAPIReady();
+}
+"""
 
 
 def _clear_recordings():
@@ -307,6 +334,14 @@ class TestScenario1YouTubeRecordingTimestamps:
             ],
             required_level=0,
         )
+        page.route(
+            "https://www.youtube.com/iframe_api",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="application/javascript",
+                body=YOUTUBE_IFRAME_API_STUB,
+            ),
+        )
 
         from content.models import Workshop
         workshop = Workshop.objects.get(slug="ai-workshop")
@@ -332,10 +367,18 @@ class TestScenario1YouTubeRecordingTimestamps:
         page.wait_for_load_state("domcontentloaded")
         assert f"{workshop_path}/video" in page.url
 
-        # Verify YouTube embed is present
+        # The API stub creates an unnamed iframe. The shared player must name
+        # that exact injected frame from its onReady callback.
         body = page.content()
         assert 'data-source="youtube"' in body
         assert "video-player" in body
+        expect(page.get_by_test_id("video-title")).to_contain_text("AI Workshop")
+        iframe = page.get_by_title("YouTube video player", exact=True)
+        expect(iframe).to_be_visible()
+        assert iframe.count() == 1
+        assert page.get_by_test_id("video-player").locator(
+            'iframe:not([title]), iframe[title=""]'
+        ).count() == 0
 
         # Wait for the chapters disclosure node before forcing it open;
         # the inner buttons render once the disclosure is in the DOM, and
@@ -402,6 +445,7 @@ class TestScenario2LoomRecordingTimestamps:
 
         context = _auth_context(browser, "free-loom@test.com")
         page = context.new_page()
+        page.set_viewport_size({"width": 1280, "height": 900})
         # Recording lives on the workshop video page (issue #426).
         # Issue #915: bare-slug URLs no longer redirect — use url_key.
         from content.models import Workshop
@@ -415,10 +459,14 @@ class TestScenario2LoomRecordingTimestamps:
 
         # Verify Loom embed is present
         assert 'data-source="loom"' in body
-        iframe = page.locator(
-            'iframe[id^="loom-player-"]'
-        )
+        expect(page.get_by_test_id("video-title")).to_contain_text("Product Demo")
+        iframe = page.get_by_title("Loom video player", exact=True)
+        expect(iframe).to_be_visible()
         assert iframe.count() == 1
+        assert iframe.get_attribute("id").startswith("loom-player-")
+        assert page.get_by_test_id("video-player").locator(
+            'iframe:not([title]), iframe[title=""]'
+        ).count() == 0
 
         # Initial iframe src should be the loom embed URL
         initial_src = iframe.get_attribute("src")
@@ -449,6 +497,20 @@ class TestScenario2LoomRecordingTimestamps:
         # Verify the iframe src was updated with ?t=150
         updated_src = iframe.get_attribute("src")
         assert "?t=150" in updated_src
+        assert iframe.get_attribute("title") == "Loom video player"
+
+        analytics_panel = page.locator("#analytics-consent-panel")
+        if analytics_panel.is_visible():
+            analytics_panel.evaluate("element => element.remove()")
+        page.evaluate(
+            "document.querySelector('details[data-testid=\"video-chapters\"]').open = true;"
+            "window.scrollTo(0, 0);"
+        )
+        ISSUE_1545_SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+        page.screenshot(
+            path=ISSUE_1545_SCREENSHOT_DIR / "loom-workshop-player-1280px.png",
+            full_page=False,
+        )
 
         context.close()
 # ---------------------------------------------------------------
@@ -558,6 +620,19 @@ class TestScenario4ArticleAutoEmbedYouTube:
             author="Test Author",
             required_level=0,
         )
+        _create_article(
+            title="Shipping With Loom",
+            slug="shipping-with-loom",
+            description="A Loom walkthrough.",
+            content_markdown=(
+                "# Shipping With Loom\n\n"
+                "Watch the walkthrough below.\n\n"
+                "https://www.loom.com/share/loomarticle123\n\n"
+                "Continue with the deployment checklist."
+            ),
+            author="Test Author",
+            required_level=0,
+        )
 
         page.goto(
             f"{django_server}/blog/building-your-first-ai-agent",
@@ -569,6 +644,9 @@ class TestScenario4ArticleAutoEmbedYouTube:
         # The YouTube URL is rendered as an embedded video
         assert 'data-source="youtube"' in body
         assert 'data-video-id="abc123"' in body
+        youtube_iframe = page.get_by_title("YouTube video player", exact=True)
+        expect(youtube_iframe).to_be_visible()
+        assert youtube_iframe.get_attribute("title") == "YouTube video player"
 
         # The raw URL text is NOT visible as a plain link
         # (it should be replaced by the embed)
@@ -580,6 +658,17 @@ class TestScenario4ArticleAutoEmbedYouTube:
         # Surrounding text renders normally
         assert "introductory text about AI agents" in body
         assert "follow-up text about next steps" in body
+
+        page.goto(
+            f"{django_server}/blog/shipping-with-loom",
+            wait_until="domcontentloaded",
+        )
+        loom_iframe = page.get_by_title("Loom video player", exact=True)
+        expect(loom_iframe).to_be_visible()
+        assert loom_iframe.get_attribute("title") == "Loom video player"
+        article_text = page.locator("main").inner_text()
+        assert "Watch the walkthrough below" in article_text
+        assert "Continue with the deployment checklist" in article_text
 # ---------------------------------------------------------------
 # Scenario 5: Removed -- duplicate of gating tests in
 #   content/tests/test_access_control.py (RecordingDetailAccessControlTest)

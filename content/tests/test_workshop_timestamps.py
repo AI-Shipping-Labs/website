@@ -539,6 +539,7 @@ class WorkshopVideoFallbackEmbedStartTest(TierSetupMixin, TestCase):
         self.assertContains(
             response, 'https://drive.example.com/embed/xyz?start=960',
         )
+        self.assertContains(response, 'title="Workshop"')
 
     def test_fallback_iframe_url_requests_no_autoplay(self):
         # Issue #899: the legacy iframe is cued via start=N but must never

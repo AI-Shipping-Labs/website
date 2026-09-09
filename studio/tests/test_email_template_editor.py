@@ -171,6 +171,7 @@ class EmailTemplateEditGetTest(TestCase):
             initial['subject'], 'Welcome to {{ tier_name }}!',
         )
         self.assertEqual(initial['footer_note'], '')
+        self.assertContains(response, 'title="Email preview"')
 
     def test_edit_form_prefills_from_override_when_present(self):
         EmailTemplateOverride.objects.create(

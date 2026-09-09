@@ -344,6 +344,7 @@ def replace_video_urls_in_html(html_content):
                 f'<div class="video-player mb-8" data-source="youtube" data-video-id="{video_id}">'
                 f'<div class="aspect-video rounded-lg overflow-hidden border border-border">'
                 f'<iframe src="{embed_url}" class="w-full h-full" '
+                f'title="YouTube video player" '
                 f'allowfullscreen allow="accelerometer; autoplay; clipboard-write; '
                 f'encrypted-media; gyroscope; picture-in-picture"></iframe>'
                 f'</div></div>'
@@ -354,6 +355,7 @@ def replace_video_urls_in_html(html_content):
                 f'<div class="video-player mb-8" data-source="loom" data-video-id="{video_id}">'
                 f'<div class="aspect-video rounded-lg overflow-hidden border border-border">'
                 f'<iframe src="{embed_url}" class="w-full h-full" '
+                f'title="Loom video player" '
                 f'allowfullscreen></iframe>'
                 f'</div></div>'
             )

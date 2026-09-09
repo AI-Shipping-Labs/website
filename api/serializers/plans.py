@@ -12,15 +12,9 @@ endpoint does not N+1.
 
 from __future__ import annotations
 
+from api.serializers.datetime import isoformat_or_none
 from plans.models import InterviewNote
 from plans.templatetags.plan_markdown import render_plan_markdown
-
-
-def _isoformat_or_none(value):
-    """Return ``value.isoformat()`` for non-null datetimes, else ``None``."""
-    if value is None:
-        return None
-    return value.isoformat()
 
 
 def _prefetched_or_ordered(instance, relation_name, *ordering):
@@ -62,8 +56,8 @@ def serialize_sprint(sprint):
         "event_series": (
             {"id": series.id, "slug": series.slug} if series else None
         ),
-        "created_at": _isoformat_or_none(sprint.created_at),
-        "updated_at": _isoformat_or_none(sprint.updated_at),
+        "created_at": isoformat_or_none(sprint.created_at),
+        "updated_at": isoformat_or_none(sprint.updated_at),
     }
 
 
@@ -75,9 +69,9 @@ def serialize_plan_flat(plan):
         "user_email": plan.member.email,
         "title": plan.display_title,
         "visibility": plan.visibility,
-        "shared_at": _isoformat_or_none(plan.shared_at),
-        "created_at": _isoformat_or_none(plan.created_at),
-        "updated_at": _isoformat_or_none(plan.updated_at),
+        "shared_at": isoformat_or_none(plan.shared_at),
+        "created_at": isoformat_or_none(plan.created_at),
+        "updated_at": isoformat_or_none(plan.updated_at),
     }
 
 
@@ -89,7 +83,7 @@ def serialize_checkpoint(checkpoint):
         "description": checkpoint.description,
         "description_html": render_plan_markdown(checkpoint.description),
         "position": checkpoint.position,
-        "done_at": _isoformat_or_none(checkpoint.done_at),
+        "done_at": isoformat_or_none(checkpoint.done_at),
     }
 
 
@@ -102,8 +96,8 @@ def serialize_week_note(note):
         "week_id": note.week_id,
         "body": note.body,
         "author_email": note.author.email if note.author_id else None,
-        "created_at": _isoformat_or_none(note.created_at),
-        "updated_at": _isoformat_or_none(note.updated_at),
+        "created_at": isoformat_or_none(note.created_at),
+        "updated_at": isoformat_or_none(note.updated_at),
     }
 
 
@@ -147,7 +141,7 @@ def serialize_deliverable(deliverable):
         "id": deliverable.id,
         "description": deliverable.description,
         "position": deliverable.position,
-        "done_at": _isoformat_or_none(deliverable.done_at),
+        "done_at": isoformat_or_none(deliverable.done_at),
     }
 
 
@@ -158,7 +152,7 @@ def serialize_next_step(next_step):
         "kind": next_step.kind,
         "description": next_step.description,
         "position": next_step.position,
-        "done_at": _isoformat_or_none(next_step.done_at),
+        "done_at": isoformat_or_none(next_step.done_at),
     }
 
 
@@ -225,9 +219,9 @@ def serialize_plan_detail(plan, *, viewer=None):
         "interview_notes": [
             serialize_interview_note(n) for n in visible_notes
         ],
-        "shared_at": _isoformat_or_none(plan.shared_at),
-        "created_at": _isoformat_or_none(plan.created_at),
-        "updated_at": _isoformat_or_none(plan.updated_at),
+        "shared_at": isoformat_or_none(plan.shared_at),
+        "created_at": isoformat_or_none(plan.created_at),
+        "updated_at": isoformat_or_none(plan.updated_at),
     }
 
 
@@ -246,6 +240,6 @@ def serialize_interview_note(note):
         "created_by_email": (
             note.created_by.email if note.created_by_id else None
         ),
-        "created_at": _isoformat_or_none(note.created_at),
-        "updated_at": _isoformat_or_none(note.updated_at),
+        "created_at": isoformat_or_none(note.created_at),
+        "updated_at": isoformat_or_none(note.updated_at),
     }

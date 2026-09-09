@@ -13,6 +13,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.datetime import isoformat_or_none
 from api.utils import (
     delete_not_available_response,
     parse_json_body,
@@ -113,10 +114,6 @@ _SYNC_HISTORY_DETAIL_EXAMPLE = {
 }
 
 
-def _iso(value):
-    return value.isoformat() if value is not None else None
-
-
 def _serialize_source(source, health=None):
     payload = {
         "id": str(source.pk),
@@ -126,20 +123,20 @@ def _serialize_source(source, health=None):
         "webhook_secret_configured": source.webhook_secret_configured,
         "webhook_security_status": source.webhook_security_status,
         "last_sync_status": source.last_sync_status,
-        "last_synced_at": _iso(source.last_synced_at),
-        "sync_locked_at": _iso(source.sync_locked_at),
+        "last_synced_at": isoformat_or_none(source.last_synced_at),
+        "sync_locked_at": isoformat_or_none(source.sync_locked_at),
         "sync_requested": source.sync_requested,
         "last_synced_commit": source.last_synced_commit,
         "short_synced_commit": source.short_synced_commit,
         "synced_commit_url": source.synced_commit_url,
         "max_files": source.max_files,
-        "created_at": _iso(source.created_at),
-        "updated_at": _iso(source.updated_at),
+        "created_at": isoformat_or_none(source.created_at),
+        "updated_at": isoformat_or_none(source.updated_at),
     }
     if health is not None:
         payload["health"] = {
             **health,
-            "content_fresh_at": _iso(health["content_fresh_at"]),
+            "content_fresh_at": isoformat_or_none(health["content_fresh_at"]),
         }
     return payload
 

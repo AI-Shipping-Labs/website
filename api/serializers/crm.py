@@ -2,13 +2,8 @@
 
 from django.urls import reverse
 
+from api.serializers.datetime import isoformat_or_none
 from crm.services.persona import resolve_crm_persona
-
-
-def _isoformat_or_none(value):
-    if value is None:
-        return None
-    return value.isoformat()
 
 
 def serialize_crm_record_summary(record):
@@ -30,8 +25,8 @@ def serialize_crm_record_full(record):
         **serialize_crm_record_summary(record),
         "summary": record.summary or "",
         "next_steps": record.next_steps or "",
-        "created_at": _isoformat_or_none(record.created_at),
-        "updated_at": _isoformat_or_none(record.updated_at),
+        "created_at": isoformat_or_none(record.created_at),
+        "updated_at": isoformat_or_none(record.updated_at),
     }
 
 

@@ -6,11 +6,7 @@ Each ``serialize_*`` takes a model instance and returns the JSON-ready shape.
 
 from __future__ import annotations
 
-
-def _isoformat_or_none(value):
-    if value is None:
-        return None
-    return value.isoformat()
+from api.serializers.datetime import isoformat_or_none
 
 
 def serialize_chapter(chapter):
@@ -25,7 +21,7 @@ def serialize_chapter(chapter):
     return {
         "number": chapter.number,
         "title": chapter.title,
-        "deadline": _isoformat_or_none(chapter.deadline),
+        "deadline": isoformat_or_none(chapter.deadline),
         "week_number": chapter.week_number,
         "week_label": chapter.week_label,
         "event": (
@@ -40,9 +36,9 @@ def serialize_chapter(chapter):
         ),
         "summary": chapter.summary,
         "summary_published": chapter.is_summary_published,
-        "summary_published_at": _isoformat_or_none(chapter.summary_published_at),
-        "created_at": _isoformat_or_none(chapter.created_at),
-        "updated_at": _isoformat_or_none(chapter.updated_at),
+        "summary_published_at": isoformat_or_none(chapter.summary_published_at),
+        "created_at": isoformat_or_none(chapter.created_at),
+        "updated_at": isoformat_or_none(chapter.updated_at),
     }
 
 
@@ -73,10 +69,10 @@ def serialize_book(book, *, include_chapters=False):
         ),
         "summary": book.summary,
         "summary_published": book.is_summary_published,
-        "summary_published_at": _isoformat_or_none(book.summary_published_at),
+        "summary_published_at": isoformat_or_none(book.summary_published_at),
         "chapter_count": book.chapters.count(),
-        "created_at": _isoformat_or_none(book.created_at),
-        "updated_at": _isoformat_or_none(book.updated_at),
+        "created_at": isoformat_or_none(book.created_at),
+        "updated_at": isoformat_or_none(book.updated_at),
     }
     if include_chapters:
         data["chapters"] = [

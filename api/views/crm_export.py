@@ -59,6 +59,7 @@ from api.request_parsing import (
 )
 from api.safety import error_response
 from api.serializers.crm import serialize_crm_record_full
+from api.serializers.datetime import isoformat_or_none
 from api.serializers.enrollments import (
     serialize_course_enrollment,
     serialize_sprint_enrollment,
@@ -106,12 +107,6 @@ EXPORT_MAX_LIMIT_KEY = "CRM_EXPORT_MAX_LIMIT"
 EXPORT_MAX_LIMIT_DEFAULT = 200
 
 _VALID_SCOPES = ["crm", "all"]
-
-
-def _isoformat_or_none(value):
-    if value is None:
-        return None
-    return value.isoformat()
 
 
 def _export_max_limit():
@@ -473,13 +468,13 @@ def build_single_crm_record_aggregate(crm_record, *, bearer, exported_at=None):
             "host_slug": call.host.slug,
             "invitee_email": call.invitee_email,
             "invitee_name": call.invitee_name,
-            "scheduled_at": _isoformat_or_none(call.scheduled_at),
+            "scheduled_at": isoformat_or_none(call.scheduled_at),
             "calendly_event_uri": call.calendly_event_uri,
             "calendly_invitee_uri": call.calendly_invitee_uri,
             "reschedule_url": call.reschedule_url,
             "cancel_url": call.cancel_url,
-            "created_at": _isoformat_or_none(call.created_at),
-            "updated_at": _isoformat_or_none(call.updated_at),
+            "created_at": isoformat_or_none(call.created_at),
+            "updated_at": isoformat_or_none(call.updated_at),
         }
         for call in (
             BookedCall.objects.filter(

@@ -61,6 +61,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.datetime import isoformat_or_none
 from api.utils import (
     body_must_be_object_response,
     delete_not_available_response,
@@ -147,10 +148,6 @@ LEVEL_MISMATCH_MESSAGE = (
 )
 
 
-def _iso(value):
-    return value.isoformat() if value is not None else None
-
-
 def serialize_event_series(series):
     """Return the canonical event-series object for list/detail/create/update."""
     return {
@@ -169,8 +166,8 @@ def serialize_event_series(series):
         "event_count": series.event_count,
         "published_event_count": series.published_event_count,
         "zoom_meetings_last_run": series.zoom_meetings_last_run,
-        "created_at": _iso(series.created_at),
-        "updated_at": _iso(series.updated_at),
+        "created_at": isoformat_or_none(series.created_at),
+        "updated_at": isoformat_or_none(series.updated_at),
     }
 
 

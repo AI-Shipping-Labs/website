@@ -25,12 +25,9 @@ keeps both signals on the outer table wrapper:
 - ``overflow-x-auto`` so even when row-stacking is not in play the
   Actions column stays scrollable instead of being clipped.
 
-The walker explicitly skips ``<table>`` elements whose nearest
-ancestor is ``hidden md:block`` — those templates use a separate
-``<ul class="md:hidden">`` card list for mobile (e.g.
-``courses/access_list.html``, ``courses/enrollments_list.html``) so the
-table itself never renders below the ``md`` breakpoint and the legacy
-wrapper class on the outer card is harmless.
+The walker explicitly skips ``<table>`` elements whose nearest ancestor is
+``hidden md:block``. A deliberately breakpoint-gated table is outside the
+shared responsive-table contract because it never renders below ``md``.
 
 These are grep-shaped assertions intentionally: they catch drift in any
 future Studio page without needing per-page integration coverage.
@@ -203,11 +200,9 @@ def _all_table_wrappers_for(template_path: Path) -> list[tuple[str, str]]:
         table_at = body.find('<table')
         if table_at == -1:
             continue
-        # If a nested ``hidden md:block`` div opens before the table,
-        # this wrapper is the outer card of the desktop-table /
-        # mobile-card pattern — the table inside is gated on the ``md``
-        # breakpoint and never renders on Pixel-7, so the legacy class
-        # on the outer card is harmless. Skip it.
+        # If a nested ``hidden md:block`` div opens before the table, the
+        # table is explicitly gated away below ``md`` and does not need the
+        # responsive-table behavior. Skip it.
         gated_at = re.search(r'<div\s+class="[^"]*hidden md:block[^"]*"', body)
         if gated_at and gated_at.start() < table_at:
             continue

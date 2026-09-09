@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Enrollments - {{ course.title }}{% endblock %}
 
@@ -50,28 +51,27 @@
   {% endif %}
 </form>
 
-<!-- Enrollments: desktop table + mobile cards -->
-<div class="bg-card border border-border rounded-lg overflow-hidden" data-testid="enrollments-records">
-  <!-- Desktop / tablet table -->
-  <div class="hidden md:block">
-    <table class="w-full">
-      <thead class="bg-secondary">
+{% if enrollments or status != 'active' %}
+<!-- One semantic table becomes labelled cards on mobile via studio/base.html. -->
+<div class="{% studio_list_class 'wrapper' %}" data-testid="enrollments-records">
+    <table class="{% studio_list_class 'table' %}">
+      <thead class="{% studio_list_class 'thead' %}">
         <tr>
-          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
-          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Source</th>
-          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Enrolled</th>
-          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Unenrolled</th>
-          <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+          <th class="{% studio_list_class 'th' %}">User</th>
+          <th class="{% studio_list_class 'th' %}">Source</th>
+          <th class="{% studio_list_class 'th' %}">Enrolled</th>
+          <th class="{% studio_list_class 'th' %}">Unenrolled</th>
+          <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-border">
+      <tbody class="{% studio_list_class 'tbody' %}">
         {% for enr in enrollments %}
-        <tr class="hover:bg-secondary/50 transition-colors" data-testid="enrollment-row">
-          <td class="px-6 py-4 text-sm text-foreground">
-            <div class="font-medium">{{ enr.user.email }}</div>
+        <tr class="{% studio_list_class 'row' %}" data-testid="enrollment-row">
+          <td class="px-6 py-4 text-sm text-foreground" data-label="User">
+            <div class="font-medium break-all sm:break-normal sm:whitespace-nowrap">{{ enr.user.email }}</div>
             <div class="text-xs text-muted-foreground">ID: {{ enr.user.pk }}</div>
           </td>
-          <td class="px-6 py-4">
+          <td class="px-6 py-4" data-label="Source">
             <span class="text-xs px-2 py-1 rounded-full
               {% if enr.source == 'manual' %}bg-blue-500/20 text-blue-400
               {% elif enr.source == 'auto_progress' %}bg-purple-500/20 text-purple-400
@@ -79,81 +79,33 @@
               {{ enr.get_source_display }}
             </span>
           </td>
-          <td class="px-6 py-4 text-sm text-muted-foreground">{{ enr.enrolled_at|operator_datetime }}</td>
-          <td class="px-6 py-4 text-sm text-muted-foreground">
+          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Enrolled">{{ enr.enrolled_at|operator_datetime }}</td>
+          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Unenrolled">
             {% if enr.unenrolled_at %}{{ enr.unenrolled_at|operator_datetime }}{% else %}-{% endif %}
           </td>
-          <td class="px-6 py-4 text-right">
+          <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
             {% if not enr.unenrolled_at %}
-            <form method="post" action="{% url 'studio_course_enrollment_unenroll' course_id=course.pk enrollment_id=enr.pk %}" class="inline"
+            <form method="post" action="{% url 'studio_course_enrollment_unenroll' course_id=course.pk enrollment_id=enr.pk %}" class="{% studio_list_class 'action_form' %}"
                   data-confirm="Unenroll {{ enr.user.email }} from {{ course.title }}?">
               {% csrf_token %}
               <button type="submit"
-                      class="text-sm text-red-400 hover:text-red-300 hover:underline px-2 py-1 min-h-[44px] inline-flex items-center"
+                      class="{% studio_action_class 'destructive' %} min-h-[44px]"
                       data-testid="unenroll-row-btn">Unenroll</button>
             </form>
             {% else %}
-            <span class="text-xs text-muted-foreground">-</span>
+            <span class="text-xs text-muted-foreground">Already unenrolled</span>
             {% endif %}
           </td>
         </tr>
         {% empty %}
-        <tr>
-          <td colspan="5" class="px-6 py-8 text-center text-sm text-muted-foreground">
-            No enrollments for this course yet.
-          </td>
-        </tr>
+          {% url 'studio_course_enrollment_list' course_id=course.pk as enrollments_clear_url %}
+          {% studio_empty_state 'filter' entity_label='enrollment' entity_label_plural='enrollments' clear_url=enrollments_clear_url colspan=5 empty_message='No enrollments match this status filter.' %}
         {% endfor %}
       </tbody>
     </table>
-  </div>
-
-  <!-- Mobile cards -->
-  <ul class="md:hidden divide-y divide-border" data-testid="enrollment-cards">
-    {% for enr in enrollments %}
-    <li class="p-4 space-y-2" data-testid="enrollment-card">
-      <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0 flex-1">
-          <div class="text-sm font-medium text-foreground break-all">{{ enr.user.email }}</div>
-          <div class="text-xs text-muted-foreground">ID: {{ enr.user.pk }}</div>
-        </div>
-        <span class="text-xs px-2 py-1 rounded-full whitespace-nowrap
-          {% if enr.source == 'manual' %}bg-blue-500/20 text-blue-400
-          {% elif enr.source == 'auto_progress' %}bg-purple-500/20 text-purple-400
-          {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
-          {{ enr.get_source_display }}
-        </span>
-      </div>
-      <dl class="text-xs text-muted-foreground space-y-1">
-        <div class="flex gap-2">
-          <dt class="w-24 shrink-0">Enrolled</dt>
-          <dd>{{ enr.enrolled_at|operator_datetime }}</dd>
-        </div>
-        {% if enr.unenrolled_at %}
-        <div class="flex gap-2">
-          <dt class="w-24 shrink-0">Unenrolled</dt>
-          <dd>{{ enr.unenrolled_at|operator_datetime }}</dd>
-        </div>
-        {% endif %}
-      </dl>
-      <div class="pt-2">
-        {% if not enr.unenrolled_at %}
-        <form method="post" action="{% url 'studio_course_enrollment_unenroll' course_id=course.pk enrollment_id=enr.pk %}"
-              data-confirm="Unenroll {{ enr.user.email }} from {{ course.title }}?">
-          {% csrf_token %}
-          <button type="submit"
-                  class="w-full inline-flex items-center justify-center px-4 py-3 min-h-[44px] rounded-lg border border-red-500/40 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
-                  data-testid="unenroll-row-btn-mobile">Unenroll</button>
-        </form>
-        {% else %}
-        <p class="text-xs text-muted-foreground italic">Already unenrolled.</p>
-        {% endif %}
-      </div>
-    </li>
-    {% empty %}
-    <li class="px-4 py-8 text-center text-sm text-muted-foreground">No enrollments for this course yet.</li>
-    {% endfor %}
-  </ul>
 </div>
+{% else %}
+  {% studio_empty_state 'fresh' entity_label='enrollment' entity_label_plural='enrollments' empty_message='No enrollments for this course yet.' testid_suffix='course-enrollments-empty' %}
+{% endif %}
 
 {% endblock %}

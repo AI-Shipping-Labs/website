@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Manage Access - {{ course.title }}{% endblock %}
 
@@ -37,100 +38,55 @@
   </form>
 </div>
 
-<!-- Access Records: desktop table + mobile cards -->
-<div class="bg-card border border-border rounded-lg overflow-hidden" data-testid="access-records">
-  <!-- Desktop / tablet table -->
-  <div class="hidden md:block">
-    <table class="w-full">
-      <thead class="bg-secondary">
+{% if access_records %}
+<!-- One semantic table becomes labelled cards on mobile via studio/base.html. -->
+<div class="{% studio_list_class 'wrapper' %}" data-testid="access-records">
+    <table class="{% studio_list_class 'table' %}">
+      <thead class="{% studio_list_class 'thead' %}">
         <tr>
-          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
-          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Access Type</th>
-          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Granted By</th>
-          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
-          <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+          <th class="{% studio_list_class 'th' %}">User</th>
+          <th class="{% studio_list_class 'th' %}">Access Type</th>
+          <th class="{% studio_list_class 'th' %}">Granted By</th>
+          <th class="{% studio_list_class 'th' %}">Date</th>
+          <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-border">
+      <tbody class="{% studio_list_class 'tbody' %}">
         {% for access in access_records %}
-        <tr class="hover:bg-secondary/50 transition-colors" data-testid="access-row">
-          <td class="px-6 py-4 text-sm text-foreground">
-            <div class="font-medium">{{ access.user.email }}</div>
+        <tr class="{% studio_list_class 'row' %}" data-testid="access-row">
+          <td class="px-6 py-4 text-sm text-foreground" data-label="User">
+            <div class="font-medium break-all sm:break-normal sm:whitespace-nowrap">{{ access.user.email }}</div>
             <div class="text-xs text-muted-foreground">ID: {{ access.user.pk }}</div>
           </td>
-          <td class="px-6 py-4">
+          <td class="px-6 py-4" data-label="Access Type">
             <span class="text-xs px-2 py-1 rounded-full {% if access.access_type == 'granted' %}bg-blue-500/20 text-blue-400{% else %}bg-green-500/20 text-green-400{% endif %}">
               {{ access.get_access_type_display }}
             </span>
           </td>
-          <td class="px-6 py-4 text-sm text-muted-foreground">
+          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Granted By">
             {% if access.granted_by %}{{ access.granted_by.email }}{% else %}-{% endif %}
           </td>
-          <td class="px-6 py-4 text-sm text-muted-foreground">{{ access.created_at|operator_datetime }}</td>
-          <td class="px-6 py-4 text-right">
+          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ access.created_at|operator_datetime }}</td>
+          <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
             {% if access.access_type == 'granted' %}
-            <form method="post" action="{% url 'studio_course_access_revoke' course_id=course.pk access_id=access.pk %}" class="inline"
+            <form method="post" action="{% url 'studio_course_access_revoke' course_id=course.pk access_id=access.pk %}" class="{% studio_list_class 'action_form' %}"
                   data-confirm="Revoke access for {{ access.user.email }}?">
               {% csrf_token %}
               <button type="submit"
-                      class="text-sm text-red-400 hover:text-red-300 hover:underline px-2 py-1 min-h-[44px] inline-flex items-center"
+                      class="{% studio_action_class 'destructive' %} min-h-[44px]"
                       data-testid="revoke-btn">Revoke</button>
             </form>
             {% else %}
-            <span class="text-xs text-muted-foreground" title="Purchased access cannot be revoked from Studio.">Purchased - cannot revoke</span>
+            <span class="text-xs text-muted-foreground">Purchased - cannot revoke</span>
             {% endif %}
           </td>
-        </tr>
-        {% empty %}
-        <tr>
-          <td colspan="5" class="px-6 py-8 text-center text-sm text-muted-foreground">No individual access records for this course.</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
-  </div>
-
-  <!-- Mobile cards -->
-  <ul class="md:hidden divide-y divide-border" data-testid="access-cards">
-    {% for access in access_records %}
-    <li class="p-4 space-y-2" data-testid="access-card">
-      <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0 flex-1">
-          <div class="text-sm font-medium text-foreground break-all">{{ access.user.email }}</div>
-          <div class="text-xs text-muted-foreground">ID: {{ access.user.pk }}</div>
-        </div>
-        <span class="text-xs px-2 py-1 rounded-full whitespace-nowrap {% if access.access_type == 'granted' %}bg-blue-500/20 text-blue-400{% else %}bg-green-500/20 text-green-400{% endif %}">
-          {{ access.get_access_type_display }}
-        </span>
-      </div>
-      <dl class="text-xs text-muted-foreground space-y-1">
-        <div class="flex gap-2">
-          <dt class="w-20 shrink-0">Granted by</dt>
-          <dd class="break-all">{% if access.granted_by %}{{ access.granted_by.email }}{% else %}-{% endif %}</dd>
-        </div>
-        <div class="flex gap-2">
-          <dt class="w-20 shrink-0">Date</dt>
-          <dd>{{ access.created_at|operator_datetime }}</dd>
-        </div>
-      </dl>
-      <div class="pt-2">
-        {% if access.access_type == 'granted' %}
-        <form method="post" action="{% url 'studio_course_access_revoke' course_id=course.pk access_id=access.pk %}"
-              data-confirm="Revoke access for {{ access.user.email }}?">
-          {% csrf_token %}
-          <button type="submit"
-                  class="w-full inline-flex items-center justify-center px-4 py-3 min-h-[44px] rounded-lg border border-red-500/40 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
-                  data-testid="revoke-btn-mobile">Revoke access</button>
-        </form>
-        {% else %}
-        <p class="text-xs text-muted-foreground italic">Purchased access cannot be revoked from Studio.</p>
-        {% endif %}
-      </div>
-    </li>
-    {% empty %}
-    <li class="px-4 py-8 text-center text-sm text-muted-foreground">No individual access records for this course.</li>
-    {% endfor %}
-  </ul>
 </div>
+{% else %}
+  {% studio_empty_state 'fresh' entity_label='access record' entity_label_plural='access records' empty_message='No individual access records for this course.' testid_suffix='course-access-empty' %}
+{% endif %}
 
 {% endblock %}

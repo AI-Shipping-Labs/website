@@ -2,10 +2,9 @@
 
 Covers:
 - Grant access by autocomplete-selected user_id (preserves email path)
-- Both desktop table and mobile cards render access records
-- Mobile revoke action is present and uses POST + CSRF
+- One responsive semantic table renders each access/enrollment record once
+- Revoke and unenroll actions remain POST forms with mobile tap targets
 - Course edit page shows access + active enrollment counts in workflow panel
-- Mobile revoke button has min tappable height
 """
 
 from django.contrib.auth import get_user_model
@@ -127,7 +126,7 @@ class StudioCourseEnrollmentCreateByUserIdTest(TestCase):
 
 
 @tag('core')
-class StudioCourseAccessListMobileRenderTest(TestCase):
+class StudioCourseAccessListResponsiveRenderTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(
@@ -150,43 +149,34 @@ class StudioCourseAccessListMobileRenderTest(TestCase):
         self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_mobile_cards_block_present(self):
+    def test_shared_responsive_table_is_the_only_list(self):
         response = self.client.get(f'/studio/courses/{self.course.pk}/access/')
-        # Mobile-only block uses md:hidden class
-        self.assertContains(response, 'data-testid="access-cards"')
+        self.assertContains(response, 'data-testid="access-records"', count=1)
+        self.assertNotContains(response, 'data-testid="access-cards"')
+        self.assertNotContains(response, 'data-testid="access-card"')
 
-    def test_desktop_table_block_present(self):
+    def test_table_lists_each_record_once(self):
         response = self.client.get(f'/studio/courses/{self.course.pk}/access/')
-        # Desktop block hidden on small screens via hidden md:block
-        content = response.content.decode()
-        self.assertIn('hidden md:block', content)
-
-    def test_mobile_card_lists_each_record(self):
-        response = self.client.get(f'/studio/courses/{self.course.pk}/access/')
-        # Two access records should produce two access-card list items
-        self.assertEqual(response.content.decode().count('data-testid="access-card"'), 2)
+        self.assertContains(response, 'data-testid="access-row"', count=2)
 
     def test_user_id_shown_in_listing(self):
         response = self.client.get(f'/studio/courses/{self.course.pk}/access/')
         self.assertContains(response, f'ID: {self.user_a.pk}')
         self.assertContains(response, f'ID: {self.user_b.pk}')
 
-    def test_mobile_revoke_button_present_for_granted(self):
+    def test_single_revoke_button_is_posted_with_csrf(self):
         response = self.client.get(f'/studio/courses/{self.course.pk}/access/')
-        self.assertContains(response, 'data-testid="revoke-btn-mobile"')
-        # Mobile revoke is wrapped in a POST form with CSRF token (CSRF preserved)
-        content = response.content.decode()
-        self.assertIn('csrfmiddlewaretoken', content)
-
-    def test_mobile_revoke_uses_min_tap_target(self):
-        response = self.client.get(f'/studio/courses/{self.course.pk}/access/')
-        # 44px tap target via min-h-[44px] utility on mobile revoke
-        content = response.content.decode()
-        self.assertIn('min-h-[44px]', content)
+        self.assertContains(response, 'data-testid="revoke-btn"', count=1)
+        self.assertNotContains(response, 'data-testid="revoke-btn-mobile"')
+        self.assertContains(response, 'name="csrfmiddlewaretoken"', count=2)
 
     def test_purchased_access_explains_non_revocable(self):
         response = self.client.get(f'/studio/courses/{self.course.pk}/access/')
-        self.assertContains(response, 'Purchased access cannot be revoked')
+        self.assertContains(
+            response,
+            'Purchased - cannot revoke',
+            count=1,
+        )
 
     def test_lookup_form_has_search_url_and_hidden_user_id(self):
         response = self.client.get(f'/studio/courses/{self.course.pk}/access/')
@@ -196,7 +186,7 @@ class StudioCourseAccessListMobileRenderTest(TestCase):
 
 
 @tag('core')
-class StudioEnrollmentsListMobileRenderTest(TestCase):
+class StudioEnrollmentsListResponsiveRenderTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(
@@ -214,18 +204,17 @@ class StudioEnrollmentsListMobileRenderTest(TestCase):
         self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_mobile_cards_block_present(self):
+    def test_shared_responsive_table_is_the_only_list(self):
         response = self.client.get(f'/studio/courses/{self.course.pk}/enrollments/')
-        self.assertContains(response, 'data-testid="enrollment-cards"')
+        self.assertContains(response, 'data-testid="enrollments-records"', count=1)
+        self.assertContains(response, 'data-testid="enrollment-row"', count=1)
+        self.assertNotContains(response, 'data-testid="enrollment-cards"')
+        self.assertNotContains(response, 'data-testid="enrollment-card"')
 
-    def test_mobile_unenroll_button_present(self):
+    def test_single_unenroll_button_is_present(self):
         response = self.client.get(f'/studio/courses/{self.course.pk}/enrollments/')
-        self.assertContains(response, 'data-testid="unenroll-row-btn-mobile"')
-
-    def test_mobile_unenroll_uses_min_tap_target(self):
-        response = self.client.get(f'/studio/courses/{self.course.pk}/enrollments/')
-        content = response.content.decode()
-        self.assertIn('min-h-[44px]', content)
+        self.assertContains(response, 'data-testid="unenroll-row-btn"', count=1)
+        self.assertNotContains(response, 'data-testid="unenroll-row-btn-mobile"')
 
     def test_user_id_shown_in_enrollments(self):
         response = self.client.get(f'/studio/courses/{self.course.pk}/enrollments/')

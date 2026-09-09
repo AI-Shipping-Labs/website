@@ -73,10 +73,14 @@ class StudioCourseAccessListTest(TestCase):
         response = self.client.get(f'/studio/courses/{self.course.pk}/access/')
         self.assertContains(response, 'g@test.com')
         self.assertContains(response, 'p@test.com')
+        self.assertContains(response, 'data-testid="access-row"', count=2)
 
     def test_access_list_empty_state(self):
         response = self.client.get(f'/studio/courses/{self.course.pk}/access/')
         self.assertContains(response, 'No individual access records')
+        self.assertContains(response, 'data-testid="studio-empty-state-fresh"')
+        self.assertContains(response, 'data-testid="grant-access-form"')
+        self.assertNotContains(response, 'data-testid="access-records"')
 
     def test_access_list_shows_granted_by(self):
         user = User.objects.create_user(email='u@test.com', password='pass')

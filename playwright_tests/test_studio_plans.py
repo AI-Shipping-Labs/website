@@ -402,8 +402,11 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
         # Issue #735 swapped the inline ``<select name="member">`` for the
         # reusable people picker (testid prefix ``plan-member``). Drive
         # the picker via its real surface: type into the search input,
-        # wait for the suggestion list to render, then click the row.
+        # wait for the suggestion list, then choose the row with the keyboard.
         plan_member = page.locator('[data-testid="plan-member-search"]')
+        expect(plan_member).to_have_attribute("role", "combobox")
+        expect(plan_member).to_have_attribute("aria-controls", "plan-member-suggestions")
+        expect(plan_member).to_have_attribute("aria-expanded", "false")
         with page.expect_request(
             lambda request: _search_query(request) == "escape-old"
         ):
@@ -415,6 +418,7 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
         expect(
             page.locator('[data-testid="plan-member-suggestions"]')
         ).to_be_visible()
+        expect(plan_member).to_have_attribute("aria-expanded", "true")
         plan_member.press("Escape")
         _release_people_search(page, pending["escape-old"], [stale_result])
         _expect_picker_dismissed(page, "plan-member-suggestions")
@@ -431,6 +435,11 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
             '[data-testid="plan-member-suggestions"]'
         ).wait_for(state="visible")
         plan_member.press("ArrowDown")
+        plan_option = page.locator('[data-testid="plan-member-suggestion"]')
+        expect(plan_option).to_have_attribute("aria-selected", "true")
+        expect(plan_member).to_have_attribute(
+            "aria-activedescendant", plan_option.get_attribute("id")
+        )
         plan_member.press("Enter")
         _release_people_search(
             page,
@@ -438,6 +447,9 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
             [stale_result],
         )
         expect(plan_member).to_have_value("Member")
+        expect(plan_member).to_be_focused()
+        expect(plan_member).to_have_attribute("aria-expanded", "false")
+        expect(plan_member).to_have_attribute("aria-activedescendant", "")
         expect(page.locator('#plan-member-id')).to_have_value(str(member.pk))
         _expect_picker_dismissed(page, "plan-member-suggestions")
         page.locator('select[name="sprint"]').select_option(

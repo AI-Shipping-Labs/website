@@ -81,6 +81,7 @@ class CourseScopedEnrollmentsAccessTest(TierSetupMixin, TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'studio/courses/enrollments_list.html')
+        self.assertTemplateUsed(response, 'studio/includes/_people_picker.html')
 
 
 # ---------------------------------------------------------------------------

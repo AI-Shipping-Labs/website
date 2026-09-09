@@ -216,7 +216,7 @@ class TestPreviewThenConfirm:
         page.wait_for_load_state("domcontentloaded")
         expect(page.locator('[data-testid="merge-preview"]')).to_be_visible()
 
-        # Repeat through pointer selection while an older response remains in
+        # Repeat through keyboard selection while an older response remains in
         # flight. Releasing each stale response must preserve the selected
         # account and keep its list empty.
         page.goto(
@@ -236,8 +236,11 @@ class TestPreviewThenConfirm:
             '[data-testid="merge-canonical-search-suggestion"]'
         ).filter(has_text="keep@test.com")
         expect(keep_suggestion).to_be_visible()
-        keep_suggestion.click()
+        canonical.press("ArrowDown")
+        expect(keep_suggestion).to_have_attribute("aria-selected", "true")
+        canonical.press("Enter")
         _release_search(page, pending["older-keep"], [stale_result])
+        expect(canonical).to_be_focused()
         expect(canonical).to_have_value("keep@test.com")
         _assert_suggestions_dismissed(page, "merge-canonical-suggestions")
 
@@ -251,8 +254,11 @@ class TestPreviewThenConfirm:
             '[data-testid="merge-secondary-search-suggestion"]'
         ).filter(has_text="dupe@test.com")
         expect(dupe_suggestion).to_be_visible()
-        dupe_suggestion.click()
+        secondary.press("ArrowDown")
+        expect(dupe_suggestion).to_have_attribute("aria-selected", "true")
+        secondary.press("Enter")
         _release_search(page, pending["older-dupe"], [stale_result])
+        expect(secondary).to_be_focused()
         expect(secondary).to_have_value("dupe@test.com")
         _assert_suggestions_dismissed(page, "merge-secondary-suggestions")
 

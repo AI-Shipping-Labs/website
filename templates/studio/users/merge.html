@@ -1,5 +1,5 @@
 {% extends "studio/base.html" %}
-{% load static studio_filters %}
+{% load studio_filters %}
 
 {% block studio_title %}Merge accounts{% endblock %}
 
@@ -76,46 +76,14 @@
     {% csrf_token %}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div data-testid="merge-canonical-field">
-        <label for="merge-canonical-search" class="block text-sm font-medium text-foreground mb-1">
-          Canonical account (survives)
-        </label>
-        <input type="text"
-               id="merge-canonical-search"
-               name="canonical_email"
-               value="{{ canonical_email }}"
-               placeholder="Search by name or email..."
-               autocomplete="off"
-               data-search-url="/studio/api/users/search/"
-               data-result-list="merge-canonical-suggestions"
-               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-               data-testid="merge-canonical-input">
-        <ul id="merge-canonical-suggestions"
-            class="hidden absolute z-20 mt-1 max-w-md bg-card border border-border rounded-lg shadow-lg overflow-hidden"
-            role="listbox"
-            data-testid="merge-canonical-suggestions"></ul>
+        {% include "studio/includes/_people_picker.html" with input_name="canonical_email" input_value=canonical_email id_prefix="merge-canonical" input_id="merge-canonical-search" list_id="merge-canonical-suggestions" label="Canonical account (survives)" search_url="/studio/api/users/search/" selection_value="email" input_testid="merge-canonical-input" list_testid="merge-canonical-suggestions" suggestion_testid="merge-canonical-search-suggestion" %}
         {% if errors.canonical %}
         <p class="mt-1 text-sm text-red-400" data-testid="merge-error-canonical">{{ errors.canonical }}</p>
         {% endif %}
       </div>
 
       <div data-testid="merge-secondary-field">
-        <label for="merge-secondary-search" class="block text-sm font-medium text-foreground mb-1">
-          Secondary account (merged in &amp; deactivated)
-        </label>
-        <input type="text"
-               id="merge-secondary-search"
-               name="secondary_email"
-               value="{{ secondary_email }}"
-               placeholder="Search by name or email..."
-               autocomplete="off"
-               data-search-url="/studio/api/users/search/"
-               data-result-list="merge-secondary-suggestions"
-               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-               data-testid="merge-secondary-input">
-        <ul id="merge-secondary-suggestions"
-            class="hidden absolute z-20 mt-1 max-w-md bg-card border border-border rounded-lg shadow-lg overflow-hidden"
-            role="listbox"
-            data-testid="merge-secondary-suggestions"></ul>
+        {% include "studio/includes/_people_picker.html" with input_name="secondary_email" input_value=secondary_email id_prefix="merge-secondary" input_id="merge-secondary-search" list_id="merge-secondary-suggestions" label="Secondary account (merged in & deactivated)" search_url="/studio/api/users/search/" selection_value="email" input_testid="merge-secondary-input" list_testid="merge-secondary-suggestions" suggestion_testid="merge-secondary-search-suggestion" %}
         {% if errors.secondary %}
         <p class="mt-1 text-sm text-red-400" data-testid="merge-error-secondary">{{ errors.secondary }}</p>
         {% endif %}
@@ -240,56 +208,4 @@
 
 {% endif %}{# /not result #}
 
-{# Autocomplete: fill the email input directly on suggestion select. #}
-<script src="{% static 'js/studio/typeahead_lifecycle.js' %}"></script>
-<script>
-(function() {
-  function wire(inputId, listId) {
-    var input = document.getElementById(inputId);
-    var list = document.getElementById(listId);
-    if (!input || !list) { return; }
-    var lifecycle;
-    function render(results) {
-      list.innerHTML = '';
-      if (!results || !results.length) {
-        list.classList.add('hidden');
-        return;
-      }
-      results.forEach(function(u) {
-        var li = document.createElement('li');
-        li.className = 'cursor-pointer px-4 py-2 hover:bg-secondary text-sm';
-        li.setAttribute('data-testid', inputId + '-suggestion');
-        var name = document.createElement('div');
-        name.className = 'text-foreground';
-        name.textContent = u.display_name || u.email;
-        var email = document.createElement('div');
-        email.className = 'text-xs text-muted-foreground font-mono';
-        email.textContent = u.email;
-        li.appendChild(name);
-        li.appendChild(email);
-        li.addEventListener('mousedown', function(e) {
-          e.preventDefault();
-          input.value = u.email;
-          lifecycle.select();
-        });
-        list.appendChild(li);
-      });
-      list.classList.remove('hidden');
-    }
-    lifecycle = window.StudioTypeaheadLifecycle.create({
-      input: input,
-      list: list,
-      fetchResults: function(q) {
-        return fetch(input.dataset.searchUrl + '?q=' + encodeURIComponent(q),
-                     {credentials: 'same-origin'})
-          .then(function(r) { return r.ok ? r.json() : {results: []}; })
-          .then(function(d) { return d.results || []; });
-      },
-      renderResults: render,
-    });
-  }
-  wire('merge-canonical-search', 'merge-canonical-suggestions');
-  wire('merge-secondary-search', 'merge-secondary-suggestions');
-})();
-</script>
 {% endblock %}

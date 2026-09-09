@@ -120,6 +120,7 @@ class TestDesktopGrantSearchAndRevoke:
         _create_staff_user("admin@test.com")
         target = _create_user("findme@test.com", tier_slug="main")
         exact = _create_user("access@test.com", tier_slug="main")
+        keyboard = _create_user("keyboard@test.com", tier_slug="main")
         course = _create_course()
 
         context = _auth_context(browser, "admin@test.com")
@@ -128,6 +129,11 @@ class TestDesktopGrantSearchAndRevoke:
 
         target_result = {"id": target.pk, "email": target.email, "name": "Target"}
         exact_result = {"id": exact.pk, "email": exact.email, "name": "Exact"}
+        keyboard_result = {
+            "id": keyboard.pk,
+            "email": keyboard.email,
+            "name": "Keyboard",
+        }
         stale_result = {
             "id": 999999,
             "email": "stale-access@test.com",
@@ -142,7 +148,10 @@ class TestDesktopGrantSearchAndRevoke:
                 hold_once.remove(query)
                 pending[query] = route
                 return
-            results = [target_result] if query == "findme" else []
+            results = {
+                "findme": [target_result],
+                "keyboard": [keyboard_result],
+            }.get(query, [])
             _fulfill_lookup(route, results)
 
         page.route("**/studio/courses/*/access/users/search/**", control_lookup)
@@ -212,6 +221,29 @@ class TestDesktopGrantSearchAndRevoke:
 
         body = page.content()
         assert "Access revoked for findme@test.com" in body
+
+        # Keyboard selection uses the same form contract and keeps focus on
+        # the combobox until the operator submits Grant Access.
+        grant_input = page.locator('[data-testid="grant-email-input"]')
+        with page.expect_response(
+            lambda response: _lookup_query(response.request) == "keyboard"
+        ):
+            grant_input.fill("keyboard")
+        keyboard_suggestion = page.locator('[data-testid="grant-suggestion"]').filter(
+            has_text="keyboard@test.com"
+        )
+        expect(keyboard_suggestion).to_be_visible()
+        grant_input.press("ArrowDown")
+        grant_input.press("Enter")
+        expect(grant_input).to_be_focused()
+        expect(grant_input).to_have_value("keyboard@test.com")
+        expect(page.locator('[data-testid="grant-user-id-input"]')).to_have_value(
+            str(keyboard.pk)
+        )
+        _expect_lookup_dismissed(page)
+        page.locator('[data-testid="grant-submit-btn"]').click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "Access granted to keyboard@test.com" in page.content()
 
 
 @pytest.mark.django_db(transaction=True)

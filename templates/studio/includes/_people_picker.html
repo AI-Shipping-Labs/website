@@ -10,9 +10,13 @@ the user's display name (bold), email (muted), and contextual badges:
 {level_name}`` for the current tier.
 
 Block parameters (pass via ``{% include ... with key=value %}``):
-- ``name`` (required): form field name for the selected user id (hidden input).
+- ``name`` (optional): form field name for the selected user id (hidden input).
+- ``input_name`` (optional): form field name for the visible text input. Use
+  this for forms that accept an email even when no suggestion is selected.
 - ``id_prefix`` (required): DOM id prefix to avoid collisions when several
   pickers appear on one page (e.g. ``tier-override-user``).
+- ``input_id`` / ``list_id`` / ``hidden_id`` (optional): stable DOM id
+  overrides for migrated pickers whose existing ids must be preserved.
 - ``search_url`` (required): URL that returns the JSON ``{results: [...]}``
   payload. Usually ``{% url 'studio_user_search' %}``.
 - ``placeholder`` (optional, default ``Search by name or email...``).
@@ -27,44 +31,60 @@ Block parameters (pass via ``{% include ... with key=value %}``):
   url with a ``{id}`` placeholder.
 - ``testid_prefix`` (optional, default = ``id_prefix``): override the
   ``data-testid`` prefix used for input, suggestion list, and rows.
+- ``input_testid`` / ``list_testid`` / ``suggestion_testid`` /
+  ``hidden_testid`` (optional): exact test-id overrides for migrated pickers.
+- ``selection_value`` (optional, default ``display_name``): use ``email``
+  when selecting a result must fill the visible input with its email address.
+- ``input_value`` and ``input_required`` (optional): initial visible value and
+  native required-state for named text inputs.
 
 Keyboard support: ArrowDown / ArrowUp moves the highlighted suggestion,
 Enter activates the highlighted row, Esc closes the suggestion list.
 {% endcomment %}
 {% with effective_testid_prefix=testid_prefix|default:id_prefix effective_placeholder=placeholder|default:"Search by name or email..." effective_label=label|default:"User" effective_on_select=on_select_action|default:"set_value" %}
 <div class="relative" data-component="studio-people-picker">
-  <label for="{{ id_prefix }}-search" class="block text-sm font-medium text-foreground mb-1">{{ effective_label }}</label>
+  <label for="{% if input_id %}{{ input_id }}{% else %}{{ id_prefix }}-search{% endif %}" class="block text-sm font-medium text-foreground mb-1">{{ effective_label }}</label>
   <input type="text"
-         id="{{ id_prefix }}-search"
+         id="{% if input_id %}{{ input_id }}{% else %}{{ id_prefix }}-search{% endif %}"
+         {% if input_name %}name="{{ input_name }}"{% endif %}
+         value="{{ input_value|default:'' }}"
+         {% if input_required %}required{% endif %}
          placeholder="{{ effective_placeholder }}"
          autocomplete="off"
+         role="combobox"
+         aria-autocomplete="list"
+         aria-expanded="false"
+         aria-controls="{% if list_id %}{{ list_id }}{% else %}{{ id_prefix }}-suggestions{% endif %}"
+         aria-activedescendant=""
          data-search-url="{{ search_url }}"
          data-extra-query="{{ extra_query|default:'' }}"
          data-on-select="{{ effective_on_select }}"
          data-navigate-template="{{ navigate_url_template|default:'' }}"
-         data-result-list="{{ id_prefix }}-suggestions"
-         data-hidden-id="{{ id_prefix }}-id"
+         data-selection-value="{{ selection_value|default:'display_name' }}"
+         data-suggestion-testid="{% if suggestion_testid %}{{ suggestion_testid }}{% else %}{{ effective_testid_prefix }}-suggestion{% endif %}"
          class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-         data-testid="{{ effective_testid_prefix }}-search">
-  <input type="hidden" name="{{ name }}" id="{{ id_prefix }}-id"{% if hidden_autocomplete %} autocomplete="{{ hidden_autocomplete }}"{% endif %}>
-  <ul id="{{ id_prefix }}-suggestions"
+         data-testid="{% if input_testid %}{{ input_testid }}{% else %}{{ effective_testid_prefix }}-search{% endif %}">
+  {% if name %}<input type="hidden" name="{{ name }}" id="{% if hidden_id %}{{ hidden_id }}{% else %}{{ id_prefix }}-id{% endif %}"{% if hidden_autocomplete %} autocomplete="{{ hidden_autocomplete }}"{% endif %}{% if hidden_testid %} data-testid="{{ hidden_testid }}"{% endif %}>{% endif %}
+  <ul id="{% if list_id %}{{ list_id }}{% else %}{{ id_prefix }}-suggestions{% endif %}"
       class="hidden absolute z-20 mt-1 w-full bg-card border border-border rounded-lg shadow-lg overflow-hidden"
       role="listbox"
-      data-testid="{{ effective_testid_prefix }}-suggestions"></ul>
+      data-testid="{% if list_testid %}{{ list_testid }}{% else %}{{ effective_testid_prefix }}-suggestions{% endif %}"></ul>
 </div>
 <script src="{% static 'js/studio/typeahead_lifecycle.js' %}"></script>
 <script>
 (function() {
-  var input = document.getElementById('{{ id_prefix }}-search');
-  var hidden = document.getElementById('{{ id_prefix }}-id');
-  var list = document.getElementById('{{ id_prefix }}-suggestions');
-  if (!input || !hidden || !list) { return; }
+  var input = document.getElementById('{% if input_id %}{{ input_id|escapejs }}{% else %}{{ id_prefix|escapejs }}-search{% endif %}');
+  var hidden = document.getElementById('{% if hidden_id %}{{ hidden_id|escapejs }}{% else %}{{ id_prefix|escapejs }}-id{% endif %}');
+  var list = document.getElementById('{% if list_id %}{{ list_id|escapejs }}{% else %}{{ id_prefix|escapejs }}-suggestions{% endif %}');
+  if (!input || !list) { return; }
 
   var url = input.dataset.searchUrl;
   var extraQuery = input.dataset.extraQuery || '';
   var onSelect = input.dataset.onSelect || 'set_value';
   var navigateTemplate = input.dataset.navigateTemplate || '';
   var testidPrefix = '{{ effective_testid_prefix|escapejs }}';
+  var selectionValue = input.dataset.selectionValue || 'display_name';
+  var suggestionTestid = input.dataset.suggestionTestid || (testidPrefix + '-suggestion');
   var lifecycle;
   var activeIndex = -1;
 
@@ -73,16 +93,18 @@ Enter activates the highlighted row, Esc closes the suggestion list.
   var BADGE_NEUTRAL = BADGE_BASE + 'bg-secondary text-muted-foreground';
   var BADGE_WARN = BADGE_BASE + 'bg-destructive/10 text-destructive';
 
-  function clearSelection() { hidden.value = ''; }
+  function clearSelection() { if (hidden) { hidden.value = ''; } }
   function items() { return list.querySelectorAll('li[data-user-id]'); }
 
   function resetActiveIndex() {
     activeIndex = -1;
+    input.setAttribute('aria-expanded', 'false');
+    input.setAttribute('aria-activedescendant', '');
   }
 
   function setActive(index) {
     var rows = items();
-    if (!rows.length) { activeIndex = -1; return; }
+    if (!rows.length) { resetActiveIndex(); return; }
     if (index < 0) { index = rows.length - 1; }
     if (index >= rows.length) { index = 0; }
     rows.forEach(function(row, i) {
@@ -95,6 +117,7 @@ Enter activates the highlighted row, Esc closes the suggestion list.
       }
     });
     activeIndex = index;
+    input.setAttribute('aria-activedescendant', rows[index].id);
   }
 
   function badge(label, klass, testid) {
@@ -105,20 +128,22 @@ Enter activates the highlighted row, Esc closes the suggestion list.
     return span;
   }
 
-  function buildRow(u) {
+  function buildRow(u, index) {
     var li = document.createElement('li');
+    li.id = input.id + '-option-' + index;
     li.className = 'cursor-pointer px-4 py-3 hover:bg-secondary text-sm text-foreground';
     li.setAttribute('role', 'option');
     li.setAttribute('aria-selected', 'false');
-    li.setAttribute('data-testid', testidPrefix + '-suggestion');
+    li.setAttribute('data-testid', suggestionTestid);
     li.setAttribute('data-user-id', u.id);
     li.setAttribute('data-email', u.email);
+    li.pickerUser = u;
 
     var nameRow = document.createElement('div');
     nameRow.className = 'font-semibold break-all';
     nameRow.setAttribute('data-testid', testidPrefix + '-suggestion-name');
-    var hasName = (u.first_name && u.first_name.length) || (u.last_name && u.last_name.length);
-    nameRow.textContent = hasName ? (u.display_name || u.email) : '(no name)';
+    var hasName = (u.first_name && u.first_name.length) || (u.last_name && u.last_name.length) || u.name;
+    nameRow.textContent = hasName ? (u.display_name || u.name || u.email) : '(no name)';
     li.appendChild(nameRow);
 
     var emailRow = document.createElement('div');
@@ -154,29 +179,32 @@ Enter activates the highlighted row, Esc closes the suggestion list.
 
   function render(results) {
     list.innerHTML = '';
-    activeIndex = -1;
+    resetActiveIndex();
     if (!results || !results.length) {
       list.classList.add('hidden');
       return;
     }
-    results.forEach(function(u) { list.appendChild(buildRow(u)); });
+    results.forEach(function(u, index) { list.appendChild(buildRow(u, index)); });
     list.classList.remove('hidden');
+    input.setAttribute('aria-expanded', 'true');
   }
 
   function activate(u) {
-    hidden.value = u.id;
+    if (hidden) { hidden.value = u.id; }
+    input.value = selectionValue === 'email'
+      ? u.email
+      : (u.display_name || u.name || u.email);
     lifecycle.select();
     if (onSelect === 'navigate' && navigateTemplate) {
       window.location.href = navigateTemplate.replace('{id}', u.id);
       return;
     }
     if (onSelect === 'submit_form') {
-      var form = hidden.closest('form');
+      var form = input.closest('form');
       if (form) { form.submit(); }
       return;
     }
     // set_value: write to the hidden field and notify listeners.
-    input.value = u.display_name || u.email;
     var event;
     try {
       event = new CustomEvent('picker:select', {detail: u, bubbles: true});
@@ -216,13 +244,14 @@ Enter activates the highlighted row, Esc closes the suggestion list.
       if (activeIndex >= 0 && rows[activeIndex]) {
         e.preventDefault();
         var row = rows[activeIndex];
-        activate({
+        activate(row.pickerUser || {
           id: row.getAttribute('data-user-id'),
           email: row.getAttribute('data-email'),
           display_name: row.querySelector('[data-testid="' + testidPrefix + '-suggestion-name"]').textContent,
         });
       }
     } else if (e.key === 'Escape') {
+      e.preventDefault();
       lifecycle.escape();
     }
   });

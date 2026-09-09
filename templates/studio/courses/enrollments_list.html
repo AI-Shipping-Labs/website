@@ -1,5 +1,4 @@
 {% extends "studio/base.html" %}
-{% load static %}
 
 {% block studio_title %}Enrollments - {{ course.title }}{% endblock %}
 
@@ -26,17 +25,8 @@
         data-testid="enroll-form">
     {% csrf_token %}
     <div class="flex-1 relative" data-testid="user-lookup">
-      <label class="block text-sm font-medium text-foreground mb-1" for="enroll-email">User email or ID</label>
-      <input id="enroll-email" type="text" name="email" required
-             placeholder="user@example.com or numeric ID"
-             autocomplete="off"
-             data-testid="enroll-email-input"
-             data-search-url="{% url 'studio_course_user_search' course_id=course.pk %}"
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      <input type="hidden" name="user_id" id="enroll-user-id" value="" data-testid="enroll-user-id-input">
-      <ul id="enroll-suggestions"
-          data-testid="enroll-suggestions"
-          class="hidden absolute z-10 mt-1 w-full bg-card border border-border rounded-lg shadow-lg max-h-60 overflow-y-auto"></ul>
+      {% url 'studio_course_user_search' course_id=course.pk as course_user_search_url %}
+      {% include "studio/includes/_people_picker.html" with name="user_id" input_name="email" id_prefix="enroll" input_id="enroll-email" list_id="enroll-suggestions" hidden_id="enroll-user-id" label="User email or ID" placeholder="user@example.com or numeric ID" search_url=course_user_search_url selection_value="email" input_required=True input_testid="enroll-email-input" list_testid="enroll-suggestions" suggestion_testid="enroll-suggestion" hidden_testid="enroll-user-id-input" %}
       <p class="text-xs text-muted-foreground mt-1">Search by email fragment or paste a numeric user ID. Enter an exact email to enroll by typed email.</p>
     </div>
     <button type="submit"
@@ -166,60 +156,4 @@
   </ul>
 </div>
 
-<script src="{% static 'js/studio/typeahead_lifecycle.js' %}"></script>
-<script>
-(function() {
-  var input = document.getElementById('enroll-email');
-  var hidden = document.getElementById('enroll-user-id');
-  var list = document.getElementById('enroll-suggestions');
-  if (!input || !hidden || !list) { return; }
-  var url = input.dataset.searchUrl;
-  var lifecycle;
-
-  function clearSelection() { hidden.value = ''; }
-
-  function render(items) {
-    list.innerHTML = '';
-    if (!items.length) {
-      list.classList.add('hidden');
-      return;
-    }
-    items.forEach(function(u) {
-      var li = document.createElement('li');
-      li.className = 'cursor-pointer px-4 py-3 hover:bg-secondary text-sm text-foreground';
-      li.setAttribute('data-testid', 'enroll-suggestion');
-      li.setAttribute('data-user-id', u.id);
-      li.setAttribute('data-email', u.email);
-      var emailSpan = document.createElement('div');
-      emailSpan.className = 'font-medium break-all';
-      emailSpan.textContent = u.email;
-      var meta = document.createElement('div');
-      meta.className = 'text-xs text-muted-foreground';
-      meta.textContent = 'ID ' + u.id + (u.name ? ' - ' + u.name : '');
-      li.appendChild(emailSpan);
-      li.appendChild(meta);
-      li.addEventListener('mousedown', function(e) {
-        e.preventDefault();
-        input.value = u.email;
-        hidden.value = u.id;
-        lifecycle.select();
-      });
-      list.appendChild(li);
-    });
-    list.classList.remove('hidden');
-  }
-
-  lifecycle = window.StudioTypeaheadLifecycle.create({
-    input: input,
-    list: list,
-    onInput: clearSelection,
-    fetchResults: function(q) {
-      return fetch(url + '?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
-        .then(function(r) { return r.ok ? r.json() : { results: [] }; })
-        .then(function(d) { return d.results || []; });
-    },
-    renderResults: render,
-  });
-})();
-</script>
 {% endblock %}

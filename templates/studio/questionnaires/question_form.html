@@ -15,7 +15,7 @@
 </div>
 
 {% if error %}
-<div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm" data-testid="question-form-error">
+<div id="question-form-error" role="alert" class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm" data-testid="question-form-error">
   {{ error }}
 </div>
 {% endif %}
@@ -26,8 +26,9 @@
     {% csrf_token %}
 
     <div class="mb-6">
-      <label class="block text-sm font-medium text-foreground mb-1">Type</label>
-      <select name="question_type" data-testid="question-type-select"
+      <label for="question-type" class="block text-sm font-medium text-foreground mb-1">Type</label>
+      <select name="question_type" id="question-type" data-testid="question-type-select"
+              {% if error_field == 'question_type' %}aria-invalid="true" aria-describedby="question-form-error"{% endif %}
               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select">
         {% for value, label in question_type_choices %}
         <option value="{{ value }}" {% if form_data.question_type == value %}selected{% endif %}>{{ label }}</option>
@@ -36,15 +37,16 @@
     </div>
 
     <div class="mb-6">
-      <label class="block text-sm font-medium text-foreground mb-1">Prompt</label>
-      <textarea name="prompt" rows="2" data-testid="question-prompt-input"
+      <label for="question-prompt" class="block text-sm font-medium text-foreground mb-1">Prompt</label>
+      <textarea name="prompt" id="question-prompt" rows="2" data-testid="question-prompt-input"
+                {% if error_field == 'prompt' %}aria-invalid="true" aria-describedby="question-form-error"{% endif %}
                 placeholder="What do you hope to achieve in the next 6 to 8 weeks?"
                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.prompt }}</textarea>
     </div>
 
     <div class="mb-6">
-      <label class="block text-sm font-medium text-foreground mb-1">Help text</label>
-      <textarea name="help_text" rows="2" data-testid="question-help-text-input"
+      <label for="question-help-text" class="block text-sm font-medium text-foreground mb-1">Help text</label>
+      <textarea name="help_text" id="question-help-text" rows="2" data-testid="question-help-text-input"
                 placeholder="Optional clarifying sub-text"
                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.help_text }}</textarea>
     </div>
@@ -57,34 +59,41 @@
     </div>
 
     <div class="mb-6">
-      <label class="block text-sm font-medium text-foreground mb-1">Order</label>
-      <input type="number" name="order" value="{{ form_data.order }}" min="0"
+      <label for="question-order" class="block text-sm font-medium text-foreground mb-1">Order</label>
+      <input type="number" name="order" id="question-order" value="{{ form_data.order }}" min="0"
+             {% if error_field == 'order' %}aria-invalid="true" aria-describedby="question-form-error"{% endif %}
              data-testid="question-order-input"
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
     </div>
 
     <div class="grid grid-cols-2 gap-4 mb-6">
       <div>
-        <label class="block text-sm font-medium text-foreground mb-1">Scale min</label>
-        <input type="number" name="scale_min" value="{{ form_data.scale_min }}"
+        <label for="question-scale-min" class="block text-sm font-medium text-foreground mb-1">Scale min</label>
+        <input type="number" name="scale_min" id="question-scale-min" value="{{ form_data.scale_min }}"
+               aria-describedby="question-scale-help{% if error_field == 'scale_min' %} question-form-error{% endif %}"
+               {% if error_field == 'scale_min' %}aria-invalid="true"{% endif %}
                data-testid="question-scale-min-input"
                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
       </div>
       <div>
-        <label class="block text-sm font-medium text-foreground mb-1">Scale max</label>
-        <input type="number" name="scale_max" value="{{ form_data.scale_max }}"
+        <label for="question-scale-max" class="block text-sm font-medium text-foreground mb-1">Scale max</label>
+        <input type="number" name="scale_max" id="question-scale-max" value="{{ form_data.scale_max }}"
+               aria-describedby="question-scale-help{% if error_field == 'scale_max' %} question-form-error{% endif %}"
+               {% if error_field == 'scale_max' %}aria-invalid="true"{% endif %}
                data-testid="question-scale-max-input"
                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
       </div>
     </div>
-    <p class="text-xs text-muted-foreground -mt-4 mb-6">Only used by scale / number questions.</p>
+    <p id="question-scale-help" class="text-xs text-muted-foreground -mt-4 mb-6">Only used by scale / number questions.</p>
 
     <div class="mb-2">
-      <label class="block text-sm font-medium text-foreground mb-1">Choice options</label>
-      <textarea name="options" rows="4" data-testid="question-options-input"
+      <label for="question-options" class="block text-sm font-medium text-foreground mb-1">Choice options</label>
+      <textarea name="options" id="question-options" rows="4" data-testid="question-options-input"
+                aria-describedby="question-options-help{% if error_field == 'options' %} question-form-error{% endif %}"
+                {% if error_field == 'options' %}aria-invalid="true"{% endif %}
                 placeholder="One option per line. Add [free text] after options like Other."
                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.options }}</textarea>
-      <p class="text-xs text-muted-foreground mt-1">One option per line. Add <code>[free text]</code> after options that should collect attached text.</p>
+      <p id="question-options-help" class="text-xs text-muted-foreground mt-1">One option per line. Add <code>[free text]</code> after options that should collect attached text.</p>
     </div>
 
   </form>

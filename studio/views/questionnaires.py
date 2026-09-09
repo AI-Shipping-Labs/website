@@ -113,13 +113,17 @@ def _normalize_purpose(raw):
     return 'general'
 
 
-def _render_form(request, *, questionnaire, form_action, form_data, error='', status=200):
+def _render_form(
+    request, *, questionnaire, form_action, form_data, error='', error_field='',
+    status=200,
+):
     context = {
         'questionnaire': questionnaire,
         'form_action': form_action,
         'form_data': form_data,
         'purpose_choices': PURPOSE_CHOICES,
         'error': error,
+        'error_field': error_field,
         'primary_label': (
             'Save changes' if form_action == 'edit' else 'Create questionnaire'
         ),
@@ -206,7 +210,8 @@ def questionnaire_create(request):
     if not title:
         return _render_form(
             request, questionnaire=None, form_action='create',
-            form_data=form_data, error='Title is required.', status=400,
+            form_data=form_data, error='Title is required.', error_field='title',
+            status=400,
         )
 
     slug = raw_slug or slugify(title)
@@ -214,7 +219,8 @@ def questionnaire_create(request):
         return _render_form(
             request, questionnaire=None, form_action='create',
             form_data=form_data,
-            error='Slug could not be derived from title.', status=400,
+            error='Slug could not be derived from title.', error_field='slug',
+            status=400,
         )
 
     if Questionnaire.objects.filter(slug=slug).exists():
@@ -223,6 +229,7 @@ def questionnaire_create(request):
             form_data=form_data,
             error=f'A questionnaire with slug "{slug}" already exists. '
                   'Pick a different slug.',
+            error_field='slug',
             status=400,
         )
 
@@ -272,7 +279,8 @@ def questionnaire_edit(request, questionnaire_id):
     if not title:
         return _render_form(
             request, questionnaire=questionnaire, form_action='edit',
-            form_data=form_data, error='Title is required.', status=400,
+            form_data=form_data, error='Title is required.', error_field='title',
+            status=400,
         )
 
     slug = raw_slug or slugify(title)
@@ -280,7 +288,8 @@ def questionnaire_edit(request, questionnaire_id):
         return _render_form(
             request, questionnaire=questionnaire, form_action='edit',
             form_data=form_data,
-            error='Slug could not be derived from title.', status=400,
+            error='Slug could not be derived from title.', error_field='slug',
+            status=400,
         )
 
     if Questionnaire.objects.filter(slug=slug).exclude(pk=questionnaire.pk).exists():
@@ -288,6 +297,7 @@ def questionnaire_edit(request, questionnaire_id):
             request, questionnaire=questionnaire, form_action='edit',
             form_data=form_data,
             error=f'A different questionnaire already uses slug "{slug}".',
+            error_field='slug',
             status=400,
         )
 
@@ -362,7 +372,7 @@ def _format_options(options):
 
 def _render_question_form(
     request, *, questionnaire, question, form_action, form_data,
-    error='', status=200,
+    error='', error_field='', status=200,
 ):
     context = {
         'questionnaire': questionnaire,
@@ -372,6 +382,7 @@ def _render_question_form(
         'question_type_choices': QUESTION_TYPE_CHOICES,
         'choice_types': sorted(_CHOICE_TYPES),
         'error': error,
+        'error_field': error_field,
         'primary_label': (
             'Save changes' if form_action == 'edit' else 'Add question'
         ),
@@ -409,22 +420,22 @@ def _question_form_data_from_question(question):
 
 
 def _validate_question_post(form_data):
-    """Validate parsed question form data. Returns ``(parsed, error)``.
+    """Validate question data. Return ``(parsed, error, error_field)``.
 
     ``parsed`` is a dict ready to assign to a ``Question`` (plus the
     ``options`` list) or ``None`` when ``error`` is non-empty.
     """
     question_type, type_error = _normalize_question_type(form_data['question_type'])
     if type_error:
-        return None, type_error
+        return None, type_error, 'question_type'
 
     prompt = form_data['prompt']
     if not prompt:
-        return None, 'Prompt is required.'
+        return None, 'Prompt is required.', 'prompt'
 
     order, order_error = _parse_optional_int(form_data['order'], label='Order')
     if order_error:
-        return None, order_error
+        return None, order_error, 'order'
     if order is None:
         order = 0
 
@@ -432,16 +443,20 @@ def _validate_question_post(form_data):
         form_data['scale_min'], label='Scale min',
     )
     if min_error:
-        return None, min_error
+        return None, min_error, 'scale_min'
     scale_max, max_error = _parse_optional_int(
         form_data['scale_max'], label='Scale max',
     )
     if max_error:
-        return None, max_error
+        return None, max_error, 'scale_max'
 
     options = _parse_options(form_data['options'])
     if question_type in _CHOICE_TYPES and not options:
-        return None, 'Choice questions need at least one option (one per line).'
+        return (
+            None,
+            'Choice questions need at least one option (one per line).',
+            'options',
+        )
 
     return {
         'question_type': question_type,
@@ -452,7 +467,7 @@ def _validate_question_post(form_data):
         'scale_min': scale_min,
         'scale_max': scale_max,
         'options': options,
-    }, ''
+    }, '', ''
 
 
 @staff_required
@@ -480,11 +495,12 @@ def question_create(request, questionnaire_id):
         )
 
     form_data = _question_form_data_from_post(request)
-    parsed, error = _validate_question_post(form_data)
+    parsed, error, error_field = _validate_question_post(form_data)
     if error:
         return _render_question_form(
             request, questionnaire=questionnaire, question=None,
-            form_action='create', form_data=form_data, error=error, status=400,
+            form_action='create', form_data=form_data, error=error,
+            error_field=error_field, status=400,
         )
 
     options = parsed.pop('options')
@@ -521,11 +537,12 @@ def question_edit(request, questionnaire_id, question_id):
         )
 
     form_data = _question_form_data_from_post(request)
-    parsed, error = _validate_question_post(form_data)
+    parsed, error, error_field = _validate_question_post(form_data)
     if error:
         return _render_question_form(
             request, questionnaire=questionnaire, question=question,
-            form_action='edit', form_data=form_data, error=error, status=400,
+            form_action='edit', form_data=form_data, error=error,
+            error_field=error_field, status=400,
         )
 
     options = parsed.pop('options')
@@ -853,7 +870,7 @@ def _get_response_for_questionnaire(questionnaire_id, response_id):
 
 def _render_response_question_form(
     request, *, questionnaire, response, response_question, form_action,
-    form_data, error='', status=200,
+    form_data, error='', error_field='', status=200,
 ):
     context = {
         'questionnaire': questionnaire,
@@ -864,6 +881,7 @@ def _render_response_question_form(
         'question_type_choices': QUESTION_TYPE_CHOICES,
         'choice_types': sorted(_CHOICE_TYPES),
         'error': error,
+        'error_field': error_field,
         'primary_label': (
             'Save changes' if form_action == 'edit' else 'Add question'
         ),
@@ -945,12 +963,13 @@ def response_question_create(request, questionnaire_id, response_id):
         )
 
     form_data = _question_form_data_from_post(request)
-    parsed, error = _validate_question_post(form_data)
+    parsed, error, error_field = _validate_question_post(form_data)
     if error:
         return _render_response_question_form(
             request, questionnaire=questionnaire, response=response,
             response_question=None, form_action='create',
-            form_data=form_data, error=error, status=400,
+            form_data=form_data, error=error, error_field=error_field,
+            status=400,
         )
 
     options = parsed.pop('options')
@@ -993,12 +1012,13 @@ def response_question_edit(request, questionnaire_id, response_id, rq_id):
         )
 
     form_data = _question_form_data_from_post(request)
-    parsed, error = _validate_question_post(form_data)
+    parsed, error, error_field = _validate_question_post(form_data)
     if error:
         return _render_response_question_form(
             request, questionnaire=questionnaire, response=response,
             response_question=rq, form_action='edit',
-            form_data=form_data, error=error, status=400,
+            form_data=form_data, error=error, error_field=error_field,
+            status=400,
         )
 
     options = parsed.pop('options')

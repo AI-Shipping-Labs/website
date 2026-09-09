@@ -7,7 +7,7 @@
 {% if form_action == 'edit' %}{% studio_header_actions title='Edit questionnaire' back_url='/studio/questionnaires/' back_label='Back to questionnaires' %}{% endstudio_header_actions %}{% else %}{% studio_header_actions title='New questionnaire' back_url='/studio/questionnaires/' back_label='Back to questionnaires' %}{% endstudio_header_actions %}{% endif %}
 
 {% if error %}
-<div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm" data-testid="questionnaire-form-error">
+<div id="questionnaire-form-error" role="alert" class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm" data-testid="questionnaire-form-error">
   {{ error }}
 </div>
 {% endif %}
@@ -17,25 +17,28 @@
     {% csrf_token %}
 
     <div class="mb-6">
-      <label class="block text-sm font-medium text-foreground mb-1">Title</label>
-      <input type="text" name="title" value="{{ form_data.title }}"
+      <label for="questionnaire-title" class="block text-sm font-medium text-foreground mb-1">Title</label>
+      <input type="text" name="title" id="questionnaire-title" value="{{ form_data.title }}"
              placeholder="May Sprint Feedback"
+             {% if error_field == 'title' %}aria-invalid="true" aria-describedby="questionnaire-form-error"{% endif %}
              data-testid="questionnaire-title-input"
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
     </div>
 
     <div class="mb-6">
-      <label class="block text-sm font-medium text-foreground mb-1">Slug</label>
-      <input type="text" name="slug" value="{{ form_data.slug }}"
+      <label for="questionnaire-slug" class="block text-sm font-medium text-foreground mb-1">Slug</label>
+      <input type="text" name="slug" id="questionnaire-slug" value="{{ form_data.slug }}"
              placeholder="may-sprint-feedback"
+             aria-describedby="questionnaire-slug-help{% if error_field == 'slug' %} questionnaire-form-error{% endif %}"
+             {% if error_field == 'slug' %}aria-invalid="true"{% endif %}
              data-testid="questionnaire-slug-input"
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      <p class="text-xs text-muted-foreground mt-1">URL-safe id. Leave blank to auto-derive from title.</p>
+      <p id="questionnaire-slug-help" class="text-xs text-muted-foreground mt-1">URL-safe id. Leave blank to auto-derive from title.</p>
     </div>
 
     <div class="mb-6">
-      <label class="block text-sm font-medium text-foreground mb-1">Purpose</label>
-      <select name="purpose" data-testid="questionnaire-purpose-select"
+      <label for="questionnaire-purpose" class="block text-sm font-medium text-foreground mb-1">Purpose</label>
+      <select name="purpose" id="questionnaire-purpose" data-testid="questionnaire-purpose-select"
               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select">
         {% for value, label in purpose_choices %}
         <option value="{{ value }}" {% if form_data.purpose == value %}selected{% endif %}>{{ label }}</option>
@@ -44,8 +47,8 @@
     </div>
 
     <div class="mb-6">
-      <label class="block text-sm font-medium text-foreground mb-1">Description</label>
-      <textarea name="description" rows="4"
+      <label for="questionnaire-description" class="block text-sm font-medium text-foreground mb-1">Description</label>
+      <textarea name="description" id="questionnaire-description" rows="4"
                 placeholder="Optional internal note / intro shown to respondents"
                 data-testid="questionnaire-description-input"
                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.description }}</textarea>
@@ -53,11 +56,12 @@
 
     <div class="mb-2 flex items-center gap-2">
       <input type="checkbox" name="is_active" id="questionnaire-is-active" {% if form_data.is_active %}checked{% endif %}
+             aria-describedby="questionnaire-active-help"
              data-testid="questionnaire-is-active-input"
              class="rounded border-border bg-secondary text-accent focus:ring-accent">
       <label for="questionnaire-is-active" class="text-sm font-medium text-foreground">Active</label>
     </div>
-    <p class="text-xs text-muted-foreground">Inactive questionnaires are hidden from new-response surfaces but keep their data.</p>
+    <p id="questionnaire-active-help" class="text-xs text-muted-foreground">Inactive questionnaires are hidden from new-response surfaces but keep their data.</p>
 
   </form>
 </div>

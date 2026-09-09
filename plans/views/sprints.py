@@ -338,7 +338,10 @@ def sprint_feedback_submit(request, sprint_slug, response_id):
     missing = find_unanswered_required(response)
     if missing:
         prompts = ', '.join(rq.prompt for rq in missing)
-        form_rows = build_response_form_rows(response)
+        form_rows = build_response_form_rows(
+            response,
+            field_errors={rq.pk: 'This question is required.' for rq in missing},
+        )
         return render(request, 'plans/sprint_feedback_fill.html', {
             'sprint': sprint,
             'response': response,

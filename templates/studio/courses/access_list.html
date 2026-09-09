@@ -80,7 +80,7 @@
           <td class="px-6 py-4 text-right">
             {% if access.access_type == 'granted' %}
             <form method="post" action="{% url 'studio_course_access_revoke' course_id=course.pk access_id=access.pk %}" class="inline"
-                  onsubmit="return confirm('Revoke access for {{ access.user.email }}?');">
+                  data-confirm="Revoke access for {{ access.user.email }}?">
               {% csrf_token %}
               <button type="submit"
                       class="text-sm text-red-400 hover:text-red-300 hover:underline px-2 py-1 min-h-[44px] inline-flex items-center"
@@ -126,7 +126,7 @@
       <div class="pt-2">
         {% if access.access_type == 'granted' %}
         <form method="post" action="{% url 'studio_course_access_revoke' course_id=course.pk access_id=access.pk %}"
-              onsubmit="return confirm('Revoke access for {{ access.user.email }}?');">
+              data-confirm="Revoke access for {{ access.user.email }}?">
           {% csrf_token %}
           <button type="submit"
                   class="w-full inline-flex items-center justify-center px-4 py-3 min-h-[44px] rounded-lg border border-red-500/40 text-sm text-red-400 hover:bg-red-500/10 transition-colors"

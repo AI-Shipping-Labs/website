@@ -910,6 +910,27 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_non_staff_member_cannot_open_observability_settings",
     })
 
+    issue_1542_owners = frozenset({
+        "playwright_tests/test_studio_course_access.py::"
+        "TestResponsiveCourseRecordLists::"
+        "test_desktop_enrollments_list_each_student_and_action_once",
+        "playwright_tests/test_studio_course_access.py::"
+        "TestResponsiveCourseRecordLists::"
+        "test_desktop_unenroll_has_no_hidden_duplicate_form",
+        "playwright_tests/test_studio_course_access.py::"
+        "TestResponsiveCourseRecordLists::"
+        "test_desktop_access_lists_grant_and_purchase_once",
+        "playwright_tests/test_studio_course_access.py::"
+        "TestResponsiveCourseRecordLists::"
+        "test_purchased_access_has_one_explanation_and_no_revoke",
+        "playwright_tests/test_studio_course_access.py::"
+        "TestResponsiveCourseRecordLists::"
+        "test_empty_enrollments_keep_form_and_one_shared_empty_state",
+        "playwright_tests/test_studio_course_access.py::"
+        "TestResponsiveCourseRecordLists::"
+        "test_non_staff_cannot_open_enrollment_or_access_lists",
+    })
+
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
 
@@ -972,8 +993,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2616)
-        self.assertEqual(len(inventory.owners), 2391)
+        self.assertEqual(inventory.item_count, 2622)
+        self.assertEqual(len(inventory.owners), 2397)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -995,7 +1016,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1590_owners
             | self.issue_1593_owners
             | self.issue_1592_owners
-            | self.issue_1539_owners,
+            | self.issue_1539_owners
+            | self.issue_1542_owners,
         )
         self.assertNotIn(
             self.migrated_owner,
@@ -1029,6 +1051,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1590_owners
             | self.issue_1593_owners
             | self.issue_1592_owners
+            | self.issue_1542_owners
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)

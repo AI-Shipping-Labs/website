@@ -94,7 +94,7 @@ class StudioConfirmGuardMarkupTest(TestCase):
         )
         message = f"Unenroll {self.member.email} from {self.course.title}?"
 
-        self.assert_safe_confirm_forms(response, [message, message])
+        self.assert_safe_confirm_forms(response, [message])
         self.assertNotContains(response, "confirm('Unenroll")
         self.assertNotContains(response, "window.coursePwned=true</script>")
 
@@ -104,7 +104,7 @@ class StudioConfirmGuardMarkupTest(TestCase):
         )
         message = f"Revoke access for {self.member.email}?"
 
-        self.assert_safe_confirm_forms(response, [message, message])
+        self.assert_safe_confirm_forms(response, [message])
         self.assertNotContains(response, "confirm('Revoke")
 
     def test_instructor_confirm_message_keeps_apostrophe_without_inline_script(self):

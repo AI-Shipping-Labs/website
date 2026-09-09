@@ -169,6 +169,22 @@ class CourseScopedEnrollmentsListTest(TierSetupMixin, TestCase):
             f'/studio/courses/{empty_course.pk}/enrollments/',
         )
         self.assertContains(response, 'No enrollments for this course yet.')
+        self.assertContains(response, 'data-testid="studio-empty-state-fresh"')
+        self.assertContains(response, 'data-testid="enroll-form"')
+        self.assertNotContains(response, 'data-testid="enrollments-records"')
+
+    def test_empty_status_all_uses_filter_state_with_clear_link(self):
+        empty_course = _make_course(slug='ec-empty-filtered')
+        response = self.client.get(
+            f'/studio/courses/{empty_course.pk}/enrollments/?status=all',
+        )
+
+        self.assertContains(response, 'data-testid="studio-empty-state-filter"')
+        self.assertContains(response, 'No enrollments match this status filter.')
+        self.assertContains(
+            response,
+            f'href="/studio/courses/{empty_course.pk}/enrollments/"',
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,8 @@
 (function () {
   'use strict';
 
+  const planMarkdown = window.SprintPlanMarkdown;
+
   function getCookie(name) {
     const prefix = name + '=';
     return document.cookie.split(';').map(function (cookie) {
@@ -16,89 +18,6 @@
     }).find(function (cookie) {
       return cookie.startsWith(prefix);
     })?.substring(prefix.length) || '';
-  }
-
-  function escapeHtml(value) {
-    return String(value || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
-  function renderInline(text) {
-    let html = escapeHtml(text);
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+|mailto:[^)\s]+|\/[^)\s]*|#[^)\s]*)\)/g, function (_match, label, url) {
-      return '<a href="' + escapeHtml(url) + '" rel="noopener noreferrer">' + label + '</a>';
-    });
-    return html;
-  }
-
-  function renderMarkdown(markdown) {
-    const lines = (markdown || '').split(/\r?\n/);
-    const blocks = [];
-    let paragraph = [];
-    let list = [];
-    let inCode = false;
-    let code = [];
-
-    function flushParagraph() {
-      if (paragraph.length) {
-        blocks.push('<p>' + renderInline(paragraph.join(' ')) + '</p>');
-        paragraph = [];
-      }
-    }
-    function flushList() {
-      if (list.length) {
-        blocks.push('<ul>' + list.map(function (item) {
-          return '<li>' + renderInline(item) + '</li>';
-        }).join('') + '</ul>');
-        list = [];
-      }
-    }
-
-    lines.forEach(function (line) {
-      if (line.trim().startsWith('```')) {
-        if (inCode) {
-          blocks.push('<pre><code>' + escapeHtml(code.join('\n')) + '</code></pre>');
-          code = [];
-          inCode = false;
-        } else {
-          flushParagraph();
-          flushList();
-          inCode = true;
-        }
-        return;
-      }
-      if (inCode) {
-        code.push(line);
-        return;
-      }
-      const listMatch = line.match(/^\s*[-*]\s+(.+)$/);
-      if (listMatch) {
-        flushParagraph();
-        list.push(listMatch[1]);
-        return;
-      }
-      if (!line.trim()) {
-        flushParagraph();
-        flushList();
-        return;
-      }
-      flushList();
-      paragraph.push(line.trim());
-    });
-
-    if (inCode) {
-      blocks.push('<pre><code>' + escapeHtml(code.join('\n')) + '</code></pre>');
-    }
-    flushParagraph();
-    flushList();
-    return blocks.join('');
   }
 
   function createBoard(root, options) {
@@ -427,7 +346,7 @@
           const description = data.description !== undefined ? data.description : value;
           input.value = description;
           input.defaultValue = description;
-          rendered.innerHTML = data.description_html || renderMarkdown(description);
+          rendered.innerHTML = data.description_html || planMarkdown.renderMarkdown(description);
           rendered.dataset.markdownSource = description;
           setExistingEditorState(card, false);
           setCardStatus(card, 'Saved', 'saved');
@@ -512,7 +431,7 @@
         }
         finished = true;
         const nextText = textEl;
-        nextText.innerHTML = save ? renderMarkdown(value || prior) : priorHtml;
+        nextText.innerHTML = save ? planMarkdown.renderMarkdown(value || prior) : priorHtml;
         nextText.dataset.markdownSource = save ? (value || prior) : prior;
         ta.replaceWith(nextText);
         card.dataset.editing = 'false';
@@ -535,7 +454,7 @@
             card.dataset.checkpointId = String(result.data.id);
             card.dataset.itemId = String(result.data.id);
             card.dataset.position = String(result.data.position);
-            nextText.innerHTML = result.data.description_html || renderMarkdown(value);
+            nextText.innerHTML = result.data.description_html || planMarkdown.renderMarkdown(value);
             nextText.dataset.markdownSource = result.data.description || value;
             bindCard(card);
             bindSortable();
@@ -553,7 +472,7 @@
             "Couldn't save task text. Your edit was reverted."
           ).then(function (result) {
             if (result.ok && result.data) {
-              nextText.innerHTML = result.data.description_html || renderMarkdown(value);
+              nextText.innerHTML = result.data.description_html || planMarkdown.renderMarkdown(value);
               nextText.dataset.markdownSource = result.data.description || value;
             }
           });
@@ -904,14 +823,11 @@
       enterInlineEdit: enterInlineEdit,
       moveIncompleteToNextWeek: moveIncompleteToNextWeek,
       reconcileMoveEnvelope: reconcileMoveEnvelope,
-      renderMarkdown: renderMarkdown,
       request: request,
     };
   }
 
   window.SprintPlanTaskBoard = {
     create: createBoard,
-    escapeHtml: escapeHtml,
-    renderMarkdown: renderMarkdown,
   };
 })();

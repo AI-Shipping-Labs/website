@@ -456,6 +456,13 @@ def _run_predeploy(phases):
     _run_check(phases)
 
 
+def _initialize_runtime_observability():
+    """Apply Studio observability settings after Django setup, before serve."""
+    from integrations.services.observability import init_logfire
+
+    init_logfire(use_runtime_config=True)
+
+
 def _finalize_serving(role, phases, boot_start):
     """Register schedules, emit the total line, and persist boot timing.
 
@@ -494,6 +501,11 @@ def _finalize_serving(role, phases, boot_start):
     # and worker. Idempotent; failures are logged and swallowed so a bad
     # schedule cannot crash the container.
     _timed("setup_schedules", _register_schedules, record=phases)
+
+    # AppConfig.ready() cannot read IntegrationSetting while Django is still
+    # populating apps. This serving-only pass runs after django.setup() and may
+    # apply a Studio override before gunicorn binds or qcluster starts polling.
+    _initialize_runtime_observability()
 
     # Issue #1141 Phase 1: total pre-serve path (process start -> just before
     # the gunicorn/qcluster handoff).

@@ -49,6 +49,7 @@ class BootModeDispatchTestBase(SimpleTestCase):
             mock.patch.object(entry, "_wait_for_serving_schema_ready"),
             mock.patch.object(entry, "_publish_serving_schema_ready"),
             mock.patch.object(entry, "persist_boot_timing"),
+            mock.patch.object(entry, "_initialize_runtime_observability"),
             mock.patch("django.core.management.call_command"),
         ):
             p.start()
@@ -62,6 +63,7 @@ class BootModeDispatchTestBase(SimpleTestCase):
         self.wait_for_schema = entry._wait_for_serving_schema_ready
         self.publish_schema = entry._publish_serving_schema_ready
         self.persist = entry.persist_boot_timing
+        self.initialize_observability = entry._initialize_runtime_observability
         # The migrate/check helpers import call_command lazily from this path.
         import django.core.management as mgmt
 
@@ -91,6 +93,7 @@ class PredeployModeTest(BootModeDispatchTestBase):
         self.start_gunicorn.assert_not_called()
         self.start_qcluster.assert_not_called()
         self.register_schedules.assert_not_called()
+        self.initialize_observability.assert_not_called()
 
     def test_predeploy_does_not_persist_boot_timing(self):
         # A predeploy task is not a serving container; it must not overwrite
@@ -152,6 +155,7 @@ class WebModeTest(BootModeDispatchTestBase):
         self.assertNotIn("check", names)
 
         self.register_schedules.assert_called_once()
+        self.assertEqual(self.initialize_observability.call_count, 1)
         self.start_gunicorn.assert_called_once()
         self.start_qcluster.assert_not_called()
         # Serving boot persists its timing payload under the web role.
@@ -166,6 +170,19 @@ class WebModeTest(BootModeDispatchTestBase):
         self._run_main_with_env({"BOOT_MODE": "web"})
         self.start_gunicorn.assert_called_once_with(3)
 
+    def test_runtime_observability_runs_after_setup_and_before_serve(self):
+        order = []
+        entry.django.setup.side_effect = lambda: order.append("django_setup")
+        self.initialize_observability.side_effect = (
+            lambda: order.append("observability")
+        )
+        self.start_gunicorn.side_effect = lambda *_: order.append("gunicorn")
+
+        self._run_main_with_env({"BOOT_MODE": "web"})
+
+        self.assertLess(order.index("django_setup"), order.index("observability"))
+        self.assertLess(order.index("observability"), order.index("gunicorn"))
+
 
 class WorkerModeTest(BootModeDispatchTestBase):
     def test_worker_registers_schedules_and_starts_qcluster_only(self):
@@ -176,10 +193,22 @@ class WorkerModeTest(BootModeDispatchTestBase):
         self.assertNotIn("check", names)
 
         self.register_schedules.assert_called_once()
+        self.assertEqual(self.initialize_observability.call_count, 1)
         self.start_qcluster.assert_called_once()
         self.start_gunicorn.assert_not_called()
         self.persist.assert_called_once()
         self.assertEqual(self.persist.call_args.args[0], "worker")
+
+
+class RuntimeObservabilityHookTest(SimpleTestCase):
+
+    def test_hook_uses_db_backed_runtime_config(self):
+        with mock.patch(
+            "integrations.services.observability.init_logfire",
+        ) as init_logfire:
+            entry._initialize_runtime_observability()
+
+        init_logfire.assert_called_once_with(use_runtime_config=True)
 
 
 class NoInfraServingBootTest(BootModeDispatchTestBase):
@@ -193,6 +222,7 @@ class NoInfraServingBootTest(BootModeDispatchTestBase):
         self.assertIn("migrate", names)
         self.assertNotIn("check", names)
         self.register_schedules.assert_called_once()
+        self.assertEqual(self.initialize_observability.call_count, 1)
         self.start_gunicorn.assert_called_once()
         self.start_qcluster.assert_not_called()
         self.assertEqual(self.persist.call_args.args[0], "web")
@@ -205,6 +235,7 @@ class NoInfraServingBootTest(BootModeDispatchTestBase):
         self.assertNotIn("migrate", names)
         self.assertNotIn("check", names)
         self.register_schedules.assert_called_once()
+        self.assertEqual(self.initialize_observability.call_count, 1)
         self.start_qcluster.assert_called_once()
         self.start_gunicorn.assert_not_called()
         self.assertEqual(self.persist.call_args.args[0], "worker")

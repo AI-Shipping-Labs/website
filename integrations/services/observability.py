@@ -1,95 +1,135 @@
-"""Gate for Pydantic Logfire observability (issue #813).
+"""Production-only Pydantic Logfire initialization.
 
-Logfire is production-only. It must NOT fire in the Django test suite, in
-the #809 eval harness (``manage.py run_ai``), in the #811 live-judge
-pytest set, or in any local/dev run unless an operator deliberately opts
-in. :func:`logfire_is_enabled` is the single three-part AND gate that
-enforces this; both the startup initializer in :mod:`integrations.apps`
-and any future caller route through it.
-
-The gate returns ``True`` only when ALL hold:
-
-1. ``settings.TESTING`` is ``False`` (the Django test suite sets
-   ``TESTING = 'test' in sys.argv``).
-2. A non-empty ``LOGFIRE_TOKEN`` resolves via ``get_config``.
-3. ``is_enabled('LOGFIRE_ENABLED')`` is ``True`` (default ``false`` —
-   explicit opt-in).
-
-Clause 3 is the load-bearing guard for the eval/judge paths: neither
-``manage.py run_ai`` nor the live-judge pytest set runs under
-``manage.py test`` (so ``TESTING`` is ``False`` there), and neither sets
-``LOGFIRE_ENABLED=true``, so the explicit-enable clause keeps them silent.
+``IntegrationsConfig.ready()`` runs before Django marks the app registry ready.
+That path must stay independent of IntegrationSetting and the shared database
+cache, so it resolves Logfire's three settings from the Django settings
+snapshot, the process environment, and the registered defaults only. Serving
+containers make one additional, post-``django.setup()`` pass that may use the
+normal DB-backed integration configuration.
 """
 
 import logging
+import os
 
 from django.conf import settings
 
-from integrations.config import get_config, is_enabled
+from integrations.config import get_config
+from integrations.settings_registry import get_group_by_name
 
 logger = logging.getLogger(__name__)
 
+_logfire_initialized = False
+_TRUTHY_VALUES = frozenset({'true', '1', 'yes'})
+_LOGFIRE_KEYS = (
+    'LOGFIRE_ENABLED',
+    'LOGFIRE_TOKEN',
+    'LOGFIRE_ENVIRONMENT',
+)
 
-def logfire_is_enabled():
-    """Return ``True`` only when Logfire should initialize (prod-only gate).
 
-    All three conditions must hold: not running tests, a non-empty
-    ``LOGFIRE_TOKEN`` is configured, and ``LOGFIRE_ENABLED`` is true.
+def _registered_logfire_defaults():
+    """Return the defaults declared for the Observability settings group."""
+    group = get_group_by_name('observability')
+    definitions = {item['key']: item for item in group['keys']}
+    return {
+        key: definitions[key].get('default', '')
+        for key in _LOGFIRE_KEYS
+    }
+
+
+def _get_boot_config(key, defaults):
+    """Resolve one key without touching IntegrationSetting or shared caches."""
+    setting_value = getattr(settings, key, None)
+    if setting_value is not None:
+        return setting_value
+
+    env_value = os.environ.get(key)
+    if env_value is not None:
+        return env_value
+
+    return defaults[key]
+
+
+def _resolved_logfire_config(*, use_runtime_config=False):
+    """Resolve the three Logfire values for app-init or serving runtime."""
+    defaults = _registered_logfire_defaults()
+    if use_runtime_config:
+        resolver = lambda key: get_config(key, defaults[key])
+    else:
+        resolver = lambda key: _get_boot_config(key, defaults)
+
+    return {key: resolver(key) for key in _LOGFIRE_KEYS}
+
+
+def _is_truthy(value):
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in _TRUTHY_VALUES
+
+
+def logfire_is_enabled(*, use_runtime_config=False):
+    """Return whether the production-only Logfire gate is open.
+
+    The default app-init path never reads the database. Serving entrypoints may
+    opt into the normal IntegrationSetting-backed resolution after
+    ``django.setup()`` completes.
     """
     if getattr(settings, 'TESTING', False):
         return False
-    if not get_config('LOGFIRE_TOKEN', ''):
-        return False
-    return is_enabled('LOGFIRE_ENABLED')
+
+    config = _resolved_logfire_config(use_runtime_config=use_runtime_config)
+    return bool(config['LOGFIRE_TOKEN']) and _is_truthy(
+        config['LOGFIRE_ENABLED'],
+    )
 
 
-def init_logfire():
-    """Configure Logfire and enable auto-instrumentation, once, behind the gate.
+def init_logfire(*, use_runtime_config=False):
+    """Configure and instrument Logfire at most once in this process.
 
-    Returns immediately when :func:`logfire_is_enabled` is ``False`` — no
-    ``logfire`` import side effects, no network, no ``configure()`` call
-    when the gate is closed. When the gate is open, calls
-    ``logfire.configure(...)`` once and enables instrumentation for Django,
-    outbound HTTP (httpx + requests), and the Anthropic SDK when that
-    instrumentor exists. Any misconfiguration or missing optional
-    instrumentor is logged and swallowed so app boot never crashes.
-
-    Called once per process from ``IntegrationsConfig.ready()`` (gunicorn
-    workers + qcluster each configure their own exporter). Returns ``True``
-    when configuration ran, ``False`` when the gate kept it closed.
+    ``use_runtime_config=False`` is the safe app-init mode. Passing ``True`` is
+    reserved for a serving entrypoint after Django's app registry is ready and
+    allows Studio's IntegrationSetting values to enable Logfire on restart.
+    Failures are logged and swallowed so observability never prevents boot.
     """
-    if not logfire_is_enabled():
+    global _logfire_initialized
+
+    if _logfire_initialized or getattr(settings, 'TESTING', False):
+        return False
+
+    config = _resolved_logfire_config(use_runtime_config=use_runtime_config)
+    if not config['LOGFIRE_TOKEN'] or not _is_truthy(
+        config['LOGFIRE_ENABLED'],
+    ):
         return False
 
     try:
         import logfire  # noqa: PLC0415
 
         logfire.configure(
-            token=get_config('LOGFIRE_TOKEN', ''),
-            environment=get_config('LOGFIRE_ENVIRONMENT', 'production'),
+            token=config['LOGFIRE_TOKEN'],
+            environment=config['LOGFIRE_ENVIRONMENT'],
         )
         _instrument(logfire)
-    except Exception:  # noqa: BLE001 — never let observability crash boot
+    except Exception:  # noqa: BLE001 -- never let observability crash boot
         logger.warning('Failed to initialize Logfire', exc_info=True)
         return False
+
+    _logfire_initialized = True
     return True
 
 
 def _instrument(logfire):
-    """Enable available auto-instrumentors without crashing on a missing one.
-
-    Django request traces, outbound HTTP (httpx covers the Anthropic SDK
-    transport; requests covers other clients), and — when the installed
-    Logfire exposes it — the Anthropic SDK directly. Each instrumentor is
-    guarded independently so one missing/failing helper does not disable
-    the rest or crash boot.
-    """
-    for name in ('instrument_django', 'instrument_httpx', 'instrument_requests',
-                 'instrument_anthropic'):
+    """Enable available auto-instrumentors without crashing on a missing one."""
+    for name in (
+        'instrument_django',
+        'instrument_httpx',
+        'instrument_requests',
+        'instrument_anthropic',
+    ):
         instrumentor = getattr(logfire, name, None)
         if instrumentor is None:
             continue
         try:
             instrumentor()
-        except Exception:  # noqa: BLE001 — optional instrumentor, log and continue
+        except Exception:  # noqa: BLE001 -- optional instrumentor
             logger.warning('Logfire %s failed', name, exc_info=True)

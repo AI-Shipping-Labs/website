@@ -1,6 +1,8 @@
 (function () {
   'use strict';
 
+  const planMarkdown = window.SprintPlanMarkdown;
+
   const root = document.getElementById('member-plan');
   if (!root) { return; }
 
@@ -175,86 +177,6 @@
     rendered.classList.toggle('text-foreground', !done);
   }
 
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text || '';
-    return div.innerHTML;
-  }
-
-  function renderInline(text) {
-    let html = escapeHtml(text);
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+|mailto:[^)\s]+|\/[^)\s]*|#[^)\s]*)\)/g, function (_match, label, url) {
-      return '<a href="' + url + '" rel="noopener noreferrer">' + label + '</a>';
-    });
-    return html;
-  }
-
-  function renderMarkdown(markdown) {
-    const lines = (markdown || '').split(/\r?\n/);
-    const blocks = [];
-    let paragraph = [];
-    let list = [];
-    let inCode = false;
-    let code = [];
-
-    function flushParagraph() {
-      if (paragraph.length) {
-        blocks.push('<p>' + renderInline(paragraph.join(' ')) + '</p>');
-        paragraph = [];
-      }
-    }
-    function flushList() {
-      if (list.length) {
-        blocks.push('<ul>' + list.map(function (item) {
-          return '<li>' + renderInline(item) + '</li>';
-        }).join('') + '</ul>');
-        list = [];
-      }
-    }
-
-    lines.forEach(function (line) {
-      if (line.trim().startsWith('```')) {
-        if (inCode) {
-          blocks.push('<pre><code>' + escapeHtml(code.join('\n')) + '</code></pre>');
-          code = [];
-          inCode = false;
-        } else {
-          flushParagraph();
-          flushList();
-          inCode = true;
-        }
-        return;
-      }
-      if (inCode) {
-        code.push(line);
-        return;
-      }
-      const listMatch = line.match(/^\s*[-*]\s+(.+)$/);
-      if (listMatch) {
-        flushParagraph();
-        list.push(listMatch[1]);
-        return;
-      }
-      if (!line.trim()) {
-        flushParagraph();
-        flushList();
-        return;
-      }
-      flushList();
-      paragraph.push(line.trim());
-    });
-
-    if (inCode) {
-      blocks.push('<pre><code>' + escapeHtml(code.join('\n')) + '</code></pre>');
-    }
-    flushParagraph();
-    flushList();
-    return blocks.join('');
-  }
-
   // Issue #583: visibility toggle. Replaces the legacy <select> + Save
   // form. Clicking the switch POSTs to update_plan_visibility with
   // ``Accept: application/json`` so the server returns JSON instead of
@@ -414,7 +336,10 @@
           .then(function (data) {
             original = data.goal || '';
             input.value = original;
-            rendered.innerHTML = original ? renderMarkdown(original) : escapeHtml(placeholder);
+            rendered.innerHTML = data.goal_html
+              || (original
+                ? planMarkdown.renderMarkdown(original)
+                : planMarkdown.escapeHtml(placeholder));
             rendered.classList.toggle('text-muted-foreground', !original);
             rendered.classList.toggle('italic', !original);
             setGoalEditing(false);
@@ -478,9 +403,11 @@
       const value = textarea.value;
       setStatus(item, 'Saving...', 'saving');
       apiPatchWithRetry(endpointFor(item), {description: value})
-        .then(function () {
-          original = value;
-          rendered.innerHTML = renderMarkdown(value);
+        .then(function (data) {
+          original = data.description !== undefined ? data.description : value;
+          textarea.value = original;
+          rendered.innerHTML = data.description_html
+            || planMarkdown.renderMarkdown(original);
           setEditing(false);
           setStatus(item, 'Saved', 'saved');
         })

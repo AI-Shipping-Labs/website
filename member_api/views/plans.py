@@ -33,6 +33,7 @@ from plans.models import (
     PLAN_TITLE_MAX_LENGTH,
     PLAN_VISIBILITY_CHOICES,
     Checkpoint,
+    CheckpointDeletionReceipt,
     Deliverable,
     NextStep,
     Plan,
@@ -1172,9 +1173,13 @@ _CHECKPOINT_DETAIL_OPENAPI = {
     },
     "DELETE": {
         "summary": "Delete a checkpoint",
-        "description": "Deletes an owned checkpoint. Requires ``plans:write``.",
+        "description": (
+            "Deletes an owned checkpoint. Repeating a completed delete for "
+            "the same plan and checkpoint ID returns the same success body. "
+            "Requires ``plans:write``."
+        ),
         "responses": {
-            200: {"description": "Checkpoint deleted."},
+            200: {"description": "Checkpoint deleted (idempotent)."},
             401: {
                 "description": "Missing key or missing ``plans:write`` scope.",
                 "schema": {"$ref": "#/components/schemas/ErrorResponse"},
@@ -1200,6 +1205,37 @@ def checkpoint_detail(request, plan_id, checkpoint_id):
     plan = _owned_plan_or_404(request.user, plan_id)
     if plan is None:
         return error_response("Plan not found", "plan_not_found", status=404)
+
+    if request.method == "DELETE":
+        with transaction.atomic():
+            # The plan is the stable claim row even after the checkpoint has
+            # gone. It serializes first deletes with ambiguous retries.
+            Plan.objects.select_for_update().only("pk").get(pk=plan.pk)
+            receipt = CheckpointDeletionReceipt.objects.filter(
+                plan=plan,
+                checkpoint_id=checkpoint_id,
+            ).exists()
+            if receipt:
+                return JsonResponse({"deleted": True, "id": checkpoint_id})
+
+            checkpoint = Checkpoint.objects.filter(
+                week__plan=plan,
+                pk=checkpoint_id,
+            ).first()
+            if checkpoint is None:
+                return _validation_error(
+                    "Checkpoint does not belong to this plan",
+                    field="checkpoint_id",
+                    code="checkpoint_not_found",
+                )
+
+            CheckpointDeletionReceipt.objects.create(
+                plan=plan,
+                checkpoint_id=checkpoint_id,
+            )
+            checkpoint.delete()
+        return JsonResponse({"deleted": True, "id": checkpoint_id})
+
     checkpoint = Checkpoint.objects.filter(
         week__plan=plan, pk=checkpoint_id,
     ).first()
@@ -1209,11 +1245,6 @@ def checkpoint_detail(request, plan_id, checkpoint_id):
             field="checkpoint_id",
             code="checkpoint_not_found",
         )
-
-    if request.method == "DELETE":
-        with transaction.atomic():
-            checkpoint.delete()
-        return JsonResponse({"deleted": True, "id": checkpoint_id})
 
     payload, body_error = _json_object_body(request)
     if body_error is not None:

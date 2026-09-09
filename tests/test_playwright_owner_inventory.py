@@ -637,6 +637,32 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "TestStaffReconcilesAmbiguousDelivery::"
         "test_duplicate_risk_confirmations_gate_retry_and_assume_sent"
     )
+    issue_1528_owners = frozenset({
+        "playwright_tests/test_member_plan_edit.py::"
+        "TestMemberOpensOwnPlan::"
+        "test_member_can_complete_checkpoint_but_has_no_delete_control",
+        "playwright_tests/test_member_plan_edit.py::"
+        "TestMemberOpensOwnPlan::"
+        "test_member_deterministic_task_error_reverts_without_retry",
+        "playwright_tests/test_studio_plan_editor.py::"
+        "TestStaffEditsSummaryInline::"
+        "test_deterministic_summary_error_does_not_retry",
+        "playwright_tests/test_studio_plan_editor.py::"
+        "TestStaffDeleteRetryPolicy::"
+        "test_lost_success_then_not_found_does_not_restore_ghost",
+        "playwright_tests/test_studio_plan_editor.py::"
+        "TestStaffDeleteRetryPolicy::"
+        "test_network_failure_retries_once_then_delete_succeeds",
+        "playwright_tests/test_studio_plan_editor.py::"
+        "TestStaffDeleteRetryPolicy::"
+        "test_forbidden_delete_restores_immediately_without_retry",
+        "playwright_tests/test_studio_plan_editor.py::"
+        "TestStaffDeleteRetryPolicy::"
+        "test_deleting_only_checkpoint_reveals_empty_week_hint",
+        "playwright_tests/test_studio_plan_editor.py::"
+        "TestStaffSeesRevertOnApiFailure::"
+        "test_checkpoint_edit_deterministic_error_does_not_retry",
+    })
     issue_1506_owners = frozenset({
         "playwright_tests/test_studio_campaigns.py::"
         "TestStaffSeesNeedsAttentionAfterHardRejection::"
@@ -876,11 +902,12 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2577)
-        self.assertEqual(len(inventory.owners), 2357)
+        self.assertEqual(inventory.item_count, 2590)
+        self.assertEqual(len(inventory.owners), 2365)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
+            | self.issue_1528_owners
             | self.ses_1552_owners
             | self.issue_1551_owners
             | self.issue_1557_owners
@@ -918,7 +945,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
         for owner in (
-            self.issue_1589_owners
+            self.issue_1528_owners
+            | self.issue_1589_owners
             | self.issue_1591_owners
             | self.issue_1590_owners
             | self.issue_1593_owners

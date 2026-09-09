@@ -17,6 +17,7 @@ from playwright_tests.conftest import auth_context as _auth_context
 from playwright_tests.conftest import create_staff_user as _create_staff_user
 from playwright_tests.conftest import create_user as _create_user
 from playwright_tests.conftest import ensure_tiers as _ensure_tiers
+from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -167,6 +168,86 @@ class TestMemberOpensOwnPlan:
         page.locator('[data-testid="plan-weeks"]').wait_for(state="visible")
         page.locator('[data-testid="plan-checkpoint"]').first.wait_for(
             state="visible")
+
+        context.close()
+
+    @pytest.mark.core
+    @browser_journey
+    def test_member_can_complete_checkpoint_but_has_no_delete_control(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_user(
+            "main@test.com",
+            tier_slug="main",
+            email_verified=True,
+        )
+        plan_pk = _seed_plan_with_two_checkpoints("main@test.com")
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/sprints/spring-cohort/plan/{plan_pk}",
+            wait_until="domcontentloaded",
+        )
+
+        card = page.get_by_test_id("plan-checkpoint").filter(
+            has_text="Read paper",
+        )
+        assert card.locator('[data-testid="checkpoint-delete"]').count() == 0
+        card.get_by_test_id("plan-row-done-toggle").click()
+        card.get_by_test_id("plan-item-save-status").get_by_text("Saved").wait_for()
+        assert card.get_attribute("data-done") == "true"
+        assert card.count() == 1
+
+        context.close()
+
+    @pytest.mark.core
+    @browser_journey
+    def test_member_deterministic_task_error_reverts_without_retry(
+        self, django_server, browser,
+    ):
+        from plans.models import Deliverable, Plan
+
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_user(
+            "member-retry@test.com",
+            tier_slug="main",
+            email_verified=True,
+        )
+        plan_pk = _seed_plan_with_two_checkpoints("member-retry@test.com")
+        Deliverable.objects.create(
+            plan=Plan.objects.get(pk=plan_pk),
+            description="Keep incomplete",
+        )
+        connection.close()
+        context = _auth_context(browser, "member-retry@test.com")
+        page = context.new_page()
+        attempts = {"count": 0}
+
+        def _reject_patch(route):
+            attempts["count"] += 1
+            route.fulfill(
+                status=422,
+                content_type="application/json",
+                body='{"error": "invalid", "code": "validation_error"}',
+            )
+
+        page.route("**/api/deliverables/*", _reject_patch)
+        page.goto(
+            f"{django_server}/sprints/spring-cohort/plan/{plan_pk}",
+            wait_until="domcontentloaded",
+        )
+
+        deliverable = page.get_by_test_id("plan-deliverable")
+        checkbox = deliverable.get_by_test_id("plan-row-done-toggle")
+        checkbox.click()
+        deliverable.get_by_test_id("plan-item-save-status").get_by_text(
+            "Save failed. Try again."
+        ).wait_for(timeout=750)
+        assert attempts["count"] == 1
+        assert not checkbox.is_checked()
 
         context.close()
 

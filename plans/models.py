@@ -1224,6 +1224,31 @@ class Checkpoint(TimestampedModelMixin, models.Model):
         return self.description[:80]
 
 
+class CheckpointDeletionReceipt(models.Model):
+    """Durable proof that a plan deleted one checkpoint ID.
+
+    The member API uses this plan-scoped receipt to make an ambiguous retry
+    succeed without treating an ID from another plan as deleted. Receipts are
+    removed with their plan, which bounds their lifetime to the owning plan.
+    """
+
+    plan = models.ForeignKey(
+        Plan,
+        on_delete=models.CASCADE,
+        related_name='checkpoint_deletion_receipts',
+    )
+    checkpoint_id = models.PositiveBigIntegerField()
+    deleted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['plan', 'checkpoint_id'],
+                name='unique_checkpoint_deletion_per_plan',
+            ),
+        ]
+
+
 class Resource(TimestampedModelMixin, models.Model):
     """A link in the Resources block on a plan.
 

@@ -1923,7 +1923,7 @@
     },
     "/member-api/v1/plans/{plan_id}/checkpoints/{checkpoint_id}": {
       "delete": {
-        "description": "Deletes an owned checkpoint.",
+        "description": "Deletes an owned checkpoint. Repeating a completed delete for the same plan and checkpoint ID returns the same success body.",
         "parameters": [
           {
             "in": "path",
@@ -1944,7 +1944,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Checkpoint deleted."
+            "description": "Checkpoint deleted (idempotent)."
           },
           "401": {
             "content": {

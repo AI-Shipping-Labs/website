@@ -30,6 +30,7 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -654,6 +655,42 @@ class TestStaffEditsSummaryInline:
         ta = page.locator('[data-testid="summary-goal"]')
         assert ta.input_value() == "Ship two projects in six weeks"
 
+    @browser_journey
+    def test_deterministic_summary_error_does_not_retry(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_staff_user("staff@test.com")
+        _create_user("member@test.com", tier_slug="free", email_verified=True)
+        plan = _seed_plan("staff@test.com", "member@test.com", [["A"]])
+        context = _auth_context(browser, "staff@test.com")
+        page = context.new_page()
+        attempts = {"count": 0}
+
+        def _reject_summary(route):
+            if route.request.method != "PATCH":
+                route.continue_()
+                return
+            attempts["count"] += 1
+            route.fulfill(
+                status=409,
+                content_type="application/json",
+                body='{"error": "conflict", "code": "conflict"}',
+            )
+
+        page.route(f"**/api/plans/{plan.pk}", _reject_summary)
+        page.goto(f"{django_server}/studio/plans/{plan.pk}/edit/")
+        _wait_for_editor(page)
+
+        page.get_by_test_id("summary-goal").fill("Conflicting change")
+        page.get_by_test_id("summary-current_situation").click()
+
+        page.locator(
+            '[data-testid="save-indicator"][data-state="failed"]'
+        ).wait_for(timeout=750)
+        assert attempts["count"] == 1
+
 
 @pytest.mark.django_db(transaction=True)
 class TestStaffAddsAndDeletesCheckpoint:
@@ -891,7 +928,7 @@ class TestStaffDeleteRollback:
         def _fail_delete(route):
             delete_attempts["count"] += 1
             route.fulfill(
-                status=500,
+                status=503,
                 content_type="application/json",
                 body='{"error": "boom", "code": "server_error"}',
             )
@@ -925,8 +962,224 @@ class TestStaffDeleteRollback:
 
 
 @pytest.mark.django_db(transaction=True)
+class TestStaffDeleteRetryPolicy:
+    @browser_journey
+    def test_lost_success_then_not_found_does_not_restore_ghost(
+        self, django_server, browser,
+    ):
+        from plans.models import Checkpoint
+
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_staff_user("staff@test.com")
+        _create_user("member@test.com", tier_slug="free", email_verified=True)
+        plan = _seed_plan(
+            "staff@test.com",
+            "member@test.com",
+            [["Ambiguous", "Keep"]],
+        )
+        context = _auth_context(browser, "staff@test.com")
+        page = context.new_page()
+        delete_attempts = {"count": 0}
+
+        def _lose_first_response(route):
+            delete_attempts["count"] += 1
+            if delete_attempts["count"] == 1:
+                checkpoint_id = int(route.request.url.rstrip("/").rsplit("/", 1)[-1])
+                Checkpoint.objects.filter(pk=checkpoint_id).delete()
+                connection.close()
+                route.abort("connectionfailed")
+                return
+            route.continue_()
+
+        page.route("**/api/checkpoints/*", _lose_first_response)
+        page.goto(f"{django_server}/studio/plans/{plan.pk}/edit/")
+        _wait_for_editor(page)
+
+        card = _checkpoint_chip(page, 1, "Ambiguous")
+        card.hover()
+        card.get_by_test_id("checkpoint-delete").click()
+        card.get_by_test_id("checkpoint-delete-confirm").click()
+
+        page.locator(
+            '[data-testid="save-indicator"][data-state="saved"]'
+        ).wait_for()
+        assert delete_attempts["count"] == 2
+        expect(card).to_have_count(0)
+        expect(page.get_by_test_id("plan-editor-toast")).not_to_contain_text(
+            "Couldn't delete task. It was restored."
+        )
+        _reload_editor(page)
+        assert _checkpoint_descriptions(page, 1) == ["Keep"]
+
+    @browser_journey
+    def test_network_failure_retries_once_then_delete_succeeds(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_staff_user("staff@test.com")
+        _create_user("member@test.com", tier_slug="free", email_verified=True)
+        plan = _seed_plan(
+            "staff@test.com",
+            "member@test.com",
+            [["Retry me", "Keep"]],
+        )
+        context = _auth_context(browser, "staff@test.com")
+        page = context.new_page()
+        delete_attempts = {"count": 0}
+
+        def _fail_once(route):
+            delete_attempts["count"] += 1
+            if delete_attempts["count"] == 1:
+                route.abort("connectionfailed")
+                return
+            route.continue_()
+
+        page.route("**/api/checkpoints/*", _fail_once)
+        page.goto(f"{django_server}/studio/plans/{plan.pk}/edit/")
+        _wait_for_editor(page)
+
+        card = _checkpoint_chip(page, 1, "Retry me")
+        card.hover()
+        card.get_by_test_id("checkpoint-delete").click()
+        card.get_by_test_id("checkpoint-delete-confirm").click()
+
+        page.locator(
+            '[data-testid="save-indicator"][data-state="saved"]'
+        ).wait_for()
+        assert delete_attempts["count"] == 2
+        expect(card).to_have_count(0)
+        _reload_editor(page)
+        assert _checkpoint_descriptions(page, 1) == ["Keep"]
+
+    @browser_journey
+    def test_forbidden_delete_restores_immediately_without_retry(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_staff_user("staff@test.com")
+        _create_user("member@test.com", tier_slug="free", email_verified=True)
+        plan = _seed_plan(
+            "staff@test.com",
+            "member@test.com",
+            [["Keep me", "Second"]],
+        )
+        context = _auth_context(browser, "staff@test.com")
+        page = context.new_page()
+        delete_attempts = {"count": 0}
+
+        def _forbid(route):
+            delete_attempts["count"] += 1
+            route.fulfill(
+                status=403,
+                content_type="application/json",
+                body='{"error": "forbidden", "code": "forbidden"}',
+            )
+
+        page.route("**/api/checkpoints/*", _forbid)
+        page.goto(f"{django_server}/studio/plans/{plan.pk}/edit/")
+        _wait_for_editor(page)
+
+        card = _checkpoint_chip(page, 1, "Keep me")
+        card.hover()
+        card.get_by_test_id("checkpoint-delete").click()
+        card.get_by_test_id("checkpoint-delete-confirm").click()
+
+        page.locator(
+            '[data-testid="save-indicator"][data-state="failed"]'
+        ).wait_for(timeout=750)
+        assert delete_attempts["count"] == 1
+        assert _checkpoint_descriptions(page, 1) == ["Keep me", "Second"]
+        expect(page.get_by_test_id("plan-editor-toast")).to_contain_text(
+            "Couldn't delete task. It was restored."
+        )
+        expect(card).to_be_focused()
+
+    @browser_journey
+    def test_deleting_only_checkpoint_reveals_empty_week_hint(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_staff_user("staff@test.com")
+        _create_user("member@test.com", tier_slug="free", email_verified=True)
+        plan = _seed_plan("staff@test.com", "member@test.com", [["Solo"]])
+        context = _auth_context(browser, "staff@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/studio/plans/{plan.pk}/edit/")
+        _wait_for_editor(page)
+
+        card = _checkpoint_chip(page, 1, "Solo")
+        card.hover()
+        card.get_by_test_id("checkpoint-delete").click()
+        card.get_by_test_id("checkpoint-delete-confirm").click()
+
+        hint = page.locator(
+            '[data-week-number="1"] [data-testid="empty-week-hint"]'
+        )
+        expect(hint).to_be_visible()
+        expect(hint).to_have_text(
+            "No checkpoints yet — add one above or drag one from another week."
+        )
+        page.wait_for_timeout(1100)
+        expect(card).to_have_count(0)
+        _reload_editor(page)
+        expect(hint).to_be_visible()
+
+
+@pytest.mark.django_db(transaction=True)
 class TestStaffSeesRevertOnApiFailure:
-    def test_drag_reverts_when_api_returns_422(self, django_server, browser):
+    @pytest.mark.parametrize("status", [400, 401, 403, 404, 409, 422])
+    @browser_journey
+    def test_checkpoint_edit_deterministic_error_does_not_retry(
+        self, django_server, browser, status,
+    ):
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_staff_user("staff@test.com")
+        _create_user("member@test.com", tier_slug="free", email_verified=True)
+        plan = _seed_plan(
+            "staff@test.com",
+            "member@test.com",
+            [["Keep text"]],
+        )
+        context = _auth_context(browser, "staff@test.com")
+        page = context.new_page()
+        patch_attempts = {"count": 0}
+
+        def _reject_patch(route):
+            if route.request.method != "PATCH":
+                route.continue_()
+                return
+            patch_attempts["count"] += 1
+            route.fulfill(
+                status=status,
+                content_type="application/json",
+                body='{"error": "rejected", "code": "rejected"}',
+            )
+
+        page.route("**/api/checkpoints/*", _reject_patch)
+        page.goto(f"{django_server}/studio/plans/{plan.pk}/edit/")
+        _wait_for_editor(page)
+
+        card = _checkpoint_chip(page, 1, "Keep text")
+        card.get_by_test_id("checkpoint-text").click()
+        editor = page.get_by_test_id("checkpoint-edit-textarea")
+        editor.fill("Changed text")
+        page.get_by_test_id("summary-goal").click()
+
+        page.locator(
+            '[data-testid="save-indicator"][data-state="failed"]'
+        ).wait_for(timeout=750)
+        assert patch_attempts["count"] == 1
+        card.get_by_test_id("checkpoint-text").wait_for(state="visible")
+        assert _checkpoint_descriptions(page, 1) == ["Keep text"]
+
+    def test_drag_reverts_when_api_returns_422(
+        self, django_server, browser,
+    ):
         _ensure_tiers()
         _clear_plans_data()
         _create_staff_user("staff@test.com")
@@ -940,9 +1193,7 @@ class TestStaffSeesRevertOnApiFailure:
 
         context = _auth_context(browser, "staff@test.com")
         page = context.new_page()
-        # Intercept the move endpoint and return 422 for both the
-        # original write and retry so the editor's rollback path runs
-        # end-to-end.
+        # A deterministic validation response must revert without a retry.
         move_attempts = {"count": 0}
 
         def _fail_move(route):
@@ -978,8 +1229,8 @@ class TestStaffSeesRevertOnApiFailure:
         # only shown briefly (autohide).
         page.locator(
             '[data-testid="save-indicator"][data-state="failed"]'
-        ).wait_for()
-        assert move_attempts["count"] == 2
+        ).wait_for(timeout=750)
+        assert move_attempts["count"] == 1
         toast = page.locator('[data-testid="plan-editor-toast"]')
         toast.wait_for(state="visible")
         assert "Couldn't save change" in toast.text_content()

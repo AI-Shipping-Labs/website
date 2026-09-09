@@ -2,6 +2,7 @@
 
 import json
 from datetime import timedelta
+from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -14,6 +15,20 @@ from accounts.services import timezones
 from accounts.services.timezones import build_timezone_options
 from email_app.models import EmailLog
 from payments.models import Tier
+
+
+class _ButtonAttributeParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.buttons = {}
+        self.elements = {}
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if attributes.get("id"):
+            self.elements[attributes["id"]] = attributes
+        if tag == "button" and attributes.get("id"):
+            self.buttons[attributes["id"]] = attributes
 
 
 @tag('core')
@@ -1081,6 +1096,55 @@ class AccountPageEmailPreferencesDisplayTest(TestCase):
         self.assertFalse(response.context["newsletter_subscribed"])
 
 
+class AccountEmailPreferenceSwitchAccessibilityTest(TestCase):
+    switch_labels = {
+        "newsletter-toggle": "Toggle newsletter subscription",
+        "workshop-emails-toggle": "Toggle workshop announcement emails",
+        "sprint-cadence-emails-toggle": "Toggle sprint reminder emails",
+        "bookclub-emails-toggle": "Toggle Book Club summary emails",
+    }
+
+    def _switches_for(self, user):
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+        parser = _ButtonAttributeParser()
+        parser.feed(response.content.decode())
+        return {
+            toggle_id: parser.buttons[toggle_id]
+            for toggle_id in self.switch_labels
+        }
+
+    def test_default_preferences_render_as_checked_switches(self):
+        user = User.objects.create_user(email="switches-on@example.com")
+
+        switches = self._switches_for(user)
+
+        for toggle_id, aria_label in self.switch_labels.items():
+            with self.subTest(toggle_id=toggle_id):
+                attributes = switches[toggle_id]
+                self.assertEqual(attributes["type"], "button")
+                self.assertEqual(attributes["role"], "switch")
+                self.assertEqual(attributes["aria-label"], aria_label)
+                self.assertEqual(attributes["aria-checked"], "true")
+                self.assertNotIn("aria-pressed", attributes)
+
+    def test_saved_opt_outs_render_as_unchecked_switches(self):
+        user = User.objects.create_user(email="switches-off@example.com")
+        user.unsubscribed = True
+        user.email_preferences = {
+            "workshop_emails": False,
+            "sprint_cadence_emails": False,
+            "bookclub_emails": False,
+        }
+        user.save(update_fields=["unsubscribed", "email_preferences"])
+
+        switches = self._switches_for(user)
+
+        for toggle_id in self.switch_labels:
+            with self.subTest(toggle_id=toggle_id):
+                self.assertEqual(switches[toggle_id]["aria-checked"], "false")
+
+
 class AccountPagePolish1206Test(TestCase):
     def test_activated_member_sections_render_in_job_first_order_with_slack(self):
         main_tier = Tier.objects.get(slug="main")
@@ -1467,15 +1531,11 @@ class AccountPageNewsletterToggleContrastTest(TestCase):
         user = User.objects.create_user(email="status@example.com")
         self.client.force_login(user)
         response = self.client.get("/account/")
-        content = response.content.decode()
-        marker = 'id="newsletter-status"'
-        idx = content.find(marker)
-        self.assertNotEqual(idx, -1)
-        tag_start = content.rfind("<", 0, idx)
-        tag_end = content.find(">", idx)
-        status_tag = content[tag_start:tag_end + 1]
-        self.assertIn("text-foreground", status_tag)
-        self.assertNotIn("text-muted-foreground", status_tag)
+        parser = _ButtonAttributeParser()
+        parser.feed(response.content.decode())
+        status_classes = parser.elements["newsletter-status"]["class"].split()
+        self.assertIn("text-foreground", status_classes)
+        self.assertNotIn("text-muted-foreground", status_classes)
 
     def test_touch_target_wrapper_preserved(self):
         """The .touch-target-toggle wrapper guarantees a 44px tap area on

@@ -677,6 +677,12 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "TestStudioConfirmGuard::"
         "test_email_reset_cancels_from_list_and_keyboard_then_accepts_from_edit",
     })
+    issue_1530_owners = frozenset({
+        "playwright_tests/test_account_email_preference_switches_1530.py::"
+        "test_member_reads_toggles_and_persists_mouse_and_keyboard_changes",
+        "playwright_tests/test_account_email_preference_switches_1530.py::"
+        "test_failed_and_network_saves_leave_accessible_and_visual_state_unchanged",
+    })
     issue_1506_owners = frozenset({
         "playwright_tests/test_studio_campaigns.py::"
         "TestStaffSeesNeedsAttentionAfterHardRejection::"
@@ -916,13 +922,14 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2594)
-        self.assertEqual(len(inventory.owners), 2369)
+        self.assertEqual(inventory.item_count, 2596)
+        self.assertEqual(len(inventory.owners), 2371)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
             | self.issue_1528_owners
             | self.issue_1529_owners
+            | self.issue_1530_owners
             | self.ses_1552_owners
             | self.issue_1551_owners
             | self.issue_1557_owners
@@ -962,6 +969,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         for owner in (
             self.issue_1528_owners
             | self.issue_1529_owners
+            | self.issue_1530_owners
             | self.issue_1589_owners
             | self.issue_1591_owners
             | self.issue_1590_owners

@@ -91,6 +91,7 @@ class StaffGateTest(MergeUITestBase):
         self._login_staff()
         response = self.client.get(reverse("studio_user_merge"))
         self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "studio/includes/_people_picker.html")
         self.assertContains(response, 'data-testid="merge-canonical-input"')
         self.assertContains(response, 'data-testid="merge-secondary-input"')
         # No preview / result card yet.

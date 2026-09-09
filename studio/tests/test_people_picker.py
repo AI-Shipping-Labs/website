@@ -8,6 +8,7 @@ that the tier-overrides page (and future surfaces like #718) consumes.
 
 import datetime
 from datetime import timedelta
+from html.parser import HTMLParser
 
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
@@ -20,6 +21,19 @@ from payments.models import Tier
 from plans.models import Plan, Sprint, SprintEnrollment
 
 User = get_user_model()
+
+
+class _ElementAttributes(HTMLParser):
+    """Collect attributes for elements with an id, keyed by that id."""
+
+    def __init__(self):
+        super().__init__()
+        self.by_id = {}
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if element_id := attributes.get('id'):
+            self.by_id[element_id] = (tag, attributes)
 
 
 @tag('core')
@@ -355,7 +369,10 @@ class StudioPeoplePickerIncludeRenderTest(TestCase):
             '{% include "studio/includes/_people_picker.html" '
             'with name=name id_prefix=id_prefix search_url=search_url '
             'extra_query=extra_query on_select_action=on_select_action '
-            'navigate_url_template=navigate_url_template %}'
+            'navigate_url_template=navigate_url_template '
+            'input_name=input_name input_id=input_id list_id=list_id '
+            'hidden_id=hidden_id selection_value=selection_value '
+            'input_required=input_required %}'
         )
         ctx = {
             'name': kwargs.get('name', 'member'),
@@ -364,8 +381,19 @@ class StudioPeoplePickerIncludeRenderTest(TestCase):
             'extra_query': kwargs.get('extra_query', ''),
             'on_select_action': kwargs.get('on_select_action', 'set_value'),
             'navigate_url_template': kwargs.get('navigate_url_template', ''),
+            'input_name': kwargs.get('input_name', ''),
+            'input_id': kwargs.get('input_id', ''),
+            'list_id': kwargs.get('list_id', ''),
+            'hidden_id': kwargs.get('hidden_id', ''),
+            'selection_value': kwargs.get('selection_value', ''),
+            'input_required': kwargs.get('input_required', False),
         }
         return template.render(Context(ctx))
+
+    def _elements(self, **kwargs):
+        parser = _ElementAttributes()
+        parser.feed(self._render(**kwargs))
+        return parser.by_id
 
     def test_renders_input_with_prefixed_id_and_search_url(self):
         html = self._render(
@@ -382,6 +410,42 @@ class StudioPeoplePickerIncludeRenderTest(TestCase):
 
         self.assertIn('name="member"', html)
         self.assertIn('id="picker-demo-id"', html)
+
+    def test_combobox_and_listbox_have_linked_accessibility_contract(self):
+        elements = self._elements(id_prefix='picker-demo')
+        input_tag, input_attrs = elements['picker-demo-search']
+        list_tag, list_attrs = elements['picker-demo-suggestions']
+
+        self.assertEqual(input_tag, 'input')
+        self.assertEqual(input_attrs['role'], 'combobox')
+        self.assertEqual(input_attrs['aria-autocomplete'], 'list')
+        self.assertEqual(input_attrs['aria-expanded'], 'false')
+        self.assertEqual(
+            input_attrs['aria-controls'], 'picker-demo-suggestions',
+        )
+        self.assertEqual(input_attrs['aria-activedescendant'], '')
+        self.assertEqual(list_tag, 'ul')
+        self.assertEqual(list_attrs['role'], 'listbox')
+
+    def test_named_email_mode_preserves_overridden_form_contract(self):
+        elements = self._elements(
+            name='user_id',
+            id_prefix='enroll',
+            input_name='email',
+            input_id='enroll-email',
+            list_id='enroll-suggestions',
+            hidden_id='enroll-user-id',
+            selection_value='email',
+            input_required=True,
+        )
+        _, input_attrs = elements['enroll-email']
+        _, hidden_attrs = elements['enroll-user-id']
+
+        self.assertEqual(input_attrs['name'], 'email')
+        self.assertIn('required', input_attrs)
+        self.assertEqual(input_attrs['aria-controls'], 'enroll-suggestions')
+        self.assertEqual(input_attrs['data-selection-value'], 'email')
+        self.assertEqual(hidden_attrs['name'], 'user_id')
 
     def test_extra_query_attribute_propagates(self):
         html = self._render(

@@ -40,6 +40,7 @@ class StudioCourseAccessListTest(TestCase):
     def test_access_list_uses_correct_template(self):
         response = self.client.get(f'/studio/courses/{self.course.pk}/access/')
         self.assertTemplateUsed(response, 'studio/courses/access_list.html')
+        self.assertTemplateUsed(response, 'studio/includes/_people_picker.html')
 
     def test_access_list_shows_granted_access(self):
         user = User.objects.create_user(email='granted@test.com', password='pass')

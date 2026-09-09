@@ -188,6 +188,7 @@ class TestScenario2OperatorEnrollsUser:
         _ensure_tiers()
         _create_staff_user("admin@test.com")
         carol = _create_user("carol@test.com", tier_slug="main")
+        skipped = _create_user("skipme@test.com", tier_slug="main")
         selected = _create_user("selected@test.com", tier_slug="main")
         course_a = _create_course("Intro to AI", slug="intro-to-ai")
         course_b = _create_course("Other Course", slug="other-course")
@@ -200,6 +201,11 @@ class TestScenario2OperatorEnrollsUser:
             "id": selected.pk,
             "email": selected.email,
             "name": "Selected Learner",
+        }
+        skipped_result = {
+            "id": skipped.pk,
+            "email": skipped.email,
+            "name": "Skipped Learner",
         }
         stale_result = {
             "id": 999999,
@@ -215,7 +221,10 @@ class TestScenario2OperatorEnrollsUser:
                 hold_once.remove(query)
                 pending[query] = route
                 return
-            results = [selected_result] if query == "selected@test.com" else []
+            results = {
+                "escape-enrollment": [carol_result],
+                "selected@test.com": [skipped_result, selected_result],
+            }.get(query, [])
             _fulfill_lookup(route, results)
 
         page.route("**/studio/courses/*/access/users/search/**", control_lookup)
@@ -227,6 +236,29 @@ class TestScenario2OperatorEnrollsUser:
 
         enroll_input = page.locator('[data-testid="enroll-email-input"]')
         enroll_button = page.get_by_role("button", name="Enroll user", exact=True)
+        expect(enroll_input).to_have_attribute("role", "combobox")
+        expect(enroll_input).to_have_attribute("aria-autocomplete", "list")
+        expect(enroll_input).to_have_attribute("aria-expanded", "false")
+        expect(enroll_input).to_have_attribute("aria-controls", "enroll-suggestions")
+        expect(enroll_input).to_have_attribute("aria-activedescendant", "")
+
+        # Escape closes a populated list without clearing the typed value, so
+        # an operator can replace it with an exact email and submit normally.
+        with page.expect_response(
+            lambda response: _lookup_query(response.request) == "escape-enrollment"
+        ):
+            enroll_input.fill("escape-enrollment")
+        expect(
+            page.locator('[data-testid="enroll-suggestions"]')
+        ).to_be_visible()
+        expect(enroll_input).to_have_attribute("aria-expanded", "true")
+        enroll_input.press("Escape")
+        expect(enroll_input).to_have_value("escape-enrollment")
+        expect(enroll_input).to_be_focused()
+        expect(enroll_input).to_have_attribute("aria-expanded", "false")
+        expect(enroll_input).to_have_attribute("aria-activedescendant", "")
+        _expect_lookup_dismissed(page)
+
         with page.expect_request(
             lambda request: _lookup_query(request) == "carol@test.com"
         ):
@@ -236,7 +268,8 @@ class TestScenario2OperatorEnrollsUser:
         _release_lookup(page, pending["carol@test.com"], [carol_result])
         _expect_lookup_dismissed(page)
         expect(page.locator('[data-testid="enroll-user-id-input"]')).to_have_value("")
-        enroll_button.click()
+        enroll_input.focus()
+        enroll_input.press("Enter")
         page.wait_for_load_state("domcontentloaded")
 
         # Lands back on the same page
@@ -265,12 +298,32 @@ class TestScenario2OperatorEnrollsUser:
             lambda response: _lookup_query(response.request) == "selected@test.com"
         ):
             enroll_input.fill("selected@test.com")
-        suggestion = page.locator('[data-testid="enroll-suggestion"]').filter(
-            has_text="selected@test.com"
+        suggestions = page.locator('[data-testid="enroll-suggestion"]')
+        expect(suggestions).to_have_count(2)
+        expect(page.locator('[data-testid="enroll-suggestions"]')).to_have_attribute(
+            "role", "listbox"
         )
-        expect(suggestion).to_be_visible()
-        suggestion.click()
+        expect(suggestions.nth(0)).to_have_attribute("role", "option")
+        expect(suggestions.nth(1)).to_have_attribute("role", "option")
+        assert suggestions.nth(0).get_attribute("id") != suggestions.nth(1).get_attribute(
+            "id"
+        )
+
+        # Down wraps from the last row to the first; Up wraps back to the
+        # intended second row. The active descendant follows that row.
+        enroll_input.press("ArrowDown")
+        enroll_input.press("ArrowDown")
+        enroll_input.press("ArrowDown")
+        expect(suggestions.nth(0)).to_have_attribute("aria-selected", "true")
+        enroll_input.press("ArrowUp")
+        expect(suggestions.nth(0)).to_have_attribute("aria-selected", "false")
+        expect(suggestions.nth(1)).to_have_attribute("aria-selected", "true")
+        expect(enroll_input).to_have_attribute(
+            "aria-activedescendant", suggestions.nth(1).get_attribute("id")
+        )
+        enroll_input.press("Enter")
         _release_lookup(page, pending["older-enrollment"], [stale_result])
+        expect(enroll_input).to_be_focused()
         expect(enroll_input).to_have_value("selected@test.com")
         expect(page.locator('[data-testid="enroll-user-id-input"]')).to_have_value(
             str(selected.pk)
@@ -285,6 +338,7 @@ class TestScenario2OperatorEnrollsUser:
         from content.models import Enrollment
 
         assert Enrollment.objects.filter(user=selected, course=course_b).count() == 1
+        assert Enrollment.objects.filter(user=skipped, course=course_b).count() == 0
         assert Enrollment.objects.filter(user=selected, course=course_a).count() == 0
         connection.close()
 

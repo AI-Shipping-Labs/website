@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import textwrap
 from pathlib import Path
+from unittest import defaultTestLoader
 
 from django.test import SimpleTestCase
 
@@ -26,6 +27,45 @@ from scripts.playwright_owner_inventory_ceilings import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRATCH = ROOT / ".tmp" / "playwright-owner-policy-tests"
+
+WORKTREE_SESSION_GUARD_OWNER_IDS = frozenset(
+    f"playwright_tests/test_worktree_session_guard.py::{name}"
+    for name in (
+        "test_ambient_serial_run_gets_the_unsuffixed_name",
+        "test_blank_worker_env_is_treated_as_controller",
+        "test_config_cache_poison_does_not_survive_into_the_next_test",
+        "test_conflict_message_sanitizes_recorded_holder_command",
+        "test_controller_process_has_no_worker_id",
+        "test_db_settings_hook_applies_the_worker_suffix",
+        "test_db_settings_hook_leaves_non_sqlite_engines_alone",
+        "test_db_settings_hook_overrides_an_earlier_test_name",
+        "test_dead_holder_metadata_does_not_block_future_session",
+        "test_each_worker_gets_a_distinct_database_file",
+        "test_invalid_pinned_port_does_not_block_parallelism",
+        "test_next_test_sees_a_clean_config_cache",
+        "test_non_local_playwright_base_url_does_not_claim_guard",
+        "test_parallelism_is_allowed_without_a_pinned_port",
+        "test_pinned_port_is_allowed_without_parallelism",
+        "test_pinned_port_with_parallelism_fails_fast",
+        "test_release_allows_retry_in_same_worktree",
+        "test_remote_base_url_ignores_the_pinned_port_check",
+        "test_requested_worker_count_is_read_from_the_n_option",
+        "test_same_worktree_conflict_fails_fast_with_holder_details",
+        "test_second_separate_invocation_is_still_blocked",
+        "test_separate_worktree_roots_are_allowed_concurrently",
+        "test_serial_run_keeps_the_historical_database_name",
+        "test_sessionfinish_releases_and_clears_guard",
+        "test_sessionstart_claims_guard_for_local_direct_pytest",
+        "test_worker_database_name_defaults_to_the_ambient_worker",
+        "test_worker_database_name_still_passes_the_unsafe_database_guard",
+        "test_worker_databases_stay_inside_their_own_worktree",
+        "test_worker_id_is_sanitized_for_filesystem_use",
+        "test_worker_process_does_not_re_run_the_pinned_port_check",
+        "test_worker_process_reports_its_id",
+        "test_xdist_controller_still_claims_the_worktree_guard",
+        "test_xdist_worker_does_not_claim_the_worktree_guard",
+    )
+)
 
 
 class SyntheticCollectionTestCase(SimpleTestCase):
@@ -989,10 +1029,25 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
             self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
             self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
+        self.assertEqual(len(WORKTREE_SESSION_GUARD_OWNER_IDS), 33)
+        for owner in WORKTREE_SESSION_GUARD_OWNER_IDS:
+            self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
+            self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
+            self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
         self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2246)
-        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 50)
+        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 17)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
+
+    def test_worktree_session_guard_owners_collect_in_native_suite(self):
+        source = ROOT / "playwright_tests" / "test_worktree_session_guard.py"
+        destination = "tests.test_worktree_session_guard"
+
+        self.assertFalse(source.exists())
+        self.assertEqual(
+            defaultTestLoader.loadTestsFromName(destination).countTestCases(),
+            33,
+        )
 
     def test_current_collection_exactly_matches_live_partition_without_runtime_startup(self):
         lock = ROOT / ".tmp" / "playwright-session.lock"
@@ -1014,8 +1069,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2628)
-        self.assertEqual(len(inventory.owners), 2403)
+        self.assertEqual(inventory.item_count, 2584)
+        self.assertEqual(len(inventory.owners), 2370)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

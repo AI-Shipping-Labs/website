@@ -94,7 +94,11 @@ from payments.models import (
 from payments.services.backfill_tiers import backfill_user_from_stripe
 from plans.models import Plan, SprintEnrollment
 from studio.decorators import staff_required, superuser_required
-from studio.utils import coerce_page_number, studio_pagination_context
+from studio.utils import (
+    coerce_page_number,
+    studio_listing_querystring,
+    studio_pagination_context,
+)
 from studio.views.tier_overrides import DURATION_CHOICES
 
 User = get_user_model()
@@ -609,12 +613,7 @@ def _pager_querystring(request, page_number):
 
 def _listing_querystring(request, **updates):
     """Build a list URL while preserving active filters and dropping page."""
-    params = request.GET.copy()
-    params.pop('page', None)
-    for key, value in updates.items():
-        params[key] = value
-    encoded = params.urlencode()
-    return '?' + encoded if encoded else ''
+    return studio_listing_querystring(request, **updates)
 
 
 @staff_required
@@ -673,6 +672,24 @@ def user_list(request):
     # Slack pill stays non-clickable, mirroring the Stripe pattern.
     slack_team_id = get_config('SLACK_TEAM_ID', '')
 
+    listing_params = {
+        'filter': active_filter,
+        'slack': slack_filter,
+        'bounce': bounce_filter,
+        'account_lifecycle': account_lifecycle_filter or None,
+        'q': search or None,
+        'tag': active_tag or None,
+        'sort': None,
+    }
+
+    def listing_url(**updates):
+        return _listing_querystring(request, **(listing_params | updates))
+
+    lifecycle_filter_links = [
+        (value, label, listing_url(account_lifecycle=value))
+        for value, label in ACCOUNT_LIFECYCLE_CHOICES
+    ]
+
     return render(request, 'studio/users/list.html', {
         'page': page,
         'paginator': paginator,
@@ -694,6 +711,33 @@ def user_list(request):
         'search': search,
         'active_tag': active_tag,
         'sort': sort,
+        'user_export_querystring': _listing_querystring(
+            request,
+            filter=active_filter,
+            slack=slack_filter,
+            bounce=bounce_filter,
+            sort=sort,
+            account_lifecycle=account_lifecycle_filter or None,
+            q=search or None,
+            tag=active_tag or None,
+        ),
+        'user_filter_all_url': listing_url(filter=FILTER_ALL),
+        'user_filter_paid_url': listing_url(filter=FILTER_PAID),
+        'user_filter_main_plus_url': listing_url(filter=FILTER_MAIN_PLUS),
+        'user_filter_premium_url': listing_url(filter=FILTER_PREMIUM),
+        'user_filter_subscribers_url': listing_url(filter=FILTER_SUBSCRIBERS),
+        'user_active_tag_clear_url': listing_url(tag=None),
+        'user_slack_any_url': listing_url(slack=SLACK_FILTER_ANY),
+        'user_slack_yes_url': listing_url(slack=SLACK_FILTER_YES),
+        'user_slack_no_url': listing_url(slack=SLACK_FILTER_NO),
+        'user_lifecycle_all_url': listing_url(account_lifecycle=None),
+        'user_lifecycle_filter_links': lifecycle_filter_links,
+        'user_bounce_any_url': listing_url(bounce=BOUNCE_FILTER_ANY),
+        'user_bounce_none_url': listing_url(bounce=BOUNCE_FILTER_NONE),
+        'user_bounce_soft_url': listing_url(bounce=BOUNCE_FILTER_SOFT),
+        'user_bounce_permanent_url': listing_url(
+            bounce=BOUNCE_FILTER_PERMANENT,
+        ),
         'joined_sort_url': _listing_querystring(
             request, sort='-joined' if sort == 'joined' else 'joined',
         ),

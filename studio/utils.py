@@ -24,11 +24,38 @@ def coerce_page_number(raw, num_pages):
     return page_num
 
 
-def studio_pager_querystring(request, page_number, *, page_param='page'):
-    """Build a pager query string while preserving active list filters."""
+def _updated_querystring(request, *, updates, drop=()):
+    """Return encoded request query parameters after explicit changes."""
     params = request.GET.copy()
-    params[page_param] = str(page_number)
-    return '?' + params.urlencode()
+    for key in drop:
+        params.pop(key, None)
+    for key, value in updates.items():
+        # Reinsert explicit updates in caller order. Besides making generated
+        # URLs deterministic, this preserves each listing's established
+        # parameter order while still delegating escaping to QueryDict.
+        params.pop(key, None)
+        if value is None:
+            continue
+        params[key] = str(value)
+    encoded = params.urlencode()
+    return f'?{encoded}' if encoded else ''
+
+
+def studio_listing_querystring(request, **updates):
+    """Build an encoded list URL while returning filter changes to page 1."""
+    return _updated_querystring(request, updates=updates, drop=('page',))
+
+
+def studio_pager_querystring(
+    request,
+    page_number,
+    *,
+    page_param='page',
+    **updates,
+):
+    """Build a pager query string while preserving active list filters."""
+    updates[page_param] = page_number
+    return _updated_querystring(request, updates=updates)
 
 
 def studio_pagination_context(

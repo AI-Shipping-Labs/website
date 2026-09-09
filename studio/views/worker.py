@@ -34,7 +34,6 @@ and redirect.
 """
 
 import logging
-import pprint
 from urllib.parse import urlencode
 
 from django.contrib import messages
@@ -47,7 +46,7 @@ from django.views.decorators.http import require_POST
 from django_q.models import OrmQ, Task
 from django_q.tasks import async_task
 
-from api.serializers.worker import extract_error_summary
+import jobs.task_format as task_format
 from jobs.schedule_reconciliation import (
     SCHEDULE_RECONCILIATION_CACHE_ALIAS,
     SCHEDULE_RECONCILIATION_CACHE_KEY,
@@ -250,10 +249,7 @@ def worker_status(request):
     failed_with_details = []
     for task in failed_tasks:
         error_message = str(task.result) if task.result is not None else "No error details"
-        # ``extract_error_summary`` lives in ``api/serializers/worker.py`` so the
-        # JSON API (issue #714) and this HTML view share one definition of the
-        # collapsed-row heuristic. See that module for the full rationale.
-        summary_line = extract_error_summary(error_message)
+        summary_line = task_format.extract_error_summary(error_message)
         failed_with_details.append(
             {
                 "task": task,
@@ -395,35 +391,6 @@ def worker_delete_queued(request, ormq_id):
     return redirect("studio_worker")
 
 
-def _format_task_value(value):
-    """Pretty-print a Task arg/kwarg/result value for the detail template.
-
-    Strings come through unchanged so multi-line tracebacks aren't quoted to
-    death; everything else goes through ``pprint`` so dicts and tuples are
-    legible.
-    """
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    try:
-        return pprint.pformat(value, width=100, sort_dicts=False)
-    except Exception:  # pragma: no cover - defensive
-        return repr(value)
-
-
-def _looks_like_traceback(text):
-    """Heuristic: was this result string produced by ``traceback.format_exc()``?
-
-    django-q stores the formatted traceback in ``Task.result`` when a job
-    raises. The detail view renders those in a collapsible block so they
-    don't dominate the page.
-    """
-    if not isinstance(text, str):
-        return False
-    return text.startswith("Traceback") or "\nTraceback (most recent call last):" in text
-
-
 @staff_required
 def worker_task_detail(request, task_id):
     """Render full detail for a completed django-q ``Task`` row.
@@ -436,7 +403,7 @@ def worker_task_detail(request, task_id):
     duration = None
     if task.started and task.stopped:
         duration = (task.stopped - task.started).total_seconds()
-    result_text = _format_task_value(task.result)
+    result_text = task_format.format_task_value(task.result)
     return render(
         request,
         "studio/worker_task_detail.html",
@@ -444,10 +411,11 @@ def worker_task_detail(request, task_id):
             "task": task,
             "display_name": humanize_task_name(task.name, task.func),
             "duration_seconds": duration,
-            "args_text": _format_task_value(task.args),
-            "kwargs_text": _format_task_value(task.kwargs),
+            "args_text": task_format.format_task_value(task.args),
+            "kwargs_text": task_format.format_task_value(task.kwargs),
             "result_text": result_text,
-            "result_is_traceback": (not task.success) and _looks_like_traceback(result_text),
+            "result_is_traceback": (not task.success)
+            and task_format.looks_like_traceback(result_text),
             "affected_entity": resolve_task_affected_entity(task),
         },
     )

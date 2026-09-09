@@ -38,6 +38,7 @@ pytestmark = pytest.mark.local_only
 DESKTOP_VIEWPORT = {"width": 1280, "height": 900}
 MOBILE_VIEWPORT = {"width": 390, "height": 844}
 SCREENSHOT_DIR = Path("/tmp/aisl-issue-494-screenshots")
+ISSUE_1543_SCREENSHOT_DIR = Path(__file__).parent.parent / ".tmp" / "issue-1543"
 
 
 def _reset_state(staff_email):
@@ -304,10 +305,31 @@ class TestStudioUserCrmOverview:
             f"&next=/studio/plans/{plan_pk}/%23member-notes"
         )
 
-        add_note.click()
+        # Old plan-note bookmarks permanently redirect to this same live
+        # member-scoped form. Exercise that compatibility route before saving
+        # so deleting its unreachable template cannot turn into a ghost form.
+        page.goto(
+            f"{django_server}/studio/plans/{plan_pk}/notes/new",
+            wait_until="domcontentloaded",
+        )
+        page.wait_for_url(
+            f"{django_server}/studio/users/{member_pk}/notes/new?plan_id={plan_pk}",
+        )
+        assert page.get_by_role("heading", name="New member note").is_visible()
+        assert page.get_by_role("heading", name="New interview note").count() == 0
+        ISSUE_1543_SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+        page.screenshot(
+            path=ISSUE_1543_SCREENSHOT_DIR / "legacy-plan-note-form-1280px.png",
+            full_page=True,
+        )
         page.locator('textarea[name="body"]').fill("Plan return context preserved")
         page.get_by_role("button", name="Save note").click()
-        page.wait_for_url(f"{django_server}/studio/plans/{plan_pk}/#member-notes")
+        page.wait_for_url(f"{django_server}/studio/users/{member_pk}/#member-notes")
+
+        page.goto(
+            f"{django_server}/studio/plans/{plan_pk}/",
+            wait_until="domcontentloaded",
+        )
         assert page.locator(
             '[data-testid="internal-notes"]',
             has_text="Plan return context preserved",

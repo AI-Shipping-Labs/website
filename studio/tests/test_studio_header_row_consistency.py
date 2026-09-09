@@ -42,7 +42,6 @@ KNOWN_EXCEPTIONS = {
     'plans/edit.html': 0,
     'plans/form.html': 0,
     'plans/move_unfinished.html': 0,
-    'plans/note_form.html': 0,
     'questionnaires/form.html': 2,
     'questionnaires/question_form.html': 0,
     'questionnaires/response_question_form.html': 0,
@@ -108,7 +107,6 @@ personas/form.html=2
 plans/edit.html=0
 plans/form.html=0
 plans/move_unfinished.html=0
-plans/note_form.html=0
 questionnaires/form.html=2
 questionnaires/question_form.html=0
 questionnaires/response_question_form.html=0

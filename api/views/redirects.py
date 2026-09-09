@@ -23,6 +23,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.datetime import isoformat_or_none
 from api.utils import (
     delete_not_available_response,
     parse_json_body,
@@ -58,10 +59,6 @@ _TRUE_VALUES = {"1", "true", "True", "yes", "on"}
 _FALSE_VALUES = {"0", "false", "False", "no", "off"}
 
 
-def _iso(value):
-    return value.isoformat() if value is not None else None
-
-
 def _serialize_redirect(redirect):
     return {
         "id": redirect.pk,
@@ -69,8 +66,8 @@ def _serialize_redirect(redirect):
         "target_path": redirect.target_path,
         "redirect_type": redirect.redirect_type,
         "is_active": redirect.is_active,
-        "created_at": _iso(redirect.created_at),
-        "updated_at": _iso(redirect.updated_at),
+        "created_at": isoformat_or_none(redirect.created_at),
+        "updated_at": isoformat_or_none(redirect.updated_at),
     }
 
 

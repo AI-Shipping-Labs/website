@@ -8,6 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.datetime import isoformat_or_none
 from api.utils import (
     body_must_be_object_response,
     delete_not_available_response,
@@ -97,10 +98,6 @@ def _site_url(path):
     return f'{site_base_url().rstrip("/")}{path}'
 
 
-def _iso(value):
-    return value.isoformat() if value is not None else None
-
-
 def serialize_marketing_page(page):
     return {
         'id': page.id,
@@ -122,8 +119,8 @@ def serialize_marketing_page(page):
         'source_repo': page.source_repo or '',
         'source_path': page.source_path or '',
         'editable': not is_synced(page),
-        'created_at': _iso(page.created_at),
-        'updated_at': _iso(page.updated_at),
+        'created_at': isoformat_or_none(page.created_at),
+        'updated_at': isoformat_or_none(page.updated_at),
     }
 
 

@@ -3,12 +3,7 @@
 from __future__ import annotations
 
 from accounts.utils.display import display_name
-
-
-def isoformat_or_none(value):
-    if value is None:
-        return None
-    return value.isoformat()
+from api.serializers.datetime import isoformat_or_none
 
 
 def _annotated_progress(plan):

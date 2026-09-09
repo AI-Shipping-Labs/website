@@ -22,13 +22,7 @@ the worker API's JSON wire shape.
 from __future__ import annotations
 
 import jobs.task_format as task_format
-
-
-def _isoformat_or_none(value):
-    """ISO-8601 with timezone for non-null datetimes, ``None`` otherwise."""
-    if value is None:
-        return None
-    return value.isoformat()
+from api.serializers.datetime import isoformat_or_none
 
 
 def _duration_seconds(task):
@@ -55,8 +49,8 @@ def serialize_task_row(task, *, affected_entity=None):
         "name": task.name,
         "group": task.group,
         "function": task.func,
-        "started_at": _isoformat_or_none(task.started),
-        "stopped_at": _isoformat_or_none(task.stopped),
+        "started_at": isoformat_or_none(task.started),
+        "stopped_at": isoformat_or_none(task.stopped),
         "duration_seconds": _duration_seconds(task),
         "success": task.success,
         "error_summary": error_summary,
@@ -99,8 +93,8 @@ def serialize_task_detail(task, *, affected_entity=None):
         "hook": task.hook,
         "args": args_text,
         "kwargs": kwargs_text,
-        "started_at": _isoformat_or_none(task.started),
-        "stopped_at": _isoformat_or_none(task.stopped),
+        "started_at": isoformat_or_none(task.started),
+        "stopped_at": isoformat_or_none(task.stopped),
         "duration_seconds": duration,
         "cluster": task.cluster,
         "attempt_count": task.attempt_count,

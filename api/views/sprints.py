@@ -23,6 +23,7 @@ from accounts.auth import token_required
 from accounts.utils.display import display_name
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.datetime import isoformat_or_none
 from api.serializers.plans import serialize_sprint
 from api.utils import (
     delete_not_available_response,
@@ -324,12 +325,6 @@ def _sprint_visible_to(user, sprint):
     return visible_plans_for(user).filter(sprint=sprint).exists()
 
 
-def _isoformat_or_none(value):
-    if value is None:
-        return None
-    return value.isoformat()
-
-
 def _snippet(value, *, limit=180):
     text = " ".join((value or "").split())
     if len(text) <= limit:
@@ -363,7 +358,7 @@ def _serialize_plan_summary(plan):
     return {
         "id": plan.id,
         "goal": plan.goal,
-        "shared_at": _isoformat_or_none(plan.shared_at),
+        "shared_at": isoformat_or_none(plan.shared_at),
     }
 
 
@@ -371,7 +366,7 @@ def _progress_item(kind, item):
     return {
         "kind": kind,
         "id": item.id,
-        "done_at": _isoformat_or_none(item.done_at),
+        "done_at": isoformat_or_none(item.done_at),
         "description": _snippet(item.description),
     }
 
@@ -417,7 +412,7 @@ def _serialize_progress_change(change):
         "item_kind": change.item_kind,
         "item_id": item_id,
         "item_description": _snippet(change.item_description),
-        "applied_at": _isoformat_or_none(change.applied_at),
+        "applied_at": isoformat_or_none(change.applied_at),
     }
 
 
@@ -427,7 +422,7 @@ def _serialize_progress_event(event):
     changes = list(event.changes.all())
     return {
         "id": event.id,
-        "applied_at": _isoformat_or_none(event.applied_at),
+        "applied_at": isoformat_or_none(event.applied_at),
         "summary": event.summary,
         "blockers": event.blockers or [],
         "model_name": event.model_name,
@@ -441,7 +436,7 @@ def _serialize_slack_message(message):
         "id": message.id,
         "ts": message.ts,
         "author_display": message.author_display,
-        "posted_at": _isoformat_or_none(message.posted_at),
+        "posted_at": isoformat_or_none(message.posted_at),
         "is_root": message.is_root,
         "text": message.text,
     }
@@ -462,7 +457,7 @@ def _serialize_thread(thread):
         "id": thread.id,
         "channel_id": thread.channel_id,
         "thread_ts": thread.thread_ts,
-        "posted_at": _isoformat_or_none(thread.posted_at),
+        "posted_at": isoformat_or_none(thread.posted_at),
         "permalink": thread.permalink,
         "reply_count": thread.reply_count,
         "root_message": _snippet(root.text if root else ""),
@@ -487,10 +482,10 @@ def _crm_progress_for(plan, threads_by_plan):
         "threads_count": len(threads),
         "parsed_events_count": len(events),
         "applied_changes_count": len(changes),
-        "latest_thread_posted_at": _isoformat_or_none(
+        "latest_thread_posted_at": isoformat_or_none(
             max((thread.posted_at for thread in threads), default=None),
         ),
-        "latest_event_applied_at": _isoformat_or_none(
+        "latest_event_applied_at": isoformat_or_none(
             max((event.applied_at for event in events), default=None),
         ),
         "threads": [_serialize_thread(thread) for thread in threads],
@@ -583,8 +578,8 @@ def _serialize_accountability_partner(assignment):
             assignment.assigned_by.email
             if assignment.assigned_by_id else None
         ),
-        "created_at": _isoformat_or_none(assignment.created_at),
-        "updated_at": _isoformat_or_none(assignment.updated_at),
+        "created_at": isoformat_or_none(assignment.created_at),
+        "updated_at": isoformat_or_none(assignment.updated_at),
     }
 
 
@@ -1566,7 +1561,7 @@ def sprint_progress_evidence(request, slug):
             },
             "source_enrollment": {
                 "id": enrollment.id,
-                "enrolled_at": _isoformat_or_none(enrollment.enrolled_at),
+                "enrolled_at": isoformat_or_none(enrollment.enrolled_at),
             },
             "source_plan": _serialize_plan_summary(source_plan),
             "target": target,

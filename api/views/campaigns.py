@@ -18,6 +18,7 @@ from accounts.auth import token_required
 from accounts.utils.tags import normalize_tags
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.datetime import isoformat_or_none
 from api.utils import (
     body_must_be_object_response,
     coerce_optional_text,
@@ -180,10 +181,6 @@ def campaign_recipient_count(request):
     return JsonResponse({"recipient_count": recount(**audience)})
 
 
-def _iso(value):
-    return value.isoformat() if value is not None else None
-
-
 def _serialize_campaign(campaign):
     return {
         "id": campaign.pk,
@@ -197,11 +194,11 @@ def _serialize_campaign(campaign):
         "target_event": campaign.target_event_id,
         "status": campaign.status,
         "is_archived": campaign.is_archived,
-        "sent_at": _iso(campaign.sent_at),
+        "sent_at": isoformat_or_none(campaign.sent_at),
         "sent_count": campaign.sent_count,
-        "audience_snapshotted_at": _iso(campaign.audience_snapshotted_at),
+        "audience_snapshotted_at": isoformat_or_none(campaign.audience_snapshotted_at),
         "delivery_counts": campaign_delivery_counts(campaign),
-        "created_at": _iso(campaign.created_at),
+        "created_at": isoformat_or_none(campaign.created_at),
     }
 
 

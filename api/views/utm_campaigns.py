@@ -30,6 +30,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.datetime import isoformat_or_none
 from api.utils import (
     body_must_be_object_response,
     coerce_optional_text,
@@ -106,10 +107,6 @@ _LINK_EXAMPLE = {
 _CAMPAIGN_DETAIL_EXAMPLE = dict(_CAMPAIGN_EXAMPLE, links=[_LINK_EXAMPLE])
 
 
-def _iso(value):
-    return value.isoformat() if value is not None else None
-
-
 def serialize_campaign(campaign, *, links=None):
     """Return the canonical campaign object.
 
@@ -125,8 +122,8 @@ def serialize_campaign(campaign, *, links=None):
         "default_utm_medium": campaign.default_utm_medium,
         "notes": campaign.notes,
         "is_archived": campaign.is_archived,
-        "created_at": _iso(campaign.created_at),
-        "updated_at": _iso(campaign.updated_at),
+        "created_at": isoformat_or_none(campaign.created_at),
+        "updated_at": isoformat_or_none(campaign.updated_at),
     }
     if links is not None:
         data["links"] = [serialize_link(link) for link in links]
@@ -148,8 +145,8 @@ def serialize_link(link):
         "effective_source": link.effective_source(),
         "effective_medium": link.effective_medium(),
         "url": link.build_url(),
-        "created_at": _iso(link.created_at),
-        "updated_at": _iso(link.updated_at),
+        "created_at": isoformat_or_none(link.created_at),
+        "updated_at": isoformat_or_none(link.updated_at),
     }
 
 

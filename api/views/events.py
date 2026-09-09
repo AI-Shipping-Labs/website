@@ -24,6 +24,7 @@ from accounts.auth import token_required
 from accounts.services.timezones import is_valid_timezone
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.datetime import isoformat_or_none
 from api.utils import (
     body_must_be_object_response,
     coerce_optional_text,
@@ -289,10 +290,6 @@ _EVENT_EXAMPLE = {
 _url_validator = URLValidator(schemes=["http", "https"])
 
 
-def _iso(value):
-    return value.isoformat() if value is not None else None
-
-
 def _host_prefetch():
     return Prefetch(
         "event_host_links",
@@ -332,8 +329,8 @@ def serialize_event(event):
         "description": event.description,
         "kind": event.kind,
         "platform": event.platform,
-        "start_datetime": _iso(event.start_datetime),
-        "end_datetime": _iso(event.end_datetime),
+        "start_datetime": isoformat_or_none(event.start_datetime),
+        "end_datetime": isoformat_or_none(event.end_datetime),
         "timezone": event.timezone,
         "zoom_join_url": event.zoom_join_url,
         "location": event.location,
@@ -347,7 +344,7 @@ def serialize_event(event):
         "host_email": event.host_email,
         "recording_url": event.recording_url or "",
         "recording_s3_url": event.recording_s3_url or "",
-        "recording_upload_enqueued_at": _iso(event.recording_upload_enqueued_at),
+        "recording_upload_enqueued_at": isoformat_or_none(event.recording_upload_enqueued_at),
         "recording_upload_status": recording_upload_status(event),
         "timestamps": event.timestamps or [],
         "materials": event.materials or [],
@@ -364,8 +361,8 @@ def serialize_event(event):
         "source_repo": event.source_repo or "",
         "source_path": event.source_path or "",
         "editable": not is_synced(event),
-        "created_at": _iso(event.created_at),
-        "updated_at": _iso(event.updated_at),
+        "created_at": isoformat_or_none(event.created_at),
+        "updated_at": isoformat_or_none(event.updated_at),
     }
 
 

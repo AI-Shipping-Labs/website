@@ -22,6 +22,7 @@ from accounts.lifecycle import lifecycle_payload
 from accounts.models import TierOverride
 from accounts.services.subscription_summary import subscription_summary
 from accounts.utils.display import display_name
+from api.serializers.datetime import isoformat_or_none
 from email_app.services.ses_identity import event_identity_summary
 
 BOUNCE_STATE_NONE = "none"
@@ -37,12 +38,6 @@ _DISPOSITION_OPENED = "opened"
 _DISPOSITION_CLICKED = "clicked"
 _DISPOSITION_BOUNCED = "bounced"
 _DISPOSITION_COMPLAINED = "complained"
-
-
-def _isoformat_or_none(value):
-    if value is None:
-        return None
-    return value.isoformat()
 
 
 def _bounce_state(user):
@@ -145,8 +140,8 @@ def serialize_user_state(user, *, compact=False):
         "slack_user_id": user.slack_user_id or "",
         "stripe_customer_id": user.stripe_customer_id or "",
         "subscription_id": user.subscription_id or "",
-        "date_joined": _isoformat_or_none(user.date_joined),
-        "last_login": _isoformat_or_none(user.last_login),
+        "date_joined": isoformat_or_none(user.date_joined),
+        "last_login": isoformat_or_none(user.last_login),
         **lifecycle_payload(user),
     }
     if not compact:
@@ -183,7 +178,7 @@ def _serialize_tier_override(override):
     return {
         "tier_slug": override.override_tier.slug,
         "level": override.override_tier.level,
-        "expires_at": _isoformat_or_none(override.expires_at),
+        "expires_at": isoformat_or_none(override.expires_at),
         "granted_by": override.granted_by.email if override.granted_by else None,
     }
 
@@ -199,7 +194,7 @@ def serialize_ses_event(event):
     return {
         "message_id": event.message_id,
         "event_type": event.event_type,
-        "received_at": _isoformat_or_none(event.received_at),
+        "received_at": isoformat_or_none(event.received_at),
         "recipient_email": event.recipient_email or "",
         "bounce_type": event.bounce_type or "",
         "bounce_subtype": event.bounce_subtype or "",
@@ -246,16 +241,16 @@ def serialize_email_log(log):
         "user_email": log.user.email if log.user_id else None,
         "email_type": log.email_type,
         "subject": log.subject or "",
-        "sent_at": _isoformat_or_none(log.sent_at),
+        "sent_at": isoformat_or_none(log.sent_at),
         "ses_message_id": log.ses_message_id or "",
-        "opened_at": _isoformat_or_none(log.opened_at),
+        "opened_at": isoformat_or_none(log.opened_at),
         "opens": int(log.opens or 0),
-        "clicked_at": _isoformat_or_none(log.clicked_at),
+        "clicked_at": isoformat_or_none(log.clicked_at),
         "clicks": int(log.clicks or 0),
-        "bounced_at": _isoformat_or_none(log.bounced_at),
+        "bounced_at": isoformat_or_none(log.bounced_at),
         "bounce_type": log.bounce_type or "",
         "bounce_subtype": log.bounce_subtype or "",
-        "complained_at": _isoformat_or_none(log.complained_at),
+        "complained_at": isoformat_or_none(log.complained_at),
         "campaign_id": log.campaign_id,
         "campaign_subject": (
             log.campaign.subject if log.campaign_id else None

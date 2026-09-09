@@ -9,6 +9,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.datetime import isoformat_or_none
 from api.utils import (
     body_must_be_object_response,
     coerce_optional_text,
@@ -43,10 +44,6 @@ _HOST_EXAMPLE = {
 }
 
 
-def _iso(value):
-    return value.isoformat() if value is not None else None
-
-
 def serialize_host_profile(host):
     """Return the canonical staff host profile object."""
     return {
@@ -59,8 +56,8 @@ def serialize_host_profile(host):
         'photo_url': host.photo_url,
         'email': host.email,
         'is_active': host.is_active,
-        'created_at': _iso(host.created_at),
-        'updated_at': _iso(host.updated_at),
+        'created_at': isoformat_or_none(host.created_at),
+        'updated_at': isoformat_or_none(host.updated_at),
     }
 
 

@@ -28,6 +28,7 @@ from accounts.auth import token_required
 from accounts.utils.tags import set_tags
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.datetime import isoformat_or_none
 from api.utils import parse_json_body, require_methods
 from payments.models import Tier
 from studio.services.contacts_import import import_contact_rows
@@ -56,13 +57,6 @@ EXPORT_COLUMNS = [
 ]
 
 
-def _isoformat_or_none(value):
-    """Return ``value.isoformat()`` for non-null datetimes, else None."""
-    if value is None:
-        return None
-    return value.isoformat()
-
-
 def _serialize_user(user):
     """Build the export dict for a single ``User`` row.
 
@@ -81,12 +75,12 @@ def _serialize_user(user):
         "tier": tier_slug,
         "email_verified": user.email_verified,
         "unsubscribed": user.unsubscribed,
-        "date_joined": _isoformat_or_none(user.date_joined),
-        "last_login": _isoformat_or_none(user.last_login),
+        "date_joined": isoformat_or_none(user.date_joined),
+        "last_login": isoformat_or_none(user.last_login),
         "stripe_customer_id": user.stripe_customer_id,
         "subscription_id": user.subscription_id,
         "slack_member": user.slack_member,
-        "slack_checked_at": _isoformat_or_none(user.slack_checked_at),
+        "slack_checked_at": isoformat_or_none(user.slack_checked_at),
     }
 
 

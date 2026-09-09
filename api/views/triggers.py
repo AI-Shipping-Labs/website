@@ -18,6 +18,7 @@ from django.http import JsonResponse
 
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.datetime import isoformat_or_none
 from api.utils import (
     body_must_be_object_response,
     coerce_optional_text,
@@ -41,10 +42,6 @@ from triggers.models import (
 # ---------------------------------------------------------------------------
 
 
-def _iso(value):
-    return value.isoformat() if value is not None else None
-
-
 def _serialize_subscription(sub):
     return {
         "id": sub.pk,
@@ -55,11 +52,11 @@ def _serialize_subscription(sub):
         # seeing the value; the raw secret is intentionally omitted.
         "has_secret": bool(sub.encrypted_secret),
         "secret_version": sub.secret_version,
-        "previous_secret_valid_until": _iso(sub.previous_secret_valid_until),
+        "previous_secret_valid_until": isoformat_or_none(sub.previous_secret_valid_until),
         "is_active": sub.is_active,
         "description": sub.description,
-        "created_at": _iso(sub.created_at),
-        "updated_at": _iso(sub.updated_at),
+        "created_at": isoformat_or_none(sub.created_at),
+        "updated_at": isoformat_or_none(sub.updated_at),
     }
 
 
@@ -75,8 +72,8 @@ def _serialize_widget(widget):
         "claimed_label": widget.claimed_label,
         "exhausted_label": widget.exhausted_label,
         "is_active": widget.is_active,
-        "created_at": _iso(widget.created_at),
-        "updated_at": _iso(widget.updated_at),
+        "created_at": isoformat_or_none(widget.created_at),
+        "updated_at": isoformat_or_none(widget.updated_at),
     }
 
 
@@ -87,7 +84,7 @@ def _serialize_emission(em):
         "event_name": em.event_name,
         "properties": em.properties or {},
         "envelope_id": em.envelope_id,
-        "created_at": _iso(em.created_at),
+        "created_at": isoformat_or_none(em.created_at),
     }
 
 
@@ -103,7 +100,7 @@ def _serialize_delivery(d):
         "job_status": d.job.status if d.job_id else None,
         "succeeded": d.succeeded,
         "error": d.error,
-        "created_at": _iso(d.created_at),
+        "created_at": isoformat_or_none(d.created_at),
     }
 
 
@@ -117,11 +114,11 @@ def _serialize_delivery_job(job):
         "status": job.status,
         "attempt_count": job.attempt_count,
         "max_attempts": job.max_attempts,
-        "next_attempt_at": _iso(job.next_attempt_at),
-        "lease_expires_at": _iso(job.lease_expires_at),
+        "next_attempt_at": isoformat_or_none(job.next_attempt_at),
+        "lease_expires_at": isoformat_or_none(job.lease_expires_at),
         "last_error": job.last_error,
-        "created_at": _iso(job.created_at),
-        "updated_at": _iso(job.updated_at),
+        "created_at": isoformat_or_none(job.created_at),
+        "updated_at": isoformat_or_none(job.updated_at),
     }
 
 

@@ -1,9 +1,8 @@
 """Serializers for the read-only onboarding API (issue #837).
 
 Pure functions (no DRF) that convert ``questionnaires`` ORM rows into the
-JSON shapes documented in the OpenAPI spec. Mirrors
-``api/serializers/users.py`` (plain dict builders, an ``_isoformat_or_none``
-helper).
+JSON shapes documented in the OpenAPI spec. Mirrors the plain-dict builders in
+``api/serializers/users.py``.
 
 Two surfaces:
 
@@ -27,6 +26,7 @@ adds the structured-list JSON wrapping on top of it.
 
 from django.urls import reverse
 
+from api.serializers.datetime import isoformat_or_none
 from crm.models import CRMRecord
 from questionnaires.onboarding import (
     normalize_answer as _normalize_answer,
@@ -34,12 +34,6 @@ from questionnaires.onboarding import (
 from questionnaires.onboarding import (
     normalize_answer_options as _normalize_answer_options,
 )
-
-
-def _isoformat_or_none(value):
-    if value is None:
-        return None
-    return value.isoformat()
 
 
 def _serialize_crm_record(response):
@@ -188,8 +182,8 @@ def serialize_response(response, *, persona):
         ),
         "questionnaire_slug": response.questionnaire.slug,
         "status": response.status,
-        "submitted_at": _isoformat_or_none(response.submitted_at),
-        "reviewed_at": _isoformat_or_none(response.reviewed_at),
+        "submitted_at": isoformat_or_none(response.submitted_at),
+        "reviewed_at": isoformat_or_none(response.reviewed_at),
         "reviewed_by": (
             response.reviewed_by.email if response.reviewed_by is not None else None
         ),
@@ -223,10 +217,10 @@ def serialize_response_summary(response):
             "purpose": response.questionnaire.purpose,
         },
         "status": response.status,
-        "submitted_at": _isoformat_or_none(response.submitted_at),
-        "updated_at": _isoformat_or_none(response.updated_at),
+        "submitted_at": isoformat_or_none(response.submitted_at),
+        "updated_at": isoformat_or_none(response.updated_at),
         "answered_count": response.answered_count,
-        "reviewed_at": _isoformat_or_none(response.reviewed_at),
+        "reviewed_at": isoformat_or_none(response.reviewed_at),
         "reviewed_by": (
             response.reviewed_by.email if response.reviewed_by is not None else None
         ),

@@ -1262,21 +1262,24 @@ INTEGRATION_GROUPS = [
                 'is_secret': False,
                 'is_boolean': True,
                 'default': 'false',
+                'requires_restart': True,
                 'description': (
                     'Explicit on switch for Pydantic Logfire. Default off '
                     'everywhere; must be true (plus a token, plus not running '
-                    'tests) before Logfire initializes. Keeps local/dev/eval '
-                    'runs silent unless an operator opts in.'
+                    'tests) before Logfire initializes. Changes take effect '
+                    'on the next web and worker process start.'
                 ),
                 'docs_url': '_docs/integrations/observability.md#logfire_enabled',
             },
             {
                 'key': 'LOGFIRE_TOKEN',
                 'is_secret': True,
+                'requires_restart': True,
                 'description': (
                     'Logfire write token. Get it from the Logfire project '
                     'settings. When blank, Logfire is fully off. Masked in '
-                    'Studio.'
+                    'Studio; changes take effect on the next web and worker '
+                    'process start.'
                 ),
                 'docs_url': '_docs/integrations/observability.md#logfire_token',
             },
@@ -1285,11 +1288,13 @@ INTEGRATION_GROUPS = [
                 'is_secret': False,
                 'optional': True,
                 'default': 'production',
+                'requires_restart': True,
                 'description': (
                     'Logfire environment tag passed to '
                     'logfire.configure(environment=...), so prod traces are '
                     'separable from any opt-in dev run. Defaults to '
-                    '"production".'
+                    '"production"; changes take effect on the next web and '
+                    'worker process start.'
                 ),
                 'docs_url': '_docs/integrations/observability.md#logfire_environment',
             },

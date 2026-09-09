@@ -518,9 +518,9 @@ LLM_MAX_RETRIES = int(os.environ.get('LLM_MAX_RETRIES', '6'))
 # Logfire initializes at app startup ONLY when not running tests AND a
 # token is present AND LOGFIRE_ENABLED is true. LOGFIRE_ENABLED defaults
 # to off everywhere so local/dev/eval/judge runs stay silent unless an
-# operator opts in. Values resolve through get_config()/is_enabled() so a
-# Studio save takes effect without a redeploy. See
-# integrations.services.observability and integrations.apps.
+# operator opts in. Studio overrides persist immediately, but the configured
+# Logfire instrumentation changes only when the web and worker processes next
+# start. See integrations.services.observability and integrations.apps.
 LOGFIRE_TOKEN = os.environ.get('LOGFIRE_TOKEN', '')
 LOGFIRE_ENABLED = os.environ.get('LOGFIRE_ENABLED', '')
 LOGFIRE_ENVIRONMENT = os.environ.get('LOGFIRE_ENVIRONMENT', 'production')

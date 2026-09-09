@@ -15,7 +15,13 @@ environment, then the registered defaults. It does not read
 populating apps. Serving web and worker containers make a second pass through
 the normal runtime configuration after `django.setup()` and before serving or
 polling. That pass uses DB row > Django settings > env > default, so Studio
-overrides apply on the next process start.
+overrides apply on the next process start. A Studio or API save persists
+immediately, and `get_config` may show the new value immediately, but the
+Logfire instrumentation already installed in a running process does not
+change. Enabling, disabling, rotating the token, or changing the environment
+tag requires restarting every web and worker process. This does not require a
+new image deploy: restart local `runserver` / gunicorn and `qcluster`, or
+restart the web and worker tasks in ECS.
 
 ## Production-only by design
 
@@ -89,6 +95,10 @@ Test vs live: Leave it off (or unset) in dev/test/eval so those runs stay
 silent. Set it `true` only in the production process where you want traces
 collected.
 
+Process restart: Enabling or disabling this key applies on the next web and
+worker process start. Disabling it does not uninstall instrumentation from a
+process that is already running.
+
 ## LOGFIRE_TOKEN
 
 Purpose: Logfire write token used by `logfire.configure(token=...)` to
@@ -107,6 +117,10 @@ the JSON export redacts it. Use a token for your production Logfire
 project; do not enable it in dev/test (the gate keeps it off anyway when
 `LOGFIRE_ENABLED` is not `true`).
 
+Process restart: Adding, removing, or rotating the token applies on the next
+web and worker process start. Saving the token does not reconfigure a running
+process.
+
 ## LOGFIRE_ENVIRONMENT
 
 Purpose: Logfire environment tag passed to
@@ -123,3 +137,7 @@ UI.
 
 Test vs live: Optional. The value only matters when the gate is open, so
 it has no effect in tests/evals where Logfire never initializes.
+
+Process restart: An environment-tag change applies on the next web and worker
+process start. Existing traces keep the environment configured when their
+process started.

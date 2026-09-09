@@ -152,7 +152,7 @@ class IntegrationSettingsApiTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
-            {"status": "ok", "updated": 1},
+            {"status": "ok", "updated": 1, "restart_required": False},
         )
         row = IntegrationSetting.objects.get(key="CONTENT_CDN_BASE")
         self.assertEqual(row.value, "https://cdn.example.com")
@@ -172,7 +172,10 @@ class IntegrationSettingsApiTest(TestCase):
         })
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"status": "ok", "updated": 1})
+        self.assertEqual(
+            response.json(),
+            {"status": "ok", "updated": 1, "restart_required": False},
+        )
         row = IntegrationSetting.objects.get(key="SES_WELCOME_FROM_EMAIL")
         self.assertEqual(row.value, "hello@aishippinglabs.com")
         self.assertEqual(row.group, "ses")
@@ -225,6 +228,23 @@ class IntegrationSettingsApiTest(TestCase):
         self.assertEqual(
             IntegrationSetting.objects.get(key="CONTENT_CDN_BASE").value,
             second_value,
+        )
+
+    def test_post_logfire_key_requires_restart_without_echoing_key_or_value(self):
+        token = "pylf_restart_required_sentinel"
+
+        response = self._post_json({
+            "updates": [{"key": "LOGFIRE_TOKEN", "value": token}],
+        })
+
+        self.assertEqual(
+            response.json(),
+            {"status": "ok", "updated": 1, "restart_required": True},
+        )
+        self._assert_no_echo(response, "LOGFIRE_TOKEN", token)
+        self.assertEqual(
+            IntegrationSetting.objects.get(key="LOGFIRE_TOKEN").value,
+            token,
         )
 
     # ---- allowlist --------------------------------------------------------
@@ -302,7 +322,10 @@ class IntegrationSettingsApiTest(TestCase):
         })
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"status": "ok", "updated": 1})
+        self.assertEqual(
+            response.json(),
+            {"status": "ok", "updated": 1, "restart_required": False},
+        )
         self.assertFalse(
             IntegrationSetting.objects.filter(key="CONTENT_CDN_BASE").exists()
         )
@@ -363,7 +386,10 @@ class IntegrationSettingsApiTest(TestCase):
             })
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"status": "ok", "updated": 3})
+        self.assertEqual(
+            response.json(),
+            {"status": "ok", "updated": 3, "restart_required": False},
+        )
         self.assertEqual(mock_clear.call_count, 1)
 
     def test_post_can_set_s3_enabled_true_and_false(self):
@@ -482,6 +508,7 @@ class IntegrationSettingsGetApiTest(TestCase):
                 "description",
                 "is_secret",
                 "is_boolean",
+                "requires_restart",
                 "configured",
                 "source",
                 "docs_url",
@@ -491,6 +518,32 @@ class IntegrationSettingsGetApiTest(TestCase):
         self.assertEqual(sample["label"], "Stripe")
         self.assertTrue(sample["is_secret"])
         self.assertFalse(sample["is_boolean"])
+        self.assertFalse(sample["requires_restart"])
+
+    def test_get_marks_only_logfire_keys_as_restart_required(self):
+        response = self._get()
+        entries = response.json()["settings"]
+
+        self.assertTrue(
+            all(type(entry["requires_restart"]) is bool for entry in entries)
+        )
+        self.assertEqual(
+            {
+                entry["key"]
+                for entry in entries
+                if entry["requires_restart"]
+            },
+            {
+                "LOGFIRE_ENABLED",
+                "LOGFIRE_TOKEN",
+                "LOGFIRE_ENVIRONMENT",
+            },
+        )
+        self.assertFalse(
+            self._entry_for(response.json(), "CONTENT_CDN_BASE")[
+                "requires_restart"
+            ]
+        )
 
     def test_get_lists_welcome_from_email_key(self):
         # Issue #937: the registry pickup surfaces the welcome sender in the
@@ -770,7 +823,7 @@ class IntegrationSettingsGetApiTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
-            {"status": "ok", "updated": 1},
+            {"status": "ok", "updated": 1, "restart_required": False},
         )
         row = IntegrationSetting.objects.get(key="CONTENT_CDN_BASE")
         self.assertEqual(row.value, "https://cdn.example.com")

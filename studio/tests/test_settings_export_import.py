@@ -252,6 +252,25 @@ class SettingsImportTest(TestCase):
             'promo@example.test',
         )
 
+    def test_import_observability_setting_flashes_restart_contract(self):
+        response = self._post_payload({
+            'format_version': 1,
+            'integration_settings': [
+                {'key': 'LOGFIRE_ENABLED', 'value': 'true'},
+            ],
+            'auth_providers': [],
+        })
+
+        messages = [str(message) for message in response.wsgi_request._messages]
+        self.assertIn(
+            'Observability changes apply after you restart the web and worker processes.',
+            messages,
+        )
+        self.assertEqual(
+            IntegrationSetting.objects.get(key='LOGFIRE_ENABLED').value,
+            'true',
+        )
+
     def test_malformed_json_is_rejected_with_message(self):
         bad_body = b'{not valid json'
         response = self.client.post(

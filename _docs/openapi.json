@@ -7177,7 +7177,7 @@
     },
     "/api/integrations/settings": {
       "get": {
-        "description": "Returns one entry per registered key with its ``group``, ``label``, ``description``, ``is_secret``, ``is_boolean``, ``configured`` flag, ``source`` (``db`` / ``env`` / ``django_settings`` / ``default`` / ``null``), and a ``docs_url`` path. The actual stored or env value is NEVER included.",
+        "description": "Returns one entry per registered key with its ``group``, ``label``, ``description``, ``is_secret``, ``is_boolean``, ``requires_restart``, ``configured`` flag, ``source`` (``db`` / ``env`` / ``django_settings`` / ``default`` / ``null``), and a ``docs_url`` path. The actual stored or env value is NEVER included.",
         "responses": {
           "200": {
             "content": {
@@ -7193,6 +7193,7 @@
                       "is_secret": true,
                       "key": "STRIPE_SECRET_KEY",
                       "label": "Stripe",
+                      "requires_restart": false,
                       "source": "db"
                     }
                   ]
@@ -7265,6 +7266,7 @@
             "content": {
               "application/json": {
                 "example": {
+                  "restart_required": false,
                   "status": "ok",
                   "updated": 1
                 }

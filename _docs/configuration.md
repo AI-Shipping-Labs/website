@@ -21,15 +21,12 @@ These variables are read at process start, before the DB is reachable, used dire
 | `VERSION` | optional | Build tag shown in the page footer. Set automatically by deploy scripts. |
 | `RUN_MIGRATIONS` | ECS only | `true` on the web container, `false` on the worker container. The single entrypoint runs migrations only when this is `true`; `deploy/update_task_def.py` maintains it. |
 | `Q_WORKERS` | optional | Worker count for django-q. Defaults to 1 on SQLite, 2 on Postgres. |
-| `EXPECT_WORKER` | optional | Set `false` only for one-off environments that intentionally have no django-q worker; suppresses worker liveness warnings/banners. Defaults `true`. |
 | `IP_HASH_SALT` | optional | Salt for SHA-256 hashing client IPs in `CampaignVisit.ip_hash`. Empty leaves `ip_hash` blank. |
 | `ANALYTICS_COOKIE_DOMAIN` | optional | Scope analytics cookies to a domain. Defaults to `SESSION_COOKIE_DOMAIN`. |
 | `EMAIL_BATCH_SIZE` | optional | Recipients per chunked `send_campaign_batch` task. Default 200. |
 | `IMPORT_WELCOME_EMAILS_PER_HOUR` | optional | Rate limit for imported-user welcome emails. Default 50. |
 | `SES_FROM_EMAIL` | optional legacy email fallback | Legacy fallback sender used only when the explicit transactional/promotional sender keys are not configured. Not rendered in Studio; prefer `SES_TRANSACTIONAL_FROM_EMAIL` and `SES_PROMOTIONAL_FROM_EMAIL` in Studio. |
 | `SES_UNSUBSCRIBE_EMAIL` | optional email header | Optional mailto address for the `List-Unsubscribe` email header. Not rendered in Studio. |
-| `SYNC_QUEUED_THRESHOLD_MINUTES` | optional | Watchdog: a sync stuck in `queued` longer than this is flipped to `failed`. Default 10. |
-| `SYNC_RUNNING_THRESHOLD_MINUTES` | optional | Watchdog: a sync stuck in `running` longer than this is flipped to `failed`. Default 30. |
 | `LOGIN_API_SLOW_MS` | optional | Slow-login instrumentation threshold in milliseconds. Default 750. |
 | `GITHUB_APP_PRIVATE_KEY_FILE` | optional | Path to a PEM file. Takes precedence over the `GITHUB_APP_PRIVATE_KEY` env var. The app falls back to the Studio-configured AWS Secrets Manager secret path if neither is set. |
 | `DJANGO_TEST_DB_NAME` | CI/test only | Makes SQLite tests file-backed so `--keepdb` can cache test databases. Used by GitHub Actions. |
@@ -38,6 +35,16 @@ These variables are read at process start, before the DB is reachable, used dire
 Test: `curl -I {SITE_BASE_URL}/ping` returns `200 OK`. Then visit `{SITE_BASE_URL}/` and confirm the home page renders without 500 errors.
 
 `SITE_BASE_URL` is also written into ECS task definitions by `deploy/update_task_def.py` as the process-start baseline. Unlike the variables above, it is also a Studio setting; use Studio > Settings > Site for normal runtime URL changes after boot.
+
+The sync watchdog and worker expectation are also runtime Site settings. Change
+them in Studio > Settings > Site; the environment values are process-start
+fallbacks used when no DB override exists.
+
+| Key | Default | Purpose |
+|-----|---------|---------|
+| `SYNC_QUEUED_THRESHOLD_MINUTES` | `10` | Minutes a sync may remain queued before the watchdog marks it failed. |
+| `SYNC_RUNNING_THRESHOLD_MINUTES` | `30` | Minutes a sync may remain running before the watchdog marks it failed. |
+| `EXPECT_WORKER` | `true` | Set `false` only for one-off environments intentionally running without django-q. |
 
 ## 2. Sign in to Studio
 

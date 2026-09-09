@@ -141,6 +141,75 @@ on the next request.
 
 Test vs live: n/a. One value per environment.
 
+## SYNC_QUEUED_THRESHOLD_MINUTES
+
+Purpose: Maximum number of minutes a content sync may remain queued before
+the Studio watchdog marks it failed because no worker picked it up.
+
+Default: `10`.
+
+Without it: The runtime helper uses 10 minutes. Blank overrides resume the
+process-start setting or environment fallback. Non-integer, zero, and negative
+values also fall back to 10 instead of breaking the sync dashboard.
+
+Where to find it: Studio > Settings > Site. Use the process environment only
+as the baseline needed before Studio settings are available.
+
+Prereqs: A django-q worker and the existing content-sync queue must be running
+for queued work to progress.
+
+Rotation: Safe to change without a restart. The next watchdog pass uses the
+new value. Choose a window longer than normal queue pickup latency.
+
+Test vs live: Keep a shorter value in test environments only when their
+workers have predictably low queue latency. Production defaults to 10 minutes.
+
+## SYNC_RUNNING_THRESHOLD_MINUTES
+
+Purpose: Maximum number of minutes a content sync may remain running before
+the Studio watchdog marks it failed because its worker stopped reporting
+completion.
+
+Default: `30`.
+
+Without it: The runtime helper uses 30 minutes. Blank overrides resume the
+process-start setting or environment fallback. Non-integer, zero, and negative
+values also fall back to 30 instead of breaking the sync dashboard.
+
+Where to find it: Studio > Settings > Site. Use the process environment only
+as the baseline needed before Studio settings are available.
+
+Prereqs: Measure the longest healthy content sync before lowering this value;
+a window that is too short can mark slow but healthy work as failed.
+
+Rotation: Safe to change without a restart. The next watchdog pass uses the
+new value.
+
+Test vs live: Non-production environments may use a shorter window for failure
+drills. Production defaults to 30 minutes.
+
+## EXPECT_WORKER
+
+Purpose: Controls whether Studio expects a django-q worker and shows missing
+worker warnings. Only case-insensitive `false` disables the expectation.
+
+Default: `true`.
+
+Without it: Worker monitoring remains enabled. Empty strings, `true`, `1`, and
+all values other than case-insensitive `false` also keep monitoring enabled.
+
+Where to find it: Studio > Settings > Site. Set it to false only for one-off
+environments that intentionally run without a worker. The process environment
+remains the startup fallback.
+
+Prereqs: None. Normal web deployments should run django-q and keep this on.
+
+Rotation: Safe to change without a restart. Studio banners and worker-health
+responses use the new value on their next configuration read.
+
+Test vs live: Keep it true in production and normal development deployments.
+Disable it only in disposable or one-off environments with no worker.
+
 ## PRIVACY_REQUEST_EMAIL
 
 Purpose: Validated team mailbox that receives account-deletion requests

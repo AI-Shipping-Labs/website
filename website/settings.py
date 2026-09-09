@@ -532,12 +532,15 @@ LOGFIRE_ENVIRONMENT = os.environ.get('LOGFIRE_ENVIRONMENT', 'production')
 #  - SYNC_RUNNING_THRESHOLD_MINUTES: a SyncLog stuck in ``running`` longer
 #    than this means the worker died mid-sync. Real syncs can take a few
 #    minutes, so the default is generous.
-SYNC_QUEUED_THRESHOLD_MINUTES = int(
-    os.environ.get('SYNC_QUEUED_THRESHOLD_MINUTES', 10),
+# Keep the raw process-start values so runtime resolvers can apply the same
+# defensive positive-integer fallback to env, legacy DB, and Studio values.
+SYNC_QUEUED_THRESHOLD_MINUTES = os.environ.get(
+    'SYNC_QUEUED_THRESHOLD_MINUTES', '10',
 )
-SYNC_RUNNING_THRESHOLD_MINUTES = int(
-    os.environ.get('SYNC_RUNNING_THRESHOLD_MINUTES', 30),
+SYNC_RUNNING_THRESHOLD_MINUTES = os.environ.get(
+    'SYNC_RUNNING_THRESHOLD_MINUTES', '30',
 )
+EXPECT_WORKER = os.environ.get('EXPECT_WORKER', 'true')
 
 # Custom user model
 AUTH_USER_MODEL = 'accounts.User'

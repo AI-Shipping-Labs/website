@@ -16,7 +16,6 @@ Covers:
   is gone and the ``worker_status_banner`` context processor is unwired.
 """
 
-import os
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -98,7 +97,7 @@ class DashboardWorkerPanelTest(TestCase):
     def test_panel_hidden_when_expect_worker_false(self):
         """If the deployment doesn't expect a worker, suppress the panel."""
         with patch('studio.worker_health.Stat.get_all', return_value=[]), \
-             patch.dict(os.environ, {'EXPECT_WORKER': 'false'}):
+             patch('studio.worker_health.get_config', return_value='false'):
             response = self.client.get('/studio/')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="dashboard-worker-panel"')
@@ -157,7 +156,7 @@ class InlineIndicatorPresenceTest(TestCase):
         """``EXPECT_WORKER=false`` (one-off scripts, dev environments without
         a worker) should hide the indicator entirely so it doesn't shout."""
         with patch('studio.worker_health.Stat.get_all', return_value=[]), \
-             patch.dict(os.environ, {'EXPECT_WORKER': 'false'}):
+             patch('studio.worker_health.get_config', return_value='false'):
             response = self.client.get('/studio/sync/')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="worker-status-inline"')

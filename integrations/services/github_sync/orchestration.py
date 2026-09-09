@@ -268,10 +268,12 @@ def _maybe_skip_unchanged_head(source, *, repo_dir, batch_id, force):
 
 
 def _start_sync_log(source, batch_id):
-    from django.conf import settings as _settings
+    from integrations.sync_config import (  # noqa: PLC0415
+        sync_queued_threshold_minutes,
+    )
 
     queued_window = timezone.now() - timezone.timedelta(
-        minutes=getattr(_settings, 'SYNC_QUEUED_THRESHOLD_MINUTES', 10),
+        minutes=sync_queued_threshold_minutes(),
     )
     queued_log = SyncLog.objects.filter(
         source=source,

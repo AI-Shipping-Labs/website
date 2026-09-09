@@ -18,7 +18,6 @@ import logging
 import uuid
 from collections import OrderedDict
 
-from django.conf import settings
 from django.contrib import messages
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -39,6 +38,10 @@ from integrations.services.sync_observability import (
     logical_status,
     structure_error_groups,
     structure_errors,
+)
+from integrations.sync_config import (
+    sync_queued_threshold_minutes,
+    sync_running_threshold_minutes,
 )
 from studio.decorators import staff_required
 from studio.services.content_sources_io import (
@@ -84,8 +87,8 @@ def _run_sync_watchdog():
     generous safety net before we declare it dead.
     """
     now = timezone.now()
-    queued_threshold_min = settings.SYNC_QUEUED_THRESHOLD_MINUTES
-    running_threshold_min = settings.SYNC_RUNNING_THRESHOLD_MINUTES
+    queued_threshold_min = sync_queued_threshold_minutes()
+    running_threshold_min = sync_running_threshold_minutes()
     queued_cutoff = now - datetime.timedelta(minutes=queued_threshold_min)
     running_cutoff = now - datetime.timedelta(minutes=running_threshold_min)
 

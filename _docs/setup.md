@@ -85,16 +85,23 @@ Set in the ECS task definition (plain environment variables):
 | `SLACK_ENABLED` | `true` where the Slack bot/imports should run | Startup gate. Studio also has Slack settings, but if this env var is false, Slack token/channel settings are blanked at import time. |
 | `SLACK_ENVIRONMENT` | `development` on dev, `production` on prod | Slack routing mode. Non-production modes ignore production Slack channel IDs and require dev/test channel overrides before posting. Can be managed in Studio for normal routing changes after the startup gate is enabled. |
 | `Q_WORKERS` | `2` | Optional django-q worker count. Defaults to 1 on SQLite, 2 on Postgres. |
-| `EXPECT_WORKER` | `true` | Optional worker-health expectation. Set `false` only for one-off environments that intentionally have no worker. |
 | `IP_HASH_SALT` | random string | Optional salt for analytics IP hashes. Empty means IP hashes are not stored. |
 | `ANALYTICS_COOKIE_DOMAIN` | `.aishippinglabs.com` | Optional analytics cookie domain override. |
 | `EMAIL_BATCH_SIZE` | `200` | Optional campaign-send chunk size. |
 | `IMPORT_WELCOME_EMAILS_PER_HOUR` | `50` | Optional throttle for imported-user welcome emails. |
 | `SES_FROM_EMAIL` | `noreply@aishippinglabs.com` | Optional legacy email sender fallback. Prefer the explicit Studio keys `SES_TRANSACTIONAL_FROM_EMAIL` and `SES_PROMOTIONAL_FROM_EMAIL`. |
 | `SES_UNSUBSCRIBE_EMAIL` | `unsubscribe@aishippinglabs.com` | Optional mailto address for the `List-Unsubscribe` email header. Not rendered in Studio. |
-| `SYNC_QUEUED_THRESHOLD_MINUTES` | `10` | Optional sync watchdog queued threshold. |
-| `SYNC_RUNNING_THRESHOLD_MINUTES` | `30` | Optional sync watchdog running threshold. |
 | `LOGIN_API_SLOW_MS` | `750` | Optional slow-login instrumentation threshold in milliseconds. |
+
+Configure the following runtime controls in Studio > Settings > Site. Their
+environment values remain process-start fallbacks for a fresh database or an
+environment that has not saved an override.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SYNC_QUEUED_THRESHOLD_MINUTES` | `10` | Minutes a sync may remain queued before the watchdog marks it failed. |
+| `SYNC_RUNNING_THRESHOLD_MINUTES` | `30` | Minutes a sync may remain running before the watchdog marks it failed. |
+| `EXPECT_WORKER` | `true` | Set `false` only for a one-off environment intentionally running without django-q. |
 
 Set via AWS Secrets Manager (injected as ECS secrets):
 

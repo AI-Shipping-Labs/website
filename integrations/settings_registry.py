@@ -668,6 +668,42 @@ INTEGRATION_GROUPS = [
             {'key': 'SITE_BASE_URL_ALIASES', 'is_secret': False, 'multiline': True, 'description': 'Additional hosts that should not trigger the host-mismatch banner. Comma- or whitespace-separated (newlines work too).', 'docs_url': '_docs/integrations/site.md#site_base_url_aliases'},
             {'key': 'EVENT_DISPLAY_TIMEZONE', 'is_secret': False, 'description': 'Default IANA timezone for public event times when the browser cannot provide one.', 'docs_url': '_docs/integrations/site.md#event_display_timezone'},
             {
+                'key': 'SYNC_QUEUED_THRESHOLD_MINUTES',
+                'is_secret': False,
+                'optional': True,
+                'default': '10',
+                'description': (
+                    'Minutes a content sync may remain queued before the '
+                    'watchdog marks it failed; invalid or non-positive input '
+                    'fall back to 10.'
+                ),
+                'docs_url': '_docs/integrations/site.md#sync_queued_threshold_minutes',
+            },
+            {
+                'key': 'SYNC_RUNNING_THRESHOLD_MINUTES',
+                'is_secret': False,
+                'optional': True,
+                'default': '30',
+                'description': (
+                    'Minutes a content sync may remain running before the '
+                    'watchdog marks it failed; invalid or non-positive input '
+                    'fall back to 30.'
+                ),
+                'docs_url': '_docs/integrations/site.md#sync_running_threshold_minutes',
+            },
+            {
+                'key': 'EXPECT_WORKER',
+                'is_secret': False,
+                'is_boolean': True,
+                'optional': True,
+                'default': 'true',
+                'description': (
+                    'Whether this environment expects a django-q worker; '
+                    'disable only for one-off environments without a worker.'
+                ),
+                'docs_url': '_docs/integrations/site.md#expect_worker',
+            },
+            {
                 'key': 'PRIVACY_REQUEST_EMAIL',
                 'is_secret': False,
                 'is_email': True,
@@ -1365,6 +1401,7 @@ SETTING_VALUE_TYPES = {
     'S3_ENABLED': 'boolean',
     'SLACK_ENABLED': 'boolean',
     'STAFF_SLACK_JOIN_NOTIFY_ENABLED': 'boolean',
+    'EXPECT_WORKER': 'boolean',
     'ONBOARDING_REMINDER_ENABLED': 'boolean',
     'SPRINT_END_AUTO_DISTRIBUTE_FEEDBACK_ENABLED': 'boolean',
     'ONBOARDING_AI_ENABLED': 'boolean',
@@ -1390,6 +1427,8 @@ SETTING_VALUE_TYPES = {
     'PLAN_SPRINTS_RAW_TEXT_RETENTION_DAYS': 'integer',
     'ONBOARDING_REMINDER_DELAY_DAYS': 'integer',
     'SPRINT_BADGE_WINDOW_DAYS': 'integer',
+    'SYNC_QUEUED_THRESHOLD_MINUTES': 'integer',
+    'SYNC_RUNNING_THRESHOLD_MINUTES': 'integer',
     'CRM_EXPORT_MAX_LIMIT': 'integer',
     'USER_ACTIVITY_RETENTION_DAYS': 'integer',
     'UNVERIFIED_USER_TTL_DAYS': 'integer',

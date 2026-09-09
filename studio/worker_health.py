@@ -10,10 +10,11 @@ regardless of recent task activity.
 """
 
 import logging
-import os
 
 from django.utils import timezone
 from django_q.status import Stat
+
+from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +22,12 @@ logger = logging.getLogger(__name__)
 def expect_worker():
     """Return True if the deployment expects an async worker to be running.
 
-    Set ``EXPECT_WORKER=false`` (env var) for one-off scripts or environments
-    that don't need async — the banner and warnings are suppressed.
-    Default: True.
+    Set ``EXPECT_WORKER=false`` in Studio or the process environment for
+    one-off environments that do not need async. Only case-insensitive
+    ``false`` disables the worker expectation; every other value keeps it on.
     """
-    return os.environ.get('EXPECT_WORKER', 'true').lower() != 'false'
+    value = get_config('EXPECT_WORKER', 'true')
+    return str(value).lower() != 'false'
 
 
 def get_worker_status():

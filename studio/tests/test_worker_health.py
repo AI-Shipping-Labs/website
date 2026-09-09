@@ -9,7 +9,6 @@ requires a running broker. The helper's contract is:
 - busy if any cluster has queued/completed tasks in its internal queue
 """
 
-import os
 from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -140,30 +139,29 @@ class WorkerIsAliveTest(SimpleTestCase):
             self.assertTrue(worker_is_alive())
 
 
-class ExpectWorkerEnvTest(SimpleTestCase):
+class ExpectWorkerConfigTest(SimpleTestCase):
     def test_default_is_true(self):
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop('EXPECT_WORKER', None)
+        with patch('studio.worker_health.get_config', return_value='true') as get:
             self.assertTrue(expect_worker())
+        get.assert_called_once_with('EXPECT_WORKER', 'true')
 
     def test_false_lowercase_disables(self):
-        with patch.dict(os.environ, {'EXPECT_WORKER': 'false'}):
+        with patch('studio.worker_health.get_config', return_value='false'):
             self.assertFalse(expect_worker())
 
     def test_false_uppercase_disables(self):
-        with patch.dict(os.environ, {'EXPECT_WORKER': 'FALSE'}):
+        with patch('studio.worker_health.get_config', return_value='FALSE'):
             self.assertFalse(expect_worker())
 
     def test_any_other_value_is_true(self):
-        with patch.dict(os.environ, {'EXPECT_WORKER': 'true'}):
-            self.assertTrue(expect_worker())
-        with patch.dict(os.environ, {'EXPECT_WORKER': '1'}):
-            self.assertTrue(expect_worker())
-        with patch.dict(os.environ, {'EXPECT_WORKER': ''}):
-            self.assertTrue(expect_worker())
+        for value in ('true', '1', '', 'unexpected'):
+            with self.subTest(value=value), patch(
+                'studio.worker_health.get_config', return_value=value,
+            ):
+                self.assertTrue(expect_worker())
 
     def test_status_includes_expect_worker_flag(self):
-        with patch.dict(os.environ, {'EXPECT_WORKER': 'false'}), \
+        with patch('studio.worker_health.get_config', return_value='false'), \
              patch('studio.worker_health.Stat.get_all', return_value=[]):
             info = get_worker_status()
         self.assertFalse(info['expect_worker'])

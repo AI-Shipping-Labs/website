@@ -274,9 +274,9 @@ def _integration_settings_set(request):
     - Boolean keys (``is_boolean: True`` in the registry) accept the JSON
       literals ``true``/``false`` AND the strings ``"true"``/``"false"``;
       both forms persist as the strings ``"true"``/``"false"``.
-    - Empty-string value on a NON-boolean key clears the DB override
-      (deletes the row), matching Studio parity. This is a side effect
-      of a write, not a separate delete endpoint.
+    - Empty-string value clears the DB override (deletes the row), matching
+      Studio's clear-override action for both scalar and boolean keys. This is
+      a side effect of a write, not a separate delete endpoint.
     - After any successful write, ``clear_config_cache()`` is called
       exactly once so other workers see the new values.
 
@@ -343,6 +343,15 @@ def _integration_settings_set(request):
         is_boolean = key_def.get('is_boolean', False)
 
         if is_boolean:
+            if raw_value == '':
+                normalised.append({
+                    'key': key,
+                    'stored_value': '',
+                    'clear_override': True,
+                    'key_def': key_def,
+                    'group': group_name,
+                })
+                continue
             coerced, ok = _coerce_boolean_value(raw_value)
             if not ok:
                 # Do NOT include the offending value in the response —
@@ -356,7 +365,7 @@ def _integration_settings_set(request):
             normalised.append({
                 'key': key,
                 'stored_value': coerced,
-                'is_boolean': True,
+                'clear_override': False,
                 'key_def': key_def,
                 'group': group_name,
             })
@@ -372,7 +381,7 @@ def _integration_settings_set(request):
             normalised.append({
                 'key': key,
                 'stored_value': raw_value,
-                'is_boolean': False,
+                'clear_override': raw_value == '',
                 'key_def': key_def,
                 'group': group_name,
             })
@@ -394,8 +403,8 @@ def _integration_settings_set(request):
             stored_value = item['stored_value']
             key_def = item['key_def']
             group_name = item['group']
-            if not item['is_boolean'] and stored_value == '':
-                # Empty-string on a non-boolean clears the override row.
+            if item['clear_override']:
+                # Empty-string clears the override row for any registered key.
                 deleted, _ = IntegrationSetting.objects.filter(key=key).delete()
                 if deleted:
                     updated += 1

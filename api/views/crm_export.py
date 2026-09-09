@@ -15,20 +15,15 @@ The per-user aggregate REUSES the existing single-resource serializers so
 the shapes stay identical to the per-resource endpoints:
 
 - core state          -> ``serialize_user_state`` (full, non-compact)
-- ``crm_record``      -> a full record dict (issue extends the
-                         ``_serialize_crm_record_summary`` shape from
-                         ``api/views/users.py`` with summary / next_steps /
-                         timestamps; persona resolution is shared)
+- ``crm_record``      -> ``serialize_crm_record_full``
 - ``notes``           -> ``serialize_interview_note`` (member + interview
                          notes, internal-visibility INCLUDED for the staff
                          bearer)
 - ``plans``           -> ``serialize_plan_detail`` (weeks -> checkpoints,
                          resources, deliverables, next-steps, plan-level
                          interview notes)
-- ``sprint_enrollments``  -> the enrollment shape from
-                             ``api/views/enrollments._serialize_enrollment``
-- ``course_enrollments``  -> the shape from
-                             ``api/views/course_enrollments._serialize_enrollment``
+- ``sprint_enrollments``  -> ``serialize_sprint_enrollment``
+- ``course_enrollments``  -> ``serialize_course_enrollment``
 - ``onboarding_responses`` -> ``serialize_response``
 
 Security: notes / plans are read through ``visible_interview_notes_for`` /
@@ -56,7 +51,18 @@ from accounts.lifecycle import account_lifecycle_q
 from accounts.models.email_alias import EmailAlias
 from accounts.utils.tags import normalize_tag, user_ids_with_exact_tag
 from api.openapi import openapi_spec
+from api.request_parsing import (
+    parse_account_lifecycle,
+    parse_limit,
+    parse_offset,
+    parse_since,
+)
 from api.safety import error_response
+from api.serializers.crm import serialize_crm_record_full
+from api.serializers.enrollments import (
+    serialize_course_enrollment,
+    serialize_sprint_enrollment,
+)
 from api.serializers.onboarding import serialize_response
 from api.serializers.plans import serialize_interview_note, serialize_plan_detail
 from api.serializers.users import serialize_user_state
@@ -64,19 +70,6 @@ from api.utils import require_methods
 from api.views._permissions import (
     visible_interview_notes_for,
     visible_plans_for,
-)
-from api.views.course_enrollments import (
-    _serialize_enrollment as serialize_course_enrollment,
-)
-from api.views.enrollments import (
-    _serialize_enrollment as serialize_sprint_enrollment,
-)
-from api.views.onboarding import _parse_offset, _persona_map, _resolve_persona
-from api.views.users import (
-    _parse_account_lifecycle,
-    _parse_limit,
-    _parse_since,
-    resolve_crm_persona,
 )
 from community.models import STATUS_BOOKED, BookedCall
 from crm.models import CRMRecord
@@ -98,6 +91,10 @@ from plans.models import (
     Week,
     WeekNote,
 )
+from questionnaires.services import (
+    persona_map_by_questionnaire,
+    resolve_persona_for_questionnaire,
+)
 
 User = get_user_model()
 
@@ -115,29 +112,6 @@ def _isoformat_or_none(value):
     if value is None:
         return None
     return value.isoformat()
-
-
-def serialize_crm_record_full(record):
-    """Full CRM-record dict for the export aggregate (issue #1079).
-
-    Extends the compact ``serialize_crm_record_summary`` shape from
-    ``api/views/users.py`` (``id`` / ``status`` / ``persona``) with
-    ``summary`` / ``next_steps`` / ``created_at`` / ``updated_at``. Persona
-    resolution is shared via ``resolve_crm_persona`` so both serializers
-    agree. ``record`` may be ``None`` (no ``CRMRecord``), in which case
-    ``None`` is returned.
-    """
-    if record is None:
-        return None
-    return {
-        "id": record.pk,
-        "status": record.status,
-        "persona": resolve_crm_persona(record),
-        "summary": record.summary or "",
-        "next_steps": record.next_steps or "",
-        "created_at": _isoformat_or_none(record.created_at),
-        "updated_at": _isoformat_or_none(record.updated_at),
-    }
 
 
 def _export_max_limit():
@@ -160,12 +134,12 @@ def _export_max_limit():
 def _parse_export_limit(raw):
     """Parse ``limit`` and clamp to the configurable export ceiling.
 
-    Reuses ``api.views.users._parse_limit`` for the 422 ``validation_error``
-    body shape (so callers see the same error as ``users_collection``), then
+    Reuses ``api.request_parsing.parse_limit`` for the 422
+    ``validation_error`` body shape, then
     re-clamps the result to ``_export_max_limit()`` because the shared
     helper hard-caps at its own ``LIMIT_MAX`` (200) constant.
     """
-    value, err = _parse_limit(raw, default=EXPORT_LIMIT_DEFAULT)
+    value, err = parse_limit(raw, default=EXPORT_LIMIT_DEFAULT)
     if err is not None:
         return None, err
     return min(value, _export_max_limit()), None
@@ -445,7 +419,7 @@ def _serialize_member(
             or response.questionnaire.purpose != "onboarding"
         ):
             continue
-        persona = _resolve_persona(
+        persona = resolve_persona_for_questionnaire(
             response.questionnaire,
             personas_by_questionnaire=persona_by_questionnaire,
         )
@@ -472,7 +446,7 @@ def build_single_crm_record_aggregate(crm_record, *, bearer, exported_at=None):
     payload = _serialize_member(
         user,
         bearer,
-        _persona_map(),
+        persona_map_by_questionnaire(),
         notes_by_member,
         plans_by_member,
     )
@@ -735,13 +709,13 @@ def crm_export(request):
     limit, err = _parse_export_limit(request.GET.get("limit"))
     if err is not None:
         return err
-    offset, err = _parse_offset(request.GET.get("offset"))
+    offset, err = parse_offset(request.GET.get("offset"))
     if err is not None:
         return err
-    since, err = _parse_since(request.GET.get("since"))
+    since, err = parse_since(request.GET.get("since"))
     if err is not None:
         return err
-    account_lifecycle, err = _parse_account_lifecycle(
+    account_lifecycle, err = parse_account_lifecycle(
         request.GET.get("account_lifecycle"),
     )
     if err is not None:
@@ -763,7 +737,7 @@ def crm_export(request):
     if tag:
         qs = qs.filter(pk__in=user_ids_with_exact_tag(tag))
     bearer = request.user
-    persona_by_questionnaire = _persona_map()
+    persona_by_questionnaire = persona_map_by_questionnaire()
 
     if email:
         target_id = (

@@ -32,11 +32,8 @@ questionnaire (first by model ordering when several point at it); the
 generic ``onboarding-general`` fallback -- which no persona points at --
 resolves to ``null``.
 
-Conventions are shared with ``api/views/users.py`` and
-``api/views/ses_events_list.py``: ``_parse_limit`` / ``_parse_since``
-(reused verbatim) and a local ``_parse_offset`` give the same 422
-``validation_error`` shape; ``count`` is the TOTAL match set before
-slicing.
+Shared query parsers keep the same 422 ``validation_error`` shape across
+operator APIs; ``count`` is the total match set before slicing.
 """
 
 from django.contrib.auth import get_user_model
@@ -45,27 +42,27 @@ from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
 from api.openapi import openapi_spec
+from api.request_parsing import parse_limit, parse_offset, parse_since
 from api.safety import error_response
 from api.serializers.onboarding import (
     serialize_persona,
     serialize_questionnaire,
     serialize_response,
 )
+from api.user_lookup import find_user_by_primary_email, user_not_found_response
 from api.utils import require_methods
-from api.views.users import _find_user, _parse_limit, _parse_since, _user_not_found_response
 from questionnaires.models import (
     PURPOSE_CHOICES,
     Persona,
     Questionnaire,
     Response,
 )
+from questionnaires.services import (
+    persona_map_by_questionnaire,
+    resolve_persona_for_questionnaire,
+)
 
 User = get_user_model()
-
-# Slug of the persona-agnostic onboarding questionnaire (mirrors
-# ``questionnaires.onboarding.GENERIC_ONBOARDING_SLUG``). It intentionally
-# has no single persona, so responses on it resolve to ``persona=null``.
-_GENERIC_ONBOARDING_SLUG = "onboarding-general"
 
 # Allowed ``purpose`` filter values for the questionnaires endpoint -- the
 # model's choice keys are the source of truth.
@@ -76,33 +73,6 @@ _VALID_PURPOSES = [choice for choice, _label in PURPOSE_CHOICES]
 # ``RESPONSE_STATUS_CHOICES``.
 _VALID_BULK_STATUSES = ["draft", "submitted", "all"]
 _VALID_REVIEW_FILTERS = ["awaiting", "reviewed", "all"]
-
-
-def _parse_offset(raw, *, field="offset"):
-    """Parse the ``offset`` query param into a non-negative int.
-
-    Mirrors ``api/views/ses_events_list._parse_offset``: zero is the first
-    page, negatives are a 422 ``validation_error``.
-    """
-    if raw is None or raw == "":
-        return 0, None
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return None, error_response(
-            f"Invalid integer: {raw!r}",
-            "validation_error",
-            status=422,
-            details={"field": field, "value": raw},
-        )
-    if value < 0:
-        return None, error_response(
-            f"{field} must be a non-negative integer",
-            "validation_error",
-            status=422,
-            details={"field": field, "value": raw},
-        )
-    return value, None
 
 
 def _parse_bool(raw):
@@ -120,49 +90,6 @@ def _parse_bool(raw):
     if lowered == "false":
         return False
     return None
-
-
-def _resolve_persona(questionnaire, *, personas_by_questionnaire=None):
-    """Resolve a questionnaire back to its persona, or ``None``.
-
-    Mirrors ``_current_self_id`` (``accounts/views/onboarding.py``): the
-    first ACTIVE ``Persona`` whose ``default_questionnaire`` is this
-    questionnaire, by the model's default ordering (``order, name``). The
-    generic fallback questionnaire -- which no active persona points at --
-    resolves to ``None`` (it serves both "none" and "more than one").
-
-    ``personas_by_questionnaire`` is an optional precomputed map
-    ``{questionnaire_id: persona}`` so the bulk path resolves N responses
-    without N queries.
-    """
-    if questionnaire is None:
-        return None
-    if personas_by_questionnaire is not None:
-        return personas_by_questionnaire.get(questionnaire.id)
-    return (
-        Persona.objects.filter(
-            default_questionnaire=questionnaire,
-            is_active=True,
-        )
-        .order_by("order", "name")
-        .first()
-    )
-
-
-def _persona_map():
-    """Build ``{questionnaire_id: persona}`` for all active personas.
-
-    The first active persona (by ``order, name``) wins for each
-    questionnaire -- matching ``_resolve_persona``'s single-lookup
-    ordering. Used by the bulk endpoint so resolving every response's
-    persona is one query, not one per row.
-    """
-    mapping = {}
-    for persona in Persona.objects.filter(is_active=True).order_by("order", "name"):
-        qid = persona.default_questionnaire_id
-        if qid is not None and qid not in mapping:
-            mapping[qid] = persona
-    return mapping
 
 
 # ---- A1. Survey definition: questionnaires ---------------------------------
@@ -469,9 +396,9 @@ def _onboarding_response_queryset():
 )
 def onboarding_response_detail(request, email):
     """``GET /api/onboarding/responses/<email>`` -- per-member feed."""
-    user = _find_user(email)
+    user = find_user_by_primary_email(email)
     if user is None:
-        return _user_not_found_response()
+        return user_not_found_response()
 
     response = (
         _onboarding_response_queryset().filter(respondent=user).first()
@@ -483,7 +410,7 @@ def onboarding_response_detail(request, email):
             status=404,
         )
 
-    persona = _resolve_persona(response.questionnaire)
+    persona = resolve_persona_for_questionnaire(response.questionnaire)
     return JsonResponse(
         serialize_response(response, persona=persona),
         status=200,
@@ -587,13 +514,13 @@ def onboarding_response_detail(request, email):
 )
 def onboarding_responses_collection(request):
     """``GET /api/onboarding/responses`` -- bulk plan-generation feed."""
-    limit, err = _parse_limit(request.GET.get("limit"))
+    limit, err = parse_limit(request.GET.get("limit"))
     if err is not None:
         return err
-    offset, err = _parse_offset(request.GET.get("offset"))
+    offset, err = parse_offset(request.GET.get("offset"))
     if err is not None:
         return err
-    since, err = _parse_since(request.GET.get("since"))
+    since, err = parse_since(request.GET.get("since"))
     if err is not None:
         return err
 
@@ -661,11 +588,11 @@ def onboarding_responses_collection(request):
     # Resolve personas in one query, then (optionally) filter in Python so
     # the persona slug / ``none`` filter uses the same resolution logic the
     # serialized payload reports.
-    persona_by_questionnaire = _persona_map()
+    persona_by_questionnaire = persona_map_by_questionnaire()
 
     matched = []
     for response in qs:
-        persona = _resolve_persona(
+        persona = resolve_persona_for_questionnaire(
             response.questionnaire,
             personas_by_questionnaire=persona_by_questionnaire,
         )

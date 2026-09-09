@@ -8,11 +8,10 @@ from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
 from api.openapi import openapi_spec
+from api.request_parsing import parse_limit, parse_offset, parse_since
 from api.safety import error_response
 from api.serializers.onboarding import serialize_response, serialize_response_summary
 from api.utils import require_methods
-from api.views.onboarding import _parse_offset, _resolve_persona
-from api.views.users import _parse_limit, _parse_since
 from questionnaires.models import Response
 from questionnaires.response_workflows import (
     VALID_PURPOSES,
@@ -23,6 +22,7 @@ from questionnaires.response_workflows import (
     response_queryset,
     transition_response_review,
 )
+from questionnaires.services import resolve_persona_for_questionnaire
 
 
 def _validation(field, value, allowed=None):
@@ -125,13 +125,13 @@ def questionnaire_responses_collection(request):
     filters, error = _collection_filters(request)
     if error is not None:
         return error
-    limit, error = _parse_limit(request.GET.get('limit'))
+    limit, error = parse_limit(request.GET.get('limit'))
     if error is not None:
         return error
-    offset, error = _parse_offset(request.GET.get('offset'))
+    offset, error = parse_offset(request.GET.get('offset'))
     if error is not None:
         return error
-    since, error = _parse_since(request.GET.get('since'))
+    since, error = parse_since(request.GET.get('since'))
     if error is not None:
         return error
 
@@ -159,7 +159,7 @@ def questionnaire_responses_collection(request):
 def _full_response_payload(response):
     persona = None
     if response.questionnaire.purpose == 'onboarding':
-        persona = _resolve_persona(response.questionnaire)
+        persona = resolve_persona_for_questionnaire(response.questionnaire)
     return serialize_response(response, persona=persona)
 
 

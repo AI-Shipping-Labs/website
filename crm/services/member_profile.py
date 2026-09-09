@@ -21,6 +21,7 @@ from crm.services.activity_context import (
     PROFILE_ACTIVITY_LIMIT,
     build_activity_context,
 )
+from crm.services.persona import resolve_crm_persona
 from plans.models import InterviewNote
 from questionnaires.onboarding import (
     flatten_response_answers,
@@ -31,20 +32,6 @@ from questionnaires.onboarding import (
 # is a quick-reference, not the full note history (that lives on the CRM
 # detail page), so we cap it.
 RECENT_INTERNAL_NOTE_LIMIT = 5
-
-
-def _persona_label(record):
-    """Best human-readable persona label for a CRM record.
-
-    Prefers the structured ``persona_ref`` (issue #801) display label when
-    set, falling back to the free-text ``persona`` field which remains the
-    source of truth. Returns ``''`` when neither is set.
-    """
-    if record is None:
-        return ''
-    if record.persona_ref_id is not None and record.persona_ref is not None:
-        return record.persona_ref.display_label
-    return (record.persona or '').strip()
 
 
 def build_member_profile_context(member):
@@ -103,7 +90,7 @@ def build_member_profile_context(member):
         'onboarding_submitted': onboarding_submitted,
         'onboarding_answers': onboarding_answers,
         'has_crm_record': record is not None,
-        'persona': _persona_label(record),
+        'persona': resolve_crm_persona(record) if record else '',
         'summary': (record.summary or '').strip() if record else '',
         'next_steps': (record.next_steps or '').strip() if record else '',
         'has_notes': bool(recent_notes),

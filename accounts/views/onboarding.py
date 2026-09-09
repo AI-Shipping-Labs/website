@@ -19,7 +19,7 @@ from django.views.decorators.http import require_POST
 
 from community.models import CallHost
 from crm.services.onboarding_notify import notify_staff_onboarding_submitted
-from questionnaires.models import OnboardingConversation, Persona, Response
+from questionnaires.models import OnboardingConversation, Response
 from questionnaires.onboarding import (
     ai_onboarding_available,
     can_access_onboarding,
@@ -34,6 +34,7 @@ from questionnaires.services import (
     build_response_form_rows,
     build_response_questions,
     find_unanswered_required,
+    resolve_persona_for_questionnaire,
     save_response_answers,
 )
 
@@ -120,11 +121,7 @@ def _current_self_id(response):
     """
     if response is None:
         return ''
-    persona = (
-        Persona.objects
-        .filter(default_questionnaire=response.questionnaire, is_active=True)
-        .first()
-    )
+    persona = resolve_persona_for_questionnaire(response.questionnaire)
     return str(persona.pk) if persona is not None else ''
 
 

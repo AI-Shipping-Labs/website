@@ -7,11 +7,10 @@ from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
 from api.openapi import openapi_spec
+from api.request_parsing import parse_limit, parse_offset
 from api.safety import error_response
 from api.serializers.users import serialize_email_log
 from api.utils import require_methods
-from api.views.ses_events_list import _parse_offset
-from api.views.users import _parse_limit
 from email_app.services.email_log_history import (
     DISPOSITIONS,
     apply_email_log_filters,
@@ -111,10 +110,10 @@ EMAIL_LOG_QUERY_SPEC = {
     },
 )
 def email_log_list(request):
-    limit, error = _parse_limit(request.GET.get("limit"))
+    limit, error = parse_limit(request.GET.get("limit"))
     if error is not None:
         return error
-    offset, error = _parse_offset(request.GET.get("offset"))
+    offset, error = parse_offset(request.GET.get("offset"))
     if error is not None:
         return error
     since, error = _parse_date(request.GET.get("since"), "since")

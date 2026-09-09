@@ -40,13 +40,10 @@ Cross-cutting:
   decision).
 """
 
-from datetime import datetime
-
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import F, Q
 from django.http import JsonResponse
-from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
@@ -65,12 +62,22 @@ from accounts.utils.tags import (
     user_ids_matching_tag_search,
 )
 from api.openapi import openapi_spec
+from api.request_parsing import (
+    parse_account_lifecycle,
+    parse_limit,
+    parse_since,
+)
 from api.safety import error_response
+from api.serializers.crm import (
+    serialize_crm_record_for_operator,
+    serialize_crm_record_summary,
+)
 from api.serializers.users import (
     serialize_email_log,
     serialize_ses_event,
     serialize_user_state,
 )
+from api.user_lookup import find_user_by_primary_email, user_not_found_response
 from api.utils import parse_json_body, require_methods
 from api.views._permissions import bearer_is_admin
 from community.models import CommunityAuditLog
@@ -92,67 +99,16 @@ from email_app.services.email_log_history import (
     user_history_queryset,
 )
 from integrations.services.maven_preferences import set_maven_email_preference
-from questionnaires.models import Persona
 from questionnaires.onboarding import get_onboarding_response
+from questionnaires.services import resolve_persona_for_questionnaire
 
 User = get_user_model()
 
-
-# ---- Parameter parsing helpers ---------------------------------------------
-#
-# Mirrors ``api/views/worker.py``'s shape so callers see the same
-# 422 ``validation_error`` body for ``limit`` / ``since`` parse
-# failures regardless of which endpoint they hit. The two helpers are
-# intentionally duplicated rather than extracted to ``api/utils`` for
-# now -- if a third caller appears, lifting them is a one-PR refactor.
-
-LIMIT_DEFAULT = 50
-LIMIT_MAX = 200
 USER_SORT_VALUES = ("joined", "-joined", "last_login", "-last_login")
 
 
-def _parse_limit(raw, *, default=LIMIT_DEFAULT, field="limit"):
-    if raw is None or raw == "":
-        return default, None
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return None, error_response(
-            f"Invalid integer: {raw!r}",
-            "validation_error",
-            status=422,
-            details={"field": field, "value": raw},
-        )
-    if value < 1:
-        return None, error_response(
-            f"{field} must be a positive integer",
-            "validation_error",
-            status=422,
-            details={"field": field, "value": raw},
-        )
-    return min(value, LIMIT_MAX), None
-
-
-def _parse_since(raw, *, field="since"):
-    if raw is None or raw == "":
-        return None, None
-    text = raw.strip()
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    try:
-        value = datetime.fromisoformat(text)
-    except ValueError:
-        return None, error_response(
-            f"Invalid ISO-8601 datetime: {raw!r}",
-            "validation_error",
-            status=422,
-            details={"field": field, "value": raw},
-        )
-    return value, None
-
-
 def _parse_activity_limit(raw):
-    limit, err = _parse_limit(
+    limit, err = parse_limit(
         raw,
         default=DEFAULT_ACTIVITY_LIMIT,
         field="limit",
@@ -174,24 +130,6 @@ def _parse_activity_category(raw):
             "field": "category",
             "value": raw,
             "allowed": [ACTIVITY_CATEGORY_ALL, *ACTIVITY_CATEGORIES],
-        },
-    )
-
-
-def _parse_account_lifecycle(raw):
-    value = (raw or "").strip()
-    if not value:
-        return "", None
-    if value in ACCOUNT_LIFECYCLE_VALUES:
-        return value, None
-    return None, error_response(
-        f"Invalid account_lifecycle: {raw!r}",
-        "validation_error",
-        status=422,
-        details={
-            "field": "account_lifecycle",
-            "value": raw,
-            "allowed": list(ACCOUNT_LIFECYCLE_VALUES),
         },
     )
 
@@ -224,18 +162,6 @@ def _user_sort_expressions(value):
     return (F("date_joined").desc(nulls_last=True), F("pk").asc())
 
 
-def _find_user(email):
-    """Look up a ``User`` by case-insensitive email."""
-    if not email:
-        return None
-    return (
-        User.objects
-        .select_related("tier", "pending_tier", "attribution")
-        .filter(email__iexact=email)
-        .first()
-    )
-
-
 def _find_user_or_alias(email):
     """Resolve a canonical API user through primary email or an alias."""
     resolved = resolve_user_by_email(email)
@@ -249,64 +175,10 @@ def _find_user_or_alias(email):
     )
 
 
-def _user_not_found_response():
-    return error_response(
-        "User not found",
-        "user_not_found",
-        status=404,
-    )
-
-
-def resolve_crm_persona(record):
-    """Resolve a ``CRMRecord``'s persona label.
-
-    Prefers the structured ``persona_ref.display_label`` when set,
-    otherwise falls back to the free-text ``persona`` field. Shared by
-    the summary (this module) and the full CRM-export serializer (issue
-    #1079) so both callers agree on persona resolution.
-    """
-    if record.persona_ref_id is not None and record.persona_ref is not None:
-        return record.persona_ref.display_label
-    return (record.persona or '').strip()
-
-
-def serialize_crm_record_summary(record):
-    """Compact CRM-record dict (``id`` / ``status`` / ``persona``).
-
-    ``record`` may be ``None`` (no ``CRMRecord``), in which case ``None``
-    is returned. Kept record-based (not user-based) so the export path
-    can serialize a pre-fetched record without re-querying.
-    """
-    if record is None:
-        return None
-    return {
-        "id": record.pk,
-        "status": record.status,
-        "persona": resolve_crm_persona(record),
-    }
-
-
-def serialize_crm_record_for_operator(record):
-    """CRM record payload with the Studio URL operators need next."""
-    if record is None:
-        return None
-    path = reverse("studio_crm_detail", kwargs={"crm_id": record.pk})
-    return {
-        **serialize_crm_record_summary(record),
-        "studio_url": path,
-        "onboarding_url": f"{path}#onboarding",
-    }
-
-
 def _crm_persona_defaults(onboarding_response):
     """CRM persona fields inferred from the submitted onboarding response."""
-    persona = (
-        Persona.objects.filter(
-            default_questionnaire=onboarding_response.questionnaire,
-            is_active=True,
-        )
-        .order_by("order", "name")
-        .first()
+    persona = resolve_persona_for_questionnaire(
+        onboarding_response.questionnaire,
     )
     if persona is None:
         return {}
@@ -316,12 +188,11 @@ def _crm_persona_defaults(onboarding_response):
     }
 
 
-def _serialize_crm_record_summary(user):
-    """Look up a user's ``CRMRecord`` and serialize the compact summary."""
-    record = CRMRecord.objects.select_related('persona_ref').filter(
+def _crm_record_for_user(user):
+    """Return the user's CRM record with persona data ready for serialization."""
+    return CRMRecord.objects.select_related('persona_ref').filter(
         user=user,
     ).first()
-    return serialize_crm_record_summary(record)
 
 
 def _actor_label(request):
@@ -501,13 +372,13 @@ _USER_EXAMPLE = {
 )
 def users_collection(request):
     """``GET /api/users`` -- search / list."""
-    limit, err = _parse_limit(request.GET.get("limit"))
+    limit, err = parse_limit(request.GET.get("limit"))
     if err is not None:
         return err
-    since, err = _parse_since(request.GET.get("since"))
+    since, err = parse_since(request.GET.get("since"))
     if err is not None:
         return err
-    account_lifecycle, err = _parse_account_lifecycle(
+    account_lifecycle, err = parse_account_lifecycle(
         request.GET.get("account_lifecycle"),
     )
     if err is not None:
@@ -635,7 +506,7 @@ def user_detail(request, email):
     """``GET | PATCH /api/users/<email>``."""
     user = _find_user_or_alias(email)
     if user is None:
-        return _user_not_found_response()
+        return user_not_found_response()
 
     if request.method == "GET":
         return JsonResponse(serialize_user_state(user), status=200)
@@ -799,9 +670,9 @@ def user_detail(request, email):
 )
 def user_slack_membership_check(request, email):
     """Run the shared single-user Slack membership operation."""
-    user = _find_user(email)
+    user = find_user_by_primary_email(email)
     if user is None:
-        return _user_not_found_response()
+        return user_not_found_response()
     outcome = check_user_slack_membership(
         user,
         audit_source=f"api:{_actor_label(request)}",
@@ -897,7 +768,7 @@ def user_crm_record(request, email):
     """``POST /api/users/<email>/crm-record``."""
     user = resolve_user_by_email(email)
     if user is None:
-        return _user_not_found_response()
+        return user_not_found_response()
     onboarding_response = get_onboarding_response(user)
     if onboarding_response is None or onboarding_response.status != "submitted":
         return error_response(
@@ -1062,14 +933,14 @@ _ACTIVITY_EXAMPLE = {
 )
 def user_activity(request, email):
     """``GET /api/users/<email>/activity``."""
-    user = _find_user(email)
+    user = find_user_by_primary_email(email)
     if user is None:
-        return _user_not_found_response()
+        return user_not_found_response()
 
     limit, err = _parse_activity_limit(request.GET.get("limit"))
     if err is not None:
         return err
-    since, err = _parse_since(request.GET.get("since"))
+    since, err = parse_since(request.GET.get("since"))
     if err is not None:
         return err
     category, err = _parse_activity_category(request.GET.get("category"))
@@ -1086,7 +957,9 @@ def user_activity(request, email):
     return JsonResponse(
         {
             "user": serialize_user_state(user, compact=True),
-            "crm_record": _serialize_crm_record_summary(user),
+            "crm_record": serialize_crm_record_summary(
+                _crm_record_for_user(user),
+            ),
             "total_count": context["activity_total"],
             "limit": context["activity_limit"],
             "has_more": context["activity_has_more"],
@@ -1100,7 +973,7 @@ def user_activity(request, email):
     )
 
 
-_SES_EVENT_EXAMPLE = {
+SES_EVENT_EXAMPLE = {
     "message_id": "11111111-2222-3333-4444-555555555555",
     "event_type": "bounce_permanent",
     "received_at": "2026-05-19T08:30:00+00:00",
@@ -1152,7 +1025,7 @@ _SES_EVENT_EXAMPLE = {
                 200: {
                     "description": "SES events page.",
                     "example": {
-                        "ses_events": [_SES_EVENT_EXAMPLE],
+                        "ses_events": [SES_EVENT_EXAMPLE],
                         "count": 1,
                         "limit": 50,
                     },
@@ -1182,14 +1055,14 @@ _SES_EVENT_EXAMPLE = {
 )
 def user_ses_events(request, email):
     """``GET /api/users/<email>/ses-events``."""
-    user = _find_user(email)
+    user = find_user_by_primary_email(email)
     if user is None:
-        return _user_not_found_response()
+        return user_not_found_response()
 
-    limit, err = _parse_limit(request.GET.get("limit"))
+    limit, err = parse_limit(request.GET.get("limit"))
     if err is not None:
         return err
-    since, err = _parse_since(request.GET.get("since"))
+    since, err = parse_since(request.GET.get("since"))
     if err is not None:
         return err
 
@@ -1358,12 +1231,12 @@ def user_email_log(request, email):
     """``GET /api/users/<email>/email-log``."""
     user = resolve_user_by_email(email)
     if user is None:
-        return _user_not_found_response()
+        return user_not_found_response()
 
-    limit, err = _parse_limit(request.GET.get("limit"))
+    limit, err = parse_limit(request.GET.get("limit"))
     if err is not None:
         return err
-    since, err = _parse_since(request.GET.get("since"))
+    since, err = parse_since(request.GET.get("since"))
     if err is not None:
         return err
 
@@ -1449,9 +1322,9 @@ def user_email_log(request, email):
 )
 def user_tags_add(request, email):
     """``POST /api/users/<email>/tags`` -- add a single tag (idempotent)."""
-    user = _find_user(email)
+    user = find_user_by_primary_email(email)
     if user is None:
-        return _user_not_found_response()
+        return user_not_found_response()
 
     data, parse_error = parse_json_body(request)
     if parse_error is not None:
@@ -1596,9 +1469,9 @@ _MARK_BOUNCED_TYPES = ["permanent", "soft"]
 )
 def user_mark_bounced(request, email):
     """``POST /api/users/<email>/mark-bounced`` -- operator mark-bounced."""
-    user = _find_user(email)
+    user = find_user_by_primary_email(email)
     if user is None:
-        return _user_not_found_response()
+        return user_not_found_response()
 
     data, parse_error = parse_json_body(request)
     if parse_error is not None:
@@ -1796,9 +1669,9 @@ def user_mark_bounced(request, email):
 )
 def user_clear_bounce(request, email):
     """``POST /api/users/<email>/clear-bounce`` -- clear bounce state."""
-    user = _find_user(email)
+    user = find_user_by_primary_email(email)
     if user is None:
-        return _user_not_found_response()
+        return user_not_found_response()
 
     data, parse_error = parse_json_body(request)
     if parse_error is not None:
@@ -1895,9 +1768,9 @@ def user_clear_bounce(request, email):
 )
 def user_tags_remove(request, email, tag):
     """``DELETE /api/users/<email>/tags/<tag>`` -- remove one tag (idempotent)."""
-    user = _find_user(email)
+    user = find_user_by_primary_email(email)
     if user is None:
-        return _user_not_found_response()
+        return user_not_found_response()
 
     normalized = normalize_tag(tag)
     if not normalized:

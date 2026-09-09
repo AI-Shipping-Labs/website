@@ -22,6 +22,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.enrollments import serialize_sprint_enrollment
 from api.utils import (
     delete_not_available_response,
     parse_json_body,
@@ -46,25 +47,6 @@ SPRINT_ENROLLMENT_DELETE_NOT_AVAILABLE_MESSAGE = (
     "Sprint enrollment deletion is not available through the API. "
     "Go to Studio to unenroll this user manually."
 )
-
-
-def _serialize_enrollment(enrollment):
-    """JSON shape for a single enrollment row.
-
-    ``enrolled_by`` is the email of the staff user who created the row,
-    or ``None`` when the member self-joined.
-    """
-    return {
-        'user_email': enrollment.user.email,
-        'enrolled_at': (
-            enrollment.enrolled_at.isoformat()
-            if enrollment.enrolled_at else None
-        ),
-        'enrolled_by': (
-            enrollment.enrolled_by.email
-            if enrollment.enrolled_by_id else None
-        ),
-    }
 
 
 def _normalize_emails(raw):
@@ -171,7 +153,7 @@ def sprint_enrollments_collection(request, slug):
         if not bearer_is_admin(request.user):
             qs = qs.filter(user=request.user)
         return JsonResponse(
-            {'enrollments': [_serialize_enrollment(e) for e in qs]},
+            {'enrollments': [serialize_sprint_enrollment(e) for e in qs]},
             status=200,
         )
 

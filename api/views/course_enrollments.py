@@ -28,6 +28,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.enrollments import serialize_course_enrollment
 from api.utils import parse_json_body, require_methods
 from api.views._permissions import bearer_is_admin
 from content.access import can_access
@@ -43,22 +44,6 @@ _ENROLLMENT_EXAMPLE = {
 }
 
 User = get_user_model()
-
-
-def _serialize_enrollment(enrollment):
-    """JSON shape for a single course-enrollment row."""
-    return {
-        'user_email': enrollment.user.email,
-        'enrolled_at': (
-            enrollment.enrolled_at.isoformat()
-            if enrollment.enrolled_at else None
-        ),
-        'unenrolled_at': (
-            enrollment.unenrolled_at.isoformat()
-            if enrollment.unenrolled_at else None
-        ),
-        'source': enrollment.source,
-    }
 
 
 def _normalize_emails(raw):
@@ -186,7 +171,7 @@ def course_enrollments_collection(request, slug):
         if not bearer_is_admin(request.user):
             qs = qs.filter(user=request.user)
         return JsonResponse(
-            {'enrollments': [_serialize_enrollment(e) for e in qs]},
+            {'enrollments': [serialize_course_enrollment(e) for e in qs]},
             status=200,
         )
 

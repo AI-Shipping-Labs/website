@@ -1,0 +1,28 @@
+<div class="flex items-center justify-between{% if not is_first %} mt-6 border-t border-border pt-6{% endif %}">
+  <div>
+    <p class="font-medium text-foreground">{{ label }}</p>
+    <p class="mt-1 text-sm text-muted-foreground">{{ description }}</p>
+  </div>
+  <div class="touch-target-toggle">
+    <button type="button"
+            id="{{ toggle_id }}"
+            data-testid="{{ toggle_id }}"
+            data-email-preference-toggle
+            data-preference-key="{{ preference_key }}"
+            data-status-on="{{ status_on }}"
+            data-status-off="{{ status_off }}"
+            data-status-id="{{ status_id }}"
+            data-error-message="{{ error_message|default:'' }}"
+            class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors {% if enabled %}bg-accent{% else %}bg-secondary{% endif %}"
+            aria-label="{{ aria_label }}"
+            aria-checked="{% if enabled %}true{% else %}false{% endif %}"
+            role="switch">
+      <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full shadow ring-0 transition-transform {% if enabled %}translate-x-5 bg-accent-foreground{% else %}translate-x-0 bg-foreground{% endif %}"
+            id="{{ toggle_id }}-dot"></span>
+    </button>
+  </div>
+</div>
+<p class="mt-4 hidden text-sm text-foreground"
+   id="{{ status_id }}"
+   data-testid="{{ status_id }}"
+   aria-live="polite"></p>

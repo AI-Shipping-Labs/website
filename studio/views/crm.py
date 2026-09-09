@@ -58,6 +58,7 @@ from questionnaires.onboarding import (
     get_onboarding_response,
 )
 from studio.decorators import staff_required
+from studio.utils import studio_listing_querystring, studio_pager_querystring
 
 User = get_user_model()
 
@@ -235,6 +236,42 @@ def crm_list(request):
         'archived': CRMRecord.objects.filter(status='archived').count(),
     }
 
+    listing_params = {
+        'filter': active_filter,
+        'account_lifecycle': account_lifecycle_filter or None,
+        'q': search or None,
+        'tag': active_tag or None,
+    }
+
+    def listing_url(**updates):
+        return studio_listing_querystring(
+            request,
+            **(listing_params | updates),
+        )
+
+    lifecycle_filter_links = [
+        (value, label, listing_url(account_lifecycle=value))
+        for value, label in ACCOUNT_LIFECYCLE_CHOICES
+    ]
+    previous_url = (
+        studio_pager_querystring(
+            request,
+            page.previous_page_number(),
+            **listing_params,
+        )
+        if page.has_previous()
+        else None
+    )
+    next_url = (
+        studio_pager_querystring(
+            request,
+            page.next_page_number(),
+            **listing_params,
+        )
+        if page.has_next()
+        else None
+    )
+
     return render(request, 'studio/crm/list.html', {
         'rows': rows,
         'paginator': paginator,
@@ -249,6 +286,13 @@ def crm_list(request):
         'filter_active': FILTER_ACTIVE,
         'filter_archived': FILTER_ARCHIVED,
         'account_lifecycle_choices': ACCOUNT_LIFECYCLE_CHOICES,
+        'crm_filter_active_url': listing_url(filter=FILTER_ACTIVE),
+        'crm_filter_archived_url': listing_url(filter=FILTER_ARCHIVED),
+        'crm_filter_all_url': listing_url(filter=FILTER_ALL),
+        'crm_lifecycle_all_url': listing_url(account_lifecycle=None),
+        'crm_lifecycle_filter_links': lifecycle_filter_links,
+        'crm_pager_previous_url': previous_url,
+        'crm_pager_next_url': next_url,
     })
 
 

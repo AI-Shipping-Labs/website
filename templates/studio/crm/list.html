@@ -10,17 +10,17 @@
 <!-- Filter chips and search -->
 <form method="get" class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" data-testid="crm-list-controls">
   <div class="flex flex-wrap items-center gap-2" data-testid="crm-filter-chips">
-    <a href="?filter={{ filter_active }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}{% if active_tag %}&tag={{ active_tag }}{% endif %}"
+    <a href="{{ crm_filter_active_url }}"
        data-testid="crm-filter-active"
        class="px-3 py-1.5 rounded-full text-xs font-medium border {% if active_filter == filter_active %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
       Active{{ counts.active|paren_count }}
     </a>
-    <a href="?filter={{ filter_archived }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}{% if active_tag %}&tag={{ active_tag }}{% endif %}"
+    <a href="{{ crm_filter_archived_url }}"
        data-testid="crm-filter-archived"
        class="px-3 py-1.5 rounded-full text-xs font-medium border {% if active_filter == filter_archived %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
       Archived{{ counts.archived|paren_count }}
     </a>
-    <a href="?filter={{ filter_all }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}{% if active_tag %}&tag={{ active_tag }}{% endif %}"
+    <a href="{{ crm_filter_all_url }}"
        data-testid="crm-filter-all"
        class="px-3 py-1.5 rounded-full text-xs font-medium border {% if active_filter == filter_all %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
       All{{ counts.all|paren_count }}
@@ -29,13 +29,13 @@
   <div class="flex flex-col gap-2 sm:items-end">
     <div class="flex flex-wrap items-center gap-2" data-testid="crm-lifecycle-filter-chips">
       <span class="text-xs text-muted-foreground">Lifecycle:</span>
-      <a href="?filter={{ active_filter }}{% if search %}&q={{ search }}{% endif %}{% if active_tag %}&tag={{ active_tag }}{% endif %}"
+      <a href="{{ crm_lifecycle_all_url }}"
          data-lifecycle-filter=""
          class="px-3 py-1 rounded-full text-xs font-medium border {% if not account_lifecycle_filter %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
         All
       </a>
-      {% for value, label in account_lifecycle_choices %}
-      <a href="?filter={{ active_filter }}&account_lifecycle={{ value }}{% if search %}&q={{ search }}{% endif %}{% if active_tag %}&tag={{ active_tag }}{% endif %}"
+      {% for value, label, filter_url in crm_lifecycle_filter_links %}
+      <a href="{{ filter_url }}"
          data-lifecycle-filter="{{ value }}"
          class="px-3 py-1 rounded-full text-xs font-medium border {% if account_lifecycle_filter == value %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
         {{ label }}
@@ -152,12 +152,12 @@
   <span>Showing {{ page.start_index }}-{{ page.end_index }} of {{ paginator.count }}</span>
   <div class="flex items-center gap-2">
     {% if page.has_previous %}
-    <a href="?filter={{ active_filter }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}{% if active_tag %}&tag={{ active_tag }}{% endif %}&page={{ page.previous_page_number }}"
+    <a href="{{ crm_pager_previous_url }}"
        class="px-3 py-1 rounded border border-border hover:bg-secondary">Previous</a>
     {% endif %}
     <span>Page {{ page.number }} of {{ paginator.num_pages }}</span>
     {% if page.has_next %}
-    <a href="?filter={{ active_filter }}{% if account_lifecycle_filter %}&account_lifecycle={{ account_lifecycle_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}{% if active_tag %}&tag={{ active_tag }}{% endif %}&page={{ page.next_page_number }}"
+    <a href="{{ crm_pager_next_url }}"
        class="px-3 py-1 rounded border border-border hover:bg-secondary">Next</a>
     {% endif %}
   </div>

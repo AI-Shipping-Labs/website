@@ -822,6 +822,24 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_schedule_reconciliation_1540.py::"
         "TestScheduleReconciliationWorkerBanner::test_non_staff_cannot_open_worker_diagnostics",
     })
+    issue_1541_owners = frozenset({
+        "playwright_tests/test_studio_listing_query_encoding_1541.py::"
+        "test_users_spaced_search_survives_tier_chip",
+        "playwright_tests/test_studio_listing_query_encoding_1541.py::"
+        "test_users_plus_ampersand_search_survives_slack_then_bounce",
+        "playwright_tests/test_studio_listing_query_encoding_1541.py::"
+        "test_users_csv_export_preserves_encoded_search_and_tag",
+        "playwright_tests/test_studio_listing_query_encoding_1541.py::"
+        "test_users_tag_clear_preserves_encoded_search_and_drops_page",
+        "playwright_tests/test_studio_listing_query_encoding_1541.py::"
+        "test_crm_ampersand_search_survives_status_chip",
+        "playwright_tests/test_studio_listing_query_encoding_1541.py::"
+        "test_crm_spaced_search_survives_pager",
+        "playwright_tests/test_studio_listing_query_encoding_1541.py::"
+        "test_lifecycle_chips_preserve_encoded_search_on_users_and_crm",
+        "playwright_tests/test_studio_listing_query_encoding_1541.py::"
+        "test_filtered_lists_keep_anonymous_redirect_and_nonstaff_forbidden",
+    })
     issue_1589_owners = frozenset({
         "playwright_tests/test_course_code_annotations_1589.py::"
         "TestCourseCodeAnnotationsReader::"
@@ -954,8 +972,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2608)
-        self.assertEqual(len(inventory.owners), 2383)
+        self.assertEqual(inventory.item_count, 2616)
+        self.assertEqual(len(inventory.owners), 2391)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -971,6 +989,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1516_owners
             | self.issue_1565_owners
             | self.issue_1540_owners
+            | self.issue_1541_owners
             | self.issue_1589_owners
             | self.issue_1591_owners
             | self.issue_1590_owners

@@ -7,11 +7,15 @@ it, Where to find it, Test vs live.
 
 Observability wires Pydantic Logfire (OpenTelemetry-based) into the
 running app so that, in production only, we collect logs and traces for
-Django requests, outbound HTTP, and the LLM calls. It reuses the existing
-integration-config machinery end to end: values resolve through
-`integrations.config.get_config` / `is_enabled` (DB row > Django settings
-> env > default), so a Studio save takes effect without a redeploy,
-consistent with every other integration.
+Django requests, outbound HTTP, and the LLM calls.
+
+The `AppConfig.ready()` pass reads Django settings, then the process
+environment, then the registered defaults. It does not read
+`IntegrationSetting` or the shared `django_q` cache while Django is
+populating apps. Serving web and worker containers make a second pass through
+the normal runtime configuration after `django.setup()` and before serving or
+polling. That pass uses DB row > Django settings > env > default, so Studio
+overrides apply on the next process start.
 
 ## Production-only by design
 
@@ -24,11 +28,9 @@ Logfire initializes at app startup ONLY when ALL three of these hold:
 3. `LOGFIRE_ENABLED` is `true`.
 
 This three-part AND gate lives in
-`integrations/services/observability.py::logfire_is_enabled()` and is the
-single guard the startup initializer
-(`integrations.apps.IntegrationsConfig.ready()`) routes through. When the
-gate is closed there is no `logfire` import side effect, no network, and
-no `logfire.configure()` call.
+`integrations/services/observability.py::logfire_is_enabled()`. When the gate
+is closed there is no `logfire` import side effect, no network, and no
+`logfire.configure()` call.
 
 Why off by default: `LOGFIRE_ENABLED` defaults to `false` everywhere, so
 Logfire stays silent in:
@@ -61,9 +63,9 @@ Logfire:
 
 Each instrumentor is guarded independently: a missing optional helper or a
 failing call is logged and swallowed, so app boot never crashes on a
-misconfiguration. `ready()` runs once per process (each gunicorn worker
-and the qcluster configure their own Logfire exporter), so there is no
-double-`configure()` within a single process.
+misconfiguration. The initializer records successful configuration in the
+process, so the post-setup runtime pass does not call `configure()` twice when
+the settings/environment pass already enabled Logfire.
 
 Out of scope here: collector/OTel endpoint configuration beyond Logfire's
 hosted endpoint (a follow-up for `DataTalksClub/aws-infra`), and custom

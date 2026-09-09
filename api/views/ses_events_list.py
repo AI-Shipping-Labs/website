@@ -32,14 +32,13 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.openapi.decorator import OPENAPI_SPEC_ATTR
+from api.request_parsing import parse_limit, parse_offset, parse_since
 from api.safety import error_response
 from api.serializers.users import serialize_ses_event
 from api.views.ses_events import ses_events as _ses_events_webhook
 from api.views.users import (
-    _SES_EVENT_EXAMPLE,
+    SES_EVENT_EXAMPLE,
     VALID_SES_EVENT_TYPES,
-    _parse_limit,
-    _parse_since,
 )
 from email_app.models import SesEvent
 
@@ -52,33 +51,6 @@ _BOUNCE_EVENT_TYPES = (
     SesEvent.EVENT_TYPE_BOUNCE_OTHER,
 )
 _BOUNCE_ALIAS = "bounce"
-
-
-def _parse_offset(raw, *, field="offset"):
-    """Parse the ``offset`` query param into a non-negative int.
-
-    Mirrors the 422 ``validation_error`` shape of ``_parse_limit`` but
-    allows zero (an offset of 0 is the first page) and rejects negatives.
-    """
-    if raw is None or raw == "":
-        return 0, None
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return None, error_response(
-            f"Invalid integer: {raw!r}",
-            "validation_error",
-            status=422,
-            details={"field": field, "value": raw},
-        )
-    if value < 0:
-        return None, error_response(
-            f"{field} must be a non-negative integer",
-            "validation_error",
-            status=422,
-            details={"field": field, "value": raw},
-        )
-    return value, None
 
 
 def _parse_email_log(raw, *, field="email_log"):
@@ -201,7 +173,7 @@ _GET_LIST_OPENAPI = {
         200: {
             "description": "SES events page.",
             "example": {
-                "ses_events": [_SES_EVENT_EXAMPLE],
+                "ses_events": [SES_EVENT_EXAMPLE],
                 "count": 1,
                 "limit": 50,
                 "offset": 0,
@@ -232,16 +204,16 @@ _GET_LIST_OPENAPI = {
 )
 def ses_events_list(request):
     """``GET /api/ses-events`` -- aggregate list across all recipients."""
-    limit, err = _parse_limit(request.GET.get("limit"))
+    limit, err = parse_limit(request.GET.get("limit"))
     if err is not None:
         return err
-    offset, err = _parse_offset(request.GET.get("offset"))
+    offset, err = parse_offset(request.GET.get("offset"))
     if err is not None:
         return err
-    since, err = _parse_since(request.GET.get("since"))
+    since, err = parse_since(request.GET.get("since"))
     if err is not None:
         return err
-    until, err = _parse_since(request.GET.get("until"), field="until")
+    until, err = parse_since(request.GET.get("until"), field="until")
     if err is not None:
         return err
     email_log_id, err = _parse_email_log(request.GET.get("email_log"))

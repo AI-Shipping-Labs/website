@@ -9,6 +9,7 @@ question set. It is pure-Python and ORM-only -- no HTTP, no AI.
 from questionnaires.models import (
     Answer,
     AnswerOptionText,
+    Persona,
     ResponseQuestion,
     ResponseQuestionOption,
 )
@@ -19,6 +20,36 @@ _TEXT_TYPES = frozenset({'text', 'long_text'})
 _NUMBER_TYPES = frozenset({'scale', 'number'})
 # Question types whose answer lives in ``selected_options``.
 _CHOICE_TYPES = frozenset({'single_choice', 'multiple_choice'})
+
+
+def resolve_persona_for_questionnaire(
+    questionnaire,
+    *,
+    personas_by_questionnaire=None,
+):
+    """Return the first active persona assigned to ``questionnaire``."""
+    if questionnaire is None:
+        return None
+    if personas_by_questionnaire is not None:
+        return personas_by_questionnaire.get(questionnaire.id)
+    return (
+        Persona.objects.filter(
+            default_questionnaire=questionnaire,
+            is_active=True,
+        )
+        .order_by('order', 'name')
+        .first()
+    )
+
+
+def persona_map_by_questionnaire():
+    """Build a questionnaire-id map with the first active persona winning."""
+    mapping = {}
+    for persona in Persona.objects.filter(is_active=True).order_by('order', 'name'):
+        questionnaire_id = persona.default_questionnaire_id
+        if questionnaire_id is not None and questionnaire_id not in mapping:
+            mapping[questionnaire_id] = persona
+    return mapping
 
 
 def build_response_questions(response):

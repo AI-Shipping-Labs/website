@@ -315,6 +315,11 @@ class RuleChainTest(SimpleTestCase):
         plan = plan_for(["scripts/affected_tests.py", "_docs/testing-guidelines.md"])
         self.assertEqual(plan.django_labels, ["tests.test_affected_tests"])
 
+    def test_screenshot_capture_helper_targets_its_native_contract(self):
+        plan = plan_for(["scripts/capture_screenshots.py"])
+        self.assertEqual(plan.django_labels, ["tests.test_capture_screenshots"])
+        self.assertEqual(plan.unmapped, [])
+
     def test_agent_branch_retirement_helper_targets_its_exact_synthetic_contract(self):
         plan = plan_for(
             [

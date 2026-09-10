@@ -8,7 +8,7 @@ Usage:
     uv run python scripts/capture_screenshots.py --urls /projects --output .tmp/screenshots --viewport 393x851
 
 This script:
-1. Starts the Django dev server (if not already running)
+1. Starts an owned Django dev server on an OS-assigned loopback port
 2. Navigates to each URL with Playwright
 3. Captures full-page screenshots
 4. Saves them to the chosen output directory
@@ -19,19 +19,23 @@ returned CloudFront URL to the user. See `.claude/skills/screenshots/SKILL.md`
 for the canonical procedure (install precondition, return shape, and the
 `SCREENSHOT_UPLOAD_TOKEN` hygiene rule).
 
-This is a manual QA/documentation helper. When it starts its own Django server,
-it intentionally uses the configured development database (db.sqlite3 by
-default) and loads synced content. Do not use it to create ad-hoc Playwright
-fixture rows; run `uv run pytest playwright_tests/...` for test validation.
+This is a manual QA/documentation helper. Its Django server intentionally uses
+the configured development database (db.sqlite3 by default) and loads synced
+content. Do not use it to create ad-hoc Playwright fixture rows; run
+`uv run pytest playwright_tests/...` for test validation.
 """
 
 import argparse
+import errno
 import os
+import socket
 import sys
-import threading
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
+from dataclasses import dataclass
+from threading import Thread
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -39,8 +43,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "website.settings")
 
 
 DJANGO_HOST = "127.0.0.1"
-DJANGO_PORT = 8766  # Different from test port to avoid conflicts
-DJANGO_BASE_URL = f"http://{DJANGO_HOST}:{DJANGO_PORT}"
+MAX_BIND_ATTEMPTS = 3
 DEFAULT_VIEWPORT = {"width": 1280, "height": 720}
 
 
@@ -65,44 +68,119 @@ def viewport_label(viewport):
 
 
 def _server_is_running(url):
-    """Check if the Django dev server is already running."""
+    """Check readiness on a URL whose listener this invocation owns."""
     try:
-        urllib.request.urlopen(url, timeout=2)
+        with urllib.request.urlopen(url, timeout=2):
+            pass
         return True
     except (urllib.error.URLError, ConnectionError, OSError):
         return False
 
 
-def _start_django_server():
-    """Start Django dev server in a background thread."""
+def _select_loopback_port():
+    """Ask the operating system for an available loopback port."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as candidate:
+        candidate.bind((DJANGO_HOST, 0))
+        return candidate.getsockname()[1]
+
+
+def _bind_django_server(port):
+    """Bind a local Django WSGI server before any readiness request."""
     import django
     django.setup()
-    from django.core.management import call_command, execute_from_command_line
+    from django.contrib.staticfiles.handlers import StaticFilesHandler
+    from django.core.servers.basehttp import (
+        ThreadedWSGIServer,
+        WSGIRequestHandler,
+        get_internal_wsgi_application,
+    )
+
+    application = StaticFilesHandler(get_internal_wsgi_application())
+    server = ThreadedWSGIServer(
+        (DJANGO_HOST, port),
+        WSGIRequestHandler,
+        ipv6=False,
+        allow_reuse_address=False,
+    )
+    server.set_app(application)
+    return server
+
+
+@dataclass
+class _OwnedDjangoServer:
+    server: object
+    thread: Thread
+    base_url: str
+
+    def stop(self):
+        if self.thread.is_alive():
+            self.server.shutdown()
+        self.server.server_close()
+        if getattr(self.thread, "ident", None) is not None:
+            self.thread.join(timeout=5)
+
+
+def _start_django_server():
+    """Start and return an owned Django server on an OS-assigned port."""
+    last_collision = None
+    for attempt in range(1, MAX_BIND_ATTEMPTS + 1):
+        port = _select_loopback_port()
+        try:
+            server = _bind_django_server(port)
+        except OSError as exc:
+            if exc.errno != errno.EADDRINUSE:
+                raise
+            last_collision = exc
+            if attempt < MAX_BIND_ATTEMPTS:
+                continue
+            break
+
+        base_url = f"http://{DJANGO_HOST}:{port}"
+        thread = Thread(target=server.serve_forever, daemon=True)
+        owned = _OwnedDjangoServer(server, thread, base_url)
+
+        try:
+            thread.start()
+            for _ in range(30):
+                if _server_is_running(f"{base_url}/"):
+                    return owned
+                if not thread.is_alive():
+                    break
+                time.sleep(0.5)
+        except BaseException:
+            owned.stop()
+            raise
+
+        owned.stop()
+        raise RuntimeError(f"Django dev server did not start at {base_url}")
+
+    raise RuntimeError(
+        "Could not start the Django screenshot server after "
+        f"{MAX_BIND_ATTEMPTS} loopback bind collisions; "
+        "another local process claimed every candidate port"
+    ) from last_collision
+
+
+@contextmanager
+def _owned_django_server():
+    """Start the screenshot server and always release its listener."""
+    owned = _start_django_server()
+    try:
+        yield owned
+    finally:
+        owned.stop()
+
+
+def _migrate_database():
+    """Apply local migrations before starting the screenshot server."""
+    import django
+    django.setup()
+    from django.core.management import call_command
 
     call_command("migrate", "--run-syncdb", verbosity=0)
 
-    original_argv = sys.argv
-    sys.argv = [
-        "manage.py", "runserver",
-        f"{DJANGO_HOST}:{DJANGO_PORT}",
-        "--noreload", "--insecure",
-    ]
-    thread = threading.Thread(
-        target=execute_from_command_line,
-        args=(sys.argv,),
-        daemon=True,
-    )
-    sys.argv = original_argv
-    thread.start()
 
-    for _ in range(30):
-        if _server_is_running(f"{DJANGO_BASE_URL}/"):
-            return thread
-        time.sleep(0.5)
-    raise RuntimeError("Django dev server did not start in time")
-
-
-def capture_screenshots(urls, output_dir, login_as=None, viewport=None):
+def capture_screenshots(urls, output_dir, login_as=None, viewport=None, *, base_url):
     """Capture screenshots of the given URLs.
 
     Args:
@@ -110,6 +188,7 @@ def capture_screenshots(urls, output_dir, login_as=None, viewport=None):
         output_dir: Directory to save screenshots
         login_as: Optional dict with 'email' and 'password' to log in first
         viewport: Playwright viewport dict. Defaults to the historical 1280x720.
+        base_url: Base URL of the Django server owned by this invocation.
 
     Returns:
         List of (url, filepath) tuples for captured screenshots
@@ -130,14 +209,14 @@ def capture_screenshots(urls, output_dir, login_as=None, viewport=None):
         try:
             if login_as:
                 # Log in via the API endpoint directly
-                page.goto(f"{DJANGO_BASE_URL}/accounts/login/", wait_until="networkidle")
+                page.goto(f"{base_url}/accounts/login/", wait_until="networkidle")
                 page.fill('#login-email', login_as['email'])
                 page.fill('#login-password', login_as['password'])
                 page.click('#login-submit')
                 page.wait_for_timeout(2000)
 
             for url_path in urls:
-                full_url = f"{DJANGO_BASE_URL}{url_path}"
+                full_url = f"{base_url}{url_path}"
                 safe_name = url_path.strip("/").replace("/", "_") or "home"
                 filepath = os.path.join(output_dir, f"{safe_name}{suffix}.png")
 
@@ -174,19 +253,21 @@ def main():
     )
     print(f"Output directory: {output_dir}")
 
-    # Start server if not running
-    if not _server_is_running(f"{DJANGO_BASE_URL}/"):
-        print("Starting Django dev server...")
-        _start_django_server()
-    else:
-        print("Django dev server already running")
-
     login_as = None
     if args.login_email:
         login_as = {"email": args.login_email, "password": args.login_password}
 
-    print(f"Capturing {len(args.urls)} screenshots at {viewport_label(args.viewport)}...")
-    screenshots = capture_screenshots(args.urls, output_dir, login_as=login_as, viewport=args.viewport)
+    _migrate_database()
+    with _owned_django_server() as owned:
+        print(f"Starting Django dev server at {owned.base_url}")
+        print(f"Capturing {len(args.urls)} screenshots at {viewport_label(args.viewport)}...")
+        screenshots = capture_screenshots(
+            args.urls,
+            output_dir,
+            login_as=login_as,
+            viewport=args.viewport,
+            base_url=owned.base_url,
+        )
 
     print(f"\nDone. {len(screenshots)} screenshots saved to {output_dir}")
     print(

@@ -164,6 +164,7 @@ FOCUSED_CONTRACT_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ("api.tests.test_events.EventsSkillDocSyncTest",),
     ),
     ("scripts/affected_tests.py", ("tests.test_affected_tests",)),
+    ("scripts/capture_screenshots.py", ("tests.test_capture_screenshots",)),
     ("_docs/testing-guidelines.md", ("tests.test_affected_tests",)),
     ("scripts/retire-agent-branches.py", ("tests.test_retire_agent_branches",)),
     ("scripts/playwright_owner_inventory.py", ("tests.test_playwright_owner_inventory",)),

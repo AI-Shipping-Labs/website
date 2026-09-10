@@ -396,11 +396,6 @@
       3808,
       3447
     ],
-    "playwright_tests/test_dev_goto_resilience_guard.py": [
-      94,
-      97,
-      95
-    ],
     "playwright_tests/test_dev_smoke_about.py": [
       286,
       307,
@@ -1912,12 +1907,12 @@
       10141
     ]
   },
-  "inventory_sha256": "ab1c80b8f34c3187de96a3dd338f0ceb32b79f9e6f56889d2f44fdbad6d6db26",
+  "inventory_sha256": "d08398833639f74d33fb4b4f8cb03be31825df23805456c7905a21aedab1f45e",
   "schema_version": 1,
   "source_runs": [
     {
       "expected_selected_nodes": 2408,
-      "file_weights_sha256": "e0f58dcc2ca86e35dd5e7c2f0fcc8a44d993b18ea8d7c306a8c6bfab56d668c9",
+      "file_weights_sha256": "98d9f49d72a530dd573d12953d4bce08553e28e793b42b03f672d5bef3d1f69f",
       "head_sha": "89faea5780eebcd2ce5108fbdce0b706514731f3",
       "job_ids": [
         94380223848,
@@ -1931,7 +1926,7 @@
     },
     {
       "expected_selected_nodes": 2408,
-      "file_weights_sha256": "38cb04846b29ff673d5d41ef5fb228da708862d26c74af8f8cf7f814a3a415f2",
+      "file_weights_sha256": "8f617f4aae3d9cc8b78b2203b9fd7b11e9d3d12366425b57afb45fad15aeabab",
       "head_sha": "0047ede3d6616b0fb35ce7c46474ddf6e099f000",
       "job_ids": [
         94415906999,
@@ -1945,7 +1940,7 @@
     },
     {
       "expected_selected_nodes": 2408,
-      "file_weights_sha256": "b3b812c3be6f24ce37b510e1912ee667a32165f7926ac7685094e14630d24718",
+      "file_weights_sha256": "19b5cae7c21726665b6098d05138d52f3d672687d4f9d68de2d5a31822e3e3ab",
       "head_sha": "56f0a99a7708b8b0ab886bd1e7e34a3f66f7d104",
       "job_ids": [
         94509841937,

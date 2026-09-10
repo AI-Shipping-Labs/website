@@ -34,22 +34,22 @@ EXPECTED_SOURCES = {
         "head_sha": "89faea5780eebcd2ce5108fbdce0b706514731f3",
         "url": "https://github.com/AI-Shipping-Labs/website/actions/runs/31679060660",
         "job_ids": [94380223848, 94380224101, 94380223809, 94380223838],
-        "weights_digest": "e0f58dcc2ca86e35dd5e7c2f0fcc8a44d993b18ea8d7c306a8c6bfab56d668c9",
+        "weights_digest": "98d9f49d72a530dd573d12953d4bce08553e28e793b42b03f672d5bef3d1f69f",
     },
     31690316576: {
         "head_sha": "0047ede3d6616b0fb35ce7c46474ddf6e099f000",
         "url": "https://github.com/AI-Shipping-Labs/website/actions/runs/31690316576",
         "job_ids": [94415906999, 94415906951, 94415906945, 94415907003],
-        "weights_digest": "38cb04846b29ff673d5d41ef5fb228da708862d26c74af8f8cf7f814a3a415f2",
+        "weights_digest": "8f617f4aae3d9cc8b78b2203b9fd7b11e9d3d12366425b57afb45fad15aeabab",
     },
     31718675813: {
         "head_sha": "56f0a99a7708b8b0ab886bd1e7e34a3f66f7d104",
         "url": "https://github.com/AI-Shipping-Labs/website/actions/runs/31718675813",
         "job_ids": [94509841937, 94509842047, 94509841969, 94509841860],
-        "weights_digest": "b3b812c3be6f24ce37b510e1912ee667a32165f7926ac7685094e14630d24718",
+        "weights_digest": "19b5cae7c21726665b6098d05138d52f3d672687d4f9d68de2d5a31822e3e3ab",
     },
 }
-EXPECTED_INVENTORY_DIGEST = "ab1c80b8f34c3187de96a3dd338f0ceb32b79f9e6f56889d2f44fdbad6d6db26"
+EXPECTED_INVENTORY_DIGEST = "d08398833639f74d33fb4b4f8cb03be31825df23805456c7905a21aedab1f45e"
 SYNTHETIC_FILES = (
     "playwright_tests/test_measured_a.py",
     "playwright_tests/test_measured_b.py",
@@ -134,7 +134,7 @@ class ScheduledPlaywrightMeasuredBalanceTest(SimpleTestCase):
         manifest = _manifest()
         self.assertEqual(manifest["schema_version"], 1)
         self.assertEqual(manifest["inventory_sha256"], EXPECTED_INVENTORY_DIGEST)
-        self.assertEqual(len(manifest["file_weights_ms"]), 381)
+        self.assertEqual(len(manifest["file_weights_ms"]), 380)
 
         sources = manifest["source_runs"]
         self.assertEqual([source["run_id"] for source in sources], list(EXPECTED_SOURCES))
@@ -235,15 +235,15 @@ class ScheduledPlaywrightMeasuredBalanceTest(SimpleTestCase):
         first = build_shard_plan(inventory, measured, 4)
         second = build_shard_plan(list(reversed(inventory)), measured, 4)
         self.assertEqual(first, second)
-        self.assertEqual(len(inventory), 381)
+        self.assertEqual(len(inventory), 380)
         self.assertEqual(first.unknown_files, ())
 
         _assert_exact_partition(self, first, inventory)
-        self.assertEqual(first.loads_ms, (889932, 889923, 889977, 889921))
-        self.assertEqual([len(shard) for shard in first.files], [92, 94, 95, 100])
+        self.assertEqual(first.loads_ms, (889932, 889913, 889913, 889900))
+        self.assertEqual([len(shard) for shard in first.files], [92, 94, 95, 99])
 
         baseline = round_robin_loads(inventory, measured, 4, first.unknown_weight_ms)
-        self.assertEqual(baseline, (857247, 887176, 706247, 1109083))
+        self.assertEqual(baseline, (1008837, 741530, 1099953, 709338))
         self.assertLess(max(first.loads_ms), max(baseline))
         self.assertGreaterEqual(max(baseline) - max(first.loads_ms), 180_000)
 

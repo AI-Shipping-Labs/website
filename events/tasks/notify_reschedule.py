@@ -26,7 +26,6 @@ does not suppress it. Permanent bounce state still suppresses delivery.
 import logging
 
 from django.contrib.auth import get_user_model
-from django.template.loader import render_to_string
 
 from accounts.services.timezones import (
     CALENDAR_INVITE_DATETIME_FORMAT,
@@ -211,11 +210,12 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
     from email_app.services.email_service import EmailService
 
     email_service = EmailService()
-    subject, body_html = email_service._render_template(
-        'event_rescheduled',
-        user,
-        {
-            'event_title': event.title,
+    subject, body_markdown, body_html, footer_note = (
+        email_service._render_template_parts(
+            'event_rescheduled',
+            user,
+            {
+                'event_title': event.title,
             # Issue #666 contract: pre-format BOTH times via
             # format_user_datetime so the template context carries
             # strings, not raw datetimes. Both render in the recipient's
@@ -234,14 +234,17 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
             ),
             'join_url': join_url,
             'cancel_url': cancel_url,
-            'is_host_registration': is_host,
-        },
+                'is_host_registration': is_host,
+            },
+        )
     )
 
-    full_html = render_to_string('email_app/base_email.html', {
-        'subject': subject,
-        'body_html': body_html,
-    })
+    full_html = email_service.render_html_email(
+        subject, body_html, footer_note=footer_note,
+    )
+    plain_text = email_service.render_plain_text_email(
+        body_markdown, footer_note=footer_note,
+    )
 
     # METHOD:REQUEST + bumped SEQUENCE so calendar clients overwrite the
     # original event entry instead of duplicating it. The SEQUENCE bump
@@ -261,6 +264,7 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
         subject=subject,
         html_body=full_html,
         ics_content=ics_content,
+        text_body=plain_text,
         method='REQUEST',
     )
 

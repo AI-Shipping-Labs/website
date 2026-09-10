@@ -198,7 +198,10 @@ class RecordingReadyNotificationSendTest(TestCase):
         notify_recording_ready(event)
 
         html = mock_send.call_args.args[2]
+        plain_text = mock_send.call_args.kwargs['text_body']
         self.assertIn('Uploaded and currently published', html)
+        self.assertIn('Uploaded and currently published', plain_text)
+        self.assertNotIn('<html', plain_text)
         event.refresh_from_db()
         self.assertTrue(event.published)
 

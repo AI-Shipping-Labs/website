@@ -119,6 +119,21 @@ def _html_from_raw(raw):
     raise AssertionError('no text/html part in message')
 
 
+def _assert_three_part_alternative(test_case, raw):
+    """Assert #1567's raw envelope while preserving #1088 metadata."""
+    message = email_lib.message_from_string(raw)
+    test_case.assertEqual(message.get_content_type(), 'multipart/alternative')
+    parts = message.get_payload()
+    test_case.assertEqual(
+        [part.get_content_type() for part in parts],
+        ['text/plain', 'text/html', 'text/calendar'],
+    )
+    calendar_part = parts[2]
+    test_case.assertEqual(calendar_part.get_param('name'), 'event.ics')
+    test_case.assertIsNone(calendar_part.get('Content-Disposition'))
+    return parts[0].get_payload(decode=True).decode('utf-8')
+
+
 def _assert_bare_organizers(ics_text, expected_email):
     for vevent in _vevents(_parse(ics_text)):
         organizer = vevent.get('organizer')
@@ -210,6 +225,10 @@ class SendSeriesRegistrationInviteTest(TierSetupMixin, TestCase):
 
         self.assertEqual(log.email_type, 'series_registration')
         raw = client.send_email.call_args.kwargs['Content']['Raw']['Data']
+        plain_text = _assert_three_part_alternative(self, raw)
+        self.assertIn("You're registered for the Weekly Office Hours series", plain_text)
+        self.assertIn('https://aishippinglabs.com/events/series/', plain_text)
+        self.assertNotIn('<html', plain_text)
         ics, method = _ics_from_raw(raw)
         _assert_bare_organizers(ics, 'series-calendar@aishippinglabs.com')
         self.assertEqual(method, 'REQUEST')
@@ -446,6 +465,13 @@ class SendSeriesCancellationTest(TierSetupMixin, TestCase):
 
         self.assertEqual(sent, 1)
         raw = client.send_email.call_args.kwargs['Content']['Raw']['Data']
+        plain_text = _assert_three_part_alternative(self, raw)
+        self.assertIn(
+            'A session in the Weekly Office Hours series has been cancelled',
+            plain_text,
+        )
+        self.assertIn('https://aishippinglabs.com/events/series/', plain_text)
+        self.assertNotIn('<html', plain_text)
         ics, method = _ics_from_raw(raw)
         _assert_bare_organizers(ics, 'series-calendar@aishippinglabs.com')
         self.assertEqual(method, 'CANCEL')

@@ -6,7 +6,6 @@ from email.mime.text import MIMEText
 
 import boto3
 from django.conf import settings
-from django.template.loader import render_to_string
 
 from accounts.services.timezones import (
     build_timezone_account_url,
@@ -73,11 +72,12 @@ def send_registration_confirmation(registration):
     calendar_links = build_calendar_links(event)
     # Render the email template
     email_service = EmailService()
-    subject, body_html = email_service._render_template(
-        'event_registration',
-        user,
-        {
-            'event_title': event.title,
+    subject, body_markdown, body_html, footer_note = (
+        email_service._render_template_parts(
+            'event_registration',
+            user,
+            {
+                'event_title': event.title,
             # Issue #666: render in the recipient's preferred timezone (with
             # IANA name appended), falling back to literal UTC when no
             # valid preference is set. Replaces ``event.formatted_start()``
@@ -91,15 +91,17 @@ def send_registration_confirmation(registration):
             'google_calendar_url': calendar_links['google'],
             'outlook_calendar_url': calendar_links['outlook'],
             'office365_calendar_url': calendar_links['office365'],
-            'is_host_registration': is_host,
-        },
+                'is_host_registration': is_host,
+            },
+        )
     )
 
-    # Wrap in base HTML email template
-    full_html = render_to_string('email_app/base_email.html', {
-        'subject': subject,
-        'body_html': body_html,
-    })
+    full_html = email_service.render_html_email(
+        subject, body_html, footer_note=footer_note,
+    )
+    plain_text = email_service.render_plain_text_email(
+        body_markdown, footer_note=footer_note,
+    )
 
     ics_content = generate_ics(
         event,
@@ -113,6 +115,7 @@ def send_registration_confirmation(registration):
         subject=subject,
         html_body=full_html,
         ics_content=ics_content,
+        text_body=plain_text,
     )
 
     # Log the send
@@ -140,6 +143,7 @@ def build_calendar_email_message(
     html_body,
     ics_content,
     *,
+    text_body,
     method='REQUEST',
     filename='event.ics',
 ):
@@ -153,11 +157,9 @@ def build_calendar_email_message(
     of an ``METHOD:REQUEST``/``CANCEL`` message, not as a named attachment.
     This is also the RFC-correct delivery for itip calendar messages.
 
-    Container shape: ``multipart/alternative[ text/html, text/calendar;
-    method=<METHOD> ]``. The HTML is listed first and the calendar last so
-    non-calendar clients render the HTML body while calendar-aware clients
-    pick the richer (last-listed) calendar alternative — a known
-    Gmail-compatibility ordering nuance.
+    Container shape: ``multipart/alternative[ text/plain, text/html,
+    text/calendar; method=<METHOD> ]``. The calendar remains last so
+    calendar-aware clients pick the richest alternative.
     """
     from_email = get_sender_for_kind(EMAIL_KIND_TRANSACTIONAL)
     normalized_method = method.upper()
@@ -167,7 +169,9 @@ def build_calendar_email_message(
     msg['From'] = from_email
     msg['To'] = to_email
 
-    # HTML body first: the human-readable representation.
+    # Human-readable alternatives first, with plain text as the universal
+    # fallback and HTML as the richer representation.
+    msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
     body = MIMEText(html_body, 'html', 'utf-8')
     msg.attach(body)
 
@@ -193,6 +197,8 @@ def _send_raw_email(
     subject,
     html_body,
     ics_content,
+    *,
+    text_body,
     method='REQUEST',
     filename='event.ics',
 ):
@@ -206,6 +212,7 @@ def _send_raw_email(
         to_email: Recipient email address.
         subject: Email subject line.
         html_body: Full HTML email body.
+        text_body: Plain-text email body derived from the resolved Markdown.
         ics_content: .ics file content as bytes.
         method: iCalendar method (REQUEST or CANCEL).
 
@@ -231,6 +238,7 @@ def _send_raw_email(
         subject,
         html_body,
         ics_content,
+        text_body=text_body,
         method=method,
         filename=filename,
     )

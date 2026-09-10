@@ -207,8 +207,18 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
 
         self.assertEqual(result['status'], 'sent')
         raw = self._last_raw(mock_boto3)
+        message = email_lib.message_from_string(raw)
+        self.assertEqual(
+            [part.get_content_type() for part in message.get_payload()],
+            ['text/plain', 'text/html', 'text/calendar'],
+        )
+        plain_text = message.get_payload()[0].get_payload(decode=True).decode('utf-8')
+        self.assertIn('Calendar Lifecycle has been cancelled', plain_text)
+        self.assertNotIn('<html', plain_text)
         part, cal = _calendar_from_raw(raw)
         self.assertEqual(part.get_param('method'), 'CANCEL')
+        self.assertEqual(part.get_param('name'), 'event.ics')
+        self.assertIsNone(part.get('Content-Disposition'))
         self.assertEqual(str(cal.get('method')), 'CANCEL')
         vevent = _vevent(cal)
         self._assert_formatted_from_and_bare_organizer(raw, cal)

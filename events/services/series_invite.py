@@ -38,8 +38,6 @@ update to series subscribers (see ``studio.views.events``).
 
 import logging
 
-from django.template.loader import render_to_string
-
 from accounts.services.timezones import (
     CALENDAR_INVITE_DATETIME_FORMAT,
     build_timezone_account_url,
@@ -132,13 +130,13 @@ def _partial_access_note(user, series, accessible_events, site_url):
     )
 
 
-def _render_series_email(
+def _render_series_email_parts(
     template_name, user, series, events, email_type,
     changed_event=None, old_start=None,
 ):
     """Render the shared series email body for ``template_name``.
 
-    Returns ``(subject, full_html)`` ready for ``_send_raw_email``.
+    Returns ``(subject, plain_text, full_html)`` ready for ``_send_raw_email``.
 
     Issue #1071: for the ``series_update`` template a single-occurrence
     reschedule threads ``changed_event`` (the occurrence that moved) and
@@ -185,10 +183,11 @@ def _render_series_email(
     registered_count = len(ordered)
 
     email_service = EmailService()
-    subject, body_html = email_service._render_template(
-        template_name,
-        user,
-        {
+    subject, body_markdown, body_html, footer_note = (
+        email_service._render_template_parts(
+            template_name,
+            user,
+            {
             'series_name': series.name,
             'series_url': series_url,
             'registered_count': registered_count,
@@ -207,12 +206,32 @@ def _render_series_email(
             'timezone_help': build_timezone_email_line(
                 user, build_timezone_account_url(site_url),
             ),
-        },
+            },
+        )
     )
-    full_html = render_to_string('email_app/base_email.html', {
-        'subject': subject,
-        'body_html': body_html,
-    })
+    full_html = email_service.render_html_email(
+        subject, body_html, footer_note=footer_note,
+    )
+    plain_text = email_service.render_plain_text_email(
+        body_markdown, footer_note=footer_note,
+    )
+    return subject, plain_text, full_html
+
+
+def _render_series_email(
+    template_name, user, series, events, email_type,
+    changed_event=None, old_start=None,
+):
+    """Compatibility helper for HTML-only previews and focused render tests."""
+    subject, _plain_text, full_html = _render_series_email_parts(
+        template_name,
+        user,
+        series,
+        events,
+        email_type,
+        changed_event=changed_event,
+        old_start=old_start,
+    )
     return subject, full_html
 
 
@@ -238,7 +257,7 @@ def send_series_registration_invite(user, series, events):
 
     Returns the ``EmailLog`` instance.
     """
-    subject, full_html = _render_series_email(
+    subject, plain_text, full_html = _render_series_email_parts(
         'series_registration', user, series, events, 'series_registration',
     )
     ics_content = generate_series_ics(
@@ -251,6 +270,7 @@ def send_series_registration_invite(user, series, events):
         subject=subject,
         html_body=full_html,
         ics_content=ics_content,
+        text_body=plain_text,
         method='REQUEST',
     )
     email_log = _log_send(user, 'series_registration', subject, ses_message_id)
@@ -319,7 +339,7 @@ def send_series_update_to_subscribers(event, user_ids=None, old_start_iso=None):
             events = _subscriber_upcoming_events(user, series)
             if not events:
                 continue
-            subject, full_html = _render_series_email(
+            subject, plain_text, full_html = _render_series_email_parts(
                 'series_update', user, series, events, 'series_update',
                 changed_event=event, old_start=old_start,
             )
@@ -333,6 +353,7 @@ def send_series_update_to_subscribers(event, user_ids=None, old_start_iso=None):
                 subject=subject,
                 html_body=full_html,
                 ics_content=ics_content,
+                text_body=plain_text,
                 method='REQUEST',
             )
             _log_send(user, 'series_update', subject, ses_message_id)
@@ -393,7 +414,7 @@ def send_series_cancellation_to_subscribers(event):
                 method='CANCEL',
                 attendee_email=user.email,
             )
-            subject, full_html = _render_series_email(
+            subject, plain_text, full_html = _render_series_email_parts(
                 'series_cancellation', user, series, [event],
                 'series_cancellation',
             )
@@ -402,6 +423,7 @@ def send_series_cancellation_to_subscribers(event):
                 subject=subject,
                 html_body=full_html,
                 ics_content=ics_content,
+                text_body=plain_text,
                 method='CANCEL',
             )
             _log_send(user, 'series_cancellation', subject, ses_message_id)

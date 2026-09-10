@@ -8,7 +8,6 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
-from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from django.utils.text import Truncator
 
@@ -141,19 +140,24 @@ def _send_one(event, workshop, recipient):
         return _recipient_result(recipient, 'already_sent')
 
     email_service = EmailService()
-    subject, body_html = email_service._render_template(
-        EMAIL_TYPE,
-        _render_user(recipient),
-        _build_context(event, workshop),
+    subject, body_markdown, body_html, footer_note = (
+        email_service._render_template_parts(
+            EMAIL_TYPE,
+            _render_user(recipient),
+            _build_context(event, workshop),
+        )
     )
-    full_html = render_to_string('email_app/base_email.html', {
-        'subject': subject,
-        'body_html': body_html,
-    })
+    full_html = email_service.render_html_email(
+        subject, body_html, footer_note=footer_note,
+    )
+    plain_text = email_service.render_plain_text_email(
+        body_markdown, footer_note=footer_note,
+    )
     ses_message_id = email_service._send_ses(
         recipient.email,
         subject,
         full_html,
+        text_body=plain_text,
         email_type=EMAIL_TYPE,
     )
 

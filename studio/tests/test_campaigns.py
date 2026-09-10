@@ -12,6 +12,7 @@ from email_app.services.email_service import EmailService
 from email_app.tests.test_email_service import assert_no_internal_footer_text
 from jobs.tasks import build_task_name
 from payments.models import Tier
+from studio.views.campaigns import TEST_EMAIL_FOOTER_NOTE
 
 User = get_user_model()
 
@@ -256,6 +257,7 @@ class StudioCampaignDetailTest(TestCase):
     def test_test_send_single_address(self, MockService):
         mock_service = MockService.return_value
         mock_service.render_markdown_email.return_value = "<html>test</html>"
+        mock_service.render_plain_text_email.return_value = "Plain test"
         mock_service._send_ses.return_value = "test-ses-id"
 
         response = self.client.post(
@@ -270,6 +272,7 @@ class StudioCampaignDetailTest(TestCase):
             "preview@example.com",
             "[TEST] Detail Campaign",
             "<html>test</html>",
+            text_body="Plain test",
             email_type="campaign",
             unsubscribe_url=None,
         )
@@ -295,7 +298,9 @@ class StudioCampaignDetailTest(TestCase):
         self.assertEqual(response.status_code, 200)
         mock_ses.assert_called_once()
         html = mock_ses.call_args[0][2]
+        plain_text = mock_ses.call_args.kwargs["text_body"]
         self.assertIn("/api/unsubscribe?token=", html)
+        self.assertIn("/api/unsubscribe?token=", plain_text)
         self.assertNotIn('<p class="verify-email-cta">', html)
         self.assertEqual(mock_ses.call_args.kwargs["email_type"], "campaign")
         self.assertIn(
@@ -304,10 +309,28 @@ class StudioCampaignDetailTest(TestCase):
         )
         assert_no_internal_footer_text(self, html)
 
+    @patch.object(EmailService, "_send_ses", return_value="test-ses-arbitrary")
+    def test_test_send_to_arbitrary_address_has_test_note_in_both_parts(
+        self, mock_ses,
+    ):
+        self.client.post(
+            f"/studio/campaigns/{self.campaign.pk}/test-send",
+            {"test_recipients": "outside@example.com"},
+        )
+
+        html = mock_ses.call_args.args[2]
+        plain_text = mock_ses.call_args.kwargs["text_body"]
+        self.assertIn(TEST_EMAIL_FOOTER_NOTE, html)
+        self.assertIn(TEST_EMAIL_FOOTER_NOTE, plain_text)
+        self.assertNotIn("/api/unsubscribe?token=", html)
+        self.assertNotIn("/api/unsubscribe?token=", plain_text)
+        self.assertIsNone(mock_ses.call_args.kwargs["unsubscribe_url"])
+
     @patch("studio.views.campaigns.EmailService")
     def test_test_send_multiple_addresses_deduplicates(self, MockService):
         mock_service = MockService.return_value
         mock_service.render_markdown_email.return_value = "<html>test</html>"
+        mock_service.render_plain_text_email.return_value = "Plain test"
         mock_service._send_ses.return_value = "test-ses-id"
 
         response = self.client.post(

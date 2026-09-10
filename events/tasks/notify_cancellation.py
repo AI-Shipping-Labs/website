@@ -3,7 +3,6 @@
 import logging
 
 from django.contrib.auth import get_user_model
-from django.template.loader import render_to_string
 
 from accounts.services.timezones import (
     build_timezone_account_url,
@@ -120,21 +119,25 @@ def send_cancellation_notice_one(event_id, user_id):
             'email_log_id': existing_log.pk,
         }
     email_service = EmailService()
-    subject, body_html = email_service._render_template(
-        'event_cancelled',
-        user,
-        {
-            'event_title': event.title,
+    subject, body_markdown, body_html, footer_note = (
+        email_service._render_template_parts(
+            'event_cancelled',
+            user,
+            {
+                'event_title': event.title,
             'event_datetime': format_user_datetime(event.start_datetime, user),
             'timezone_help': build_timezone_email_line(
                 user, build_timezone_account_url(site_url),
             ),
-        },
+            },
+        )
     )
-    full_html = render_to_string('email_app/base_email.html', {
-        'subject': subject,
-        'body_html': body_html,
-    })
+    full_html = email_service.render_html_email(
+        subject, body_html, footer_note=footer_note,
+    )
+    plain_text = email_service.render_plain_text_email(
+        body_markdown, footer_note=footer_note,
+    )
     ics_content = generate_ics(
         event,
         method='CANCEL',
@@ -146,6 +149,7 @@ def send_cancellation_notice_one(event_id, user_id):
         subject=subject,
         html_body=full_html,
         ics_content=ics_content,
+        text_body=plain_text,
         method='CANCEL',
     )
 

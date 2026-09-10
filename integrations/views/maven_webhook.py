@@ -104,5 +104,11 @@ def maven_webhook(request):
             "Ignored Maven webhook event type %r",
             normalized_event_type(payload),
         )
+    elif result.status == "manual_intervention_required":
+        logger.warning(
+            "Acknowledged exhausted Maven occurrence=%s steps=%s",
+            result.occurrence_id,
+            ",".join(result.exhausted_steps),
+        )
 
     return JsonResponse({"status": result.status}, status=200)

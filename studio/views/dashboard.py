@@ -15,6 +15,7 @@ from events.models import Event
 from events.models.event import HIDDEN_FROM_PUBLIC_STATUSES
 from events.services.time_windows import upcoming_events_queryset, upcoming_window_q
 from integrations.models import ContentSource
+from integrations.services.maven_attention import needs_attention_occurrences
 from plans.models import Plan, Sprint
 from questionnaires.models import Response
 from studio.decorators import staff_required
@@ -179,6 +180,16 @@ def dashboard(request):
     recent_content = recent_content[:5]
 
     attention_items = []
+    maven_attention_count = needs_attention_occurrences().count()
+    if maven_attention_count:
+        attention_items.append(_attention_item(
+            'Maven enrollments need attention',
+            maven_attention_count,
+            f"{reverse('studio_maven_event_list')}?status=needs_attention",
+            'triangle-alert',
+            tone='critical',
+            description='Automatic recovery stalled or exhausted; fix the cause and retry safely.',
+        ))
     if worker_info['expect_worker'] and not worker_info['alive']:
         queued_tasks = f"{queue_depth} queued task{'s' if queue_depth != 1 else ''}"
         attention_items.append(_attention_item(

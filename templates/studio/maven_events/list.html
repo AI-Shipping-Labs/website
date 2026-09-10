@@ -3,25 +3,35 @@
 {% block studio_title %}Maven occurrences{% endblock %}
 {% block studio_content %}
 {% studio_header_actions title="Maven enrollment occurrences" subtitle="Inspect lifecycle and retryable delivery state without exposing webhook payloads." %}{% endstudio_header_actions %}
-{% if events %}
+<form method="get" class="mb-6 flex flex-wrap items-end gap-3" data-testid="maven-occurrence-filters">
+  <div><label for="maven-occurrence-status" class="mb-1 block text-sm font-medium text-foreground">Status</label><select id="maven-occurrence-status" name="status" class="studio-select min-h-[44px] rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent"><option value="all" {% if status_filter == 'all' %}selected{% endif %}>All</option><option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>Failed</option><option value="needs_attention" {% if status_filter == 'needs_attention' %}selected{% endif %}>Needs attention</option></select></div>
+  <button type="submit" class="min-h-[44px] rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Apply filter</button>
+</form>
+{% if has_occurrences %}
 <div class="{% studio_list_class 'wrapper' %}" data-testid="maven-occurrence-list">
   <table class="{% studio_list_class 'table' %}">
     <thead class="{% studio_list_class 'thead' %}"><tr>
-      <th class="{% studio_list_class 'th' %}">Occurrence</th><th class="{% studio_list_class 'th' %}">Course / cohort</th><th class="{% studio_list_class 'th' %}">Lifecycle</th><th class="{% studio_list_class 'th' %}">Entitlement</th><th class="{% studio_list_class 'th' %}">Slack</th><th class="{% studio_list_class 'th' %}">Welcome</th><th class="{% studio_list_class 'th' %}">Removal</th>
+      <th class="{% studio_list_class 'th' %}">Occurrence</th><th class="{% studio_list_class 'th' %}">Course / cohort</th><th class="{% studio_list_class 'th' %}">Lifecycle</th><th class="{% studio_list_class 'th' %}">State</th><th class="{% studio_list_class 'th' %}">Entitlement</th><th class="{% studio_list_class 'th' %}">Notification</th><th class="{% studio_list_class 'th' %}">Slack</th><th class="{% studio_list_class 'th' %}">Welcome</th><th class="{% studio_list_class 'th' %}">Removal</th><th class="{% studio_list_class 'th' 'right' %}">Actions</th>
     </tr></thead>
     <tbody class="{% studio_list_class 'tbody' %}">
     {% for event in events %}<tr class="{% studio_list_class 'row' %}">
       <td class="px-6 py-3 text-sm" data-label="Occurrence"><a class="text-accent hover:underline" href="{% url 'studio_maven_event_detail' event.pk %}">#{{ event.pk }}</a><div class="text-xs text-muted-foreground">{{ event.created_at }}</div></td>
       <td class="px-6 py-3 text-sm" data-label="Course / cohort">{{ event.course|default:'—' }}<div class="text-xs text-muted-foreground">{{ event.cohort|default:'—' }}</div></td>
-      <td class="px-6 py-3 text-sm" data-label="Lifecycle">{{ event.lifecycle }}</td>
-      <td class="px-6 py-3 text-sm" data-label="Entitlement">{{ event.override_status }}</td>
-      <td class="px-6 py-3 text-sm" data-label="Slack">{{ event.slack_status }}</td>
-      <td class="px-6 py-3 text-sm" data-label="Welcome">{{ event.welcome_status }}</td>
-      <td class="px-6 py-3 text-sm" data-label="Removal">{{ event.removal_status }}</td>
-    </tr>{% endfor %}
+      <td class="px-6 py-3 text-sm" data-label="Lifecycle">{% studio_status_badge event.lifecycle event.get_lifecycle_display %}</td>
+      <td class="px-6 py-3 text-sm" data-label="State">{% if event.needs_attention %}{% studio_status_badge 'needs_attention' 'Needs attention' %}{% else %}—{% endif %}</td>
+      <td class="px-6 py-3 text-sm" data-label="Entitlement">{% studio_status_badge event.override_status event.get_override_status_display %}</td>
+      <td class="px-6 py-3 text-sm" data-label="Notification">{% studio_status_badge event.notification_status event.get_notification_status_display %}</td>
+      <td class="px-6 py-3 text-sm" data-label="Slack">{% studio_status_badge event.slack_status event.get_slack_status_display %}</td>
+      <td class="px-6 py-3 text-sm" data-label="Welcome">{% studio_status_badge event.welcome_status event.get_welcome_status_display %}</td>
+      <td class="px-6 py-3 text-sm" data-label="Removal">{% studio_status_badge event.removal_status event.get_removal_status_display %}</td>
+      <td class="px-6 py-3 {% studio_list_class 'action_cell' %}" data-label="Actions"><div class="{% studio_list_class 'action_group' %}">{% url 'studio_maven_event_detail' event.pk as detail_url %}{% studio_list_action detail_url 'View' 'secondary' %}</div></td>
+    </tr>{% empty %}
+      {% studio_empty_state 'filter' entity_label='Maven occurrence' entity_label_plural='Maven occurrences' clear_url=clear_url colspan=10 empty_message='No Maven occurrences match your filters.' testid_suffix='maven-occurrences' %}
+    {% endfor %}
     </tbody>
   </table>
 </div>
+{% if show_pager %}{% include "studio/includes/list_pager.html" with pager_testid_prefix="maven-occurrence-list-pager" %}{% endif %}
 {% else %}
   {% studio_empty_state 'fresh' entity_label='Maven occurrence' entity_label_plural='Maven occurrences' create_url=None testid_suffix='maven-occurrences' %}
 {% endif %}

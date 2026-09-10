@@ -50,6 +50,8 @@ class MavenResult:
     actions: list = field(default_factory=list)
     user_id: int | None = None
     created_user: bool = False
+    occurrence_id: int | None = None
+    exhausted_steps: list = field(default_factory=list)
 
 
 # Maven exposes no documented payload contract and we have never seen a real
@@ -311,15 +313,33 @@ def _handle_enrolled(payload, email, course, cohort, course_key, cohort_key, ide
 
     actions = run_occurrence_steps(occurrence)
     occurrence.refresh_from_db()
-    if occurrence.override_status == MavenEnrollmentEvent.STEP_FAILED:
+    exhausted_steps = incomplete_steps_at_attempt_ceiling(occurrence)
+    if occurrence.override_status == MavenEnrollmentEvent.STEP_FAILED and not exhausted_steps:
         raise MavenTransientError("maven entitlement step failed")
+    if exhausted_steps:
+        return MavenResult(
+            "manual_intervention_required",
+            occurrence.outcome,
+            actions,
+            occurrence.user_id,
+            created_user,
+            occurrence.pk,
+            exhausted_steps,
+        )
     status = "already_member" if not occurrence.welcome_eligible else "onboarded"
     if not created_occurrence and all(
         getattr(occurrence, f"{name}_status") in {MavenEnrollmentEvent.STEP_SUCCEEDED, MavenEnrollmentEvent.STEP_SKIPPED}
         for name in ("override", "notification", "slack", "welcome")
     ):
         status = "already_processed"
-    return MavenResult(status, occurrence.outcome, actions, occurrence.user_id, created_user)
+    return MavenResult(
+        status,
+        occurrence.outcome,
+        actions,
+        occurrence.user_id,
+        created_user,
+        occurrence.pk,
+    )
 
 
 def _handle_removed(payload, email, course, cohort, course_key, cohort_key, identity_hash):
@@ -360,10 +380,36 @@ def _handle_removed(payload, email, course, cohort, course_key, cohort_key, iden
                     payload=_safe_payload(payload),
                 )
     actions = run_occurrence_steps(occurrence, step="removal")
+    occurrence.refresh_from_db()
+    exhausted_steps = incomplete_steps_at_attempt_ceiling(occurrence)
+    if exhausted_steps:
+        return MavenResult(
+            "manual_intervention_required",
+            occurrence.outcome,
+            actions,
+            occurrence.user_id,
+            False,
+            occurrence.pk,
+            exhausted_steps,
+        )
     return MavenResult(
         "already_processed" if was_already_removed else "removal_notified",
-        occurrence.outcome, actions, occurrence.user_id,
+        occurrence.outcome, actions, occurrence.user_id, False, occurrence.pk,
     )
+
+
+def incomplete_steps_at_attempt_ceiling(occurrence):
+    """Return incomplete step names whose automatic-attempt budget is spent."""
+    terminal = {
+        MavenEnrollmentEvent.STEP_SUCCEEDED,
+        MavenEnrollmentEvent.STEP_SKIPPED,
+    }
+    return [
+        name
+        for name in STEP_NAMES
+        if getattr(occurrence, f"{name}_status") not in terminal
+        and getattr(occurrence, f"{name}_attempts") >= MAX_STEP_ATTEMPTS
+    ]
 
 
 def _resolve_or_create(email, first_name="", last_name=""):
@@ -704,7 +750,14 @@ def _run_step(pk, name, actions, *, force=False):
             notify_maven_cohort_removal(row.user, row.cohort, row.course, email=row.email)
             actions.append("Sent staff removal heads-up.")
     except Exception as exc:
-        logger.exception("Maven %s step failed for occurrence %s", name, pk)
+        # Provider exception messages can contain addresses, response bodies,
+        # or tokens. Persist and log only the safe exception class.
+        logger.warning(
+            "Maven %s step failed for occurrence=%s error_class=%s",
+            name,
+            pk,
+            exc.__class__.__name__,
+        )
         _finish_step(pk, name, MavenEnrollmentEvent.STEP_FAILED, _safe_error(exc))
         actions.append(f"{name.title()} failed; persisted for retry.")
     else:

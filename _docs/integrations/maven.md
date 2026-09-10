@@ -257,11 +257,33 @@ The entitlement, enrollment staff heads-up, Slack invite, welcome, and removal
 notification each persist their own status, attempted/completed timestamps,
 bounded attempt count (three automatic attempts), and a safe error class. A
 five-minute scheduled recovery job retries pending, failed, or stale-running
-work within that bound. A
-duplicate delivery retries only failed work; successful or actively running
-work is never repeated. Operators can inspect the canonical member and safely
-retry individual steps at `/studio/maven-events/`; retries are
-staff-authenticated and audited, including attempts for unknown users.
+work only while the selected step has fewer than three attempts. Successful and
+skipped steps are never repeated.
+
+An entitlement failure returns HTTP 500 while another automatic attempt is
+available so Maven can redeliver safely. When any incomplete step reaches the
+three-attempt ceiling, the webhook acknowledges the occurrence with HTTP 200
+and the exact response `{"status": "manual_intervention_required"}`. The
+acknowledgement prevents endless provider redelivery; it does not claim that
+enrollment work completed. Later duplicate deliveries keep the same attempt and
+side-effect counts.
+
+Studio treats an exhausted failed step as needing attention immediately. A
+failed step below the ceiling or a running step also needs attention when its
+last attempt or completion has remained unchanged for at least 15 minutes.
+Successful and skipped steps never qualify. The Studio dashboard shows a
+critical `Maven enrollments need attention` item with the distinct occurrence
+count. It links to `/studio/maven-events/?status=needs_attention`; the Maven
+occurrence list also supports `status=failed` for all current failures.
+
+To recover an occurrence, open its detail page, identify the affected step,
+and fix the underlying provider or configuration cause first. Then use
+`Retry safely` for that step. The staff-authenticated POST is CSRF-protected and
+audited. A manual attempt may exceed the automatic three-attempt ceiling. When
+an entitlement retry succeeds, the eligible notification, Slack, and welcome
+steps resume once in dependency order; already successful or skipped work is
+left untouched. Studio reports the persisted result as recovered, skipped,
+failed again, or already running.
 
 ## Data minimization and retention
 

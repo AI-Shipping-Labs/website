@@ -115,6 +115,23 @@ DATE_ROT_GUARD_OWNER_IDS = frozenset({
 
 DATE_ROT_GUARD_DESTINATION = "tests.test_date_rot_guard.DateRotGuardTest"
 
+PORT_RESOLUTION_POLICY_OWNER_IDS = frozenset({
+    "playwright_tests/test_conftest_port_resolution.py::"
+    "test_invalid_or_nonpositive_falls_back_to_free_port",
+    "playwright_tests/test_conftest_port_resolution.py::"
+    "test_resolved_port_is_memoized",
+    "playwright_tests/test_conftest_port_resolution.py::"
+    "test_unset_falls_back_to_free_port",
+    "playwright_tests/test_conftest_port_resolution.py::"
+    "test_valid_positive_port_is_honored_verbatim",
+    "playwright_tests/test_conftest_port_resolution.py::"
+    "test_zero_falls_back_to_free_port",
+})
+
+PORT_RESOLUTION_POLICY_DESTINATION = (
+    "tests.test_conftest_port_resolution.ConftestPortResolutionTest"
+)
+
 
 class SyntheticCollectionTestCase(SimpleTestCase):
     def setUp(self):
@@ -1097,8 +1114,13 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
             self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
             self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
+        self.assertEqual(len(PORT_RESOLUTION_POLICY_OWNER_IDS), 5)
+        for owner in PORT_RESOLUTION_POLICY_OWNER_IDS:
+            self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
+            self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
+            self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
         self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2246)
-        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 5)
+        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 0)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
 
@@ -1144,6 +1166,17 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             7,
         )
 
+    def test_port_resolution_owners_collect_as_five_native_tests(self):
+        source = ROOT / "playwright_tests" / "test_conftest_port_resolution.py"
+
+        self.assertFalse(source.exists())
+        self.assertEqual(
+            defaultTestLoader.loadTestsFromName(
+                PORT_RESOLUTION_POLICY_DESTINATION
+            ).countTestCases(),
+            5,
+        )
+
     def test_current_collection_exactly_matches_live_partition_without_runtime_startup(self):
         lock = ROOT / ".tmp" / "playwright-session.lock"
         guard = None
@@ -1164,8 +1197,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2565)
-        self.assertEqual(len(inventory.owners), 2358)
+        self.assertEqual(inventory.item_count, 2555)
+        self.assertEqual(len(inventory.owners), 2353)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

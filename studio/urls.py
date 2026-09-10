@@ -231,6 +231,11 @@ from studio.views.plans import (
     plan_view_as_member,
     plan_visibility_update,
 )
+from studio.views.privacy_deletion import (
+    privacy_deletion_confirm,
+    privacy_deletion_retry_confirmation,
+    privacy_deletion_review,
+)
 from studio.views.projects import project_list, project_review
 from studio.views.questionnaires import (
     question_create,
@@ -920,6 +925,21 @@ urlpatterns = [
     # ``created/``, and ``export`` prefixes are registered above so the
     # ``<int:user_id>`` route does not swallow them.
     path('users/<int:user_id>/', user_detail, name='studio_user_detail'),
+    path(
+        'privacy/deletion-requests/<int:request_id>/',
+        privacy_deletion_review,
+        name='studio_privacy_deletion_review',
+    ),
+    path(
+        'privacy/deletion-requests/<int:request_id>/confirm',
+        privacy_deletion_confirm,
+        name='studio_privacy_deletion_confirm',
+    ),
+    path(
+        'privacy/deletion-requests/<int:request_id>/retry-confirmation',
+        privacy_deletion_retry_confirmation,
+        name='studio_privacy_deletion_retry_confirmation',
+    ),
     path(
         'users/<int:user_id>/sync-from-stripe/',
         user_sync_from_stripe,

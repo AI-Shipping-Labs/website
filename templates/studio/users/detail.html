@@ -23,6 +23,27 @@
   </a>
 {% endstudio_header_actions %}
 
+{% if deletion_request %}
+<section id="privacy-deletion-request"
+         class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-5 mb-8 max-w-4xl"
+         data-testid="privacy-deletion-request-callout">
+  <div class="flex items-start gap-3">
+    <i data-lucide="triangle-alert" class="w-5 h-5 text-amber-300 mt-0.5"></i>
+    <div class="min-w-0 flex-1">
+      <h2 class="text-base font-semibold text-foreground">Account deletion request</h2>
+      <dl class="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+        <div><dt class="text-xs text-muted-foreground">Accepted at</dt><dd class="text-foreground">{{ deletion_request_time_utc }}</dd></div>
+        <div><dt class="text-xs text-muted-foreground">Support ID</dt><dd class="font-mono text-foreground">{{ detail_user.pk }}</dd></div>
+        <div class="sm:col-span-2"><dt class="text-xs text-muted-foreground">Current blocker</dt><dd class="text-foreground">{{ deletion_request_blocker|default:"None detected" }}</dd></div>
+      </dl>
+      <a href="{% url 'studio_privacy_deletion_review' deletion_request.pk %}"
+         class="mt-4 inline-flex items-center rounded-lg border border-amber-500/40 px-3 py-2 text-sm font-medium text-foreground hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+         data-testid="privacy-deletion-review">Review deletion request</a>
+    </div>
+  </div>
+</section>
+{% endif %}
+
 {% if open_payment_mismatches %}
 <section class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-5 mb-8 max-w-4xl"
          data-testid="payment-mismatch-warning">

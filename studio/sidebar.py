@@ -225,6 +225,9 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_user_import',
         'studio_user_import_preview',
         'studio_user_import_confirm',
+        'studio_privacy_deletion_review',
+        'studio_privacy_deletion_confirm',
+        'studio_privacy_deletion_retry_confirmation',
     )),
     ('people', 'call_hosts', (
         'studio_call_host_list',

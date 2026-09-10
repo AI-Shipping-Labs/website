@@ -217,6 +217,41 @@ def get_account_deletion_request(user):
     )
 
 
+def normalized_privacy_email_hash(email):
+    """Return the one-way identity value stored in privacy audit rows."""
+    return _hash_value("privacy-email", (email or "").strip().lower())
+
+
+def write_privacy_execution_audit(
+    originating_request,
+    operator_user_id,
+    *,
+    status,
+    blocker_reason="",
+    error_code="",
+    request_context=None,
+):
+    """Record a linked execution refusal/failure without retaining PII."""
+    context = request_context or {}
+    return PrivacyRequestLog.objects.create(
+        request_type=PrivacyRequestLog.REQUEST_DELETE,
+        status=status,
+        old_user_id=originating_request.old_user_id,
+        normalized_email_hash=originating_request.normalized_email_hash,
+        email_domain=originating_request.email_domain,
+        row_count_summary={},
+        blocker_reason=blocker_reason,
+        error_code=error_code,
+        originating_request=originating_request,
+        operator_user_id=operator_user_id,
+        request_ip_hash=_hash_value("privacy-ip", context.get("ip", "")),
+        user_agent_hash=_hash_value(
+            "privacy-user-agent",
+            context.get("user_agent", ""),
+        ),
+    )
+
+
 def request_account_deletion(user, request_context=None):
     """Email one durable, idempotent deletion request for ``user``.
 
@@ -285,6 +320,7 @@ def request_account_deletion(user, request_context=None):
         studio_member_url = (
             f"{site_base_url().rstrip('/')}"
             f"{reverse('studio_user_detail', kwargs={'user_id': locked_user.pk})}"
+            "#privacy-deletion-request"
         )
         dedupe_key = f"account-deletion-request:{request_log.pk}"
         context = {
@@ -294,7 +330,7 @@ def request_account_deletion(user, request_context=None):
                 datetime_timezone.utc,
             ).strftime("%Y-%m-%d %H:%M:%S UTC"),
             "studio_member_url": studio_member_url,
-            "privacy_email": DEFAULT_PRIVACY_REQUEST_EMAIL,
+            "privacy_email": team_email,
         }
 
         try:
@@ -333,7 +369,7 @@ def request_account_deletion(user, request_context=None):
         )
 
 
-def delete_account_for_privacy(user, request_context=None):
+def delete_account_for_privacy(user, request_context=None, *, notify_staff=True):
     """Delete a member account locally, retaining only scrubbed audit data."""
     if user.is_staff or user.is_superuser:
         log = log_blocked_privacy_delete(
@@ -354,12 +390,13 @@ def delete_account_for_privacy(user, request_context=None):
             PrivacyRequestLog.BLOCKER_ACTIVE_SUBSCRIPTION,
             request_context,
         )
-        notify_privacy_staff(
-            event="blocked_active_subscription",
-            email=user.email,
-            old_user_id=user.pk,
-            row_count_summary={},
-        )
+        if notify_staff:
+            notify_privacy_staff(
+                event="blocked_active_subscription",
+                email=user.email,
+                old_user_id=user.pk,
+                row_count_summary={},
+            )
         return PrivacyDeletionResult(
             success=False,
             status=PrivacyRequestLog.STATUS_BLOCKED,
@@ -394,12 +431,13 @@ def delete_account_for_privacy(user, request_context=None):
             request_context=request_context,
         )
 
-    notify_privacy_staff(
-        event="completed_delete",
-        email=email,
-        old_user_id=old_user_id,
-        row_count_summary=summary,
-    )
+    if notify_staff:
+        notify_privacy_staff(
+            event="completed_delete",
+            email=email,
+            old_user_id=old_user_id,
+            row_count_summary=summary,
+        )
     return PrivacyDeletionResult(
         success=True,
         status=PrivacyRequestLog.STATUS_COMPLETED,
@@ -2074,7 +2112,7 @@ def _create_privacy_log(
         request_type=request_type,
         status=status,
         old_user_id=old_user_id if old_user_id is not None else getattr(user, "pk", None),
-        normalized_email_hash=_hash_value("privacy-email", normalized),
+        normalized_email_hash=normalized_privacy_email_hash(normalized),
         email_domain=domain,
         row_count_summary=row_count_summary,
         blocker_reason=blocker_reason,

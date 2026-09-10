@@ -2,6 +2,7 @@ import json
 import re
 from pathlib import Path
 
+import yaml
 from django.test import SimpleTestCase
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -168,10 +169,22 @@ class TailwindSourceContractTest(SimpleTestCase):
         self.assertIn("COPY --from=css-builder /app/static/css/tailwind.css", dockerfile)
         self.assertEqual(dockerfile.count("FROM node:"), 1)
 
-        for workflow in ("ci.yml", "deploy-dev.yml", "scheduled-playwright.yml"):
-            source = (ROOT / ".github/workflows" / workflow).read_text()
-            self.assertIn("actions/setup-node@v4", source, workflow)
-            self.assertIn("make css-build" if workflow == "scheduled-playwright.yml" else "make ", source, workflow)
+        for workflow, native_job in (("ci.yml", "unit-tests"), ("deploy-dev.yml", "test")):
+            config = yaml.safe_load((ROOT / ".github/workflows" / workflow).read_text())
+            steps = config["jobs"][native_job]["steps"]
+            steps_by_name = {step["name"]: step for step in steps}
+            self.assertEqual(steps_by_name["Set up Node"]["uses"], "actions/setup-node@v4", workflow)
+            self.assertEqual(steps_by_name["Build Tailwind CSS"]["run"], "make css-build", workflow)
+            step_names = list(steps_by_name)
+            self.assertLess(
+                step_names.index("Build Tailwind CSS"),
+                step_names.index("Run unit and integration tests"),
+                workflow,
+            )
+
+        scheduled = (ROOT / ".github/workflows" / "scheduled-playwright.yml").read_text()
+        self.assertIn("actions/setup-node@v4", scheduled)
+        self.assertIn("make css-build", scheduled)
 
     def test_generated_outputs_are_ignored_and_brotli_is_installed(self):
         gitignore = (ROOT / ".gitignore").read_text()

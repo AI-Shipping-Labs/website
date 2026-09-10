@@ -234,6 +234,12 @@ jobs:
           echo "CI_TIMING phase=setup_python seconds=$((now - CI_PHASE_START)) source=runner_clock"
           echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
       # See the install-step comment in the `checks` job for why `--locked`.
       - name: Install dependencies
         run: |
@@ -241,6 +247,9 @@ jobs:
           uv sync --locked
           end=$(date +%s)
           echo "CI_TIMING phase=uv_sync seconds=$((end - start))"
+
+      - name: Build Tailwind CSS
+        run: make css-build
 
       - name: Start test database cache restore timing
         run: echo "CI_PHASE_START=$(date +%s)" >> "$GITHUB_ENV"

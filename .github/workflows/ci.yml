@@ -175,6 +175,12 @@ jobs:
           echo "CI_TIMING phase=setup_python seconds=$((now - CI_PHASE_START)) source=runner_clock"
           echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
       # We use `--locked` so any drift between pyproject.toml and uv.lock
       # fails the install step loudly with "requirements are unsatisfiable"
       # rather than silently re-resolving (which `--frozen` would mask: it
@@ -191,6 +197,9 @@ jobs:
           uv sync --locked
           end=$(date +%s)
           echo "CI_TIMING phase=uv_sync seconds=$((end - start))"
+
+      - name: Build Tailwind CSS
+        run: make css-build
 
       - name: Start test database cache restore timing
         run: echo "CI_PHASE_START=$(date +%s)" >> "$GITHUB_ENV"

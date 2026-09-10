@@ -1,4 +1,4 @@
-"""Static guard against hard-coded near-current Playwright date rot."""
+"""Native guard against hard-coded near-current Playwright date rot."""
 
 from __future__ import annotations
 
@@ -8,16 +8,13 @@ import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 
-import pytest
+from django.test import SimpleTestCase
 
-pytestmark = pytest.mark.core
-
-PLAYWRIGHT_DIR = Path(__file__).parent
+ROOT = Path(__file__).resolve().parents[1]
+PLAYWRIGHT_DIR = ROOT / "playwright_tests"
 DATE_ROT_OK = "date-rot-ok:"
 
-DATE_STRING_RE = re.compile(
-    r"(?<!\d)2026-\d{2}-\d{2}(?!\d)|(?<!\d)\d{2}/\d{2}/2026(?!\d)"
-)
+DATE_STRING_RE = re.compile(r"(?<!\d)2026-\d{2}-\d{2}(?!\d)|(?<!\d)\d{2}/\d{2}/2026(?!\d)")
 FUTURE_SENSITIVE_EVENT_FIELDS = {
     "start_datetime",
     "end_datetime",
@@ -29,9 +26,7 @@ FUTURE_SENSITIVE_FORM_FIELDS = FUTURE_SENSITIVE_EVENT_FIELDS | {
     "start_date",
     "end_date",
 }
-FUTURE_SENSITIVE_FORM_LABELS = {
-    field.replace("_", " ") for field in FUTURE_SENSITIVE_FORM_FIELDS
-}
+FUTURE_SENSITIVE_FORM_LABELS = {field.replace("_", " ") for field in FUTURE_SENSITIVE_FORM_FIELDS}
 COHORT_DATE_FIELDS = {"start_date", "end_date"}
 SPRINT_DATE_FIELDS = {"start_date", "end_date"}
 FROZEN_OR_FIXED_NAMES = ("fixed", "frozen", "historical", "canonical")
@@ -113,14 +108,8 @@ class DateRotScanner(ast.NodeVisitor):
                 return True
             call = getattr(parent, "parent", None)
             return (
-                parent.arg in COHORT_DATE_FIELDS
-                and isinstance(call, ast.Call)
-                and "cohort" in _name(call.func).lower()
-            ) or (
-                parent.arg in SPRINT_DATE_FIELDS
-                and isinstance(call, ast.Call)
-                and _is_sprint_create_call(call)
-            )
+                parent.arg in COHORT_DATE_FIELDS and isinstance(call, ast.Call) and "cohort" in _name(call.func).lower()
+            ) or (parent.arg in SPRINT_DATE_FIELDS and isinstance(call, ast.Call) and _is_sprint_create_call(call))
         key = _dict_value_key(node)
         if key in FUTURE_SENSITIVE_EVENT_FIELDS:
             return True
@@ -164,8 +153,6 @@ def _scan_source(path: Path, source: str) -> list[DateRotViolation]:
 def _scan_playwright_sources() -> list[DateRotViolation]:
     violations: list[DateRotViolation] = []
     for path in sorted(PLAYWRIGHT_DIR.glob("test_*.py")):
-        if path.name == Path(__file__).name:
-            continue
         violations.extend(_scan_source(path.relative_to(PLAYWRIGHT_DIR.parent), path.read_text()))
     return violations
 
@@ -308,11 +295,7 @@ def _receiver_query_strings(node: ast.AST) -> list[str]:
 
 def _call_constant_strings(node: ast.Call) -> list[str]:
     strings = [value for arg in node.args if (value := _constant_string(arg))]
-    strings.extend(
-        value
-        for keyword in node.keywords
-        if (value := _constant_string(keyword.value))
-    )
+    strings.extend(value for keyword in node.keywords if (value := _constant_string(keyword.value)))
     return strings
 
 
@@ -333,104 +316,101 @@ def _has_date_rot_ok(source_lines: list[str], lineno: int) -> bool:
     return False
 
 
-def test_date_rot_guard_rejects_unsafe_future_sensitive_fixture():
-    source = textwrap.dedent(
-        """
-        from datetime import datetime
+class DateRotGuardTest(SimpleTestCase):
+    def test_date_rot_guard_rejects_unsafe_future_sensitive_fixture(self):
+        source = textwrap.dedent(
+            """
+            from datetime import datetime
 
-        def test_bad():
-            Event.objects.create(start_datetime=datetime(2026, 7, 8, 18, 0))
-        """
-    )
+            def test_bad():
+                Event.objects.create(start_datetime=datetime(2026, 7, 8, 18, 0))
+            """
+        )
 
-    violations = _scan_source(Path("sample.py"), source)
+        violations = _scan_source(Path("sample.py"), source)
 
-    assert len(violations) == 1
-    assert "start_datetime" in violations[0].snippet
-    assert "timezone.now" in violations[0].format()
+        assert len(violations) == 1
+        assert "start_datetime" in violations[0].snippet
+        assert "timezone.now" in violations[0].format()
 
+    def test_date_rot_guard_rejects_iso_timestamp_with_t_boundary(self):
+        source = textwrap.dedent(
+            """
+            def test_bad_iso_timestamp():
+                Event.objects.create(start_datetime="2026-07-18T12:00:00Z")
+            """
+        )
 
-def test_date_rot_guard_rejects_iso_timestamp_with_t_boundary():
-    source = textwrap.dedent(
-        """
-        def test_bad_iso_timestamp():
-            Event.objects.create(start_datetime="2026-07-18T12:00:00Z")
-        """
-    )
+        violations = _scan_source(Path("sample.py"), source)
 
-    violations = _scan_source(Path("sample.py"), source)
+        assert len(violations) == 1
+        assert "start_datetime" in violations[0].snippet
 
-    assert len(violations) == 1
-    assert "start_datetime" in violations[0].snippet
+    def test_date_rot_guard_rejects_unsafe_sprint_start_date_fixture(self):
+        source = textwrap.dedent(
+            """
+            import datetime
 
+            def test_bad_sprint():
+                Sprint.objects.create(start_date=datetime.date(2026, 5, 1))
+            """
+        )
 
-def test_date_rot_guard_rejects_unsafe_sprint_start_date_fixture():
-    source = textwrap.dedent(
-        """
-        import datetime
+        violations = _scan_source(Path("sample.py"), source)
 
-        def test_bad_sprint():
-            Sprint.objects.create(start_date=datetime.date(2026, 5, 1))
-        """
-    )
+        assert len(violations) == 1
+        assert "start_date" in violations[0].snippet
+        assert "timezone.localdate" in violations[0].format()
 
-    violations = _scan_source(Path("sample.py"), source)
+    def test_date_rot_guard_rejects_chained_locator_fill_for_start_date(self):
+        source = textwrap.dedent(
+            """
+            def test_bad_fill(page):
+                page.locator("input[name='start_date']").fill("2026-05-01")
+            """
+        )
 
-    assert len(violations) == 1
-    assert "start_date" in violations[0].snippet
-    assert "timezone.localdate" in violations[0].format()
+        violations = _scan_source(Path("sample.py"), source)
 
+        assert len(violations) == 1
+        assert "locator" in violations[0].snippet
+        assert "form/input date" in violations[0].reason
 
-def test_date_rot_guard_rejects_chained_locator_fill_for_start_date():
-    source = textwrap.dedent(
-        """
-        def test_bad_fill(page):
-            page.locator("input[name='start_date']").fill("2026-05-01")
-        """
-    )
+    def test_date_rot_guard_rejects_chained_label_fill_for_start_date(self):
+        source = textwrap.dedent(
+            """
+            def test_bad_fill(page):
+                page.get_by_label("Start date").fill("2026-05-01")
+            """
+        )
 
-    violations = _scan_source(Path("sample.py"), source)
+        violations = _scan_source(Path("sample.py"), source)
 
-    assert len(violations) == 1
-    assert "locator" in violations[0].snippet
-    assert "form/input date" in violations[0].reason
+        assert len(violations) == 1
+        assert "get_by_label" in violations[0].snippet
+        assert "form/input date" in violations[0].reason
 
+    def test_date_rot_guard_allows_reasoned_fixed_dates_and_frozen_exact_copy(self):
+        source = textwrap.dedent(
+            """
+            from datetime import datetime
+            from freezegun import freeze_time
 
-def test_date_rot_guard_rejects_chained_label_fill_for_start_date():
-    source = textwrap.dedent(
-        """
-        def test_bad_fill(page):
-            page.get_by_label("Start date").fill("2026-05-01")
-        """
-    )
+            def test_reasoned():
+                # date-rot-ok: canonical historical workshop URL
+                page.goto("/workshops/2026-06-18-cloudflare")  # dev-goto-ok
 
-    violations = _scan_source(Path("sample.py"), source)
+            @freeze_time("2026-06-17T12:00:00Z")
+            def test_frozen():
+                Event.objects.create(start_datetime=datetime(2026, 6, 24, 16, 0))
+            """
+        )
 
-    assert len(violations) == 1
-    assert "get_by_label" in violations[0].snippet
-    assert "form/input date" in violations[0].reason
+        assert _scan_source(Path("sample.py"), source) == []
 
+    def test_no_unsafe_hard_coded_2026_dates_in_future_sensitive_playwright_fixtures(
+        self,
+    ):
+        violations = _scan_playwright_sources()
 
-def test_date_rot_guard_allows_reasoned_fixed_dates_and_frozen_exact_copy():
-    source = textwrap.dedent(
-        """
-        from datetime import datetime
-        from freezegun import freeze_time
-
-        def test_reasoned():
-            # date-rot-ok: canonical historical workshop URL
-            page.goto("/workshops/2026-06-18-cloudflare")  # dev-goto-ok
-
-        @freeze_time("2026-06-17T12:00:00Z")
-        def test_frozen():
-            Event.objects.create(start_datetime=datetime(2026, 6, 24, 16, 0))
-        """
-    )
-
-    assert _scan_source(Path("sample.py"), source) == []
-
-
-def test_no_unsafe_hard_coded_2026_dates_in_future_sensitive_playwright_fixtures():
-    violations = _scan_playwright_sources()
-
-    assert violations == [], "\n" + "\n".join(violation.format() for violation in violations)
+        assert violations == [], "\n" + "\n".join(violation.format() for violation in violations)

@@ -74,6 +74,7 @@ PLAYWRIGHT_TEST_TREE_POLICY_LABELS = sorted(
         *LEXICAL_TEST_TREE_POLICY_LABELS,
         "tests.test_playwright_owner_inventory",
         "tests.test_browser_journey_policy",
+        "tests.test_date_rot_guard",
         "tests.test_dev_goto_resilience_guard",
     ]
 )

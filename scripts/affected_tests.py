@@ -294,6 +294,7 @@ TEST_TREE_CONTRACTS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         (
             "tests.test_playwright_owner_inventory",
             "tests.test_browser_journey_policy",
+            "tests.test_date_rot_guard",
             "tests.test_dev_goto_resilience_guard",
         ),
     ),

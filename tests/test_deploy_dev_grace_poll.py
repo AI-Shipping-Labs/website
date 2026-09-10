@@ -3,6 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import yaml
 from django.test import SimpleTestCase, tag
@@ -21,6 +22,24 @@ RUNNING_TASK = "arn:aws:ecs:eu-west-1:123:task/ready"
 WORKER_RUNNING_TASK = "arn:aws:ecs:eu-west-1:123:task/worker-ready"
 PROD_WEB_SERVICE = "ai-shipping-labs-prod"
 PROD_WORKER_SERVICE = "ai-shipping-labs-worker-prod"
+
+ISOLATED_HARNESS_ENV_PREFIXES = ("FAKE_",)
+ISOLATED_HARNESS_ENV_KEYS = {
+    "DEPLOY_GRACE_MAX_ATTEMPTS",
+    "DEPLOY_GRACE_SLEEP_SECONDS",
+    "PREDEPLOY_MIGRATE_CHECK_ENABLED",
+    "READINESS_PYTHON_BIN",
+}
+
+
+def _isolated_harness_env():
+    """Copy the host environment without test-only deploy controls."""
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if key not in ISOLATED_HARNESS_ENV_KEYS
+        and not key.startswith(ISOLATED_HARNESS_ENV_PREFIXES)
+    }
 
 
 FAKE_AWS = rf'''#!__PYTHON__
@@ -320,7 +339,7 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
         sleep_log = tmpdir / "sleep.log"
         timeout_log = tmpdir / "timeout.log"
 
-        env = dict(os.environ)
+        env = _isolated_harness_env()
         env["PATH"] = f"{bindir}{os.pathsep}{env['PATH']}"
         env.update({
             "REAL_PYTHON": sys.executable,
@@ -373,12 +392,6 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
             env["FAKE_WORKER_ACTIVE_NON_PRIMARY_COUNT"] = str(
                 worker_active_non_primary_count
             )
-        for name in (
-            "PREDEPLOY_MIGRATE_CHECK_ENABLED",
-            "DEPLOY_GRACE_MAX_ATTEMPTS",
-            "DEPLOY_GRACE_SLEEP_SECONDS",
-        ):
-            env.pop(name, None)
         if predeploy_enabled:
             env["PREDEPLOY_MIGRATE_CHECK_ENABLED"] = "true"
 
@@ -425,7 +438,7 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
         sleep_log = tmpdir / "sleep.log"
         action = yaml.safe_load(WAKE_ACTION_PATH.read_text())
 
-        env = dict(os.environ)
+        env = _isolated_harness_env()
         env["PATH"] = f"{bindir}{os.pathsep}{env['PATH']}"
         env.update({
             "REAL_PYTHON": sys.executable,
@@ -447,8 +460,6 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
             "MAX_ATTEMPTS": str(max_attempts),
             "REQUIRED_CONSECUTIVE": str(required_matches),
         })
-        env.pop("READINESS_PYTHON_BIN", None)
-
         result = subprocess.run(
             ["bash", "-c", action["runs"]["steps"][0]["run"]],
             env=env,
@@ -507,11 +518,15 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
 
     def test_waiter_timeout_requires_stable_tag_and_healthy_new_revision(self):
         SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
-        with TemporaryDirectory(dir=SCRATCH_ROOT) as tmpdir:
-            run = self._run_deploy(
-                tmpdir,
-                responses=["previous-tag", *(["20260708-011950-8dc969b"] * 3)],
-            )
+        with patch.dict(
+            os.environ,
+            {"FAKE_WEB_PRIMARY_TASK_DEF": "ambient-wrong-task-definition"},
+        ):
+            with TemporaryDirectory(dir=SCRATCH_ROOT) as tmpdir:
+                run = self._run_deploy(
+                    tmpdir,
+                    responses=["previous-tag", *(["20260708-011950-8dc969b"] * 3)],
+                )
 
         result = run["result"]
         self.assertEqual(

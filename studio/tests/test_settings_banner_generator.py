@@ -4,15 +4,15 @@ Confirms:
 
 - ``/studio/settings/`` exposes the new ``Content Tools`` section.
 - The ``banner_generator`` group renders both fields.
-- POSTing to the save endpoint upserts both IntegrationSetting rows and
-  clears the config cache.
+- POSTing to the save endpoint upserts both package config overrides
+  (encrypted secrets) and clears the config cache.
 """
 
+from community_base.config.models import Setting
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 
-from integrations.config import clear_config_cache
-from integrations.models import IntegrationSetting
+from integrations.config import clear_config_cache, get_config
 
 User = get_user_model()
 
@@ -59,17 +59,20 @@ class SettingsDashboardBannerGeneratorTest(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertIn('content_tools', response.url)
+        # The token is a declared secret: the row holds ciphertext and the
+        # donor-shaped plaintext only comes back through the shim read.
         self.assertEqual(
-            IntegrationSetting.objects.get(
-                key='BANNER_GENERATOR_FUNCTION_URL',
-            ).value,
+            get_config('BANNER_GENERATOR_FUNCTION_URL'),
             'https://lambda.example.com/render',
         )
-        self.assertEqual(
-            IntegrationSetting.objects.get(
-                key='BANNER_GENERATOR_AUTH_TOKEN',
-            ).value,
-            'token-zzz',
+        self.assertEqual(get_config('BANNER_GENERATOR_AUTH_TOKEN'), 'token-zzz')
+        self.assertTrue(
+            Setting.objects.filter(
+                key='BANNER_GENERATOR_FUNCTION_URL',
+            ).exists(),
+        )
+        self.assertTrue(
+            Setting.objects.filter(key='BANNER_GENERATOR_AUTH_TOKEN').exists(),
         )
 
     def test_save_clears_config_cache(self):

@@ -1,6 +1,7 @@
 """Build and apply Studio settings export/import payloads (issue #323).
 
-Two pure functions wrapped around ``IntegrationSetting`` and ``SocialApp``:
+Two pure functions wrapped around the package config store (``cb_config``,
+through :mod:`integrations.config`'s cutover helpers) and ``SocialApp``:
 
 - ``build_export()`` — snapshot every known integration key + auth provider
   row in plaintext, returned as a JSON-serialisable dict with
@@ -21,8 +22,14 @@ from datetime import datetime, timezone
 
 from allauth.socialaccount.models import SocialApp
 from django.contrib.sites.models import Site
+from django.core.exceptions import ValidationError
 
-from integrations.models import IntegrationSetting
+from integrations.config import (
+    delete_package_override,
+    has_package_override,
+    set_package_override,
+    stored_override_map,
+)
 from integrations.settings_registry import INTEGRATION_GROUPS
 from studio.services.auth_settings import (
     PROVIDER_META,
@@ -40,27 +47,23 @@ def _known_integration_keys() -> dict[str, dict]:
     """
     out: dict[str, dict] = {}
     for group in INTEGRATION_GROUPS:
-        for key_def in group['keys']:
-            out[key_def['key']] = {**key_def, 'group': group['name']}
+        for key_def in group["keys"]:
+            out[key_def["key"]] = {**key_def, "group": group["name"]}
     return out
 
 
 def build_export() -> dict:
     """Return the JSON-serialisable settings snapshot.
 
-    Includes every ``IntegrationSetting`` row whose key is registered in
+    Includes every stored override whose key is registered in
     ``INTEGRATION_GROUPS`` and every ``SocialApp`` row whose ``provider`` is
     in ``SUPPORTED_PROVIDERS``. Values are plaintext.
     """
     known_keys = _known_integration_keys()
 
-    integration_rows = (
-        IntegrationSetting.objects.filter(key__in=known_keys.keys())
-        .order_by('key')
-        .values_list('key', 'value')
-    )
+    overrides = stored_override_map()
     integration_settings = [
-        {'key': key, 'value': value} for key, value in integration_rows
+        {"key": key, "value": overrides[key]} for key in sorted(known_keys.keys() & overrides.keys())
     ]
 
     auth_providers = []
@@ -68,20 +71,22 @@ def build_export() -> dict:
         app = SocialApp.objects.filter(provider=provider).first()
         if app is None:
             continue
-        auth_providers.append({
-            'provider': provider,
-            'name': app.name or PROVIDER_META[provider]['name'],
-            'client_id': app.client_id or '',
-            'secret': app.secret or '',
-        })
+        auth_providers.append(
+            {
+                "provider": provider,
+                "name": app.name or PROVIDER_META[provider]["name"],
+                "client_id": app.client_id or "",
+                "secret": app.secret or "",
+            }
+        )
 
-    exported_at = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    exported_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     return {
-        'format_version': FORMAT_VERSION,
-        'exported_at': exported_at,
-        'integration_settings': integration_settings,
-        'auth_providers': auth_providers,
+        "format_version": FORMAT_VERSION,
+        "exported_at": exported_at,
+        "integration_settings": integration_settings,
+        "auth_providers": auth_providers,
     }
 
 
@@ -97,6 +102,7 @@ class ImportResult:
 
     integration_created: int = 0
     integration_updated: int = 0
+    invalid_integration_keys: list[str] = field(default_factory=list)
     auth_created: int = 0
     auth_updated: int = 0
     restart_required: bool = False
@@ -121,17 +127,16 @@ def apply_import(payload: dict) -> ImportResult:
             or unsupported, or the two arrays are the wrong type.
     """
     if not isinstance(payload, dict):
-        raise ImportError('Settings file must be a JSON object.')
+        raise ImportError("Settings file must be a JSON object.")
 
-    version = payload.get('format_version')
+    version = payload.get("format_version")
     if version != FORMAT_VERSION:
         raise ImportError(
-            f'Unsupported format_version: {version!r}. '
-            f'This build only accepts format_version={FORMAT_VERSION}.'
+            f"Unsupported format_version: {version!r}. This build only accepts format_version={FORMAT_VERSION}."
         )
 
-    integration_entries = payload.get('integration_settings', [])
-    auth_entries = payload.get('auth_providers', [])
+    integration_entries = payload.get("integration_settings", [])
+    auth_entries = payload.get("auth_providers", [])
 
     if not isinstance(integration_entries, list):
         raise ImportError('"integration_settings" must be a list.')
@@ -144,25 +149,38 @@ def apply_import(payload: dict) -> ImportResult:
     for entry in integration_entries:
         if not isinstance(entry, dict):
             continue
-        key = entry.get('key')
-        value = entry.get('value', '')
+        key = entry.get("key")
+        value = entry.get("value", "")
         if not key:
             continue
         if key not in known_keys:
             result.skipped_integration_keys.append(key)
             continue
         meta = known_keys[key]
-        if meta.get('requires_restart', False):
+        if meta.get("requires_restart", False):
             result.restart_required = True
-        _, created = IntegrationSetting.objects.update_or_create(
-            key=key,
-            defaults={
-                'value': value if value is not None else '',
-                'is_secret': meta.get('is_secret', False),
-                'group': meta['group'],
-                'description': meta.get('description', ''),
-            },
-        )
+        # D1.2c step-5 cutover: overrides persist in the package config
+        # store through the package service (encrypted secrets, audit row).
+        # The donor import stored whatever it was given, including empty and
+        # malformed values; the package coerces, so the donor's empty-means-
+        # unset shape becomes a row deletion here and a value the package
+        # refuses is skipped and reported instead of stored.
+        stored_value = value if value is not None else ""
+        if stored_value == "":
+            if delete_package_override(key):
+                result.integration_updated += 1
+            continue
+        created = not has_package_override(key)
+        try:
+            set_package_override(
+                key,
+                stored_value,
+                actor_ref="studio:settings-import",
+                reason="Imported Studio settings bundle",
+            )
+        except ValidationError:
+            result.invalid_integration_keys.append(key)
+            continue
         if created:
             result.integration_created += 1
         else:
@@ -172,20 +190,20 @@ def apply_import(payload: dict) -> ImportResult:
     for entry in auth_entries:
         if not isinstance(entry, dict):
             continue
-        provider = entry.get('provider')
+        provider = entry.get("provider")
         if not provider:
             continue
         if provider not in SUPPORTED_PROVIDERS:
             result.skipped_auth_providers.append(provider)
             continue
         meta = PROVIDER_META[provider]
-        name = entry.get('name') or meta['name']
+        name = entry.get("name") or meta["name"]
         app, created = SocialApp.objects.update_or_create(
             provider=provider,
             defaults={
-                'name': name,
-                'client_id': entry.get('client_id', '') or '',
-                'secret': entry.get('secret', '') or '',
+                "name": name,
+                "client_id": entry.get("client_id", "") or "",
+                "secret": entry.get("secret", "") or "",
             },
         )
         app.sites.add(site)

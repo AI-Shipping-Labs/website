@@ -26,11 +26,11 @@ the page cannot satisfy the assertion.
 import os
 import re
 
+from community_base.config.models import Setting
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from integrations.config import clear_config_cache, get_config
-from integrations.models import IntegrationSetting
+from integrations.config import clear_config_cache, get_config, set_package_override
 from payments.models import Tier
 
 User = get_user_model()
@@ -38,7 +38,7 @@ User = get_user_model()
 # The single env key this suite cares about. We pop it in setUp so a
 # developer's `.env` cannot accidentally satisfy the "not configured"
 # assertions.
-ENV_KEY = 'STRIPE_DASHBOARD_ACCOUNT_ID'
+ENV_KEY = "STRIPE_DASHBOARD_ACCOUNT_ID"
 
 
 def _row_html(html, user_pk):
@@ -51,14 +51,13 @@ def _row_html(html, user_pk):
     """
     pattern = (
         r'<tr[^>]*data-testid="user-row-' + str(user_pk) + r'"[^>]*>'
-        r'(.*?)'
-        r'</tr>'
+        r"(.*?)"
+        r"</tr>"
     )
     match = re.search(pattern, html, re.DOTALL)
     if not match:
         raise AssertionError(
-            f'Could not locate row data-testid="user-row-{user_pk}" in '
-            f'rendered HTML. Did the row markup change?'
+            f'Could not locate row data-testid="user-row-{user_pk}" in rendered HTML. Did the row markup change?'
         )
     return match.group(0)
 
@@ -69,29 +68,34 @@ class StudioUserListStripeIndicatorTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
+            email="staff@test.com",
+            password="testpass",
+            is_staff=True,
         )
         cls.user_with_stripe = User.objects.create_user(
-            email='paid@test.com', password='testpass',
-            stripe_customer_id='cus_ABC',
+            email="paid@test.com",
+            password="testpass",
+            stripe_customer_id="cus_ABC",
         )
         cls.user_without_stripe = User.objects.create_user(
-            email='free@test.com', password='testpass',
-            stripe_customer_id='',
+            email="free@test.com",
+            password="testpass",
+            stripe_customer_id="",
         )
         cls.imported_paid_user = User.objects.create_user(
-            email='imported-paid@test.com', password='testpass',
-            stripe_customer_id='cus_PAID',
-            tier=Tier.objects.get(slug='main'),
+            email="imported-paid@test.com",
+            password="testpass",
+            stripe_customer_id="cus_PAID",
+            tier=Tier.objects.get(slug="main"),
         )
 
     def setUp(self):
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(email="staff@test.com", password="testpass")
         # Start every test from a known-clean state regardless of what the
         # previous test, the dev shell's .env, or another suite left
         # behind. clear_config_cache() drops the in-process snapshot so
-        # IntegrationSetting writes inside the test take effect.
-        IntegrationSetting.objects.filter(key=ENV_KEY).delete()
+        # Package-store writes inside the test take effect.
+        Setting.objects.filter(key=ENV_KEY).delete()
         clear_config_cache()
         self.addCleanup(clear_config_cache)
         self._saved_env = os.environ.pop(ENV_KEY, None)
@@ -107,15 +111,7 @@ class StudioUserListStripeIndicatorTest(TestCase):
         """Persist STRIPE_DASHBOARD_ACCOUNT_ID via the same mechanism the
         Studio settings save view uses, then clear the in-process cache
         so subsequent ``get_config`` calls see the new value."""
-        IntegrationSetting.objects.update_or_create(
-            key=ENV_KEY,
-            defaults={
-                'value': value,
-                'is_secret': False,
-                'group': 'stripe',
-                'description': '',
-            },
-        )
+        set_package_override(ENV_KEY, value, actor_ref="test")
         clear_config_cache()
 
     # ------------------------------------------------------------------
@@ -126,8 +122,7 @@ class StudioUserListStripeIndicatorTest(TestCase):
     def _tr_attrs(self, html, user_pk):
         """Return the ``<tr ...>`` open-tag attribute string for a row."""
         match = re.search(
-            r'<tr([^>]*data-testid="user-row-' + str(user_pk)
-            + r'"[^>]*)>',
+            r'<tr([^>]*data-testid="user-row-' + str(user_pk) + r'"[^>]*)>',
             html,
         )
         self.assertIsNotNone(
@@ -137,40 +132,43 @@ class StudioUserListStripeIndicatorTest(TestCase):
         return match.group(1)
 
     def test_stripe_customer_id_appears_in_row_tooltip_when_set(self):
-        response = self.client.get('/studio/users/')
+        response = self.client.get("/studio/users/")
         self.assertEqual(response.status_code, 200)
         attrs = self._tr_attrs(
-            response.content.decode(), self.user_with_stripe.pk,
+            response.content.decode(),
+            self.user_with_stripe.pk,
         )
         # Tooltip carries the documented "Stripe customer: <cus_*>" line.
-        self.assertIn('Stripe customer: cus_ABC', attrs)
+        self.assertIn("Stripe customer: cus_ABC", attrs)
 
     def test_stripe_customer_omitted_from_row_tooltip_when_unset(self):
-        response = self.client.get('/studio/users/')
+        response = self.client.get("/studio/users/")
         self.assertEqual(response.status_code, 200)
         attrs = self._tr_attrs(
-            response.content.decode(), self.user_without_stripe.pk,
+            response.content.decode(),
+            self.user_without_stripe.pk,
         )
         # No Stripe line at all when the user has no customer ID.
-        self.assertNotIn('Stripe customer:', attrs)
+        self.assertNotIn("Stripe customer:", attrs)
 
     def test_per_row_stripe_indicator_glyph_is_removed_from_listing(self):
         # Issue #451 regression guard: the inline glyph anchor / span
         # both disappear from the row; the Stripe deep-link lives on the
         # user detail page instead.
-        response = self.client.get('/studio/users/')
+        response = self.client.get("/studio/users/")
         row_html = _row_html(
-            response.content.decode(), self.user_with_stripe.pk,
+            response.content.decode(),
+            self.user_with_stripe.pk,
         )
         self.assertNotIn('data-testid="stripe-indicator"', row_html)
 
     def test_stripe_imported_paid_user_shows_base_tier_without_override_badge(self):
-        response = self.client.get('/studio/users/', {'q': 'imported-paid@test.com'})
+        response = self.client.get("/studio/users/", {"q": "imported-paid@test.com"})
         self.assertEqual(response.status_code, 200)
 
         row_html = _row_html(response.content.decode(), self.imported_paid_user.pk)
-        self.assertIn('Main', row_html)
-        self.assertNotIn('(override)', row_html)
+        self.assertIn("Main", row_html)
+        self.assertNotIn("(override)", row_html)
 
     # ------------------------------------------------------------------
     # Settings round-trip: the new key really is editable in Studio
@@ -186,20 +184,20 @@ class StudioUserListStripeIndicatorTest(TestCase):
         # does not try to delete pre-existing rows (there are none) — the
         # endpoint iterates the whole group on every save.
         post_data = {
-            'STRIPE_SECRET_KEY': '',
-            'STRIPE_WEBHOOK_SECRET': '',
-            'STRIPE_CUSTOMER_PORTAL_URL': '',
-            'STRIPE_DASHBOARD_ACCOUNT_ID': 'acct_NEW',
+            "STRIPE_SECRET_KEY": "",
+            "STRIPE_WEBHOOK_SECRET": "",
+            "STRIPE_CUSTOMER_PORTAL_URL": "",
+            "STRIPE_DASHBOARD_ACCOUNT_ID": "acct_NEW",
         }
-        response = self.client.post('/studio/settings/stripe/save/', post_data)
+        response = self.client.post("/studio/settings/stripe/save/", post_data)
         # 302 redirect back to settings dashboard on success.
         self.assertEqual(response.status_code, 302)
 
-        row = IntegrationSetting.objects.get(key=ENV_KEY)
-        self.assertEqual(row.value, 'acct_NEW')
-        self.assertFalse(row.is_secret)
-        self.assertEqual(row.group, 'stripe')
+        # The package row has no group/is_secret columns: those live on the
+        # declaration; the plaintext round-trips through the shim read.
+        self.assertTrue(Setting.objects.filter(key=ENV_KEY).exists())
+        self.assertEqual(get_config(ENV_KEY), "acct_NEW")
 
         # Cache must have been cleared by the save view, so a fresh read
         # returns the new value without us calling clear_config_cache here.
-        self.assertEqual(get_config(ENV_KEY), 'acct_NEW')
+        self.assertEqual(get_config(ENV_KEY), "acct_NEW")

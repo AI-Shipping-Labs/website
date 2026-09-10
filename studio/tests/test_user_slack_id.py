@@ -22,6 +22,7 @@ re-asserting on raw HTML.
 import os
 import re
 
+from community_base.config.models import Setting
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
@@ -30,22 +31,19 @@ from integrations.models import IntegrationSetting
 
 User = get_user_model()
 
-SETTINGS_KEY = 'SLACK_TEAM_ID'
+SETTINGS_KEY = "SLACK_TEAM_ID"
 
 
 def _row_html(html, user_pk):
     """Return the inner HTML of the ``<tr data-testid="user-row-<pk>">`` row."""
     pattern = (
         r'<tr[^>]*data-testid="user-row-' + str(user_pk) + r'"[^>]*>'
-        r'(.*?)'
-        r'</tr>'
+        r"(.*?)"
+        r"</tr>"
     )
     match = re.search(pattern, html, re.DOTALL)
     if not match:
-        raise AssertionError(
-            f'Could not locate row data-testid="user-row-{user_pk}" in '
-            f'rendered HTML.'
-        )
+        raise AssertionError(f'Could not locate row data-testid="user-row-{user_pk}" in rendered HTML.')
     return match.group(0)
 
 
@@ -74,10 +72,10 @@ class _SlackTeamIdSettingMixin:
         IntegrationSetting.objects.update_or_create(
             key=SETTINGS_KEY,
             defaults={
-                'value': value,
-                'is_secret': False,
-                'group': 'slack',
-                'description': '',
+                "value": value,
+                "is_secret": False,
+                "group": "slack",
+                "description": "",
             },
         )
         clear_config_cache()
@@ -89,41 +87,46 @@ class StudioUserDetailSlackIdRowTest(_SlackTeamIdSettingMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(
-            email='staff@test.com', password='pw', is_staff=True,
+            email="staff@test.com",
+            password="pw",
+            is_staff=True,
         )
         cls.linked = User.objects.create_user(
-            email='ada@example.com', password='pw',
-            slack_user_id='U01ADA123',
+            email="ada@example.com",
+            password="pw",
+            slack_user_id="U01ADA123",
         )
         cls.unlinked = User.objects.create_user(
-            email='partner@example.com', password='pw',
+            email="partner@example.com",
+            password="pw",
         )
 
     def setUp(self):
-        self.client.login(email='staff@test.com', password='pw')
+        self.client.login(email="staff@test.com", password="pw")
         self._reset_team_id()
 
     def test_detail_renders_slack_id_row_for_linked_user(self):
-        response = self.client.get(f'/studio/users/{self.linked.pk}/')
+        response = self.client.get(f"/studio/users/{self.linked.pk}/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="user-detail-slack-id-row"')
         self.assertContains(response, 'data-testid="user-detail-slack-id-value"')
-        self.assertContains(response, 'U01ADA123')
+        self.assertContains(response, "U01ADA123")
 
     def test_detail_renders_not_linked_for_unlinked_user(self):
-        response = self.client.get(f'/studio/users/{self.unlinked.pk}/')
+        response = self.client.get(f"/studio/users/{self.unlinked.pk}/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="user-detail-slack-id-empty"')
-        self.assertContains(response, 'Not linked')
+        self.assertContains(response, "Not linked")
 
     def test_open_in_slack_link_visible_when_team_id_configured(self):
-        self._set_team_id('T01TEAM123')
+        self._set_team_id("T01TEAM123")
         # Sanity: confirm the helper actually plumbed the value into config.
-        self.assertEqual(get_config(SETTINGS_KEY), 'T01TEAM123')
+        self.assertEqual(get_config(SETTINGS_KEY), "T01TEAM123")
 
-        response = self.client.get(f'/studio/users/{self.linked.pk}/')
+        response = self.client.get(f"/studio/users/{self.linked.pk}/")
         self.assertContains(
-            response, 'data-testid="user-detail-slack-profile-link"',
+            response,
+            'data-testid="user-detail-slack-profile-link"',
         )
         self.assertContains(
             response,
@@ -143,10 +146,11 @@ class StudioUserDetailSlackIdRowTest(_SlackTeamIdSettingMixin, TestCase):
 
     def test_open_in_slack_link_missing_when_team_id_blank(self):
         # No team ID configured → no anchor, but the ID stays visible.
-        self.assertEqual(get_config(SETTINGS_KEY), '')
-        response = self.client.get(f'/studio/users/{self.linked.pk}/')
+        self.assertEqual(get_config(SETTINGS_KEY), "")
+        response = self.client.get(f"/studio/users/{self.linked.pk}/")
         self.assertNotContains(
-            response, 'data-testid="user-detail-slack-profile-link"',
+            response,
+            'data-testid="user-detail-slack-profile-link"',
         )
         # Tooltip explains why the link is missing.
         self.assertContains(
@@ -154,45 +158,45 @@ class StudioUserDetailSlackIdRowTest(_SlackTeamIdSettingMixin, TestCase):
             'title="Configure SLACK_TEAM_ID to enable the link"',
         )
         # ID itself still visible so the operator can copy it manually.
-        self.assertContains(response, 'U01ADA123')
+        self.assertContains(response, "U01ADA123")
 
     def test_open_in_slack_link_missing_when_user_has_no_slack_id(self):
         # Even with the team ID configured, an unlinked user has no anchor.
-        self._set_team_id('T01TEAM123')
-        response = self.client.get(f'/studio/users/{self.unlinked.pk}/')
+        self._set_team_id("T01TEAM123")
+        response = self.client.get(f"/studio/users/{self.unlinked.pk}/")
         self.assertNotContains(
-            response, 'data-testid="user-detail-slack-profile-link"',
+            response,
+            'data-testid="user-detail-slack-profile-link"',
         )
-        self.assertContains(response, 'Not linked')
+        self.assertContains(response, "Not linked")
 
     def test_inline_edit_disclosure_present_on_detail_template(self):
-        linked_html = self.client.get(
-            f'/studio/users/{self.linked.pk}/'
-        ).content.decode()
-        unlinked_html = self.client.get(
-            f'/studio/users/{self.unlinked.pk}/'
-        ).content.decode()
+        linked_html = self.client.get(f"/studio/users/{self.linked.pk}/").content.decode()
+        unlinked_html = self.client.get(f"/studio/users/{self.unlinked.pk}/").content.decode()
         for html in (linked_html, unlinked_html):
             self.assertIn('aria-controls="slack-id-edit-form"', html)
             self.assertIn('name="slack_user_id"', html)
             self.assertIn('id="slack-id-edit-form"', html)
             self.assertIn('class="hidden mt-2 flex-col', html)
         self.assertIn(
-            f'action="/studio/users/{self.linked.pk}/slack-id/"', linked_html,
+            f'action="/studio/users/{self.linked.pk}/slack-id/"',
+            linked_html,
         )
         self.assertIn(
-            f'action="/studio/users/{self.unlinked.pk}/slack-id/"', unlinked_html,
+            f'action="/studio/users/{self.unlinked.pk}/slack-id/"',
+            unlinked_html,
         )
 
     def test_unlinked_row_does_not_offer_django_admin_path(self):
         # When the user has no Slack ID, the row says "Not linked" and
         # stays inside Studio.
-        response = self.client.get(f'/studio/users/{self.unlinked.pk}/')
+        response = self.client.get(f"/studio/users/{self.unlinked.pk}/")
         self.assertContains(response, 'data-testid="user-detail-slack-id-empty"')
         self.assertNotContains(
-            response, 'data-testid="user-detail-slack-id-admin-link"',
+            response,
+            'data-testid="user-detail-slack-id-admin-link"',
         )
-        self.assertNotContains(response, 'Edit in Django admin')
+        self.assertNotContains(response, "Edit in Django admin")
         self.assertEqual(
             response.content.decode().count('data-testid="studio-open-in-admin"'),
             0,
@@ -201,9 +205,10 @@ class StudioUserDetailSlackIdRowTest(_SlackTeamIdSettingMixin, TestCase):
     def test_linked_row_keeps_slack_id_editing_in_studio(self):
         # A linked user shows the value and, when configured, an
         # "Open in Slack" anchor. Editing remains on the inline Studio form.
-        response = self.client.get(f'/studio/users/{self.linked.pk}/')
+        response = self.client.get(f"/studio/users/{self.linked.pk}/")
         self.assertNotContains(
-            response, 'data-testid="user-detail-slack-id-admin-link"',
+            response,
+            'data-testid="user-detail-slack-id-admin-link"',
         )
         self.assertContains(response, 'id="slack-id-edit-form"')
 
@@ -214,39 +219,44 @@ class StudioUserSlackIdSetEndpointTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(
-            email='staff@test.com', password='pw', is_staff=True,
+            email="staff@test.com",
+            password="pw",
+            is_staff=True,
         )
         cls.non_staff = User.objects.create_user(
-            email='member@test.com', password='pw',
+            email="member@test.com",
+            password="pw",
         )
         cls.target = User.objects.create_user(
-            email='partner@example.com', password='pw',
+            email="partner@example.com",
+            password="pw",
         )
         cls.target_with_id = User.objects.create_user(
-            email='ghost@example.com', password='pw',
-            slack_user_id='U_OLDONE',
+            email="ghost@example.com",
+            password="pw",
+            slack_user_id="U_OLDONE",
         )
 
     def setUp(self):
-        self.client.login(email='staff@test.com', password='pw')
+        self.client.login(email="staff@test.com", password="pw")
 
     def _post(self, user, value):
         return self.client.post(
-            f'/studio/users/{user.pk}/slack-id/',
-            {'slack_user_id': value},
+            f"/studio/users/{user.pk}/slack-id/",
+            {"slack_user_id": value},
         )
 
     def test_set_valid_id_persists_and_redirects(self):
-        response = self._post(self.target, 'U09PARTNER')
+        response = self._post(self.target, "U09PARTNER")
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], f'/studio/users/{self.target.pk}/')
+        self.assertEqual(response["Location"], f"/studio/users/{self.target.pk}/")
         self.target.refresh_from_db()
-        self.assertEqual(self.target.slack_user_id, 'U09PARTNER')
+        self.assertEqual(self.target.slack_user_id, "U09PARTNER")
 
     def test_set_bumps_slack_checked_at(self):
         # Pre-condition: never checked.
         self.assertIsNone(self.target.slack_checked_at)
-        self._post(self.target, 'U09PARTNER')
+        self._post(self.target, "U09PARTNER")
         self.target.refresh_from_db()
         # Must be non-null after a successful set — uses timezone.now().
         self.assertIsNotNone(self.target.slack_checked_at)
@@ -254,75 +264,75 @@ class StudioUserSlackIdSetEndpointTest(TestCase):
     def test_set_uppercases_lowercase_input(self):
         # Operators occasionally paste a lowercase value. Slack IDs are
         # conventionally uppercase; we normalize before validation.
-        response = self._post(self.target, 'u01abc123')
+        response = self._post(self.target, "u01abc123")
         self.assertEqual(response.status_code, 302)
         self.target.refresh_from_db()
-        self.assertEqual(self.target.slack_user_id, 'U01ABC123')
+        self.assertEqual(self.target.slack_user_id, "U01ABC123")
 
     def test_set_trims_whitespace(self):
-        self._post(self.target, '  U01TRIM00  ')
+        self._post(self.target, "  U01TRIM00  ")
         self.target.refresh_from_db()
-        self.assertEqual(self.target.slack_user_id, 'U01TRIM00')
+        self.assertEqual(self.target.slack_user_id, "U01TRIM00")
 
     def test_w_prefix_is_valid(self):
         # Enterprise Grid org-wide IDs start with W; both prefixes accepted.
-        self._post(self.target, 'W01ENT123')
+        self._post(self.target, "W01ENT123")
         self.target.refresh_from_db()
-        self.assertEqual(self.target.slack_user_id, 'W01ENT123')
+        self.assertEqual(self.target.slack_user_id, "W01ENT123")
 
     def test_invalid_format_rejected_and_existing_value_unchanged(self):
         # Starting state: target_with_id already has a Slack ID. A bad
         # submission must NOT overwrite it.
-        response = self._post(self.target_with_id, 'not-a-slack-id')
+        response = self._post(self.target_with_id, "not-a-slack-id")
         self.assertEqual(response.status_code, 302)
         self.target_with_id.refresh_from_db()
-        self.assertEqual(self.target_with_id.slack_user_id, 'U_OLDONE')
+        self.assertEqual(self.target_with_id.slack_user_id, "U_OLDONE")
 
     def test_invalid_format_flashes_error(self):
-        response = self._post(self.target, 'lowercase-only')
+        response = self._post(self.target, "lowercase-only")
         # follow=True so the messages framework attaches the flash to the
         # final response context.
         response = self.client.post(
-            f'/studio/users/{self.target.pk}/slack-id/',
-            {'slack_user_id': 'lowercase-only'},
+            f"/studio/users/{self.target.pk}/slack-id/",
+            {"slack_user_id": "lowercase-only"},
             follow=True,
         )
-        flashes = [str(m) for m in response.context['messages']]
+        flashes = [str(m) for m in response.context["messages"]]
         self.assertTrue(
-            any('Invalid Slack ID' in m for m in flashes),
+            any("Invalid Slack ID" in m for m in flashes),
             f'Expected an "Invalid Slack ID" flash, got: {flashes}',
         )
 
     def test_empty_value_clears_existing_id(self):
-        response = self._post(self.target_with_id, '')
+        response = self._post(self.target_with_id, "")
         self.assertEqual(response.status_code, 302)
         self.target_with_id.refresh_from_db()
-        self.assertEqual(self.target_with_id.slack_user_id, '')
+        self.assertEqual(self.target_with_id.slack_user_id, "")
 
     def test_empty_value_clears_and_bumps_slack_checked_at(self):
         # The bump fires on the clear path too so the badge state ("Never
         # checked" → "Not in Slack") tracks operator intent.
         self.assertIsNone(self.target_with_id.slack_checked_at)
-        self._post(self.target_with_id, '')
+        self._post(self.target_with_id, "")
         self.target_with_id.refresh_from_db()
         self.assertIsNotNone(self.target_with_id.slack_checked_at)
 
     def test_short_id_rejected(self):
         # Pattern requires at least 3 chars total (^[UW][A-Z0-9]{2,}$).
-        response = self._post(self.target, 'U1')
+        response = self._post(self.target, "U1")
         self.assertEqual(response.status_code, 302)
         self.target.refresh_from_db()
-        self.assertEqual(self.target.slack_user_id, '')
+        self.assertEqual(self.target.slack_user_id, "")
 
     def test_id_with_special_chars_rejected(self):
-        response = self._post(self.target, 'U01-ABC')
+        response = self._post(self.target, "U01-ABC")
         self.assertEqual(response.status_code, 302)
         self.target.refresh_from_db()
-        self.assertEqual(self.target.slack_user_id, '')
+        self.assertEqual(self.target.slack_user_id, "")
 
     def test_get_method_not_allowed(self):
         # GET-only access should bounce — endpoint is POST-only.
-        response = self.client.get(f'/studio/users/{self.target.pk}/slack-id/')
+        response = self.client.get(f"/studio/users/{self.target.pk}/slack-id/")
         self.assertEqual(response.status_code, 405)
 
     def test_anonymous_user_cannot_post_and_no_side_effect(self):
@@ -330,22 +340,22 @@ class StudioUserSlackIdSetEndpointTest(TestCase):
         self.client.logout()
         before = self.target.slack_user_id
         response = self.client.post(
-            f'/studio/users/{self.target.pk}/slack-id/',
-            {'slack_user_id': 'U99HIJACK'},
+            f"/studio/users/{self.target.pk}/slack-id/",
+            {"slack_user_id": "U99HIJACK"},
         )
         # @staff_required redirects unauthenticated users to login.
         self.assertEqual(response.status_code, 302)
-        self.assertIn('/accounts/login/', response['Location'])
+        self.assertIn("/accounts/login/", response["Location"])
         self.target.refresh_from_db()
         self.assertEqual(self.target.slack_user_id, before)
 
     def test_non_staff_user_cannot_post_and_no_side_effect(self):
         self.client.logout()
-        self.client.login(email='member@test.com', password='pw')
+        self.client.login(email="member@test.com", password="pw")
         before = self.target.slack_user_id
         response = self.client.post(
-            f'/studio/users/{self.target.pk}/slack-id/',
-            {'slack_user_id': 'U99HIJACK'},
+            f"/studio/users/{self.target.pk}/slack-id/",
+            {"slack_user_id": "U99HIJACK"},
         )
         # @staff_required returns 403 for authenticated non-staff users.
         self.assertEqual(response.status_code, 403)
@@ -355,8 +365,8 @@ class StudioUserSlackIdSetEndpointTest(TestCase):
     def test_target_user_not_found(self):
         # Operator clicks a stale URL after the user was deleted.
         response = self.client.post(
-            '/studio/users/999999/slack-id/',
-            {'slack_user_id': 'U01ABC123'},
+            "/studio/users/999999/slack-id/",
+            {"slack_user_id": "U01ABC123"},
         )
         self.assertEqual(response.status_code, 404)
 
@@ -375,24 +385,27 @@ class StudioUserListSlackRowTooltipTest(_SlackTeamIdSettingMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(
-            email='staff@test.com', password='pw', is_staff=True,
+            email="staff@test.com",
+            password="pw",
+            is_staff=True,
         )
         cls.linked = User.objects.create_user(
-            email='ada@example.com', password='pw',
-            slack_user_id='U01ADA123',
+            email="ada@example.com",
+            password="pw",
+            slack_user_id="U01ADA123",
         )
         cls.unlinked = User.objects.create_user(
-            email='alan@example.com', password='pw',
+            email="alan@example.com",
+            password="pw",
         )
 
     def setUp(self):
-        self.client.login(email='staff@test.com', password='pw')
+        self.client.login(email="staff@test.com", password="pw")
         self._reset_team_id()
 
     def _tr_attrs(self, html, user_pk):
         match = re.search(
-            r'<tr([^>]*data-testid="user-row-' + str(user_pk)
-            + r'"[^>]*)>',
+            r'<tr([^>]*data-testid="user-row-' + str(user_pk) + r'"[^>]*)>',
             html,
         )
         self.assertIsNotNone(
@@ -402,21 +415,21 @@ class StudioUserListSlackRowTooltipTest(_SlackTeamIdSettingMixin, TestCase):
         return match.group(1)
 
     def test_slack_id_present_in_row_tooltip_when_set(self):
-        response = self.client.get('/studio/users/?q=ada@example.com')
+        response = self.client.get("/studio/users/?q=ada@example.com")
         attrs = self._tr_attrs(response.content.decode(), self.linked.pk)
-        self.assertIn('Slack ID: U01ADA123', attrs)
+        self.assertIn("Slack ID: U01ADA123", attrs)
 
     def test_slack_id_omitted_from_row_tooltip_when_user_has_none(self):
-        response = self.client.get('/studio/users/?q=alan@example.com')
+        response = self.client.get("/studio/users/?q=alan@example.com")
         attrs = self._tr_attrs(response.content.decode(), self.unlinked.pk)
-        self.assertNotIn('Slack ID:', attrs)
+        self.assertNotIn("Slack ID:", attrs)
 
     def test_per_row_slack_pill_and_anchor_are_removed_from_listing(self):
         # Issue #451 regression guard: the inline Slack pill and the
         # optional anchor wrapper both disappear from the row. The
         # workspace deep-link lives on the user detail page now.
-        self._set_team_id('T01TEAM123')
-        response = self.client.get('/studio/users/?q=ada@example.com')
+        self._set_team_id("T01TEAM123")
+        response = self.client.get("/studio/users/?q=ada@example.com")
         row_html = _row_html(response.content.decode(), self.linked.pk)
         self.assertNotIn('data-testid="slack-status"', row_html)
         self.assertNotIn('data-testid="slack-profile-link"', row_html)
@@ -428,11 +441,13 @@ class StudioSlackTeamIdSettingsSaveTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(
-            email='staff@test.com', password='pw', is_staff=True,
+            email="staff@test.com",
+            password="pw",
+            is_staff=True,
         )
 
     def setUp(self):
-        self.client.login(email='staff@test.com', password='pw')
+        self.client.login(email="staff@test.com", password="pw")
         IntegrationSetting.objects.filter(key=SETTINGS_KEY).delete()
         clear_config_cache()
         self.addCleanup(clear_config_cache)
@@ -444,43 +459,43 @@ class StudioSlackTeamIdSettingsSaveTest(TestCase):
         # POST has to include all of them (empty values are fine; the view
         # treats them as "delete").
         post_data = {
-            'SLACK_ENABLED': 'false',
-            'SLACK_ENVIRONMENT': '',
-            'SLACK_BOT_TOKEN': '',
-            'SLACK_COMMUNITY_CHANNEL_IDS': '',
-            'SLACK_ANNOUNCEMENTS_CHANNEL_ID': '',
-            'SLACK_DEV_COMMUNITY_CHANNEL_IDS': '',
-            'SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID': '',
-            'SLACK_TEST_COMMUNITY_CHANNEL_IDS': '',
-            'SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID': '',
-            'SLACK_INVITE_URL': '',
-            'SLACK_TEAM_ID': 'T01NEWTEAM',
+            "SLACK_ENABLED": "false",
+            "SLACK_ENVIRONMENT": "",
+            "SLACK_BOT_TOKEN": "",
+            "SLACK_COMMUNITY_CHANNEL_IDS": "",
+            "SLACK_ANNOUNCEMENTS_CHANNEL_ID": "",
+            "SLACK_DEV_COMMUNITY_CHANNEL_IDS": "",
+            "SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID": "",
+            "SLACK_TEST_COMMUNITY_CHANNEL_IDS": "",
+            "SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID": "",
+            "SLACK_INVITE_URL": "",
+            "SLACK_TEAM_ID": "T01NEWTEAM",
         }
-        response = self.client.post('/studio/settings/slack/save/', post_data)
+        response = self.client.post("/studio/settings/slack/save/", post_data)
         self.assertEqual(response.status_code, 302)
 
-        row = IntegrationSetting.objects.get(key=SETTINGS_KEY)
-        self.assertEqual(row.value, 'T01NEWTEAM')
-        self.assertFalse(row.is_secret)
-        self.assertEqual(row.group, 'slack')
-        self.assertEqual(get_config(SETTINGS_KEY), 'T01NEWTEAM')
+        # The row now lives in the package config store (encrypted because
+        # SLACK_BOT_TOKEN is a declared secret in the same save); the
+        # donor-shaped value comes back through the shim read.
+        self.assertTrue(
+            Setting.objects.filter(key=SETTINGS_KEY).exists(),
+        )
+        self.assertEqual(get_config(SETTINGS_KEY), "T01NEWTEAM")
 
     def test_registry_includes_slack_team_id_in_slack_group(self):
         # The settings dashboard pulls fields from INTEGRATION_GROUPS, so
         # the key being registered there is what makes it render.
         from integrations.settings_registry import get_group_by_name
 
-        slack_group = get_group_by_name('slack')
+        slack_group = get_group_by_name("slack")
         self.assertIsNotNone(slack_group)
-        keys = [k['key'] for k in slack_group['keys']]
-        self.assertIn('SLACK_TEAM_ID', keys)
-        team_id_entry = next(
-            k for k in slack_group['keys'] if k['key'] == 'SLACK_TEAM_ID'
-        )
+        keys = [k["key"] for k in slack_group["keys"]]
+        self.assertIn("SLACK_TEAM_ID", keys)
+        team_id_entry = next(k for k in slack_group["keys"] if k["key"] == "SLACK_TEAM_ID")
         # Non-secret so the value renders inline (not masked).
-        self.assertFalse(team_id_entry.get('is_secret', False))
+        self.assertFalse(team_id_entry.get("is_secret", False))
         # Descriptive copy is in place.
         self.assertTrue(
-            team_id_entry.get('description', '').strip(),
-            'SLACK_TEAM_ID must carry a non-empty description.',
+            team_id_entry.get("description", "").strip(),
+            "SLACK_TEAM_ID must carry a non-empty description.",
         )

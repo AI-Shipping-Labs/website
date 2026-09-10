@@ -20,17 +20,17 @@ clear the corresponding ``os.environ`` entry in ``setUp`` so the dev shell's
 import os
 import re
 
+from community_base.config.models import Setting
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
-from integrations.config import clear_config_cache, get_config
-from integrations.models import IntegrationSetting
+from integrations.config import clear_config_cache, get_config, set_package_override
 
 User = get_user_model()
 
 ENV_KEYS_UNDER_TEST = (
-    'STRIPE_CUSTOMER_PORTAL_URL',
-    'STRIPE_SECRET_KEY',
+    "STRIPE_CUSTOMER_PORTAL_URL",
+    "STRIPE_SECRET_KEY",
 )
 
 
@@ -55,11 +55,13 @@ class SettingsSourceBadgeTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff_user = User.objects.create_user(
-            email='admin@test.com', password='testpass', is_staff=True,
+            email="admin@test.com",
+            password="testpass",
+            is_staff=True,
         )
 
     def setUp(self):
-        self.client.login(email='admin@test.com', password='testpass')
+        self.client.login(email="admin@test.com", password="testpass")
         clear_config_cache()
         self.addCleanup(clear_config_cache)
         # Pop any pre-existing values so the test starts from a known state.
@@ -76,147 +78,135 @@ class SettingsSourceBadgeTest(TestCase):
         """
         pattern = (
             r'<div[^>]*data-field-key="' + re.escape(key) + r'"[^>]*>'
-            r'(.*?)'
+            r"(.*?)"
             r'(?=<div[^>]*data-field-key=|<div class="mt-6 flex justify-end")'
         )
         match = re.search(pattern, body, re.DOTALL)
-        self.assertIsNotNone(match, f'Field block for {key} not found in dashboard HTML')
+        self.assertIsNotNone(match, f"Field block for {key} not found in dashboard HTML")
         return match.group(0)
 
     def test_env_only_shows_env_badge_no_clear_no_hint(self):
         """Field with only env value: blue env badge, no Clear button, no hint."""
-        os.environ['STRIPE_CUSTOMER_PORTAL_URL'] = 'https://billing.example.test/env-only'
+        os.environ["STRIPE_CUSTOMER_PORTAL_URL"] = "https://billing.example.test/env-only"
 
-        response = self.client.get('/studio/settings/')
+        response = self.client.get("/studio/settings/")
         self.assertEqual(response.status_code, 200)
-        block = self._field_html(response.content.decode(), 'STRIPE_CUSTOMER_PORTAL_URL')
+        block = self._field_html(response.content.decode(), "STRIPE_CUSTOMER_PORTAL_URL")
 
         self.assertIn('data-source-badge="env"', block)
-        self.assertIn('Source: env', block)
+        self.assertIn("Source: env", block)
         self.assertNotIn('data-clear-override="STRIPE_CUSTOMER_PORTAL_URL"', block)
-        self.assertNotIn('data-env-hint=', block)
+        self.assertNotIn("data-env-hint=", block)
 
     def test_db_override_with_env_shows_db_badge_clear_and_hint(self):
         """Field with DB override + env: amber DB badge, Clear button, hint shows env value."""
-        IntegrationSetting.objects.create(
-            key='STRIPE_CUSTOMER_PORTAL_URL', value='https://billing.example.test/db-override',
-            is_secret=False, group='stripe',
-        )
-        os.environ['STRIPE_CUSTOMER_PORTAL_URL'] = 'https://billing.example.test/env-value'
+        set_package_override("STRIPE_CUSTOMER_PORTAL_URL", "https://billing.example.test/db-override", actor_ref="test")
+        os.environ["STRIPE_CUSTOMER_PORTAL_URL"] = "https://billing.example.test/env-value"
 
-        response = self.client.get('/studio/settings/')
-        block = self._field_html(response.content.decode(), 'STRIPE_CUSTOMER_PORTAL_URL')
+        response = self.client.get("/studio/settings/")
+        block = self._field_html(response.content.decode(), "STRIPE_CUSTOMER_PORTAL_URL")
 
         self.assertIn('data-source-badge="db"', block)
-        self.assertIn('Source: DB override', block)
+        self.assertIn("Source: DB override", block)
         self.assertIn('data-clear-override="STRIPE_CUSTOMER_PORTAL_URL"', block)
         # Hint is the present-env variant and contains the raw env value
         # (this field is not a secret).
         self.assertIn('data-env-hint="present"', block)
-        self.assertIn('https://billing.example.test/env-value', block)
-        self.assertIn('would apply if override cleared', block)
+        self.assertIn("https://billing.example.test/env-value", block)
+        self.assertIn("would apply if override cleared", block)
 
     def test_db_override_without_env_shows_no_env_hint(self):
         """DB override + no env: amber badge, Clear button, "no env value" hint."""
-        IntegrationSetting.objects.create(
-            key='STRIPE_CUSTOMER_PORTAL_URL', value='https://billing.example.test/db-only',
-            is_secret=False, group='stripe',
-        )
+        set_package_override("STRIPE_CUSTOMER_PORTAL_URL", "https://billing.example.test/db-only", actor_ref="test")
         # setUp already popped STRIPE_CUSTOMER_PORTAL_URL from os.environ.
 
-        response = self.client.get('/studio/settings/')
-        block = self._field_html(response.content.decode(), 'STRIPE_CUSTOMER_PORTAL_URL')
+        response = self.client.get("/studio/settings/")
+        block = self._field_html(response.content.decode(), "STRIPE_CUSTOMER_PORTAL_URL")
 
         self.assertIn('data-source-badge="db"', block)
         self.assertIn('data-clear-override="STRIPE_CUSTOMER_PORTAL_URL"', block)
         self.assertIn('data-env-hint="absent"', block)
-        self.assertIn('No env value set', block)
+        self.assertIn("No env value set", block)
 
     def test_not_set_shows_grey_badge_no_clear_no_hint(self):
         """Field with neither DB nor env: grey "not set" badge."""
         # setUp already popped STRIPE_CUSTOMER_PORTAL_URL.
 
-        response = self.client.get('/studio/settings/')
-        block = self._field_html(response.content.decode(), 'STRIPE_CUSTOMER_PORTAL_URL')
+        response = self.client.get("/studio/settings/")
+        block = self._field_html(response.content.decode(), "STRIPE_CUSTOMER_PORTAL_URL")
 
         self.assertIn('data-source-badge="none"', block)
-        self.assertIn('Source: not set', block)
+        self.assertIn("Source: not set", block)
         self.assertNotIn('data-clear-override="STRIPE_CUSTOMER_PORTAL_URL"', block)
-        self.assertNotIn('data-env-hint=', block)
+        self.assertNotIn("data-env-hint=", block)
 
     def test_secret_field_redacts_env_value_in_hint(self):
         """Secret field with DB override + env: hint redacts to fixed-length stars."""
-        IntegrationSetting.objects.create(
-            key='STRIPE_SECRET_KEY', value='sk_live_db_override',
-            is_secret=True, group='stripe',
-        )
+        set_package_override("STRIPE_SECRET_KEY", "sk_live_db_override", actor_ref="test")
         # Use a recognisable env value so we can assert it does NOT leak.
-        os.environ['STRIPE_SECRET_KEY'] = 'sk_live_env_supersecretvalue123'
+        os.environ["STRIPE_SECRET_KEY"] = "sk_live_env_supersecretvalue123"
 
-        response = self.client.get('/studio/settings/')
-        block = self._field_html(response.content.decode(), 'STRIPE_SECRET_KEY')
+        response = self.client.get("/studio/settings/")
+        block = self._field_html(response.content.decode(), "STRIPE_SECRET_KEY")
 
         self.assertIn('data-env-hint="present"', block)
         # 12 fixed stars — never the raw env value, never length-leaking.
-        self.assertIn('************', block)
-        self.assertNotIn('sk_live_env_supersecretvalue123', block)
+        self.assertIn("************", block)
+        self.assertNotIn("sk_live_env_supersecretvalue123", block)
 
     def test_post_empty_value_deletes_db_override(self):
         """POST with empty value for a DB-override key deletes the row."""
-        IntegrationSetting.objects.create(
-            key='STRIPE_CUSTOMER_PORTAL_URL', value='https://billing.example.test/db-override',
-            is_secret=False, group='stripe',
-        )
+        set_package_override("STRIPE_CUSTOMER_PORTAL_URL", "https://billing.example.test/db-override", actor_ref="test")
         # Other Stripe keys are non-empty so they don't get incidentally cleared.
         post_data = {
-            'STRIPE_SECRET_KEY': 'sk_keep',
-            'STRIPE_WEBHOOK_SECRET': 'whsec_keep',
-            'STRIPE_CUSTOMER_PORTAL_URL': '',  # the one we are clearing
+            "STRIPE_SECRET_KEY": "sk_keep",
+            "STRIPE_WEBHOOK_SECRET": "whsec_keep",
+            "STRIPE_CUSTOMER_PORTAL_URL": "",  # the one we are clearing
         }
-        response = self.client.post('/studio/settings/stripe/save/', post_data)
+        response = self.client.post("/studio/settings/stripe/save/", post_data)
         self.assertEqual(response.status_code, 302)
         # Row was deleted.
         self.assertFalse(
-            IntegrationSetting.objects.filter(key='STRIPE_CUSTOMER_PORTAL_URL').exists(),
+            Setting.objects.filter(key="STRIPE_CUSTOMER_PORTAL_URL").exists(),
         )
         # Sibling rows we set are still present.
         self.assertEqual(
-            IntegrationSetting.objects.get(key='STRIPE_SECRET_KEY').value,
-            'sk_keep',
+            get_config("STRIPE_SECRET_KEY"),
+            "sk_keep",
         )
 
     def test_clear_override_then_get_shows_env_badge(self):
         """After clearing a DB override, the next GET shows the env badge."""
-        IntegrationSetting.objects.create(
-            key='STRIPE_CUSTOMER_PORTAL_URL', value='https://billing.example.test/db-override',
-            is_secret=False, group='stripe',
-        )
-        os.environ['STRIPE_CUSTOMER_PORTAL_URL'] = 'https://billing.example.test/env-value'
+        set_package_override("STRIPE_CUSTOMER_PORTAL_URL", "https://billing.example.test/db-override", actor_ref="test")
+        os.environ["STRIPE_CUSTOMER_PORTAL_URL"] = "https://billing.example.test/env-value"
 
         # Clear via empty-value POST.
-        self.client.post('/studio/settings/stripe/save/', {
-            'STRIPE_SECRET_KEY': '',
-            'STRIPE_WEBHOOK_SECRET': '',
-            'STRIPE_CUSTOMER_PORTAL_URL': '',
-        })
+        self.client.post(
+            "/studio/settings/stripe/save/",
+            {
+                "STRIPE_SECRET_KEY": "",
+                "STRIPE_WEBHOOK_SECRET": "",
+                "STRIPE_CUSTOMER_PORTAL_URL": "",
+            },
+        )
         # Next GET shows env badge for the cleared key.
-        response = self.client.get('/studio/settings/')
-        block = self._field_html(response.content.decode(), 'STRIPE_CUSTOMER_PORTAL_URL')
+        response = self.client.get("/studio/settings/")
+        block = self._field_html(response.content.decode(), "STRIPE_CUSTOMER_PORTAL_URL")
         self.assertIn('data-source-badge="env"', block)
         self.assertNotIn('data-clear-override="STRIPE_CUSTOMER_PORTAL_URL"', block)
 
     def test_post_empty_for_unset_key_is_noop(self):
         """Saving empty for a key with no existing row doesn't error or create one."""
         post_data = {
-            'STRIPE_SECRET_KEY': '',
-            'STRIPE_WEBHOOK_SECRET': '',
-            'STRIPE_CUSTOMER_PORTAL_URL': '',
+            "STRIPE_SECRET_KEY": "",
+            "STRIPE_WEBHOOK_SECRET": "",
+            "STRIPE_CUSTOMER_PORTAL_URL": "",
         }
-        response = self.client.post('/studio/settings/stripe/save/', post_data)
+        response = self.client.post("/studio/settings/stripe/save/", post_data)
         self.assertEqual(response.status_code, 302)
         # No row should exist for any of these keys.
-        for key in ['STRIPE_SECRET_KEY', 'STRIPE_CUSTOMER_PORTAL_URL']:
-            self.assertFalse(IntegrationSetting.objects.filter(key=key).exists())
+        for key in ["STRIPE_SECRET_KEY", "STRIPE_CUSTOMER_PORTAL_URL"]:
+            self.assertFalse(Setting.objects.filter(key=key).exists())
 
 
 class SettingsTemplateCommentLeakageTest(TestCase):
@@ -232,21 +222,23 @@ class SettingsTemplateCommentLeakageTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff_user = User.objects.create_user(
-            email='admin@test.com', password='testpass', is_staff=True,
+            email="admin@test.com",
+            password="testpass",
+            is_staff=True,
         )
 
     def setUp(self):
-        self.client.login(email='admin@test.com', password='testpass')
+        self.client.login(email="admin@test.com", password="testpass")
 
     def test_no_django_comment_fragments_leak_into_rendered_settings(self):
-        response = self.client.get('/studio/settings/')
+        response = self.client.get("/studio/settings/")
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
-        self.assertNotIn('{#', body)
-        self.assertNotIn('{# Clear-override', body)
+        self.assertNotIn("{#", body)
+        self.assertNotIn("{# Clear-override", body)
 
 
-@override_settings(STRIPE_CUSTOMER_PORTAL_URL='https://billing.example.test/env-underneath')
+@override_settings(STRIPE_CUSTOMER_PORTAL_URL="https://billing.example.test/env-underneath")
 class SettingsClearOverrideRuntimeIntegrationTest(TestCase):
     """End-to-end: clearing a DB override actually changes what runtime reads.
 
@@ -258,38 +250,40 @@ class SettingsClearOverrideRuntimeIntegrationTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff_user = User.objects.create_user(
-            email='admin@test.com', password='testpass', is_staff=True,
+            email="admin@test.com",
+            password="testpass",
+            is_staff=True,
         )
 
     def setUp(self):
-        self.client.login(email='admin@test.com', password='testpass')
+        self.client.login(email="admin@test.com", password="testpass")
         clear_config_cache()
         self.addCleanup(clear_config_cache)
 
     def test_clearing_db_override_makes_runtime_read_env(self):
         """get_config reads env value after the DB override row is deleted."""
-        IntegrationSetting.objects.create(
-            key='STRIPE_CUSTOMER_PORTAL_URL', value='https://billing.example.test/db-winning',
-            is_secret=False, group='stripe',
-        )
+        set_package_override("STRIPE_CUSTOMER_PORTAL_URL", "https://billing.example.test/db-winning", actor_ref="test")
 
         clear_config_cache()
         # Before clear: DB value wins.
         self.assertEqual(
-            get_config('STRIPE_CUSTOMER_PORTAL_URL'),
-            'https://billing.example.test/db-winning',
+            get_config("STRIPE_CUSTOMER_PORTAL_URL"),
+            "https://billing.example.test/db-winning",
         )
 
         # Submit empty-value save → row deleted, cache cleared by the view.
-        self.client.post('/studio/settings/stripe/save/', {
-            'STRIPE_SECRET_KEY': '',
-            'STRIPE_WEBHOOK_SECRET': '',
-            'STRIPE_CUSTOMER_PORTAL_URL': '',
-        })
+        self.client.post(
+            "/studio/settings/stripe/save/",
+            {
+                "STRIPE_SECRET_KEY": "",
+                "STRIPE_WEBHOOK_SECRET": "",
+                "STRIPE_CUSTOMER_PORTAL_URL": "",
+            },
+        )
 
         # After clear: runtime falls back to the Django-settings value
         # (which @override_settings has pinned to the env-equivalent).
         self.assertEqual(
-            get_config('STRIPE_CUSTOMER_PORTAL_URL'),
-            'https://billing.example.test/env-underneath',
+            get_config("STRIPE_CUSTOMER_PORTAL_URL"),
+            "https://billing.example.test/env-underneath",
         )

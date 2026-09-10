@@ -10,7 +10,7 @@ Single endpoint, ``/api/integrations/settings``, that surfaces the
   value of any setting — operators learn which keys are set and where
   the value resolves from, without exposing the value itself.
 - ``POST`` (issue #633) mutates rows in
-  ``integrations.models.IntegrationSetting`` for keys in the same
+  the package config store (``cb_config.Setting``) for keys in the same
   allowlist. The response NEVER echoes stored or submitted values, key
   names, or the literal substring ``"value"``.
 
@@ -34,6 +34,7 @@ through this endpoint like every other registered key.
 
 import json
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -42,15 +43,13 @@ from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import require_methods
-from integrations.config import clear_config_cache, resolve_source
-from integrations.models import IntegrationSetting
+from integrations.config import (
+    clear_config_cache,
+    delete_package_override,
+    resolve_source,
+    set_package_override,
+)
 from integrations.settings_registry import INTEGRATION_GROUPS
-
-
-def _column_safe_description(description):
-    """Return a description that fits ``IntegrationSetting.description``."""
-    max_len = IntegrationSetting._meta.get_field("description").max_length
-    return (description or "")[:max_len]
 
 
 def _build_registry_index():
@@ -63,10 +62,10 @@ def _build_registry_index():
     """
     index = {}
     for group in INTEGRATION_GROUPS:
-        for key_def in group['keys']:
-            index[key_def['key']] = {
-                'key_def': key_def,
-                'group': group['name'],
+        for key_def in group["keys"]:
+            index[key_def["key"]] = {
+                "key_def": key_def,
+                "group": group["name"],
             }
     return index
 
@@ -83,13 +82,13 @@ def _coerce_boolean_value(raw_value):
     can't be coerced.
     """
     if isinstance(raw_value, bool):
-        return ('true' if raw_value else 'false'), True
+        return ("true" if raw_value else "false"), True
     if isinstance(raw_value, str):
         normalised = raw_value.strip().lower()
-        if normalised == 'true':
-            return 'true', True
-        if normalised == 'false':
-            return 'false', True
+        if normalised == "true":
+            return "true", True
+        if normalised == "false":
+            return "false", True
     return None, False
 
 
@@ -102,7 +101,7 @@ def _coerce_boolean_value(raw_value):
     description=(
         "GET lists registered keys plus metadata + a ``source`` enum "
         "indicating WHERE the value resolves from; the value itself is "
-        "NEVER returned. POST writes ``IntegrationSetting`` rows for "
+        "NEVER returned. POST writes package config overrides for "
         "keys in the registry. Both responses are scrubbed of any "
         "stored or submitted secret value."
     ),
@@ -188,9 +187,7 @@ def _coerce_boolean_value(raw_value):
                     },
                 },
                 400: {
-                    "description": (
-                        "Malformed body, invalid key, or invalid value."
-                    ),
+                    "description": ("Malformed body, invalid key, or invalid value."),
                     "example": {
                         "error": "One or more keys are not in the integration registry",
                         "code": "invalid_key",
@@ -246,29 +243,31 @@ def _integration_settings_list(request):
     """
     entries = []
     for group in INTEGRATION_GROUPS:
-        group_name = group['name']
-        group_label = group['label']
-        for key_def in group['keys']:
-            key = key_def['key']
-            registry_default = key_def.get('default', '')
+        group_name = group["name"]
+        group_label = group["label"]
+        for key_def in group["keys"]:
+            key = key_def["key"]
+            registry_default = key_def.get("default", "")
             source = resolve_source(key, registry_default=registry_default)
-            entries.append({
-                'key': key,
-                'group': group_name,
-                'label': group_label,
-                'description': key_def.get('description', ''),
-                'is_secret': key_def.get('is_secret', False),
-                'is_boolean': key_def.get('is_boolean', False),
-                'requires_restart': key_def.get('requires_restart', False),
-                'configured': source is not None,
-                'source': source,
-                'docs_url': key_def.get('docs_url', ''),
-            })
-    return JsonResponse({'settings': entries})
+            entries.append(
+                {
+                    "key": key,
+                    "group": group_name,
+                    "label": group_label,
+                    "description": key_def.get("description", ""),
+                    "is_secret": key_def.get("is_secret", False),
+                    "is_boolean": key_def.get("is_boolean", False),
+                    "requires_restart": key_def.get("requires_restart", False),
+                    "configured": source is not None,
+                    "source": source,
+                    "docs_url": key_def.get("docs_url", ""),
+                }
+            )
+    return JsonResponse({"settings": entries})
 
 
 def _integration_settings_set(request):
-    """Write-only batch update of ``IntegrationSetting`` rows.
+    """Write-only batch update of package config override rows.
 
     Request body shape::
 
@@ -348,19 +347,21 @@ def _integration_settings_set(request):
             invalid_keys.append(key)
             continue
 
-        key_def = registry[key]['key_def']
-        group_name = registry[key]['group']
-        is_boolean = key_def.get('is_boolean', False)
+        key_def = registry[key]["key_def"]
+        group_name = registry[key]["group"]
+        is_boolean = key_def.get("is_boolean", False)
 
         if is_boolean:
-            if raw_value == '':
-                normalised.append({
-                    'key': key,
-                    'stored_value': '',
-                    'clear_override': True,
-                    'key_def': key_def,
-                    'group': group_name,
-                })
+            if raw_value == "":
+                normalised.append(
+                    {
+                        "key": key,
+                        "stored_value": "",
+                        "clear_override": True,
+                        "key_def": key_def,
+                        "group": group_name,
+                    }
+                )
                 continue
             coerced, ok = _coerce_boolean_value(raw_value)
             if not ok:
@@ -372,29 +373,33 @@ def _integration_settings_set(request):
                     "invalid_value",
                     details={"key": key},
                 )
-            normalised.append({
-                'key': key,
-                'stored_value': coerced,
-                'clear_override': False,
-                'key_def': key_def,
-                'group': group_name,
-            })
+            normalised.append(
+                {
+                    "key": key,
+                    "stored_value": coerced,
+                    "clear_override": False,
+                    "key_def": key_def,
+                    "group": group_name,
+                }
+            )
         else:
             if raw_value is None:
-                raw_value = ''
+                raw_value = ""
             if not isinstance(raw_value, str):
                 return error_response(
                     "Value must be a string or null",
                     "invalid_value",
                     details={"key": key},
                 )
-            normalised.append({
-                'key': key,
-                'stored_value': raw_value,
-                'clear_override': raw_value == '',
-                'key_def': key_def,
-                'group': group_name,
-            })
+            normalised.append(
+                {
+                    "key": key,
+                    "stored_value": raw_value,
+                    "clear_override": raw_value == "",
+                    "key_def": key_def,
+                    "group": group_name,
+                }
+            )
 
     if invalid_keys:
         return error_response(
@@ -403,10 +408,7 @@ def _integration_settings_set(request):
             details={"invalid_keys": invalid_keys},
         )
 
-    restart_required = any(
-        item['key_def'].get('requires_restart', False)
-        for item in normalised
-    )
+    restart_required = any(item["key_def"].get("requires_restart", False) for item in normalised)
 
     # Phase 2: apply all writes inside a transaction. Studio uses the
     # same update_or_create / delete-on-empty-string pattern; we mirror
@@ -414,33 +416,40 @@ def _integration_settings_set(request):
     updated = 0
     with transaction.atomic():
         for item in normalised:
-            key = item['key']
-            stored_value = item['stored_value']
-            key_def = item['key_def']
-            group_name = item['group']
-            if item['clear_override']:
-                # Empty-string clears the override row for any registered key.
-                deleted, _ = IntegrationSetting.objects.filter(key=key).delete()
-                if deleted:
+            key = item["key"]
+            stored_value = item["stored_value"]
+            key_def = item["key_def"]
+            group_name = item["group"]
+            # D1.2c step-5 cutover: overrides persist in the package
+            # config store through the package service (encrypted secrets,
+            # audit row). Empty-string still clears the override for any
+            # registered key; a value the package refuses is reported as
+            # invalid_value instead of being stored.
+            if item["clear_override"] or stored_value == "":
+                if delete_package_override(key):
                     updated += 1
                 continue
-            IntegrationSetting.objects.update_or_create(
-                key=key,
-                defaults={
-                    'value': stored_value,
-                    'is_secret': key_def.get('is_secret', False),
-                    'group': group_name,
-                    'description': _column_safe_description(
-                        key_def.get('description', ''),
-                    ),
-                },
-            )
+            try:
+                set_package_override(
+                    key,
+                    stored_value,
+                    actor_ref="management-api:integration-settings",
+                    reason="Bulk update via the operator API",
+                )
+            except ValidationError:
+                return error_response(
+                    f"{key} does not hold a valid value for its type",
+                    "invalid_value",
+                    details={"invalid_keys": [key]},
+                )
             updated += 1
 
     clear_config_cache()
 
-    return JsonResponse({
-        "status": "ok",
-        "updated": updated,
-        "restart_required": restart_required,
-    })
+    return JsonResponse(
+        {
+            "status": "ok",
+            "updated": updated,
+            "restart_required": restart_required,
+        }
+    )

@@ -4,6 +4,7 @@ import os
 from unittest.mock import patch
 
 from allauth.socialaccount.models import SocialApp
+from community_base.config.models import Setting
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import OperationalError
@@ -14,7 +15,11 @@ from email_app.services.email_classification import (
     EMAIL_KIND_TRANSACTIONAL,
     get_sender_for_kind,
 )
-from integrations.config import clear_config_cache, get_config
+from integrations.config import (
+    clear_config_cache,
+    get_config,
+    set_package_override,
+)
 from integrations.models import IntegrationSetting
 from integrations.settings_registry import INTEGRATION_GROUPS
 
@@ -33,97 +38,103 @@ class GetConfigTest(TestCase):
 
     def test_returns_db_value_over_env_var(self):
         IntegrationSetting.objects.create(
-            key='TEST_KEY', value='from_db', group='test',
+            key="TEST_KEY",
+            value="from_db",
+            group="test",
         )
-        with patch.dict(os.environ, {'TEST_KEY': 'from_env'}):
-            result = get_config('TEST_KEY')
-        self.assertEqual(result, 'from_db')
+        with patch.dict(os.environ, {"TEST_KEY": "from_env"}):
+            result = get_config("TEST_KEY")
+        self.assertEqual(result, "from_db")
 
     def test_falls_back_to_env_when_db_empty(self):
-        with patch.dict(os.environ, {'TEST_KEY': 'from_env'}):
-            result = get_config('TEST_KEY')
-        self.assertEqual(result, 'from_env')
+        with patch.dict(os.environ, {"TEST_KEY": "from_env"}):
+            result = get_config("TEST_KEY")
+        self.assertEqual(result, "from_env")
 
     def test_falls_back_to_default_when_nothing_set(self):
-        result = get_config('NONEXISTENT_KEY', 'my_default')
-        self.assertEqual(result, 'my_default')
+        result = get_config("NONEXISTENT_KEY", "my_default")
+        self.assertEqual(result, "my_default")
 
     def test_empty_db_value_falls_back_to_env(self):
         IntegrationSetting.objects.create(
-            key='TEST_KEY', value='', group='test',
+            key="TEST_KEY",
+            value="",
+            group="test",
         )
-        with patch.dict(os.environ, {'TEST_KEY': 'from_env'}):
-            result = get_config('TEST_KEY')
-        self.assertEqual(result, 'from_env')
+        with patch.dict(os.environ, {"TEST_KEY": "from_env"}):
+            result = get_config("TEST_KEY")
+        self.assertEqual(result, "from_env")
 
     def test_clear_cache_causes_reload(self):
-        with patch.dict(os.environ, {'TEST_KEY': 'env_val'}):
-            result1 = get_config('TEST_KEY')
-            self.assertEqual(result1, 'env_val')
+        with patch.dict(os.environ, {"TEST_KEY": "env_val"}):
+            result1 = get_config("TEST_KEY")
+            self.assertEqual(result1, "env_val")
 
         # Add DB value and clear cache
         IntegrationSetting.objects.create(
-            key='TEST_KEY', value='db_val', group='test',
+            key="TEST_KEY",
+            value="db_val",
+            group="test",
         )
         clear_config_cache()
-        result2 = get_config('TEST_KEY')
-        self.assertEqual(result2, 'db_val')
+        result2 = get_config("TEST_KEY")
+        self.assertEqual(result2, "db_val")
 
     def test_worker_uncached_falls_back_to_env_when_db_unavailable(self):
         with (
             patch.dict(
                 os.environ,
                 {
-                    'DJANGO_QCLUSTER_PROCESS': 'true',
-                    'WORKER_DB_DOWN_KEY': 'from_env',
+                    "DJANGO_QCLUSTER_PROCESS": "true",
+                    "WORKER_DB_DOWN_KEY": "from_env",
                 },
             ),
             patch.object(
                 IntegrationSetting.objects,
-                'filter',
-                side_effect=OperationalError('DB unreachable'),
+                "filter",
+                side_effect=OperationalError("DB unreachable"),
             ),
         ):
-            with self.assertLogs('integrations.config', level='WARNING'):
-                result = get_config('WORKER_DB_DOWN_KEY', 'fallback')
+            with self.assertLogs("integrations.config", level="WARNING"):
+                result = get_config("WORKER_DB_DOWN_KEY", "fallback")
 
-        self.assertEqual(result, 'from_env')
+        self.assertEqual(result, "from_env")
 
     def test_worker_uncached_falls_back_to_default_when_db_unavailable(self):
         with (
-            patch.dict(os.environ, {'DJANGO_QCLUSTER_PROCESS': 'true'}),
+            patch.dict(os.environ, {"DJANGO_QCLUSTER_PROCESS": "true"}),
             patch.object(
                 IntegrationSetting.objects,
-                'filter',
-                side_effect=OperationalError('DB unreachable'),
+                "filter",
+                side_effect=OperationalError("DB unreachable"),
             ),
         ):
-            os.environ.pop('WORKER_DB_DOWN_DEFAULT_KEY', None)
-            with self.assertLogs('integrations.config', level='WARNING'):
-                result = get_config('WORKER_DB_DOWN_DEFAULT_KEY', 'fallback')
+            os.environ.pop("WORKER_DB_DOWN_DEFAULT_KEY", None)
+            with self.assertLogs("integrations.config", level="WARNING"):
+                result = get_config("WORKER_DB_DOWN_DEFAULT_KEY", "fallback")
 
-        self.assertEqual(result, 'fallback')
+        self.assertEqual(result, "fallback")
 
     def test_worker_uncached_does_not_swallow_programmer_errors(self):
         with (
-            patch.dict(os.environ, {'DJANGO_QCLUSTER_PROCESS': 'true'}),
+            patch.dict(os.environ, {"DJANGO_QCLUSTER_PROCESS": "true"}),
             patch.object(
                 IntegrationSetting.objects,
-                'filter',
-                side_effect=TypeError('programmer bug'),
+                "filter",
+                side_effect=TypeError("programmer bug"),
             ),
         ):
             with self.assertRaises(TypeError):
-                get_config('WORKER_PROGRAMMER_BUG_KEY', 'fallback')
+                get_config("WORKER_PROGRAMMER_BUG_KEY", "fallback")
 
     def test_populate_cache_does_not_swallow_programmer_errors(self):
         with patch.object(
             IntegrationSetting.objects,
-            'values_list',
-            side_effect=TypeError('programmer bug'),
+            "values_list",
+            side_effect=TypeError("programmer bug"),
         ):
             with self.assertRaises(TypeError):
-                get_config('PROGRAMMER_BUG_KEY', 'fallback')
+                get_config("PROGRAMMER_BUG_KEY", "fallback")
 
 
 class GetConfigSimpleTestCaseFallbackTest(SimpleTestCase):
@@ -135,18 +146,18 @@ class GetConfigSimpleTestCaseFallbackTest(SimpleTestCase):
     def tearDown(self):
         clear_config_cache()
 
-    @override_settings(SIMPLE_DB_FORBIDDEN_KEY='from_settings')
+    @override_settings(SIMPLE_DB_FORBIDDEN_KEY="from_settings")
     def test_falls_back_to_settings_when_database_access_is_forbidden(self):
-        with self.assertNoLogs('integrations.config', level='WARNING'):
-            result = get_config('SIMPLE_DB_FORBIDDEN_KEY', 'fallback')
+        with self.assertNoLogs("integrations.config", level="WARNING"):
+            result = get_config("SIMPLE_DB_FORBIDDEN_KEY", "fallback")
 
-        self.assertEqual(result, 'from_settings')
+        self.assertEqual(result, "from_settings")
 
     def test_falls_back_to_default_when_database_access_is_forbidden(self):
-        with self.assertNoLogs('integrations.config', level='WARNING'):
-            result = get_config('SIMPLE_DB_FORBIDDEN_DEFAULT_KEY', 'fallback')
+        with self.assertNoLogs("integrations.config", level="WARNING"):
+            result = get_config("SIMPLE_DB_FORBIDDEN_DEFAULT_KEY", "fallback")
 
-        self.assertEqual(result, 'fallback')
+        self.assertEqual(result, "fallback")
 
 
 class SesSenderConfigTest(TestCase):
@@ -161,39 +172,31 @@ class SesSenderConfigTest(TestCase):
     def test_default_transactional_sender(self):
         self.assertEqual(
             settings.SES_TRANSACTIONAL_FROM_EMAIL,
-            'noreply@aishippinglabs.com',
+            "noreply@aishippinglabs.com",
         )
 
     def test_default_promotional_sender(self):
         self.assertEqual(
             settings.SES_PROMOTIONAL_FROM_EMAIL,
-            'content@aishippinglabs.com',
+            "content@aishippinglabs.com",
         )
 
     def test_studio_override_wins_for_transactional_sender(self):
-        IntegrationSetting.objects.create(
-            key='SES_TRANSACTIONAL_FROM_EMAIL',
-            value='tx@example.test',
-            group='ses',
-        )
+        set_package_override("SES_TRANSACTIONAL_FROM_EMAIL", "tx@example.test", actor_ref="test")
         clear_config_cache()
 
         self.assertEqual(
             get_sender_for_kind(EMAIL_KIND_TRANSACTIONAL),
-            'tx@example.test',
+            "tx@example.test",
         )
 
     def test_studio_override_wins_for_promotional_sender(self):
-        IntegrationSetting.objects.create(
-            key='SES_PROMOTIONAL_FROM_EMAIL',
-            value='promo@example.test',
-            group='ses',
-        )
+        set_package_override("SES_PROMOTIONAL_FROM_EMAIL", "promo@example.test", actor_ref="test")
         clear_config_cache()
 
         self.assertEqual(
             get_sender_for_kind(EMAIL_KIND_PROMOTIONAL),
-            'promo@example.test',
+            "promo@example.test",
         )
 
 
@@ -203,72 +206,76 @@ class SettingsDashboardViewTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff_user = User.objects.create_user(
-            email='admin@test.com', password='testpass', is_staff=True,
+            email="admin@test.com",
+            password="testpass",
+            is_staff=True,
         )
         cls.regular_user = User.objects.create_user(
-            email='user@test.com', password='testpass', is_staff=False,
+            email="user@test.com",
+            password="testpass",
+            is_staff=False,
         )
 
     def test_requires_staff(self):
-        response = self.client.get('/studio/settings/')
+        response = self.client.get("/studio/settings/")
         # Should redirect to login
         self.assertEqual(response.status_code, 302)
-        self.assertIn('/accounts/login/', response.url)
+        self.assertIn("/accounts/login/", response.url)
 
     def test_non_staff_forbidden(self):
-        self.client.login(email='user@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
+        self.client.login(email="user@test.com", password="testpass")
+        response = self.client.get("/studio/settings/")
         self.assertEqual(response.status_code, 403)
 
     def test_staff_sees_dashboard(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
+        self.client.login(email="admin@test.com", password="testpass")
+        response = self.client.get("/studio/settings/")
         self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'studio/settings/dashboard.html')
+        self.assertTemplateUsed(response, "studio/settings/dashboard.html")
 
     def test_dashboard_shows_all_groups(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
-        groups = response.context['groups']
-        group_names = [g['name'] for g in groups]
-        self.assertIn('stripe', group_names)
-        self.assertIn('zoom', group_names)
-        self.assertIn('github', group_names)
-        self.assertIn('slack', group_names)
+        self.client.login(email="admin@test.com", password="testpass")
+        response = self.client.get("/studio/settings/")
+        groups = response.context["groups"]
+        group_names = [g["name"] for g in groups]
+        self.assertIn("stripe", group_names)
+        self.assertIn("zoom", group_names)
+        self.assertIn("github", group_names)
+        self.assertIn("slack", group_names)
 
     def test_dashboard_shows_status_not_configured(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        zoom_keys = ['ZOOM_CLIENT_ID', 'ZOOM_CLIENT_SECRET', 'ZOOM_ACCOUNT_ID', 'ZOOM_WEBHOOK_SECRET_TOKEN']
-        env_override = {k: '' for k in zoom_keys}
+        self.client.login(email="admin@test.com", password="testpass")
+        zoom_keys = ["ZOOM_CLIENT_ID", "ZOOM_CLIENT_SECRET", "ZOOM_ACCOUNT_ID", "ZOOM_WEBHOOK_SECRET_TOKEN"]
+        env_override = {k: "" for k in zoom_keys}
         with patch.dict(os.environ, env_override, clear=False):
             # Remove the keys entirely if they exist
             for k in zoom_keys:
                 os.environ.pop(k, None)
-            response = self.client.get('/studio/settings/')
-        groups = response.context['groups']
-        zoom_group = next(g for g in groups if g['name'] == 'zoom')
-        self.assertEqual(zoom_group['status'], 'not_configured')
+            response = self.client.get("/studio/settings/")
+        groups = response.context["groups"]
+        zoom_group = next(g for g in groups if g["name"] == "zoom")
+        self.assertEqual(zoom_group["status"], "not_configured")
 
     def test_dashboard_shows_status_configured(self):
-        for key in ['ZOOM_CLIENT_ID', 'ZOOM_CLIENT_SECRET', 'ZOOM_ACCOUNT_ID', 'ZOOM_WEBHOOK_SECRET_TOKEN']:
-            IntegrationSetting.objects.create(key=key, value='val', group='zoom')
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
-        groups = response.context['groups']
-        zoom_group = next(g for g in groups if g['name'] == 'zoom')
-        self.assertEqual(zoom_group['status'], 'configured')
+        for key in ["ZOOM_CLIENT_ID", "ZOOM_CLIENT_SECRET", "ZOOM_ACCOUNT_ID", "ZOOM_WEBHOOK_SECRET_TOKEN"]:
+            set_package_override(key, "val", actor_ref="test")
+        self.client.login(email="admin@test.com", password="testpass")
+        response = self.client.get("/studio/settings/")
+        groups = response.context["groups"]
+        zoom_group = next(g for g in groups if g["name"] == "zoom")
+        self.assertEqual(zoom_group["status"], "configured")
 
     def test_dashboard_shows_status_partial(self):
-        IntegrationSetting.objects.create(key='ZOOM_CLIENT_ID', value='val', group='zoom')
-        self.client.login(email='admin@test.com', password='testpass')
-        zoom_keys = ['ZOOM_CLIENT_SECRET', 'ZOOM_ACCOUNT_ID', 'ZOOM_WEBHOOK_SECRET_TOKEN']
-        with patch.dict(os.environ, {k: '' for k in zoom_keys}, clear=False):
+        set_package_override("ZOOM_CLIENT_ID", "val", actor_ref="test")
+        self.client.login(email="admin@test.com", password="testpass")
+        zoom_keys = ["ZOOM_CLIENT_SECRET", "ZOOM_ACCOUNT_ID", "ZOOM_WEBHOOK_SECRET_TOKEN"]
+        with patch.dict(os.environ, {k: "" for k in zoom_keys}, clear=False):
             for k in zoom_keys:
                 os.environ.pop(k, None)
-            response = self.client.get('/studio/settings/')
-        groups = response.context['groups']
-        zoom_group = next(g for g in groups if g['name'] == 'zoom')
-        self.assertEqual(zoom_group['status'], 'partial')
+            response = self.client.get("/studio/settings/")
+        groups = response.context["groups"]
+        zoom_group = next(g for g in groups if g["name"] == "zoom")
+        self.assertEqual(zoom_group["status"], "partial")
 
     def _group_from_settings(self, name, *, env=None):
         """Render /studio/settings/ and return the named group context.
@@ -277,168 +284,140 @@ class SettingsDashboardViewTest(TestCase):
         shell can't make an all-optional group look configured), applies
         any provided env values, then reads the group from the view.
         """
-        self.client.login(email='admin@test.com', password='testpass')
+        self.client.login(email="admin@test.com", password="testpass")
         overrides = dict(env or {})
         with patch.dict(os.environ, overrides, clear=False):
-            for key in (env or {}):
-                if env[key] == '':
+            for key in env or {}:
+                if env[key] == "":
                     os.environ.pop(key, None)
-            response = self.client.get('/studio/settings/')
-        groups = response.context['groups']
-        return next(g for g in groups if g['name'] == name)
+            response = self.client.get("/studio/settings/")
+        groups = response.context["groups"]
+        return next(g for g in groups if g["name"] == name)
 
     def test_analytics_all_optional_unset_is_not_configured(self):
         # Issue #938: an all-optional group with nothing set must not be
         # "configured" by vacuous truth (0 required keys set == 0 required).
-        analytics = self._group_from_settings(
-            'analytics', env={'GOOGLE_ANALYTICS_ID': ''}
-        )
-        self.assertEqual(analytics['status'], 'not_configured')
+        analytics = self._group_from_settings("analytics", env={"GOOGLE_ANALYTICS_ID": ""})
+        self.assertEqual(analytics["status"], "not_configured")
 
     def test_analytics_configured_when_id_set_via_db(self):
-        IntegrationSetting.objects.create(
-            key='GOOGLE_ANALYTICS_ID', value='G-ABC123XYZ', group='analytics'
-        )
-        analytics = self._group_from_settings('analytics')
-        self.assertEqual(analytics['status'], 'configured')
+        set_package_override("GOOGLE_ANALYTICS_ID", "G-ABC123XYZ", actor_ref="test")
+        analytics = self._group_from_settings("analytics")
+        self.assertEqual(analytics["status"], "configured")
 
     def test_analytics_configured_when_id_set_via_env(self):
-        analytics = self._group_from_settings(
-            'analytics', env={'GOOGLE_ANALYTICS_ID': 'G-ENVVALUE1'}
-        )
-        self.assertEqual(analytics['status'], 'configured')
+        analytics = self._group_from_settings("analytics", env={"GOOGLE_ANALYTICS_ID": "G-ENVVALUE1"})
+        self.assertEqual(analytics["status"], "configured")
 
     def test_analytics_default_only_retention_does_not_configure_group(self):
         # USER_ACTIVITY_RETENTION_DAYS resolves to its registry default
         # (365, source 'default'). A default alone must NOT mark the group
         # configured, and GA being unset keeps it not_configured.
-        analytics = self._group_from_settings(
-            'analytics', env={'GOOGLE_ANALYTICS_ID': ''}
-        )
-        retention = next(
-            f for f in analytics['fields']
-            if f['key'] == 'USER_ACTIVITY_RETENTION_DAYS'
-        )
-        self.assertEqual(retention['source'], 'default')
-        self.assertEqual(retention['current_value'], '365')
-        self.assertEqual(analytics['status'], 'not_configured')
+        analytics = self._group_from_settings("analytics", env={"GOOGLE_ANALYTICS_ID": ""})
+        retention = next(f for f in analytics["fields"] if f["key"] == "USER_ACTIVITY_RETENTION_DAYS")
+        self.assertEqual(retention["source"], "default")
+        self.assertEqual(retention["current_value"], "365")
+        self.assertEqual(analytics["status"], "not_configured")
 
     def test_all_optional_group_never_partial(self):
         # An all-optional group has total_keys == 0, so it must never emit
         # 'partial' (the template would render the nonsensical "Partial
         # (x/0)"). It is only ever configured or not_configured.
-        analytics = self._group_from_settings(
-            'analytics', env={'GOOGLE_ANALYTICS_ID': 'G-PARTIAL01'}
-        )
-        self.assertEqual(analytics['total_keys'], 0)
-        self.assertEqual(analytics['status'], 'configured')
-        self.assertNotEqual(analytics['status'], 'partial')
+        analytics = self._group_from_settings("analytics", env={"GOOGLE_ANALYTICS_ID": "G-PARTIAL01"})
+        self.assertEqual(analytics["total_keys"], 0)
+        self.assertEqual(analytics["status"], "configured")
+        self.assertNotEqual(analytics["status"], "partial")
 
     def test_calendly_all_optional_unset_is_not_configured(self):
-        calendly = self._group_from_settings(
-            'calendly', env={'CALENDLY_ACCESS_TOKEN': ''}
-        )
-        self.assertEqual(calendly['total_keys'], 0)
-        self.assertEqual(calendly['status'], 'not_configured')
+        calendly = self._group_from_settings("calendly", env={"CALENDLY_ACCESS_TOKEN": ""})
+        self.assertEqual(calendly["total_keys"], 0)
+        self.assertEqual(calendly["status"], "not_configured")
 
     def test_calendly_configured_when_token_set_via_db(self):
-        IntegrationSetting.objects.create(
-            key='CALENDLY_ACCESS_TOKEN', value='cal-token', group='calendly'
-        )
-        calendly = self._group_from_settings('calendly')
-        self.assertEqual(calendly['status'], 'configured')
+        set_package_override("CALENDLY_ACCESS_TOKEN", "cal-token", actor_ref="test")
+        calendly = self._group_from_settings("calendly")
+        self.assertEqual(calendly["status"], "configured")
 
     def test_secret_fields_marked_is_secret(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
-        groups = response.context['groups']
-        zoom_group = next(g for g in groups if g['name'] == 'zoom')
-        client_id_field = next(f for f in zoom_group['fields'] if f['key'] == 'ZOOM_CLIENT_ID')
-        self.assertTrue(client_id_field['is_secret'])
+        self.client.login(email="admin@test.com", password="testpass")
+        response = self.client.get("/studio/settings/")
+        groups = response.context["groups"]
+        zoom_group = next(g for g in groups if g["name"] == "zoom")
+        client_id_field = next(f for f in zoom_group["fields"] if f["key"] == "ZOOM_CLIENT_ID")
+        self.assertTrue(client_id_field["is_secret"])
 
     def test_env_source_shown_when_value_from_env(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        with patch.dict(os.environ, {'ZOOM_CLIENT_ID': 'env_val'}):
-            response = self.client.get('/studio/settings/')
-        groups = response.context['groups']
-        zoom_group = next(g for g in groups if g['name'] == 'zoom')
-        client_id_field = next(f for f in zoom_group['fields'] if f['key'] == 'ZOOM_CLIENT_ID')
-        self.assertEqual(client_id_field['source'], 'env')
+        self.client.login(email="admin@test.com", password="testpass")
+        with patch.dict(os.environ, {"ZOOM_CLIENT_ID": "env_val"}):
+            response = self.client.get("/studio/settings/")
+        groups = response.context["groups"]
+        zoom_group = next(g for g in groups if g["name"] == "zoom")
+        client_id_field = next(f for f in zoom_group["fields"] if f["key"] == "ZOOM_CLIENT_ID")
+        self.assertEqual(client_id_field["source"], "env")
 
     def test_pem_field_marked_multiline(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
-        groups = response.context['groups']
-        github_group = next(g for g in groups if g['name'] == 'github')
-        pem_field = next(f for f in github_group['fields'] if f['key'] == 'GITHUB_APP_PRIVATE_KEY')
-        self.assertTrue(pem_field['multiline'])
+        self.client.login(email="admin@test.com", password="testpass")
+        response = self.client.get("/studio/settings/")
+        groups = response.context["groups"]
+        github_group = next(g for g in groups if g["name"] == "github")
+        pem_field = next(f for f in github_group["fields"] if f["key"] == "GITHUB_APP_PRIVATE_KEY")
+        self.assertTrue(pem_field["multiline"])
 
     def test_github_default_secret_path_counts_as_configured(self):
-        IntegrationSetting.objects.create(
-            key='GITHUB_APP_ID',
-            value='3143490',
-            group='github',
-        )
-        IntegrationSetting.objects.create(
-            key='GITHUB_APP_INSTALLATION_ID',
-            value='117839867',
-            group='github',
-        )
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
-        groups = response.context['groups']
-        github_group = next(g for g in groups if g['name'] == 'github')
-        secret_path_field = next(
-            f for f in github_group['fields']
-            if f['key'] == 'GITHUB_APP_PRIVATE_KEY_SECRET_ID'
-        )
+        set_package_override("GITHUB_APP_ID", "3143490", actor_ref="test")
+        set_package_override("GITHUB_APP_INSTALLATION_ID", "117839867", actor_ref="test")
+        self.client.login(email="admin@test.com", password="testpass")
+        response = self.client.get("/studio/settings/")
+        groups = response.context["groups"]
+        github_group = next(g for g in groups if g["name"] == "github")
+        secret_path_field = next(f for f in github_group["fields"] if f["key"] == "GITHUB_APP_PRIVATE_KEY_SECRET_ID")
 
-        self.assertEqual(github_group['status'], 'configured')
-        self.assertEqual(secret_path_field['source'], 'default')
+        self.assertEqual(github_group["status"], "configured")
+        self.assertEqual(secret_path_field["source"], "default")
         self.assertEqual(
-            secret_path_field['current_value'],
-            'ai-shipping-labs/github-app-private-key',
+            secret_path_field["current_value"],
+            "ai-shipping-labs/github-app-private-key",
         )
 
     def test_dashboard_groups_settings_into_navigation_sections(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
+        self.client.login(email="admin@test.com", password="testpass")
+        response = self.client.get("/studio/settings/")
 
-        sections = response.context['settings_sections']
-        section_ids = [section['id'] for section in sections]
+        sections = response.context["settings_sections"]
+        section_ids = [section["id"] for section in sections]
         self.assertEqual(
             section_ids,
             [
-                'auth', 'payments', 'content', 'content_tools',
-                'messaging', 'storage', 'site', 'analytics', 'ai',
-                'observability',
+                "auth",
+                "payments",
+                "content",
+                "content_tools",
+                "messaging",
+                "storage",
+                "site",
+                "analytics",
+                "ai",
+                "observability",
             ],
         )
 
-        groups_by_section = {
-            section['id']: [group['name'] for group in section['groups']]
-            for section in sections
-        }
-        self.assertEqual(groups_by_section['payments'], ['stripe'])
-        self.assertEqual(groups_by_section['content'], ['zoom', 'calendly', 'github'])
-        self.assertEqual(groups_by_section['messaging'], ['ses', 'slack', 'maven', 'triggers'])
+        groups_by_section = {section["id"]: [group["name"] for group in section["groups"]] for section in sections}
+        self.assertEqual(groups_by_section["payments"], ["stripe"])
+        self.assertEqual(groups_by_section["content"], ["zoom", "calendly", "github"])
+        self.assertEqual(groups_by_section["messaging"], ["ses", "slack", "maven", "triggers"])
         self.assertEqual(
-            groups_by_section['storage'],
-            ['s3_recordings', 's3_content', 's3_downloads'],
+            groups_by_section["storage"],
+            ["s3_recordings", "s3_content", "s3_downloads"],
         )
-        self.assertEqual(groups_by_section['site'], ['site'])
-        self.assertEqual(groups_by_section['analytics'], ['analytics'])
-        self.assertEqual(groups_by_section['ai'], ['llm'])
-        self.assertEqual(groups_by_section['observability'], ['observability'])
+        self.assertEqual(groups_by_section["site"], ["site"])
+        self.assertEqual(groups_by_section["analytics"], ["analytics"])
+        self.assertEqual(groups_by_section["ai"], ["llm"])
+        self.assertEqual(groups_by_section["observability"], ["observability"])
 
-        assigned_group_names = [
-            group['name']
-            for section in sections
-            for group in section['groups']
-        ]
+        assigned_group_names = [group["name"] for section in sections for group in section["groups"]]
         self.assertCountEqual(
             assigned_group_names,
-            [group_def['name'] for group_def in INTEGRATION_GROUPS],
+            [group_def["name"] for group_def in INTEGRATION_GROUPS],
         )
 
         body = response.content.decode()
@@ -454,29 +433,24 @@ class SettingsDashboardViewTest(TestCase):
 
     def test_dashboard_status_summary_counts_sources_and_risk_groups(self):
         SocialApp.objects.create(
-            provider='google',
-            name='Google',
-            client_id='google-client',
-            secret='google-secret',
+            provider="google",
+            name="Google",
+            client_id="google-client",
+            secret="google-secret",
         )
-        IntegrationSetting.objects.create(
-            key='STRIPE_SECRET_KEY',
-            value='sk_test',
-            is_secret=True,
-            group='stripe',
-        )
+        set_package_override("STRIPE_SECRET_KEY", "sk_test", actor_ref="test")
 
-        self.client.login(email='admin@test.com', password='testpass')
+        self.client.login(email="admin@test.com", password="testpass")
         with patch.dict(
             os.environ,
-            {'SES_TRANSACTIONAL_FROM_EMAIL': 'ops@example.test'},
+            {"SES_TRANSACTIONAL_FROM_EMAIL": "ops@example.test"},
             clear=True,
         ):
-            response = self.client.get('/studio/settings/')
+            response = self.client.get("/studio/settings/")
 
-        summary = response.context['status_summary']
-        expected_total_items = len(response.context['auth_providers']) + len(response.context['groups'])
-        self.assertEqual(summary['total_items'], expected_total_items)
+        summary = response.context["status_summary"]
+        expected_total_items = len(response.context["auth_providers"]) + len(response.context["groups"])
+        self.assertEqual(summary["total_items"], expected_total_items)
         # Google OAuth is configured here. The `triggers` group (issue
         # #1070) is also "configured": its only key TRIGGERS_ENABLED is a
         # boolean with a set default ('false') and there are no other
@@ -485,7 +459,7 @@ class SettingsDashboardViewTest(TestCase):
         # set, so after issue #938 they are `not_configured` rather than
         # "configured" by vacuous truth. A registry default alone (e.g.
         # analytics' USER_ACTIVITY_RETENTION_DAYS=365) does not count as set.
-        self.assertEqual(summary['configured_count'], 2)
+        self.assertEqual(summary["configured_count"], 2)
         # Stripe has one DB-backed key, SES has one env-backed key,
         # GitHub has the default Secrets Manager path but no App IDs,
         # LLM has provider+model defaults but no API key (issue #799),
@@ -501,49 +475,49 @@ class SettingsDashboardViewTest(TestCase):
         # has the ONBOARDING_REMINDER_ENABLED default ('true', a set value)
         # but its other required keys (SITE_BASE_URL etc.) unset here
         # (issue #1133).
-        self.assertEqual(summary['partial_count'], 10)
+        self.assertEqual(summary["partial_count"], 10)
         self.assertEqual(
-            summary['missing_count'],
-            expected_total_items - summary['configured_count'] - summary['partial_count'],
+            summary["missing_count"],
+            expected_total_items - summary["configured_count"] - summary["partial_count"],
         )
-        self.assertEqual(summary['db_override_count'], 1)
-        self.assertEqual(summary['env_backed_count'], 1)
-        self.assertGreater(summary['missing_required_values'], 0)
+        self.assertEqual(summary["db_override_count"], 1)
+        self.assertEqual(summary["env_backed_count"], 1)
+        self.assertGreater(summary["missing_required_values"], 0)
         self.assertIn(
-            {'label': 'Stripe', 'section_label': 'Payments', 'status': 'partial'},
-            summary['high_risk_items'],
+            {"label": "Stripe", "section_label": "Payments", "status": "partial"},
+            summary["high_risk_items"],
         )
         self.assertIn(
-            {'label': 'Google OAuth', 'section_label': 'Auth', 'status': 'configured'},
-            summary['high_risk_items'],
+            {"label": "Google OAuth", "section_label": "Auth", "status": "configured"},
+            summary["high_risk_items"],
         )
 
     def test_uncategorized_registry_group_appears_in_other_section(self):
-        self.client.login(email='admin@test.com', password='testpass')
+        self.client.login(email="admin@test.com", password="testpass")
         registry = [
             *INTEGRATION_GROUPS,
             {
-                'name': 'mystery',
-                'label': 'Mystery Service',
-                'keys': [
+                "name": "mystery",
+                "label": "Mystery Service",
+                "keys": [
                     {
-                        'key': 'MYSTERY_TOKEN',
-                        'is_secret': True,
-                        'description': 'Token for an unmapped integration.',
+                        "key": "MYSTERY_TOKEN",
+                        "is_secret": True,
+                        "description": "Token for an unmapped integration.",
                     },
                 ],
             },
         ]
 
-        with patch('studio.views.settings.INTEGRATION_GROUPS', registry):
-            response = self.client.get('/studio/settings/')
+        with patch("studio.views.settings.INTEGRATION_GROUPS", registry):
+            response = self.client.get("/studio/settings/")
 
-        sections = response.context['settings_sections']
-        other_section = next(section for section in sections if section['id'] == 'other')
-        self.assertEqual([group['name'] for group in other_section['groups']], ['mystery'])
+        sections = response.context["settings_sections"]
+        other_section = next(section for section in sections if section["id"] == "other")
+        self.assertEqual([group["name"] for group in other_section["groups"]], ["mystery"])
         body = response.content.decode()
         self.assertIn('href="#other"', body)
-        self.assertIn('Mystery Service', body)
+        self.assertIn("Mystery Service", body)
 
 
 class SettingsSaveGroupViewTest(TestCase):
@@ -552,7 +526,9 @@ class SettingsSaveGroupViewTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff_user = User.objects.create_user(
-            email='admin@test.com', password='testpass', is_staff=True,
+            email="admin@test.com",
+            password="testpass",
+            is_staff=True,
         )
 
     def setUp(self):
@@ -562,125 +538,142 @@ class SettingsSaveGroupViewTest(TestCase):
         clear_config_cache()
 
     def test_save_creates_settings(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.post('/studio/settings/zoom/save/', {
-            'ZOOM_CLIENT_ID': 'my_client_id',
-            'ZOOM_CLIENT_SECRET': 'my_secret',
-            'ZOOM_ACCOUNT_ID': 'my_account',
-            'ZOOM_WEBHOOK_SECRET_TOKEN': 'my_token',
-        })
+        self.client.login(email="admin@test.com", password="testpass")
+        response = self.client.post(
+            "/studio/settings/zoom/save/",
+            {
+                "ZOOM_CLIENT_ID": "my_client_id",
+                "ZOOM_CLIENT_SECRET": "my_secret",
+                "ZOOM_ACCOUNT_ID": "my_account",
+                "ZOOM_WEBHOOK_SECRET_TOKEN": "my_token",
+            },
+        )
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(
-            IntegrationSetting.objects.get(key='ZOOM_CLIENT_ID').value,
-            'my_client_id',
-        )
-        self.assertEqual(
-            IntegrationSetting.objects.get(key='ZOOM_CLIENT_SECRET').value,
-            'my_secret',
-        )
+        # The save path persists through the package service: secrets are
+        # encrypted at rest, so assert via the donor-shaped shim read.
+        self.assertEqual(get_config("ZOOM_CLIENT_ID"), "my_client_id")
+        self.assertEqual(get_config("ZOOM_CLIENT_SECRET"), "my_secret")
 
     def test_save_updates_existing_settings(self):
-        IntegrationSetting.objects.create(
-            key='ZOOM_CLIENT_ID', value='old_val', group='zoom',
+        set_package_override("ZOOM_CLIENT_ID", "old_val", actor_ref="test")
+        self.client.login(email="admin@test.com", password="testpass")
+        self.client.post(
+            "/studio/settings/zoom/save/",
+            {
+                "ZOOM_CLIENT_ID": "new_val",
+                "ZOOM_CLIENT_SECRET": "",
+                "ZOOM_ACCOUNT_ID": "",
+                "ZOOM_WEBHOOK_SECRET_TOKEN": "",
+            },
         )
-        self.client.login(email='admin@test.com', password='testpass')
-        self.client.post('/studio/settings/zoom/save/', {
-            'ZOOM_CLIENT_ID': 'new_val',
-            'ZOOM_CLIENT_SECRET': '',
-            'ZOOM_ACCOUNT_ID': '',
-            'ZOOM_WEBHOOK_SECRET_TOKEN': '',
-        })
-        setting = IntegrationSetting.objects.get(key='ZOOM_CLIENT_ID')
-        self.assertEqual(setting.value, 'new_val')
+        self.assertEqual(get_config("ZOOM_CLIENT_ID"), "new_val")
 
     def test_save_clears_config_cache(self):
         # Populate cache
-        get_config('ZOOM_CLIENT_ID', 'default')
+        get_config("ZOOM_CLIENT_ID", "default")
 
-        self.client.login(email='admin@test.com', password='testpass')
-        self.client.post('/studio/settings/zoom/save/', {
-            'ZOOM_CLIENT_ID': 'new_val',
-            'ZOOM_CLIENT_SECRET': '',
-            'ZOOM_ACCOUNT_ID': '',
-            'ZOOM_WEBHOOK_SECRET_TOKEN': '',
-        })
+        self.client.login(email="admin@test.com", password="testpass")
+        self.client.post(
+            "/studio/settings/zoom/save/",
+            {
+                "ZOOM_CLIENT_ID": "new_val",
+                "ZOOM_CLIENT_SECRET": "",
+                "ZOOM_ACCOUNT_ID": "",
+                "ZOOM_WEBHOOK_SECRET_TOKEN": "",
+            },
+        )
         # After save, cache should be cleared and new value returned
-        result = get_config('ZOOM_CLIENT_ID')
-        self.assertEqual(result, 'new_val')
+        result = get_config("ZOOM_CLIENT_ID")
+        self.assertEqual(result, "new_val")
 
     def test_save_unknown_group_returns_error(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.post('/studio/settings/nonexistent/save/', {})
+        self.client.login(email="admin@test.com", password="testpass")
+        response = self.client.post("/studio/settings/nonexistent/save/", {})
         self.assertEqual(response.status_code, 302)
 
     def test_save_requires_staff(self):
-        response = self.client.post('/studio/settings/zoom/save/', {
-            'ZOOM_CLIENT_ID': 'should_not_save',
-        })
+        response = self.client.post(
+            "/studio/settings/zoom/save/",
+            {
+                "ZOOM_CLIENT_ID": "should_not_save",
+            },
+        )
         self.assertEqual(response.status_code, 302)
-        self.assertIn('/accounts/login/', response.url)
-        self.assertEqual(IntegrationSetting.objects.count(), 0)
+        self.assertIn("/accounts/login/", response.url)
+        self.assertEqual(Setting.objects.count(), 0)
 
     def test_save_sets_group_and_metadata(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        self.client.post('/studio/settings/zoom/save/', {
-            'ZOOM_CLIENT_ID': 'val',
-            'ZOOM_CLIENT_SECRET': 'val',
-            'ZOOM_ACCOUNT_ID': 'val',
-            'ZOOM_WEBHOOK_SECRET_TOKEN': 'val',
-        })
-        setting = IntegrationSetting.objects.get(key='ZOOM_CLIENT_ID')
-        self.assertEqual(setting.group, 'zoom')
-        self.assertTrue(setting.is_secret)
-        self.assertIn('client ID', setting.description)
+        self.client.login(email="admin@test.com", password="testpass")
+        self.client.post(
+            "/studio/settings/zoom/save/",
+            {
+                "ZOOM_CLIENT_ID": "val",
+                "ZOOM_CLIENT_SECRET": "val",
+                "ZOOM_ACCOUNT_ID": "val",
+                "ZOOM_WEBHOOK_SECRET_TOKEN": "val",
+            },
+        )
+        # The package store has no group/description columns: the group is
+        # derivable from the declaration and the secret flag from it, and the
+        # change lands in the package audit trail instead.
+        setting = Setting.objects.get(key="ZOOM_CLIENT_ID")
+        from community_base.config.models import SettingChange
+
+        self.assertTrue(
+            SettingChange.objects.filter(setting_key="ZOOM_CLIENT_ID").exists(),
+        )
+        declared = INTEGRATION_GROUPS
+        zoom_keys = next(g["keys"] for g in declared if g["name"] == "zoom")
+        self.assertIn(
+            setting.key,
+            {k["key"] for k in zoom_keys},
+        )
 
     def test_invalid_staff_email_rejects_group_without_partial_writes(self):
-        IntegrationSetting.objects.create(
-            key='SITE_BASE_URL',
-            value='https://before.test',
-            group='site',
-        )
-        self.client.login(email='admin@test.com', password='testpass')
+        set_package_override("SITE_BASE_URL", "https://before.test", actor_ref="test")
+        self.client.login(email="admin@test.com", password="testpass")
 
-        response = self.client.post('/studio/settings/site/save/', {
-            'SITE_BASE_URL': 'https://after.test',
-            'STAFF_SIGNUP_NOTIFY_EMAIL': 'not-an-email',
-        })
+        response = self.client.post(
+            "/studio/settings/site/save/",
+            {
+                "SITE_BASE_URL": "https://after.test",
+                "STAFF_SIGNUP_NOTIFY_EMAIL": "not-an-email",
+            },
+        )
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
-            IntegrationSetting.objects.get(key='SITE_BASE_URL').value,
-            'https://before.test',
+            get_config("SITE_BASE_URL"),
+            "https://before.test",
         )
-        self.assertFalse(IntegrationSetting.objects.filter(
-            key='STAFF_SIGNUP_NOTIFY_EMAIL',
-        ).exists())
-        messages = [
-            str(message) for message in response.wsgi_request._messages
-        ]
-        self.assertTrue(any(
-            'No settings were saved' in message for message in messages
-        ))
+        self.assertFalse(
+            Setting.objects.filter(
+                key="STAFF_SIGNUP_NOTIFY_EMAIL",
+            ).exists()
+        )
+        messages = [str(message) for message in response.wsgi_request._messages]
+        self.assertTrue(any("No settings were saved" in message for message in messages))
 
     def test_valid_email_setting_is_trimmed_before_save(self):
-        self.client.login(email='admin@test.com', password='testpass')
+        self.client.login(email="admin@test.com", password="testpass")
 
-        response = self.client.post('/studio/settings/site/save/', {
-            'STAFF_SIGNUP_NOTIFY_EMAIL': '  team@example.com  ',
-        })
+        response = self.client.post(
+            "/studio/settings/site/save/",
+            {
+                "STAFF_SIGNUP_NOTIFY_EMAIL": "  team@example.com  ",
+            },
+        )
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
-            IntegrationSetting.objects.get(
-                key='STAFF_SIGNUP_NOTIFY_EMAIL',
-            ).value,
-            'team@example.com',
+            get_config("STAFF_SIGNUP_NOTIFY_EMAIL"),
+            "team@example.com",
         )
 
     def test_registered_email_settings_render_email_inputs(self):
-        self.client.login(email='admin@test.com', password='testpass')
+        self.client.login(email="admin@test.com", password="testpass")
 
-        response = self.client.get('/studio/settings/')
+        response = self.client.get("/studio/settings/")
 
         self.assertContains(
             response,
@@ -698,25 +691,27 @@ class SettingsDashboardAutofillSuppressionTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff_user = User.objects.create_user(
-            email='admin@test.com', password='testpass', is_staff=True,
+            email="admin@test.com",
+            password="testpass",
+            is_staff=True,
         )
 
     def setUp(self):
-        self.client.login(email='admin@test.com', password='testpass')
+        self.client.login(email="admin@test.com", password="testpass")
 
     def test_settings_page_includes_autocomplete_off(self):
         # Browser password managers treat <input type="text"> next to
         # <input type="password"> as a sign-in form unless the inputs
         # carry autocomplete="off".
-        response = self.client.get('/studio/settings/')
+        response = self.client.get("/studio/settings/")
         self.assertContains(response, 'autocomplete="off"')
 
     def test_settings_page_includes_extension_optout_attrs(self):
         # 1Password / Bitwarden / LastPass respect data-1p-ignore /
         # data-bwignore / data-lpignore even when they ignore the HTML
         # standard autocomplete attribute.
-        response = self.client.get('/studio/settings/')
-        self.assertContains(response, 'data-1p-ignore')
+        response = self.client.get("/studio/settings/")
+        self.assertContains(response, "data-1p-ignore")
 
 
 class DeadStripeSettingsRetirementTest(TestCase):
@@ -733,36 +728,38 @@ class DeadStripeSettingsRetirementTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff_user = User.objects.create_user(
-            email='admin@test.com', password='testpass', is_staff=True,
+            email="admin@test.com",
+            password="testpass",
+            is_staff=True,
         )
 
     def _stripe_group_keys(self):
         for group in INTEGRATION_GROUPS:
-            if group['name'] == 'stripe':
-                return {key_def['key'] for key_def in group['keys']}
+            if group["name"] == "stripe":
+                return {key_def["key"] for key_def in group["keys"]}
         self.fail("Stripe integration group missing from registry")
 
     def test_settings_registry_does_not_expose_stripe_checkout_enabled(self):
-        self.assertNotIn('STRIPE_CHECKOUT_ENABLED', self._stripe_group_keys())
+        self.assertNotIn("STRIPE_CHECKOUT_ENABLED", self._stripe_group_keys())
 
     def test_settings_registry_does_not_expose_stripe_publishable_key(self):
-        self.assertNotIn('STRIPE_PUBLISHABLE_KEY', self._stripe_group_keys())
+        self.assertNotIn("STRIPE_PUBLISHABLE_KEY", self._stripe_group_keys())
 
     def test_django_settings_module_does_not_define_stripe_checkout_enabled(self):
         self.assertFalse(
-            hasattr(settings, 'STRIPE_CHECKOUT_ENABLED'),
+            hasattr(settings, "STRIPE_CHECKOUT_ENABLED"),
             "STRIPE_CHECKOUT_ENABLED must not be defined on Django settings",
         )
 
     def test_django_settings_module_does_not_define_stripe_publishable_key(self):
         self.assertFalse(
-            hasattr(settings, 'STRIPE_PUBLISHABLE_KEY'),
+            hasattr(settings, "STRIPE_PUBLISHABLE_KEY"),
             "STRIPE_PUBLISHABLE_KEY must not be defined on Django settings",
         )
 
     def test_studio_settings_page_does_not_render_stripe_checkout_enabled_row(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
+        self.client.login(email="admin@test.com", password="testpass")
+        response = self.client.get("/studio/settings/")
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
         # Per-field rows carry data-field-key="<KEY>". The retired key
@@ -771,8 +768,8 @@ class DeadStripeSettingsRetirementTest(TestCase):
         self.assertNotIn('name="STRIPE_CHECKOUT_ENABLED"', body)
 
     def test_studio_settings_page_does_not_render_stripe_publishable_key_row(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
+        self.client.login(email="admin@test.com", password="testpass")
+        response = self.client.get("/studio/settings/")
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
         self.assertNotIn('data-field-key="STRIPE_PUBLISHABLE_KEY"', body)
@@ -791,27 +788,25 @@ class DeadYouTubeSettingsRetirementTest(TestCase):
     """
 
     YOUTUBE_KEYS = (
-        'YOUTUBE_CLIENT_ID',
-        'YOUTUBE_CLIENT_SECRET',
-        'YOUTUBE_REFRESH_TOKEN',
+        "YOUTUBE_CLIENT_ID",
+        "YOUTUBE_CLIENT_SECRET",
+        "YOUTUBE_REFRESH_TOKEN",
     )
 
     @classmethod
     def setUpTestData(cls):
         cls.staff_user = User.objects.create_user(
-            email='admin@test.com', password='testpass', is_staff=True,
+            email="admin@test.com",
+            password="testpass",
+            is_staff=True,
         )
 
     def test_settings_registry_has_no_youtube_group(self):
-        group_names = {group['name'] for group in INTEGRATION_GROUPS}
-        self.assertNotIn('youtube', group_names)
+        group_names = {group["name"] for group in INTEGRATION_GROUPS}
+        self.assertNotIn("youtube", group_names)
 
     def test_settings_registry_does_not_expose_youtube_keys(self):
-        all_keys = {
-            key_def['key']
-            for group in INTEGRATION_GROUPS
-            for key_def in group['keys']
-        }
+        all_keys = {key_def["key"] for group in INTEGRATION_GROUPS for key_def in group["keys"]}
         for key in self.YOUTUBE_KEYS:
             self.assertNotIn(key, all_keys)
 
@@ -819,12 +814,12 @@ class DeadYouTubeSettingsRetirementTest(TestCase):
         for key in self.YOUTUBE_KEYS:
             self.assertFalse(
                 hasattr(settings, key),
-                f'{key} must not be defined on Django settings',
+                f"{key} must not be defined on Django settings",
             )
 
     def test_studio_settings_page_does_not_render_youtube_group(self):
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
+        self.client.login(email="admin@test.com", password="testpass")
+        response = self.client.get("/studio/settings/")
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
         for key in self.YOUTUBE_KEYS:
@@ -845,19 +840,20 @@ class IntegrationRegistryDocsCoverageTest(SimpleTestCase):
     def test_every_registered_key_has_docs_url(self):
         missing = []
         for group in INTEGRATION_GROUPS:
-            for entry in group['keys']:
-                if not entry.get('docs_url'):
+            for entry in group["keys"]:
+                if not entry.get("docs_url"):
                     missing.append(f"{group['name']}.{entry['key']}")
         self.assertEqual(
-            missing, [],
+            missing,
+            [],
             f"Keys without docs_url: {missing}",
         )
 
 
 TEAM_REQUESTS_KEYS = [
-    'SLACK_TEAM_REQUESTS_CHANNEL_ID',
-    'SLACK_DEV_TEAM_REQUESTS_CHANNEL_ID',
-    'SLACK_TEST_TEAM_REQUESTS_CHANNEL_ID',
+    "SLACK_TEAM_REQUESTS_CHANNEL_ID",
+    "SLACK_DEV_TEAM_REQUESTS_CHANNEL_ID",
+    "SLACK_TEST_TEAM_REQUESTS_CHANNEL_ID",
 ]
 
 
@@ -870,15 +866,14 @@ class SlackTeamRequestsRegistryTest(SimpleTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.slack_group = next(
-            g for g in INTEGRATION_GROUPS if g['name'] == 'slack'
-        )
-        cls.entries_by_key = {e['key']: e for e in cls.slack_group['keys']}
+        cls.slack_group = next(g for g in INTEGRATION_GROUPS if g["name"] == "slack")
+        cls.entries_by_key = {e["key"]: e for e in cls.slack_group["keys"]}
 
     def test_three_team_requests_keys_registered_in_slack_group(self):
         for key in TEAM_REQUESTS_KEYS:
             self.assertIn(
-                key, self.entries_by_key,
+                key,
+                self.entries_by_key,
                 f"{key} is not registered in the slack settings group",
             )
 
@@ -886,34 +881,34 @@ class SlackTeamRequestsRegistryTest(SimpleTestCase):
         for key in TEAM_REQUESTS_KEYS:
             entry = self.entries_by_key[key]
             self.assertFalse(
-                entry.get('is_secret', False),
+                entry.get("is_secret", False),
                 f"{key} should not be marked is_secret",
             )
             self.assertTrue(
-                entry.get('optional', False),
+                entry.get("optional", False),
                 f"{key} should be marked optional",
             )
             self.assertTrue(
-                entry.get('description'),
+                entry.get("description"),
                 f"{key} should have a non-empty description",
             )
 
     def test_team_requests_docs_anchors_resolve_to_sections(self):
-        slack_md = os.path.join(
-            settings.BASE_DIR, '_docs', 'integrations', 'slack.md'
-        )
-        with open(slack_md, encoding='utf-8') as fh:
+        slack_md = os.path.join(settings.BASE_DIR, "_docs", "integrations", "slack.md")
+        with open(slack_md, encoding="utf-8") as fh:
             content = fh.read()
         for key in TEAM_REQUESTS_KEYS:
             entry = self.entries_by_key[key]
-            docs_url = entry.get('docs_url', '')
+            docs_url = entry.get("docs_url", "")
             self.assertEqual(
-                docs_url, f'_docs/integrations/slack.md#{key.lower()}',
+                docs_url,
+                f"_docs/integrations/slack.md#{key.lower()}",
                 f"{key} docs_url does not point at the expected anchor",
             )
             # The anchor (lowercased key) must be a real ``## `` heading.
             self.assertIn(
-                f'## {key}\n', content,
+                f"## {key}\n",
+                content,
                 f"slack.md has no '## {key}' section for the docs anchor",
             )
 
@@ -927,57 +922,61 @@ class SlackTeamRequestsDashboardTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff_user = User.objects.create_user(
-            email='trqadmin@test.com', password='testpass', is_staff=True,
+            email="trqadmin@test.com",
+            password="testpass",
+            is_staff=True,
         )
         cls.regular_user = User.objects.create_user(
-            email='trquser@test.com', password='testpass', is_staff=False,
+            email="trquser@test.com",
+            password="testpass",
+            is_staff=False,
         )
 
     def _slack_fields(self, response):
-        groups = response.context['groups']
-        slack_group = next(g for g in groups if g['name'] == 'slack')
-        return {f['key']: f for f in slack_group['fields']}
+        groups = response.context["groups"]
+        slack_group = next(g for g in groups if g["name"] == "slack")
+        return {f["key"]: f for f in slack_group["fields"]}
 
     def test_keys_render_as_editable_slack_fields(self):
-        self.client.login(email='trqadmin@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
+        self.client.login(email="trqadmin@test.com", password="testpass")
+        response = self.client.get("/studio/settings/")
         fields = self._slack_fields(response)
         for key in TEAM_REQUESTS_KEYS:
             self.assertIn(
-                key, fields,
+                key,
+                fields,
                 f"{key} does not render as a Slack field on the dashboard",
             )
-            self.assertFalse(fields[key]['is_secret'])
+            self.assertFalse(fields[key]["is_secret"])
 
     def test_source_badge_is_env_or_default_without_override(self):
-        self.client.login(email='trqadmin@test.com', password='testpass')
+        self.client.login(email="trqadmin@test.com", password="testpass")
         with patch.dict(os.environ, {}, clear=False):
             for key in TEAM_REQUESTS_KEYS:
                 os.environ.pop(key, None)
-            response = self.client.get('/studio/settings/')
+            response = self.client.get("/studio/settings/")
         fields = self._slack_fields(response)
         # Optional, no env, no DB row -> resolves to env or default, never db.
         self.assertIn(
-            fields['SLACK_TEAM_REQUESTS_CHANNEL_ID']['source'],
-            ('env', 'default', ''),
+            fields["SLACK_TEAM_REQUESTS_CHANNEL_ID"]["source"],
+            ("env", "default", ""),
         )
-        self.assertNotEqual(fields['SLACK_TEAM_REQUESTS_CHANNEL_ID']['source'], 'db')
+        self.assertNotEqual(fields["SLACK_TEAM_REQUESTS_CHANNEL_ID"]["source"], "db")
 
     def test_source_badge_flips_to_db_override(self):
-        IntegrationSetting.objects.create(
-            key='SLACK_TEAM_REQUESTS_CHANNEL_ID', value='C0TEAMREQ1', group='slack',
-        )
+        set_package_override("SLACK_TEAM_REQUESTS_CHANNEL_ID", "C0TEAMREQ1", actor_ref="test")
         clear_config_cache()
         self.addCleanup(clear_config_cache)
-        self.client.login(email='trqadmin@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
+        self.client.login(email="trqadmin@test.com", password="testpass")
+        response = self.client.get("/studio/settings/")
         fields = self._slack_fields(response)
         self.assertEqual(
-            fields['SLACK_TEAM_REQUESTS_CHANNEL_ID']['source'], 'db',
+            fields["SLACK_TEAM_REQUESTS_CHANNEL_ID"]["source"],
+            "db",
         )
-        self.assertEqual(get_config('SLACK_TEAM_REQUESTS_CHANNEL_ID'), 'C0TEAMREQ1')
+        self.assertEqual(get_config("SLACK_TEAM_REQUESTS_CHANNEL_ID"), "C0TEAMREQ1")
 
     def test_non_staff_cannot_see_team_requests_fields(self):
-        self.client.login(email='trquser@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
+        self.client.login(email="trquser@test.com", password="testpass")
+        response = self.client.get("/studio/settings/")
         self.assertEqual(response.status_code, 403)

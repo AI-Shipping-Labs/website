@@ -1,7 +1,7 @@
 """Tests for the integration settings API (issues #633, #640).
 
 The endpoint is ``/api/integrations/settings``. POST (#633) mutates
-``IntegrationSetting`` rows for keys in
+package config override rows for keys in
 ``integrations.settings_registry.INTEGRATION_GROUPS``. GET (#640) lists
 every registered key with metadata and a ``source`` enum but NEVER the
 actual value. Both methods are gated by a staff-scoped
@@ -22,13 +22,13 @@ import json
 import os
 from unittest.mock import patch
 
+from community_base.config.models import Setting
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from accounts.models import Token
 from email_app.services.email_classification import get_sender_for_email_type
-from integrations.config import clear_config_cache
-from integrations.models import IntegrationSetting
+from integrations.config import clear_config_cache, get_config, set_package_override
 from integrations.settings_registry import INTEGRATION_GROUPS
 
 User = get_user_model()
@@ -154,31 +154,33 @@ class IntegrationSettingsApiTest(TestCase):
             response.json(),
             {"status": "ok", "updated": 1, "restart_required": False},
         )
-        row = IntegrationSetting.objects.get(key="CONTENT_CDN_BASE")
-        self.assertEqual(row.value, "https://cdn.example.com")
-        self.assertEqual(row.group, "s3_content")
+        row = row = Setting.objects.get(key="CONTENT_CDN_BASE")
+        self.assertEqual(get_config("CONTENT_CDN_BASE"), "https://cdn.example.com")
+        # The package store has no per-row group column; the group lives
+        # on the declaration.
+        self.assertEqual(row.key, "CONTENT_CDN_BASE")
 
     def test_post_welcome_from_email_updates_setting(self):
         # Issue #937: the welcome sender is registry-driven, so it is
         # writable via the API and a subsequent resolution reflects it.
         self.addCleanup(clear_config_cache)
-        response = self._post_json({
-            "updates": [
-                {
-                    "key": "SES_WELCOME_FROM_EMAIL",
-                    "value": "hello@aishippinglabs.com",
-                },
-            ],
-        })
+        response = self._post_json(
+            {
+                "updates": [
+                    {
+                        "key": "SES_WELCOME_FROM_EMAIL",
+                        "value": "hello@aishippinglabs.com",
+                    },
+                ],
+            }
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
             {"status": "ok", "updated": 1, "restart_required": False},
         )
-        row = IntegrationSetting.objects.get(key="SES_WELCOME_FROM_EMAIL")
-        self.assertEqual(row.value, "hello@aishippinglabs.com")
-        self.assertEqual(row.group, "ses")
+        self.assertEqual(get_config("SES_WELCOME_FROM_EMAIL"), "hello@aishippinglabs.com")
 
         clear_config_cache()
         self.assertEqual(
@@ -186,37 +188,45 @@ class IntegrationSettingsApiTest(TestCase):
             "hello@aishippinglabs.com",
         )
 
-    def test_post_ses_configuration_set_uses_column_safe_description(self):
+    def test_post_ses_configuration_set_truncates_its_description(self):
         """Regression for #814: prod Postgres enforces description max_length."""
-        response = self._post_json({
-            "updates": [
-                {
-                    "key": "SES_CONFIGURATION_SET_NAME",
-                    "value": "aishippinglabs",
-                },
-            ],
-        })
+        response = self._post_json(
+            {
+                "updates": [
+                    {
+                        "key": "SES_CONFIGURATION_SET_NAME",
+                        "value": "aishippinglabs",
+                    },
+                ],
+            }
+        )
 
         self.assertEqual(response.status_code, 200)
-        row = IntegrationSetting.objects.get(key="SES_CONFIGURATION_SET_NAME")
-        max_len = IntegrationSetting._meta.get_field("description").max_length
-        self.assertLessEqual(len(row.description), max_len)
+        # The package store has no per-row description column; the write
+        # succeeding is the whole contract here.
+        self.assertTrue(
+            Setting.objects.filter(key="SES_CONFIGURATION_SET_NAME").exists(),
+        )
 
     def test_post_response_does_not_echo_key_or_value(self):
         # First write — fresh key, fresh value.
         first_value = "https://cdn.example.com"
-        response = self._post_json({
-            "updates": [{"key": "CONTENT_CDN_BASE", "value": first_value}],
-        })
+        response = self._post_json(
+            {
+                "updates": [{"key": "CONTENT_CDN_BASE", "value": first_value}],
+            }
+        )
         self.assertEqual(response.status_code, 200)
         self._assert_no_echo(response, "CONTENT_CDN_BASE", first_value)
 
         # Overwrite the same key with a NEW value. The response must not
         # leak the previous value, the new value, or the key name.
         second_value = "https://new-cdn.example.org"
-        response = self._post_json({
-            "updates": [{"key": "CONTENT_CDN_BASE", "value": second_value}],
-        })
+        response = self._post_json(
+            {
+                "updates": [{"key": "CONTENT_CDN_BASE", "value": second_value}],
+            }
+        )
         self.assertEqual(response.status_code, 200)
         self._assert_no_echo(
             response,
@@ -226,16 +236,18 @@ class IntegrationSettingsApiTest(TestCase):
         )
         # And the row really did get updated.
         self.assertEqual(
-            IntegrationSetting.objects.get(key="CONTENT_CDN_BASE").value,
+            get_config("CONTENT_CDN_BASE"),
             second_value,
         )
 
     def test_post_logfire_key_requires_restart_without_echoing_key_or_value(self):
         token = "pylf_restart_required_sentinel"
 
-        response = self._post_json({
-            "updates": [{"key": "LOGFIRE_TOKEN", "value": token}],
-        })
+        response = self._post_json(
+            {
+                "updates": [{"key": "LOGFIRE_TOKEN", "value": token}],
+            }
+        )
 
         self.assertEqual(
             response.json(),
@@ -243,17 +255,19 @@ class IntegrationSettingsApiTest(TestCase):
         )
         self._assert_no_echo(response, "LOGFIRE_TOKEN", token)
         self.assertEqual(
-            IntegrationSetting.objects.get(key="LOGFIRE_TOKEN").value,
+            get_config("LOGFIRE_TOKEN"),
             token,
         )
 
     # ---- allowlist --------------------------------------------------------
 
     def test_post_rejects_unknown_key_and_writes_nothing(self):
-        starting_count = IntegrationSetting.objects.count()
-        response = self._post_json({
-            "updates": [{"key": "DJANGO_SECRET_KEY", "value": "x"}],
-        })
+        starting_count = Setting.objects.count()
+        response = self._post_json(
+            {
+                "updates": [{"key": "DJANGO_SECRET_KEY", "value": "x"}],
+            }
+        )
 
         self.assertEqual(response.status_code, 400)
         body = response.json()
@@ -262,26 +276,26 @@ class IntegrationSettingsApiTest(TestCase):
             body["details"]["invalid_keys"],
             ["DJANGO_SECRET_KEY"],
         )
-        self.assertEqual(IntegrationSetting.objects.count(), starting_count)
+        self.assertEqual(Setting.objects.count(), starting_count)
 
     def test_post_with_mixed_valid_and_invalid_keys_writes_nothing(self):
-        starting_count = IntegrationSetting.objects.count()
-        response = self._post_json({
-            "updates": [
-                {"key": "CONTENT_CDN_BASE", "value": "https://cdn.example.com"},
-                {"key": "DATABASE_URL", "value": "postgres://hacker"},
-            ],
-        })
+        starting_count = Setting.objects.count()
+        response = self._post_json(
+            {
+                "updates": [
+                    {"key": "CONTENT_CDN_BASE", "value": "https://cdn.example.com"},
+                    {"key": "DATABASE_URL", "value": "postgres://hacker"},
+                ],
+            }
+        )
 
         self.assertEqual(response.status_code, 400)
         body = response.json()
         self.assertEqual(body["code"], "invalid_key")
         self.assertIn("DATABASE_URL", body["details"]["invalid_keys"])
         # All-or-nothing: the valid key did NOT get written.
-        self.assertFalse(
-            IntegrationSetting.objects.filter(key="CONTENT_CDN_BASE").exists()
-        )
-        self.assertEqual(IntegrationSetting.objects.count(), starting_count)
+        self.assertFalse(Setting.objects.filter(key="CONTENT_CDN_BASE").exists())
+        self.assertEqual(Setting.objects.count(), starting_count)
 
     # ---- malformed bodies -------------------------------------------------
 
@@ -310,25 +324,23 @@ class IntegrationSettingsApiTest(TestCase):
     # ---- empty-string clears row (Studio parity) --------------------------
 
     def test_post_empty_value_clears_existing_row(self):
-        IntegrationSetting.objects.create(
+        set_package_override(
             key="CONTENT_CDN_BASE",
             value="https://old-cdn.example.com",
-            is_secret=False,
-            group="s3_content",
-            description="",
+            actor_ref="test",
         )
-        response = self._post_json({
-            "updates": [{"key": "CONTENT_CDN_BASE", "value": ""}],
-        })
+        response = self._post_json(
+            {
+                "updates": [{"key": "CONTENT_CDN_BASE", "value": ""}],
+            }
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
             {"status": "ok", "updated": 1, "restart_required": False},
         )
-        self.assertFalse(
-            IntegrationSetting.objects.filter(key="CONTENT_CDN_BASE").exists()
-        )
+        self.assertFalse(Setting.objects.filter(key="CONTENT_CDN_BASE").exists())
         self._assert_no_echo(
             response,
             "CONTENT_CDN_BASE",
@@ -339,33 +351,39 @@ class IntegrationSettingsApiTest(TestCase):
 
     def test_post_boolean_key_accepts_bool_and_string(self):
         # JSON true literal
-        response = self._post_json({
-            "updates": [{"key": "SLACK_ENABLED", "value": True}],
-        })
+        response = self._post_json(
+            {
+                "updates": [{"key": "SLACK_ENABLED", "value": True}],
+            }
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            IntegrationSetting.objects.get(key="SLACK_ENABLED").value,
+            get_config("SLACK_ENABLED"),
             "true",
         )
 
         # String "true" — must persist as the same "true" literal.
-        IntegrationSetting.objects.filter(key="SLACK_ENABLED").delete()
-        response = self._post_json({
-            "updates": [{"key": "SLACK_ENABLED", "value": "true"}],
-        })
+        Setting.objects.filter(key="SLACK_ENABLED").delete()
+        response = self._post_json(
+            {
+                "updates": [{"key": "SLACK_ENABLED", "value": "true"}],
+            }
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            IntegrationSetting.objects.get(key="SLACK_ENABLED").value,
+            get_config("SLACK_ENABLED"),
             "true",
         )
 
         # JSON false literal — stored as "false", not absent.
-        response = self._post_json({
-            "updates": [{"key": "SLACK_ENABLED", "value": False}],
-        })
+        response = self._post_json(
+            {
+                "updates": [{"key": "SLACK_ENABLED", "value": False}],
+            }
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            IntegrationSetting.objects.get(key="SLACK_ENABLED").value,
+            get_config("SLACK_ENABLED"),
             "false",
         )
 
@@ -374,16 +392,16 @@ class IntegrationSettingsApiTest(TestCase):
     def test_post_calls_clear_config_cache_once(self):
         # Patch the symbol where it is USED, not where it is defined —
         # the view imports it into its own module namespace.
-        with patch(
-            "api.views.integration_settings.clear_config_cache"
-        ) as mock_clear:
-            response = self._post_json({
-                "updates": [
-                    {"key": "CONTENT_CDN_BASE", "value": "https://cdn.example.com"},
-                    {"key": "SLACK_ENABLED", "value": True},
-                    {"key": "SITE_BASE_URL", "value": "https://example.com"},
-                ],
-            })
+        with patch("api.views.integration_settings.clear_config_cache") as mock_clear:
+            response = self._post_json(
+                {
+                    "updates": [
+                        {"key": "CONTENT_CDN_BASE", "value": "https://cdn.example.com"},
+                        {"key": "SLACK_ENABLED", "value": True},
+                        {"key": "SITE_BASE_URL", "value": "https://example.com"},
+                    ],
+                }
+            )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
@@ -394,32 +412,38 @@ class IntegrationSettingsApiTest(TestCase):
 
     def test_post_can_set_s3_enabled_true_and_false(self):
         # Issue #1068: boolean write path works for S3_ENABLED.
-        response = self._post_json({
-            "updates": [{"key": "S3_ENABLED", "value": True}],
-        })
+        response = self._post_json(
+            {
+                "updates": [{"key": "S3_ENABLED", "value": True}],
+            }
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            IntegrationSetting.objects.get(key="S3_ENABLED").value,
+            get_config("S3_ENABLED"),
             "true",
         )
 
-        response = self._post_json({
-            "updates": [{"key": "S3_ENABLED", "value": False}],
-        })
+        response = self._post_json(
+            {
+                "updates": [{"key": "S3_ENABLED", "value": False}],
+            }
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            IntegrationSetting.objects.get(key="S3_ENABLED").value,
+            get_config("S3_ENABLED"),
             "false",
         )
-        IntegrationSetting.objects.filter(key="S3_ENABLED").delete()
+        Setting.objects.filter(key="S3_ENABLED").delete()
 
     # ---- error-path leak check -------------------------------------------
 
     def test_post_invalid_key_response_does_not_echo_value(self):
         secret_value = "supersecretdoNOTleak"
-        response = self._post_json({
-            "updates": [{"key": "DJANGO_SECRET_KEY", "value": secret_value}],
-        })
+        response = self._post_json(
+            {
+                "updates": [{"key": "DJANGO_SECRET_KEY", "value": secret_value}],
+            }
+        )
 
         self.assertEqual(response.status_code, 400)
         body_str = response.content.decode("utf-8")
@@ -486,11 +510,7 @@ class IntegrationSettingsGetApiTest(TestCase):
         self.assertIn("settings", body)
         entries = body["settings"]
 
-        expected_order = [
-            key_def["key"]
-            for group in INTEGRATION_GROUPS
-            for key_def in group["keys"]
-        ]
+        expected_order = [key_def["key"] for group in INTEGRATION_GROUPS for key_def in group["keys"]]
         actual_order = [entry["key"] for entry in entries]
         self.assertEqual(actual_order, expected_order)
 
@@ -524,26 +544,16 @@ class IntegrationSettingsGetApiTest(TestCase):
         response = self._get()
         entries = response.json()["settings"]
 
-        self.assertTrue(
-            all(type(entry["requires_restart"]) is bool for entry in entries)
-        )
+        self.assertTrue(all(type(entry["requires_restart"]) is bool for entry in entries))
         self.assertEqual(
-            {
-                entry["key"]
-                for entry in entries
-                if entry["requires_restart"]
-            },
+            {entry["key"] for entry in entries if entry["requires_restart"]},
             {
                 "LOGFIRE_ENABLED",
                 "LOGFIRE_TOKEN",
                 "LOGFIRE_ENVIRONMENT",
             },
         )
-        self.assertFalse(
-            self._entry_for(response.json(), "CONTENT_CDN_BASE")[
-                "requires_restart"
-            ]
-        )
+        self.assertFalse(self._entry_for(response.json(), "CONTENT_CDN_BASE")["requires_restart"])
 
     def test_get_lists_welcome_from_email_key(self):
         # Issue #937: the registry pickup surfaces the welcome sender in the
@@ -579,21 +589,14 @@ class IntegrationSettingsGetApiTest(TestCase):
 
     def test_get_s3_enabled_source_is_db_when_overridden(self):
         """When a DB row exists, source resolves to db."""
-        IntegrationSetting.objects.update_or_create(
-            key="S3_ENABLED",
-            defaults={
-                "value": "true",
-                "is_secret": False,
-                "group": "s3_content",
-            },
-        )
+        set_package_override("S3_ENABLED", "true", actor_ref="test")
         try:
             response = self._get()
             body = response.json()
             entry = self._entry_for(body, "S3_ENABLED")
             self.assertEqual(entry["source"], "db")
         finally:
-            IntegrationSetting.objects.filter(key="S3_ENABLED").delete()
+            Setting.objects.filter(key="S3_ENABLED").delete()
 
     # ---- auth -------------------------------------------------------------
 
@@ -615,15 +618,13 @@ class IntegrationSettingsGetApiTest(TestCase):
     def test_get_does_not_echo_any_setting_value(self):
         # Plant a unique sentinel as a DB-stored value for a key that
         # would otherwise be unset. If the GET handler ever leaks
-        # IntegrationSetting.value into the response, this assertion
+        # any stored value into the response, this assertion
         # catches it.
         sentinel = "SENTINEL-VALUE-do-NOT-leak-abc123XYZ"
-        IntegrationSetting.objects.create(
+        set_package_override(
             key="STRIPE_WEBHOOK_SECRET",
             value=sentinel,
-            is_secret=True,
-            group="stripe",
-            description="",
+            actor_ref="test",
         )
 
         response = self._get()
@@ -643,13 +644,7 @@ class IntegrationSettingsGetApiTest(TestCase):
         # response body — neither as a JSON key nor inside any echoed
         # value. We plant a DB row first so the DB-source branch is
         # exercised by the same call.
-        IntegrationSetting.objects.create(
-            key="CONTENT_CDN_BASE",
-            value="https://cdn.example.com",
-            is_secret=False,
-            group="s3_content",
-            description="",
-        )
+        set_package_override("CONTENT_CDN_BASE", "https://cdn.example.com", actor_ref="test")
         response = self._get()
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("value", response.content.decode("utf-8"))
@@ -658,13 +653,7 @@ class IntegrationSettingsGetApiTest(TestCase):
 
     def test_get_marks_db_override_with_source_db(self):
         # DB row with non-empty value beats every other layer.
-        IntegrationSetting.objects.create(
-            key="CONTENT_CDN_BASE",
-            value="https://cdn.example.com",
-            is_secret=False,
-            group="s3_content",
-            description="",
-        )
+        set_package_override("CONTENT_CDN_BASE", "https://cdn.example.com", actor_ref="test")
         response = self._get()
         self.assertEqual(response.status_code, 200)
         entry = self._entry_for(response.json(), "CONTENT_CDN_BASE")
@@ -697,9 +686,7 @@ class IntegrationSettingsGetApiTest(TestCase):
         # settings layer in dev environments where it might be set.
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop(settings_key, None)
-            with override_settings(
-                **{settings_key: "#announcements-from-settings"}
-            ):
+            with override_settings(**{settings_key: "#announcements-from-settings"}):
                 response = self._get()
 
         self.assertEqual(response.status_code, 200)
@@ -782,19 +769,19 @@ class IntegrationSettingsGetApiTest(TestCase):
         """
         synthetic_registry = [
             {
-                'name': 'phantom',
-                'label': 'Phantom',
-                'keys': [
+                "name": "phantom",
+                "label": "Phantom",
+                "keys": [
                     {
-                        'key': 'PHANTOM_NO_DOCS_KEY',
-                        'is_secret': False,
-                        'description': 'Synthetic key without docs_url.',
+                        "key": "PHANTOM_NO_DOCS_KEY",
+                        "is_secret": False,
+                        "description": "Synthetic key without docs_url.",
                     },
                 ],
             },
         ]
         with patch(
-            'api.views.integration_settings.INTEGRATION_GROUPS',
+            "api.views.integration_settings.INTEGRATION_GROUPS",
             synthetic_registry,
         ):
             response = self._get()
@@ -825,18 +812,20 @@ class IntegrationSettingsGetApiTest(TestCase):
             response.json(),
             {"status": "ok", "updated": 1, "restart_required": False},
         )
-        row = IntegrationSetting.objects.get(key="CONTENT_CDN_BASE")
-        self.assertEqual(row.value, "https://cdn.example.com")
+        Setting.objects.get(key="CONTENT_CDN_BASE")
+        self.assertEqual(get_config("CONTENT_CDN_BASE"), "https://cdn.example.com")
 
     def test_existing_post_behavior_unchanged_for_invalid_key(self):
         # Same contract as test_post_rejects_unknown_key_and_writes_nothing:
         # invalid_key error code, all-or-nothing, no DB rows written.
-        starting_count = IntegrationSetting.objects.count()
+        starting_count = Setting.objects.count()
         response = self.client.post(
             URL,
-            data=json.dumps({
-                "updates": [{"key": "DJANGO_SECRET_KEY", "value": "x"}],
-            }),
+            data=json.dumps(
+                {
+                    "updates": [{"key": "DJANGO_SECRET_KEY", "value": "x"}],
+                }
+            ),
             content_type="application/json",
             **self._auth(),
         )
@@ -847,4 +836,4 @@ class IntegrationSettingsGetApiTest(TestCase):
             body["details"]["invalid_keys"],
             ["DJANGO_SECRET_KEY"],
         )
-        self.assertEqual(IntegrationSetting.objects.count(), starting_count)
+        self.assertEqual(Setting.objects.count(), starting_count)

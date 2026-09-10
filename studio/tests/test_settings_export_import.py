@@ -16,17 +16,18 @@ import json
 import re
 
 from allauth.socialaccount.models import SocialApp
+from community_base.config.models import Setting
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 
-from integrations.models import IntegrationSetting
+from integrations.config import get_config, set_package_override
 
 User = get_user_model()
 
 
 def _upload(name: str, body: bytes) -> SimpleUploadedFile:
-    return SimpleUploadedFile(name, body, content_type='application/json')
+    return SimpleUploadedFile(name, body, content_type="application/json")
 
 
 class SettingsDashboardButtonsTest(TestCase):
@@ -35,14 +36,16 @@ class SettingsDashboardButtonsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff_user = User.objects.create_user(
-            email='admin@test.com', password='testpass', is_staff=True,
+            email="admin@test.com",
+            password="testpass",
+            is_staff=True,
         )
 
     def setUp(self):
-        self.client.login(email='admin@test.com', password='testpass')
+        self.client.login(email="admin@test.com", password="testpass")
 
     def test_dashboard_shows_download_link(self):
-        response = self.client.get('/studio/settings/')
+        response = self.client.get("/studio/settings/")
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
         # The download anchor points at the export endpoint.
@@ -57,18 +60,18 @@ class SettingsDashboardButtonsTest(TestCase):
                 r'<a[^>]*href="([^"]+)"[^>]*data-testid="settings-download"',
                 body,
             )
-        self.assertIsNotNone(match, 'Download link must be present in the page header')
-        self.assertEqual(match.group(1), '/studio/settings/export/')
-        self.assertIn('Download settings', body)
+        self.assertIsNotNone(match, "Download link must be present in the page header")
+        self.assertEqual(match.group(1), "/studio/settings/export/")
+        self.assertIn("Download settings", body)
 
     def test_dashboard_shows_upload_form(self):
-        response = self.client.get('/studio/settings/')
+        response = self.client.get("/studio/settings/")
         body = response.content.decode()
         # An <input type="file" name="settings_file"> inside a form
         # POSTing to the import endpoint.
         self.assertIn('action="/studio/settings/import/"', body)
         self.assertIn('name="settings_file"', body)
-        self.assertIn('Upload settings', body)
+        self.assertIn("Upload settings", body)
 
 
 class SettingsExportTest(TestCase):
@@ -77,18 +80,20 @@ class SettingsExportTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff_user = User.objects.create_user(
-            email='admin@test.com', password='testpass', is_staff=True,
+            email="admin@test.com",
+            password="testpass",
+            is_staff=True,
         )
 
     def setUp(self):
-        self.client.login(email='admin@test.com', password='testpass')
+        self.client.login(email="admin@test.com", password="testpass")
 
     def test_export_returns_json_file_attachment(self):
-        response = self.client.get('/studio/settings/export/')
+        response = self.client.get("/studio/settings/export/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response['Content-Type'], 'application/json')
-        disposition = response['Content-Disposition']
-        self.assertIn('attachment', disposition)
+        self.assertEqual(response["Content-Type"], "application/json")
+        disposition = response["Content-Disposition"]
+        self.assertIn("attachment", disposition)
         # Filename pattern: aishippinglabs-settings-YYYYMMDD-HHMMSS.json
         self.assertRegex(
             disposition,
@@ -96,62 +101,48 @@ class SettingsExportTest(TestCase):
         )
 
     def test_export_contains_format_version_and_arrays(self):
-        IntegrationSetting.objects.create(
-            key='STRIPE_SECRET_KEY', value='sk_live_abc',
-            is_secret=True, group='stripe',
-        )
+        set_package_override("STRIPE_SECRET_KEY", "sk_live_abc", actor_ref="test")
         SocialApp.objects.create(
-            provider='google', name='Google',
-            client_id='cid-123', secret='sec-456',
+            provider="google",
+            name="Google",
+            client_id="cid-123",
+            secret="sec-456",
         )
 
-        response = self.client.get('/studio/settings/export/')
+        response = self.client.get("/studio/settings/export/")
         payload = json.loads(response.content.decode())
 
-        self.assertEqual(payload['format_version'], 1)
-        self.assertIn('integration_settings', payload)
-        self.assertIn('auth_providers', payload)
+        self.assertEqual(payload["format_version"], 1)
+        self.assertIn("integration_settings", payload)
+        self.assertIn("auth_providers", payload)
 
-        keys = {entry['key']: entry['value'] for entry in payload['integration_settings']}
-        self.assertEqual(keys['STRIPE_SECRET_KEY'], 'sk_live_abc')
+        keys = {entry["key"]: entry["value"] for entry in payload["integration_settings"]}
+        self.assertEqual(keys["STRIPE_SECRET_KEY"], "sk_live_abc")
 
-        providers = {p['provider']: p for p in payload['auth_providers']}
-        self.assertEqual(providers['google']['client_id'], 'cid-123')
+        providers = {p["provider"]: p for p in payload["auth_providers"]}
+        self.assertEqual(providers["google"]["client_id"], "cid-123")
         # Plaintext: secret round-trips verbatim.
-        self.assertEqual(providers['google']['secret'], 'sec-456')
+        self.assertEqual(providers["google"]["secret"], "sec-456")
 
     def test_export_excludes_unknown_integration_keys(self):
-        # A row whose key is NOT in the registry must not leak into the
-        # export — the schema guarantees we only ship known keys.
-        IntegrationSetting.objects.create(
-            key='LEGACY_DROPPED_KEY', value='nope',
-            is_secret=False, group='unknown',
-        )
-        response = self.client.get('/studio/settings/export/')
+        # A key NOT in the registry can no longer exist in the store at
+        # all: the package service refuses undeclared keys, so the export
+        # can only ever ship registered keys.
+        response = self.client.get("/studio/settings/export/")
         payload = json.loads(response.content.decode())
-        keys = [entry['key'] for entry in payload['integration_settings']]
-        self.assertNotIn('LEGACY_DROPPED_KEY', keys)
+        keys = [entry["key"] for entry in payload["integration_settings"]]
+        self.assertNotIn("LEGACY_DROPPED_KEY", keys)
 
     def test_export_includes_configured_ses_sender_keys(self):
-        IntegrationSetting.objects.create(
-            key='SES_TRANSACTIONAL_FROM_EMAIL',
-            value='tx@example.test',
-            is_secret=False,
-            group='ses',
-        )
-        IntegrationSetting.objects.create(
-            key='SES_PROMOTIONAL_FROM_EMAIL',
-            value='promo@example.test',
-            is_secret=False,
-            group='ses',
-        )
+        set_package_override("SES_TRANSACTIONAL_FROM_EMAIL", "tx@example.test", actor_ref="test")
+        set_package_override("SES_PROMOTIONAL_FROM_EMAIL", "promo@example.test", actor_ref="test")
 
-        response = self.client.get('/studio/settings/export/')
+        response = self.client.get("/studio/settings/export/")
         payload = json.loads(response.content.decode())
 
-        keys = {entry['key']: entry['value'] for entry in payload['integration_settings']}
-        self.assertEqual(keys['SES_TRANSACTIONAL_FROM_EMAIL'], 'tx@example.test')
-        self.assertEqual(keys['SES_PROMOTIONAL_FROM_EMAIL'], 'promo@example.test')
+        keys = {entry["key"]: entry["value"] for entry in payload["integration_settings"]}
+        self.assertEqual(keys["SES_TRANSACTIONAL_FROM_EMAIL"], "tx@example.test")
+        self.assertEqual(keys["SES_PROMOTIONAL_FROM_EMAIL"], "promo@example.test")
 
 
 class SettingsImportTest(TestCase):
@@ -160,192 +151,193 @@ class SettingsImportTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff_user = User.objects.create_user(
-            email='admin@test.com', password='testpass', is_staff=True,
+            email="admin@test.com",
+            password="testpass",
+            is_staff=True,
         )
 
     def setUp(self):
-        self.client.login(email='admin@test.com', password='testpass')
+        self.client.login(email="admin@test.com", password="testpass")
 
     def _post_payload(self, payload: dict):
-        body = json.dumps(payload).encode('utf-8')
+        body = json.dumps(payload).encode("utf-8")
         return self.client.post(
-            '/studio/settings/import/',
-            {'settings_file': _upload('settings.json', body)},
+            "/studio/settings/import/",
+            {"settings_file": _upload("settings.json", body)},
         )
 
     def test_round_trip_download_then_upload_into_empty_db(self):
-        IntegrationSetting.objects.create(
-            key='STRIPE_SECRET_KEY', value='sk_live_xyz',
-            is_secret=True, group='stripe',
-        )
-        IntegrationSetting.objects.create(
-            key='STRIPE_CUSTOMER_PORTAL_URL',
-            value='https://billing.example.test/portal',
-            is_secret=False, group='stripe',
-        )
+        set_package_override("STRIPE_SECRET_KEY", "sk_live_xyz", actor_ref="test")
+        set_package_override("STRIPE_CUSTOMER_PORTAL_URL", "https://billing.example.test/portal", actor_ref="test")
         SocialApp.objects.create(
-            provider='google', name='Google',
-            client_id='goog-id', secret='goog-secret',
+            provider="google",
+            name="Google",
+            client_id="goog-id",
+            secret="goog-secret",
         )
 
         # Download.
-        export_response = self.client.get('/studio/settings/export/')
+        export_response = self.client.get("/studio/settings/export/")
         exported = export_response.content
 
         # Wipe the DB to simulate a fresh environment.
-        IntegrationSetting.objects.all().delete()
+        Setting.objects.all().delete()
         SocialApp.objects.all().delete()
 
         # Upload the same bytes back.
         response = self.client.post(
-            '/studio/settings/import/',
-            {'settings_file': _upload('settings.json', exported)},
+            "/studio/settings/import/",
+            {"settings_file": _upload("settings.json", exported)},
         )
         self.assertEqual(response.status_code, 302)
 
         self.assertEqual(
-            IntegrationSetting.objects.get(key='STRIPE_SECRET_KEY').value,
-            'sk_live_xyz',
+            get_config("STRIPE_SECRET_KEY"),
+            "sk_live_xyz",
         )
         self.assertEqual(
-            IntegrationSetting.objects.get(key='STRIPE_CUSTOMER_PORTAL_URL').value,
-            'https://billing.example.test/portal',
+            get_config("STRIPE_CUSTOMER_PORTAL_URL"),
+            "https://billing.example.test/portal",
         )
-        google = SocialApp.objects.get(provider='google')
-        self.assertEqual(google.client_id, 'goog-id')
-        self.assertEqual(google.secret, 'goog-secret')
+        google = SocialApp.objects.get(provider="google")
+        self.assertEqual(google.client_id, "goog-id")
+        self.assertEqual(google.secret, "goog-secret")
 
     def test_import_updates_existing_rows(self):
-        IntegrationSetting.objects.create(
-            key='STRIPE_SECRET_KEY', value='old-value',
-            is_secret=True, group='stripe',
+        set_package_override("STRIPE_SECRET_KEY", "old-value", actor_ref="test")
+        response = self._post_payload(
+            {
+                "format_version": 1,
+                "integration_settings": [
+                    {"key": "STRIPE_SECRET_KEY", "value": "new-value"},
+                ],
+                "auth_providers": [],
+            }
         )
-        response = self._post_payload({
-            'format_version': 1,
-            'integration_settings': [
-                {'key': 'STRIPE_SECRET_KEY', 'value': 'new-value'},
-            ],
-            'auth_providers': [],
-        })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
-            IntegrationSetting.objects.get(key='STRIPE_SECRET_KEY').value,
-            'new-value',
+            get_config("STRIPE_SECRET_KEY"),
+            "new-value",
         )
 
     def test_import_accepts_ses_sender_keys(self):
-        response = self._post_payload({
-            'format_version': 1,
-            'integration_settings': [
-                {'key': 'SES_TRANSACTIONAL_FROM_EMAIL', 'value': 'tx@example.test'},
-                {'key': 'SES_PROMOTIONAL_FROM_EMAIL', 'value': 'promo@example.test'},
-            ],
-            'auth_providers': [],
-        })
+        response = self._post_payload(
+            {
+                "format_version": 1,
+                "integration_settings": [
+                    {"key": "SES_TRANSACTIONAL_FROM_EMAIL", "value": "tx@example.test"},
+                    {"key": "SES_PROMOTIONAL_FROM_EMAIL", "value": "promo@example.test"},
+                ],
+                "auth_providers": [],
+            }
+        )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
-            IntegrationSetting.objects.get(key='SES_TRANSACTIONAL_FROM_EMAIL').value,
-            'tx@example.test',
+            get_config("SES_TRANSACTIONAL_FROM_EMAIL"),
+            "tx@example.test",
         )
         self.assertEqual(
-            IntegrationSetting.objects.get(key='SES_PROMOTIONAL_FROM_EMAIL').value,
-            'promo@example.test',
+            get_config("SES_PROMOTIONAL_FROM_EMAIL"),
+            "promo@example.test",
         )
 
     def test_import_observability_setting_flashes_restart_contract(self):
-        response = self._post_payload({
-            'format_version': 1,
-            'integration_settings': [
-                {'key': 'LOGFIRE_ENABLED', 'value': 'true'},
-            ],
-            'auth_providers': [],
-        })
+        response = self._post_payload(
+            {
+                "format_version": 1,
+                "integration_settings": [
+                    {"key": "LOGFIRE_ENABLED", "value": "true"},
+                ],
+                "auth_providers": [],
+            }
+        )
 
         messages = [str(message) for message in response.wsgi_request._messages]
         self.assertIn(
-            'Observability changes apply after you restart the web and worker processes.',
+            "Observability changes apply after you restart the web and worker processes.",
             messages,
         )
         self.assertEqual(
-            IntegrationSetting.objects.get(key='LOGFIRE_ENABLED').value,
-            'true',
+            get_config("LOGFIRE_ENABLED"),
+            "true",
         )
 
     def test_malformed_json_is_rejected_with_message(self):
-        bad_body = b'{not valid json'
+        bad_body = b"{not valid json"
         response = self.client.post(
-            '/studio/settings/import/',
-            {'settings_file': _upload('settings.json', bad_body)},
+            "/studio/settings/import/",
+            {"settings_file": _upload("settings.json", bad_body)},
         )
         self.assertEqual(response.status_code, 302)
         # No DB writes happened.
-        self.assertEqual(IntegrationSetting.objects.count(), 0)
+        self.assertEqual(Setting.objects.count(), 0)
         self.assertEqual(SocialApp.objects.count(), 0)
         msgs = [str(m) for m in response.wsgi_request._messages]
-        self.assertTrue(any('valid JSON' in m for m in msgs))
+        self.assertTrue(any("valid JSON" in m for m in msgs))
 
     def test_unknown_format_version_is_rejected(self):
         # Existing row must be untouched.
-        IntegrationSetting.objects.create(
-            key='STRIPE_SECRET_KEY', value='preserved',
-            is_secret=True, group='stripe',
+        set_package_override("STRIPE_SECRET_KEY", "preserved", actor_ref="test")
+        response = self._post_payload(
+            {
+                "format_version": 99,
+                "integration_settings": [
+                    {"key": "STRIPE_SECRET_KEY", "value": "should-not-apply"},
+                ],
+                "auth_providers": [],
+            }
         )
-        response = self._post_payload({
-            'format_version': 99,
-            'integration_settings': [
-                {'key': 'STRIPE_SECRET_KEY', 'value': 'should-not-apply'},
-            ],
-            'auth_providers': [],
-        })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
-            IntegrationSetting.objects.get(key='STRIPE_SECRET_KEY').value,
-            'preserved',
+            get_config("STRIPE_SECRET_KEY"),
+            "preserved",
         )
         msgs = [str(m) for m in response.wsgi_request._messages]
         self.assertTrue(
-            any('format_version' in m for m in msgs),
-            f'Expected a format_version error in messages, got: {msgs!r}',
+            any("format_version" in m for m in msgs),
+            f"Expected a format_version error in messages, got: {msgs!r}",
         )
 
     def test_unknown_integration_key_is_skipped_with_warning(self):
-        response = self._post_payload({
-            'format_version': 1,
-            'integration_settings': [
-                {'key': 'STRIPE_SECRET_KEY', 'value': 'sk_test'},
-                {'key': 'TOTALLY_MADE_UP_KEY', 'value': 'whatever'},
-            ],
-            'auth_providers': [],
-        })
+        response = self._post_payload(
+            {
+                "format_version": 1,
+                "integration_settings": [
+                    {"key": "STRIPE_SECRET_KEY", "value": "sk_test"},
+                    {"key": "TOTALLY_MADE_UP_KEY", "value": "whatever"},
+                ],
+                "auth_providers": [],
+            }
+        )
         self.assertEqual(response.status_code, 302)
         # Known key applied.
         self.assertEqual(
-            IntegrationSetting.objects.get(key='STRIPE_SECRET_KEY').value,
-            'sk_test',
+            get_config("STRIPE_SECRET_KEY"),
+            "sk_test",
         )
         # Unknown key NOT created.
-        self.assertFalse(
-            IntegrationSetting.objects.filter(key='TOTALLY_MADE_UP_KEY').exists()
-        )
+        self.assertFalse(Setting.objects.filter(key="TOTALLY_MADE_UP_KEY").exists())
         # Warning message names the skipped key.
         msgs = [str(m) for m in response.wsgi_request._messages]
         self.assertTrue(
-            any('TOTALLY_MADE_UP_KEY' in m for m in msgs),
-            f'Expected skipped key in messages, got: {msgs!r}',
+            any("TOTALLY_MADE_UP_KEY" in m for m in msgs),
+            f"Expected skipped key in messages, got: {msgs!r}",
         )
 
     def test_unknown_auth_provider_is_skipped_with_warning(self):
-        response = self._post_payload({
-            'format_version': 1,
-            'integration_settings': [],
-            'auth_providers': [
-                {'provider': 'twitter', 'name': 'Twitter', 'client_id': 'a', 'secret': 'b'},
-            ],
-        })
+        response = self._post_payload(
+            {
+                "format_version": 1,
+                "integration_settings": [],
+                "auth_providers": [
+                    {"provider": "twitter", "name": "Twitter", "client_id": "a", "secret": "b"},
+                ],
+            }
+        )
         self.assertEqual(response.status_code, 302)
-        self.assertFalse(SocialApp.objects.filter(provider='twitter').exists())
+        self.assertFalse(SocialApp.objects.filter(provider="twitter").exists())
         msgs = [str(m) for m in response.wsgi_request._messages]
-        self.assertTrue(any('twitter' in m for m in msgs))
+        self.assertTrue(any("twitter" in m for m in msgs))
 
 
 class SettingsExportImportAccessControlTest(TestCase):
@@ -354,46 +346,50 @@ class SettingsExportImportAccessControlTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.regular_user = User.objects.create_user(
-            email='user@test.com', password='testpass', is_staff=False,
+            email="user@test.com",
+            password="testpass",
+            is_staff=False,
         )
 
     def test_non_staff_cannot_export(self):
-        self.client.login(email='user@test.com', password='testpass')
-        response = self.client.get('/studio/settings/export/')
+        self.client.login(email="user@test.com", password="testpass")
+        response = self.client.get("/studio/settings/export/")
         self.assertEqual(response.status_code, 403)
 
     def test_anonymous_cannot_export(self):
-        response = self.client.get('/studio/settings/export/')
+        response = self.client.get("/studio/settings/export/")
         self.assertEqual(response.status_code, 302)
-        self.assertIn('/accounts/login/', response.url)
+        self.assertIn("/accounts/login/", response.url)
 
     def test_non_staff_cannot_import(self):
-        self.client.login(email='user@test.com', password='testpass')
-        body = json.dumps({
-            'format_version': 1,
-            'integration_settings': [
-                {'key': 'STRIPE_SECRET_KEY', 'value': 'sneaky'},
-            ],
-            'auth_providers': [],
-        }).encode('utf-8')
+        self.client.login(email="user@test.com", password="testpass")
+        body = json.dumps(
+            {
+                "format_version": 1,
+                "integration_settings": [
+                    {"key": "STRIPE_SECRET_KEY", "value": "sneaky"},
+                ],
+                "auth_providers": [],
+            }
+        ).encode("utf-8")
         response = self.client.post(
-            '/studio/settings/import/',
-            {'settings_file': _upload('settings.json', body)},
+            "/studio/settings/import/",
+            {"settings_file": _upload("settings.json", body)},
         )
         self.assertEqual(response.status_code, 403)
-        self.assertFalse(
-            IntegrationSetting.objects.filter(key='STRIPE_SECRET_KEY').exists()
-        )
+        self.assertFalse(Setting.objects.filter(key="STRIPE_SECRET_KEY").exists())
 
     def test_anonymous_cannot_import(self):
-        body = json.dumps({
-            'format_version': 1,
-            'integration_settings': [],
-            'auth_providers': [],
-        }).encode('utf-8')
+        body = json.dumps(
+            {
+                "format_version": 1,
+                "integration_settings": [],
+                "auth_providers": [],
+            }
+        ).encode("utf-8")
         response = self.client.post(
-            '/studio/settings/import/',
-            {'settings_file': _upload('settings.json', body)},
+            "/studio/settings/import/",
+            {"settings_file": _upload("settings.json", body)},
         )
         self.assertEqual(response.status_code, 302)
-        self.assertIn('/accounts/login/', response.url)
+        self.assertIn("/accounts/login/", response.url)

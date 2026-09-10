@@ -446,10 +446,10 @@ After affirmative analytics consent, UTM and organic-referrer attribution are ca
 - `Studio > Notifications` (`/studio/notifications/`) — recent notification log (Slack, email, push).
 - `Studio > Settings` (`/studio/settings/`) — every group's status badge. A "partial" badge means some keys are set and others aren't.
 - Server logs — depends on hosting. ECS: CloudWatch log group for the service. Local: stdout from `runserver`.
-- DB inspection — `IntegrationSetting` table holds Studio-saved values (encrypted secrets are still readable by Django; treat the table as sensitive).
+- DB inspection — Studio-saved values live in the package config store (`cb_config` `Setting` table, A0.2 step-5 cutover); secret values are Fernet-encrypted at rest (treat the table as sensitive). The retired donor `IntegrationSetting` table remains read-only until the step-6 cleanup and is no longer written.
 
 ## Future updates
 
 This section tracks doc updates pending on still-open feature work. Add a row when a new issue is opened that will require a doc edit; remove the row once the issue ships and the doc is updated.
 
-No pending doc updates at this time.
+- A0.2 step 6 (pending): when the donor `IntegrationSetting` table and compatibility shim are deleted, remove the donor-table row in section 12 and name the package config page and operator API as the only surfaces.

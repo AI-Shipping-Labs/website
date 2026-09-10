@@ -26,8 +26,13 @@ from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
-from integrations.config import clear_config_cache, site_base_url
-from integrations.models import IntegrationSetting
+from integrations.config import (
+    clear_config_cache,
+    delete_package_override,
+    set_package_override,
+    site_base_url,
+    stored_override_map,
+)
 from integrations.settings_registry import INTEGRATION_GROUPS, get_group_by_name
 from studio.decorators import staff_required
 from studio.services.auth_settings import (
@@ -386,9 +391,7 @@ def _build_status_summary(groups, auth_providers):
 @staff_required
 def settings_dashboard(request):
     """Render the sectioned settings dashboard."""
-    db_settings = dict(
-        IntegrationSetting.objects.values_list('key', 'value')
-    )
+    db_settings = stored_override_map()
 
     groups = []
     for group_def in INTEGRATION_GROUPS:
@@ -482,21 +485,20 @@ def settings_save_group(request, group_name):
     for key_def in group_def['keys']:
         key = key_def['key']
         value = normalized_values[key]
+        # D1.2c step-5 cutover: overrides persist in the package config
+        # store (cb_config), through the package service so secrets are
+        # encrypted and every change lands in the package audit trail.
         if key == clear_override or (value == '' and not key_def.get('is_boolean')):
-            deleted, _ = IntegrationSetting.objects.filter(key=key).delete()
-            if deleted:
+            if delete_package_override(key):
                 cleared_keys.append(key)
             continue
 
         if value != '':
-            IntegrationSetting.objects.update_or_create(
-                key=key,
-                defaults={
-                    'value': value,
-                    'is_secret': key_def.get('is_secret', False),
-                    'group': group_name,
-                    'description': key_def.get('description', ''),
-                },
+            set_package_override(
+                key,
+                value,
+                actor_ref=f'user:{request.user.pk}',
+                reason=f'Updated Studio group {group_name}',
             )
             saved_count += 1
 

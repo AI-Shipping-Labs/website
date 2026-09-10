@@ -1910,19 +1910,14 @@
       9496,
       11205,
       10141
-    ],
-    "playwright_tests/test_worktree_session_guard.py": [
-      1751,
-      1760,
-      1255
     ]
   },
-  "inventory_sha256": "eb24a9351e8d6c07704ad5ccd23aefadd6c6a95063379e47d0d49cd9c5af9020",
+  "inventory_sha256": "ab1c80b8f34c3187de96a3dd338f0ceb32b79f9e6f56889d2f44fdbad6d6db26",
   "schema_version": 1,
   "source_runs": [
     {
       "expected_selected_nodes": 2408,
-      "file_weights_sha256": "036a8aeb57af3e94736bfd0383b8742af0659e02cde3a170cf0b623019d4b301",
+      "file_weights_sha256": "e0f58dcc2ca86e35dd5e7c2f0fcc8a44d993b18ea8d7c306a8c6bfab56d668c9",
       "head_sha": "89faea5780eebcd2ce5108fbdce0b706514731f3",
       "job_ids": [
         94380223848,
@@ -1936,7 +1931,7 @@
     },
     {
       "expected_selected_nodes": 2408,
-      "file_weights_sha256": "b4ee714b064aad5ce4964a07f365d6605aed3410e30e93eb0b63a6709c38906b",
+      "file_weights_sha256": "38cb04846b29ff673d5d41ef5fb228da708862d26c74af8f8cf7f814a3a415f2",
       "head_sha": "0047ede3d6616b0fb35ce7c46474ddf6e099f000",
       "job_ids": [
         94415906999,
@@ -1950,7 +1945,7 @@
     },
     {
       "expected_selected_nodes": 2408,
-      "file_weights_sha256": "72f56ad6ad97738457b92d187da5af9b1eba37258eee17bfdd08c47db7483b29",
+      "file_weights_sha256": "b3b812c3be6f24ce37b510e1912ee667a32165f7926ac7685094e14630d24718",
       "head_sha": "56f0a99a7708b8b0ab886bd1e7e34a3f66f7d104",
       "job_ids": [
         94509841937,

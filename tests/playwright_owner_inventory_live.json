@@ -2307,16 +2307,6 @@
       "category": "playwright-policy",
       "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
       "relocation": "tests/"
-    },
-    "playwright_tests/test_dev_goto_resilience_guard.py::test_dev_eligible_files_route_navigation_through_goto_with_retry": {
-      "category": "playwright-policy",
-      "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_dev_goto_resilience_guard.py::test_dev_eligible_universe_is_discoverable": {
-      "category": "playwright-policy",
-      "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
-      "relocation": "tests/"
     }
   },
   "collected_item_count": 2559,

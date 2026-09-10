@@ -2247,33 +2247,7 @@
     "playwright_tests/test_workshops_mobile_512.py::test_pixel7_archive_is_overflow_free_and_home_omits_recordings",
     "playwright_tests/test_workshops_mobile_512.py::test_tablet_archive_keeps_all_recordings_reachable"
   ],
-  "LEGACY_NON_BROWSER": {
-    "playwright_tests/test_conftest_port_resolution.py::test_invalid_or_nonpositive_falls_back_to_free_port": {
-      "category": "playwright-policy",
-      "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_conftest_port_resolution.py::test_resolved_port_is_memoized": {
-      "category": "playwright-policy",
-      "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_conftest_port_resolution.py::test_unset_falls_back_to_free_port": {
-      "category": "playwright-policy",
-      "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_conftest_port_resolution.py::test_valid_positive_port_is_honored_verbatim": {
-      "category": "playwright-policy",
-      "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_conftest_port_resolution.py::test_zero_falls_back_to_free_port": {
-      "category": "playwright-policy",
-      "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
-      "relocation": "tests/"
-    }
-  },
+  "LEGACY_NON_BROWSER": {},
   "collected_item_count": 2559,
   "collected_owner_count": 2339,
   "inventory_source_sha": "e238f4bf44411cd7d8d50d59b3359acc38aa4c64",

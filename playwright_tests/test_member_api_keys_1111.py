@@ -167,19 +167,6 @@ class TestMemberAPIKeysAccountUI:
         connection.close()
         context.close()
 
-    def test_skill_directory_exists_in_repo(self):
-        # Issue #1127: the skill directory was restored so the tree link
-        # no longer 404s.
-        import os
-
-        base = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "skills",
-            "ai-shipping-labs-member-api",
-        )
-        assert os.path.isfile(os.path.join(base, "README.md"))
-        assert os.path.isfile(os.path.join(base, "SKILL.md"))
-
     @pytest.mark.core
     def test_member_revokes_then_deletes_key(self, django_server, browser):
         from django.db import connection

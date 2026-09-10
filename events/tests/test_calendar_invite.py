@@ -498,10 +498,11 @@ class SendRegistrationConfirmationTest(TestCase):
         raise AssertionError('No text/calendar part found in email')
 
     @patch('events.services.registration_email.boto3')
-    def test_send_email_calendar_is_multipart_alternative_sibling(self, mock_boto3):
-        """Issue #1088: the text/calendar part is delivered as a
-        multipart/alternative sibling of the HTML body, NOT as a
-        Content-Disposition: attachment, so Gmail merges by UID in place.
+    def test_send_email_calendar_has_ordered_multipart_alternatives(self, mock_boto3):
+        """Calendar mail has plain, HTML, and calendar siblings in that order.
+
+        The calendar stays last and has no attachment disposition, preserving
+        the provider contract from #1088 while adding the #1567 text fallback.
         """
         mock_client = MagicMock()
         mock_client.send_email.return_value = {'MessageId': 'msg-456'}
@@ -527,14 +528,22 @@ class SendRegistrationConfirmationTest(TestCase):
         )
         alternative = alternative_parts[0]
 
-        # The text/html body and the text/calendar part are SIBLINGS inside
-        # the same multipart/alternative container.
+        # Exactly one of each direct child, ordered least-rich to richest.
         child_types = [
             child.get_content_type()
             for child in alternative.get_payload()
         ]
-        self.assertIn('text/html', child_types)
-        self.assertIn('text/calendar', child_types)
+        self.assertEqual(
+            child_types,
+            ['text/plain', 'text/html', 'text/calendar'],
+        )
+
+        plain_text = alternative.get_payload()[0].get_payload(
+            decode=True,
+        ).decode('utf-8')
+        self.assertIn("You're registered for Test Event", plain_text)
+        self.assertIn(self.event.get_join_url(), plain_text)
+        self.assertNotIn('<html', plain_text)
 
         cal_part = next(
             child for child in alternative.get_payload()
@@ -543,6 +552,7 @@ class SendRegistrationConfirmationTest(TestCase):
 
         # method=REQUEST on the calendar part's Content-Type.
         self.assertEqual(cal_part.get_param('method'), 'REQUEST')
+        self.assertEqual(cal_part.get_param('name'), 'event.ics')
 
         # No Content-Disposition: attachment on the calendar part.
         self.assertIsNone(cal_part.get('Content-Disposition'))

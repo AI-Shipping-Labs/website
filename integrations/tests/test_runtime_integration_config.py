@@ -143,6 +143,7 @@ class SESRuntimeConfigTest(RuntimeConfigTestCase):
             to_email="member@example.com",
             subject="Event",
             html_body="<p>Event</p>",
+            text_body="Event",
             ics_content="BEGIN:VCALENDAR\nEND:VCALENDAR",
         )
 

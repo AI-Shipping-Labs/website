@@ -904,6 +904,12 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_maven_attention_1566.py::"
         "test_staff_reaches_old_exhausted_occurrence_with_attention_filter_preserved",
     })
+    issue_1567_owners = frozenset({
+        "playwright_tests/test_plain_text_email_1567.py::"
+        "test_staff_edits_previews_and_test_sends_maven_welcome",
+        "playwright_tests/test_plain_text_email_1567.py::"
+        "test_staff_previews_and_test_sends_markdown_campaign",
+    })
     issue_1557_owners = frozenset({
         "playwright_tests/test_event_recap.py::"
         "TestRecapReadyNotificationBrowserFlow::"
@@ -1224,8 +1230,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2566)
-        self.assertEqual(len(inventory.owners), 2364)
+        self.assertEqual(inventory.item_count, 2568)
+        self.assertEqual(len(inventory.owners), 2366)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1241,6 +1247,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1516_owners
             | self.issue_1565_owners
             | self.issue_1566_owners
+            | self.issue_1567_owners
             | self.issue_1540_owners
             | self.issue_1541_owners
             | self.issue_1589_owners
@@ -1291,6 +1298,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1542_owners
             | self.issue_1544_owners
             | self.issue_1556_owners
+            | self.issue_1567_owners
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)

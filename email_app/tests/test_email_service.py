@@ -395,6 +395,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'recipient@example.com',
             'Test Subject',
             '<html><body>Hello</body></html>',
+            text_body='Hello',
         )
 
         self.assertEqual(result, 'ses-real-id')
@@ -407,6 +408,16 @@ class EmailServiceSESIntegrationTest(TestCase):
         self.assertEqual(
             call_kwargs['Content']['Simple']['Subject']['Data'],
             'Test Subject',
+        )
+        self.assertEqual(
+            call_kwargs['Content']['Simple']['Body'],
+            {
+                'Text': {'Data': 'Hello', 'Charset': 'UTF-8'},
+                'Html': {
+                    'Data': '<html><body>Hello</body></html>',
+                    'Charset': 'UTF-8',
+                },
+            },
         )
         self.assertNotIn('Headers', call_kwargs['Content']['Simple'])
 
@@ -421,6 +432,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'recipient@example.com',
             'Test Subject',
             '<html><body>Hello</body></html>',
+            text_body='Hello',
             unsubscribe_url=unsubscribe_url,
         )
 
@@ -457,6 +469,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'recipient@example.com',
             'Test Subject',
             '<html><body>Hello</body></html>',
+            text_body='Hello',
             unsubscribe_url=unsubscribe_url,
         )
 
@@ -485,7 +498,9 @@ class EmailServiceSESIntegrationTest(TestCase):
             self.assertLogs('email_app.services.email_service', level='ERROR') as logs,
             self.assertRaises(EmailServiceError) as ctx,
         ):
-            self.service._send_ses('to@example.com', 'Sub', '<html/>')
+            self.service._send_ses(
+                'to@example.com', 'Sub', '<html/>', text_body='Text',
+            )
         self.assertIn('Failed to send email via SES to to@example.com', logs.output[0])
         self.assertIn('SES send failed', str(ctx.exception))
 
@@ -496,7 +511,9 @@ class EmailServiceSESIntegrationTest(TestCase):
         mock_boto3.client.return_value = mock_client
 
         with self.assertRaisesRegex(RuntimeError, 'bad send kwargs'):
-            self.service._send_ses('to@example.com', 'Sub', '<html/>')
+            self.service._send_ses(
+                'to@example.com', 'Sub', '<html/>', text_body='Text',
+            )
 
     @override_settings(SES_TRANSACTIONAL_FROM_EMAIL='custom@example.com')
     @patch('email_app.services.email_service.boto3')
@@ -509,6 +526,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'to@example.com',
             'Sub',
             '<html/>',
+            text_body='Text',
             email_type='password_reset',
         )
 
@@ -532,6 +550,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'to@example.com',
             'Sub',
             '<html/>',
+            text_body='Text',
             email_type='password_reset',
         )
 
@@ -549,6 +568,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'to@example.com',
             'Sub',
             '<html/>',
+            text_body='Text',
             email_type='campaign',
         )
 
@@ -570,6 +590,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'to@example.com',
             'Sub',
             '<html/>',
+            text_body='Text',
             email_type='password_reset',
         )
 
@@ -589,7 +610,9 @@ class EmailServiceSESIntegrationTest(TestCase):
         mock_client.send_email.return_value = {'MessageId': 'id-123'}
         mock_boto3.client.return_value = mock_client
 
-        self.service._send_ses('to@example.com', 'Sub', '<html/>')
+        self.service._send_ses(
+            'to@example.com', 'Sub', '<html/>', text_body='Text',
+        )
 
         call_kwargs = mock_client.send_email.call_args[1]
         self.assertEqual(call_kwargs['ConfigurationSetName'], 'my-set')
@@ -600,7 +623,9 @@ class EmailServiceSESIntegrationTest(TestCase):
         mock_client.send_email.return_value = {'MessageId': 'id-123'}
         mock_boto3.client.return_value = mock_client
 
-        self.service._send_ses('to@example.com', 'Sub', '<html/>')
+        self.service._send_ses(
+            'to@example.com', 'Sub', '<html/>', text_body='Text',
+        )
 
         call_kwargs = mock_client.send_email.call_args[1]
         self.assertNotIn('ConfigurationSetName', call_kwargs)
@@ -977,6 +1002,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'member@example.com',
             'Sub',
             '<html/>',
+            text_body='Text',
             email_type='welcome',
         )
 
@@ -997,6 +1023,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'to@example.com',
             'Sub',
             '<html/>',
+            text_body='Text',
             email_type='password_reset',
         )
 
@@ -1018,6 +1045,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'member@example.com',
             'Sub',
             '<html/>',
+            text_body='Text',
             email_type='cofounder_welcome',
             bcc='staff@aishippinglabs.com',
         )

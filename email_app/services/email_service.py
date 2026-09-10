@@ -27,7 +27,7 @@ from django.template.loader import render_to_string
 from accounts.services.timezones import format_user_datetime
 from accounts.utils.display import GREETING_FALLBACK, greeting_name
 from accounts.utils.tokens import generate_user_action_token
-from content.utils.markdown import render_email_markdown
+from content.utils.markdown import render_email_markdown, render_email_plain_text
 from email_app.services.email_classification import (
     EMAIL_KIND_PROMOTIONAL,
     WELCOME_EMAIL_TYPES,
@@ -116,6 +116,7 @@ class PreparedRenderedEmail:
     to_email: str = ''
     subject: str = ''
     full_html: str = ''
+    plain_text: str = ''
     email_type: str = ''
     unsubscribe_url: str | None = None
     cc: object = None
@@ -237,7 +238,7 @@ class EmailService:
 
         # Load and render the template. DB overrides beat filesystem
         # templates, but no override keeps the historical file path.
-        subject, body_html, footer_note = self._render_template_with_footer(
+        subject, body_markdown, body_html, footer_note = self._render_template_parts(
             template_name,
             user,
             context,
@@ -262,12 +263,19 @@ class EmailService:
             footer_note=footer_note,
             verify_email_url=verify_email_url,
         )
+        plain_text = self.render_plain_text_email(
+            body_markdown,
+            footer_note=footer_note,
+            verify_email_url=verify_email_url,
+            unsubscribe_url=unsubscribe_url,
+        )
 
         # Send via SES
         ses_message_id = self._send_ses(
             to_email,
             subject,
             full_html,
+            text_body=plain_text,
             email_type=template_name,
             unsubscribe_url=unsubscribe_url,
             cc=cc,
@@ -309,7 +317,7 @@ class EmailService:
         self,
         user,
         subject,
-        body_html,
+        body_markdown,
         *,
         email_type,
         campaign_id=None,
@@ -317,7 +325,7 @@ class EmailService:
         cc=None,
         bcc=None,
     ):
-        """Guard and send an already-rendered email body.
+        """Guard and send an email from resolved Markdown source.
 
         This is the public delivery boundary for callers whose content does
         not come from a named email template, notably ``EmailCampaign``. A
@@ -332,7 +340,7 @@ class EmailService:
         prepared = self.prepare_rendered(
             user,
             subject,
-            body_html,
+            body_markdown,
             email_type=email_type,
             campaign_id=campaign_id,
             footer_note=footer_note,
@@ -348,7 +356,7 @@ class EmailService:
         self,
         user,
         subject,
-        body_html,
+        body_markdown,
         *,
         email_type,
         campaign_id=None,
@@ -380,6 +388,7 @@ class EmailService:
         if self._should_include_verify_footer(user, email_type):
             verify_email_url = self._build_verify_email_url(user)
 
+        body_html = render_email_markdown(body_markdown)
         full_html = self.render_html_email(
             subject,
             body_html,
@@ -387,10 +396,17 @@ class EmailService:
             footer_note=footer_note,
             verify_email_url=verify_email_url,
         )
+        plain_text = self.render_plain_text_email(
+            body_markdown,
+            footer_note=footer_note,
+            verify_email_url=verify_email_url,
+            unsubscribe_url=unsubscribe_url,
+        )
         return PreparedRenderedEmail(
             to_email=user.email,
             subject=subject,
             full_html=full_html,
+            plain_text=plain_text,
             email_type=email_type,
             unsubscribe_url=unsubscribe_url,
             cc=cc,
@@ -403,6 +419,7 @@ class EmailService:
             prepared.to_email,
             prepared.subject,
             prepared.full_html,
+            text_body=prepared.plain_text,
             email_type=prepared.email_type,
             unsubscribe_url=prepared.unsubscribe_url,
             cc=prepared.cc,
@@ -427,7 +444,7 @@ class EmailService:
         if skip_reason is not None:
             return PreparedRenderedEmail(skip_reason=skip_reason)
 
-        subject, body_html, footer_note = self._render_template_with_footer(
+        subject, body_markdown, body_html, footer_note = self._render_template_parts(
             template_name,
             user,
             context,
@@ -445,10 +462,17 @@ class EmailService:
             footer_note=footer_note,
             verify_email_url=verify_email_url,
         )
+        plain_text = self.render_plain_text_email(
+            body_markdown,
+            footer_note=footer_note,
+            verify_email_url=verify_email_url,
+            unsubscribe_url=unsubscribe_url,
+        )
         return PreparedRenderedEmail(
             to_email=(recipient_email or user.email).strip(),
             subject=subject,
             full_html=full_html,
+            plain_text=plain_text,
             email_type=template_name,
             unsubscribe_url=unsubscribe_url,
             cc=cc,
@@ -501,6 +525,15 @@ class EmailService:
         Raises:
             EmailServiceError: If no override or template file is found.
         """
+        subject, _body_markdown, body_html, footer_note = self._render_template_parts(
+            template_name,
+            user,
+            context,
+        )
+        return subject, body_html, footer_note
+
+    def _render_template_parts(self, template_name, user, context):
+        """Resolve a named template once and return its Markdown and HTML bodies."""
         subject_source, body_source, footer_note = self._load_template_source(
             template_name,
         )
@@ -541,7 +574,7 @@ class EmailService:
         # so transactional email bodies parse identically to the website.
         body_html = render_email_markdown(rendered_body)
 
-        return subject, body_html, footer_note
+        return subject, rendered_body, body_html, footer_note
 
     def _load_template_source(self, template_name):
         """Return ``(subject, body_markdown, footer_note)`` for a template."""
@@ -663,6 +696,27 @@ class EmailService:
             verify_email_url=verify_email_url,
         )
 
+    def render_plain_text_email(
+        self,
+        body_markdown,
+        *,
+        unsubscribe_url=None,
+        footer_note=None,
+        verify_email_url=None,
+    ):
+        """Render resolved Markdown plus the same actions as the HTML footer."""
+        sections = [render_email_plain_text(body_markdown), 'AI Shipping Labs']
+        if footer_note:
+            sections.append(str(footer_note).strip())
+        if verify_email_url:
+            sections.append(
+                'Your email is not verified on our platform.\n'
+                f'Verify your email: {verify_email_url}'
+            )
+        if unsubscribe_url:
+            sections.append(f'Unsubscribe from all emails: {unsubscribe_url}')
+        return '\n\n'.join(section for section in sections if section).strip()
+
     def _build_unsubscribe_headers(self, unsubscribe_url):
         """Build SES-compatible one-click unsubscribe headers."""
         if not unsubscribe_url:
@@ -690,6 +744,7 @@ class EmailService:
         subject,
         html_body,
         *,
+        text_body,
         email_type=None,
         unsubscribe_url=None,
         cc=None,
@@ -702,6 +757,7 @@ class EmailService:
             to_email: Recipient email address.
             subject: Email subject line.
             html_body: Full HTML email body.
+            text_body: Full plain-text email body derived from the same source.
             email_type: The email template name (e.g. 'welcome',
                 'password_reset'). Used to resolve the From address via
                 ``get_sender_for_email_type`` so welcome types pick up the
@@ -766,6 +822,10 @@ class EmailService:
                     "Charset": "UTF-8",
                 },
                 "Body": {
+                    "Text": {
+                        "Data": text_body,
+                        "Charset": "UTF-8",
+                    },
                     "Html": {
                         "Data": html_body,
                         "Charset": "UTF-8",

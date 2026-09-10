@@ -192,9 +192,6 @@ class CampaignDeliveryFailureSemanticsTest(CampaignDeliveryBase, TestCase):
 
         with (
             patch(
-                "email_app.tasks.send_campaign.render_email_markdown",
-            ) as render_body,
-            patch(
                 "email_app.tasks.send_campaign.EmailService.prepare_rendered",
             ) as prepare,
             patch(
@@ -225,7 +222,6 @@ class CampaignDeliveryFailureSemanticsTest(CampaignDeliveryBase, TestCase):
         self.assertEqual(campaign.sent_count, 0)
         self.assertIsNotNone(campaign.sent_at)
         self.assertFalse(EmailLog.objects.filter(campaign=campaign).exists())
-        render_body.assert_not_called()
         prepare.assert_not_called()
         build_unsubscribe_url.assert_not_called()
         build_verify_url.assert_not_called()

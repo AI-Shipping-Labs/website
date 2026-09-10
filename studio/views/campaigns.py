@@ -767,12 +767,18 @@ def campaign_test_send(request, campaign_id):
             unsubscribe_url=unsubscribe_url,
             footer_note=footer_note,
         )
+        plain_text = service.render_plain_text_email(
+            campaign.body,
+            unsubscribe_url=unsubscribe_url,
+            footer_note=footer_note,
+        )
 
         try:
             service._send_ses(
                 recipient,
                 subject,
                 full_html,
+                text_body=plain_text,
                 email_type='campaign',
                 unsubscribe_url=unsubscribe_url,
             )

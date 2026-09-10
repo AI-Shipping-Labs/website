@@ -7,7 +7,6 @@ from types import SimpleNamespace
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Q
-from django.template.loader import render_to_string
 
 from accounts.services.email_resolution import resolve_user_by_email
 from email_app.services.email_service import EmailService
@@ -155,19 +154,24 @@ def _send_one(event, recipient):
             }
 
         email_service = EmailService()
-        subject, body_html = email_service._render_template(
-            EMAIL_TYPE,
-            _render_user(recipient),
-            _build_context(event),
+        subject, body_markdown, body_html, footer_note = (
+            email_service._render_template_parts(
+                EMAIL_TYPE,
+                _render_user(recipient),
+                _build_context(event),
+            )
         )
-        full_html = render_to_string('email_app/base_email.html', {
-            'subject': subject,
-            'body_html': body_html,
-        })
+        full_html = email_service.render_html_email(
+            subject, body_html, footer_note=footer_note,
+        )
+        plain_text = email_service.render_plain_text_email(
+            body_markdown, footer_note=footer_note,
+        )
         ses_message_id = email_service._send_ses(
             recipient.email,
             subject,
             full_html,
+            text_body=plain_text,
             email_type=EMAIL_TYPE,
         )
         email_log = EmailLog.objects.create(

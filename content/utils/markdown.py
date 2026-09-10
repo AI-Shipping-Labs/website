@@ -6,6 +6,8 @@ import re
 import markdown as markdown_lib
 import nh3
 from django.utils.html import strip_tags
+from markdown_it import MarkdownIt
+from markdown_it.tree import SyntaxTreeNode
 
 from content.markdown_extensions import (
     EventWidgetExtension,
@@ -135,6 +137,13 @@ MARKDOWN_EXTENSION_CONFIGS = {
     },
 }
 
+# Plain-text email bodies need Markdown semantics (especially link targets and
+# list boundaries), not an HTML document with its tags removed. markdown-it's
+# syntax tree gives us those source-level semantics before HTML rendering.
+_EMAIL_PLAIN_TEXT_MARKDOWN = MarkdownIt(
+    'commonmark', {'html': True},
+).enable('table')
+
 
 def _build_extensions(
     *,
@@ -249,6 +258,137 @@ def render_email_markdown(text):
         # inbox can't run — consume the directive without a placeholder.
         render_event_widget_placeholder=False,
     )
+
+
+def _email_plain_link(label, destination):
+    """Keep a Markdown link destination unless its label already is the URL."""
+    label = label.strip()
+    destination = html_lib.unescape(destination).strip()
+    if not destination:
+        return label
+    comparable_destination = (
+        destination.removeprefix('mailto:')
+        if destination.lower().startswith('mailto:')
+        else destination
+    )
+    if label in {destination, comparable_destination}:
+        return label
+    if not label:
+        return destination
+    return f'{label} ({destination})'
+
+
+def _email_plain_inline(node):
+    if node.type in {'text', 'code_inline'}:
+        return node.content
+    if node.type in {'softbreak', 'hardbreak'}:
+        return '\n'
+    if node.type == 'html_inline':
+        return html_lib.unescape(strip_tags(node.content))
+    if node.type == 'image':
+        label = ''.join(_email_plain_inline(child) for child in node.children or [])
+        return _email_plain_link(label, node.attrs.get('src', ''))
+
+    rendered = ''.join(
+        _email_plain_inline(child) for child in node.children or []
+    )
+    if node.type == 'link':
+        return _email_plain_link(rendered, node.attrs.get('href', ''))
+    return rendered
+
+
+def _email_plain_table(node):
+    rows = []
+    for section in node.children or []:
+        for row in section.children or []:
+            cells = [
+                _email_plain_block(cell).strip()
+                for cell in row.children or []
+            ]
+            rows.append(' | '.join(cells))
+    return '\n'.join(rows)
+
+
+def _email_plain_list(node, depth=0):
+    lines = []
+    start = int(node.attrs.get('start', 1))
+    ordered = node.type == 'ordered_list'
+    for offset, item in enumerate(node.children or []):
+        prefix = f'{start + offset}. ' if ordered else '- '
+        indentation = '  ' * depth
+        first_line = True
+        for child in item.children or []:
+            if child.type in {'bullet_list', 'ordered_list'}:
+                lines.append(_email_plain_list(child, depth + 1))
+                continue
+            rendered = _email_plain_block(child, depth=depth).strip()
+            if not rendered:
+                continue
+            rendered_lines = rendered.splitlines()
+            if first_line:
+                lines.append(f'{indentation}{prefix}{rendered_lines[0]}')
+                first_line = False
+            else:
+                lines.append(f'{indentation}  {rendered_lines[0]}')
+            lines.extend(
+                f'{indentation}  {line}' for line in rendered_lines[1:]
+            )
+        if first_line:
+            lines.append(f'{indentation}{prefix.rstrip()}')
+    return '\n'.join(lines)
+
+
+def _email_plain_children(node, depth=0):
+    rendered_children = []
+    for child in node.children or []:
+        rendered = _email_plain_block(child, depth=depth).strip()
+        if rendered:
+            rendered_children.append(rendered)
+    return '\n\n'.join(rendered_children)
+
+
+def _email_plain_block(node, depth=0):
+    if node.type in {'paragraph', 'heading', 'inline', 'th', 'td'}:
+        return ''.join(
+            _email_plain_inline(child) for child in node.children or []
+        )
+    if node.type in {'fence', 'code_block'}:
+        return node.content.rstrip('\n')
+    if node.type in {'bullet_list', 'ordered_list'}:
+        return _email_plain_list(node, depth)
+    if node.type == 'blockquote':
+        rendered = _email_plain_children(node, depth)
+        return '\n'.join(
+            f'> {line}' if line else '>' for line in rendered.splitlines()
+        )
+    if node.type == 'table':
+        return _email_plain_table(node)
+    if node.type == 'hr':
+        return '---'
+    if node.type == 'html_block':
+        return html_lib.unescape(strip_tags(node.content)).strip()
+    return _email_plain_children(node, depth)
+
+
+def render_email_plain_text(text):
+    """Render resolved Markdown source as a readable email text body.
+
+    The syntax tree is built directly from Markdown source. This preserves
+    structural boundaries and actionable destinations that would be lost by
+    stripping the already-wrapped HTML email.
+    """
+    if not text:
+        return ''
+    source = normalize_inline_bullets(str(text))
+    root = SyntaxTreeNode(_EMAIL_PLAIN_TEXT_MARKDOWN.parse(source))
+    blocks = []
+    for child in root.children or []:
+        rendered = _email_plain_block(child).strip()
+        if rendered:
+            blocks.append(rendered)
+    plain_text = '\n\n'.join(blocks)
+    plain_text = '\n'.join(line.rstrip() for line in plain_text.splitlines())
+    return re.sub(r'\n{3,}', '\n\n', plain_text).strip()
 
 
 def render_description_html(text):

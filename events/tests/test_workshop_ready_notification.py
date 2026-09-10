@@ -80,9 +80,13 @@ class WorkshopReadyServiceTest(TestCase):
             Notification.objects.filter(user=self.unrelated).exists(),
         )
         html = mock_send.call_args_list[0].args[2]
+        plain_text = mock_send.call_args_list[0].kwargs['text_body']
         self.assertIn('Workshop Ready Event', html)
         self.assertIn('Workshop Ready Notes', html)
         self.assertIn('/workshops/workshop-ready-event-workshop', html)
+        self.assertIn('Workshop Ready Event', plain_text)
+        self.assertIn('Workshop Ready Notes', plain_text)
+        self.assertIn('/workshops/workshop-ready-event-workshop', plain_text)
 
     @patch('email_app.services.email_service.EmailService._send_ses', return_value='ses')
     def test_host_already_registered_is_deduped(self, mock_send):

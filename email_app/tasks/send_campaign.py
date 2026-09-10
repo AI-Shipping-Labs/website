@@ -12,7 +12,6 @@ from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Q
 from django.utils import timezone
 
-from content.utils.markdown import render_email_markdown
 from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
 from email_app.services.email_service import (
     UNSUBSCRIBED_AT_SEND,
@@ -458,7 +457,6 @@ def send_campaign_batch(
         }
 
     service = EmailService()
-    body_html = None
     sent_count = 0
     skipped_count = already_sent_count
     failed_count = 0
@@ -497,14 +495,11 @@ def send_campaign_batch(
                 skipped_count += 1
             continue
 
-        if body_html is None:
-            body_html = render_email_markdown(campaign.body)
-
         try:
             prepared = service.prepare_rendered(
                 user,
                 campaign.subject,
-                body_html,
+                campaign.body,
                 email_type='campaign',
                 campaign_id=campaign_id,
             )

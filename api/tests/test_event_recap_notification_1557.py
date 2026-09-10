@@ -85,6 +85,7 @@ class EventRecapNotificationApiTest(TestCase):
             self.member.email,
             'Recap ready: API Recap Event',
             ANY,
+            text_body=ANY,
             email_type='event_recap_ready',
             unsubscribe_url=None,
             cc=None,

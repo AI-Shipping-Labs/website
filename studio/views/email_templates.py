@@ -22,6 +22,11 @@ from django.views.decorators.http import require_POST
 
 from accounts.utils.display import GREETING_FALLBACK
 from email_app.models import EmailTemplateOverride
+from email_app.services.email_classification import (
+    EMAIL_KIND_PROMOTIONAL,
+    EmailClassificationError,
+    classify_email_type,
+)
 from email_app.services.email_service import (
     TEMPLATES_DIR,
     EmailService,
@@ -44,6 +49,7 @@ TEMPLATE_DISPLAY_ORDER = [
     'welcome',
     'free_welcome',
     'account_deletion_request',
+    'account_deletion_completed',
     'email_verification_signup',
     'email_verification_subscribe',
     'password_reset',
@@ -66,6 +72,7 @@ TEMPLATE_DISPLAY_ORDER = [
 # drift apart. The completeness test intentionally fails when registration is
 # extended without documenting the real send trigger.
 TEMPLATE_SENT_WHEN = {
+    'account_deletion_completed': 'Sent after a superuser completes an accepted local account-deletion request.',
     'account_deletion_request': 'Sent when a signed-in member asks the team to delete their local account.',
     'account_email_change_confirm': 'Sent when a member requests an account email-address change.',
     'account_email_changed_notice': 'Sent to the previous address after an account email change succeeds.',
@@ -222,6 +229,13 @@ def _render_preview_html(
     rendered_body = Template(body_markdown or '').render(Context(placeholder))
     body_html = render_email_markdown(rendered_body)
 
+    try:
+        is_promotional = (
+            classify_email_type(template_name) == EMAIL_KIND_PROMOTIONAL
+        )
+    except EmailClassificationError:
+        is_promotional = False
+
     return render_to_string(
         'email_app/base_email.html',
         {
@@ -229,7 +243,11 @@ def _render_preview_html(
             'body_html': body_html,
             # Show a fake unsubscribe link so the operator sees the
             # footer chrome that real recipients will get.
-            'unsubscribe_url': 'https://aishippinglabs.com/api/unsubscribe?token=preview',
+            'unsubscribe_url': (
+                'https://aishippinglabs.com/api/unsubscribe?token=preview'
+                if is_promotional
+                else None
+            ),
             'footer_note': footer_note or '',
         },
     )

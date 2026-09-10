@@ -1,0 +1,82 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Account deletion request{% endblock %}
+
+{% block studio_content %}
+{% studio_header_actions title="Account deletion request" eyebrow="Privacy" subtitle="Review the accepted request and its durable execution evidence." back_url="/studio/users/" back_label="Back to users" testid="privacy-deletion-header" %}
+{% endstudio_header_actions %}
+
+<section class="bg-card border border-border rounded-lg p-6 mb-6 max-w-3xl" data-testid="privacy-deletion-facts">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Request facts</h2>
+  <dl class="grid gap-3 text-sm sm:grid-cols-2">
+    <div><dt class="text-xs text-muted-foreground">Request ID</dt><dd class="text-foreground font-mono">{{ request_log.pk }}</dd></div>
+    <div><dt class="text-xs text-muted-foreground">Support ID</dt><dd class="text-foreground font-mono" data-testid="privacy-deletion-support-id">{{ request_log.old_user_id }}</dd></div>
+    <div><dt class="text-xs text-muted-foreground">Accepted at</dt><dd class="text-foreground" data-testid="privacy-deletion-requested-at">{{ requested_at_utc }}</dd></div>
+    <div><dt class="text-xs text-muted-foreground">Request state</dt><dd class="text-foreground">{{ request_log.get_status_display }}</dd></div>
+  </dl>
+</section>
+
+{% if completed_audit %}
+<section class="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-6 mb-6 max-w-3xl" data-testid="privacy-deletion-completed">
+  <h2 class="text-lg font-semibold text-foreground">Account deleted</h2>
+  <p class="mt-2 text-sm text-muted-foreground">Local account deletion completed at {{ completed_at_utc }}. Support ID {{ request_log.old_user_id }} remains as privacy-safe audit evidence.</p>
+  {% if delivery.status == 'sent' %}
+  <p class="mt-3 text-sm text-foreground" data-testid="privacy-confirmation-sent">Confirmation email sent. The encrypted destination has been cleared.</p>
+  {% elif delivery.status == 'failed' %}
+  <div class="mt-3" data-testid="privacy-confirmation-failed">
+    <p class="text-sm text-foreground">Account deleted, but confirmation email was not delivered.</p>
+    {% if can_retry_delivery %}
+    <form method="post" action="{% url 'studio_privacy_deletion_retry_confirmation' request_log.pk %}" class="mt-3">
+      {% csrf_token %}
+      <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="privacy-confirmation-retry">Retry confirmation</button>
+    </form>
+    {% else %}<p class="mt-2 text-sm text-muted-foreground">A superuser must retry the confirmation.</p>{% endif %}
+  </div>
+  {% elif delivery.status == 'outcome_unknown' or delivery.status == 'sending' %}
+  <div class="mt-3" data-testid="privacy-confirmation-unknown">
+    <p class="text-sm text-foreground">Confirmation delivery outcome is unknown. Review provider delivery evidence before taking further action.</p>
+    <p class="mt-1 text-sm text-muted-foreground">Ordinary resend is disabled to prevent duplicate mail.</p>
+  </div>
+  {% else %}
+  <p class="mt-3 text-sm text-muted-foreground" data-testid="privacy-confirmation-pending">Confirmation delivery is pending.</p>
+  {% endif %}
+</section>
+{% else %}
+{% if blocker_message %}
+<section class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-5 mb-6 max-w-3xl" data-testid="privacy-deletion-blocker">
+  <h2 class="text-base font-semibold text-foreground">Current blocker</h2>
+  <p class="mt-2 text-sm text-muted-foreground">{{ blocker_message }}</p>
+</section>
+{% else %}
+<section class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-5 mb-6 max-w-3xl" data-testid="privacy-deletion-ready">
+  <h2 class="text-base font-semibold text-foreground">No current execution blocker</h2>
+  <p class="mt-2 text-sm text-muted-foreground">The canonical privacy service will re-check protected-account and subscription rules when the request is confirmed.</p>
+</section>
+{% endif %}
+
+<section class="bg-card border border-border rounded-lg p-6 max-w-3xl" data-testid="privacy-deletion-confirmation">
+  <h2 class="text-lg font-semibold text-foreground">Confirm irreversible local deletion</h2>
+  <p class="mt-2 text-sm text-muted-foreground">This permanently deletes the local AI Shipping Labs account and member profile. It does not cancel Stripe or erase records held by Stripe, Slack, SES, or OAuth providers.</p>
+  {% if can_confirm %}
+  <form method="post" action="{% url 'studio_privacy_deletion_confirm' request_log.pk %}" class="mt-5 space-y-4" data-testid="privacy-deletion-form">
+    {% csrf_token %}
+    <input type="hidden" name="workflow_version" value="{{ request_log.workflow_version }}">
+    <div>
+      <label for="privacy-confirm-email" class="block text-sm font-medium text-foreground mb-1">Enter the exact current login email</label>
+      <input id="privacy-confirm-email" name="confirm_email" type="email" autocomplete="off" required class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground" data-testid="privacy-confirm-email">
+    </div>
+    <label class="flex items-start gap-3 text-sm text-foreground">
+      <input type="checkbox" name="acknowledge" value="yes" required class="mt-1 rounded border-border text-accent focus:ring-accent" data-testid="privacy-confirm-acknowledge">
+      <span>I understand that local account deletion is irreversible and does not delete external-provider records.</span>
+    </label>
+    <button type="submit" class="{% studio_action_class 'destructive' %}" data-testid="privacy-delete-account">Delete account</button>
+  </form>
+  {% elif not request.user.is_superuser %}
+  <p class="mt-4 text-sm text-muted-foreground" data-testid="privacy-superuser-required">A superuser must complete this deletion request.</p>
+  {% else %}
+  <p class="mt-4 text-sm text-muted-foreground">Resolve the missing-account evidence before attempting deletion.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

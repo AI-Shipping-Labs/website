@@ -49,8 +49,9 @@ from accounts.lifecycle import (
     lifecycle_label,
     normalize_account_lifecycle,
 )
-from accounts.models import EmailAlias, TierOverride
+from accounts.models import EmailAlias, PrivacyRequestLog, TierOverride
 from accounts.services.email_resolution import normalize_email
+from accounts.services.privacy import normalized_privacy_email_hash
 from accounts.services.slack_identity import (
     is_valid_slack_user_id,
     normalize_slack_user_id,
@@ -1386,6 +1387,24 @@ def user_detail(request, user_id):
         User.objects.select_related('tier', 'pending_tier'),
         pk=user_id,
     )
+    deletion_request = (
+        PrivacyRequestLog.objects.filter(
+            request_type=PrivacyRequestLog.REQUEST_DELETION_REQUEST,
+            status=PrivacyRequestLog.STATUS_REQUESTED,
+            old_user_id=user.pk,
+        )
+        .order_by("-requested_at", "-pk")
+        .first()
+    )
+    deletion_request_blocker = ""
+    if deletion_request is not None:
+        identity_hash = normalized_privacy_email_hash(user.email)
+        if identity_hash != deletion_request.normalized_email_hash:
+            deletion_request_blocker = "Login identity changed; a fresh request is required."
+        elif user.is_staff or user.is_superuser:
+            deletion_request_blocker = "Protected staff account"
+        elif user.subscription_id:
+            deletion_request_blocker = "Active subscription cleanup required"
     override = _active_override_for_user(user)
     crm_record = CRMRecord.objects.filter(user=user).first()
     course_enrollments = _build_course_enrollments(user)
@@ -1467,6 +1486,15 @@ def user_detail(request, user_id):
 
     context = {
         'detail_user': user,
+        'deletion_request': deletion_request,
+        'deletion_request_blocker': deletion_request_blocker,
+        'deletion_request_time_utc': (
+            deletion_request.requested_at.astimezone(datetime.timezone.utc).strftime(
+                "%Y-%m-%d %H:%M:%S UTC",
+            )
+            if deletion_request is not None
+            else ""
+        ),
         'tier_name': _effective_tier_name(user, override),
         'tier_slug': _effective_tier_slug(user, override),
         'has_override': has_override,

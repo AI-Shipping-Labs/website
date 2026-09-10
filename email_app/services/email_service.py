@@ -68,6 +68,7 @@ EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = {
     "download_delivery",
     "account_email_change_confirm",
     "account_deletion_request",
+    "account_deletion_completed",
     "password_reset",
     # Payment-grace copy is contract-locked, and the team diagnostic uses a
     # recipient override for the member's User row. Never append a member
@@ -120,6 +121,7 @@ class PreparedRenderedEmail:
     cc: object = None
     bcc: object = None
     skip_reason: str | None = None
+    redact_transport_recipient: bool = False
 
 
 def _normalize_cc(cc):
@@ -140,6 +142,12 @@ def _normalize_cc(cc):
 
 class EmailServiceError(Exception):
     """Raised when email sending fails."""
+
+    pass
+
+
+class EmailTransportOutcomeUnknown(EmailServiceError):
+    """Raised when SES may have accepted a request before transport failed."""
 
     pass
 
@@ -399,6 +407,53 @@ class EmailService:
             unsubscribe_url=prepared.unsubscribe_url,
             cc=prepared.cc,
             bcc=prepared.bcc,
+            redact_recipient=prepared.redact_transport_recipient,
+        )
+
+    def prepare_template(
+        self,
+        user,
+        template_name,
+        context=None,
+        *,
+        recipient_email=None,
+        cc=None,
+        bcc=None,
+        redact_transport_recipient=False,
+    ):
+        """Render and validate a named template without crossing transport."""
+        context = context or {}
+        email_kind, skip_reason = self._delivery_decision(user, template_name)
+        if skip_reason is not None:
+            return PreparedRenderedEmail(skip_reason=skip_reason)
+
+        subject, body_html, footer_note = self._render_template_with_footer(
+            template_name,
+            user,
+            context,
+        )
+        unsubscribe_url = None
+        if email_kind == EMAIL_KIND_PROMOTIONAL:
+            unsubscribe_url = self._build_unsubscribe_url(user)
+        verify_email_url = None
+        if self._should_include_verify_footer(user, template_name):
+            verify_email_url = self._build_verify_email_url(user)
+        full_html = self.render_html_email(
+            subject,
+            body_html,
+            unsubscribe_url=unsubscribe_url,
+            footer_note=footer_note,
+            verify_email_url=verify_email_url,
+        )
+        return PreparedRenderedEmail(
+            to_email=(recipient_email or user.email).strip(),
+            subject=subject,
+            full_html=full_html,
+            email_type=template_name,
+            unsubscribe_url=unsubscribe_url,
+            cc=cc,
+            bcc=bcc,
+            redact_transport_recipient=redact_transport_recipient,
         )
 
     @staticmethod
@@ -639,6 +694,7 @@ class EmailService:
         unsubscribe_url=None,
         cc=None,
         bcc=None,
+        redact_recipient=False,
     ):
         """Send an email via Amazon SES v2 SendEmail API.
 
@@ -678,9 +734,10 @@ class EmailService:
         if not getattr(settings, "SES_ENABLED", False):
             cc_label = f" cc={cc_list}" if cc_list else ""
             bcc_label = f" bcc={bcc_list}" if bcc_list else ""
+            recipient_label = "[privacy-recipient]" if redact_recipient else to_email
             logger.info(
                 "SES disabled - skipping send to %s%s%s (subject=%s)",
-                to_email,
+                recipient_label,
                 cc_label,
                 bcc_label,
                 subject,
@@ -693,7 +750,7 @@ class EmailService:
                 urls = re.findall(r'href="(https?://[^"]+)"', html_body)
                 print(
                     f"\n[email_app] SES disabled (local dev). "
-                    f"To: {to_email} | Subject: {subject}",
+                    f"To: {recipient_label} | Subject: {subject}",
                     flush=True,
                 )
                 for url in urls:
@@ -753,6 +810,32 @@ class EmailService:
         try:
             response = self.ses_client.send_email(**send_kwargs)
             return response.get("MessageId", "")
-        except (BotoCoreError, ClientError) as e:
-            logger.exception("Failed to send email via SES to %s", to_email)
+        except ClientError as e:
+            recipient_label = "[privacy-recipient]" if redact_recipient else to_email
+            if redact_recipient:
+                error_code = e.response.get("Error", {}).get("Code", "unknown")
+                logger.error(
+                    "SES rejected redacted recipient request error_code=%s",
+                    error_code,
+                )
+                raise EmailServiceError("SES privacy send failed") from None
+            logger.exception("Failed to send email via SES to %s", recipient_label)
             raise EmailServiceError(f"SES send failed for {to_email}: {e}") from e
+        except BotoCoreError as e:
+            recipient_label = "[privacy-recipient]" if redact_recipient else to_email
+            if redact_recipient:
+                logger.error(
+                    "SES transport outcome is unknown for redacted recipient "
+                    "error_type=%s",
+                    type(e).__name__,
+                )
+                raise EmailTransportOutcomeUnknown(
+                    "SES privacy send outcome is unknown",
+                ) from None
+            logger.exception(
+                "SES transport outcome is unknown for %s",
+                recipient_label,
+            )
+            raise EmailTransportOutcomeUnknown(
+                f"SES send outcome is unknown for {to_email}: {e}",
+            ) from e

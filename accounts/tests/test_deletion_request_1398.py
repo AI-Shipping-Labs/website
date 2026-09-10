@@ -90,6 +90,12 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
         self.assertIn(user.email, rendered)
         self.assertIn(f"Support ID <strong>{user.pk}</strong>", rendered)
         self.assertIn(f"/studio/users/{user.pk}/", rendered)
+        self.assertIn(
+            f'href="https://aishippinglabs.com/studio/users/{user.pk}/'
+            '#privacy-deletion-request"',
+            rendered,
+        )
+        self.assertNotIn("testserver", rendered)
         self.assertIn("No account deletion has happened yet", rendered)
         self.assertIn("no later than one month after receipt", rendered)
         self.assertNotIn("verify your email", rendered.lower())

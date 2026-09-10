@@ -13,6 +13,11 @@ literal placeholder strings.
 from accounts.utils.display import GREETING_FALLBACK
 
 PREVIEW_CONTEXTS = {
+    'account_deletion_completed': {
+        'support_id': 42,
+        'completed_at_utc': '2026-08-13 11:00:00 UTC',
+        'privacy_email': 'team@aishippinglabs.com',
+    },
     'account_deletion_request': {
         'login_email': 'ada@example.com',
         'support_id': 42,

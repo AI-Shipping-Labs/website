@@ -92,6 +92,7 @@ class SidebarRouteMapTest(TestCase):
         cases = {
             # The six routes that returned an empty active_section on main.
             'studio_user_detail': ('people', 'users'),
+            'studio_privacy_deletion_review': ('people', 'users'),
             'studio_user_import': ('people', 'users'),
             'studio_assistant': ('people', 'assistant'),
             'studio_maven_event_list': ('operations', 'maven_events'),

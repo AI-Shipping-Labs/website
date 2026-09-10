@@ -12,11 +12,10 @@ registry for other tests.
 import os
 from unittest import mock
 
-from community_base.config import service as cb_service
 from community_base.config.crypto import encrypt
 from community_base.config.models import Setting
 from community_base.config.registry import Definition, definition
-from django.core.cache import cache
+from django.core.cache import caches
 from django.test import TestCase, override_settings
 
 from integrations import config as config_module
@@ -212,21 +211,21 @@ class ConfigShimCacheInvalidationTest(ShimKeysMixin, TestCase):
             clear_config_cache()
             self.assertEqual(get_config("SHIM_TEST_PLAIN"), "from_db")
 
-    def test_clear_config_cache_publishes_package_stamp_to_default_cache(self):
-        before = cache.get(cb_service.STAMP_KEY)
+    def test_clear_config_cache_publishes_stamp_to_the_shared_django_q_cache(self):
+        before = caches["django_q"].get(_STAMP_CACHE_KEY)
         clear_config_cache()
-        after = cache.get(cb_service.STAMP_KEY)
+        after = caches["django_q"].get(_STAMP_CACHE_KEY)
         self.assertIsNotNone(after)
         self.assertNotEqual(before, after)
 
     def test_reset_local_config_cache_does_not_publish(self):
         clear_config_cache()
-        stamp = cache.get(cb_service.STAMP_KEY)
+        stamp = caches["django_q"].get(_STAMP_CACHE_KEY)
         reset_local_config_cache()
-        self.assertEqual(cache.get(cb_service.STAMP_KEY), stamp)
+        self.assertEqual(caches["django_q"].get(_STAMP_CACHE_KEY), stamp)
 
-    def test_stamp_key_matches_package(self):
-        self.assertEqual(_STAMP_CACHE_KEY, cb_service.STAMP_KEY)
+    def test_stamp_key_is_the_donor_channel(self):
+        self.assertEqual(_STAMP_CACHE_KEY, "integration_settings_stamp")
 
     def test_worker_bypass_reads_fresh_db_value_with_cold_cache(self):
         with mock.patch.dict(os.environ, {"SHIM_TEST_PLAIN": "from_env"}):

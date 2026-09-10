@@ -26,15 +26,22 @@ Cross-process invalidation
 
 The donor published a short stamp into ``caches['django_q']`` and memoized
 stamp reads through ``integrations.shared_cache`` (local TTL <= 5s). That
-machinery is replaced by the package runtime
-(``community_base.config.service.runtime``): the stamp now lives in the
-DEFAULT Django cache under the package's ``STAMP_KEY``, which must be
-process-shared in deployment — the package makes the same assumption for
-its own runtime. Each process records the stamp it saw when it last read
+donor stamp channel is preserved verbatim: the stamp lives in the shared
+``caches['django_q']`` DatabaseCache under the donor's
+``integration_settings_stamp`` key, read through the donor's
+``integrations.shared_cache`` memo (local TTL <= 5s), so another process's
+save becomes visible here no later than the TTL bound. Each process records the stamp it saw when it last read
 the DB; ``get_config()`` re-reads the stamp on every call and, if it
 changed, repopulates the in-process cache from the DB. A warm request
 therefore pays at most one stamp GET, not one GET per ``get_config()``
 call, and zero ``cb_config`` queries when nothing has changed.
+
+Transitional dual read (steps 1-4): the Studio save path still writes the
+donor ``IntegrationSetting`` table until its step-5 cutover, so the
+database layer reads the donor store FIRST and the package store second.
+The migration-time copy in ``cb_config`` is therefore never allowed to
+shadow a newer donor edit, and keys written only by the package still
+resolve. Step 6 removes the donor leg.
 
 The stamp is intentionally opaque (a random uuid hex). We never compare
 the value, only "is it the same string we recorded last time".
@@ -53,12 +60,12 @@ from django.core.validators import validate_email
 from django.db import DatabaseError
 from django.test.testcases import DatabaseOperationForbidden
 
-# Must match community_base.config.service.STAMP_KEY (pinned package tag
-# v0.3.0); pinned by integrations.tests.test_config_shim. The constant
-# lives here (instead of importing service at module level) because
-# community_base.config.service imports the cb_config models, which only
-# exist once the app registry is ready.
-_STAMP_CACHE_KEY = "community_base.config.stamp"
+from integrations.shared_cache import get_shared_cache, set_shared_cache
+
+# The donor's stamp channel, preserved verbatim (contract step 4): the
+# shared ``django_q`` DatabaseCache, which every host that talks to the
+# application DB already has (see ``website.settings`` CACHES).
+_STAMP_CACHE_KEY = "integration_settings_stamp"
 
 logger = logging.getLogger(__name__)
 
@@ -182,14 +189,36 @@ def _decode_stored_value(key, item, stored):
     return value or None
 
 
-def _read_db_value(key):
-    """Return the stored cb_config value for ``key`` as a raw string, or None.
+def _donor_db_value(key):
+    """Return the raw donor ``IntegrationSetting`` value for ``key``, or None.
 
+    The donor stored plaintext and read any row regardless of declarations,
+    so no registry lookup gates this read.
+    """
+    from integrations.models import IntegrationSetting  # noqa: PLC0415
+
+    return (
+        IntegrationSetting.objects.filter(key=key)
+        .values_list("value", flat=True)
+        .first()
+    )
+
+
+def _read_db_value(key):
+    """Return the stored value for ``key`` as a raw string, or None.
+
+    Donor store first (the operationally freshest writes while the Studio
+    save path is uncut), then the package store with its decrypted read.
     Keys the package registry does not declare have no package storage
     layer (``definition()`` raises ImproperlyConfigured for them) and
-    resolve through settings/env only. Database errors propagate to the
-    caller, which handles them with the donor's log-and-fall-through set.
+    resolve through the donor store, settings, and env only. Database
+    errors propagate to the caller, which handles them with the donor's
+    log-and-fall-through set.
     """
+    donor_value = _donor_db_value(key)
+    if donor_value is not None:
+        return donor_value
+
     from community_base.config.models import Setting  # noqa: PLC0415
 
     try:
@@ -211,6 +240,10 @@ def _db_configured(key):
     on empty string). The decrypted plaintext never leaves this helper —
     :func:`resolve_source` only ever returns the layer name.
     """
+    donor_value = _donor_db_value(key)
+    if donor_value is not None:
+        return bool(donor_value)
+
     from community_base.config.models import Setting  # noqa: PLC0415
 
     try:
@@ -356,16 +389,13 @@ def is_enabled(key):
 def _read_stamp():
     """Return the published cross-process stamp, or None if unavailable.
 
-    The stamp lives in the DEFAULT Django cache under the package's key
-    (``community_base.config.service.STAMP_KEY``). Wrapped in a try/except
-    so a missing cache backend or table during boot/tests does not crash
-    callers — when the stamp can't be read we treat it as "no change" and
-    let the in-process cache stand.
+    The stamp lives in the shared ``django_q`` DatabaseCache under the
+    donor's key. Wrapped in a try/except so a missing cache backend or
+    table during boot/tests does not crash callers — when the stamp can't
+    be read we treat it as "no change" and let the in-process cache stand.
     """
     try:
-        from django.core.cache import cache  # noqa: PLC0415
-
-        return cache.get(_STAMP_CACHE_KEY)
+        return get_shared_cache(_STAMP_CACHE_KEY)
     except _CACHE_STAMP_EXCEPTIONS:
         logger.debug(
             "Unable to read integration settings cache stamp",
@@ -395,6 +425,14 @@ def _populate_cache():
             except ImproperlyConfigured:
                 continue
             value = _decode_stored_value(row_key, item, stored)
+            if value:
+                values[row_key] = value
+        # Donor rows overlay the package copy: while the Studio save path
+        # is uncut its rows are the fresher writes (see the module
+        # docstring's transitional dual read).
+        from integrations.models import IntegrationSetting  # noqa: PLC0415
+
+        for row_key, value in IntegrationSetting.objects.values_list("key", "value"):
             if value:
                 values[row_key] = value
         _cache = values
@@ -439,15 +477,16 @@ def clear_config_cache():
     """Clear the in-process cache and publish a fresh cross-process stamp.
 
     Called by ``studio.views.settings.settings_save_group`` after a
-    successful upsert/delete on integration settings. The package runtime
-    publishes the stamp into the default cache; other processes notice the
-    new stamp on their next ``get_config()`` and repopulate.
+    successful upsert/delete on integration settings. The donor channel is
+    kept: a fresh stamp is published into the shared ``django_q`` cache;
+    other processes notice it on their next ``get_config()`` and
+    repopulate.
     """
     reset_local_config_cache()
     try:
-        from community_base.config.service import runtime  # noqa: PLC0415
+        import uuid  # noqa: PLC0415
 
-        runtime.publish()
+        set_shared_cache(_STAMP_CACHE_KEY, uuid.uuid4().hex)
     except _CACHE_STAMP_EXCEPTIONS:
         # If the shared cache is unreachable we still cleared in-process
         # state, so the calling process at least sees fresh values.

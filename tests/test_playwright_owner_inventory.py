@@ -85,6 +85,17 @@ REPOSITORY_STATIC_DESTINATIONS = (
     "test_full_and_single_range_response_matrix",
 )
 
+DEV_GOTO_RESILIENCE_GUARD_OWNER_IDS = frozenset({
+    "playwright_tests/test_dev_goto_resilience_guard.py::"
+    "test_dev_eligible_files_route_navigation_through_goto_with_retry",
+    "playwright_tests/test_dev_goto_resilience_guard.py::"
+    "test_dev_eligible_universe_is_discoverable",
+})
+
+DEV_GOTO_RESILIENCE_GUARD_DESTINATION = (
+    "tests.test_dev_goto_resilience_guard.DevGotoResilienceGuardTest"
+)
+
 
 class SyntheticCollectionTestCase(SimpleTestCase):
     def setUp(self):
@@ -1057,8 +1068,13 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
             self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
             self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
+        self.assertEqual(len(DEV_GOTO_RESILIENCE_GUARD_OWNER_IDS), 2)
+        for owner in DEV_GOTO_RESILIENCE_GUARD_OWNER_IDS:
+            self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
+            self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
+            self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
         self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2246)
-        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 14)
+        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 12)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
 
@@ -1082,6 +1098,17 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             3,
         )
 
+    def test_dev_goto_resilience_owners_collect_as_two_native_tests(self):
+        source = ROOT / "playwright_tests" / "test_dev_goto_resilience_guard.py"
+
+        self.assertFalse(source.exists())
+        self.assertEqual(
+            defaultTestLoader.loadTestsFromName(
+                DEV_GOTO_RESILIENCE_GUARD_DESTINATION
+            ).countTestCases(),
+            2,
+        )
+
     def test_current_collection_exactly_matches_live_partition_without_runtime_startup(self):
         lock = ROOT / ".tmp" / "playwright-session.lock"
         guard = None
@@ -1102,8 +1129,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2574)
-        self.assertEqual(len(inventory.owners), 2367)
+        self.assertEqual(inventory.item_count, 2572)
+        self.assertEqual(len(inventory.owners), 2365)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

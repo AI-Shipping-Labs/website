@@ -2272,41 +2272,6 @@
       "category": "playwright-policy",
       "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
       "relocation": "tests/"
-    },
-    "playwright_tests/test_date_rot_guard.py::test_date_rot_guard_allows_reasoned_fixed_dates_and_frozen_exact_copy": {
-      "category": "playwright-policy",
-      "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_date_rot_guard.py::test_date_rot_guard_rejects_chained_label_fill_for_start_date": {
-      "category": "playwright-policy",
-      "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_date_rot_guard.py::test_date_rot_guard_rejects_chained_locator_fill_for_start_date": {
-      "category": "playwright-policy",
-      "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_date_rot_guard.py::test_date_rot_guard_rejects_iso_timestamp_with_t_boundary": {
-      "category": "playwright-policy",
-      "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_date_rot_guard.py::test_date_rot_guard_rejects_unsafe_future_sensitive_fixture": {
-      "category": "playwright-policy",
-      "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_date_rot_guard.py::test_date_rot_guard_rejects_unsafe_sprint_start_date_fixture": {
-      "category": "playwright-policy",
-      "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_date_rot_guard.py::test_no_unsafe_hard_coded_2026_dates_in_future_sensitive_playwright_fixtures": {
-      "category": "playwright-policy",
-      "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
-      "relocation": "tests/"
     }
   },
   "collected_item_count": 2559,

@@ -96,6 +96,25 @@ DEV_GOTO_RESILIENCE_GUARD_DESTINATION = (
     "tests.test_dev_goto_resilience_guard.DevGotoResilienceGuardTest"
 )
 
+DATE_ROT_GUARD_OWNER_IDS = frozenset({
+    "playwright_tests/test_date_rot_guard.py::"
+    "test_date_rot_guard_allows_reasoned_fixed_dates_and_frozen_exact_copy",
+    "playwright_tests/test_date_rot_guard.py::"
+    "test_date_rot_guard_rejects_chained_label_fill_for_start_date",
+    "playwright_tests/test_date_rot_guard.py::"
+    "test_date_rot_guard_rejects_chained_locator_fill_for_start_date",
+    "playwright_tests/test_date_rot_guard.py::"
+    "test_date_rot_guard_rejects_iso_timestamp_with_t_boundary",
+    "playwright_tests/test_date_rot_guard.py::"
+    "test_date_rot_guard_rejects_unsafe_future_sensitive_fixture",
+    "playwright_tests/test_date_rot_guard.py::"
+    "test_date_rot_guard_rejects_unsafe_sprint_start_date_fixture",
+    "playwright_tests/test_date_rot_guard.py::"
+    "test_no_unsafe_hard_coded_2026_dates_in_future_sensitive_playwright_fixtures",
+})
+
+DATE_ROT_GUARD_DESTINATION = "tests.test_date_rot_guard.DateRotGuardTest"
+
 
 class SyntheticCollectionTestCase(SimpleTestCase):
     def setUp(self):
@@ -1073,8 +1092,13 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
             self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
             self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
+        self.assertEqual(len(DATE_ROT_GUARD_OWNER_IDS), 7)
+        for owner in DATE_ROT_GUARD_OWNER_IDS:
+            self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
+            self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
+            self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
         self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2246)
-        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 12)
+        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 5)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
 
@@ -1109,6 +1133,17 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             2,
         )
 
+    def test_date_rot_guard_owners_collect_as_seven_native_tests(self):
+        source = ROOT / "playwright_tests" / "test_date_rot_guard.py"
+
+        self.assertFalse(source.exists())
+        self.assertEqual(
+            defaultTestLoader.loadTestsFromName(
+                DATE_ROT_GUARD_DESTINATION
+            ).countTestCases(),
+            7,
+        )
+
     def test_current_collection_exactly_matches_live_partition_without_runtime_startup(self):
         lock = ROOT / ".tmp" / "playwright-session.lock"
         guard = None
@@ -1129,8 +1164,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2572)
-        self.assertEqual(len(inventory.owners), 2365)
+        self.assertEqual(inventory.item_count, 2565)
+        self.assertEqual(len(inventory.owners), 2358)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

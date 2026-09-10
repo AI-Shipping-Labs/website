@@ -5,6 +5,56 @@ from pathlib import Path
 from django.test import SimpleTestCase
 
 ROOT = Path(__file__).resolve().parents[1]
+CSS_PATH = ROOT / "static/css/tailwind.css"
+
+DYNAMIC_CLASSES = {
+    # Product button helper: all sizes and variants.
+    "min-h-[44px]",
+    "px-3",
+    "py-1.5",
+    "px-4",
+    "py-2",
+    "px-6",
+    "py-3",
+    "bg-accent",
+    "text-accent-foreground",
+    "bg-secondary",
+    "text-foreground",
+    "text-red-700",
+    "dark:text-red-400",
+    # Member and content badges.
+    "bg-green-500/15",
+    "text-green-800",
+    "dark:text-green-400",
+    "bg-yellow-500/15",
+    "text-yellow-800",
+    "dark:text-yellow-400",
+    "bg-red-500/15",
+    "text-red-800",
+    "dark:text-red-400",
+    "bg-purple-500/20",
+    "text-purple-400",
+    "bg-orange-500/20",
+    # Studio lifecycle/severity/tier producers.
+    "bg-sky-500/15",
+    "text-sky-300",
+    "bg-emerald-500/15",
+    "text-emerald-300",
+    "bg-amber-500/15",
+    "text-amber-300",
+    # Sole operator-authored runtime token family.
+    "from-accent/30",
+    "from-blue-500/30",
+    # First-party JavaScript-only state classes.
+    "bg-amber-500",
+    "bg-emerald-500",
+    "translate-x-0.5",
+    "translate-x-5",
+}
+
+
+def _escaped_selector(class_name):
+    return "." + re.sub(r"([^a-zA-Z0-9_-])", r"\\\1", class_name)
 
 
 class TailwindSourceContractTest(SimpleTestCase):
@@ -23,6 +73,16 @@ class TailwindSourceContractTest(SimpleTestCase):
         self.assertNotIn("display=optional", source)
         # The blocking pre-paint theme script remains before the stylesheet.
         self.assertLess(source.index("localStorage.getItem('theme')"), source.index("css/tailwind.css"))
+
+    def test_compiled_bundle_contains_every_dynamic_product_selector(self):
+        css = CSS_PATH.read_text()
+        missing = sorted(
+            name
+            for name in DYNAMIC_CLASSES
+            if _escaped_selector(name) not in css
+        )
+
+        self.assertEqual(missing, [])
 
     def test_tailwind_version_and_locked_commands_are_exact(self):
         package = json.loads((ROOT / "package.json").read_text())

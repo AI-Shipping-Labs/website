@@ -2317,21 +2317,6 @@
       "category": "playwright-policy",
       "reason": "Exercises Playwright collection, port, date, navigation, lock, or database policy as non-browser test logic.",
       "relocation": "tests/"
-    },
-    "playwright_tests/test_member_api_keys_1111.py::TestMemberAPIKeysAccountUI::test_skill_directory_exists_in_repo": {
-      "category": "repository-static",
-      "reason": "Checks repository files or pure response logic without a browser journey.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_tailwind_build_1383.py::test_compiled_bundle_contains_dynamic_product_selectors": {
-      "category": "repository-static",
-      "reason": "Checks repository files or pure response logic without a browser journey.",
-      "relocation": "tests/"
-    },
-    "playwright_tests/test_workshop_video_no_autoplay_899.py::test_fixture_range_response_matrix": {
-      "category": "repository-static",
-      "reason": "Checks repository files or pure response logic without a browser journey.",
-      "relocation": "tests/"
     }
   },
   "collected_item_count": 2559,

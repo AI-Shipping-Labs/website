@@ -67,6 +67,24 @@ WORKTREE_SESSION_GUARD_OWNER_IDS = frozenset(
     )
 )
 
+REPOSITORY_STATIC_OWNER_IDS = frozenset({
+    "playwright_tests/test_member_api_keys_1111.py::"
+    "TestMemberAPIKeysAccountUI::test_skill_directory_exists_in_repo",
+    "playwright_tests/test_tailwind_build_1383.py::"
+    "test_compiled_bundle_contains_dynamic_product_selectors",
+    "playwright_tests/test_workshop_video_no_autoplay_899.py::"
+    "test_fixture_range_response_matrix",
+})
+
+REPOSITORY_STATIC_DESTINATIONS = (
+    "tests.test_member_api_skill_repository.MemberApiSkillRepositoryTest."
+    "test_member_api_skill_directory_contains_required_docs",
+    "tests.test_tailwind_build.TailwindSourceContractTest."
+    "test_compiled_bundle_contains_every_dynamic_product_selector",
+    "tests.test_video_fixture_range_response.VideoFixtureRangeResponseTest."
+    "test_full_and_single_range_response_matrix",
+)
+
 
 class SyntheticCollectionTestCase(SimpleTestCase):
     def setUp(self):
@@ -1034,8 +1052,13 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
             self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
             self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
+        self.assertEqual(len(REPOSITORY_STATIC_OWNER_IDS), 3)
+        for owner in REPOSITORY_STATIC_OWNER_IDS:
+            self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
+            self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
+            self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
         self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2246)
-        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 17)
+        self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 14)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
 
@@ -1047,6 +1070,16 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         self.assertEqual(
             defaultTestLoader.loadTestsFromName(destination).countTestCases(),
             33,
+        )
+
+    def test_repository_static_owners_collect_as_three_native_tests(self):
+        self.assertEqual(len(REPOSITORY_STATIC_DESTINATIONS), 3)
+        self.assertEqual(
+            sum(
+                defaultTestLoader.loadTestsFromName(destination).countTestCases()
+                for destination in REPOSITORY_STATIC_DESTINATIONS
+            ),
+            3,
         )
 
     def test_current_collection_exactly_matches_live_partition_without_runtime_startup(self):
@@ -1069,8 +1102,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2584)
-        self.assertEqual(len(inventory.owners), 2370)
+        self.assertEqual(inventory.item_count, 2574)
+        self.assertEqual(len(inventory.owners), 2367)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

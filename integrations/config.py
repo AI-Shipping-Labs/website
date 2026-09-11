@@ -371,6 +371,44 @@ def recording_auto_publish_on_s3_upload_enabled():
     return str(raw).strip().lower() in ("true", "1", "yes")
 
 
+def recording_transcript_ingest_enabled():
+    """True when the automatic transcript pipeline should run (issue #1597).
+
+    Gates the automatic enqueue points (the Zoom webhooks and the post-S3-
+    upload chain) but never the explicit operator recovery path
+    (``POST /api/events/<slug>/sync-transcript`` and the Studio sync action),
+    so an operator can always backfill a transcript with automation off.
+    Default-on: a finished call should end with a stored transcript without
+    anyone pressing anything. Reads via
+    ``get_config('RECORDING_TRANSCRIPT_INGEST_ENABLED', 'true')`` so the
+    DB -> settings -> env -> default chain resolves to True when the key is
+    unset everywhere, mirroring
+    :func:`recording_auto_publish_on_s3_upload_enabled`.
+    """
+    raw = get_config('RECORDING_TRANSCRIPT_INGEST_ENABLED', 'true')
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ('true', '1', 'yes')
+
+
+def recording_recap_auto_draft_enabled():
+    """True when a stored transcript should chain an LLM recap draft.
+
+    Issue #1597. Default-on per the product decision recorded on the issue:
+    the drafted recap is saved to ``recap_notes`` (never overwriting
+    operator-authored notes), and the public recap page then goes live
+    through the existing ``recap_is_published`` gate — publication is
+    deliberate, notification of registrants stays explicit. Reads via
+    ``get_config('RECORDING_RECAP_AUTO_DRAFT_ENABLED', 'true')`` following
+    the same default-on pattern as
+    :func:`recording_auto_publish_on_s3_upload_enabled`.
+    """
+    raw = get_config('RECORDING_RECAP_AUTO_DRAFT_ENABLED', 'true')
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ('true', '1', 'yes')
+
+
 def is_enabled(key):
     """Check if a config flag is enabled (handles both bool and string values).
 

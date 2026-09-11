@@ -1,4 +1,4 @@
-"""Zoom webhook endpoint for handling recording.completed events.
+"""Zoom webhook endpoint for recording.completed / transcript webhooks.
 
 Endpoint: POST /api/webhooks/zoom
 
@@ -6,6 +6,12 @@ When Zoom sends a recording.completed webhook:
 1. Validates the webhook signature
 2. Matches the meeting_id to an Event record
 3. Sets recording fields directly on the Event
+4. Enqueues the S3 upload task and, when a transcript VTT arrived with the
+   payload, the transcript task (issue #1597)
+
+Issue #1597 additionally handles ``recording.transcript.completed``: Zoom
+can finish transcribing after the video event, and that webhook updates
+the stored transcript URL and enqueues the transcript task.
 
 Issue #713: the webhook no longer writes ``event.status='completed'``.
 The event becomes "past" automatically once ``end_datetime`` passes
@@ -88,12 +94,25 @@ def zoom_webhook(request):
         processed=False,
     )
 
-    # Process recording.completed
+    # Process recording.completed and recording.transcript.completed
     if event_type == 'recording.completed':
         try:
             _handle_recording_completed(payload, webhook_log)
         except Exception as e:
             logger.exception('Error processing recording.completed webhook')
+            return JsonResponse(
+                {'status': 'error', 'message': str(e)},
+                status=200,  # Return 200 to avoid Zoom retries
+            )
+    elif event_type == 'recording.transcript.completed':
+        # Issue #1597: Zoom can deliver the transcript after the video
+        # event; capture it even though recording.completed already ran.
+        try:
+            _handle_recording_transcript_completed(payload, webhook_log)
+        except Exception as e:
+            logger.exception(
+                'Error processing recording.transcript.completed webhook',
+            )
             return JsonResponse(
                 {'status': 'error', 'message': str(e)},
                 status=200,  # Return 200 to avoid Zoom retries
@@ -125,12 +144,7 @@ def _handle_recording_completed(payload, webhook_log):
     # Extract recording URLs from Zoom payload
     recording_files = object_data.get('recording_files', [])
     video_url, download_url = _select_preferred_video(recording_files)
-    transcript_url = ''
-    # Extract transcript URL (audio_transcript VTT file)
-    for rec_file in recording_files:
-        if rec_file.get('recording_type') == 'audio_transcript':
-            transcript_url = rec_file.get('download_url', '')
-            break
+    transcript_url = _extract_transcript_url(recording_files)
 
     # Fallback: use the share_url from the object if available
     if not video_url:
@@ -163,10 +177,15 @@ def _handle_recording_completed(payload, webhook_log):
             event.recording_zoom_download_url = download_url
             update_fields.append('recording_zoom_download_url')
 
+        from events.services.recording_transcript import (
+            enqueue_recording_transcript_task,
+            transcript_capture_needed,
+        )
         from events.services.recording_upload import (
             enqueue_recording_upload_task,
             recording_upload_lease_is_active,
         )
+        from integrations.config import recording_transcript_ingest_enabled
 
         should_enqueue_upload = (
             bool(download_url)
@@ -182,6 +201,16 @@ def _handle_recording_completed(payload, webhook_log):
             )
             event.recording_upload_enqueued_at = timezone.now()
             update_fields.append('recording_upload_enqueued_at')
+
+        # Issue #1597: the VTT is independent of the MP4 — enqueue the
+        # transcript task alongside the upload when Zoom delivered a
+        # transcript and the parsed text is not stored yet.
+        should_enqueue_transcript = (
+            recording_transcript_ingest_enabled()
+            and transcript_capture_needed(event)
+        )
+        if should_enqueue_transcript:
+            enqueue_recording_transcript_task(event, source='Zoom webhook')
 
         if update_fields:
             update_fields.append('updated_at')
@@ -209,6 +238,104 @@ def _handle_recording_completed(payload, webhook_log):
         logger.warning(
             'No download URL available for event "%s", skipping S3 upload',
             event.title,
+        )
+
+    if should_enqueue_transcript:
+        logger.info(
+            'Enqueued transcript capture job for event "%s" (id=%s)',
+            event.title, event.id,
+        )
+
+
+def _extract_transcript_url(recording_files):
+    """Return the ``audio_transcript`` download URL from recording files."""
+    for rec_file in recording_files:
+        if rec_file.get('recording_type') == 'audio_transcript':
+            return (rec_file.get('download_url') or '').strip()
+    return ''
+
+
+def _handle_recording_transcript_completed(payload, webhook_log):
+    """Process a recording.transcript.completed webhook payload.
+
+    Issue #1597: Zoom can finish transcribing after the video event, so
+    the transcript can arrive via this later webhook. Updates the stored
+    transcript URL and enqueues the transcript task when the parsed text
+    is still empty. A URL arriving for an event already marked
+    transcript-unavailable clears that marker — Zoom produced a transcript
+    after all, so the task should try again.
+    """
+    zoom_payload = payload.get('payload', {})
+    object_data = zoom_payload.get('object', {})
+    meeting_id = str(object_data.get('id', ''))
+
+    if not meeting_id:
+        logger.warning(
+            'recording.transcript.completed webhook missing meeting ID',
+        )
+        return
+
+    transcript_url = _extract_transcript_url(
+        object_data.get('recording_files', []),
+    )
+
+    from events.services.recording_transcript import (
+        enqueue_recording_transcript_task,
+        transcript_capture_needed,
+    )
+    from integrations.config import recording_transcript_ingest_enabled
+
+    with transaction.atomic():
+        try:
+            event = Event.objects.select_for_update().get(
+                zoom_meeting_id=meeting_id,
+            )
+        except Event.DoesNotExist:
+            logger.warning(
+                'No event found for Zoom meeting ID %s '
+                '(recording.transcript.completed)', meeting_id,
+            )
+            return
+
+        update_fields = []
+        if transcript_url and not event.transcript_text:
+            if transcript_url != event.transcript_url:
+                event.transcript_url = transcript_url
+                update_fields.append('transcript_url')
+            if event.transcript_unavailable_at is not None:
+                # Zoom produced a transcript after all: retry from scratch.
+                event.transcript_unavailable_at = None
+                event.transcript_fetch_attempts = 0
+                update_fields.extend([
+                    'transcript_unavailable_at',
+                    'transcript_fetch_attempts',
+                ])
+
+        should_enqueue_transcript = (
+            recording_transcript_ingest_enabled()
+            and transcript_capture_needed(event)
+        )
+        if should_enqueue_transcript:
+            enqueue_recording_transcript_task(
+                event, source='Zoom transcript webhook',
+            )
+
+        if update_fields:
+            update_fields.append('updated_at')
+            event.save(update_fields=update_fields)
+
+        webhook_log.processed = True
+        webhook_log.save(update_fields=['processed'])
+
+    logger.info(
+        'Processed transcript webhook for event "%s" (slug=%s) from Zoom '
+        'meeting %s',
+        event.title, event.slug, meeting_id,
+    )
+    if should_enqueue_transcript:
+        logger.info(
+            'Enqueued transcript capture job for event "%s" (id=%s)',
+            event.title, event.id,
         )
 
 

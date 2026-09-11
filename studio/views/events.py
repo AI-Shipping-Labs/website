@@ -47,6 +47,11 @@ from events.services.event_recap_notification import (
 from events.services.occurrence_publication import (
     run_occurrence_publication_lifecycle,
 )
+from events.services.recording_transcript import (
+    enqueue_recording_transcript_task,
+    refresh_transcript_from_zoom,
+    transcript_status,
+)
 from events.services.recording_upload import (
     RECORDING_UPLOAD_STATUS_IDLE,
     RECORDING_UPLOAD_STATUS_IN_PROGRESS,
@@ -62,7 +67,7 @@ from events.services.workshop_ready_notification import (
 from events.services.zoom_lifecycle import sync_or_delete_zoom_meeting
 from events.tasks.send_post_event_followup import enqueue_post_event_followup
 from integrations.services.banner_generator.dispatch import enqueue_if_missing
-from integrations.services.zoom import create_meeting
+from integrations.services.zoom import ZoomAPIError, create_meeting
 from studio.decorators import staff_required
 from studio.services.banner_panel import banner_panel_context
 from studio.utils import get_github_edit_url, is_synced, studio_pagination_context
@@ -900,6 +905,11 @@ def _event_edit_panels_context(event) -> dict:
         'studio_event_retry_recording_upload', kwargs={'event_id': event.pk},
     )
     context['recording_upload_status'] = recording_upload_status(event)
+    # Issue #1597: transcript capture status + manual sync action.
+    context['transcript_status'] = transcript_status(event)
+    context['sync_transcript_url'] = reverse(
+        'studio_event_sync_transcript', kwargs={'event_id': event.pk},
+    )
     # Issue #1076: deep-link to the pre-filled "recording available" campaign
     # draft (editable broadcast to registrants — distinct from the
     # transactional follow-up above). Opens a draft for review; never sends.
@@ -1347,6 +1357,38 @@ def event_retry_recording_upload(request, event_id):
         messages.info(request, 'Recording upload is already in progress.')
     elif result == RECORDING_UPLOAD_STATUS_IDLE:
         messages.error(request, 'No Zoom download URL yet.')
+    return redirect('studio_event_edit', event_id=event.pk)
+
+
+@staff_required
+@require_POST
+def event_sync_transcript(request, event_id):
+    """Issue #1597: manual "Sync transcript & recap" trigger.
+
+    Re-lists the meeting's recordings via the Zoom API to pick up a
+    transcript VTT (and MP4 download URL) the webhook missed, then
+    enqueues the transcript task, which downloads and parses the VTT,
+    stores ``transcript_text``, and chains the LLM recap draft. Like the
+    sync-transcript API endpoint, this works regardless of
+    ``RECORDING_TRANSCRIPT_INGEST_ENABLED`` — it is the explicit
+    operator recovery path.
+    """
+    event = get_object_or_404(Event, pk=event_id)
+    if event.zoom_meeting_id:
+        try:
+            refresh_transcript_from_zoom(event)
+            messages.success(
+                request,
+                'Re-checked Zoom recordings for a transcript file.',
+            )
+        except ZoomAPIError:
+            messages.warning(
+                request,
+                'Could not re-check Zoom recordings; using the stored '
+                'transcript URL.',
+            )
+    enqueue_recording_transcript_task(event, source='Studio sync')
+    messages.success(request, 'Transcript & recap sync queued.')
     return redirect('studio_event_edit', event_id=event.pk)
 
 

@@ -317,8 +317,24 @@
     "is_secret": false,
     "is_boolean": true,
     "default": "true",
-    "description": "When on, a successful Zoom -> S3 recording upload auto-publishes the event so entitled members can watch the recording right away, and the host notification says the recording is available to watch with a link to the workshop video page (issue #1134, Phase B). On by default per the product decision that the recording should be watchable immediately. Turn it off to keep the review-first flow: the event stays unpublished after upload and the host email keeps the \"ready for review/publishing\" framing with a Studio link.",
-    "docs_url": "_docs/integrations/s3_recordings.md#recording_auto_publish_on_s3_upload"
+   "description": "When on, a successful Zoom -> S3 recording upload auto-publishes the event so entitled members can watch the recording right away, and the host notification says the recording is available to watch with a link to the workshop video page (issue #1134, Phase B). On by default per the product decision that the recording should be watchable immediately. Turn it off to keep the review-first flow: the event stays unpublished after upload and the host email keeps the \"ready for review/publishing\" framing with a Studio link.",
+   "docs_url": "_docs/integrations/s3_recordings.md#recording_auto_publish_on_s3_upload"
+   },
+   {
+    "key": "RECORDING_TRANSCRIPT_INGEST_ENABLED",
+    "is_secret": false,
+    "is_boolean": true,
+    "default": "true",
+    "description": "When on, Zoom webhooks and the post-S3-upload chain automatically download, parse, and store recording transcripts. The explicit sync-transcript recovery action still works when this is off.",
+    "docs_url": "_docs/integrations/zoom.md#recording_transcript_ingest_enabled"
+   },
+   {
+    "key": "RECORDING_RECAP_AUTO_DRAFT_ENABLED",
+    "is_secret": false,
+    "is_boolean": true,
+    "default": "true",
+    "description": "When on, a stored transcript automatically drafts recap_notes through the configured LLM when operator notes are still empty. Registrant notifications remain explicit.",
+    "docs_url": "_docs/integrations/zoom.md#recording_recap_auto_draft_enabled"
    }
   ]
  },

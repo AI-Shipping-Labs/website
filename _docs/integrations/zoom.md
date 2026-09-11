@@ -411,6 +411,78 @@ PATCH payloads because that field is not supported by Zoom's meeting request
 contract. Enable and lock transcription as needed in the authorized Zoom admin
 console under Account Management → Account Settings → Recording.
 
+### Enable account-wide audio transcripts
+
+The automated transcript pipeline depends on Zoom producing a `.vtt`
+`audio_transcript` file for every cloud recording (issue #1597). Turn it on
+account-wide so every host's recordings produce one:
+
+1. In the Zoom web portal, sign in as an admin and open
+   Account Management → Account Settings → Recording.
+2. Under Cloud recording, enable `Audio transcription` and click lock so
+   per-user settings cannot silently disable it.
+3. Record to the cloud as usual. When the recording finishes, the
+   `recording.completed` webhook payload then contains a
+   `recording_files` entry with `recording_type: "audio_transcript"`, whose
+   `download_url` the platform stores on `Event.transcript_url`.
+
+Without a VTT, the transcript task retries a few times and then marks the
+event `transcript_status: "unavailable"`. The manual
+`~/git/zoom-calls` WhisperX flow remains the fallback for meetings that
+were recorded before transcription was enabled; WhisperX is deliberately
+out of scope inside the platform (model size and CPU on ECS).
+
+### `RECORDING_TRANSCRIPT_INGEST_ENABLED`
+
+Studio settings key (S3 Recordings group), default `true`. When on, the
+automatic transcript pipeline runs: the `recording.completed` and
+`recording.transcript.completed` webhooks and the post-S3-upload chain
+enqueue the transcript task, which downloads the VTT from Zoom, parses it
+to plain text, and stores it on `Event.transcript_text`. If Zoom has not
+produced the VTT yet, the task retries with backoff (up to 4 attempts);
+when the retries are exhausted it marks the event unavailable and skips
+recap drafting. A late `recording.transcript.completed` webhook clears
+the unavailable marker and tries again.
+
+This toggle never gates the explicit operator recovery path — see
+`POST /api/events/<slug>/sync-transcript` below — so a transcript can
+always be backfilled by hand with automation off.
+
+### `RECORDING_RECAP_AUTO_DRAFT_ENABLED`
+
+Studio settings key (S3 Recordings group), default `true`. When on, a
+stored transcript chains an LLM recap draft
+(`integrations.services.llm`). The draft is factual Markdown ("What we
+covered" / "Key takeaways"), generated only from the transcript with no
+attendee personal data. It is written to `Event.recap_notes` only when
+`recap_notes` is still empty — operator-authored notes always win. The
+public recap page then goes live through the existing recap gate
+(`has_recap and is_past`): publication is automatic by design, while
+emailing registrants stays manual via the explicit recap-ready
+notification. Requires `LLM_API_KEY` (LLM Provider group) to be
+configured; with the LLM missing, the transcript is still stored and only
+the draft is skipped.
+
+### `POST /api/events/<slug>/sync-transcript`
+
+Staff-token endpoint and the explicit recovery path for the whole chain.
+It re-lists the meeting's recordings via the Zoom API to pick up a
+transcript VTT (and the MP4 download URL) the webhook missed, then
+re-enqueues the transcript task. Optional body:
+
+```json
+{"redraft": true}
+```
+
+`redraft: true` regenerates the recap draft even when `recap_notes` is
+non-empty. It is an explicit opt-in and returns 422
+`llm_not_configured` when the LLM provider is missing; without it, an
+existing draft is never overwritten. The response carries the derived
+`transcript_status` (`none` / `waiting` / `stored` / `unavailable`),
+whether a task was queued and its id, and whether the Zoom re-list found a
+transcript. The same action is available in Studio on the event edit page
+("Sync transcript & recap" in the Transcript & recap panel).
+
 ## Reschedule failures and explicit retry
 
 Ordinary Studio/API event edits are fail-soft: a valid local reschedule stays

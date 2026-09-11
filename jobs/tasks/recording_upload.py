@@ -133,6 +133,13 @@ def upload_recording_to_s3(event_id, download_url):
         event.title, s3_url,
     )
 
+    # Issue #1597: chain transcript ingestion off the successful upload so a
+    # finished call ends with a stored transcript without manual steps.
+    # Best-effort by contract: an enqueue failure must never fail the
+    # upload result, and the toggle gates the automatic path (the explicit
+    # sync-transcript surfaces bypass it).
+    _enqueue_transcript_after_upload(event)
+
     from events.services.recording_ready_notification import notify_recording_ready
 
     try:
@@ -186,6 +193,38 @@ def _build_authenticated_download_url(download_url):
     token = get_access_token()
     separator = '&' if '?' in download_url else '?'
     return f'{download_url}{separator}access_token={token}'
+
+
+def _enqueue_transcript_after_upload(event):
+    """Enqueue ``transcribe_recording`` after a successful upload (#1597).
+
+    Skipped when the text is already stored, the event is marked
+    transcript-unavailable, or the ingest toggle is off. Never raises.
+    """
+    from events.services.recording_transcript import (
+        enqueue_recording_transcript_task,
+    )
+    from integrations.config import recording_transcript_ingest_enabled
+
+    try:
+        if (
+            recording_transcript_ingest_enabled()
+            and not event.transcript_text
+            and event.transcript_unavailable_at is None
+        ):
+            task_id = enqueue_recording_transcript_task(
+                event, source='S3 upload',
+            )
+            logger.info(
+                'Enqueued transcript job for event "%s" (id=%s): %s',
+                event.title, event.id, task_id,
+            )
+    except Exception:
+        logger.exception(
+            'Transcript job enqueue failed for event "%s" (id=%s) after a '
+            'successful S3 upload; the upload result is unaffected',
+            event.title, event.id,
+        )
 
 
 def _download_from_zoom(url, dest_path):

@@ -4,6 +4,8 @@ from .expire_overrides import expire_tier_overrides
 from .healthcheck import health_check
 from .helpers import async_task, schedule
 from .names import TASK_NAME_MAX_LENGTH, build_task_name, constrain_task_name, sanitize_task_name_part
+from .recap_draft import draft_event_recap
+from .recording_transcript import transcribe_recording
 from .recording_upload import retry_stuck_recording_uploads, upload_recording_to_s3
 from .schedule_reconciliation import reconcile_schedules
 from .test_worker_smoke import run as test_worker_smoke
@@ -15,6 +17,7 @@ __all__ = [
     'cleanup_old_webhook_deliveries',
     'cleanup_old_webhook_logs',
     'cleanup_calendly_webhook_logs',
+    'draft_event_recap',
     'retry_calendly_webhooks',
     'retry_stuck_recording_uploads',
     'reconcile_schedules',
@@ -24,5 +27,6 @@ __all__ = [
     'sanitize_task_name_part',
     'schedule',
     'test_worker_smoke',
+    'transcribe_recording',
     'upload_recording_to_s3',
 ]

@@ -98,6 +98,8 @@ SETTING_VALUE_TYPES = {
     "ZOOM_JOIN_BEFORE_HOST": "boolean",
     "SES_WEBHOOK_VALIDATION_ENABLED": "boolean",
     "RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD": "boolean",
+    "RECORDING_TRANSCRIPT_INGEST_ENABLED": "boolean",
+    "RECORDING_RECAP_AUTO_DRAFT_ENABLED": "boolean",
     "S3_ENABLED": "boolean",
     "SLACK_ENABLED": "boolean",
     "STAFF_SLACK_JOIN_NOTIFY_ENABLED": "boolean",
@@ -164,7 +166,7 @@ def get_group_by_name(name):
     """Look up an integration group by its name.
 
     Args:
-        name: Group name (e.g. 'stripe', 'zoom').
+        name: Group name (e.g. 'stripe').
 
     Returns:
         dict or None: The group definition, or None if not found.

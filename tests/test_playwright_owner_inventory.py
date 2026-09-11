@@ -1038,6 +1038,24 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_operator_reply_is_escaped_and_idempotent_in_course_discussion",
     })
 
+    issue_1597_owners = frozenset({
+        "playwright_tests/test_event_transcript_recap.py::"
+        "TestStudioTranscriptPanel::"
+        "test_staff_sees_stored_status_drafted_notes_and_sync_action",
+        "playwright_tests/test_event_transcript_recap.py::"
+        "TestStudioTranscriptPanel::"
+        "test_unavailable_transcript_hides_recap_draft",
+        "playwright_tests/test_event_transcript_recap.py::"
+        "TestPublicRecapAfterAutoDraft::"
+        "test_anonymous_visitor_reads_drafted_recap_with_recording",
+        "playwright_tests/test_event_transcript_recap.py::"
+        "TestPublicRecapAfterAutoDraft::"
+        "test_unavailable_transcript_means_no_public_recap",
+        "playwright_tests/test_event_transcript_recap.py::"
+        "TestSyncTranscriptActionFlow::"
+        "test_staff_sync_requeues_and_reports_via_message",
+    })
+
     issue_1539_owners = frozenset({
         "playwright_tests/test_studio_settings_observability.py::"
         "TestStudioSettingsObservability::"
@@ -1251,8 +1269,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2576)
-        self.assertEqual(len(inventory.owners), 2374)
+        self.assertEqual(inventory.item_count, 2581)
+        self.assertEqual(len(inventory.owners), 2379)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1278,6 +1296,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1590_owners
             | self.issue_1593_owners
             | self.issue_1592_owners
+            | self.issue_1597_owners
             | self.issue_1539_owners
             | self.issue_1542_owners
             | self.issue_1544_owners
@@ -1318,6 +1337,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1590_owners
             | self.issue_1593_owners
             | self.issue_1592_owners
+            | self.issue_1597_owners
             | self.issue_1542_owners
             | self.issue_1544_owners
             | self.issue_1556_owners

@@ -5523,6 +5523,9 @@
                       ],
                       "timezone": "Europe/Berlin",
                       "title": "Office Hours: May 5",
+                      "transcript_status": "none",
+                      "transcript_text": "",
+                      "transcript_url": "",
                       "updated_at": "2026-04-15T12:00:00+00:00",
                       "zoom_join_url": "https://zoom.us/j/123"
                     }
@@ -5791,6 +5794,9 @@
                   ],
                   "timezone": "Europe/Berlin",
                   "title": "Office Hours: May 5",
+                  "transcript_status": "none",
+                  "transcript_text": "",
+                  "transcript_url": "",
                   "updated_at": "2026-04-15T12:00:00+00:00",
                   "zoom_join_url": "https://zoom.us/j/123"
                 }
@@ -6088,6 +6094,9 @@
                   ],
                   "timezone": "Europe/Berlin",
                   "title": "Office Hours: May 5",
+                  "transcript_status": "none",
+                  "transcript_text": "",
+                  "transcript_url": "",
                   "updated_at": "2026-04-15T12:00:00+00:00",
                   "zoom_join_url": "https://zoom.us/j/123"
                 }
@@ -6337,6 +6346,9 @@
                   ],
                   "timezone": "Europe/Berlin",
                   "title": "Office Hours: May 5",
+                  "transcript_status": "none",
+                  "transcript_text": "",
+                  "transcript_url": "",
                   "updated_at": "2026-04-15T12:00:00+00:00",
                   "zoom_join_url": "https://zoom.us/j/123"
                 }
@@ -6768,6 +6780,149 @@
           }
         },
         "summary": "Retry a stuck Zoom recording S3 upload",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/api/events/{slug}/sync-transcript": {
+      "post": {
+        "description": "Operator recovery path for the transcript pipeline (issue #1597). Re-lists the meeting's recordings via the Zoom API to pick up a transcript VTT (and MP4 download URL) the webhook missed, then re-enqueues the transcript task, which downloads and parses the VTT, stores transcript_text, and chains the LLM recap draft (written to recap_notes only when recap_notes is empty). This endpoint is never gated by RECORDING_TRANSCRIPT_INGEST_ENABLED \u2014 it exists so a transcript can be backfilled by hand with automation off. Optional body {\"redraft\": true} regenerates the recap draft even when recap_notes is non-empty (explicit opt-in; 422 llm_not_configured when the LLM provider is missing). Allowed for synced GitHub events: the transcript and recap draft are operational state, not content owned by the source repo.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "redraft": true
+              },
+              "schema": {
+                "properties": {
+                  "redraft": {
+                    "default": false,
+                    "description": "Explicitly replace existing recap_notes with a new transcript-based draft. Defaults to false.",
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "recap_queued": null,
+                  "redraft": false,
+                  "task_id": "a1b2c3d4e5f6",
+                  "transcript_queued": true,
+                  "transcript_status": "waiting",
+                  "zoom_refresh": "transcript_found"
+                },
+                "schema": {
+                  "properties": {
+                    "recap_queued": {
+                      "description": "Whether a recap (re)draft will run after the transcript lands; null when redraft was not requested.",
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "redraft": {
+                      "type": "boolean"
+                    },
+                    "task_id": {
+                      "description": "django-q task id when the transcript task was enqueued; poll GET /api/worker/tasks/<id>.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "transcript_queued": {
+                      "type": "boolean"
+                    },
+                    "transcript_status": {
+                      "enum": [
+                        "none",
+                        "waiting",
+                        "stored",
+                        "unavailable"
+                      ],
+                      "type": "string"
+                    },
+                    "zoom_refresh": {
+                      "enum": [
+                        "skipped",
+                        "ok",
+                        "transcript_found",
+                        "failed"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Sync state after the refresh + enqueue attempt."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed JSON body."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing, invalid, or non-staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Event not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "llm_not_configured",
+                  "error": "Recap redraft requested but the LLM provider is not configured."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid redraft value, or redraft requested while the LLM provider is not configured."
+          }
+        },
+        "summary": "Sync transcript and recap draft",
         "tags": [
           "Events"
         ]

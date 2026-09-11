@@ -43,6 +43,6 @@ class CommunityAuditLogModelTest(TestCase):
         log = CommunityAuditLog.objects.create(
             user=self.user,
             action="link",
-            details='{"source": "email_matcher"}',
+            details='{"source": "schedule"}',
         )
         self.assertEqual(log.action, "link")

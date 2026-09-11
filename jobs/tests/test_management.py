@@ -181,8 +181,15 @@ class SetupSchedulesCommandTest(TestCase):
         )
         self.assertEqual(schedule.cron, '0 6 * * *')
         self.assertEqual(schedule.schedule_type, Schedule.CRON)
-        self.assertIn('slack-membership-refresh (daily at 06:00 UTC)', out.getvalue())
+        self.assertIn(
+            'slack-membership-refresh '
+            '(daily membership and channel reconciliation at 06:00 UTC)',
+            out.getvalue(),
+        )
         self.assertNotIn('every 30 min', out.getvalue())
+        self.assertFalse(
+            Schedule.objects.filter(func__contains='email_matcher').exists(),
+        )
 
     def test_creates_sprint_end_recap_schedule(self):
         """Command registers sprint-end recaps after plan-sprints ingest."""

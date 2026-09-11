@@ -17687,6 +17687,7 @@
     },
     "/api/users/{email}/slack-membership/check": {
       "post": {
+        "description": "Resolve a primary email or alias to its canonical account, refresh definite workspace state, and reconcile eligible Main+ members with configured community channels. Partial channel failure remains a definite HTTP 200 result.",
         "parameters": [
           {
             "in": "path",
@@ -17699,13 +17700,75 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "channel_reconciliation": {
+                    "added_count": 1,
+                    "already_present_count": 1,
+                    "configured_count": 2,
+                    "failed_count": 0,
+                    "status": "complete"
+                  },
+                  "email": "member@example.com",
+                  "outcome": "member",
+                  "slack_checked_at": "2026-09-11T06:00:00+00:00",
+                  "slack_member": true,
+                  "slack_user_id": "U01234567"
+                }
+              }
+            },
             "description": "Definite member or not-member result."
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "authentication_required",
+                  "error": "Authentication token required"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or malformed credentials return authentication_required; unknown, inactive-owner, or non-staff-owner tokens return invalid_token."
+          },
           "404": {
-            "description": "Unknown email."
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown primary email or alias."
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "method_not_allowed",
+                  "error": "Method not allowed"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Method not allowed after valid authentication."
           },
           "503": {
-            "description": "Slack membership unavailable."
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "slack_membership_unavailable",
+                  "error": "Slack membership could not be checked"
+                }
+              }
+            },
+            "description": "Slack membership unavailable; no mutation made."
           }
         },
         "summary": "Check cached Slack membership now",

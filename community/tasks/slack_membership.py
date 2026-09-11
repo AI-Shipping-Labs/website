@@ -1,6 +1,6 @@
-"""Background job: refresh Slack workspace membership per user.
+"""Background job: reconcile Slack membership and community channels.
 
-Runs every 30 minutes (cron). For users whose ``slack_checked_at`` is
+Runs daily at 06:00 UTC. For users whose ``slack_checked_at`` is
 NULL or older than ``SLACK_MEMBERSHIP_REFRESH_DAYS``, calls Slack's
 ``users.lookupByEmail`` and updates the canonical ``slack_member`` flag
 plus ``slack_checked_at`` timestamp.
@@ -54,6 +54,7 @@ re-match the predicate on the next run and chain forever.
 import json
 import logging
 import time
+from dataclasses import asdict, dataclass, field
 
 from django.db.models import Q
 from django.utils import timezone
@@ -69,9 +70,9 @@ from jobs.tasks import async_task, build_task_name
 
 logger = logging.getLogger(__name__)
 
-# Re-check workspace membership at most once a week to keep API spend low
-# while still picking up users who joined Slack after signup.
-SLACK_MEMBERSHIP_REFRESH_DAYS = 7
+# Re-check daily so newly joined eligible members reach community channels
+# without needing an operator action.
+SLACK_MEMBERSHIP_REFRESH_DAYS = 1
 
 # Per-chunk cap. Each scheduled run processes up to this many users and
 # enqueues a follow-up ``async_task`` if more remain. Sized (issue #918)
@@ -100,6 +101,29 @@ SLACK_MEMBERSHIP_SLEEP_SECONDS = 3.0
 
 # Tag name mirrored on User.tags when issue #354 ships the tags primitive.
 SLACK_MEMBER_TAG = "slack-member"
+
+
+@dataclass(frozen=True)
+class ChannelReconciliationResult:
+    status: str = "skipped"
+    configured_count: int = 0
+    added_count: int = 0
+    already_present_count: int = 0
+    failed_count: int = 0
+
+    def as_dict(self):
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class SlackMembershipCheckResult:
+    outcome: str
+    channels: ChannelReconciliationResult = field(
+        default_factory=ChannelReconciliationResult,
+    )
+
+    def as_dict(self):
+        return {"outcome": self.outcome, "channels": self.channels.as_dict()}
 
 
 def _has_tags_field():
@@ -136,9 +160,8 @@ def _set_slack_member_tag(user, present):
             set_tags(user, tags)
     except Exception:
         logger.warning(
-            "Failed to mirror slack_member to tag for %s",
-            getattr(user, 'email', '<unknown>'),
-            exc_info=True,
+            "Failed to mirror Slack membership tag: user_id=%s",
+            user.pk,
         )
 
 
@@ -163,24 +186,24 @@ def check_user_slack_membership(
     user,
     *,
     service=None,
-    audit_source="slack_membership_task",
+    audit_source="schedule",
+    actor_token=None,
 ):
     """Check one selected user and apply only a definite Slack outcome.
 
     This is the shared operation used by scheduled refreshes and explicit
     Studio/API checks. ``unknown`` and provider exceptions are mutation-free.
+    Definite members with current Main+ access are also reconciled against
+    every configured community channel.
     """
     try:
         service = service or get_community_service()
         outcome, uid = service.check_workspace_membership(user.email)
     except Exception:
-        logger.exception(
-            "Unexpected error checking Slack membership for %s",
-            user.email,
-        )
-        return "unknown"
+        logger.error("Unexpected Slack membership check error: user_id=%s", user.pk)
+        return SlackMembershipCheckResult("unknown")
     if outcome not in {"member", "not_member"}:
-        return "unknown"
+        return SlackMembershipCheckResult("unknown")
 
     is_first_check = user.slack_checked_at is None
     previous_member = bool(user.slack_member)
@@ -208,10 +231,23 @@ def check_user_slack_membership(
             try:
                 notify_slack_join(user)
             except Exception:
-                logger.exception(
-                    "Failed to send Slack-join staff notification for %s",
-                    user.email,
+                logger.error(
+                    "Failed Slack-join staff notification: user_id=%s",
+                    user.pk,
                 )
+
+        channels = _reconcile_community_channels(
+            user,
+            service,
+            slack_user_id=user.slack_user_id or uid,
+        )
+        _log_channel_reconciliation(
+            user,
+            channels,
+            source=audit_source,
+            actor_token=actor_token,
+        )
+        return SlackMembershipCheckResult("member", channels)
     else:
         user.slack_member = False
         user.slack_checked_at = now
@@ -224,7 +260,93 @@ def check_user_slack_membership(
                 False,
                 source=audit_source,
             )
-    return outcome
+    return SlackMembershipCheckResult("not_member")
+
+
+def _reconcile_community_channels(user, service, *, slack_user_id):
+    """Return a deterministic aggregate for one eligible member."""
+    raw_channel_ids = getattr(service, "channel_ids", ())
+    channel_ids = (
+        tuple(raw_channel_ids)
+        if isinstance(raw_channel_ids, (list, tuple))
+        else ()
+    )
+
+    eligible = User.objects.filter(pk=user.pk).filter(main_plus_q()).exists()
+    if not eligible:
+        return ChannelReconciliationResult(
+            status="skipped",
+            configured_count=len(channel_ids),
+        )
+    if not channel_ids:
+        return ChannelReconciliationResult(status="unavailable")
+    if not slack_user_id:
+        return ChannelReconciliationResult(
+            status="failed",
+            configured_count=len(channel_ids),
+            failed_count=len(channel_ids),
+        )
+
+    try:
+        raw_results = service.add_to_channels(slack_user_id)
+    except Exception:
+        logger.error(
+            "Unexpected Slack channel reconciliation error: user_id=%s configured_count=%s",
+            user.pk,
+            len(channel_ids),
+        )
+        return ChannelReconciliationResult(
+            status="failed",
+            configured_count=len(channel_ids),
+            failed_count=len(channel_ids),
+        )
+
+    results = raw_results if isinstance(raw_results, list) else []
+    added = sum(
+        bool(item.get("ok")) and not item.get("already_in")
+        for item in results
+        if isinstance(item, dict)
+    )
+    already = sum(
+        bool(item.get("ok")) and bool(item.get("already_in"))
+        for item in results
+        if isinstance(item, dict)
+    )
+    failed = max(0, len(channel_ids) - added - already)
+    if failed == 0:
+        status = "complete"
+    elif added or already:
+        status = "partial"
+    else:
+        status = "failed"
+    return ChannelReconciliationResult(
+        status=status,
+        configured_count=len(channel_ids),
+        added_count=added,
+        already_present_count=already,
+        failed_count=failed,
+    )
+
+
+def _log_channel_reconciliation(user, result, *, source, actor_token=None):
+    if result.added_count == 0 and result.failed_count == 0:
+        return
+    details = {
+        "source": source,
+        "result": result.status,
+        "configured_count": result.configured_count,
+        "added_count": result.added_count,
+        "already_present_count": result.already_present_count,
+        "failed_count": result.failed_count,
+        "subject_user_id": user.pk,
+    }
+    if source == "api" and actor_token:
+        details["actor_token"] = actor_token
+    CommunityAuditLog.objects.create(
+        user=user,
+        action="link",
+        details=json.dumps(details),
+    )
 
 
 def refresh_slack_membership(
@@ -269,7 +391,8 @@ def refresh_slack_membership(
 
     Returns:
         dict: counts keyed by ``members``, ``not_members``, ``unknown``,
-        ``total_checked``, ``transitions``, ``enqueued_followup``.
+        ``total_checked``, channel outcomes, newly added memberships, and
+        ``enqueued_followup``.
     """
     batch_size = batch_size or SLACK_MEMBERSHIP_CHUNK_SIZE
     refresh_days = refresh_days or SLACK_MEMBERSHIP_REFRESH_DAYS
@@ -294,25 +417,34 @@ def refresh_slack_membership(
     members = 0
     not_members = 0
     unknown = 0
-    transitions = 0
+    channel_complete = 0
+    channel_partial = 0
+    channel_failed = 0
+    channel_unavailable = 0
+    newly_added_channel_memberships = 0
 
     for index, user in enumerate(users):
         # Self-throttle BETWEEN calls (not before the first one).
         if index > 0 and sleep_seconds:
             time.sleep(sleep_seconds)
 
-        was_first_check = user.slack_checked_at is None
-        previous_member = bool(user.slack_member)
-        outcome = check_user_slack_membership(user, service=service)
-        if outcome == "unknown":
+        result = check_user_slack_membership(user, service=service)
+        if result.outcome == "unknown":
             unknown += 1
             continue
-        if outcome == "member":
+        if result.outcome == "member":
             members += 1
-        elif outcome == "not_member":
+            if result.channels.status == "complete":
+                channel_complete += 1
+            elif result.channels.status == "partial":
+                channel_partial += 1
+            elif result.channels.status == "failed":
+                channel_failed += 1
+            elif result.channels.status == "unavailable":
+                channel_unavailable += 1
+            newly_added_channel_memberships += result.channels.added_count
+        elif result.outcome == "not_member":
             not_members += 1
-        if was_first_check or previous_member != (outcome == "member"):
-            transitions += 1
 
     total_checked = len(users)
 
@@ -346,7 +478,11 @@ def refresh_slack_membership(
         "members": members,
         "not_members": not_members,
         "unknown": unknown,
-        "transitions": transitions,
+        "channel_complete": channel_complete,
+        "channel_partial": channel_partial,
+        "channel_failed": channel_failed,
+        "channel_unavailable": channel_unavailable,
+        "newly_added_channel_memberships": newly_added_channel_memberships,
         "enqueued_followup": enqueued_followup,
     }
     logger.info("Slack membership refresh complete: %s", summary)
@@ -400,9 +536,8 @@ def _backfill_name_from_slack(service, user):
         profile = lookup(user.email)
     except Exception:
         logger.warning(
-            "Slack profile lookup failed for %s; skipping name backfill",
-            user.email,
-            exc_info=True,
+            "Slack profile lookup failed; skipping name backfill: user_id=%s",
+            user.pk,
         )
         return False
     # Require a concrete dict — MagicMock services in tests that didn't

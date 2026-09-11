@@ -672,3 +672,71 @@ recipient key):
 - `SLACK_ENABLED` must be true.
 - `SLACK_BOT_TOKEN` must be set.
 - The bot must be a member of `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`.
+
+## Daily membership and channel reconciliation
+
+The `slack-membership-refresh` schedule runs
+`community.tasks.slack_membership.refresh_slack_membership` every day at
+06:00 UTC. It checks accounts with effective Main-or-higher access whose last
+check is missing or at least one day old. Each run handles 30 accounts with a
+three-second gap between Slack membership lookups and chains another chunk
+only after a definite result. A fully unavailable Slack run does not chain.
+
+For each definite workspace member, the same operation adds the Slack user to
+every channel returned by the environment-aware community channel setting.
+Existing channel memberships count as success. Free, Basic, expired-override,
+and inactive-override accounts are checked only when an operator explicitly
+requests it, and their community channels are left unchanged. The operation
+never sends another invite email or changes membership entitlements.
+
+The channel result shown through Studio and the operator API is one of:
+
+| Status | Meaning |
+| --- | --- |
+| `complete` | Every configured channel was added or already present. |
+| `partial` | At least one channel succeeded and at least one failed. |
+| `failed` | Every configured channel failed. |
+| `skipped` | The workspace member does not currently have Main+ access. |
+| `unavailable` | No environment-specific community channels are configured. |
+
+Staff can retry one account with Check now on its Studio user detail page or
+with the staff-token endpoint:
+
+```bash
+curl -X POST \
+  -H "Authorization: Token $AISL_API_TOKEN" \
+  "https://aishippinglabs.com/api/users/member@example.com/slack-membership/check"
+```
+
+A successful repair returns the canonical account email and an aggregate-only
+channel result:
+
+```json
+{
+  "email": "member@example.com",
+  "outcome": "member",
+  "slack_member": true,
+  "slack_user_id": "U01234567",
+  "slack_checked_at": "2026-09-11T06:00:00+00:00",
+  "channel_reconciliation": {
+    "status": "complete",
+    "configured_count": 2,
+    "added_count": 1,
+    "already_present_count": 1,
+    "failed_count": 0
+  }
+}
+```
+
+The response stays HTTP 200 for definite workspace results, including partial
+or failed channel reconciliation. A provider outage returns 503 and leaves the
+cached state untouched. Repeating the operation is safe because Slack's
+`already_in_channel` response is treated as success. A later scheduled or
+manual check retries failed channels.
+
+Audit rows use action `link` only when at least one channel was newly added or
+failed. They contain the local subject ID, source, result, and aggregate counts;
+they do not contain email addresses, Slack user IDs, channel IDs, tokens, or
+provider response bodies. For troubleshooting, first verify `SLACK_ENABLED`,
+the bot token, the environment-specific community channel IDs, and that the bot
+belongs to each configured channel.

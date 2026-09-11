@@ -81,14 +81,26 @@ class TestIssue1288UserSupport:
 
     def test_check_now_refreshes_slack_and_preserves_id(self, django_server, browser):
         member_pk, _ = _seed()
+        from accounts.models import User
+        from payments.models import Tier
+        member = User.objects.get(pk=member_pk)
+        member.tier = Tier.objects.get(slug="main")
+        member.save(update_fields=["tier"])
+        connection.close()
         service = Mock()
+        service.channel_ids = ["C_COMMUNITY"]
         service.check_workspace_membership.return_value = ("member", "U01ABC123")
-        service.get_user_profile.return_value = None
+        service.lookup_user_profile_by_email.return_value = None
+        service.add_to_channels.return_value = [
+            {"channel": "C_COMMUNITY", "ok": True},
+        ]
         context, page = _page(browser)
         with patch("community.tasks.slack_membership.get_community_service", return_value=service):
             page.goto(f"{django_server}/studio/users/{member_pk}/")
             page.get_by_test_id("user-detail-slack-check").click()
-            page.get_by_text("Slack membership checked: Member.").wait_for()
+            page.get_by_text(
+                "Slack membership checked: Member. Community channels are connected."
+            ).wait_for()
             assert "U01ABC123" in page.get_by_test_id("user-detail-slack-id-value").inner_text()
             page.get_by_test_id("user-detail-slack-check").click()
             assert "U01ABC123" in page.get_by_test_id("user-detail-slack-id-value").inner_text()

@@ -17,6 +17,7 @@ conversations.invite and conversations.kick.
 
 import json
 import logging
+import re
 import time
 from typing import NamedTuple
 
@@ -87,6 +88,12 @@ SLACK_RETRY_AFTER_MAX_SECONDS = 30
 # Fallback wait when Slack returns ``ratelimited`` without a usable
 # ``Retry-After`` header.
 SLACK_RETRY_AFTER_DEFAULT_SECONDS = 5
+
+
+def _safe_error_code(value):
+    """Return only Slack-style symbolic codes suitable for logs/results."""
+    value = value if isinstance(value, str) else ""
+    return value if re.fullmatch(r"[a-z0-9_]{1,64}", value) else "unknown_error"
 
 
 class SlackAPIError(Exception):
@@ -444,15 +451,14 @@ class SlackCommunityService(CommunityService):
             # ratelimited, fatal_error, internal_error, service_unavailable,
             # any other Slack-side or HTTP-level failure: be conservative.
             logger.warning(
-                "Slack workspace membership check failed for %s: %s",
-                email, e,
+                "Slack workspace membership check failed: error_code=%s",
+                _safe_error_code(e.error_code),
             )
             return ("unknown", None)
-        except requests.RequestException as e:
+        except requests.RequestException:
             # Network error, timeout, DNS, etc.
             logger.warning(
-                "Slack workspace membership check network error for %s: %s",
-                email, e,
+                "Slack workspace membership check failed: error_code=network_error",
             )
             return ("unknown", None)
 
@@ -480,13 +486,13 @@ class SlackCommunityService(CommunityService):
                     results.append({"channel": channel_id, "ok": True, "already_in": True})
                 else:
                     logger.warning(
-                        "Failed to add user %s to channel %s: %s",
-                        slack_user_id, channel_id, e,
+                        "Slack community channel add failed: error_code=%s",
+                        _safe_error_code(e.error_code),
                     )
                     results.append({
                         "channel": channel_id,
                         "ok": False,
-                        "error": str(e),
+                        "error": _safe_error_code(e.error_code),
                     })
         return results
 

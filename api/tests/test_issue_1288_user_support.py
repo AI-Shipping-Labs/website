@@ -9,6 +9,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import TierOverride, Token
+from community.tasks.slack_membership import SlackMembershipCheckResult
 from payments.models import Tier
 
 User = get_user_model()
@@ -59,7 +60,8 @@ class Issue1288ApiTest(TestCase):
         self.assertEqual(member.slack_user_id, 'U01ABC123')
         checked_at = member.slack_checked_at
         with patch(
-            'api.views.users.check_user_slack_membership', return_value='unknown',
+            'api.views.users.check_user_slack_membership',
+            return_value=SlackMembershipCheckResult('unknown'),
         ):
             response = self.client.post(
                 f'/api/users/{member.email}/slack-membership/check', **self.auth(),

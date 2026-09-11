@@ -136,7 +136,7 @@ SCHEDULE_DEFINITIONS = (
         "slack-membership-refresh",
         "community.tasks.slack_membership.refresh_slack_membership",
         "0 6 * * *",
-        description="daily at 06:00 UTC",
+        description="daily membership and channel reconciliation at 06:00 UTC",
     ),
     ScheduleDefinition(
         "import-slack-daily",

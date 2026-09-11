@@ -287,6 +287,11 @@ class EmailServiceTemplateRenderingTest(TestCase):
         self.assertIn('community', subject)
         self.assertIn('/community/slack', html)
         self.assertNotIn('slack.com/join/abc', html)
+        self.assertIn(
+            'After you join, we check Slack daily and add members with '
+            'community access to the community channels automatically.',
+            html,
+        )
 
     @patch.object(EmailService, '_send_ses', return_value='test-id')
     def test_lead_magnet_delivery_template(self, mock_ses):

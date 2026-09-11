@@ -168,6 +168,10 @@ Production deploys MUST set the env var `SES_ENABLED=true` to actually send mail
 
 Deploy-time guard: a Django system check (`email_app.E001`) makes `manage.py check` exit non-zero whenever `DEBUG=False` and `SES_ENABLED` is not `true`, so a production deploy that runs `manage.py check` as a pre-flight step blocks before the new container is promoted. The check is silent in local dev (`DEBUG=True`) and under `manage.py test` (the test runner sets the `TESTING` flag). To intentionally run a production-like environment without SES (for example a staging box that should not send real mail), silence the check with `SILENCED_SYSTEM_CHECKS = ['email_app.E001']` in settings. Issue #521.
 
+Send paths (A1.2 migration in progress): transactional sends are moving from `email_app.services.email_service.EmailService` to the shared `community_base.mail` package app (plan issue A1.2, AI-Shipping-Labs/website#1610). Signup verification and password reset already go through it: the caller persists only non-secret inputs, `email_app.package_mail.send_package_mail` stores a durable `EmailDelivery` row, and the durable worker (default `django_q`) renders and transports it on the transitional `ses_local` backend — the same SES account, configuration set and per-type senders as below. A send is recorded as before: `EmailLog` rows are written after provider acceptance. Everything else (welcome, campaigns, reminders) still uses the legacy `EmailService` path until its migration slice.
+
+Site behavior hooks live in `email_app/hooks.py`, wired in `website/settings.py` under `COMMUNITY_BASE`: `MAIL_PREFERENCE_RESOLVER` (promotional-only opt-out), `MAIL_UNSUBSCRIBE_URL_BUILDER` and `MAIL_VERIFY_EMAIL_URL_BUILDER` (one-click unsubscribe and the verify-email footer), `MAIL_TEMPLATE_OVERRIDE_LOADER` (Studio `EmailTemplateOverride` precedence over `email_app/email_templates/`), `MAIL_SEND_RECORDER` (the `EmailLog` audit row), and `MAIL_CONTEXT_RESOLVER` (`resolve_auth_mail_context`, which mints the signed verification / reset URLs at delivery time so the stored delivery context never contains a bearer link).
+
 Keys to set in Studio:
 
 | Key | Source | Notes |

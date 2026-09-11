@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='event',
             name='transcript_fetch_attempts',
-            field=models.PositiveIntegerField(db_default=0, default=0, help_text='Failed transcript-fetch attempts for this event. Used to stop retrying when Zoom has no transcript for the meeting.'),
+            field=models.PositiveIntegerField(db_default=0, default=0, editable=False, help_text='Failed transcript-fetch attempts for this event. Used to stop retrying when Zoom has no transcript for the meeting.'),
         ),
         migrations.AddField(
             model_name='event',

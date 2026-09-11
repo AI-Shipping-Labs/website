@@ -295,6 +295,7 @@ class Event(
     transcript_fetch_attempts = models.PositiveIntegerField(
         default=0,
         db_default=0,
+        editable=False,
         help_text=(
             'Failed transcript-fetch attempts for this event. Used to stop '
             'retrying when Zoom has no transcript for the meeting.'

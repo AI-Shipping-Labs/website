@@ -734,6 +734,9 @@ class TranscriptWebhookTest(TestCase):
     AWS_S3_RECORDINGS_REGION='eu-central-1',
     AWS_ACCESS_KEY_ID='test-key-id',
     AWS_SECRET_ACCESS_KEY='test-secret-key',
+    ZOOM_CLIENT_ID='test-client-id',
+    ZOOM_CLIENT_SECRET='test-client-secret',
+    ZOOM_ACCOUNT_ID='test-account-id',
 )
 class UploadChainTranscriptEnqueueTest(TestCase):
     """The S3 upload chains the transcript job, and only that can fail."""
